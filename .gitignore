@@ -6,9 +6,10 @@ node_modules/
 .react-router/
 build/
 
-# Runtime state (file-based persistence) — volume-mounted in production
-#data/
-!data/.gitkeep
+# Runtime state (file-based persistence) — volume-mounted in production.
+# Do not commit expenses/images (sensitive financial data).
+/data/
+!/data/.gitkeep
 
 # Logs
 *.log
