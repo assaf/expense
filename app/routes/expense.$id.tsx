@@ -436,6 +436,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
           <span className="text-sm font-medium text-gray-700">Date</span>
           <input
             type="date"
+            tabIndex={-1}
             max={todayDate()}
             className="rounded-lg border border-gray-300 px-3 py-2"
             value={date}
@@ -702,6 +703,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
           <span className="text-sm font-medium text-gray-700">Date</span>
           <input
             type="date"
+            tabIndex={-1}
             max={todayDate()}
             className="rounded-lg border border-gray-300 px-3 py-2"
             value={date}
@@ -843,6 +845,7 @@ function EditorActions({
       <Button
         type="button"
         variant="danger"
+        tabIndex={-1}
         onClick={onDelete}
         disabled={saving}
       >
@@ -855,6 +858,7 @@ function EditorActions({
         <Button
           type="button"
           variant="ghost"
+          tabIndex={-1}
           onClick={onCancel}
           disabled={saving}
         >
