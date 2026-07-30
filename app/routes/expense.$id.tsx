@@ -165,10 +165,12 @@ function safeParseLocations(raw: string): Location[] {
 
 export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
   const { expense } = loaderData;
+  // key by id so navigating to a different expense remounts the editor with
+  // fresh field state (useState initializers re-run from the new loaderData).
   return expense.type === "receipt" ? (
-    <ReceiptEditor data={loaderData} />
+    <ReceiptEditor key={expense.id} data={loaderData} />
   ) : (
-    <MileageEditor data={loaderData} />
+    <MileageEditor key={expense.id} data={loaderData} />
   );
 }
 
