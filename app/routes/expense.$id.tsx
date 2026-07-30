@@ -7,6 +7,8 @@ import {
   MapPinned,
   Loader2,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useFetcher, useNavigate } from "react-router";
 import { Link, redirect } from "react-router";
@@ -20,6 +22,7 @@ import {
   deleteExpense,
   readCategories,
   readExpense,
+  readExpenses,
   readPriorMerchants,
   readReports,
   upsertExpense,
@@ -36,14 +39,22 @@ import type { Route } from "./+types/expense.$id";
 export async function loader({ params }: Route.LoaderArgs) {
   const expense = await readExpense(params.id);
   if (!expense) throw new Response("Not found", { status: 404 });
-  const [reports, categories, settings, merchants] = await Promise.all([
+  const [reports, categories, settings, merchants, all] = await Promise.all([
     readReports(),
     readCategories(),
     readSettings(),
     readPriorMerchants(),
+    readExpenses(),
   ]);
   const year = yearOf(expense.date);
   const rate = settings.mileageRates[year] ?? "";
+  // Neighbours in the main list order (newest first, empty dates last).
+  const sorted = [...all].sort(sortByDateDesc);
+  const i = sorted.findIndex((e) => e.id === expense.id);
+  const nav = {
+    prevId: i > 0 ? sorted[i - 1]!.id : null,
+    nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
+  };
   return {
     expense: serializeExpense(expense),
     reports: reports.map((r) => r.name),
@@ -52,7 +63,15 @@ export async function loader({ params }: Route.LoaderArgs) {
     home: homeLocation(settings),
     rate,
     year,
+    nav,
   };
+}
+
+function sortByDateDesc(a: Expense, b: Expense): number {
+  if (!a.date && !b.date) return b.createdAt.localeCompare(a.createdAt);
+  if (!a.date) return 1;
+  if (!b.date) return -1;
+  return b.date.localeCompare(a.date);
 }
 
 function serializeExpense(e: Expense) {
@@ -155,19 +174,49 @@ export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
 
 function Shell({
   title,
+  nav,
   children,
 }: {
   title: string;
+  nav?: { prevId: string | null; nextId: string | null };
   children: React.ReactNode;
 }) {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
-      <Link
-        to="/"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </Link>
+      <div className="mb-4 flex items-center justify-between">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </Link>
+        {nav ? (
+          <div className="flex items-center gap-1">
+            <Link
+              to={`/expense/${nav.prevId}`}
+              aria-label="Previous expense"
+              className={
+                nav.prevId
+                  ? "inline-flex items-center text-gray-500 hover:text-ink"
+                  : "pointer-events-none text-gray-300"
+              }
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+            <Link
+              to={`/expense/${nav.nextId}`}
+              aria-label="Next expense"
+              className={
+                nav.nextId
+                  ? "inline-flex items-center text-gray-500 hover:text-ink"
+                  : "pointer-events-none text-gray-300"
+              }
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Link>
+          </div>
+        ) : null}
+      </div>
       <h1 className="mb-6 text-2xl font-bold">{title}</h1>
       {children}
     </main>
@@ -292,7 +341,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   });
 
   return (
-    <Shell title={expense.merchant || "New receipt"}>
+    <Shell title={expense.merchant || "New receipt"} nav={data.nav}>
       {error ? (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -593,7 +642,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     }));
 
   return (
-    <Shell title="Mileage expense">
+    <Shell title="Mileage expense" nav={data.nav}>
       {error ? (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
