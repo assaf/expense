@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Build the image, push to GHCR, and deploy to Coolify.
+# Mirrors the Rentail deployment flow. Requires:
+#   GHCR_TOKEN      - GitHub container registry token
+#   COOLIFY_URL     - e.g. https://coolify.labnotes.org
+#   COOLIFY_TOKEN   - Coolify API token
+#   COOLIFY_APP_ID  - the Coolify application uuid for expensify
+set -eo pipefail
+
+IMAGE="ghcr.io/assaf/expensify:latest"
+
+echo -e "\033[0;32m--- Step 1: Build and push image ---\033[0m"
+echo "${GHCR_TOKEN}" | docker login ghcr.io -u assaf --password-stdin
+docker build -t "${IMAGE}" .
+docker push "${IMAGE}"
+
+echo -e "\033[0;32m--- Step 2: Deploy to Coolify ---\033[0m"
+coolify-ghcr-deploy \
+  --app-name "expensify" \
+  --coolify-url "${COOLIFY_URL}" \
+  --coolify-token "${COOLIFY_TOKEN}" \
+  --app-id "${COOLIFY_APP_ID}" \
+  --image "${IMAGE}" \
+  --healthcheck-timeout 60
+
+echo -e "\033[0;34m--- Deployed ---\033[0m"

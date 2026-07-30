@@ -1,0 +1,11 @@
+.env
+Dockerfile
+.dockerignore
+node_modules
+build
+.react-router
+.git
+.github
+data
+**/.DS_Store
+*.log

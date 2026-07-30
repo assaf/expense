@@ -1,0 +1,23 @@
+{
+  "include": ["app/**/*.ts", "app/**/*.tsx", ".react-router/types/**/*"],
+  "exclude": ["build", "node_modules", "public"],
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "~/*": ["./app/*"],
+      "+types/*": ["./.react-router/types/*"]
+    },
+    "resolveJsonModule": true,
+    "rootDirs": [".", "./.react-router/types"],
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["node", "@react-router/node"],
+    "verbatimModuleSyntax": true
+  }
+}

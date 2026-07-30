@@ -1,0 +1,69 @@
+/**
+ * Domain model for the expense tracker.
+ *
+ * State is persisted as CSV files on disk (see store.server.ts). These types
+ * describe the in-memory shape after parsing.
+ */
+
+export type ExpenseType = "receipt" | "mileage";
+
+/** A single geocoded address used in a mileage route. */
+export interface Location {
+  address: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+/** Fields common to every expense. */
+interface ExpenseBase {
+  id: string;
+  type: ExpenseType;
+  date: string; // YYYY-MM-DD, "" when unset
+  report: string; // report name, "" when unset
+  category: string; // tax category name, "" when unset
+  description: string;
+  amount: string; // decimal string "12.34", "" when unset
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+export interface ReceiptExpense extends ExpenseBase {
+  type: "receipt";
+  merchant: string;
+  imageFile: string; // filename inside data/images/, "" when unset
+  imageMime: string;
+  originalName: string;
+}
+
+export interface MileageExpense extends ExpenseBase {
+  type: "mileage";
+  locations: Location[];
+  distanceMiles: string; // decimal string "122.13", "" when unset
+}
+
+export type Expense = ReceiptExpense | MileageExpense;
+
+export interface Report {
+  name: string;
+}
+
+export interface Category {
+  name: string;
+}
+
+/** Settings stored as key/value rows in settings.csv. */
+export type Settings = {
+  /** Home location used as the first/last stop of every mileage route. */
+  homeAddress: string;
+  homeLat: number | null;
+  homeLng: number | null;
+  /** Mileage reimbursement rate per calendar year, e.g. { "2026": "0.70" }. */
+  mileageRates: Record<string, string>;
+};
+
+export const DEFAULT_SETTINGS: Settings = {
+  homeAddress: "",
+  homeLat: null,
+  homeLng: null,
+  mileageRates: {},
+};
