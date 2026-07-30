@@ -275,6 +275,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [transition, setTransition] = useState<null | "save" | "cancel">(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
 
   const complete = useMemo(
     () =>
@@ -341,6 +342,14 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   useEffect(() => {
     if (fetcher.state === "idle" && transition === "save") setTransition(null);
   }, [fetcher.state, transition]);
+
+  // Autofocus the amount field when opening a brand-new receipt.
+  useEffect(() => {
+    if (!expense.date && !expense.merchant && !expense.imageFile) {
+      amountRef.current?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onDelete() {
     const form = new FormData();
@@ -454,6 +463,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             placeholder="0.00"
             className="rounded-lg border border-gray-300 px-3 py-2"
             value={amount}
+            ref={amountRef}
             onClick={(e) => e.currentTarget.select()}
             onChange={(e) => setAmount(e.target.value)}
             onBlur={(e) => setAmount(normalizeAmount(e.target.value))}
@@ -513,7 +523,10 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       {lightbox && expense.imageFile ? (
         <Lightbox
           src={`/expense/${expense.id}/image?v=${imageVersion}`}
-          onClose={() => setLightbox(false)}
+          onClose={() => {
+            setLightbox(false);
+            amountRef.current?.focus();
+          }}
         />
       ) : null}
       {confirmDelete ? (
