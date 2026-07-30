@@ -108,6 +108,9 @@ importers:
       coolify-ghcr-deploy:
         specifier: ^1.4.1
         version: 1.4.1
+      portless:
+        specifier: ^0.15.4
+        version: 0.15.4
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -1865,6 +1868,12 @@ packages:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
 
+  portless@0.15.4:
+    resolution: {integrity: sha512-tOxEsdlDGuPHO6DPkuK3c3mMV5ctXEgVFm53Sa8nfZ2RsRGTq4By424C6z5+JWfNbd3ktR5SOd1FJBOlB1Woqg==}
+    engines: {node: '>=24'}
+    os: [darwin, linux, win32]
+    hasBin: true
+
   postcss@8.5.25:
     resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
     engines: {node: ^10 || ^12 || >=14}
@@ -3609,6 +3618,8 @@ snapshots:
       browserify-zlib: 0.2.0
 
   pngjs@7.0.0: {}
+
+  portless@0.15.4: {}
 
   postcss@8.5.25:
     dependencies:
