@@ -925,9 +925,10 @@ function fetcherError(data: unknown): string {
 
 /**
  * Form-wide keyboard shortcuts: Enter saves, Escape cancels.
- * Skipped while an overlay (lightbox/confirm) is open, and Enter is ignored in
- * textareas (newlines), on buttons (they submit themselves), and in selects
- * (Return picks the highlighted option).
+ * Skipped while an overlay (lightbox/confirm) is open. Enter is ignored in
+ * textareas (newlines), on buttons (they submit themselves), and in inputs
+ * backed by a datalist (merchant autocomplete picks the suggestion).
+ * Drop-downs (selects) DO submit on Enter.
  */
 function useFormKeys(opts: {
   onSave: () => void;
@@ -939,7 +940,11 @@ function useFormKeys(opts: {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (blocked) return;
-      const tag = (e.target as HTMLElement | null)?.tagName;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      // Inputs with a <datalist> (e.g. merchant autocomplete): Enter picks the
+      // suggestion, so let the browser handle it and don't submit.
+      const hasList = !!target?.getAttribute?.("list");
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
@@ -947,7 +952,7 @@ function useFormKeys(opts: {
         e.key === "Enter" &&
         tag !== "TEXTAREA" &&
         tag !== "BUTTON" &&
-        tag !== "SELECT"
+        !hasList
       ) {
         e.preventDefault();
         if (!disabled) onSave();
