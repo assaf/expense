@@ -879,22 +879,32 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-50 flex flex-col bg-black/85"
       onClick={onClose}
     >
-      <button
-        className="absolute right-4 top-4 text-white"
-        onClick={onClose}
-        aria-label="Close"
-      >
-        <X className="h-8 w-8" />
-      </button>
-      <img
-        src={src}
-        alt="Receipt"
-        className="max-h-full max-w-full object-contain"
+      <div className="flex justify-end p-3">
+        <button
+          className="text-white"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label="Close"
+        >
+          <X className="h-7 w-7" />
+        </button>
+      </div>
+      {/* Scrollable area: image fits width, natural height -> scroll if taller. */}
+      <div
+        className="min-h-0 flex-1 overflow-auto"
         onClick={(e) => e.stopPropagation()}
-      />
+      >
+        <img
+          src={src}
+          alt="Receipt"
+          className="mx-auto block h-auto max-w-full"
+        />
+      </div>
     </div>
   );
 }
