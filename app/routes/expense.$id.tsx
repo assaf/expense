@@ -454,6 +454,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             placeholder="0.00"
             className="rounded-lg border border-gray-300 px-3 py-2"
             value={amount}
+            onClick={(e) => e.currentTarget.select()}
             onChange={(e) => setAmount(e.target.value)}
             onBlur={(e) => setAmount(normalizeAmount(e.target.value))}
           />
@@ -721,6 +722,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             placeholder="0.00"
             className="rounded-lg border border-gray-300 px-3 py-2"
             value={amount}
+            onClick={(e) => e.currentTarget.select()}
             onChange={(e) => {
               manualAmount.current = true;
               setAmount(e.target.value);
