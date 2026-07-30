@@ -881,7 +881,8 @@ function fetcherError(data: unknown): string {
 /**
  * Form-wide keyboard shortcuts: Enter saves, Escape cancels.
  * Skipped while an overlay (lightbox/confirm) is open, and Enter is ignored in
- * textareas (newlines) and on buttons (they submit themselves).
+ * textareas (newlines), on buttons (they submit themselves), and in selects
+ * (Return picks the highlighted option).
  */
 function useFormKeys(opts: {
   onSave: () => void;
@@ -897,7 +898,12 @@ function useFormKeys(opts: {
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
-      } else if (e.key === "Enter" && tag !== "TEXTAREA" && tag !== "BUTTON") {
+      } else if (
+        e.key === "Enter" &&
+        tag !== "TEXTAREA" &&
+        tag !== "BUTTON" &&
+        tag !== "SELECT"
+      ) {
         e.preventDefault();
         if (!disabled) onSave();
       }
