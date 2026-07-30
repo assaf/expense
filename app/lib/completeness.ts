@@ -1,6 +1,12 @@
 import type { Expense } from "~/lib/types";
 import { parseAmount } from "~/lib/format";
 
+/** A non-zero monetary amount is required for completeness (0 / empty = incomplete). */
+function hasAmount(amount: string): boolean {
+  const n = parseAmount(amount);
+  return n !== null && n !== 0;
+}
+
 /** A receipt is complete when it has date, merchant, amount, image, category, report. */
 export function isReceiptComplete(
   e: Extract<Expense, { type: "receipt" }>,
@@ -11,7 +17,7 @@ export function isReceiptComplete(
     e.imageFile &&
     e.category.trim() &&
     e.report.trim() &&
-    parseAmount(e.amount) !== null,
+    hasAmount(e.amount),
   );
 }
 
@@ -22,7 +28,7 @@ export function isMileageComplete(
   return Boolean(
     e.date &&
     e.report.trim() &&
-    parseAmount(e.amount) !== null &&
+    hasAmount(e.amount) &&
     e.locations.filter((l) => l.address.trim()).length >= 2,
   );
 }
