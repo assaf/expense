@@ -284,6 +284,12 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   }
 
   const error = fetcherError(fetcher.data);
+  useFormKeys({
+    onSave,
+    onCancel: () => navigate("/"),
+    disabled: fetcher.state !== "idle",
+    blocked: lightbox || confirmDelete,
+  });
 
   return (
     <Shell title={expense.merchant || "New receipt"}>
@@ -571,6 +577,12 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   }
 
   const error = fetcherError(fetcher.data);
+  useFormKeys({
+    onSave,
+    onCancel: () => navigate("/"),
+    disabled: fetcher.state !== "idle",
+    blocked: false,
+  });
 
   const stops = locations
     .filter((l) => l.lat !== null && l.lng !== null)
@@ -815,6 +827,35 @@ function fetcherError(data: unknown): string {
     return typeof e === "string" ? e : "";
   }
   return "";
+}
+
+/**
+ * Form-wide keyboard shortcuts: Enter saves, Escape cancels.
+ * Skipped while an overlay (lightbox/confirm) is open, and Enter is ignored in
+ * textareas (newlines) and on buttons (they submit themselves).
+ */
+function useFormKeys(opts: {
+  onSave: () => void;
+  onCancel: () => void;
+  disabled: boolean;
+  blocked: boolean;
+}) {
+  const { onSave, onCancel, disabled, blocked } = opts;
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (blocked) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      } else if (e.key === "Enter" && tag !== "TEXTAREA" && tag !== "BUTTON") {
+        e.preventDefault();
+        if (!disabled) onSave();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onSave, onCancel, disabled, blocked]);
 }
 
 function ConfirmDialog({
