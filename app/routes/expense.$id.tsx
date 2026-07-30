@@ -271,6 +271,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const [imageVersion, setImageVersion] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [transition, setTransition] = useState<null | "save" | "cancel">(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const complete = useMemo(
@@ -326,6 +327,19 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     void fetcher.submit(form, { method: "post" });
   }
 
+  const doSave = () => {
+    setTransition("save");
+    onSave();
+  };
+  const doCancel = () => {
+    setTransition("cancel");
+    navigate("/");
+  };
+  // Clear the overlay if the submission finishes without navigating (validation error).
+  useEffect(() => {
+    if (fetcher.state === "idle" && transition === "save") setTransition(null);
+  }, [fetcher.state, transition]);
+
   async function onDelete() {
     const form = new FormData();
     form.set("intent", "delete");
@@ -334,8 +348,8 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
-    onSave,
-    onCancel: () => navigate("/"),
+    onSave: doSave,
+    onCancel: doCancel,
     disabled: fetcher.state !== "idle",
     blocked: lightbox || confirmDelete,
   });
@@ -487,8 +501,8 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       <EditorActions
         complete={complete}
         saving={fetcher.state !== "idle"}
-        onCancel={() => navigate("/")}
-        onSave={onSave}
+        onCancel={doCancel}
+        onSave={doSave}
         onDelete={() => setConfirmDelete(true)}
       />
 
@@ -506,6 +520,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
           deleting={fetcher.state !== "idle"}
         />
       ) : null}
+      {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
   );
 }
@@ -532,6 +547,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   );
   const [approximate, setApproximate] = useState(false);
   const [computing, setComputing] = useState(false);
+  const [transition, setTransition] = useState<null | "save" | "cancel">(null);
   const manualAmount = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSig = useRef("");
@@ -625,10 +641,22 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     void fetcher.submit(form, { method: "post" });
   }
 
+  const doSave = () => {
+    setTransition("save");
+    onSave();
+  };
+  const doCancel = () => {
+    setTransition("cancel");
+    navigate("/");
+  };
+  useEffect(() => {
+    if (fetcher.state === "idle" && transition === "save") setTransition(null);
+  }, [fetcher.state, transition]);
+
   const error = fetcherError(fetcher.data);
   useFormKeys({
-    onSave,
-    onCancel: () => navigate("/"),
+    onSave: doSave,
+    onCancel: doCancel,
     disabled: fetcher.state !== "idle",
     blocked: false,
   });
@@ -767,14 +795,15 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       <EditorActions
         complete={complete}
         saving={fetcher.state !== "idle"}
-        onCancel={() => navigate("/")}
-        onSave={onSave}
+        onCancel={doCancel}
+        onSave={doSave}
         onDelete={() => {
           const form = new FormData();
           form.set("intent", "delete");
           void fetcher.submit(form, { method: "post" });
         }}
       />
+      {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
   );
 }
@@ -911,6 +940,20 @@ function useFormKeys(opts: {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onSave, onCancel, disabled, blocked]);
+}
+
+/** Brief visual feedback while a save/cancel navigation is in flight. */
+function TransitionOverlay({ kind }: { kind: "save" | "cancel" }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+      <div className="flex flex-col items-center gap-2 text-gray-600">
+        <Loader2 className="h-7 w-7 animate-spin" />
+        <span className="text-sm font-medium">
+          {kind === "save" ? "Saving…" : "Closing…"}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function ConfirmDialog({
