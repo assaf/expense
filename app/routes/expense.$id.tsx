@@ -950,6 +950,10 @@ function useFormKeys(opts: {
       if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
+      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        // Cmd/Ctrl+Enter always submits, even in textareas / autocomplete / dropdowns.
+        e.preventDefault();
+        if (!disabled) onSave();
       } else if (
         e.key === "Enter" &&
         tag !== "TEXTAREA" &&
