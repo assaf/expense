@@ -14,7 +14,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm --config.verify-deps-before-run=false run build
+RUN pnpm --config.verify-deps-before-run=false run build:prisma \
+    && pnpm --config.verify-deps-before-run=false run build
 
 # --- RUNNER ---
 FROM node:26-slim AS runner
@@ -34,6 +35,8 @@ EXPOSE 3000
 
 # Persistent state lives in /app/data — mount a volume here in Coolify.
 COPY --from=builder /app/build ./build
+COPY --from=builder /app/node_modules/.pnpm/node_modules/@prisma/engines ./build/node_modules/.pnpm/node_modules/@prisma/engines
+COPY --from=builder /app/prisma/generated ./prisma/generated
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 RUN pnpm --config.verify-deps-before-run=false install --prod --frozen-lockfile --ignore-scripts

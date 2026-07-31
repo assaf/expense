@@ -1,23 +1,29 @@
 # Agent guide — Expensify
 
 Personal expense tracker (receipts + mileage). React Router v8 framework mode,
-Tailwind v4. Storage is Postgres-only (required): all reads/writes go through
-`app/lib/store.server.ts` → `app/lib/store/database.ts`; receipt images via
+Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
+(schema in `prisma/schema.prisma` — the single source of truth; client in
+`app/lib/prisma.server.ts`). Domain reads/writes go through
+`app/lib/store.server.ts` → `app/lib/database.ts`; receipt images via
 `app/lib/images.server.ts` (Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
 or Postgres BYTEA with `IMAGE_BACKEND=pg` — the dev/test default; no separate
-service needed).
+service needed). There is **no runtime DDL** — schema changes go through
+Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
 Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`) only.
 Deployed to Coolify.
 
 ## Commands
 
 ```bash
-pnpm dev        # dev server (port 5173) — env from Infisical (--env dev)
-pnpm check      # react-router typegen + vp check (format/lint/typecheck)
-pnpm build      # production build
-pnpm start      # serve production build (port 3000)
-pnpm test       # 30 tests against local Postgres (expensify_test, incl. image blobs)
-./scripts/deploy [--skip-tests]  # check + tests + GHCR push + Coolify (Infisical)
+pnpm dev             # dev server — env from Infisical (--env dev)
+pnpm check           # prisma generate + react-router typegen + vp check
+pnpm build           # production build
+pnpm build:prisma    # prisma generate (writes prisma/generated, gitignored)
+pnpm start           # serve production build (port 3000)
+pnpm db:push         # sync the dev database to schema.prisma
+pnpm db:migrate      # apply prisma/migrations (deploy)
+pnpm test            # force-resets expensify_test schema + 40 tests (incl. image blobs)
+./scripts/deploy [--skip-tests]  # check + tests + prod db push + GHCR push + Coolify (Infisical)
 ```
 
 Run `pnpm check` before committing.
@@ -39,11 +45,13 @@ image blobs in Postgres), not `.env`/Infisical.
 - **Routing**: React Router v8, flat file routes in `app/routes/`. `app/routes.ts`
   wires an index + `flatRoutes()`. Loaders/actions are server-only.
 - **Types**: import route types from `./+types/<name>`. Path alias `~/*` → `app/*`.
-- **State**: Postgres (`expenses`, `reports`, `categories`, `settings`,
-  `mileage` tables) — required, everywhere. `data/` CSVs exist only as the
-  migration source for `pnpm migrate-data`. Never read state on the client;
-  all reads/writes go through `app/lib/store.server.ts` →
-  `app/lib/store/database.ts`.
+- **State**: Postgres via Prisma (schema.prisma) — accounts, users, expenses,
+  reports, categories, settings, mileage, image_blobs. Required, everywhere.
+  `data/` CSVs exist only as the migration source for `pnpm migrate-data`.
+  Never read state on the client; all reads/writes go through
+  `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
+  by `accountId`). `prisma/generated` is the generated client (gitignored,
+  produced by `pnpm build:prisma`).
 - **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
   is set, or Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` —
   used by dev/tests. No local fallback. See `app/lib/images.server.ts`.
@@ -60,21 +68,24 @@ image blobs in Postgres), not `.env`/Infisical.
 
 ## Key files
 
-| File                              | Role                                                |
-| --------------------------------- | --------------------------------------------------- |
-| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.         |
-| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).      |
-| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.             |
-| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                |
-| `app/routes/export.*`             | PDF per report + ZIP of everything.                 |
-| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.  |
-| `app/routes/login.tsx`            | Sign in / create account / join by invite code.     |
-| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.          |
-| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup. |
-| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.            |
-| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                |
-| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).    |
-| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                   |
+| File                              | Role                                                 |
+| --------------------------------- | ---------------------------------------------------- |
+| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.          |
+| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).       |
+| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.              |
+| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                 |
+| `app/routes/export.*`             | PDF per report + ZIP of everything.                  |
+| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.   |
+| `app/routes/login.tsx`            | Sign in / create account / join by invite code.      |
+| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.           |
+| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup.  |
+| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.             |
+| `app/lib/prisma.server.ts`        | Prisma client singleton (PrismaPg adapter).          |
+| `prisma/schema.prisma`            | Single schema source of truth (8 models).            |
+| `prisma/migrations/0_init`        | Baseline migration (fresh DBs via `prisma migrate`). |
+| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                 |
+| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).     |
+| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                    |
 
 ## Gotchas
 
@@ -89,8 +100,9 @@ image blobs in Postgres), not `.env`/Infisical.
     (`SESSION_SECRET`, 30-day max age).
   - **Bootstrap**: on an empty database, the first account + user are
     created from `APP_USERNAME`/`APP_PASSWORD` (fail-closed if missing).
-    Single-user era rows are adopted into that account automatically
-    (idempotent migrations in `initStore`).
+    Single-user era rows are adopted into that account automatically. This
+    is app-side data seeding (`initStore` in database.ts, memoized per
+    process) — the SCHEMA itself is managed by Prisma (no runtime DDL).
   - Every loader/action calls `requireUser(request)` and passes
     `user.accountId` to the store; the root loader guards all routes.
   - Tests seed two accounts + three users; `launchBrowser.ts` signs in as

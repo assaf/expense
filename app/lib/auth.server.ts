@@ -8,6 +8,7 @@ import {
   findUserById,
   findUserByUsername,
   getPasswordHash,
+  initStore,
 } from "./store.server";
 import type { User } from "./types";
 
@@ -45,6 +46,7 @@ const sessionStorage = createCookieSessionStorage({
 
 /** Require an authenticated request. Returns the user or redirects to /login. */
 export async function requireUser(request: Request): Promise<User> {
+  await initStore();
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
@@ -89,6 +91,7 @@ export async function login(
   username: string,
   password: string,
 ): Promise<string> {
+  await initStore();
   const user = await findUserByUsername(username);
   const stored = user ? await getPasswordHash(user.id) : "";
   if (!user || !stored || !(await verifyPassword(password, stored))) {
@@ -107,6 +110,7 @@ export async function createAccountWithUser(input: {
   username: string;
   password: string;
 }): Promise<string> {
+  await initStore();
   validateSignup(input.username, input.password);
   const account = await createAccount(input.accountName);
   const user = await createUser({
@@ -128,6 +132,7 @@ export async function joinAccountWithInviteCode(input: {
   username: string;
   password: string;
 }): Promise<string> {
+  await initStore();
   validateSignup(input.username, input.password);
   const account = await findAccountByInviteCode(
     normalizeInviteCode(input.inviteCode),

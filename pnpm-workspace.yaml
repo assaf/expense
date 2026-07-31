@@ -1,10 +1,16 @@
 allowBuilds:
   "@tailwindcss/oxide": true
   esbuild: true
+  "@prisma/client": true
+  "@prisma/engines": true
+  prisma: true
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
   - esbuild
+  - "@prisma/client"
+  - "@prisma/engines"
+  - prisma
 
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.6

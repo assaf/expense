@@ -1,9 +1,9 @@
-import postgres from "postgres";
-import type { Sql, TransactionSql } from "postgres";
 import { ulid } from "ulid";
-import { APP_PASSWORD, APP_USERNAME, DATABASE_URL } from "~/lib/env";
+import { APP_PASSWORD, APP_USERNAME } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
+import prisma from "~/lib/prisma.server";
+import type { Prisma } from "prisma/generated";
 import { DEFAULT_SETTINGS } from "~/lib/types";
 import type {
   Account,
@@ -17,183 +17,66 @@ import type {
 } from "~/lib/types";
 
 /**
- * Postgres-backed store — the only storage backend. DATABASE_URL is required;
- * all accounts/users/expenses/reports/categories/settings/mileage/image-blob
- * reads and writes go through here (see app/lib/store.server.ts).
+ * Postgres-backed store via Prisma (see prisma/schema.prisma — the single
+ * schema source of truth). All accounts/users/expenses/reports/categories/
+ * settings/mileage/image-blob reads and writes go through here.
  *
  * Every domain row belongs to an account (`accountId`); all reads and writes
  * are scoped to the caller's account so users only ever see their own
  * account's data. Multiple users may belong to one account and share its
  * expenses, reports, categories, and settings.
+ *
+ * There is no runtime DDL: schema changes go through `prisma migrate` /
+ * `pnpm db:push`. `initStore` only performs one-time data seeding: it
+ * bootstraps the first account/user from APP_USERNAME/APP_PASSWORD and
+ * adopts single-user era rows (accountId '') into that account.
  */
 
-let sql: Sql | undefined;
-let schemaReady: Promise<void> | undefined;
+let ready: Promise<void> | undefined;
 
-function db(): Sql {
-  if (!sql) {
-    if (!DATABASE_URL) throw new Error("DATABASE_URL is not configured");
-    sql = postgres(DATABASE_URL, {
-      max: 5,
-      idle_timeout: 20,
-      connect_timeout: 10,
+/** One-time (per process) data seeding: bootstrap user + adopt legacy rows. */
+export async function initStore(): Promise<void> {
+  if (!ready) {
+    ready = (async () => {
+      const bootstrap = await ensureBootstrapUser();
+      await prisma.expense.updateMany({
+        where: { accountId: "" },
+        data: { accountId: bootstrap.accountId },
+      });
+      await prisma.report.updateMany({
+        where: { accountId: "" },
+        data: { accountId: bootstrap.accountId },
+      });
+      await prisma.category.updateMany({
+        where: { accountId: "" },
+        data: { accountId: bootstrap.accountId },
+      });
+      await prisma.mileage.updateMany({
+        where: { accountId: "" },
+        data: { accountId: bootstrap.accountId },
+      });
+      await prisma.settings.updateMany({
+        where: { accountId: "" },
+        data: { accountId: bootstrap.accountId },
+      });
+    })().catch((error) => {
+      // Allow a retry on the next call if seeding failed partway.
+      ready = undefined;
+      throw error;
     });
   }
-  return sql;
-}
-
-// Tables created on first use. Legacy single-user tables are upgraded by
-// migrateSchema() below (accountId columns, per-account uniqueness, FKs).
-const DDL = `
-CREATE TABLE IF NOT EXISTS accounts (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT NOT NULL UNIQUE,
-  "inviteCode" TEXT NOT NULL UNIQUE,
-  "createdAt" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS users (
-  "id" TEXT PRIMARY KEY,
-  "accountId" TEXT NOT NULL,
-  "username" TEXT NOT NULL UNIQUE,
-  "passwordHash" TEXT NOT NULL DEFAULT '',
-  "name" TEXT NOT NULL DEFAULT '',
-  "createdAt" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS expenses (
-  "id" TEXT PRIMARY KEY,
-  "type" TEXT NOT NULL DEFAULT '',
-  "date" TEXT NOT NULL DEFAULT '',
-  "report" TEXT NOT NULL DEFAULT '',
-  "category" TEXT NOT NULL DEFAULT '',
-  "description" TEXT NOT NULL DEFAULT '',
-  "amount" TEXT NOT NULL DEFAULT '',
-  "merchant" TEXT NOT NULL DEFAULT '',
-  "imageFile" TEXT NOT NULL DEFAULT '',
-  "imageMime" TEXT NOT NULL DEFAULT '',
-  "originalName" TEXT NOT NULL DEFAULT '',
-  "distanceMiles" TEXT NOT NULL DEFAULT '',
-  "locations" JSONB NOT NULL DEFAULT '[]',
-  "createdAt" TEXT NOT NULL DEFAULT '',
-  "updatedAt" TEXT NOT NULL DEFAULT '',
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS reports (
-  "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS categories (
-  "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS mileage (
-  "date" TEXT NOT NULL DEFAULT '',
-  "report" TEXT NOT NULL DEFAULT '',
-  "locations" TEXT NOT NULL DEFAULT '',
-  "distanceMiles" TEXT NOT NULL DEFAULT '',
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS "settings" (
-  "accountId" TEXT NOT NULL DEFAULT '',
-  "key" TEXT NOT NULL DEFAULT '',
-  "value" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS image_blobs (
-  "key" TEXT PRIMARY KEY,
-  "mime" TEXT NOT NULL DEFAULT '',
-  "data" BYTEA NOT NULL
-);
-`;
-
-/**
- * Create tables, migrate the single-user schema to per-account, and bootstrap
- * the first account/user. Idempotent and memoized per process — runs on first
- * use in every process (dev, tests, production).
- */
-export async function initStore(): Promise<void> {
-  if (!schemaReady) {
-    schemaReady = migrateSchema();
-  }
-  await schemaReady;
-}
-
-async function migrateSchema(): Promise<void> {
-  await db().unsafe(DDL);
-
-  // Legacy tables get an account column (default '' until adopted below).
-  await db().unsafe(`
-    ALTER TABLE expenses ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';
-    ALTER TABLE reports ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';
-    ALTER TABLE categories ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';
-    ALTER TABLE "settings" ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';
-    ALTER TABLE mileage ADD COLUMN IF NOT EXISTS "accountId" TEXT NOT NULL DEFAULT '';
-  `);
-
-  // First user (from APP_USERNAME/APP_PASSWORD) or the oldest existing one.
-  const bootstrap = await ensureBootstrapUser();
-
-  // Adopt single-user era rows (accountId '') into the bootstrap account.
-  await db()`UPDATE expenses SET "accountId" = ${bootstrap.accountId} WHERE "accountId" = ''`;
-  await db()`UPDATE reports SET "accountId" = ${bootstrap.accountId} WHERE "accountId" = ''`;
-  await db()`UPDATE categories SET "accountId" = ${bootstrap.accountId} WHERE "accountId" = ''`;
-  await db()`UPDATE mileage SET "accountId" = ${bootstrap.accountId} WHERE "accountId" = ''`;
-  await db()`UPDATE "settings" SET "accountId" = ${bootstrap.accountId} WHERE "accountId" = ''`;
-
-  // Reports/categories were globally unique; they are now unique per account.
-  await db().unsafe(`
-    ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_name_key;
-    ALTER TABLE categories DROP CONSTRAINT IF EXISTS categories_name_key;
-    CREATE UNIQUE INDEX IF NOT EXISTS reports_account_name_idx
-      ON reports ("accountId", "name");
-    CREATE UNIQUE INDEX IF NOT EXISTS categories_account_name_idx
-      ON categories ("accountId", "name");
-    ALTER TABLE "settings" DROP CONSTRAINT IF EXISTS settings_pkey;
-    ALTER TABLE "settings" ADD PRIMARY KEY ("accountId", "key");
-  `);
-
-  // Foreign keys (idempotent; added only when missing).
-  await db().unsafe(`
-    DO $do$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_account_fk') THEN
-        ALTER TABLE users ADD CONSTRAINT users_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expenses_account_fk') THEN
-        ALTER TABLE expenses ADD CONSTRAINT expenses_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reports_account_fk') THEN
-        ALTER TABLE reports ADD CONSTRAINT reports_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'categories_account_fk') THEN
-        ALTER TABLE categories ADD CONSTRAINT categories_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'mileage_account_fk') THEN
-        ALTER TABLE mileage ADD CONSTRAINT mileage_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'settings_account_fk') THEN
-        ALTER TABLE "settings" ADD CONSTRAINT settings_account_fk
-          FOREIGN KEY ("accountId") REFERENCES accounts("id") ON DELETE CASCADE;
-      END IF;
-    END $do$;
-  `);
+  await ready;
 }
 
 /**
- * Guarantee at least one user exists. On a fresh database, creates the
+ * Guarantee at least one user exists. On an empty database, creates the
  * bootstrap account + user from APP_USERNAME/APP_PASSWORD (fail-closed if
- * those are missing). Otherwise returns the oldest existing user — used only
- * to adopt legacy (pre-account) rows.
+ * missing). Otherwise returns the oldest existing user — used as the target
+ * account for adopting legacy (pre-account) rows.
  */
 async function ensureBootstrapUser(): Promise<User> {
-  const users = await db()<
-    UserRow[]
-  >`SELECT * FROM users ORDER BY "createdAt" LIMIT 1`;
-  if (users.length > 0) return rowToUser(users[0]);
+  const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  if (first) return rowToUser(first);
 
   if (!APP_USERNAME || !APP_PASSWORD) {
     throw new Error(
@@ -203,70 +86,50 @@ async function ensureBootstrapUser(): Promise<User> {
   }
 
   const now = new Date().toISOString();
-  const account: Account = {
-    id: ulid(),
-    name: APP_USERNAME.trim(),
-    inviteCode: generateInviteCode(),
-    createdAt: now,
-  };
-  const user: User = {
-    id: ulid(),
-    accountId: account.id,
+  const accountId = ulid();
+  const userId = ulid();
+  await prisma.$transaction([
+    prisma.account.create({
+      data: {
+        id: accountId,
+        name: APP_USERNAME.trim(),
+        inviteCode: generateInviteCode(),
+        createdAt: now,
+      },
+    }),
+    prisma.user.create({
+      data: {
+        id: userId,
+        accountId,
+        username: APP_USERNAME.trim().toLowerCase(),
+        passwordHash: await hashPassword(APP_PASSWORD),
+        name: APP_USERNAME.trim(),
+        createdAt: now,
+      },
+    }),
+  ]);
+  return {
+    id: userId,
+    accountId,
     username: APP_USERNAME.trim().toLowerCase(),
     name: APP_USERNAME.trim(),
     createdAt: now,
   };
-  const passwordHash = await hashPassword(APP_PASSWORD);
-  await db().begin(async (tx) => {
-    await tx`INSERT INTO accounts ${tx(account)}`;
-    await tx`INSERT INTO users ${tx({ ...user, passwordHash })}`;
-  });
-  return user;
 }
 
 // --- Accounts & Users ------------------------------------------------------
 
-interface AccountRow {
-  id: string;
-  name: string;
-  inviteCode: string;
-  createdAt: string;
+function rowToAccount(row: Account): Account {
+  return row;
 }
 
-interface UserRow {
-  id: string;
-  accountId: string;
-  username: string;
-  passwordHash: string;
-  name: string;
-  createdAt: string;
-}
-
-function rowToAccount(row: AccountRow): Account {
-  return {
-    id: row.id,
-    name: row.name,
-    inviteCode: row.inviteCode,
-    createdAt: row.createdAt,
-  };
-}
-
-function rowToUser(row: UserRow): User {
-  return {
-    id: row.id,
-    accountId: row.accountId,
-    username: row.username,
-    name: row.name,
-    createdAt: row.createdAt,
-  };
+function rowToUser(row: User): User {
+  return row;
 }
 
 export async function readAccount(id: string): Promise<Account | undefined> {
-  await initStore();
-  const rows = await db()<
-    AccountRow[]
-  >`SELECT * FROM accounts WHERE "id" = ${id}`;
-  return rows.length > 0 ? rowToAccount(rows[0]) : undefined;
+  const row = await prisma.account.findUnique({ where: { id } });
+  return row ? rowToAccount(row) : undefined;
 }
 
 /** Create a new account. Throws if the name is already taken. */
@@ -274,36 +137,32 @@ export async function createAccount(name: string): Promise<Account> {
   const clean = name.trim();
   if (!clean) throw new Error("Account name is required");
   await initStore();
-  const clash = await db()<
-    AccountRow[]
-  >`SELECT "id" FROM accounts WHERE "name" = ${clean} LIMIT 1`;
-  if (clash.length > 0)
-    throw new Error("An account with that name already exists");
+  const clash = await prisma.account.findUnique({ where: { name: clean } });
+  if (clash) throw new Error("An account with that name already exists");
   const account: Account = {
     id: ulid(),
     name: clean,
     inviteCode: generateInviteCode(),
     createdAt: new Date().toISOString(),
   };
-  await db()`INSERT INTO accounts ${db()(account)}`;
+  await prisma.account.create({ data: account });
   return account;
 }
 
 export async function findAccountByInviteCode(
   inviteCode: string,
 ): Promise<Account | undefined> {
-  await initStore();
-  const rows = await db()<
-    AccountRow[]
-  >`SELECT * FROM accounts WHERE "inviteCode" = ${inviteCode} LIMIT 1`;
-  return rows.length > 0 ? rowToAccount(rows[0]) : undefined;
+  const row = await prisma.account.findUnique({ where: { inviteCode } });
+  return row ? rowToAccount(row) : undefined;
 }
 
 /** Replace an account's invite code with a fresh one; returns the new code. */
 export async function regenerateInviteCode(accountId: string): Promise<string> {
-  await initStore();
   const code = generateInviteCode();
-  await db()`UPDATE accounts SET "inviteCode" = ${code} WHERE "id" = ${accountId}`;
+  await prisma.account.update({
+    where: { id: accountId },
+    data: { inviteCode: code },
+  });
   return code;
 }
 
@@ -317,10 +176,8 @@ export async function createUser(input: {
   await initStore();
   const username = input.username.trim().toLowerCase();
   if (!username) throw new Error("Username is required");
-  const clash = await db()<
-    UserRow[]
-  >`SELECT "id" FROM users WHERE "username" = ${username} LIMIT 1`;
-  if (clash.length > 0) throw new Error("That username is already taken");
+  const clash = await prisma.user.findUnique({ where: { username } });
+  if (clash) throw new Error("That username is already taken");
   const user: User = {
     id: ulid(),
     accountId: input.accountId,
@@ -328,62 +185,39 @@ export async function createUser(input: {
     name: input.name.trim() || username,
     createdAt: new Date().toISOString(),
   };
-  await db()`INSERT INTO users ${db()({ ...user, passwordHash: input.passwordHash })}`;
+  await prisma.user.create({
+    data: { ...user, passwordHash: input.passwordHash },
+  });
   return user;
 }
 
 export async function findUserByUsername(
   username: string,
 ): Promise<User | undefined> {
-  await initStore();
-  const rows = await db()<
-    UserRow[]
-  >`SELECT * FROM users WHERE "username" = ${username.trim().toLowerCase()} LIMIT 1`;
-  return rows.length > 0 ? rowToUser(rows[0]) : undefined;
+  const row = await prisma.user.findUnique({
+    where: { username: username.trim().toLowerCase() },
+  });
+  return row ? rowToUser(row) : undefined;
 }
 
 export async function findUserById(id: string): Promise<User | undefined> {
-  await initStore();
-  const rows = await db()<
-    UserRow[]
-  >`SELECT * FROM users WHERE "id" = ${id} LIMIT 1`;
-  return rows.length > 0 ? rowToUser(rows[0]) : undefined;
+  const row = await prisma.user.findUnique({ where: { id } });
+  return row ? rowToUser(row) : undefined;
 }
 
 /** The stored password hash for a user (never exposed on the User type). */
 export async function getPasswordHash(userId: string): Promise<string> {
-  await initStore();
-  const rows = await db()<
-    { passwordHash: string }[]
-  >`SELECT "passwordHash" FROM users WHERE "id" = ${userId} LIMIT 1`;
-  return rows.length > 0 ? rows[0].passwordHash : "";
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordHash: true },
+  });
+  return row?.passwordHash ?? "";
 }
 
 // --- Expenses --------------------------------------------------------------
 
-interface ExpenseRow {
-  id: string;
-  type: string;
-  date: string;
-  report: string;
-  category: string;
-  description: string;
-  amount: string;
-  merchant: string;
-  imageFile: string;
-  imageMime: string;
-  originalName: string;
-  distanceMiles: string;
-  locations: unknown;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export async function readExpenses(accountId: string): Promise<Expense[]> {
-  await initStore();
-  const rows = await db()<
-    ExpenseRow[]
-  >`SELECT * FROM expenses WHERE "accountId" = ${accountId}`;
+  const rows = await prisma.expense.findMany({ where: { accountId } });
   return rows.map(rowToExpense);
 }
 
@@ -391,25 +225,37 @@ export async function readExpense(
   id: string,
   accountId: string,
 ): Promise<Expense | undefined> {
-  await initStore();
-  const rows = await db()<
-    ExpenseRow[]
-  >`SELECT * FROM expenses WHERE "id" = ${id} AND "accountId" = ${accountId}`;
-  return rows.length > 0 ? rowToExpense(rows[0]) : undefined;
+  const row = await prisma.expense.findFirst({
+    where: { id, accountId },
+  });
+  return row ? rowToExpense(row) : undefined;
 }
 
 export async function writeExpenses(
   accountId: string,
   expenses: Expense[],
 ): Promise<void> {
-  await initStore();
-  await db().begin(async (tx) => {
-    await tx`DELETE FROM expenses WHERE "accountId" = ${accountId}`;
-    for (const e of expenses) {
-      await tx`INSERT INTO expenses ${tx({ ...expenseRow(e), accountId })}`;
-    }
-    await rebuildMileage(tx, accountId, expenses);
-  });
+  await prisma.$transaction([
+    prisma.expense.deleteMany({ where: { accountId } }),
+    prisma.expense.createMany({
+      data: expenses.map((e) => ({ ...expenseData(e), accountId })),
+    }),
+    prisma.mileage.deleteMany({ where: { accountId } }),
+    prisma.mileage.createMany({
+      data: expenses
+        .filter((e): e is MileageExpense => e.type === "mileage")
+        .map((e) => ({
+          date: e.date,
+          report: e.report,
+          locations: e.locations
+            .map((l) => l.address)
+            .filter(Boolean)
+            .join(" → "),
+          distanceMiles: e.distanceMiles,
+          accountId,
+        })),
+    }),
+  ]);
 }
 
 export async function upsertExpense(
@@ -440,44 +286,26 @@ export async function deleteExpense(
 
 /** Distinct merchant names previously used, most-recent first. */
 export async function readPriorMerchants(accountId: string): Promise<string[]> {
-  await initStore();
-  const rows = await db()<
-    { merchant: string }[]
-  >`SELECT "merchant" FROM expenses WHERE "type" = 'receipt' AND "merchant" <> '' AND "accountId" = ${accountId} GROUP BY "merchant" ORDER BY MAX("createdAt") DESC`;
-  return rows.map((r) => r.merchant);
-}
-
-// --- Mileage table (derived artifact, mirrors mileage.csv) -----------------
-
-async function rebuildMileage(
-  tx: TransactionSql,
-  accountId: string,
-  expenses: Expense[],
-): Promise<void> {
-  await tx`DELETE FROM mileage WHERE "accountId" = ${accountId}`;
-  for (const e of expenses) {
-    if (e.type !== "mileage") continue;
-    const locationsText = e.locations
-      .map((l) => l.address)
-      .filter(Boolean)
-      .join(" → ");
-    await tx`INSERT INTO mileage ${tx({
-      date: e.date,
-      report: e.report,
-      locations: locationsText,
-      distanceMiles: e.distanceMiles,
-      accountId,
-    })}`;
-  }
+  const grouped = await prisma.expense.groupBy({
+    by: ["merchant"],
+    where: { accountId, type: "receipt", merchant: { not: "" } },
+    _max: { createdAt: true },
+  });
+  return grouped
+    .sort((a, b) =>
+      (b._max.createdAt ?? "").localeCompare(a._max.createdAt ?? ""),
+    )
+    .map((g) => g.merchant);
 }
 
 // --- Reports & Categories --------------------------------------------------
 
 export async function readReports(accountId: string): Promise<Report[]> {
-  await initStore();
-  const rows = await db()<
-    { name: string }[]
-  >`SELECT "name" FROM reports WHERE "name" <> '' AND "accountId" = ${accountId} ORDER BY "id"`;
+  const rows = await prisma.report.findMany({
+    where: { accountId, name: { not: "" } },
+    orderBy: { id: "asc" },
+    select: { name: true },
+  });
   return rows.map((r) => ({ name: r.name }));
 }
 
@@ -485,13 +313,13 @@ export async function writeReports(
   accountId: string,
   reports: Report[],
 ): Promise<void> {
-  await initStore();
-  await db().begin(async (tx) => {
-    await tx`DELETE FROM reports WHERE "accountId" = ${accountId}`;
-    for (const r of reports) {
-      await tx`INSERT INTO reports ${tx({ name: r.name, accountId })} ON CONFLICT ("accountId", "name") DO NOTHING`;
-    }
-  });
+  await prisma.$transaction([
+    prisma.report.deleteMany({ where: { accountId } }),
+    prisma.report.createMany({
+      data: reports.map((r) => ({ name: r.name, accountId })),
+      skipDuplicates: true,
+    }),
+  ]);
 }
 
 export async function addReport(
@@ -500,16 +328,17 @@ export async function addReport(
 ): Promise<void> {
   const clean = name.trim();
   if (!clean) return;
-  await initStore();
-  await db()`INSERT INTO reports ${db()({ name: clean, accountId })} ON CONFLICT ("accountId", "name") DO NOTHING`;
+  await prisma.report.createMany({
+    data: [{ name: clean, accountId }],
+    skipDuplicates: true,
+  });
 }
 
 export async function removeReport(
   accountId: string,
   name: string,
 ): Promise<void> {
-  await initStore();
-  await db()`DELETE FROM reports WHERE "name" = ${name} AND "accountId" = ${accountId}`;
+  await prisma.report.deleteMany({ where: { accountId, name } });
 }
 
 export async function renameReport(
@@ -519,21 +348,29 @@ export async function renameReport(
 ): Promise<void> {
   const clean = newName.trim();
   if (!clean || oldName === clean) return;
-  await initStore();
-  await db().begin(async (tx) => {
-    const clash =
-      await tx`SELECT 1 FROM reports WHERE "name" = ${clean} AND "name" <> ${oldName} AND "accountId" = ${accountId}`;
-    if (clash.length > 0) return;
-    await tx`UPDATE reports SET "name" = ${clean} WHERE "name" = ${oldName} AND "accountId" = ${accountId}`;
-    await tx`UPDATE expenses SET "report" = ${clean} WHERE "report" = ${oldName} AND "accountId" = ${accountId}`;
+  await prisma.$transaction(async (tx) => {
+    const clash = await tx.report.findFirst({
+      where: { accountId, name: clean, NOT: { name: oldName } },
+      select: { id: true },
+    });
+    if (clash) return;
+    await tx.report.updateMany({
+      where: { accountId, name: oldName },
+      data: { name: clean },
+    });
+    await tx.expense.updateMany({
+      where: { accountId, report: oldName },
+      data: { report: clean },
+    });
   });
 }
 
 export async function readCategories(accountId: string): Promise<Category[]> {
-  await initStore();
-  const rows = await db()<
-    { name: string }[]
-  >`SELECT "name" FROM categories WHERE "name" <> '' AND "accountId" = ${accountId} ORDER BY "id"`;
+  const rows = await prisma.category.findMany({
+    where: { accountId, name: { not: "" } },
+    orderBy: { id: "asc" },
+    select: { name: true },
+  });
   return rows.map((c) => ({ name: c.name }));
 }
 
@@ -541,13 +378,13 @@ export async function writeCategories(
   accountId: string,
   categories: Category[],
 ): Promise<void> {
-  await initStore();
-  await db().begin(async (tx) => {
-    await tx`DELETE FROM categories WHERE "accountId" = ${accountId}`;
-    for (const c of categories) {
-      await tx`INSERT INTO categories ${tx({ name: c.name, accountId })} ON CONFLICT ("accountId", "name") DO NOTHING`;
-    }
-  });
+  await prisma.$transaction([
+    prisma.category.deleteMany({ where: { accountId } }),
+    prisma.category.createMany({
+      data: categories.map((c) => ({ name: c.name, accountId })),
+      skipDuplicates: true,
+    }),
+  ]);
 }
 
 export async function addCategory(
@@ -556,25 +393,23 @@ export async function addCategory(
 ): Promise<void> {
   const clean = name.trim();
   if (!clean) return;
-  await initStore();
-  await db()`INSERT INTO categories ${db()({ name: clean, accountId })} ON CONFLICT ("accountId", "name") DO NOTHING`;
+  await prisma.category.createMany({
+    data: [{ name: clean, accountId }],
+    skipDuplicates: true,
+  });
 }
 
 export async function removeCategory(
   accountId: string,
   name: string,
 ): Promise<void> {
-  await initStore();
-  await db()`DELETE FROM categories WHERE "name" = ${name} AND "accountId" = ${accountId}`;
+  await prisma.category.deleteMany({ where: { accountId, name } });
 }
 
 // --- Settings --------------------------------------------------------------
 
 export async function readSettings(accountId: string): Promise<Settings> {
-  await initStore();
-  const rows = await db()<
-    { key: string; value: string }[]
-  >`SELECT "key", "value" FROM "settings" WHERE "accountId" = ${accountId}`;
+  const rows = await prisma.settings.findMany({ where: { accountId } });
   const settings: Settings = { ...DEFAULT_SETTINGS, mileageRates: {} };
   const kv: Record<string, string> = {};
   for (const row of rows) {
@@ -594,8 +429,7 @@ export async function writeSettings(
   accountId: string,
   settings: Settings,
 ): Promise<void> {
-  await initStore();
-  const rows: { accountId: string; key: string; value: string }[] = [
+  const rows = [
     { accountId, key: "homeAddress", value: settings.homeAddress },
     {
       accountId,
@@ -611,17 +445,18 @@ export async function writeSettings(
   for (const [year, rate] of Object.entries(settings.mileageRates)) {
     rows.push({ accountId, key: `mileageRate.${year}`, value: rate });
   }
-  await db().begin(async (tx) => {
-    await tx`DELETE FROM "settings" WHERE "accountId" = ${accountId}`;
-    for (const row of rows) {
-      await tx`INSERT INTO "settings" ${tx(row)}`;
-    }
-  });
+  await prisma.$transaction([
+    prisma.settings.deleteMany({ where: { accountId } }),
+    prisma.settings.createMany({ data: rows }),
+  ]);
 }
 
 // --- Helpers ---------------------------------------------------------------
 
-function expenseRow(e: Expense): Record<string, unknown> {
+/** Expense fields for create/update, split by type. */
+function expenseData(
+  e: Expense,
+): Omit<Prisma.ExpenseCreateManyInput, "accountId"> {
   const common = {
     id: e.id,
     type: e.type,
@@ -651,11 +486,27 @@ function expenseRow(e: Expense): Record<string, unknown> {
     imageMime: "",
     originalName: "",
     distanceMiles: e.distanceMiles,
-    locations: e.locations,
+    locations: e.locations as unknown as Prisma.InputJsonValue,
   };
 }
 
-function rowToExpense(row: ExpenseRow): Expense {
+function rowToExpense(row: {
+  id: string;
+  type: string;
+  date: string;
+  report: string;
+  category: string;
+  description: string;
+  amount: string;
+  merchant: string;
+  imageFile: string;
+  imageMime: string;
+  originalName: string;
+  distanceMiles: string;
+  locations: unknown;
+  createdAt: string;
+  updatedAt: string;
+}): Expense {
   const base = {
     id: row.id,
     type: row.type as Expense["type"],

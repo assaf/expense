@@ -3,6 +3,13 @@
 # Mirrors the Rentail deployment flow — secrets come from Infisical.
 #   - prod env: DATABASE_URL, BLOB_READ_WRITE_TOKEN (runtime env for the app)
 #   - dev env:  GHCR_TOKEN (registry auth)
+#
+# Schema: `prisma db push` syncs the production database to
+# prisma/schema.prisma before deploy. On a pre-Prisma database this applies
+# the accounts/users + accountId columns (additive) and rebuilds constraints;
+# --accept-data-loss covers the deliberate constraint rebuild (settings PK,
+# reports/categories unique). `migrate resolve` records the 0_init baseline so
+# future `prisma migrate deploy` runs have history.
 set -eo pipefail
 
 IMAGE="ghcr.io/assaf/expensify:latest"
@@ -17,12 +24,16 @@ else
   pnpm test
 fi
 
-echo -e "\033[0;32m--- Step 3: Build and push image ---\033[0m"
+echo -e "\033[0;32m--- Step 3: Sync production schema ---\033[0m"
+infisical --env prod run -- pnpm prisma db push --accept-data-loss
+infisical --env prod run -- pnpm prisma migrate resolve --applied 0_init
+
+echo -e "\033[0;32m--- Step 4: Build and push image ---\033[0m"
 echo "$(infisical secrets get GHCR_TOKEN --env dev --plain)" | docker login ghcr.io -u assaf --password-stdin
 docker build -t "${IMAGE}" .
 docker push "${IMAGE}"
 
-echo -e "\033[0;32m--- Step 4: Deploy to Coolify ---\033[0m"
+echo -e "\033[0;32m--- Step 5: Deploy to Coolify ---\033[0m"
 infisical export --env prod --format=dotenv > .env
 infisical --env prod run -- coolify-ghcr-deploy \
   --app-name "expensify" \
@@ -30,5 +41,7 @@ infisical --env prod run -- coolify-ghcr-deploy \
   --env-file ".env" \
   --image "${IMAGE}" \
   --healthcheck-timeout 60
+
+rm -f .env
 
 echo -e "\033[0;34m--- Deployed ---\033[0m"

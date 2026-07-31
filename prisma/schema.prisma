@@ -1,0 +1,129 @@
+// Expensify schema — single source of truth for the Postgres database.
+// Managed with `pnpm db:push` (dev/deploy) and versioned migrations
+// (prisma/migrations). See app/lib/database.ts for the store layer.
+
+generator client {
+  provider               = "prisma-client"
+  output                 = "generated"
+  engineType             = "client"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+  moduleFormat           = "esm"
+  runtime                = "nodejs"
+}
+
+datasource db {
+  provider     = "postgresql"
+  relationMode = "foreignKeys"
+}
+
+/// A shared workspace: users in the same account share all data below.
+model Account {
+  id         String     @id
+  name       String     @unique
+  inviteCode String     @unique
+  createdAt  String
+
+  users      User[]
+  expenses   Expense[]
+  reports    Report[]
+  categories Category[]
+  mileage    Mileage[]
+  settings   Settings[]
+
+  @@map("accounts")
+}
+
+/// A login identity, always linked to exactly one account.
+model User {
+  id           String  @id
+  accountId    String
+  username     String  @unique
+  passwordHash String
+  name         String
+  createdAt    String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+model Expense {
+  id           String @id
+  type         String
+  date         String
+  report       String
+  category     String
+  description  String
+  amount       String
+  merchant     String
+  imageFile    String
+  imageMime    String
+  originalName String
+  distanceMiles String
+  locations    Json
+  createdAt    String
+  updatedAt    String
+  accountId    String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("expenses")
+}
+
+model Report {
+  id        BigInt @id @default(autoincrement())
+  name      String
+  accountId String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, name])
+  @@map("reports")
+}
+
+model Category {
+  id        BigInt @id @default(autoincrement())
+  name      String
+  accountId String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, name])
+  @@map("categories")
+}
+
+/// Derived artifact rebuilt on every expense write (mirrors the old mileage.csv).
+model Mileage {
+  id           BigInt @id @default(autoincrement())
+  date         String
+  report       String
+  locations    String
+  distanceMiles String
+  accountId    String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("mileage")
+}
+
+/// Per-account key/value settings (home location, mileage rates).
+model Settings {
+  accountId String
+  key       String
+  value     String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, key])
+  @@map("settings")
+}
+
+/// Receipt image bytes when IMAGE_BACKEND=pg (dev/tests).
+model ImageBlob {
+  key  String @id
+  mime String
+  data Bytes
+
+  @@map("image_blobs")
+}

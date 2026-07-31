@@ -1,9 +1,8 @@
 import { extname } from "node:path";
 import { del, get, put, rename as blobRename } from "@vercel/blob";
-import postgres from "postgres";
-import type { Sql } from "postgres";
 import { ulid } from "ulid";
-import { DATABASE_URL, IMAGE_BACKEND, hasBlob } from "~/lib/env";
+import { IMAGE_BACKEND, hasBlob } from "~/lib/env";
+import prisma from "~/lib/prisma.server";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
@@ -74,24 +73,12 @@ function backend(): Backend {
 
 // --- Postgres BYTEA client (lazy — only used with IMAGE_BACKEND=pg) ---------
 
-let pgSql: Sql | undefined;
-
-function pgDb(): Sql {
-  if (!pgSql) {
-    if (!DATABASE_URL) throw new Error("DATABASE_URL is not configured");
-    pgSql = postgres(DATABASE_URL, {
-      max: 2,
-      idle_timeout: 20,
-      connect_timeout: 10,
-    });
-  }
-  return pgSql;
-}
-
 async function pgExists(key: string): Promise<boolean> {
-  const rows =
-    await pgDb()`SELECT 1 FROM image_blobs WHERE "key" = ${key} LIMIT 1`;
-  return rows.length > 0;
+  const row = await prisma.imageBlob.findUnique({
+    where: { key },
+    select: { key: true },
+  });
+  return row !== null;
 }
 
 /**
@@ -141,7 +128,9 @@ export async function saveImage(
   }
 
   const pathname = toPathname(key);
-  await pgDb()`INSERT INTO image_blobs ("key", "mime", "data") VALUES (${pathname}, ${resolvedMime}, ${buffer})`;
+  await prisma.imageBlob.create({
+    data: { key: pathname, mime: resolvedMime, data: new Uint8Array(buffer) },
+  });
   return { filename: pathname, mime: resolvedMime };
 }
 
@@ -176,7 +165,10 @@ export async function renameImageToConvention(
   if (await pgExists(to)) {
     to = suffixedKey(target);
   }
-  await pgDb()`UPDATE image_blobs SET "key" = ${to} WHERE "key" = ${from}`;
+  await prisma.imageBlob.update({
+    where: { key: from },
+    data: { key: to },
+  });
   return to;
 }
 
@@ -192,11 +184,15 @@ export async function readImage(
     return { buffer, mime: result.blob.contentType ?? mimeForFile(filename) };
   }
 
-  const rows =
-    await pgDb()`SELECT "data", "mime" FROM image_blobs WHERE "key" = ${toPathname(filename)}`;
-  if (rows.length === 0) return null;
-  const row = rows[0] as { data: Buffer; mime: string };
-  return { buffer: row.data, mime: row.mime || mimeForFile(filename) };
+  const row = await prisma.imageBlob.findUnique({
+    where: { key: toPathname(filename) },
+    select: { data: true, mime: true },
+  });
+  if (!row) return null;
+  return {
+    buffer: Buffer.from(row.data),
+    mime: row.mime || mimeForFile(filename),
+  };
 }
 
 export async function deleteImage(filename: string): Promise<void> {
@@ -205,9 +201,9 @@ export async function deleteImage(filename: string): Promise<void> {
     await del(toPathname(filename)).catch(() => {});
     return;
   }
-  await pgDb()`DELETE FROM image_blobs WHERE "key" = ${toPathname(filename)}`.catch(
-    () => {},
-  );
+  await prisma.imageBlob
+    .deleteMany({ where: { key: toPathname(filename) } })
+    .catch(() => {});
 }
 
 /** Collision-safe convention key: `<stem>-<6 chars><ext>` (all backends). */

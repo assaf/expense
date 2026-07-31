@@ -1,18 +1,25 @@
 /**
  * Global setup: runs once before all test files.
- * Ensures the test schema exists, seeds the test database, and starts the
+ * Recreates the test schema from Prisma (pnpm test:db:push → db push
+ * --force-reset on expensify_test), seeds the test database, and starts the
  * forked test server (Postgres only — images live in Postgres BYTEA).
  * Requires local Postgres (expensify_test).
  */
-import { seedTestData } from "./seedTestData";
+import { execSync } from "node:child_process";
+import { seedTestData, TEST_DB_URL } from "./seedTestData";
 import { launchServer, closeServer } from "./launchServer";
 
 export default async function setup() {
-  // Select the Postgres backend before the app modules load, then ensure the
-  // schema exists (the server process reuses the same database).
-  process.env.DATABASE_URL = "postgres://localhost/expensify_test";
-  const store = await import("~/lib/store.server");
-  await store.initStore();
+  process.env.DATABASE_URL = TEST_DB_URL;
+
+  // Schema comes from prisma/schema.prisma — drop and recreate for a clean,
+  // deterministic test database (expensify_test is throwaway).
+  execSync("pnpm test:db:push", {
+    cwd: ".",
+    stdio: "inherit",
+    env: { ...process.env, DATABASE_URL: TEST_DB_URL },
+  });
+
   await seedTestData();
   await launchServer();
 

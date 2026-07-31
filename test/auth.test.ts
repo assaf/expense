@@ -1,14 +1,13 @@
 import { expect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
-import postgres from "postgres";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
-  TEST_DB_URL,
   TEST_INVITE_CODE,
   TEST_PASSWORD,
   TEST_USERNAME,
+  testPrisma,
 } from "./helpers/seedTestData";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
@@ -174,14 +173,10 @@ describe("Access control", () => {
 
 /** Grab an expense id from the second (isolation) account. */
 async function otherExpenseId(): Promise<string> {
-  const sql = postgres(TEST_DB_URL, { max: 1 });
-  try {
-    const rows = await sql<
-      { id: string }[]
-    >`SELECT "id" FROM expenses WHERE "accountId" = ${OTHER_ACCOUNT_ID} LIMIT 1`;
-    if (rows.length === 0) throw new Error("No isolation expense seeded");
-    return rows[0].id;
-  } finally {
-    await sql.end();
-  }
+  const row = await testPrisma.expense.findFirst({
+    where: { accountId: OTHER_ACCOUNT_ID },
+    select: { id: true },
+  });
+  if (!row) throw new Error("No isolation expense seeded");
+  return row.id;
 }

@@ -32,22 +32,28 @@ and accounts are fully isolated from each other.
 
 ## State
 
-Storage is Postgres-only. `DATABASE_URL` is required at startup (the app
-exits with a clear error otherwise). Receipt images go to Vercel Blob when
-`BLOB_READ_WRITE_TOKEN` is set (prod), or into Postgres BYTEA when
-`IMAGE_BACKEND=pg` (dev/tests — no separate service). A missing image backend
-is an error, never a silent disk fallback.
+Storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the
+single schema source of truth; the client is generated to
+`prisma/generated` by `pnpm build:prisma`). `DATABASE_URL` is required at
+startup (the app exits with a clear error otherwise). Receipt images go to
+Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set (prod), or into Postgres
+BYTEA when `IMAGE_BACKEND=pg` (dev/tests — no separate service). A missing
+image backend is an error, never a silent disk fallback.
 
 | Data                        | Images                                |
 | --------------------------- | ------------------------------------- |
-| `expenses` / `reports` /    | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
-| `categories` / `settings` / | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
-| `mileage` tables            |                                       |
+| `accounts` / `users` /      | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
+| `expenses` / `reports` /    | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
+| `categories` / `settings` / |                                       |
+| `mileage` / `image_blobs`   |                                       |
 
 All reads/writes go through `app/lib/store.server.ts` (→
-`app/lib/store/database.ts`); image storage is behind
-`app/lib/images.server.ts` (`@vercel/blob` vs Postgres `image_blobs`). Keys
-are `images/...` pathnames on every backend, so data is portable between them.
+`app/lib/database.ts`, Prisma queries scoped by `accountId`); image storage
+is behind `app/lib/images.server.ts` (`@vercel/blob` vs Prisma `imageBlob`).
+Keys are `images/...` pathnames on every backend, so data is portable
+between them. Schema changes: edit `prisma/schema.prisma`, then
+`prisma migrate dev --name …` locally and `pnpm db:push` (or
+`pnpm db:migrate`) before deploying.
 
 ### `data/` — migration source only
 
@@ -78,7 +84,7 @@ inline) wins; a local `.env` file fills the gaps. `DATABASE_URL` is required;
 
 ```bash
 # .env (project root, gitignored)
-DATABASE_URL=postgres://localhost/expensify_dev
+DATABASE_URL=postgres://assaf@localhost/expensify_dev   # include the local user
 IMAGE_BACKEND=pg        # receipt images live in Postgres — no extra service
 SESSION_SECRET=…         # signs the session cookie (random hex)
 APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
@@ -91,8 +97,9 @@ created through the app's signup/join flow. `SESSION_SECRET` is always
 required. `APP_USERNAME`/`APP_PASSWORD` can be removed from `.env` once you
 have at least one user.
 
-Tests intentionally hardcode `expensify_test` (Postgres incl. image blobs) and
-ignore the local database.
+Tests intentionally hardcode `expensify_test` (Postgres incl. image blobs),
+ignore the local database, and reset the schema from Prisma on each run
+(`pnpm test:db:push` in the test setup).
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
@@ -104,8 +111,11 @@ Vercel injects them at runtime; `.env` never exists there.
 prod secrets from [Infisical](https://infisical.com) (`infisical export --env
 prod > .env` + `infisical --env prod run -- coolify-ghcr-deploy --env-file
 .env`); `GHCR_TOKEN` comes from the Infisical `dev` env. Requires `infisical
-login` / `infisical init` once (writes `.infisical.json`). The one-off prod
-migrations also run this way: `pnpm migrate-data:prod`.
+login` / `infisical init` once (writes `.infisical.json`). Deploy syncs the
+production schema (`prisma db push --accept-data-loss` — additive on the
+pre-Prisma database — then `prisma migrate resolve --applied 0_init` to
+record the baseline). The one-off CSV import also runs this way:
+`pnpm migrate-data:prod`.
 
 ## Quick start
 
@@ -115,6 +125,7 @@ Prerequisites: Postgres running locally (`brew services start postgresql@18`).
 createdb expensify_dev          # once
 pnpm install
 # create .env with the local values above
+pnpm db:push                    # create the schema from prisma/schema.prisma
 pnpm dev                        # reads .env
 ```
 
@@ -122,10 +133,10 @@ Running the server without `DATABASE_URL` exits immediately with a clear
 error — there is no file-based fallback.
 
 ```bash
-pnpm check        # typegen + format + lint + typecheck
-pnpm build        # production build
+pnpm check        # prisma generate + typegen + format + lint + typecheck
+pnpm build        # production build (build:prisma runs first)
 pnpm start        # serve the production build (port 3000)
-pnpm test         # runs against expensify_test (Postgres only)
+pnpm test         # resets expensify_test from Prisma and runs the suite
 ```
 
 Node 26+ and pnpm 11+.

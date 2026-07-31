@@ -8,13 +8,16 @@
  *   IMAGE_BACKEND=pg        → Postgres BYTEA (dev)
  *   neither                 → images are skipped (keys kept; data still loads)
  *
+ * Requires the schema to exist — run `pnpm db:push` (or prisma migrate) first.
+ * All imported rows are assigned to the bootstrap account (created from
+ * APP_USERNAME/APP_PASSWORD when the database is empty).
+ *
  * Run with:
  *   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… node scripts/migrate-data.ts   # prod
  *   DATABASE_URL=postgres://localhost/expensify_dev IMAGE_BACKEND=pg node scripts/migrate-data.ts  # dev
  *
- * Requires Node 26+ (runs TypeScript natively). The schema DDL below must stay
- * in sync with app/lib/store/database.ts. Idempotent: re-running replaces the
- * DB rows and skips images that already exist in the store.
+ * Requires Node 26+ (runs TypeScript natively). Idempotent: re-running
+ * replaces the domain rows and skips images that already exist in the store.
  */
 import "dotenv/config";
 import { readFile, mkdir } from "node:fs/promises";
@@ -23,9 +26,10 @@ import { join, extname } from "node:path";
 import { randomBytes, scrypt as scryptCb } from "node:crypto";
 import { promisify } from "node:util";
 import { parse } from "csv-parse/sync";
-import postgres from "postgres";
 import { ulid } from "ulid";
 import { get, put } from "@vercel/blob";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../prisma/generated/client.ts";
 
 const DATA_DIR = process.env.DATA_DIR ?? "data";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
@@ -52,8 +56,9 @@ const INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateInviteCode(): string {
   let code = "";
-  for (const byte of randomBytes(8))
+  for (const byte of randomBytes(8)) {
     code += INVITE_CHARS[byte % INVITE_CHARS.length];
+  }
   return code;
 }
 
@@ -65,15 +70,20 @@ function imageBackend(): ImageBackend {
   return "none";
 }
 
-let migrateSql: postgres.Sql | undefined;
-
-function db(): postgres.Sql {
-  if (!migrateSql) {
-    if (!DATABASE_URL) fail("DATABASE_URL is required");
-    migrateSql = postgres(DATABASE_URL, { max: 5, connect_timeout: 10 });
-  }
-  return migrateSql;
+if (!DATABASE_URL) {
+  console.error("DATABASE_URL is required");
+  process.exit(1);
 }
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({
+    connectionString: DATABASE_URL,
+    max: 5,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 10_000,
+    allowExitOnIdle: true,
+  }),
+});
 
 /** Upload one image to the active backend; returns "uploaded" | "skipped". */
 async function uploadImage(
@@ -93,77 +103,18 @@ async function uploadImage(
     return "uploaded";
   }
   if (backend === "pg") {
-    const rows =
-      await db()`SELECT 1 FROM image_blobs WHERE "key" = ${pathname} LIMIT 1`;
-    if (rows.length > 0) return "skipped";
-    await db()`INSERT INTO image_blobs ("key", "mime", "data") VALUES (${pathname}, ${mime}, ${buffer})`;
+    const existing = await prisma.imageBlob.findUnique({
+      where: { key: pathname },
+      select: { key: true },
+    });
+    if (existing) return "skipped";
+    await prisma.imageBlob.create({
+      data: { key: pathname, mime, data: new Uint8Array(buffer) },
+    });
     return "uploaded";
   }
   return "skipped";
 }
-
-// Mirrors app/lib/database.ts
-const DDL = `
-CREATE TABLE IF NOT EXISTS accounts (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT NOT NULL UNIQUE,
-  "inviteCode" TEXT NOT NULL UNIQUE,
-  "createdAt" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS users (
-  "id" TEXT PRIMARY KEY,
-  "accountId" TEXT NOT NULL,
-  "username" TEXT NOT NULL UNIQUE,
-  "passwordHash" TEXT NOT NULL DEFAULT '',
-  "name" TEXT NOT NULL DEFAULT '',
-  "createdAt" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS expenses (
-  "id" TEXT PRIMARY KEY,
-  "type" TEXT NOT NULL DEFAULT '',
-  "date" TEXT NOT NULL DEFAULT '',
-  "report" TEXT NOT NULL DEFAULT '',
-  "category" TEXT NOT NULL DEFAULT '',
-  "description" TEXT NOT NULL DEFAULT '',
-  "amount" TEXT NOT NULL DEFAULT '',
-  "merchant" TEXT NOT NULL DEFAULT '',
-  "imageFile" TEXT NOT NULL DEFAULT '',
-  "imageMime" TEXT NOT NULL DEFAULT '',
-  "originalName" TEXT NOT NULL DEFAULT '',
-  "distanceMiles" TEXT NOT NULL DEFAULT '',
-  "locations" JSONB NOT NULL DEFAULT '[]',
-  "createdAt" TEXT NOT NULL DEFAULT '',
-  "updatedAt" TEXT NOT NULL DEFAULT '',
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS reports (
-  "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS categories (
-  "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS mileage (
-  "date" TEXT NOT NULL DEFAULT '',
-  "report" TEXT NOT NULL DEFAULT '',
-  "locations" TEXT NOT NULL DEFAULT '',
-  "distanceMiles" TEXT NOT NULL DEFAULT '',
-  "accountId" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS "settings" (
-  "accountId" TEXT NOT NULL DEFAULT '',
-  "key" TEXT NOT NULL DEFAULT '',
-  "value" TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS image_blobs (
-  "key" TEXT PRIMARY KEY,
-  "mime" TEXT NOT NULL DEFAULT '',
-  "data" BYTEA NOT NULL
-);
-`;
 
 interface ExpenseRecord {
   id: string;
@@ -185,11 +136,6 @@ interface ExpenseRecord {
   }>;
   createdAt: string;
   updatedAt: string;
-}
-
-function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
 }
 
 async function readCsv(file: string): Promise<string[][]> {
@@ -245,7 +191,6 @@ function mimeForFile(filename: string): string {
 }
 
 async function main(): Promise<void> {
-  if (!DATABASE_URL) fail("DATABASE_URL is required");
   const backend = imageBackend();
   const backendName =
     backend === "blob"
@@ -258,26 +203,43 @@ async function main(): Promise<void> {
     `Migrating state from ${join(process.cwd(), DATA_DIR)} → Postgres + ${backendName}`,
   );
 
-  const sql = db();
-  await sql.unsafe(DDL);
-
   // --- Bootstrap account + user (all imported rows land here) ----------------
   const now = new Date().toISOString();
-  const accounts =
-    await sql`SELECT "id" FROM accounts ORDER BY "createdAt" LIMIT 1`;
+  const firstAccount = await prisma.account.findFirst({
+    orderBy: { createdAt: "asc" },
+  });
   let accountId: string;
-  if (accounts.length > 0) {
-    accountId = accounts[0].id as string;
+  if (firstAccount) {
+    accountId = firstAccount.id;
   } else {
     if (!APP_USERNAME || !APP_PASSWORD) {
-      fail("No accounts exist and APP_USERNAME/APP_PASSWORD are not set");
+      console.error(
+        "No accounts exist and APP_USERNAME/APP_PASSWORD are not set",
+      );
+      process.exit(1);
     }
     const username = APP_USERNAME.trim().toLowerCase();
     accountId = ulid();
-    await sql.begin(async (tx) => {
-      await tx`INSERT INTO accounts ("id", "name", "inviteCode", "createdAt") VALUES (${accountId}, ${APP_USERNAME.trim()}, ${generateInviteCode()}, ${now})`;
-      await tx`INSERT INTO users ("id", "accountId", "username", "passwordHash", "name", "createdAt") VALUES (${ulid()}, ${accountId}, ${username}, ${await hashPassword(APP_PASSWORD)}, ${APP_USERNAME.trim()}, ${now})`;
-    });
+    await prisma.$transaction([
+      prisma.account.create({
+        data: {
+          id: accountId,
+          name: APP_USERNAME.trim(),
+          inviteCode: generateInviteCode(),
+          createdAt: now,
+        },
+      }),
+      prisma.user.create({
+        data: {
+          id: ulid(),
+          accountId,
+          username,
+          passwordHash: await hashPassword(APP_PASSWORD),
+          name: APP_USERNAME.trim(),
+          createdAt: now,
+        },
+      }),
+    ]);
     console.info(`Created bootstrap account + user "${username}"`);
   }
 
@@ -364,38 +326,67 @@ async function main(): Promise<void> {
   console.info(
     `Loading expenses, reports, categories, settings, mileage (account ${accountId}) …`,
   );
-  await sql.begin(async (tx) => {
-    await tx`DELETE FROM expenses`;
-    for (const e of expenses) {
-      await tx`INSERT INTO expenses ("id", "type", "date", "report", "category", "description", "amount", "merchant", "imageFile", "imageMime", "originalName", "distanceMiles", "locations", "createdAt", "updatedAt", "accountId") VALUES (${e.id}, ${e.type}, ${e.date}, ${e.report}, ${e.category}, ${e.description}, ${e.amount}, ${e.merchant}, ${e.imageFile}, ${e.imageMime}, ${e.originalName}, ${e.distanceMiles}, ${JSON.stringify(e.locations)}, ${e.createdAt}, ${e.updatedAt}, ${accountId})`;
-    }
-    await tx`DELETE FROM reports`;
-    for (const name of reports) {
-      await tx`INSERT INTO reports ("name", "accountId") VALUES (${name}, ${accountId}) ON CONFLICT ("accountId", "name") DO NOTHING`;
-    }
-    await tx`DELETE FROM categories`;
-    for (const name of categories) {
-      await tx`INSERT INTO categories ("name", "accountId") VALUES (${name}, ${accountId}) ON CONFLICT ("accountId", "name") DO NOTHING`;
-    }
-    await tx`DELETE FROM "settings"`;
-    for (const [key, value] of Object.entries(settingsKv)) {
-      await tx`INSERT INTO "settings" ("accountId", "key", "value") VALUES (${accountId}, ${key}, ${value})`;
-    }
-    await tx`DELETE FROM mileage`;
-    for (const e of expenses) {
-      if (e.type !== "mileage") continue;
-      const locationsText = e.locations
-        .map((l) => l.address)
-        .filter(Boolean)
-        .join(" → ");
-      await tx`INSERT INTO mileage ("date", "report", "locations", "distanceMiles", "accountId") VALUES (${e.date}, ${e.report}, ${locationsText}, ${e.distanceMiles}, ${accountId})`;
-    }
-  });
+  await prisma.$transaction([
+    prisma.expense.deleteMany(),
+    prisma.expense.createMany({
+      data: expenses.map((e) => ({
+        id: e.id,
+        type: e.type,
+        date: e.date,
+        report: e.report,
+        category: e.category,
+        description: e.description,
+        amount: e.amount,
+        merchant: e.merchant,
+        imageFile: e.imageFile,
+        imageMime: e.imageMime,
+        originalName: e.originalName,
+        distanceMiles: e.distanceMiles,
+        locations: e.locations,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        accountId,
+      })),
+    }),
+    prisma.report.deleteMany(),
+    prisma.report.createMany({
+      data: reports.map((name) => ({ name, accountId })),
+      skipDuplicates: true,
+    }),
+    prisma.category.deleteMany(),
+    prisma.category.createMany({
+      data: categories.map((name) => ({ name, accountId })),
+      skipDuplicates: true,
+    }),
+    prisma.settings.deleteMany(),
+    prisma.settings.createMany({
+      data: Object.entries(settingsKv).map(([key, value]) => ({
+        accountId,
+        key,
+        value,
+      })),
+    }),
+    prisma.mileage.deleteMany(),
+    prisma.mileage.createMany({
+      data: expenses
+        .filter((e) => e.type === "mileage")
+        .map((e) => ({
+          date: e.date,
+          report: e.report,
+          locations: e.locations
+            .map((l) => l.address)
+            .filter(Boolean)
+            .join(" → "),
+          distanceMiles: e.distanceMiles,
+          accountId,
+        })),
+    }),
+  ]);
 
   console.info(
     `Done. ${expenses.length} expenses, ${reports.length} reports, ${categories.length} categories, ${Object.keys(settingsKv).length} settings.`,
   );
-  await sql.end();
+  await prisma.$disconnect();
 }
 
 function parseNames(rows: string[][]): string[] {
@@ -423,7 +414,8 @@ function parseKv(rows: string[][]): Record<string, string> {
   return kv;
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Migration failed:", err);
+  await prisma.$disconnect();
   process.exit(1);
 });

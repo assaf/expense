@@ -14,6 +14,7 @@ export default defineConfig({
       "node_modules/**",
       "data/**",
       "data-test/**",
+      "prisma/generated/**",
     ],
     printWidth: 80,
     tabWidth: 2,
@@ -27,6 +28,7 @@ export default defineConfig({
       "node_modules/**",
       "data/**",
       "data-test/**",
+      "prisma/generated/**",
       // tsgolint overflows on vite config generics; tsc checks it cleanly.
       "vite.config.ts",
     ],
@@ -51,12 +53,20 @@ export default defineConfig({
     alias: [
       { find: "~", replacement: resolve("app") },
       { find: "~/test", replacement: resolve("test") },
+      {
+        find: "prisma/generated",
+        replacement: resolve("prisma/generated/client"),
+      },
       { find: "+types", replacement: resolve(".react-router/types") },
     ],
   },
   test: {
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,
+    env: {
+      DATABASE_URL: "postgres://assaf@localhost/expensify_test",
+      IMAGE_BACKEND: "pg",
+    },
     execArgv: ["--max-old-space-size=3072"],
     fileParallelism: false,
     globalSetup: "test/helpers/globalSetup.ts",
