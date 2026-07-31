@@ -1,16 +1,12 @@
 import "dotenv/config";
 import "node:process";
-import { join } from "node:path";
 
 const env = process.env;
 
-/** Absolute or relative directory holding CSV state and image files (local mode). */
-export const DATA_DIR = env.DATA_DIR ?? "data";
-
-/** Postgres connection string. When set, the app uses Postgres instead of CSVs. */
+/** Postgres connection string. Required — the app fails fast without it. */
 export const DATABASE_URL = env.DATABASE_URL ?? "";
 
-/** Vercel Blob read-write token. When set, receipt images go to Blob instead of disk. */
+/** Vercel Blob read-write token. When set, receipt images go to Blob. */
 export const BLOB_READ_WRITE_TOKEN = env.BLOB_READ_WRITE_TOKEN ?? "";
 
 /** S3-compatible storage (MinIO locally, R2/S3 elsewhere). */
@@ -23,7 +19,7 @@ export const S3_SECRET_ACCESS_KEY = env.S3_SECRET_ACCESS_KEY ?? "minioadmin";
 
 export const isProd = env.NODE_ENV === "production";
 
-/** True when Postgres storage is configured (Vercel/Coolify production). */
+/** True when Postgres storage is configured (required — the app fails fast without it). */
 export function hasDatabase(): boolean {
   return Boolean(DATABASE_URL);
 }
@@ -37,6 +33,3 @@ export function hasBlob(): boolean {
 export function hasS3(): boolean {
   return Boolean(S3_ENDPOINT && S3_BUCKET);
 }
-
-/** Local images directory (used only in local mode, when Blob is not configured). */
-export const IMAGES_DIR = join(DATA_DIR, "images");

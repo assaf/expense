@@ -1,5 +1,3 @@
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { extname } from "node:path";
 import { del, get, put, rename as blobRename } from "@vercel/blob";
 import {
@@ -12,7 +10,6 @@ import {
 } from "@aws-sdk/client-s3";
 import { ulid } from "ulid";
 import {
-  IMAGES_DIR,
   hasBlob,
   hasS3,
   S3_ACCESS_KEY_ID,
@@ -29,11 +26,12 @@ import { sanitizeFilenamePart } from "~/lib/validation";
  *     (Vercel production).
  *  2. S3-compatible storage (local MinIO, or R2/S3) when S3_ENDPOINT + S3_BUCKET
  *     are set (local dev/tests, alternate clouds).
- *  3. Local files under DATA_DIR/images otherwise (no-infra fallback).
  *
- * The returned `filename` is the storage key: a bare name in local mode, an
- * `images/...` pathname in blob/S3 mode. Keys are interchangeable between the
- * blob and S3 backends.
+ * A backend is required: without one, saveImage/readImage/… throw a clear
+ * error instead of silently falling back to disk.
+ *
+ * The returned `filename` is the storage key: an `images/...` pathname on
+ * both backends, so keys are interchangeable between Blob and S3.
  */
 
 const BLOB_PREFIX = "images";
@@ -158,8 +156,9 @@ export async function saveImage(
     return { filename: toPathname(key), mime: resolvedMime };
   }
 
-  await writeFile(`${IMAGES_DIR}/${key}`, buffer);
-  return { filename: key, mime: resolvedMime };
+  throw new Error(
+    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
+  );
 }
 
 /**
@@ -205,18 +204,9 @@ export async function renameImageToConvention(
     return to;
   }
 
-  const from = `${IMAGES_DIR}/${currentFile}`;
-  const to = `${IMAGES_DIR}/${target}`;
-  if (existsSync(from)) {
-    // Avoid clobbering an existing same-named file from a different expense.
-    let final = to;
-    if (existsSync(to) && from !== to) {
-      final = `${IMAGES_DIR}/${suffixedKey(target)}`;
-    }
-    await rename(from, final);
-    return final.slice(IMAGES_DIR.length + 1);
-  }
-  return currentFile;
+  throw new Error(
+    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
+  );
 }
 
 export async function readImage(
@@ -251,11 +241,9 @@ export async function readImage(
     }
   }
 
-  const full = `${IMAGES_DIR}/${filename}`;
-  if (!existsSync(full)) return null;
-  const buffer = await readFile(full);
-  const mime = mimeForFile(filename);
-  return { buffer, mime };
+  throw new Error(
+    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
+  );
 }
 
 export async function deleteImage(filename: string): Promise<void> {
@@ -275,8 +263,10 @@ export async function deleteImage(filename: string): Promise<void> {
       .catch(() => {});
     return;
   }
-  const full = `${IMAGES_DIR}/${filename}`;
-  if (existsSync(full)) await unlink(full).catch(() => {});
+
+  throw new Error(
+    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
+  );
 }
 
 /** Collision-safe convention key: `<stem>-<6 chars><ext>` (all backends). */

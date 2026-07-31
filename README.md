@@ -2,9 +2,9 @@
 
 Personal expense tracking with receipts and mileage. Replaces Expensify for a
 single user. Built with React Router v8 (framework mode) + Tailwind v4. State
-lives in Postgres with receipt images in Vercel Blob when `DATABASE_URL` +
-`BLOB_READ_WRITE_TOKEN` are set (Vercel/Coolify production); otherwise it falls
-back to local files under `data/` (dev and tests).
+lives in Postgres with receipt images in Vercel Blob (or any S3-compatible
+store such as MinIO/R2). `DATABASE_URL` is required — there is no file-based
+fallback; `data/` exists only as the migration source for `pnpm migrate-data`.
 
 ## What it does
 
@@ -20,22 +20,28 @@ back to local files under `data/` (dev and tests).
 
 ## State
 
-Two interchangeable storage backends, selected by environment:
+Storage is Postgres-only. `DATABASE_URL` is required at startup (the app
+exits with a clear error otherwise). Receipt images go to Vercel Blob when
+`BLOB_READ_WRITE_TOKEN` is set, else to S3-compatible storage when
+`S3_ENDPOINT` + `S3_BUCKET` are set (local MinIO, or R2/S3); a missing image
+backend is also a startup/upload error, never a silent disk fallback.
 
-| Backend      | Selected when                   | Data                        | Images                                |
-| ------------ | ------------------------------- | --------------------------- | ------------------------------------- |
-| **Postgres** | `DATABASE_URL` set              | `expenses` / `reports` /    | Vercel Blob if                        |
-|              |                                 | `categories` / `settings` / | `BLOB_READ_WRITE_TOKEN` set,          |
-|              |                                 | `mileage` tables            | else S3 (`S3_ENDPOINT` + `S3_BUCKET`) |
-| **Local**    | `DATABASE_URL` unset (no-infra) | CSVs under `data/`          | `data/images/`                        |
+| Data                        | Images                                     |
+| --------------------------- | ------------------------------------------ |
+| `expenses` / `reports` /    | Vercel Blob if `BLOB_READ_WRITE_TOKEN`     |
+| `categories` / `settings` / | set, else S3 (`S3_ENDPOINT` + `S3_BUCKET`) |
+| `mileage` tables            |                                            |
 
-Both expose the same API through `app/lib/store.server.ts` (a facade over
-`app/lib/store/local.server.ts` and `app/lib/store/pg.server.ts`); image
-storage is behind `app/lib/images.server.ts` (local fs vs `@vercel/blob` vs
-S3-compatible via `@aws-sdk/client-s3` — MinIO locally, or R2/S3). Keys are
-`images/...` pathnames on both cloud backends, so data is portable between them.
+All reads/writes go through `app/lib/store.server.ts` (→
+`app/lib/store/pg.server.ts`); image storage is behind
+`app/lib/images.server.ts` (`@vercel/blob` vs `@aws-sdk/client-s3` — MinIO
+locally, or R2/S3). Keys are `images/...` pathnames on both cloud backends, so
+data is portable between them.
 
-Local files:
+### `data/` — migration source only
+
+`data/` is gitignored and no longer read at runtime. It holds the original
+CSVs + receipt images that `pnpm migrate-data` imports into Postgres/Blob/S3:
 
 | File             | Contents                                                     |
 | ---------------- | ------------------------------------------------------------ |
@@ -46,17 +52,16 @@ Local files:
 | `settings.csv`   | Home location + mileage rate per calendar year.              |
 | `images/`        | Receipt images, named `YYYY-MM-DD_REPORT_FILE.ext`.          |
 
-`data/` is gitignored; in Docker/Coolify production mount a persistent volume
-at `/app/data` (set `DATA_DIR` to override). The directory is created
-automatically on first run.
+`data/` is gitignored. Not needed at runtime — the app only requires Postgres
+(+ a cloud image backend).
 
 ## Quick start
 
 ## Environment variables
 
 Load order: real `process.env` (Vercel dashboard, Coolify app settings, or
-inline) wins; a local `.env` file fills the gaps; otherwise the app falls
-back to file-based storage. `.env` is gitignored.
+inline) wins; a local `.env` file fills the gaps. `DATABASE_URL` is required;
+`.env` is gitignored.
 
 **dev / test — local `.env`:**
 
@@ -94,8 +99,8 @@ pnpm install
 pnpm dev                        # reads .env
 ```
 
-Running the server without env vars falls back to local files (CSVs under
-`data/`).
+Running the server without `DATABASE_URL` exits immediately with a clear
+error — there is no file-based fallback.
 
 ```bash
 pnpm check        # typegen + format + lint + typecheck

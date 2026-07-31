@@ -1,12 +1,15 @@
 # Agent guide — Expensify
 
 Personal expense tracker (receipts + mileage). React Router v8 framework mode,
-Tailwind v4. Storage is a facade in `app/lib/store.server.ts`: Postgres + cloud
-images when `DATABASE_URL`/`BLOB_READ_WRITE_TOKEN` (Vercel Blob) or
-`S3_ENDPOINT`+`S3_BUCKET` (MinIO/R2/S3) are set; file-based CSVs under `data/`
-otherwise. Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`)
+Tailwind v4. Storage is Postgres-only (required): all reads/writes go through
+`app/lib/store.server.ts` → `app/lib/store/pg.server.ts`; receipt images via
+`app/lib/images.server.ts` (Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
+else S3-compatible MinIO/R2 when `S3_ENDPOINT`+`S3_BUCKET` are set — no file
+fallback). Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`)
 
 - MinIO (`docker compose up -d`). Deployed to Coolify.
+
+* MinIO (`docker compose up -d`). Deployed to Coolify.
 
 ## Commands
 
@@ -24,7 +27,8 @@ Run `pnpm check` before committing.
 ## Secrets
 
 Env load order: `process.env` (Vercel/Coolify/inline) → local `.env` (via
-dotenv in `app/lib/env.ts`) → file fallback. Dev/test use `.env`
+dotenv in `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback.
+Dev/test use `.env`
 (`DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`); prod uses the Vercel dashboard
 (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`); `scripts/deploy` and
 `pnpm migrate-data:prod` pull prod secrets from Infisical (`.infisical.json`,
@@ -37,12 +41,13 @@ MinIO), not `.env`/Infisical.
   wires an index + `flatRoutes()`. Loaders/actions are server-only.
 - **Types**: import route types from `./+types/<name>`. Path alias `~/*` → `app/*`.
 - **State**: Postgres (`expenses`, `reports`, `categories`, `settings`,
-  `mileage` tables) in prod and in local dev/tests; CSVs under `data/` only in
-  the no-infra fallback. Never read state on the client; all reads/writes go
-  through `app/lib/store.server.ts` (facade) → `app/lib/store/local.server.ts`
-  or `app/lib/store/pg.server.ts`.
-- **Images**: Vercel Blob `images/…` pathnames, S3-compatible (MinIO locally)
-  via `@aws-sdk/client-s3`, or local `data/images/`. See `app/lib/images.server.ts`.
+  `mileage` tables) — required, everywhere. `data/` CSVs exist only as the
+  migration source for `pnpm migrate-data`. Never read state on the client;
+  all reads/writes go through `app/lib/store.server.ts` →
+  `app/lib/store/pg.server.ts`.
+- **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
+  is set, else S3-compatible (MinIO locally, R2/S3) via `@aws-sdk/client-s3`.
+  No local fallback. See `app/lib/images.server.ts`.
   Named `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
   otherwise a temp id-based name (renamed on save).
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`
@@ -64,9 +69,8 @@ MinIO), not `.env`/Infisical.
 | `app/routes/api.route.ts`         | Recompute mileage distance + amount.               |
 | `app/routes/export.*`             | PDF per report + ZIP of everything.                |
 | `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location. |
-| `app/lib/store.server.ts`         | Storage facade (local CSV vs Postgres).            |
-| `app/lib/store/local.server.ts`   | File-based backend (dev/tests).                    |
-| `app/lib/store/pg.server.ts`      | Postgres backend (prod).                           |
+| `app/lib/store.server.ts`         | Storage entry point (Postgres only).               |
+| `app/lib/store/pg.server.ts`      | Postgres backend.                                  |
 | `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                  |
 
 ## Gotchas

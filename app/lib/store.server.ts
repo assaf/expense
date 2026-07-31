@@ -2,17 +2,21 @@ import { ulid } from "ulid";
 import { hasDatabase } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
-import * as localStore from "~/lib/store/local.server";
 import * as pgStore from "~/lib/store/pg.server";
 
 /**
- * Storage facade. Routes every read/write to the Postgres backend when
- * DATABASE_URL is set (Vercel/Coolify production), otherwise falls back to
- * the file-based CSV store (local dev and tests). The two backends share the
- * same behavior and public API; nothing else in the app picks a backend.
+ * Storage entry point. Postgres is required — every read/write goes through
+ * pg.server.ts and the app refuses to start without DATABASE_URL (there is no
+ * file fallback anymore). Image storage is selected separately in
+ * images.server.ts (Vercel Blob vs S3-compatible, no local fallback).
  */
+if (!hasDatabase()) {
+  throw new Error(
+    "DATABASE_URL is required — set it in .env for local dev, or in the Vercel/Coolify dashboard for production.",
+  );
+}
 
-const store = hasDatabase() ? pgStore : localStore;
+const store = pgStore;
 
 export const initStore = store.initStore;
 export const readExpenses = store.readExpenses;
