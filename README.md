@@ -223,7 +223,7 @@ pnpm start        # serve the production build (port 3000)
 pnpm test         # resets expensify_test from Prisma and runs the suite
 ```
 
-Node 26+ and pnpm 11+.
+Node 24+ and pnpm 11+ (developed/tested on Node 26).
 
 ## Deployment
 
@@ -240,8 +240,8 @@ zero-config path builds one SSR function that serves every route.)
    - `DATABASE_URL` — Vercel Postgres / Neon pooled URL. Tables are created
      automatically on first request.
    - `BLOB_READ_WRITE_TOKEN` — Vercel Storage → Blob → Tokens.
-   - Node 26 is required (`engines`); pick it in project settings if Vercel
-     doesn't match automatically.
+   - Node 24+ (`engines`; the project runs on Node 26); pick Node 26 in
+     project settings if Vercel doesn't match automatically.
 4. One-time data import is done — the CSV source under `data/` was deleted
    in the Jul 2026 cleanup (data verified in the database: 306 expenses,
    247 images). Re-import would require restoring the CSVs first.
