@@ -9,7 +9,6 @@ build/
 # Runtime state (file-based persistence) — volume-mounted in production.
 # Do not commit expenses/images (sensitive financial data).
 /data/
-!/data/.gitkeep
 
 # Test artifacts
 data-test/
@@ -21,3 +20,4 @@ server.log
 .test-server.json
 .vercel
 .env*
+.pi
