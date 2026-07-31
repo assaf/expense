@@ -2,7 +2,7 @@
  * Custom snapshot matcher for visual regression testing.
  * Minimal implementation — extend as needed.
  */
-import { expect } from "vite-plus/test";
+import { expect } from "vitest";
 
 expect.extend({
   toMatchScreenshot(this: unknown, _actual: unknown) {
