@@ -87,6 +87,7 @@ const prisma = new PrismaClient({
 
 /** Upload one image to the active backend; returns "uploaded" | "skipped". */
 async function uploadImage(
+  accountId: string,
   pathname: string,
   buffer: Buffer,
   mime: string,
@@ -103,13 +104,13 @@ async function uploadImage(
     return "uploaded";
   }
   if (backend === "pg") {
-    const existing = await prisma.imageBlob.findUnique({
-      where: { key: pathname },
+    const existing = await prisma.imageBlob.findFirst({
+      where: { accountId, key: pathname },
       select: { key: true },
     });
     if (existing) return "skipped";
     await prisma.imageBlob.create({
-      data: { key: pathname, mime, data: new Uint8Array(buffer) },
+      data: { accountId, key: pathname, mime, data: new Uint8Array(buffer) },
     });
     return "uploaded";
   }
@@ -302,7 +303,7 @@ async function main(): Promise<void> {
   for (const e of receipts) {
     const imageFile = e.imageFile;
     const localPath = join(imagesDir, imageFile);
-    const pathname = `${BLOB_PREFIX}/${imageFile}`;
+    const pathname = `${BLOB_PREFIX}/${accountId}/${imageFile}`;
     if (!existsSync(localPath)) {
       missing++;
       console.warn(`  missing locally, keeping key as-is: ${imageFile}`);
@@ -310,7 +311,12 @@ async function main(): Promise<void> {
     }
     if (backend === "none") continue;
     const buffer = await readFile(localPath);
-    const result = await uploadImage(pathname, buffer, mimeForFile(imageFile));
+    const result = await uploadImage(
+      accountId,
+      pathname,
+      buffer,
+      mimeForFile(imageFile),
+    );
     if (result === "uploaded") {
       uploaded++;
       if (uploaded % 25 === 0) console.info(`  ${uploaded} uploaded …`);

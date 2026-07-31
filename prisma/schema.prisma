@@ -30,6 +30,7 @@ model Account {
   categories Category[]
   mileage    Mileage[]
   settings   Settings[]
+  imageBlobs ImageBlob[]
 
   @@map("accounts")
 }
@@ -119,11 +120,17 @@ model Settings {
   @@map("settings")
 }
 
-/// Receipt image bytes when IMAGE_BACKEND=pg (dev/tests).
+/// Receipt image bytes when IMAGE_BACKEND=pg (dev/tests). Keys are
+/// namespaced per account (`images/{accountId}/…`) so the same filename in
+/// two accounts never collides — on any backend.
 model ImageBlob {
-  key  String @id
-  mime String
-  data Bytes
+  accountId String
+  key       String
+  mime      String
+  data      Bytes
 
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, key])
   @@map("image_blobs")
 }

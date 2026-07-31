@@ -15,7 +15,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!expense || expense.type !== "receipt" || !expense.imageFile) {
     return new Response("Not found", { status: 404 });
   }
-  const image = await readImage(expense.imageFile);
+  const image = await readImage(user.accountId, expense.imageFile);
   if (!image) return new Response("Not found", { status: 404 });
   return new Response(image.buffer as BodyInit, {
     headers: {
@@ -36,7 +36,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   const intent = formString(form, "intent");
 
   if (intent === "delete") {
-    if (expense.imageFile) await deleteImage(expense.imageFile);
+    if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
     expense.imageFile = "";
     expense.imageMime = "";
     expense.originalName = "";
@@ -52,17 +52,19 @@ export async function action({ request, params }: Route.ActionArgs) {
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const { filename, mime } = await saveImage(
+      user.accountId,
       buffer,
       file.type,
       file.name || "pasted.png",
     );
-    if (expense.imageFile) await deleteImage(expense.imageFile);
+    if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
     expense.imageFile = filename;
     expense.imageMime = mime;
     expense.originalName = file.name || "pasted.png";
     expense.updatedAt = new Date().toISOString();
     // Rename to convention immediately if date+report already set.
     const renamed = await renameImageToConvention(
+      user.accountId,
       expense.imageFile,
       expense.date,
       expense.report,

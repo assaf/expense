@@ -9,6 +9,13 @@ export default defineConfig({
     get url() {
       return env("DATABASE_URL");
     },
+    // Scratch database for `migrate diff --from-migrations` / `migrate dev`.
+    get shadowDatabaseUrl() {
+      return (
+        process.env.SHADOW_DATABASE_URL ??
+        "postgres://assaf@localhost/expensify_shadow"
+      );
+    },
   },
   migrations: {
     path: "prisma/migrations",

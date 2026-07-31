@@ -43,10 +43,12 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   for (const e of sorted) {
     if (e.type !== "receipt" || !e.imageFile) continue;
-    const image = await readImage(e.imageFile);
+    const image = await readImage(user.accountId, e.imageFile);
     if (!image) continue;
-    // Strip the blob pathname prefix so zip entries keep the plain filename.
-    files[e.imageFile.replace(/^images\//, "")] = new Uint8Array(image.buffer);
+    // Strip the account namespace so zip entries keep the plain filename.
+    files[e.imageFile.replace(/^images\/[^/]+\//, "")] = new Uint8Array(
+      image.buffer,
+    );
   }
 
   const zip = zipSync(files, { level: 9 });

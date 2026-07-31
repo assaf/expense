@@ -117,6 +117,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       };
       if (updated.imageFile) {
         updated.imageFile = await renameImageToConvention(
+          user.accountId,
           updated.imageFile,
           date,
           report,

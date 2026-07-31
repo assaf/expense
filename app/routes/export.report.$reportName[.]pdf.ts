@@ -113,7 +113,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     doc.fontSize(13).font("Helvetica-Bold").text("Receipts");
     doc.moveDown(0.5);
     for (const e of receipts) {
-      const image = await readImage(e.imageFile);
+      const image = await readImage(user.accountId, e.imageFile);
       if (!image) continue;
       doc
         .fontSize(9)

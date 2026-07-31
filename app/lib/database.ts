@@ -59,6 +59,7 @@ export async function initStore(): Promise<void> {
         where: { accountId: "" },
         data: { accountId: bootstrap.accountId },
       });
+      await migrateImageBlobKeys(bootstrap.accountId);
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.
       ready = undefined;
@@ -66,6 +67,45 @@ export async function initStore(): Promise<void> {
     });
   }
   await ready;
+}
+
+/**
+ * One-time (idempotent) fix-up for the pre-account era image keys: blobs were
+ * global (`images/{name}`); they are now namespaced per account
+ * (`images/{accountId}/{name}`). Backfills the account from the owning
+ * expense, adopts orphans into the bootstrap account, and rewrites the keys
+ * on image_blobs + expenses.imageFile. No-op once every key is namespaced.
+ */
+async function migrateImageBlobKeys(bootstrapAccountId: string): Promise<void> {
+  // Backfill accountId from the expense that references each blob.
+  await prisma.$executeRaw`
+    UPDATE "image_blobs" SET "accountId" = e."accountId"
+    FROM (SELECT DISTINCT "imageFile", "accountId" FROM "expenses" WHERE "imageFile" <> '') e
+    WHERE "image_blobs"."key" = e."imageFile" AND "image_blobs"."accountId" = ''
+  `;
+  // Orphans (no expense references them) go to the bootstrap account.
+  await prisma.$executeRaw`
+    UPDATE "image_blobs" SET "accountId" = ${bootstrapAccountId} WHERE "accountId" = ''
+  `;
+  // Namespace legacy keys: images/X → images/{accountId}/X, and bare names
+  // (CSV-era expenses stored filenames without the prefix) get the full path.
+  await prisma.$executeRaw`
+    UPDATE "image_blobs"
+    SET "key" = CASE
+      WHEN "key" LIKE 'images/%' THEN 'images/' || "accountId" || '/' || substr("key", 8)
+      ELSE 'images/' || "accountId" || '/' || "key"
+    END
+    WHERE "key" <> '' AND "key" NOT LIKE 'images/%/%'
+  `;
+  // Mirror the same rewrite into expenses.imageFile.
+  await prisma.$executeRaw`
+    UPDATE "expenses"
+    SET "imageFile" = CASE
+      WHEN "imageFile" LIKE 'images/%' THEN 'images/' || "accountId" || '/' || substr("imageFile", 8)
+      ELSE 'images/' || "accountId" || '/' || "imageFile"
+    END
+    WHERE "imageFile" <> '' AND "imageFile" NOT LIKE 'images/%/%'
+  `;
 }
 
 /**
@@ -276,7 +316,7 @@ export async function deleteExpense(
   const all = await readExpenses(accountId);
   const target = all.find((e) => e.id === id);
   if (target?.type === "receipt" && target.imageFile) {
-    await deleteImage(target.imageFile).catch(() => {});
+    await deleteImage(accountId, target.imageFile).catch(() => {});
   }
   await writeExpenses(
     accountId,

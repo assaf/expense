@@ -27,6 +27,7 @@ fi
 echo -e "\033[0;32m--- Step 3: Sync production schema ---\033[0m"
 infisical --env prod run -- pnpm prisma db push --accept-data-loss
 infisical --env prod run -- pnpm prisma migrate resolve --applied 0_init
+infisical --env prod run -- pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope
 
 echo -e "\033[0;32m--- Step 4: Build and push image ---\033[0m"
 echo "$(infisical secrets get GHCR_TOKEN --env dev --plain)" | docker login ghcr.io -u assaf --password-stdin

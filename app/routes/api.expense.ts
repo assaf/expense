@@ -26,6 +26,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const { filename, mime } = await saveImage(
+      user.accountId,
       buffer,
       file.type,
       file.name || "pasted.png",

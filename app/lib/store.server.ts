@@ -1,6 +1,5 @@
 import { ulid } from "ulid";
 import { hasDatabase } from "~/lib/env";
-import { deleteImage } from "~/lib/images.server";
 import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
 import * as db from "~/lib/database";
 
@@ -47,11 +46,6 @@ export const addCategory = store.addCategory;
 export const removeCategory = store.removeCategory;
 export const readSettings = store.readSettings;
 export const writeSettings = store.writeSettings;
-
-/** Delete a stored image through the active image backend. */
-export function deleteImageFile(filename: string): Promise<void> {
-  return deleteImage(filename);
-}
 
 /** Build a new expense shell with sensible defaults. */
 export function newExpenseShell(type: Expense["type"]): Expense {

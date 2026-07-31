@@ -55,8 +55,12 @@ image blobs in Postgres), not `.env`/Infisical.
 - **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
   is set, or Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` —
   used by dev/tests. No local fallback. See `app/lib/images.server.ts`.
-  Named `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
-  otherwise a temp id-based name (renamed on save).
+  **Keys are namespaced per account** (`images/{accountId}/…`) so the same
+  filename in two accounts never collides on either backend; every
+  save/read/rename/delete takes the owning `accountId`. Named
+  `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
+  otherwise a temp id-based name (renamed on save). Legacy (pre-account)
+  keys are rewritten automatically by `initStore` (`migrateImageBlobKeys`).
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`
   at load and breaks SSR). Geocoding via Nominatim, routing via OSRM — no API
   keys. See `app/lib/maps.server.ts`.

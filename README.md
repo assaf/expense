@@ -50,10 +50,11 @@ image backend is an error, never a silent disk fallback.
 All reads/writes go through `app/lib/store.server.ts` (→
 `app/lib/database.ts`, Prisma queries scoped by `accountId`); image storage
 is behind `app/lib/images.server.ts` (`@vercel/blob` vs Prisma `imageBlob`).
-Keys are `images/...` pathnames on every backend, so data is portable
-between them. Schema changes: edit `prisma/schema.prisma`, then
-`prisma migrate dev --name …` locally and `pnpm db:push` (or
-`pnpm db:migrate`) before deploying.
+Keys are `images/{accountId}/...` pathnames on every backend — namespaced
+per account so two accounts can never collide on the same filename — and
+data is portable between them. Schema changes: edit
+`prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
+`pnpm db:push` (or `pnpm db:migrate`) before deploying.
 
 ### `data/` — migration source only
 
