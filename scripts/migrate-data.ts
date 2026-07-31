@@ -13,7 +13,7 @@
  *   DATABASE_URL=postgres://localhost/expensify_dev IMAGE_BACKEND=pg node scripts/migrate-data.ts  # dev
  *
  * Requires Node 26+ (runs TypeScript natively). The schema DDL below must stay
- * in sync with app/lib/store/pg.server.ts. Idempotent: re-running replaces the
+ * in sync with app/lib/store/database.ts. Idempotent: re-running replaces the
  * DB rows and skips images that already exist in the store.
  */
 import "dotenv/config";
@@ -75,7 +75,7 @@ async function uploadImage(
   return "skipped";
 }
 
-// Mirrors app/lib/store/pg.server.ts
+// Mirrors app/lib/store/database.ts
 const DDL = `
 CREATE TABLE IF NOT EXISTS expenses (
   "id" TEXT PRIMARY KEY,

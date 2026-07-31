@@ -33,7 +33,7 @@ is an error, never a silent disk fallback.
 | `mileage` tables            |                                       |
 
 All reads/writes go through `app/lib/store.server.ts` (→
-`app/lib/store/pg.server.ts`); image storage is behind
+`app/lib/store/database.ts`); image storage is behind
 `app/lib/images.server.ts` (`@vercel/blob` vs Postgres `image_blobs`). Keys
 are `images/...` pathnames on every backend, so data is portable between them.
 

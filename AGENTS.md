@@ -2,7 +2,7 @@
 
 Personal expense tracker (receipts + mileage). React Router v8 framework mode,
 Tailwind v4. Storage is Postgres-only (required): all reads/writes go through
-`app/lib/store.server.ts` → `app/lib/store/pg.server.ts`; receipt images via
+`app/lib/store.server.ts` → `app/lib/store/database.ts`; receipt images via
 `app/lib/images.server.ts` (Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
 or Postgres BYTEA with `IMAGE_BACKEND=pg` — the dev/test default; no separate
 service needed).
@@ -42,7 +42,7 @@ image blobs in Postgres), not `.env`/Infisical.
   `mileage` tables) — required, everywhere. `data/` CSVs exist only as the
   migration source for `pnpm migrate-data`. Never read state on the client;
   all reads/writes go through `app/lib/store.server.ts` →
-  `app/lib/store/pg.server.ts`.
+  `app/lib/store/database.ts`.
 - **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
   is set, or Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` —
   used by dev/tests. No local fallback. See `app/lib/images.server.ts`.
@@ -68,7 +68,7 @@ image blobs in Postgres), not `.env`/Infisical.
 | `app/routes/export.*`             | PDF per report + ZIP of everything.                |
 | `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location. |
 | `app/lib/store.server.ts`         | Storage entry point (Postgres only).               |
-| `app/lib/store/pg.server.ts`      | Postgres backend.                                  |
+| `app/lib/store/database.ts`       | Postgres backend.                                  |
 | `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                  |
 
 ## Gotchas

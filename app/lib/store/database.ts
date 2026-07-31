@@ -13,8 +13,9 @@ import type {
 } from "~/lib/types";
 
 /**
- * Postgres-backed store. Used when DATABASE_URL is set (Vercel/Coolify
- * production). Mirrors the local CSV store's behavior and public API.
+ * Postgres-backed store — the only storage backend. DATABASE_URL is required;
+ * all expenses/reports/categories/settings/mileage/image-blob reads and
+ * writes go through here (see app/lib/store.server.ts).
  */
 
 let sql: Sql | undefined;

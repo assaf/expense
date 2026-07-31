@@ -2,11 +2,11 @@ import { ulid } from "ulid";
 import { hasDatabase } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
-import * as pgStore from "~/lib/store/pg.server";
+import * as db from "~/lib/store/database";
 
 /**
  * Storage entry point. Postgres is required — every read/write goes through
- * pg.server.ts and the app refuses to start without DATABASE_URL (there is no
+ * database.ts and the app refuses to start without DATABASE_URL (there is no
  * file fallback anymore). Image storage is selected separately in
  * images.server.ts (Vercel Blob vs Postgres BYTEA, no local fallback).
  */
@@ -16,7 +16,7 @@ if (!hasDatabase()) {
   );
 }
 
-const store = pgStore;
+const store = db;
 
 export const initStore = store.initStore;
 export const readExpenses = store.readExpenses;
