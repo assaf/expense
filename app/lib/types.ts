@@ -1,8 +1,9 @@
 /**
  * Domain model for the expense tracker.
  *
- * State is persisted as CSV files on disk (see store.server.ts). These types
- * describe the in-memory shape after parsing.
+ * State is persisted either as CSV files on disk (local dev/tests) or in
+ * Postgres with receipt images in Vercel Blob (production) — see
+ * store.server.ts. These types describe the in-memory shape after parsing.
  */
 
 export type ExpenseType = "receipt" | "mileage";
@@ -30,7 +31,7 @@ interface ExpenseBase {
 export interface ReceiptExpense extends ExpenseBase {
   type: "receipt";
   merchant: string;
-  imageFile: string; // filename inside data/images/, "" when unset
+  imageFile: string; // storage key (bare filename, or `images/...` blob pathname)
   imageMime: string;
   originalName: string;
 }
@@ -51,7 +52,7 @@ export interface Category {
   name: string;
 }
 
-/** Settings stored as key/value rows in settings.csv. */
+/** Settings stored as key/value rows (settings.csv locally, a settings table in Postgres). */
 export type Settings = {
   /** Home location used as the first/last stop of every mileage route. */
   homeAddress: string;

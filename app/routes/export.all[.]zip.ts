@@ -1,9 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
-import { imagesDir, readExpenses } from "~/lib/store.server";
+import { readImage } from "~/lib/images.server";
+import { readExpenses } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { mileageMerchant, yearOf } from "~/lib/format";
 import type { Expense } from "~/lib/types";
@@ -43,10 +41,10 @@ export async function loader(_: Route.LoaderArgs) {
 
   for (const e of sorted) {
     if (e.type !== "receipt" || !e.imageFile) continue;
-    const full = join(imagesDir(), e.imageFile);
-    if (!existsSync(full)) continue;
-    const buf = await readFile(full);
-    files[e.imageFile] = new Uint8Array(buf);
+    const image = await readImage(e.imageFile);
+    if (!image) continue;
+    // Strip the blob pathname prefix so zip entries keep the plain filename.
+    files[e.imageFile.replace(/^images\//, "")] = new Uint8Array(image.buffer);
   }
 
   const zip = zipSync(files, { level: 9 });

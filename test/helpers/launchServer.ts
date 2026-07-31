@@ -16,10 +16,12 @@ export async function launchServer(): Promise<string> {
   await findAvailablePort();
   const env = {
     ...process.env,
-    DATA_DIR: "data-test",
     NODE_ENV: "test",
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
+    DATABASE_URL: "postgres://localhost/expensify_test",
+    S3_ENDPOINT: "http://localhost:9000",
+    S3_BUCKET: "expensify",
   };
 
   serverProcess = spawn("pnpm", ["start"], {
