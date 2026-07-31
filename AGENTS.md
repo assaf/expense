@@ -10,7 +10,7 @@ or Postgres BYTEA with `IMAGE_BACKEND=pg` — the dev/test default; no separate
 service needed). There is **no runtime DDL** — schema changes go through
 Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
 Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`) only.
-Deployed to Coolify.
+Deployed to **Vercel** (Neon Postgres; GitHub push to `main` auto-deploys).
 
 ## Commands
 
@@ -23,7 +23,10 @@ pnpm start           # serve production build (port 3000)
 pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expensify_test schema + 40 tests (incl. image blobs)
-./scripts/deploy [--skip-tests]  # check + tests + prod db push + GHCR push + Coolify (Infisical)
+./scripts/deploy [--skip-tests]  # check + tests + prod db preflight/push + GHCR + Coolify
+# NOTE: prod currently runs on Vercel, not Coolify — deploy = `git push origin main`.
+# Schema changes: `prisma migrate dev` locally, then apply to prod with
+# `DATABASE_URL=$UNPOOLED pnpm db:migrate` (prod has migration history since Jul 2026).
 ```
 
 Run `pnpm check` before committing.
@@ -35,10 +38,11 @@ dotenv in `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback.
 Dev/test use `.env`
 (`DATABASE_URL`, `IMAGE_BACKEND=pg`, and auth: `APP_USERNAME`,
 `APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
-(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, plus the same three auth vars); `scripts/deploy` and
-`pnpm migrate-data:prod` pull prod secrets from Infisical (`.infisical.json`,
-same pattern as Rentail). Tests hardcode local services (`expensify_test`,
-image blobs in Postgres), not `.env`/Infisical.
+(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, plus the same three auth vars).
+`.infisical.json` is stale (workspace 404s) — don't rely on Infisical; pull
+prod env with `npx vercel env pull --environment=production .env.prod`
+(use `DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local
+services (`expensify_test`, image blobs in Postgres), not `.env`/Infisical.
 
 ## Stack & conventions
 
@@ -72,24 +76,25 @@ image blobs in Postgres), not `.env`/Infisical.
 
 ## Key files
 
-| File                              | Role                                                 |
-| --------------------------------- | ---------------------------------------------------- |
-| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.          |
-| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).       |
-| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.              |
-| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                 |
-| `app/routes/export.*`             | PDF per report + ZIP of everything.                  |
-| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.   |
-| `app/routes/login.tsx`            | Sign in / create account / join by invite code.      |
-| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.           |
-| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup.  |
-| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.             |
-| `app/lib/prisma.server.ts`        | Prisma client singleton (PrismaPg adapter).          |
-| `prisma/schema.prisma`            | Single schema source of truth (8 models).            |
-| `prisma/migrations/0_init`        | Baseline migration (fresh DBs via `prisma migrate`). |
-| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                 |
-| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).     |
-| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                    |
+| File                              | Role                                                          |
+| --------------------------------- | ------------------------------------------------------------- |
+| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.                   |
+| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).                |
+| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.                       |
+| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                          |
+| `app/routes/export.*`             | PDF per report + ZIP of everything.                           |
+| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.            |
+| `app/routes/login.tsx`            | Sign in / create account / join by invite code.               |
+| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.                    |
+| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup.           |
+| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.                      |
+| `app/lib/prisma.server.ts`        | Prisma client singleton (PrismaPg adapter).                   |
+| `prisma/schema.prisma`            | Single schema source of truth (8 models).                     |
+| `prisma/migrations/0_init`        | Baseline migration (fresh DBs via `prisma migrate`).          |
+| `scripts/preflight-prod.mjs`      | Idempotent pre-account baseline SQL for prod (pre-`db push`). |
+| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                          |
+| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).              |
+| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                             |
 
 ## Gotchas
 
