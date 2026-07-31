@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Build the image, push to GHCR, and deploy to Coolify.
-# Mirrors the Rentail deployment flow — secrets come from Infisical.
-#   - prod env: DATABASE_URL, BLOB_READ_WRITE_TOKEN (runtime env for the app)
-#   - dev env:  GHCR_TOKEN (registry auth)
+# Deploy expensify.
 #
-# Schema: `prisma db push` syncs the production database to
-# prisma/schema.prisma before deploy. On a pre-Prisma database this applies
-# the accounts/users + accountId columns (additive) and rebuilds constraints;
-# --accept-data-loss covers the deliberate constraint rebuild (settings PK,
-# reports/categories unique). `migrate resolve` records the 0_init baseline so
-# future `prisma migrate deploy` runs have history.
+# NOTE: production currently runs on Vercel (git push to main auto-deploys)
+# with a Neon Postgres database. The Coolify/GHCR steps below mirror the
+# Rentail flow and are kept for a future move to self-hosted infra — the
+# database step applies either way.
+#
+# Schema: on a pre-account database, `scripts/preflight-prod.mjs` first adds
+# accountId columns (defaulting to a fresh bootstrap account) and creates the
+# accounts/users tables — `prisma db push` cannot add NOT NULL columns to
+# non-empty tables and cannot DROP INDEX constraint-backed uniques, so it
+# would otherwise refuse. Then `db push` syncs the rest, and `migrate resolve`
+# records the baseline so future `prisma migrate deploy` runs have history.
+# On an already-baselined database, preflight is a no-op.
 set -eo pipefail
 
 IMAGE="ghcr.io/assaf/expensify:latest"
@@ -25,6 +28,9 @@ else
 fi
 
 echo -e "\033[0;32m--- Step 3: Sync production schema ---\033[0m"
+infisical --env prod run -- node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
+infisical --env prod run -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
+rm -f /tmp/preflight-prod.sql
 infisical --env prod run -- pnpm prisma db push --accept-data-loss
 infisical --env prod run -- pnpm prisma migrate resolve --applied 0_init
 infisical --env prod run -- pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope
