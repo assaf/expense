@@ -347,6 +347,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   useEffect(() => {
     if (!expense.date && !expense.merchant && !expense.imageFile) {
       amountRef.current?.focus();
+      amountRef.current?.select();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -526,6 +527,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
           onClose={() => {
             setLightbox(false);
             amountRef.current?.focus();
+            amountRef.current?.select();
           }}
         />
       ) : null}
