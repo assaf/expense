@@ -1,10 +1,33 @@
 # Expensify
 
-Personal expense tracking with receipts and mileage. Built with React Router
-v8 (framework mode) + Tailwind v4. State lives in Postgres with receipt
-images in Vercel Blob (prod) or Postgres BYTEA (dev/test, no extra service).
-`DATABASE_URL` is required — there is no file-based fallback; `data/` exists
-only as the migration source for `pnpm migrate-data`.
+Personal expense tracking with receipts and mileage.
+
+What it does:
+
+- Log expenses two ways: receipt-based (upload/scan an image, add date, report,
+  category, merchant, amount) and mileage (drive route on a map — Leaflet + OSRM
+  — with configurable per-year mileage rates)
+- Organize into reports and categories; every receipt image is stored and
+  auto-renamed to a convention (YYYY-MM-DD_Report_Name.jpg)
+- Export: PDF per report (with embedded receipt images) and a ZIP of everything
+- Settings: reports, categories, mileage rates, home location for mileage routes
+
+Stack:
+
+- React Router v8 (framework mode) + Tailwind v4, TypeScript
+- Postgres via Prisma — accounts, users, expenses, reports, categories,
+  settings, mileage, image blobs
+- Images: Vercel Blob in prod, Postgres BYTEA in dev/test
+- Deployed on Vercel + Neon (git push to main auto-deploys)
+
+Auth & accounts (the recent work):
+
+- Username/password login (scrypt-hashed), sessions via signed cookies
+- Multi-user accounts: each account has its own data, users in the same account
+  share everything, other accounts fully isolated
+- New users join an account via an 8-char invite code (shown in Settings,
+  regenerable); anyone can self-signup into a fresh account
+- Image keys are namespaced per account so two accounts can never collide
 
 ## Accounts & sharing
 
@@ -77,9 +100,9 @@ CSVs + receipt images that `pnpm migrate-data` imports into Postgres/Blob:
 
 ## Environment variables
 
-Load order: real `process.env` (Vercel dashboard, Coolify app settings, or
-inline) wins; a local `.env` file fills the gaps. `DATABASE_URL` is required;
-`.env` is gitignored.
+Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
+`.env` file fills the gaps. `DATABASE_URL` is required; `.env` is gitignored. if
+(!hasDatabase()) {
 
 **dev / test — local `.env`:**
 
@@ -107,16 +130,6 @@ Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
 `BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens), `SESSION_SECRET`,
 and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
-
-**Coolify deploy — Infisical:** `scripts/deploy` mirrors Rentail and pulls
-prod secrets from [Infisical](https://infisical.com) (`infisical export --env
-prod > .env` + `infisical --env prod run -- coolify-ghcr-deploy --env-file
-.env`); `GHCR_TOKEN` comes from the Infisical `dev` env. Requires `infisical
-login` / `infisical init` once (writes `.infisical.json`). Deploy syncs the
-production schema (`prisma db push --accept-data-loss` — additive on the
-pre-Prisma database — then `prisma migrate resolve --applied 0_init` to
-record the baseline). The one-off CSV import also runs this way:
-`pnpm migrate-data:prod`.
 
 ## Quick start
 
@@ -162,7 +175,7 @@ zero-config path builds one SSR function that serves every route.)
 4. Migrate the existing data once (from a machine with the CSVs):
 
    ```bash
-   infisical --env prod run -- pnpm migrate-data   # or pnpm migrate-data:prod
+   pnpm migrate-data   # or pnpm migrate-data:prod
    ```
 
    It imports the CSVs under `data/` into Postgres and uploads `data/images/*`
@@ -173,19 +186,13 @@ zero-config path builds one SSR function that serves every route.)
 5. Deploy. Test the app is behind Deployment Protection or basic auth — the
    app has no built-in login (single-user personal tool).
 
-**Coolify (Docker):** `./scripts/deploy` — mirrors Rentail: `pnpm check`,
-tests, build/push to GHCR, then `infisical export --env prod > .env` and
-`infisical --env prod run -- coolify-ghcr-deploy --env-file .env`. Requires the
-Infisical `dev` env to hold `GHCR_TOKEN` and the `prod` env to hold the runtime
-secrets (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`) plus `COOLIFY_TOKEN`.
-
 ```bash
 ./scripts/deploy            # check + tests + deploy
 ./scripts/deploy --skip-tests
 ```
 
-Vercel has its own environment management (dashboard), independent of
-Infisical — set `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` there directly.
+Vercel has its own environment management (dashboard) — set `DATABASE_URL` and
+`BLOB_READ_WRITE_TOKEN` there directly.
 
 ## Maps & geocoding
 

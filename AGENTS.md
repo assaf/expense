@@ -15,7 +15,7 @@ Deployed to **Vercel** (Neon Postgres; GitHub push to `main` auto-deploys).
 ## Commands
 
 ```bash
-pnpm dev             # dev server — env from Infisical (--env dev)
+pnpm dev             # dev server
 pnpm check           # prisma generate + react-router typegen + vp check
 pnpm build           # production build
 pnpm build:prisma    # prisma generate (writes prisma/generated, gitignored)
@@ -23,26 +23,24 @@ pnpm start           # serve production build (port 3000)
 pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expensify_test schema + 40 tests (incl. image blobs)
-./scripts/deploy [--skip-tests]  # check + tests + prod db preflight/push + GHCR + Coolify
-# NOTE: prod currently runs on Vercel, not Coolify — deploy = `git push origin main`.
-# Schema changes: `prisma migrate dev` locally, then apply to prod with
-# `DATABASE_URL=$UNPOOLED pnpm db:migrate` (prod has migration history since Jul 2026).
+# NOTE: prod currently runs on Vercel — deploy = `git push origin main`. Schema
+# changes: `prisma migrate dev` locally, then apply to prod with
+# `DATABASE_URL=$UNPOOLED pnpm db:migrate` (prod has migration history since Jul
+# 2026).
 ```
 
 Run `pnpm check` before committing.
 
 ## Secrets
 
-Env load order: `process.env` (Vercel/Coolify/inline) → local `.env` (via
-dotenv in `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback.
-Dev/test use `.env`
-(`DATABASE_URL`, `IMAGE_BACKEND=pg`, and auth: `APP_USERNAME`,
+Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
+`app/lib/env.ts`). `DATABASE_URL` is required — no file fallback. Dev/test use
+`.env` (`DATABASE_URL`, `IMAGE_BACKEND=pg`, and auth: `APP_USERNAME`,
 `APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
-(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, plus the same three auth vars).
-`.infisical.json` is stale (workspace 404s) — don't rely on Infisical; pull
-prod env with `npx vercel env pull --environment=production .env.prod`
-(use `DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local
-services (`expensify_test`, image blobs in Postgres), not `.env`/Infisical.
+(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, plus the same three auth vars). Pull
+prod env with `npx vercel env pull --environment=production .env.prod` (use
+`DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local services
+(`expensify_test`, image blobs in Postgres), not `.env`.
 
 ## Stack & conventions
 
