@@ -9,6 +9,7 @@ import type {
   Account,
   Category,
   Expense,
+  InboundEmailRecord,
   MileageExpense,
   ReceiptExpense,
   Report,
@@ -439,6 +440,110 @@ export async function writeSettings(
     prisma.settings.deleteMany({ where: { accountId } }),
     prisma.settings.createMany({ data: rows }),
   ]);
+}
+
+// --- Inbound email ----------------------------------------------------------
+
+/** Normalize a sender address for storage/lookup (trim + lowercase). */
+function normalizeSender(address: string): string {
+  return address.trim().toLowerCase();
+}
+
+/** The stored row for a received email, or undefined when first seen. */
+export async function readInboundEmail(
+  emailId: string,
+): Promise<InboundEmailRecord | undefined> {
+  const row = await prisma.inboundEmail.findUnique({ where: { emailId } });
+  return (row ?? undefined) as InboundEmailRecord | undefined;
+}
+
+/** Create or update the audit row for a received email. */
+export async function upsertInboundEmail(input: {
+  emailId: string;
+  accountId: string;
+  subject: string;
+  status: InboundEmailRecord["status"];
+  error: string;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await prisma.inboundEmail.findUnique({
+    where: { emailId: input.emailId },
+  });
+  if (existing) {
+    await prisma.inboundEmail.update({
+      where: { emailId: input.emailId },
+      data: {
+        accountId: input.accountId,
+        subject: input.subject,
+        status: input.status,
+        error: input.error,
+        updatedAt: now,
+      },
+    });
+  } else {
+    await prisma.inboundEmail.create({
+      data: { ...input, createdAt: now, updatedAt: now },
+    });
+  }
+}
+
+/**
+ * The account that claims this sender address, by "first added" precedence:
+ * when the same address is allowed by several accounts, the row with the
+ * earliest createdAt wins; removing that row falls through to the next one.
+ */
+export async function findAccountByInboundSender(
+  senderEmail: string,
+): Promise<Account | undefined> {
+  const target = normalizeSender(senderEmail);
+  if (!target) return undefined;
+  const rows = await prisma.inboundSender.findMany({
+    where: { address: target },
+    orderBy: [{ createdAt: "asc" }, { accountId: "asc" }],
+    select: { accountId: true },
+  });
+  for (const row of rows) {
+    const account = await prisma.account.findUnique({
+      where: { id: row.accountId },
+    });
+    if (account) return account;
+  }
+  return undefined;
+}
+
+/** All allowed sender addresses for an account, in the order they were added. */
+export async function listInboundSenders(accountId: string): Promise<string[]> {
+  const rows = await prisma.inboundSender.findMany({
+    where: { accountId },
+    orderBy: [{ createdAt: "asc" }, { address: "asc" }],
+    select: { address: true },
+  });
+  return rows.map((r) => r.address);
+}
+
+/** Allow a sender address for an account (idempotent, normalized). */
+export async function addInboundSender(
+  accountId: string,
+  address: string,
+): Promise<void> {
+  const normalized = normalizeSender(address);
+  if (!normalized) return;
+  await prisma.inboundSender.createMany({
+    data: [
+      { accountId, address: normalized, createdAt: new Date().toISOString() },
+    ],
+    skipDuplicates: true,
+  });
+}
+
+/** Remove a sender address from an account. */
+export async function removeInboundSender(
+  accountId: string,
+  address: string,
+): Promise<void> {
+  await prisma.inboundSender.deleteMany({
+    where: { accountId, address: normalizeSender(address) },
+  });
 }
 
 // --- Helpers ---------------------------------------------------------------

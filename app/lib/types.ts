@@ -93,3 +93,14 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLng: null,
   mileageRates: {},
 };
+
+/** One processed inbound email (idempotency + audit). */
+export interface InboundEmailRecord {
+  emailId: string;
+  accountId: string;
+  subject: string;
+  status: "processing" | "created" | "partial" | "error";
+  error: string;
+  createdAt: string;
+  updatedAt: string;
+}

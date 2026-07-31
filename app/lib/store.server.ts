@@ -42,6 +42,12 @@ export const addCategory = store.addCategory;
 export const removeCategory = store.removeCategory;
 export const readSettings = store.readSettings;
 export const writeSettings = store.writeSettings;
+export const readInboundEmail = store.readInboundEmail;
+export const upsertInboundEmail = store.upsertInboundEmail;
+export const findAccountByInboundSender = store.findAccountByInboundSender;
+export const listInboundSenders = store.listInboundSenders;
+export const addInboundSender = store.addInboundSender;
+export const removeInboundSender = store.removeInboundSender;
 
 /** Build a new expense shell with sensible defaults. */
 export function newExpenseShell(type: Expense["type"]): Expense {

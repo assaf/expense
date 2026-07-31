@@ -10,16 +10,20 @@ import { Link, Form } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
+import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
 import { readSettings, writeSettings } from "~/lib/settings.server";
 import {
   addCategory,
+  addInboundSender,
   addReport,
+  listInboundSenders,
   readAccount,
   readCategories,
   readReports,
   regenerateInviteCode,
   removeCategory,
+  removeInboundSender,
   removeReport,
 } from "~/lib/store.server";
 import { normalizeAmount } from "~/lib/format";
@@ -29,10 +33,11 @@ import type { Route } from "./+types/settings";
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const account = await readAccount(user.accountId);
-  const [reports, categories, settings] = await Promise.all([
+  const [reports, categories, settings, inboundSenders] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
     readSettings(user.accountId),
+    listInboundSenders(user.accountId),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
@@ -41,6 +46,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     reports: reports.map((r) => r.name),
     categories: categories.map((c) => c.name),
     homeAddress: settings.homeAddress,
+    inboundSenders,
+    inboundAddress: INBOUND_EMAIL_ADDRESS,
     rates: years.map((y) => ({ year: y, rate: settings.mileageRates[y] })),
   };
 }
@@ -86,6 +93,16 @@ export async function action({ request }: Route.ActionArgs) {
       await writeSettings(user.accountId, settings);
       break;
     }
+    case "addInboundSender": {
+      const address = formString(form, "address").trim().toLowerCase();
+      await addInboundSender(user.accountId, address);
+      break;
+    }
+    case "removeInboundSender": {
+      const address = formString(form, "address").trim().toLowerCase();
+      await removeInboundSender(user.accountId, address);
+      break;
+    }
     case "saveHome": {
       const settings = await readSettings(user.accountId);
       const address = formString(form, "homeAddress").trim();
@@ -108,8 +125,16 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, categories, homeAddress, rates, accountName, inviteCode } =
-    loaderData;
+  const {
+    reports,
+    categories,
+    homeAddress,
+    rates,
+    accountName,
+    inviteCode,
+    inboundSenders,
+    inboundAddress,
+  } = loaderData;
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <Link
@@ -225,6 +250,83 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             <MapPin className="h-4 w-4" /> Save
           </Button>
         </Form>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Receipts by email</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Forward receipt emails to the address below and they are parsed
+          (merchant, amount, category) and added automatically. The expense date
+          is the date of the forwarded email.
+        </p>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          {inboundAddress ? (
+            <div className="mb-4">
+              <div className="text-sm font-medium text-gray-500">
+                Forward receipts to
+              </div>
+              <div className="font-mono text-lg font-semibold">
+                {inboundAddress}
+              </div>
+            </div>
+          ) : (
+            <p className="mb-4 text-sm text-gray-400">
+              Set the INBOUND_EMAIL_ADDRESS environment variable to show the
+              forwarding address here.
+            </p>
+          )}
+          <div className="mb-3">
+            <div className="mb-1 text-sm font-medium text-gray-700">
+              Allowed sender address(es)
+            </div>
+            <p className="mb-2 text-xs text-gray-500">
+              The addresses you forward receipts from — you can add several.
+              Only emails from these addresses are imported.
+            </p>
+            <ul className="flex flex-col gap-1">
+              {inboundSenders.length === 0 ? (
+                <li className="text-sm text-gray-400">None yet.</li>
+              ) : (
+                inboundSenders.map((address) => (
+                  <li
+                    key={address}
+                    className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5"
+                  >
+                    <span className="font-mono text-sm">{address}</span>
+                    <Form method="post" className="contents">
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value="removeInboundSender"
+                      />
+                      <input type="hidden" name="address" value={address} />
+                      <button
+                        type="submit"
+                        className="text-gray-400 hover:text-red-600"
+                        aria-label={`Remove ${address}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </Form>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+          <Form method="post" className="flex items-center gap-2">
+            <input type="hidden" name="intent" value="addInboundSender" />
+            <input
+              type="email"
+              name="address"
+              placeholder="you@example.com"
+              required
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+            />
+            <Button type="submit" size="sm" variant="secondary">
+              <Plus className="h-4 w-4" /> Add address
+            </Button>
+          </Form>
+        </div>
       </section>
 
       <section className="border-t border-gray-100 pt-6">

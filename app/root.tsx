@@ -14,8 +14,12 @@ import type { Route } from "./+types/root";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  // The login route (and its React Router `.data` requests) is public.
-  if (!url.pathname.startsWith("/login")) {
+  // The login route and the inbound email webhook are public; everything
+  // else requires a session (the webhook verifies its own Resend signature).
+  const isPublic =
+    url.pathname.startsWith("/login") ||
+    url.pathname.startsWith("/api/inbound-email");
+  if (!isPublic) {
     await requireUser(request);
   }
   return null;

@@ -7,6 +7,8 @@ What it does:
 - Log expenses two ways: receipt-based (upload/scan an image, add date, report,
   category, merchant, amount) and mileage (drive route on a map — Leaflet + OSRM
   — with configurable per-year mileage rates)
+- **Receipts by email**: forward a receipt to your inbox address and it's
+  parsed (merchant/amount/category) and added automatically — see below
 - Organize into reports and categories; every receipt image is stored and
   auto-renamed to a convention (YYYY-MM-DD_Report_Name.jpg)
 - Export: PDF per report (with embedded receipt images) and a ZIP of everything
@@ -102,6 +104,10 @@ IMAGE_BACKEND=pg        # receipt images live in Postgres — no extra service
 SESSION_SECRET=…         # signs the session cookie (random hex)
 APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
 APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
+# Receipts by email (all optional):
+# RESEND_API_KEY=re_…            INBOUND_EMAIL_WEBHOOK_SECRET=whsec_…
+# INBOUND_EMAIL_FROM=…           INBOUND_EMAIL_ADDRESS=receipts@example.com
+# DEEPSEEK_API_KEY=sk-…          RECEIPT_OCR_MODE=auto
 ```
 
 On an empty database the first account + user are bootstrapped from
@@ -119,6 +125,81 @@ Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
 `BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens), `SESSION_SECRET`,
 and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
+
+## Receipts by email
+
+Forward a receipt email to your inbox address and it's parsed and added
+automatically: the merchant, amount, and category are extracted, the receipt
+is stored as an image, and the expense date is the date of the email being
+forwarded. If something can't be processed, a reply email explains what
+happened.
+
+How it decides what to import:
+
+- Receipt **attached as PDF/image** → that attachment becomes the receipt
+  image; text is extracted from the PDF text layer (or OCR'd) to get the
+  merchant/amount/category.
+- Receipt **inline in the email** (ASCII/HTML) → the email body is turned
+  into an image and stored; the text is parsed the same way.
+- Multiple attachments (e.g. a receipt + a logo or signature) → only the
+  actual receipt is handled (heuristics + model tiebreak).
+- The sender must be on the account's **allowed sender list** (Settings →
+  Receipts by email); anything else gets a "sender not recognized" reply.
+  You can add several addresses. If the same address is allowed by multiple
+  accounts, the account that added it first claims it — removing it there
+  falls through to the next account that allows it.
+- Successful imports don't email you; incomplete ones (missing merchant,
+  amount, …) create the expense anyway and reply listing what's missing.
+- Each email is processed at most once (idempotent per email id).
+
+### Setup (Resend + DeepSeek)
+
+Vercel has no inbound email, so receipt emails are received by **Resend**
+(receiving = parse email → POST webhook) and parsed by **DeepSeek**
+(`deepseek-v4-flash`). Replies on failure go out through Resend too.
+
+1. Create a [Resend](https://resend.com) account and add a domain (e.g.
+   `labnotes.org`) — you'll point MX/DKIM/SPF DNS records at Resend.
+2. Resend → **Receiving**: add a receiving domain and an inbound route
+   (catch-all or `receipts@…`) that POSTs to
+   `https://<your-app>/api/inbound-email`.
+3. On the webhook, copy the **signing secret** (`whsec_…`).
+4. Create a [DeepSeek](https://platform.deepseek.com) API key.
+5. Set env vars (dev `.env`, prod Vercel dashboard):
+
+   ```bash
+   RESEND_API_KEY=re_…                     # receive + send replies
+   INBOUND_EMAIL_WEBHOOK_SECRET=whsec_…    # verifies the webhook signature
+   INBOUND_EMAIL_FROM="Expensify <receipts@labnotes.org>"   # reply sender
+   INBOUND_EMAIL_ADDRESS=receipts@labnotes.org               # shown in Settings
+   DEEPSEEK_API_KEY=sk-…                   # receipt text/OCR extraction
+   DEEPSEEK_MODEL=deepseek-v4-flash        # optional, this is the default
+   RECEIPT_OCR_MODE=auto                   # auto|deepseek|tesseract (default auto)
+   ```
+
+   All are optional — without them the webhook returns 503 and receipts
+   aren't imported.
+
+6. In the app: Settings → **Receipts by email** → add each address you'll
+   forward from (you can add several), then forward a receipt to your
+   inbound address.
+
+Notes:
+
+- **DeepSeek vision**: the hosted DeepSeek API is text-only today — image
+  receipts are OCR'd locally with tesseract.js (worker/fonts fetched from a
+  CDN at runtime). Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model
+  accepts images (it tries vision first and falls back automatically on
+  `auto`).
+- **Scanned PDFs** (no text layer) are rasterized and OCR'd; the first pages
+  become the stored receipt image.
+- **HTML receipts** are stored as a rendered text image (monospace receipt
+  sheet) — no headless browser needed.
+- Forwarding **as attachment (.eml)** — the receipt nested inside the .eml is
+  not unpacked; use normal inline forwarding (Gmail/iOS quote the original in
+  the body).
+- Webhook processing runs up to 60s (Vercel `maxDuration`) — enough for
+  attachment download + OCR + extraction.
 
 ## Quick start
 

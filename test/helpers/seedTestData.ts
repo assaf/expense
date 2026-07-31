@@ -27,7 +27,7 @@ export const testPrisma = new PrismaClient({
 });
 
 /** Test account — the default login (testuser) belongs here. */
-const TEST_ACCOUNT_ID = "acct_test1";
+export const TEST_ACCOUNT_ID = "acct_test1";
 export const TEST_INVITE_CODE = "TESTCODE1";
 
 /** Second account — used to prove data isolation between accounts. */

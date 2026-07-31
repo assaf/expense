@@ -22,7 +22,7 @@ pnpm build:prisma    # prisma generate (writes prisma/generated, gitignored)
 pnpm start           # serve production build (port 3000)
 pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
-pnpm test            # force-resets expensify_test schema + 40 tests (incl. image blobs)
+pnpm test            # force-resets expensify_test schema + 79 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
 # NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
 # sync (preflight + db push, via `vercel env pull`), CLI deploy, and opening the
@@ -43,6 +43,12 @@ Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 prod env with `npx vercel env pull --environment=production .env.prod` (use
 `DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local services
 (`expensify_test`, image blobs in Postgres), not `.env`.
+
+Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_SECRET`,
+`INBOUND_EMAIL_FROM`, `INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
+`DEEPSEEK_MODEL` (default `deepseek-v4-flash`), `RECEIPT_OCR_MODE`
+(`auto` default | `deepseek` | `tesseract`). All optional — the webhook route
+returns 503 when unconfigured and everything else still works.
 
 ## Stack & conventions
 
@@ -75,25 +81,31 @@ prod env with `npx vercel env pull --environment=production .env.prod` (use
 
 ## Key files
 
-| File                              | Role                                                          |
-| --------------------------------- | ------------------------------------------------------------- |
-| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.                   |
-| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).                |
-| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.                       |
-| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                          |
-| `app/routes/export.*`             | PDF per report + ZIP of everything.                           |
-| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.            |
-| `app/routes/login.tsx`            | Sign in / create account / join by invite code.               |
-| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.                    |
-| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup.           |
-| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.                      |
-| `app/lib/prisma.server.ts`        | Prisma client singleton (PrismaPg adapter).                   |
-| `prisma/schema.prisma`            | Single schema source of truth (8 models).                     |
-| `prisma/migrations/0_init`        | Baseline migration (fresh DBs via `prisma migrate`).          |
-| `scripts/preflight-prod.mjs`      | Idempotent pre-account baseline SQL for prod (pre-`db push`). |
-| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                          |
-| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).              |
-| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                             |
+| File                               | Role                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `app/routes/_index.tsx`            | Main list, add buttons, paste/upload image.                                           |
+| `app/routes/expense.$id.tsx`       | Receipt + mileage editor (save/cancel/delete).                                        |
+| `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                               |
+| `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                  |
+| `app/routes/export.*`              | PDF per report + ZIP of everything.                                                   |
+| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.          |
+| `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).               |
+| `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                       |
+| `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                            |
+| `app/lib/auth.server.ts`           | Auth: session storage, `requireUser`, login/signup.                                   |
+| `app/lib/passwords.ts`             | scrypt hashing + invite-code generation.                                              |
+| `app/lib/prisma.server.ts`         | Prisma client singleton (PrismaPg adapter).                                           |
+| `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies. |
+| `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                        |
+| `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                 |
+| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono).                  |
+| `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                              |
+| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                             |
+| `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                  |
+| `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                         |
+| `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                  |
+| `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                      |
+| `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                     |
 
 ## Gotchas
 
@@ -123,3 +135,26 @@ prod env with `npx vercel env pull --environment=production .env.prod` (use
   (they keep their old convention name). Re-saving each receipt rewrites the name.
 - `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
   still type-checks it.
+- **Receipts by email**: the `/api/inbound-email` route is public (no session) —
+  it verifies Resend's `Resend-Signature` (Svix HMAC, `whsec_…` secret,
+  replay-guarded) and maps the sender to an account via the `inbound_senders`
+  table (one row per account+address, normalized lowercase). Webhook retries
+  are idempotent via the `inbound_emails` table.
+  - **Precedence**: when the same sender address is allowed by several
+    accounts, the row with the earliest `createdAt` wins ("first added takes
+    precedence"); deleting that row falls through to the next account. Manage
+    lists in Settings → Receipts by email (add/remove per address).
+  - The expense date is the **original forwarded email's date** (quoted
+    "Begin forwarded message" Date → .eml attachment Date → received header).
+  - Only the best receipt attachment (PDF/image, heuristic + model tiebreak)
+    is used; logos/signatures/inline decoration are skipped; otherwise the
+    email body (text or HTML→text) becomes the receipt image.
+  - PDF attachments are stored as rendered PNGs; the stored image is always
+    browser-displayable (HEIC/BMP/TIFF → PNG via sharp).
+  - The hosted DeepSeek API is text-only today — image OCR falls back to
+    tesseract.js (CDN worker/lang at runtime). `RECEIPT_OCR_MODE=deepseek`
+    forces vision-only. Don't expect image input to work until DeepSeek ships
+    it on the hosted API.
+  - Heavy deps (sharp, @resvg/resvg-js, @napi-rs/canvas, tesseract.js,
+    pdfjs-dist) are Node-runtime only; native modules must stay external in
+    the server build (Vite SSR externalizes node_modules by default).

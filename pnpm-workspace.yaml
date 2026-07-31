@@ -4,6 +4,7 @@ allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
   prisma: true
+  tesseract.js: true
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"

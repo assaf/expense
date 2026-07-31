@@ -1,0 +1,761 @@
+import { createHmac } from "node:crypto";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { normalizeAmount } from "~/lib/format";
+import {
+  processInboundEvent,
+  verifyWebhookSignature,
+  parseDateString,
+  extractDateFromForwardedText,
+  extractDateFromEml,
+  extractExpenseDate,
+  extractEmailAddress,
+  scoreAttachment,
+  pickReceiptAttachment,
+  matchCategory,
+} from "~/lib/inbound-email.server";
+import type {
+  InboundDeps,
+  EmailReceivedData,
+  ReceivedEmail,
+  AttachmentMeta,
+} from "~/lib/inbound-email.server";
+import type { ExtractionResult } from "~/lib/receipt-ai.server";
+import type { ProcessResult } from "~/lib/inbound-email.server";
+import type { Expense, ReceiptExpense } from "~/lib/types";
+import {
+  buildReceiptSvg,
+  htmlToText,
+  renderReceiptImage,
+} from "~/lib/receipt-render.server";
+import { parseJsonObject } from "~/lib/receipt-ai.server";
+import { deleteExpense, readExpenses } from "~/lib/store.server";
+import {
+  TEST_ACCOUNT_ID,
+  OTHER_ACCOUNT_ID,
+  testPrisma,
+} from "./helpers/seedTestData";
+
+/** A real 1x1 transparent PNG used as fake image/PDF render output. */
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+const SENDER = "forwarder@example.com";
+
+/** Deterministic fake "model": reads MERCHANT:/TOTAL:/CATEGORY: markers. */
+function fakeExtract(text?: string): ExtractionResult {
+  const t = text ?? "";
+  const merchant = t.match(/MERCHANT:\s*([^\n]+)/i)?.[1]?.trim() ?? "";
+  const amount = t.match(/TOTAL:\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)?.[1] ?? "";
+  return {
+    isReceipt: t.includes("TOTAL:") || t.includes("MERCHANT:"),
+    merchant,
+    amount: normalizeAmount(amount),
+    currency: "USD",
+    category: t.match(/CATEGORY:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
+    confidence: "high",
+    notes: "",
+  };
+}
+
+function receivedEmail(overrides: Partial<ReceivedEmail> = {}): ReceivedEmail {
+  return {
+    id: "email-1",
+    from: `Forwarder <${SENDER}>`,
+    to: ["receipts@labnotes.org"],
+    subject: "Fwd: Receipt from Amazon",
+    html: null,
+    text: [
+      "Begin forwarded message:",
+      "",
+      "From: Amazon <no-reply@amazon.com>",
+      "Date: June 5, 2026 10:12:33 PDT",
+      "Subject: Your order receipt",
+      "",
+      "MERCHANT: Amazon",
+      "TOTAL: 42.50",
+      "CATEGORY: office supplies",
+    ].join("\n"),
+    headers: { date: "Sat, 20 Jun 2026 09:00:00 -0700" },
+    created_at: "2026-06-20T16:00:00.000Z",
+    message_id: "<msg-1@example.com>",
+    ...overrides,
+  };
+}
+
+function eventData(
+  overrides: Partial<EmailReceivedData> = {},
+): EmailReceivedData {
+  return {
+    email_id: "email-1",
+    created_at: "2026-06-20T16:00:00.000Z",
+    from: `Forwarder <${SENDER}>`,
+    to: ["receipts@labnotes.org"],
+    bcc: [],
+    cc: [],
+    received_for: ["receipts@labnotes.org"],
+    message_id: "<msg-1@example.com>",
+    subject: "Fwd: Receipt from Amazon",
+    attachments: [],
+    ...overrides,
+  };
+}
+
+function attachment(overrides: Partial<AttachmentMeta> = {}): AttachmentMeta {
+  return {
+    id: "att-1",
+    filename: "receipt.pdf",
+    size: 12000,
+    content_type: "application/pdf",
+    content_disposition: "attachment",
+    content_id: null,
+    download_url: null,
+    expires_at: null,
+    ...overrides,
+  };
+}
+
+/** Build fake deps: real renderReceiptImage (resvg + bundled font), everything else faked. */
+function fakeDeps(): InboundDeps & {
+  sent: { subject: string; html: string; to: string }[];
+  downloads: AttachmentMeta[];
+} {
+  const sent: { subject: string; html: string; to: string }[] = [];
+  const downloads: AttachmentMeta[] = [];
+  const deps: InboundDeps = {
+    fetchReceivedEmail: async (id) => receivedEmail({ id }),
+    listAttachments: async () => [],
+    downloadAttachment: async (meta) => {
+      downloads.push(meta);
+      return TINY_PNG;
+    },
+    classifyAttachment: async () => null,
+    extractReceipt: async (input) => fakeExtract(input.text),
+    extractFromImage: async () => ({
+      result: fakeExtract(
+        "MERCHANT: Photo Shop\nTOTAL: 5.00\nCATEGORY: office supplies",
+      ),
+      text: "MERCHANT: Photo Shop\nTOTAL: 5.00\nCATEGORY: office supplies",
+      stored: { buffer: TINY_PNG, mime: "image/png" },
+    }),
+    extractPdfText: async () =>
+      "MERCHANT: Amazon\nTOTAL: 9.99\nCATEGORY: office supplies",
+    renderPdfToPng: async () => TINY_PNG,
+    renderReceiptImage,
+    sendReply: async (input) => {
+      sent.push({ subject: input.subject, html: input.html, to: input.to });
+    },
+  };
+  return { ...deps, sent, downloads };
+}
+
+/** The expense id from a created/partial result (asserts the status). */
+function expenseIdOf(result: ProcessResult): string {
+  if (result.status === "created" || result.status === "partial") {
+    return result.expenseId;
+  }
+  throw new Error(`Expected created/partial, got ${result.status}`);
+}
+
+/** Narrow an expense to a receipt (throws otherwise). */
+function asReceipt(expense: Expense | undefined): ReceiptExpense {
+  if (!expense || expense.type !== "receipt") {
+    throw new Error("Expected a receipt expense");
+  }
+  return expense;
+}
+
+const usedEmailIds: string[] = [];
+const usedExpenseIds: string[] = [];
+const usedSenders: { accountId: string; address: string }[] = [];
+
+/** Allow a sender for the test account and remember it for cleanup. */
+async function allowSender(
+  accountId: string,
+  address: string,
+  createdAt = new Date().toISOString(),
+): Promise<void> {
+  await testPrisma.inboundSender.createMany({
+    data: [{ accountId, address: address.toLowerCase(), createdAt }],
+    skipDuplicates: true,
+  });
+  usedSenders.push({ accountId, address: address.toLowerCase() });
+}
+
+beforeEach(async () => {
+  await allowSender(TEST_ACCOUNT_ID, SENDER);
+});
+
+afterEach(async () => {
+  for (const id of usedExpenseIds) {
+    await deleteExpense(id, TEST_ACCOUNT_ID).catch(() => {});
+    await deleteExpense(id, OTHER_ACCOUNT_ID).catch(() => {});
+  }
+  usedExpenseIds.length = 0;
+  if (usedEmailIds.length > 0) {
+    await testPrisma.inboundEmail
+      .deleteMany({ where: { emailId: { in: usedEmailIds } } })
+      .catch(() => {});
+    usedEmailIds.length = 0;
+  }
+  for (const s of usedSenders) {
+    await testPrisma.inboundSender
+      .deleteMany({ where: { accountId: s.accountId, address: s.address } })
+      .catch(() => {});
+  }
+  usedSenders.length = 0;
+});
+
+describe("Webhook signature", () => {
+  const secret = "whsec_testsecret";
+  const key = "testsecret";
+  const body = JSON.stringify({ type: "email.received", data: {} });
+
+  function sign(ts: number, payload: string): string {
+    const v1 = createHmac("sha256", key)
+      .update(`${ts}.${payload}`)
+      .digest("hex");
+    return `t=${ts},v1=${v1}`;
+  }
+
+  it("accepts a valid signature", () => {
+    expect(
+      verifyWebhookSignature(
+        sign(Math.floor(Date.now() / 1000), body),
+        body,
+        secret,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a tampered body", () => {
+    const sig = sign(Math.floor(Date.now() / 1000), body);
+    expect(verifyWebhookSignature(sig, body + "x", secret)).toBe(false);
+  });
+
+  it("rejects a wrong secret", () => {
+    const sig = sign(Math.floor(Date.now() / 1000), body);
+    expect(verifyWebhookSignature(sig, body, "whsec_other")).toBe(false);
+  });
+
+  it("rejects an expired timestamp (replay guard)", () => {
+    const sig = sign(Math.floor(Date.now() / 1000) - 600, body);
+    expect(verifyWebhookSignature(sig, body, secret)).toBe(false);
+  });
+
+  it("rejects missing or empty signatures", () => {
+    expect(verifyWebhookSignature("", body, secret)).toBe(false);
+    expect(verifyWebhookSignature("t=1", body, secret)).toBe(false);
+  });
+});
+
+describe("Date extraction", () => {
+  it("parses RFC 2822 and human dates", () => {
+    expect(parseDateString("Tue, 10 Feb 2026 09:15:22 -0800")).toBe(
+      "2026-02-10",
+    );
+    expect(parseDateString("June 5, 2026 10:12:33 PDT")).toBe("2026-06-05");
+    expect(parseDateString("garbage")).toBeNull();
+  });
+
+  it("rejects future dates", () => {
+    expect(parseDateString("Jan 1 2100")).toBeNull();
+  });
+
+  it("extracts the forwarded message date (Apple/Gmail style)", () => {
+    const text = [
+      "Begin forwarded message:",
+      "",
+      "From: Amazon <no-reply@amazon.com>",
+      "Date: June 5, 2026 10:12:33 PDT",
+      "Subject: Your receipt",
+      "",
+      "Order total $42.50",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-06-05");
+  });
+
+  it("extracts the forwarded message date (Gmail quote style)", () => {
+    const text = [
+      "---------- Forwarded message ----------",
+      "From: X <x@y.com>",
+      "Date: Mon, 2 Mar 2026 08:00:00 +0000",
+      "Subject: hi",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-03-02");
+  });
+
+  it("extracts the date from an .eml attachment", () => {
+    const eml =
+      "Date: Tue, 10 Feb 2026 09:15:22 -0800\nFrom: a@b.com\nSubject: x\n\nbody";
+    expect(extractDateFromEml(eml)).toBe("2026-02-10");
+  });
+
+  it("prefers the forwarded date over the received header date", () => {
+    const email = receivedEmail();
+    expect(extractExpenseDate(email)).toBe("2026-06-05");
+  });
+
+  it("falls back to the received email header date", () => {
+    const email = receivedEmail({
+      text: "plain receipt without forward block",
+    });
+    expect(extractExpenseDate(email)).toBe("2026-06-20");
+  });
+
+  it("falls back to the arrival time when nothing else parses", () => {
+    const email = receivedEmail({ text: null, html: null, headers: {} });
+    expect(extractExpenseDate(email)).toBe("2026-06-20");
+  });
+});
+
+describe("Email address extraction", () => {
+  it("strips display names and lowercases", () => {
+    expect(extractEmailAddress("Forwarder <Foo@Bar.com>")).toBe("foo@bar.com");
+    expect(extractEmailAddress("plain@address.com")).toBe("plain@address.com");
+    expect(extractEmailAddress("")).toBe("");
+  });
+});
+
+describe("Attachment selection", () => {
+  it("prefers a PDF over a small inline logo", () => {
+    const atts = [
+      attachment({
+        id: "logo",
+        filename: "logo.png",
+        size: 4000,
+        content_type: "image/png",
+        content_disposition: "inline",
+      }),
+      attachment({ id: "pdf", filename: "invoice.pdf" }),
+    ];
+    const pick = pickReceiptAttachment(atts, "");
+    expect(pick?.index).toBe(1);
+    expect(pick?.ambiguous).toBe(false);
+  });
+
+  it("boosts an inline image referenced by the HTML (embedded receipt picture)", () => {
+    const html = '<img src="cid:img001">';
+    const atts = [
+      attachment({
+        id: "inline-receipt",
+        filename: "image001.png",
+        size: 300_000,
+        content_type: "image/png",
+        content_disposition: "inline",
+        content_id: "img001",
+      }),
+      attachment({
+        id: "other",
+        filename: "banner.gif",
+        size: 25_000,
+        content_type: "image/gif",
+        content_disposition: "inline",
+      }),
+    ];
+    const pick = pickReceiptAttachment(atts, html);
+    expect(pick?.index).toBe(0);
+  });
+
+  it("returns null when nothing looks like a receipt", () => {
+    const atts = [
+      attachment({
+        id: "logo",
+        filename: "logo.png",
+        size: 3000,
+        content_type: "image/png",
+        content_disposition: "inline",
+      }),
+      attachment({
+        id: "sig",
+        filename: "signature.png",
+        size: 5000,
+        content_type: "image/png",
+        content_disposition: "inline",
+      }),
+    ];
+    expect(pickReceiptAttachment(atts, "")).toBeNull();
+  });
+
+  it("ignores non-receipt attachments (eml, vcf)", () => {
+    const atts = [
+      attachment({
+        id: "eml",
+        filename: "original.eml",
+        size: 1000,
+        content_type: "message/rfc822",
+      }),
+      attachment({
+        id: "vcf",
+        filename: "contact.vcf",
+        size: 500,
+        content_type: "text/vcard",
+      }),
+    ];
+    expect(pickReceiptAttachment(atts, "")).toBeNull();
+  });
+
+  it("flags ambiguity when two strong candidates are close", () => {
+    const atts = [
+      attachment({ id: "a", filename: "receipt.pdf", size: 10_000 }),
+      attachment({ id: "b", filename: "statement.pdf", size: 12_000 }),
+    ];
+    const pick = pickReceiptAttachment(atts, "");
+    expect(pick).not.toBeNull();
+    expect(pick?.ambiguous).toBe(true);
+  });
+
+  it("scores receipt-named files higher and logo-named files lower", () => {
+    expect(
+      scoreAttachment(attachment({ filename: "receipt.pdf" }), ""),
+    ).toBeGreaterThan(
+      scoreAttachment(
+        attachment({ filename: "logo.png", content_type: "image/png" }),
+        "",
+      ),
+    );
+  });
+});
+
+describe("Category matching", () => {
+  const cats = ["Office Supplies", "Travel", "Meals"];
+
+  it("matches case-insensitively", () => {
+    expect(matchCategory("office supplies", cats)).toBe("Office Supplies");
+  });
+
+  it("returns empty when nothing matches", () => {
+    expect(matchCategory("Unrelated", cats)).toBe("");
+    expect(matchCategory("", cats)).toBe("");
+  });
+});
+
+describe("HTML to text", () => {
+  it("converts block elements to lines", () => {
+    expect(htmlToText("<p>Hello</p><p>World</p>")).toBe("Hello\nWorld");
+  });
+
+  it("keeps table cell layout", () => {
+    const html =
+      "<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>";
+    const text = htmlToText(html);
+    expect(text).toContain("A  B");
+    expect(text).toContain("C  D");
+  });
+
+  it("drops scripts and styles", () => {
+    const html = "<script>evil()</script><style>p{color:red}</style><p>Hi</p>";
+    expect(htmlToText(html)).not.toContain("evil");
+    expect(htmlToText(html)).toContain("Hi");
+  });
+});
+
+describe("Receipt rendering", () => {
+  it("builds an SVG with escaped text", () => {
+    const svg = buildReceiptSvg("Total: $42.50 <tax>", {
+      subject: "Receipt & more",
+    });
+    expect(svg).toContain("Receipt &amp; more");
+    expect(svg).toContain("$42.50 &lt;tax&gt;");
+    expect(svg).toContain("<svg");
+  });
+
+  it("renders a PNG with the expected signature", async () => {
+    const png = await renderReceiptImage("MERCHANT: Amazon\nTOTAL: 42.50");
+    expect(png[0]).toBe(0x89);
+    expect(png[1]).toBe(0x50);
+    expect(png.length).toBeGreaterThan(100);
+  });
+});
+
+describe("DeepSeek JSON parsing", () => {
+  it("strips markdown fences", () => {
+    expect(parseJsonObject('```json\n{"a": 1}\n```')).toEqual({ a: 1 });
+  });
+
+  it("extracts JSON from prose", () => {
+    expect(parseJsonObject('Here: {"b": 2} thanks')).toEqual({ b: 2 });
+  });
+});
+
+describe("processInboundEvent (body receipt)", () => {
+  it("creates an expense with the forwarded email date", async () => {
+    const deps = fakeDeps();
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+
+    expect(result).toMatchObject({ status: "created" });
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
+    expect(created.type).toBe("receipt");
+    expect(created.merchant).toBe("Amazon");
+    expect(created.amount).toBe("42.50");
+    expect(created.date).toBe("2026-06-05"); // forwarded message date, not header
+    expect(created.category).toBe("Office Supplies"); // matched existing category
+    expect(created.imageFile).not.toBe("");
+    expect(created.imageMime).toBe("image/png");
+    usedExpenseIds.push(expenseIdOf(result));
+    // Success → no reply email.
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("sends no expense to the other account", async () => {
+    const deps = fakeDeps();
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    const other = await readExpenses(OTHER_ACCOUNT_ID);
+    expect(other.some((e) => e.id === expenseIdOf(result))).toBe(false);
+  });
+
+  it("is idempotent for the same email_id", async () => {
+    const deps = fakeDeps();
+    const first = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(first));
+    const before = (await readExpenses(TEST_ACCOUNT_ID)).length;
+    const second = await processInboundEvent(eventData(), deps);
+    expect(second).toMatchObject({ status: "duplicate" });
+    expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
+  });
+
+  it("creates a partial expense and replies when merchant is missing", async () => {
+    const deps = fakeDeps();
+    const email = receivedEmail({
+      text: "Begin forwarded message:\n\nFrom: X <x@y.com>\nDate: June 5, 2026\n\nTOTAL: 12.00",
+    });
+    deps.fetchReceivedEmail = async () => email;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "partial" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toContain("needs attention");
+    expect(deps.sent[0]!.html).toContain("merchant");
+  });
+
+  it("replies when the email contains no receipt at all", async () => {
+    const deps = fakeDeps();
+    const email = receivedEmail({ text: "", html: null });
+    deps.fetchReceivedEmail = async () => email;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(result).toMatchObject({ status: "error" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.html).toContain("couldn't find a receipt");
+  });
+
+  it("replies when the content is not a receipt", async () => {
+    const deps = fakeDeps();
+    const email = receivedEmail({ text: "Hi, what's up?", html: null });
+    deps.fetchReceivedEmail = async () => email;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(result).toMatchObject({ status: "error" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.html).toContain("doesn't look like a receipt");
+  });
+
+  it("replies and does not create an expense when extraction fails", async () => {
+    const deps = fakeDeps();
+    deps.extractReceipt = async () => {
+      throw new Error("DeepSeek API 429: rate limited");
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(result).toMatchObject({ status: "error" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.html).toContain("rate limited");
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
+
+  it("rejects unknown senders with a reply and no expense", async () => {
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({ from: "Stranger <stranger@evil.com>" }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "unknown-sender" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toContain("sender not recognized");
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
+});
+
+describe("processInboundEvent (multiple senders)", () => {
+  it("accepts any address in the allowed sender list", async () => {
+    await allowSender(TEST_ACCOUNT_ID, "home@example.com");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ from: "Home <home@example.com>" });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-second-sender",
+        from: "Home <home@example.com>",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-second-sender");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+  });
+
+  it("rejects an address that is not on the list", async () => {
+    await allowSender(TEST_ACCOUNT_ID, "home@example.com");
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-not-allowed",
+        from: "Other <other@example.com>",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "unknown-sender" });
+    expect(deps.sent).toHaveLength(1);
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
+
+  it("first-added account wins, and falls through after removal", async () => {
+    // Same sender allowed by two accounts; Other Account added it first.
+    await allowSender(
+      OTHER_ACCOUNT_ID,
+      "shared@example.com",
+      "2026-01-01T00:00:00.000Z",
+    );
+    await allowSender(
+      TEST_ACCOUNT_ID,
+      "shared@example.com",
+      "2026-02-01T00:00:00.000Z",
+    );
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ from: "Shared <shared@example.com>" });
+
+    // 1. The first-added account claims the sender.
+    const first = await processInboundEvent(
+      eventData({
+        email_id: "email-shared-1",
+        from: "Shared <shared@example.com>",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-shared-1");
+    usedExpenseIds.push(expenseIdOf(first));
+    // Lands in the first-added account (partial only because that account
+    // has no matching category — placement is what this test checks).
+    expect(first.status === "created" || first.status === "partial").toBe(true);
+    const inOther1 = await readExpenses(OTHER_ACCOUNT_ID);
+    expect(
+      inOther1.some((e) => e.id === expenseIdOf(first) && e.type === "receipt"),
+    ).toBe(true);
+    const inTest1 = await readExpenses(TEST_ACCOUNT_ID);
+    expect(inTest1.some((e) => e.id === expenseIdOf(first))).toBe(false);
+
+    // 2. Removing it from the first account falls through to the second.
+    await testPrisma.inboundSender.deleteMany({
+      where: {
+        accountId: OTHER_ACCOUNT_ID,
+        address: "shared@example.com",
+      },
+    });
+    const second = await processInboundEvent(
+      eventData({
+        email_id: "email-shared-2",
+        from: "Shared <shared@example.com>",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-shared-2");
+    usedExpenseIds.push(expenseIdOf(second));
+    expect(second).toMatchObject({ status: "created" });
+    const inTest2 = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      inTest2.some((e) => e.id === expenseIdOf(second) && e.type === "receipt"),
+    ).toBe(true);
+    const inOther2 = await readExpenses(OTHER_ACCOUNT_ID);
+    expect(inOther2.some((e) => e.id === expenseIdOf(second))).toBe(false);
+  });
+});
+
+describe("processInboundEvent (attachments)", () => {
+  it("creates an expense from a PDF attachment (text layer)", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ text: null, html: null });
+    deps.listAttachments = async () => [
+      attachment({
+        id: "att-pdf",
+        filename: "invoice.pdf",
+        size: 12_000,
+        content_type: "application/pdf",
+        content_disposition: "attachment",
+      }),
+      attachment({
+        id: "att-logo",
+        filename: "logo.png",
+        size: 4000,
+        content_type: "image/png",
+        content_disposition: "inline",
+      }),
+    ];
+    const result = await processInboundEvent(
+      eventData({ email_id: "email-pdf", subject: "Fwd: Invoice" }),
+      deps,
+    );
+    usedEmailIds.push("email-pdf");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
+    expect(created.merchant).toBe("Amazon");
+    expect(created.amount).toBe("9.99");
+    expect(created.originalName).toBe("invoice.png"); // PDF stored as PNG
+    expect(created.imageMime).toBe("image/png");
+    expect(created.date).toBe("2026-06-20"); // no forward block → header date
+    // Logo was downloaded? No — only the chosen attachment is downloaded.
+    expect(deps.downloads.map((m) => m.id)).toEqual(["att-pdf"]);
+  });
+
+  it("creates an expense from an image attachment via OCR", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ text: null, html: null });
+    deps.listAttachments = async () => [
+      attachment({
+        id: "att-photo",
+        filename: "photo.jpg",
+        size: 500_000,
+        content_type: "image/jpeg",
+        content_disposition: "attachment",
+      }),
+    ];
+    const result = await processInboundEvent(
+      eventData({ email_id: "email-photo", subject: "Fwd: Receipt photo" }),
+      deps,
+    );
+    usedEmailIds.push("email-photo");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
+    expect(created.merchant).toBe("Photo Shop");
+    expect(created.amount).toBe("5.00");
+    expect(created.imageFile).not.toBe("");
+  });
+});

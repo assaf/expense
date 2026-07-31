@@ -24,13 +24,15 @@ model Account {
   inviteCode String     @unique
   createdAt  String
 
-  users      User[]
-  expenses   Expense[]
-  reports    Report[]
-  categories Category[]
-  mileage    Mileage[]
-  settings   Settings[]
-  imageBlobs ImageBlob[]
+  users         User[]
+  expenses      Expense[]
+  reports       Report[]
+  categories    Category[]
+  mileage       Mileage[]
+  settings      Settings[]
+  imageBlobs    ImageBlob[]
+  inboundEmails InboundEmail[]
+  inboundSenders InboundSender[]
 
   @@map("accounts")
 }
@@ -133,4 +135,36 @@ model ImageBlob {
 
   @@id([accountId, key])
   @@map("image_blobs")
+}
+
+/// Idempotency + audit record for emails received via the inbound webhook.
+/// One row per email_id; status tracks processing so Resend retries never
+/// create duplicate expenses.
+model InboundEmail {
+  emailId   String @id
+  accountId String
+  subject   String
+  status    String // processing | created | partial | error
+  error     String
+  createdAt String
+  updatedAt String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("inbound_emails")
+}
+
+/// One allowed receipt-forwarding sender per account. When the same address
+/// is allowed by several accounts, the row with the earliest createdAt wins
+/// ("first added takes precedence"); removing it falls through to the next.
+model InboundSender {
+  accountId String
+  address   String // normalized lowercase
+  createdAt String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, address])
+  @@index([address])
+  @@map("inbound_senders")
 }
