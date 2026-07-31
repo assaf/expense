@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "react-router build --force",
+    "prebuild": "prisma generate",
     "check": "./scripts/check",
     "clean": "rm -rf node_modules/.vite .react-router build prisma/generated",
     "dev": "portless run -- react-router dev",
