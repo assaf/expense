@@ -1,8 +1,8 @@
 /**
  * Global setup: runs once before all test files.
  * Ensures the test schema exists, seeds the test database, and starts the
- * forked test server (which runs against Postgres + MinIO, matching prod).
- * Requires local Postgres (expensify_test) and MinIO (`docker compose up -d`).
+ * forked test server (Postgres only — images live in Postgres BYTEA).
+ * Requires local Postgres (expensify_test).
  */
 import { seedTestData } from "./seedTestData";
 import { launchServer, closeServer } from "./launchServer";

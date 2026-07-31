@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS "settings" (
   "key" TEXT PRIMARY KEY,
   "value" TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS image_blobs (
+  "key" TEXT PRIMARY KEY,
+  "mime" TEXT NOT NULL DEFAULT '',
+  "data" BYTEA NOT NULL
+);
 `;
 
 /** Create tables on first use. Idempotent and memoized per process. */

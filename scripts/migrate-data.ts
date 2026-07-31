@@ -4,13 +4,14 @@
  * receipt images under DATA_DIR/images) into Postgres + cloud images.
  *
  * Image backend is selected like the app does:
- *   BLOB_READ_WRITE_TOKEN  → Vercel Blob (prod)
- *   S3_ENDPOINT + S3_BUCKET → S3-compatible (local MinIO dev)
- *   neither                 → images are skipped (keys kept; data still loads)
+ *   BLOB_READ_WRITE_TOKEN       → Vercel Blob (prod)
+ *   S3_ENDPOINT + S3_BUCKET      → S3-compatible (MinIO/R2)
+ *   IMAGE_BACKEND=pg             → Postgres BYTEA (dev)
+ *   neither                      → images are skipped (keys kept; data still loads)
  *
  * Run with:
  *   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… node scripts/migrate-data.ts   # prod
- *   DATABASE_URL=postgres://localhost/expensify_dev S3_ENDPOINT=… S3_BUCKET=… node scripts/migrate-data.ts  # dev
+ *   DATABASE_URL=postgres://localhost/expensify_dev IMAGE_BACKEND=pg node scripts/migrate-data.ts  # dev
  *
  * Requires Node 26+ (runs TypeScript natively). The schema DDL below must stay
  * in sync with app/lib/store/pg.server.ts. Idempotent: re-running replaces the
@@ -36,17 +37,29 @@ const S3_ENDPOINT = process.env.S3_ENDPOINT ?? "";
 const S3_BUCKET = process.env.S3_BUCKET ?? "";
 const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID ?? "minioadmin";
 const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY ?? "minioadmin";
+const IMAGE_BACKEND = process.env.IMAGE_BACKEND ?? "";
 const BLOB_PREFIX = "images";
 
-type ImageBackend = "blob" | "s3" | "none";
+type ImageBackend = "blob" | "s3" | "pg" | "none";
 
 function imageBackend(): ImageBackend {
+  if (IMAGE_BACKEND === "pg") return "pg";
   if (BLOB_TOKEN) return "blob";
   if (S3_ENDPOINT && S3_BUCKET) return "s3";
   return "none";
 }
 
 let s3Client: S3Client | undefined;
+
+let migrateSql: postgres.Sql | undefined;
+
+function db(): postgres.Sql {
+  if (!migrateSql) {
+    if (!DATABASE_URL) fail("DATABASE_URL is required");
+    migrateSql = postgres(DATABASE_URL, { max: 5, connect_timeout: 10 });
+  }
+  return migrateSql;
+}
 
 function s3(): S3Client {
   if (!s3Client) {
@@ -101,6 +114,13 @@ async function uploadImage(
     );
     return "uploaded";
   }
+  if (backend === "pg") {
+    const rows =
+      await db()`SELECT 1 FROM image_blobs WHERE "key" = ${pathname} LIMIT 1`;
+    if (rows.length > 0) return "skipped";
+    await db()`INSERT INTO image_blobs ("key", "mime", "data") VALUES (${pathname}, ${mime}, ${buffer})`;
+    return "uploaded";
+  }
   return "skipped";
 }
 
@@ -140,6 +160,11 @@ CREATE TABLE IF NOT EXISTS mileage (
 CREATE TABLE IF NOT EXISTS "settings" (
   "key" TEXT PRIMARY KEY,
   "value" TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS image_blobs (
+  "key" TEXT PRIMARY KEY,
+  "mime" TEXT NOT NULL DEFAULT '',
+  "data" BYTEA NOT NULL
 );
 `;
 
@@ -230,13 +255,15 @@ async function main(): Promise<void> {
       ? "Vercel Blob"
       : backend === "s3"
         ? `S3 (${S3_ENDPOINT})`
-        : "none (image keys kept as-is)";
+        : backend === "pg"
+          ? "Postgres (BYTEA)"
+          : "none (image keys kept as-is)";
 
   console.info(
     `Migrating state from ${join(process.cwd(), DATA_DIR)} → Postgres + ${backendName}`,
   );
 
-  const sql = postgres(DATABASE_URL, { max: 5, connect_timeout: 10 });
+  const sql = db();
   await sql.unsafe(DDL);
 
   // --- Parse CSVs -----------------------------------------------------------

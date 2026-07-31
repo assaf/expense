@@ -8,8 +8,12 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import postgres from "postgres";
+import type { Sql } from "postgres";
 import { ulid } from "ulid";
 import {
+  DATABASE_URL,
+  IMAGE_BACKEND,
   hasBlob,
   hasS3,
   S3_ACCESS_KEY_ID,
@@ -24,14 +28,15 @@ import { sanitizeFilenamePart } from "~/lib/validation";
  * Receipt image storage, selected by environment:
  *  1. Vercel Blob under the `images/` prefix when BLOB_READ_WRITE_TOKEN is set
  *     (Vercel production).
- *  2. S3-compatible storage (local MinIO, or R2/S3) when S3_ENDPOINT + S3_BUCKET
- *     are set (local dev/tests, alternate clouds).
+ *  2. S3-compatible storage (R2/S3/MinIO) when S3_ENDPOINT + S3_BUCKET are set.
+ *  3. Postgres BYTEA when IMAGE_BACKEND=pg (dev/tests — no separate service).
  *
- * A backend is required: without one, saveImage/readImage/… throw a clear
- * error instead of silently falling back to disk.
+ * IMAGE_BACKEND can force any of the three; otherwise Blob token → S3 config →
+ * error. A backend is required: save/read/rename/delete throw a clear error
+ * instead of silently falling back to disk.
  *
  * The returned `filename` is the storage key: an `images/...` pathname on
- * both backends, so keys are interchangeable between Blob and S3.
+ * every backend, so keys are interchangeable between Blob, S3, and Postgres.
  */
 
 const BLOB_PREFIX = "images";
@@ -98,6 +103,50 @@ function isNotFound(err: unknown): boolean {
   );
 }
 
+type Backend = "blob" | "s3" | "pg";
+
+function backend(): Backend {
+  if (IMAGE_BACKEND) {
+    if (
+      IMAGE_BACKEND === "blob" ||
+      IMAGE_BACKEND === "s3" ||
+      IMAGE_BACKEND === "pg"
+    ) {
+      return IMAGE_BACKEND;
+    }
+    throw new Error(
+      `Unknown IMAGE_BACKEND "${IMAGE_BACKEND}" — expected "blob", "s3", or "pg".`,
+    );
+  }
+  if (hasBlob()) return "blob";
+  if (hasS3()) return "s3";
+  throw new Error(
+    "No image storage configured — set BLOB_READ_WRITE_TOKEN, S3_ENDPOINT + S3_BUCKET, or IMAGE_BACKEND=pg.",
+  );
+}
+
+// --- Postgres BYTEA client (lazy — only used with IMAGE_BACKEND=pg) ---------
+
+let pgSql: Sql | undefined;
+
+function pgDb(): Sql {
+  if (!pgSql) {
+    if (!DATABASE_URL) throw new Error("DATABASE_URL is not configured");
+    pgSql = postgres(DATABASE_URL, {
+      max: 2,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
+  }
+  return pgSql;
+}
+
+async function pgExists(key: string): Promise<boolean> {
+  const rows =
+    await pgDb()`SELECT 1 FROM image_blobs WHERE "key" = ${key} LIMIT 1`;
+  return rows.length > 0;
+}
+
 /**
  * Build the convention filename:
  *   {YYYY-MM-DD}_{REPORT}_{FILENAME}.{ext}
@@ -135,7 +184,7 @@ export async function saveImage(
     extname(originalName).toLowerCase() || extForMime(resolvedMime) || ".png";
   const key = `${ulid()}${ext}`;
 
-  if (hasBlob()) {
+  if (backend() === "blob") {
     const blob = await put(toPathname(key), buffer, {
       access: "public",
       contentType: resolvedMime,
@@ -144,7 +193,7 @@ export async function saveImage(
     return { filename: blob.pathname, mime: resolvedMime };
   }
 
-  if (hasS3()) {
+  if (backend() === "s3") {
     await s3().send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
@@ -156,9 +205,9 @@ export async function saveImage(
     return { filename: toPathname(key), mime: resolvedMime };
   }
 
-  throw new Error(
-    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
-  );
+  const pathname = toPathname(key);
+  await pgDb()`INSERT INTO image_blobs ("key", "mime", "data") VALUES (${pathname}, ${resolvedMime}, ${buffer})`;
+  return { filename: pathname, mime: resolvedMime };
 }
 
 /**
@@ -175,7 +224,7 @@ export async function renameImageToConvention(
   const target = conventionImageName(date, report, originalName, mime);
   if (!target || target === currentFile) return currentFile;
 
-  if (hasBlob()) {
+  if (backend() === "blob") {
     const from = toPathname(currentFile);
     if (!(await blobExists(from))) return currentFile;
     let to = toPathname(target);
@@ -186,7 +235,7 @@ export async function renameImageToConvention(
     return to;
   }
 
-  if (hasS3()) {
+  if (backend() === "s3") {
     const from = toPathname(currentFile);
     if (!(await s3Exists(from))) return currentFile;
     let to = toPathname(target);
@@ -204,9 +253,14 @@ export async function renameImageToConvention(
     return to;
   }
 
-  throw new Error(
-    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
-  );
+  const from = toPathname(currentFile);
+  if (!(await pgExists(from))) return currentFile;
+  let to = toPathname(target);
+  if (await pgExists(to)) {
+    to = suffixedKey(target);
+  }
+  await pgDb()`UPDATE image_blobs SET "key" = ${to} WHERE "key" = ${from}`;
+  return to;
 }
 
 export async function readImage(
@@ -214,14 +268,14 @@ export async function readImage(
 ): Promise<{ buffer: Buffer; mime: string } | null> {
   if (!filename) return null;
 
-  if (hasBlob()) {
+  if (backend() === "blob") {
     const result = await get(toPathname(filename), { access: "public" });
     if (!result) return null;
     const buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
     return { buffer, mime: result.blob.contentType ?? mimeForFile(filename) };
   }
 
-  if (hasS3()) {
+  if (backend() === "s3") {
     try {
       const result = await s3().send(
         new GetObjectCommand({
@@ -241,18 +295,20 @@ export async function readImage(
     }
   }
 
-  throw new Error(
-    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
-  );
+  const rows =
+    await pgDb()`SELECT "data", "mime" FROM image_blobs WHERE "key" = ${toPathname(filename)}`;
+  if (rows.length === 0) return null;
+  const row = rows[0] as { data: Buffer; mime: string };
+  return { buffer: row.data, mime: row.mime || mimeForFile(filename) };
 }
 
 export async function deleteImage(filename: string): Promise<void> {
   if (!filename) return;
-  if (hasBlob()) {
+  if (backend() === "blob") {
     await del(toPathname(filename)).catch(() => {});
     return;
   }
-  if (hasS3()) {
+  if (backend() === "s3") {
     await s3()
       .send(
         new DeleteObjectCommand({
@@ -263,9 +319,8 @@ export async function deleteImage(filename: string): Promise<void> {
       .catch(() => {});
     return;
   }
-
-  throw new Error(
-    "No image storage configured — set BLOB_READ_WRITE_TOKEN or S3_ENDPOINT + S3_BUCKET.",
+  await pgDb()`DELETE FROM image_blobs WHERE "key" = ${toPathname(filename)}`.catch(
+    () => {},
   );
 }
 

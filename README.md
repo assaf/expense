@@ -2,9 +2,10 @@
 
 Personal expense tracking with receipts and mileage. Replaces Expensify for a
 single user. Built with React Router v8 (framework mode) + Tailwind v4. State
-lives in Postgres with receipt images in Vercel Blob (or any S3-compatible
-store such as MinIO/R2). `DATABASE_URL` is required — there is no file-based
-fallback; `data/` exists only as the migration source for `pnpm migrate-data`.
+lives in Postgres with receipt images in Vercel Blob (prod), Postgres BYTEA
+(dev/test, no extra service), or any S3-compatible store (optional).
+`DATABASE_URL` is required — there is no file-based fallback; `data/` exists
+only as the migration source for `pnpm migrate-data`.
 
 ## What it does
 
@@ -22,20 +23,21 @@ fallback; `data/` exists only as the migration source for `pnpm migrate-data`.
 
 Storage is Postgres-only. `DATABASE_URL` is required at startup (the app
 exits with a clear error otherwise). Receipt images go to Vercel Blob when
-`BLOB_READ_WRITE_TOKEN` is set, else to S3-compatible storage when
-`S3_ENDPOINT` + `S3_BUCKET` are set (local MinIO, or R2/S3); a missing image
-backend is also a startup/upload error, never a silent disk fallback.
+`BLOB_READ_WRITE_TOKEN` is set (prod), to S3-compatible storage when
+`S3_ENDPOINT` + `S3_BUCKET` are set (R2/S3/MinIO), or into Postgres BYTEA when
+`IMAGE_BACKEND=pg` (dev/tests — no separate service). A missing image backend
+is an error, never a silent disk fallback.
 
-| Data                        | Images                                     |
-| --------------------------- | ------------------------------------------ |
-| `expenses` / `reports` /    | Vercel Blob if `BLOB_READ_WRITE_TOKEN`     |
-| `categories` / `settings` / | set, else S3 (`S3_ENDPOINT` + `S3_BUCKET`) |
-| `mileage` tables            |                                            |
+| Data                        | Images                                |
+| --------------------------- | ------------------------------------- |
+| `expenses` / `reports` /    | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
+| `categories` / `settings` / | S3 (`S3_ENDPOINT` + `S3_BUCKET`)      |
+| `mileage` tables            | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
 
 All reads/writes go through `app/lib/store.server.ts` (→
 `app/lib/store/pg.server.ts`); image storage is behind
-`app/lib/images.server.ts` (`@vercel/blob` vs `@aws-sdk/client-s3` — MinIO
-locally, or R2/S3). Keys are `images/...` pathnames on both cloud backends, so
+`app/lib/images.server.ts` (`@vercel/blob` vs `@aws-sdk/client-s3` vs
+Postgres `image_blobs`). Keys are `images/...` pathnames on every backend, so
 data is portable between them.
 
 ### `data/` — migration source only
@@ -68,11 +70,10 @@ inline) wins; a local `.env` file fills the gaps. `DATABASE_URL` is required;
 ```bash
 # .env (project root, gitignored)
 DATABASE_URL=postgres://localhost/expensify_dev
-S3_ENDPOINT=http://localhost:9000
-S3_BUCKET=expensify
+IMAGE_BACKEND=pg        # receipt images live in Postgres — no extra service
 ```
 
-Tests intentionally hardcode `expensify_test` + MinIO (no `.env` needed) and
+Tests intentionally hardcode `expensify_test` (Postgres incl. image blobs) and
 ignore the local database.
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
@@ -89,8 +90,7 @@ migrations also run this way: `pnpm migrate-data:prod`.
 
 ## Quick start
 
-Prerequisites: Postgres running locally (`brew services start postgresql@18`),
-MinIO (`docker compose up -d`; first run creates the `expensify` bucket).
+Prerequisites: Postgres running locally (`brew services start postgresql@18`).
 
 ```bash
 createdb expensify_dev          # once
@@ -106,7 +106,7 @@ error — there is no file-based fallback.
 pnpm check        # typegen + format + lint + typecheck
 pnpm build        # production build
 pnpm start        # serve the production build (port 3000)
-pnpm test         # runs against expensify_test + MinIO (both must be up)
+pnpm test         # runs against expensify_test (Postgres only)
 ```
 
 Node 26+ and pnpm 11+.
@@ -135,8 +135,9 @@ zero-config path builds one SSR function that serves every route.)
    ```
 
    It imports the CSVs under `data/` into Postgres and uploads `data/images/*`
-   to Blob (keeping the same `images/<filename>` keys; already-uploaded files
-   are skipped). Idempotent.
+   to the configured image store (Blob, S3, or Postgres BYTEA with
+   `IMAGE_BACKEND=pg`), keeping the same `images/<filename>` keys;
+   already-uploaded files are skipped. Idempotent.
 
 5. Deploy. Test the app is behind Deployment Protection or basic auth — the
    app has no built-in login (single-user personal tool).
@@ -146,7 +147,7 @@ tests, build/push to GHCR, then `infisical export --env prod > .env` and
 `infisical --env prod run -- coolify-ghcr-deploy --env-file .env`. Requires the
 Infisical `dev` env to hold `GHCR_TOKEN` and the `prod` env to hold the runtime
 secrets (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, or `S3_ENDPOINT`/`S3_BUCKET`
-for local-file storage) plus `COOLIFY_TOKEN`.
+for S3-backed images) plus `COOLIFY_TOKEN`.
 
 ```bash
 ./scripts/deploy            # check + tests + deploy

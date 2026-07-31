@@ -17,6 +17,14 @@ export const S3_BUCKET = env.S3_BUCKET ?? "";
 export const S3_ACCESS_KEY_ID = env.S3_ACCESS_KEY_ID ?? "minioadmin";
 export const S3_SECRET_ACCESS_KEY = env.S3_SECRET_ACCESS_KEY ?? "minioadmin";
 
+/**
+ * Force the image backend: "blob" | "s3" | "pg". Defaults to Vercel Blob when
+ * BLOB_READ_WRITE_TOKEN is set, else S3 when S3_ENDPOINT+S3_BUCKET are set.
+ * "pg" stores image bytes in Postgres (BYTEA) — used by dev/tests so no
+ * separate service is needed.
+ */
+export const IMAGE_BACKEND = env.IMAGE_BACKEND ?? "";
+
 export const isProd = env.NODE_ENV === "production";
 
 /** True when Postgres storage is configured (required — the app fails fast without it). */

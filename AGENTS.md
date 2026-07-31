@@ -4,12 +4,10 @@ Personal expense tracker (receipts + mileage). React Router v8 framework mode,
 Tailwind v4. Storage is Postgres-only (required): all reads/writes go through
 `app/lib/store.server.ts` → `app/lib/store/pg.server.ts`; receipt images via
 `app/lib/images.server.ts` (Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
-else S3-compatible MinIO/R2 when `S3_ENDPOINT`+`S3_BUCKET` are set — no file
-fallback). Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`)
-
-- MinIO (`docker compose up -d`). Deployed to Coolify.
-
-* MinIO (`docker compose up -d`). Deployed to Coolify.
+S3-compatible when `S3_ENDPOINT`+`S3_BUCKET` are set, or Postgres BYTEA with
+`IMAGE_BACKEND=pg` — the dev/test default; no separate service needed).
+Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`) only.
+Deployed to Coolify.
 
 ## Commands
 
@@ -18,7 +16,7 @@ pnpm dev        # dev server (port 5173) — env from Infisical (--env dev)
 pnpm check      # react-router typegen + vp check (format/lint/typecheck)
 pnpm build      # production build
 pnpm start      # serve production build (port 3000)
-pnpm test       # 30 tests against local Postgres (expensify_test) + MinIO
+pnpm test       # 30 tests against local Postgres (expensify_test, incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + GHCR push + Coolify (Infisical)
 ```
 
@@ -29,11 +27,11 @@ Run `pnpm check` before committing.
 Env load order: `process.env` (Vercel/Coolify/inline) → local `.env` (via
 dotenv in `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback.
 Dev/test use `.env`
-(`DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`); prod uses the Vercel dashboard
+(`DATABASE_URL`, `IMAGE_BACKEND=pg`); prod uses the Vercel dashboard
 (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`); `scripts/deploy` and
 `pnpm migrate-data:prod` pull prod secrets from Infisical (`.infisical.json`,
-same pattern as Rentail). Tests hardcode local services (`expensify_test` +
-MinIO), not `.env`/Infisical.
+same pattern as Rentail). Tests hardcode local services (`expensify_test`,
+image blobs in Postgres), not `.env`/Infisical.
 
 ## Stack & conventions
 
@@ -46,8 +44,9 @@ MinIO), not `.env`/Infisical.
   all reads/writes go through `app/lib/store.server.ts` →
   `app/lib/store/pg.server.ts`.
 - **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
-  is set, else S3-compatible (MinIO locally, R2/S3) via `@aws-sdk/client-s3`.
-  No local fallback. See `app/lib/images.server.ts`.
+  is set, else S3-compatible (R2/S3/MinIO) via `@aws-sdk/client-s3`, or
+  Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` — used by
+  dev/tests. No local fallback. See `app/lib/images.server.ts`.
   Named `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
   otherwise a temp id-based name (renamed on save).
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`
@@ -77,8 +76,9 @@ MinIO), not `.env`/Infisical.
 
 - **No auth** — a single-user personal app. Put it behind Coolify basic auth,
   Vercel Deployment Protection, or a private network in production.
-- Tests and dev require local Postgres and MinIO up (`docker compose up -d`);
-  without them the suite fails to connect. `pnpm test` uses `expensify_test`.
+- Tests and dev require local Postgres up (`brew services start postgresql@18`);
+  without it the suite fails to connect. `pnpm test` uses `expensify_test`.
+  No MinIO/other services needed — images live in Postgres (`IMAGE_BACKEND=pg`).
 - When renaming a report, expenses update but image files are **not** auto-renamed
   (they keep their old convention name). Re-saving each receipt rewrites the name.
 - `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
