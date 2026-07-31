@@ -445,7 +445,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
               key={imageVersion}
               src={`/expense/${expense.id}/image?v=${imageVersion}`}
               alt="Receipt"
-              className="max-h-80 w-full object-cover object-top"
+              className="min-h-80 max-h-120 w-full object-cover object-top"
             />
           </button>
         ) : (
