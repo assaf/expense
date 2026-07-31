@@ -1,14 +1,18 @@
 /**
  * Launch the test server as a child process.
- * Use spawn for react-router-serve, poll the port until ready.
+ * Builds the app first if needed (so `vp test` works standalone),
+ * spawns react-router-serve, and polls the port until ready.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 let serverProcess: ChildProcess | undefined;
 let serverPort = 5199;
 
 export async function launchServer(): Promise<string> {
+  await ensureBuild();
   await findAvailablePort();
   const env = {
     ...process.env,
@@ -46,6 +50,51 @@ export async function launchServer(): Promise<string> {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("Server startup timeout after 60s");
+}
+
+/**
+ * Build the app if build/server/index.js is missing or older than the newest
+ * source file. Keeps `vp test` self-sufficient without slowing re-runs.
+ */
+async function ensureBuild(): Promise<void> {
+  const buildPath = resolve("build/server/index.js");
+  const buildMtime = existsSync(buildPath) ? statSync(buildPath).mtimeMs : 0;
+  const newestSource = newestMtime([
+    "app",
+    "react-router.config.ts",
+    "vite.config.ts",
+    "tsconfig.json",
+  ]);
+  if (buildMtime > 0 && buildMtime >= newestSource) return;
+
+  console.info("Building app for tests…");
+  await run("pnpm", ["exec", "react-router", "build", "--force"]);
+}
+
+function newestMtime(paths: string[]): number {
+  let newest = 0;
+  const visit = (p: string) => {
+    if (!existsSync(p)) return;
+    const st = statSync(p);
+    if (st.isDirectory()) {
+      for (const child of readdirSync(p)) visit(resolve(p, child));
+    } else {
+      newest = Math.max(newest, st.mtimeMs);
+    }
+  };
+  for (const p of paths) visit(resolve(p));
+  return newest;
+}
+
+function run(cmd: string, args: string[]): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(cmd, args, { cwd: resolve("."), stdio: "inherit" });
+    child.on("exit", (code) => {
+      if (code === 0) resolvePromise();
+      else reject(new Error(`${cmd} exited with code ${code}`));
+    });
+    child.on("error", reject);
+  });
 }
 
 export async function closeServer(): Promise<void> {
