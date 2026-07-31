@@ -177,14 +177,18 @@ export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
 function Shell({
   title,
   nav,
+  dimmed,
   children,
 }: {
   title: string;
   nav?: { prevId: string | null; nextId: string | null };
+  dimmed?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main
+      className={`mx-auto max-w-2xl px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""}`}
+    >
       <div className="mb-4 flex items-center justify-between">
         <Link
           to="/"
@@ -273,7 +277,9 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const [imageVersion, setImageVersion] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [transition, setTransition] = useState<null | "save" | "cancel">(null);
+  const [transition, setTransition] = useState<
+    null | "save" | "cancel" | "delete"
+  >(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -340,7 +346,11 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   };
   // Clear the overlay if the submission finishes without navigating (validation error).
   useEffect(() => {
-    if (fetcher.state === "idle" && transition === "save") setTransition(null);
+    if (
+      fetcher.state === "idle" &&
+      (transition === "save" || transition === "delete")
+    )
+      setTransition(null);
   }, [fetcher.state, transition]);
 
   // Autofocus the amount field when opening a brand-new receipt.
@@ -353,6 +363,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   }, []);
 
   async function onDelete() {
+    setTransition("delete");
     const form = new FormData();
     form.set("intent", "delete");
     void fetcher.submit(form, { method: "post" });
@@ -367,7 +378,11 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   });
 
   return (
-    <Shell title={expense.merchant || "New receipt"} nav={data.nav}>
+    <Shell
+      title={expense.merchant || "New receipt"}
+      nav={data.nav}
+      dimmed={!!transition}
+    >
       {error ? (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -566,7 +581,9 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   );
   const [approximate, setApproximate] = useState(false);
   const [computing, setComputing] = useState(false);
-  const [transition, setTransition] = useState<null | "save" | "cancel">(null);
+  const [transition, setTransition] = useState<
+    null | "save" | "cancel" | "delete"
+  >(null);
   const manualAmount = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSig = useRef("");
@@ -669,7 +686,11 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     navigate("/");
   };
   useEffect(() => {
-    if (fetcher.state === "idle" && transition === "save") setTransition(null);
+    if (
+      fetcher.state === "idle" &&
+      (transition === "save" || transition === "delete")
+    )
+      setTransition(null);
   }, [fetcher.state, transition]);
 
   const error = fetcherError(fetcher.data);
@@ -689,7 +710,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     }));
 
   return (
-    <Shell title="Mileage expense" nav={data.nav}>
+    <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
       {error ? (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -819,6 +840,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         onCancel={doCancel}
         onSave={doSave}
         onDelete={() => {
+          setTransition("delete");
           const form = new FormData();
           form.set("intent", "delete");
           void fetcher.submit(form, { method: "post" });
@@ -985,13 +1007,17 @@ function useFormKeys(opts: {
 }
 
 /** Brief visual feedback while a save/cancel navigation is in flight. */
-function TransitionOverlay({ kind }: { kind: "save" | "cancel" }) {
+function TransitionOverlay({ kind }: { kind: "save" | "cancel" | "delete" }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm">
-      <div className="flex flex-col items-center gap-2 text-gray-600">
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-2 rounded-xl bg-white/90 px-6 py-4 shadow-lg text-gray-600">
         <Loader2 className="h-7 w-7 animate-spin" />
         <span className="text-sm font-medium">
-          {kind === "save" ? "Saving…" : "Closing…"}
+          {kind === "save"
+            ? "Saving…"
+            : kind === "delete"
+              ? "Deleting…"
+              : "Closing…"}
         </span>
       </div>
     </div>
