@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check-and-test:
+    name: Check & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Matches the hardcoded test URL in vite.config.ts:
+      # postgres://assaf@localhost/expensify_test (passwordless)
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: assaf
+          POSTGRES_DB: expensify_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # initStore bootstraps an account from these on an empty database
+      # (tests force-reset the schema, so they must be present).
+      APP_USERNAME: testuser
+      APP_PASSWORD: test-password
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm check
+
+      - run: pnpm test
