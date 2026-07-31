@@ -136,7 +136,9 @@ returns 503 when unconfigured and everything else still works.
 - `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
   still type-checks it.
 - **Receipts by email**: the `/api/inbound-email` route is public (no session) —
-  it verifies Resend's `Resend-Signature` (Svix HMAC, `whsec_…` secret,
+  it verifies Resend's webhook (standard Svix/Standard-Webhooks format:
+  `svix-id` / `svix-timestamp` / `svix-signature` headers, HMAC-SHA256 of
+  `id.timestamp.body` keyed with the base64-decoded `whsec_…` secret,
   replay-guarded) and maps the sender to an account via the `inbound_senders`
   table (one row per account+address, normalized lowercase). Webhook retries
   are idempotent via the `inbound_emails` table.

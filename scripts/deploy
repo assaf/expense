@@ -39,6 +39,8 @@ pnpm prisma db push --accept-data-loss
 # history. Errors when already recorded (P3008) are expected on re-runs.
 pnpm prisma migrate resolve --applied 0_init || true
 pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
+pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
+pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
 
 echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
 npx -y vercel@latest deploy --prod --yes

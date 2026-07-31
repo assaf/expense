@@ -35,10 +35,16 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
   const rawBody = await request.text();
-  const signature = request.headers.get("resend-signature") ?? "";
-  if (
-    !verifyWebhookSignature(signature, rawBody, INBOUND_EMAIL_WEBHOOK_SECRET)
-  ) {
+  const verified = verifyWebhookSignature(
+    {
+      id: request.headers.get("svix-id"),
+      timestamp: request.headers.get("svix-timestamp"),
+      signature: request.headers.get("svix-signature"),
+    },
+    rawBody,
+    INBOUND_EMAIL_WEBHOOK_SECRET,
+  );
+  if (!verified) {
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }
   let event: unknown;
