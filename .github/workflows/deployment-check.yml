@@ -48,4 +48,8 @@ jobs:
 
       - run: pnpm check
 
+      # Playwright browsers are not installed by pnpm install; the E2E tests
+      # launch headless Chromium, so download it (with OS deps) first.
+      - run: pnpm exec playwright install --with-deps chromium
+
       - run: pnpm test
