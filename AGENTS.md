@@ -51,7 +51,6 @@ prod env with `npx vercel env pull --environment=production .env.prod` (use
 - **Types**: import route types from `./+types/<name>`. Path alias `~/*` → `app/*`.
 - **State**: Postgres via Prisma (schema.prisma) — accounts, users, expenses,
   reports, categories, settings, mileage, image_blobs. Required, everywhere.
-  `data/` CSVs exist only as the migration source for `pnpm migrate-data`.
   Never read state on the client; all reads/writes go through
   `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
   by `accountId`). `prisma/generated` is the generated client (gitignored,

@@ -79,22 +79,11 @@ data is portable between them. Schema changes: edit
 `prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
 `pnpm db:push` (or `pnpm db:migrate`) before deploying.
 
-### `data/` — migration source only
+### `data/` — migration source only (removed)
 
-`data/` is gitignored and no longer read at runtime. It holds the original
-CSVs + receipt images that `pnpm migrate-data` imports into Postgres/Blob:
-
-| File             | Contents                                                     |
-| ---------------- | ------------------------------------------------------------ |
-| `expenses.csv`   | Every expense (receipt + mileage), the source of truth.      |
-| `reports.csv`    | Report names.                                                |
-| `categories.csv` | Tax category names.                                          |
-| `mileage.csv`    | Derived: date, report, locations, distance for mileage rows. |
-| `settings.csv`   | Home location + mileage rate per calendar year.              |
-| `images/`        | Receipt images, named `YYYY-MM-DD_REPORT_FILE.ext`.          |
-
-`data/` is gitignored. Not needed at runtime — the app only requires Postgres
-(+ a cloud image backend).
+The original CSVs + receipt images that fed `pnpm migrate-data` were deleted
+in the Jul 2026 cleanup; the data now lives in the database (prod + dev
+verified). `data/` stays in `.gitignore` and was never tracked in git history.
 
 ## Quick start
 
@@ -172,16 +161,13 @@ zero-config path builds one SSR function that serves every route.)
    - `BLOB_READ_WRITE_TOKEN` — Vercel Storage → Blob → Tokens.
    - Node 26 is required (`engines`); pick it in project settings if Vercel
      doesn't match automatically.
-4. Migrate the existing data once (from a machine with the CSVs):
+4. One-time data import is done — the CSV source under `data/` was deleted
+   in the Jul 2026 cleanup (data verified in the database: 306 expenses,
+   247 images). Re-import would require restoring the CSVs first.
 
    ```bash
-   pnpm migrate-data   # or pnpm migrate-data:prod
+   pnpm migrate-data   # idempotent import from data/*.csv + data/images/*
    ```
-
-   It imports the CSVs under `data/` into Postgres and uploads `data/images/*`
-   to the configured image store (Blob or Postgres BYTEA with
-   `IMAGE_BACKEND=pg`), keeping the same `images/<filename>` keys;
-   already-uploaded files are skipped. Idempotent.
 
 5. Deploy. Test the app is behind Deployment Protection or basic auth — the
    app has no built-in login (single-user personal tool).
