@@ -23,9 +23,11 @@ pnpm start           # serve production build (port 3000)
 pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expensify_test schema + 40 tests (incl. image blobs)
-# NOTE: prod currently runs on Vercel — deploy = `git push origin main`. Schema
-# changes: `prisma migrate dev` locally, then apply to prod with
-# `DATABASE_URL=$UNPOOLED pnpm db:migrate` (prod has migration history since Jul
+./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
+# NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
+# sync (preflight + db push, via `vercel env pull`), CLI deploy, and opening the
+# site. `git push origin main` also auto-deploys. Schema changes: `prisma migrate
+# dev` locally, then run deploy to sync prod (migration history exists since Jul
 # 2026).
 ```
 

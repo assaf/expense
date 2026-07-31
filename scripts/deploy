@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
-# Deploy expensify.
+# Deploy expensify to production:
+#   1. sync the production database schema (Neon; prod env pulled from Vercel)
+#   2. deploy with the Vercel CLI
+#   3. open the production site
 #
-# NOTE: production currently runs on Vercel (git push to main auto-deploys)
-# with a Neon Postgres database. The Coolify/GHCR steps below mirror the
-# Rentail flow and are kept for a future move to self-hosted infra — the
-# database step applies either way.
-#
-# Schema: on a pre-account database, `scripts/preflight-prod.mjs` first adds
-# accountId columns (defaulting to a fresh bootstrap account) and creates the
-# accounts/users tables — `prisma db push` cannot add NOT NULL columns to
-# non-empty tables and cannot DROP INDEX constraint-backed uniques, so it
-# would otherwise refuse. Then `db push` syncs the rest, and `migrate resolve`
-# records the baseline so future `prisma migrate deploy` runs have history.
-# On an already-baselined database, preflight is a no-op.
+# Prod secrets come from `vercel env pull` (the Infisical link is stale —
+# see AGENTS.md; .env.prod.pull is gitignored). Use DATABASE_URL_UNPOOLED for
+# schema DDL — the pooled URL is for runtime queries. The preflight script is
+# a no-op on an already-baselined database (it only matters if the DB is a
+# restored pre-account dump), and `migrate resolve` re-records the baseline.
 set -eo pipefail
 
-IMAGE="ghcr.io/assaf/expensify:latest"
+PROD_DOMAIN="expensify.labnotes.org"
 
 echo -e "\033[0;32m--- Step 1: Check (fmt, lint, types) ---\033[0m"
 pnpm check
@@ -27,28 +23,27 @@ else
   pnpm test
 fi
 
-echo -e "\033[0;32m--- Step 3: Sync production schema ---\033[0m"
-infisical --env prod run -- node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
-infisical --env prod run -- psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
+echo -e "\033[0;32m--- Step 3: Pull production env (Vercel) ---\033[0m"
+npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+set -a
+source .env.prod.pull
+set +a
+export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+
+echo -e "\033[0;32m--- Step 4: Sync production database schema ---\033[0m"
+node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
 rm -f /tmp/preflight-prod.sql
-infisical --env prod run -- pnpm prisma db push --accept-data-loss
-infisical --env prod run -- pnpm prisma migrate resolve --applied 0_init
-infisical --env prod run -- pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope
+pnpm prisma db push --accept-data-loss
+# Record the baseline migrations so future `prisma migrate deploy` has
+# history. Errors when already recorded (P3008) are expected on re-runs.
+pnpm prisma migrate resolve --applied 0_init || true
+pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
 
-echo -e "\033[0;32m--- Step 4: Build and push image ---\033[0m"
-echo "$(infisical secrets get GHCR_TOKEN --env dev --plain)" | docker login ghcr.io -u assaf --password-stdin
-docker build -t "${IMAGE}" .
-docker push "${IMAGE}"
+echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
+npx -y vercel@latest deploy --prod --yes
 
-echo -e "\033[0;32m--- Step 5: Deploy to Coolify ---\033[0m"
-infisical export --env prod --format=dotenv > .env
-infisical --env prod run -- coolify-ghcr-deploy \
-  --app-name "expensify" \
-  --coolify-url "https://coolify.labnotes.org" \
-  --env-file ".env" \
-  --image "${IMAGE}" \
-  --healthcheck-timeout 60
-
-rm -f .env
+echo -e "\033[0;32m--- Step 6: Open production site ---\033[0m"
+open "https://${PROD_DOMAIN}"
 
 echo -e "\033[0;34m--- Deployed ---\033[0m"
