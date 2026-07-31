@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 /**
  * One-off migration: copy the local file-based state (CSVs under DATA_DIR and
- * receipt images under DATA_DIR/images) into Postgres + Vercel Blob.
+ * receipt images under DATA_DIR/images) into Postgres + cloud images.
+ *
+ * Image backend is selected like the app does:
+ *   BLOB_READ_WRITE_TOKEN  → Vercel Blob (prod)
+ *   S3_ENDPOINT + S3_BUCKET → S3-compatible (local MinIO dev)
+ *   neither                 → images are skipped (keys kept; data still loads)
  *
  * Run with:
- *   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… node scripts/migrate-data.ts
+ *   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… node scripts/migrate-data.ts   # prod
+ *   DATABASE_URL=postgres://localhost/expensify_dev S3_ENDPOINT=… S3_BUCKET=… node scripts/migrate-data.ts  # dev
  *
  * Requires Node 26+ (runs TypeScript natively). The schema DDL below must stay
  * in sync with app/lib/store/pg.server.ts. Idempotent: re-running replaces the
- * DB rows and skips images that already exist in Blob.
+ * DB rows and skips images that already exist in the store.
  */
 import "dotenv/config";
 import { readFile, mkdir } from "node:fs/promises";
@@ -16,12 +22,87 @@ import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { parse } from "csv-parse/sync";
 import postgres from "postgres";
+import {
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { get, put } from "@vercel/blob";
 
 const DATA_DIR = process.env.DATA_DIR ?? "data";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN ?? "";
+const S3_ENDPOINT = process.env.S3_ENDPOINT ?? "";
+const S3_BUCKET = process.env.S3_BUCKET ?? "";
+const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID ?? "minioadmin";
+const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY ?? "minioadmin";
 const BLOB_PREFIX = "images";
+
+type ImageBackend = "blob" | "s3" | "none";
+
+function imageBackend(): ImageBackend {
+  if (BLOB_TOKEN) return "blob";
+  if (S3_ENDPOINT && S3_BUCKET) return "s3";
+  return "none";
+}
+
+let s3Client: S3Client | undefined;
+
+function s3(): S3Client {
+  if (!s3Client) {
+    s3Client = new S3Client({
+      region: process.env.S3_REGION ?? "us-east-1",
+      endpoint: S3_ENDPOINT,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return s3Client;
+}
+
+async function s3Exists(key: string): Promise<boolean> {
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Upload one image to the active backend; returns "uploaded" | "skipped". */
+async function uploadImage(
+  pathname: string,
+  buffer: Buffer,
+  mime: string,
+): Promise<"uploaded" | "skipped"> {
+  const backend = imageBackend();
+  if (backend === "blob") {
+    const existing = await get(pathname, { access: "public" });
+    if (existing) return "skipped";
+    await put(pathname, buffer, {
+      access: "public",
+      contentType: mime,
+      addRandomSuffix: false,
+    });
+    return "uploaded";
+  }
+  if (backend === "s3") {
+    if (await s3Exists(pathname)) return "skipped";
+    await s3().send(
+      new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: pathname,
+        Body: buffer,
+        ContentType: mime,
+      }),
+    );
+    return "uploaded";
+  }
+  return "skipped";
+}
 
 // Mirrors app/lib/store/pg.server.ts
 const DDL = `
@@ -143,10 +224,16 @@ function mimeForFile(filename: string): string {
 
 async function main(): Promise<void> {
   if (!DATABASE_URL) fail("DATABASE_URL is required");
-  if (!BLOB_TOKEN) fail("BLOB_READ_WRITE_TOKEN is required");
+  const backend = imageBackend();
+  const backendName =
+    backend === "blob"
+      ? "Vercel Blob"
+      : backend === "s3"
+        ? `S3 (${S3_ENDPOINT})`
+        : "none (image keys kept as-is)";
 
   console.info(
-    `Migrating state from ${join(process.cwd(), DATA_DIR)} → Postgres + Vercel Blob`,
+    `Migrating state from ${join(process.cwd(), DATA_DIR)} → Postgres + ${backendName}`,
   );
 
   const sql = postgres(DATABASE_URL, { max: 5, connect_timeout: 10 });
@@ -193,7 +280,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Upload receipt images to Blob ---------------------------------------
+  // --- Upload receipt images to the active store --------------------------
   let uploaded = 0;
   let skipped = 0;
   let missing = 0;
@@ -201,7 +288,13 @@ async function main(): Promise<void> {
   await mkdir(imagesDir, { recursive: true });
 
   const receipts = expenses.filter((e) => e.type === "receipt" && e.imageFile);
-  console.info(`Uploading ${receipts.length} receipt image(s) to Blob …`);
+  if (backend === "none") {
+    console.info(
+      `${receipts.length} receipt image(s) referenced; no image backend configured — skipping uploads.`,
+    );
+  } else {
+    console.info(`Uploading ${receipts.length} receipt image(s) …`);
+  }
   for (const e of receipts) {
     const imageFile = e.imageFile;
     const localPath = join(imagesDir, imageFile);
@@ -211,19 +304,15 @@ async function main(): Promise<void> {
       console.warn(`  missing locally, keeping key as-is: ${imageFile}`);
       continue;
     }
-    const existing = await get(pathname, { access: "public" });
-    if (existing) {
-      skipped++;
-      continue;
-    }
+    if (backend === "none") continue;
     const buffer = await readFile(localPath);
-    await put(pathname, buffer, {
-      access: "public",
-      contentType: mimeForFile(imageFile),
-      addRandomSuffix: false,
-    });
-    uploaded++;
-    if (uploaded % 25 === 0) console.info(`  ${uploaded} uploaded …`);
+    const result = await uploadImage(pathname, buffer, mimeForFile(imageFile));
+    if (result === "uploaded") {
+      uploaded++;
+      if (uploaded % 25 === 0) console.info(`  ${uploaded} uploaded …`);
+    } else {
+      skipped++;
+    }
   }
   console.info(
     `Images: ${uploaded} uploaded, ${skipped} already present, ${missing} missing`,
