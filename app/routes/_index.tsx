@@ -10,7 +10,7 @@ import { Link, useNavigate } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
-import { formatAmount, formatDate } from "~/lib/format";
+import { formatAmount, formatDate, parseAmount } from "~/lib/format";
 import { readSettings } from "~/lib/settings.server";
 import {
   initStore,
@@ -29,10 +29,29 @@ export async function loader(_: Route.LoaderArgs) {
   ]);
   const sorted = [...expenses].sort(sortByDateDesc);
   const currentYear = String(new Date().getFullYear());
+  const reportSummary = new Map<string, { count: number; total: number }>();
+  for (const e of expenses) {
+    const name = e.report || "Unassigned";
+    const s = reportSummary.get(name) ?? { count: 0, total: 0 };
+    s.count++;
+    const amt = parseAmount(e.amount);
+    if (amt !== null) s.total += amt;
+    reportSummary.set(name, s);
+  }
+  const reports = [...reportSummary]
+    .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
+    .sort((a, b) =>
+      a.name === "Unassigned"
+        ? 1
+        : b.name === "Unassigned"
+          ? -1
+          : a.name.localeCompare(b.name),
+    );
   return {
     expenses: sorted.map(toListItem),
     mileageRate: settings.mileageRates[currentYear] ?? "",
     merchants,
+    reports,
   };
 }
 
@@ -61,7 +80,7 @@ function toListItem(e: Expense) {
 }
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
-  const { expenses, mileageRate } = loaderData;
+  const { expenses, mileageRate, reports } = loaderData;
   const fileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -158,6 +177,27 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
             : " Set a mileage rate in Settings."}
         </p>
       </div>
+
+      {reports.length > 0 ? (
+        <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {reports.map((r) => (
+            <div
+              key={r.name}
+              className="rounded-xl border border-gray-200 bg-white p-3"
+            >
+              <div className="truncate text-sm font-medium text-gray-700">
+                {r.name}
+              </div>
+              <div className="text-lg font-semibold tabular-nums">
+                {formatAmount(r.total)}
+              </div>
+              <div className="text-xs text-gray-500">
+                {r.count} expense{r.count === 1 ? "" : "s"}
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {expenses.length === 0 ? (
         <EmptyState />
