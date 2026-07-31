@@ -54,40 +54,16 @@ export async function loader({ params }: Route.LoaderArgs) {
     merchantW = 125,
     descW = 562 - descX;
 
-  // Column header.
-  doc.fontSize(10).font("Helvetica").fillColor("#6b7280");
-  const headerY = doc.y;
-  doc.text("Date", dateX, headerY, { width: dateW, lineBreak: false });
-  doc.text("Amount", amountX, headerY, {
-    width: amountW,
-    lineBreak: false,
-    align: "right",
-  });
-  doc.text("Merchant", merchantX, headerY, {
-    width: merchantW,
-    lineBreak: false,
-  });
-  doc.text("Description", descX, headerY, {
-    width: descW,
-    lineBreak: false,
-  });
-  doc
-    .moveDown(0.35)
-    .moveTo(dateX, doc.y)
-    .lineTo(descX + descW, doc.y)
-    .strokeColor("#e5e7eb")
-    .lineWidth(0.5)
-    .stroke();
-  doc.moveDown(0.35);
-  doc.fillColor("#111827");
-
   for (const category of categories) {
     doc.moveDown(0.75);
     // Don't orphan a category title at the very bottom of a page.
     if (doc.y > doc.page.maxY() - 2 * doc.currentLineHeight()) {
       doc.addPage();
     }
-    doc.fontSize(13).font("Helvetica-Bold").text(category);
+    doc
+      .fontSize(13)
+      .font("Helvetica-Bold")
+      .text(category, 50, doc.y, { width: 512, align: "center" });
     doc.moveDown(0.25);
     const inCat = inReport.filter((e) => e.category === category);
     for (const e of inCat) {
