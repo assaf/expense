@@ -23,11 +23,11 @@
     "csv-parse": "^7.0.1",
     "csv-stringify": "^6.8.1",
     "debug": "^4.4.3",
-    "fflate": "^0.8.2",
+    "fflate": "^0.8.3",
     "isbot": "^5.2.1",
     "leaflet": "^1.9.4",
-    "lucide-react": "^1.27.0",
-    "pdfkit": "^0.17.1",
+    "lucide-react": "^1.28.0",
+    "pdfkit": "^0.19.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0",
@@ -39,14 +39,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",
-    "@types/leaflet": "^1.9.20",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^26.1.2",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "coolify-ghcr-deploy": "^1.4.1",
     "playwright": "^1.62.0",
-    "portless": "^0.15.4",
+    "portless": "^0.15.5",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:",
@@ -55,6 +55,6 @@
   "engines": {
     "node": ">=26.0.0"
   },
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@11.18.0",
   "portless": "expensify"
 }

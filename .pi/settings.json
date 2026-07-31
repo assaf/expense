@@ -1,0 +1,9 @@
+{
+  "defaultModel": "deepseek-v4-flash",
+  "defaultThinkingLevel": "medium",
+  "quietStartup": true,
+  "defaultProjectTrust": "ask",
+  "enableInstallTelemetry": false,
+  "skills": ["skills"],
+  "enableSkillCommands": true
+}

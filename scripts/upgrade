@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -eo pipefail
+
+echo -e "\033[32m  Upgrading pnpm …\033[0m"
+pnpm self-update
+
+echo -e "\033[32m  Upgrading dependencies …\033[0m"
+pnpm update --latest
+
+echo -e "\033[32m  Installing Playwright browsers …\033[0m"
+playwright install webkit --with-deps
+
+echo -e "\033[32m  Deduping dependencies …\033[0m"
+pnpm dedupe --ignore-scripts
+pnpm prune --ignore-scripts
+
+echo -e "\033[32m  Security audit …\033[0m"
+pnpm install
+git add package.json pnpm-lock.yaml
+
+echo -e "\033[32m  Running tests …\033[0m"
+rm -rf __screenshots__/*
+pnpm run check
+pnpm vp test run
+
+echo -e "\033[32m  Auditing dependencies …\033[0m"
+pnpm pnpm audit --prod || echo "Security audit failed"
+
+echo -e "\033[32m  Commiting changes …\033[0m"
+git diff --unified=0 --color --word-diff HEAD~1 package.json
+git commit -m "Upgrade dependencies" || echo
+
+echo -e "\033[32m  Cleaning up …\033[0m"
+git gc --prune=now || echo
+
+echo -e "\033[32m  Checking for outdated dependencies …\033[0m"
+pnpm outdated
+
+terminal-notifier -sound default  -title "$0" -message "Done!"
+exit 0
