@@ -342,7 +342,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   };
   const doCancel = () => {
     setTransition("cancel");
-    navigate("/");
+    void navigate("/");
   };
   // Clear the overlay if the submission finishes without navigating (validation error).
   useEffect(() => {
@@ -359,7 +359,6 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       amountRef.current?.focus();
       amountRef.current?.select();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onDelete() {
@@ -683,7 +682,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   };
   const doCancel = () => {
     setTransition("cancel");
-    navigate("/");
+    void navigate("/");
   };
   useEffect(() => {
     if (
