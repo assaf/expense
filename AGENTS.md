@@ -11,13 +11,22 @@ otherwise. Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`)
 ## Commands
 
 ```bash
-pnpm dev        # dev server (port 5173)
+pnpm dev        # dev server (port 5173) — env from Infisical (--env dev)
 pnpm check      # react-router typegen + vp check (format/lint/typecheck)
 pnpm build      # production build
 pnpm start      # serve production build (port 3000)
+pnpm test       # 30 tests against local Postgres (expensify_test) + MinIO
+./scripts/deploy [--skip-tests]  # check + tests + GHCR push + Coolify (Infisical)
 ```
 
 Run `pnpm check` before committing.
+
+## Secrets
+
+Env vars are loaded via Infisical, same as Rentail: `infisical --env <env> run -- …`
+for dev/deploy, `infisical export --env prod > .env` for the Coolify app. The
+`.infisical.json` workspace id is set up per-project (empty until `infisical init`).
+Tests intentionally use local services (expensify_test + MinIO), not Infisical.
 
 ## Stack & conventions
 

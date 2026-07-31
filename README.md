@@ -52,16 +52,43 @@ automatically on first run.
 
 ## Quick start
 
-Prerequisites: Postgres running locally (`brew services start postgresql@18`)
-and MinIO (`docker compose up -d`; first run creates the `expensify` bucket).
+## Environment variables (Infisical)
+
+Secrets are loaded the same way as Rentail — via [Infisical](https://infisical.com)
+(`infisical --env <dev|test|prod> run -- …`). One-time setup:
+
+```bash
+infisical login           # your terminal, not the agent
+infisical init            # create/link the expensify project → writes .infisical.json
+```
+
+Then add secrets to the `dev`, `test`, and `prod` environments:
+
+| Secret                  | dev (local)                          | prod (cloud)                      |
+| ----------------------- | ------------------------------------ | --------------------------------- |
+| `DATABASE_URL`          | `postgres://localhost/expensify_dev` | Vercel Postgres / Neon pooled URL |
+| `S3_ENDPOINT`           | `http://localhost:9000`              | (unused — Vercel Blob)            |
+| `S3_BUCKET`             | `expensify`                          | (unused)                          |
+| `BLOB_READ_WRITE_TOKEN` | —                                    | Vercel Storage → Blob → Tokens    |
+| `GHCR_TOKEN` (dev)      | registry token for `scripts/deploy`  | —                                 |
+
+`pnpm dev` and `scripts/deploy` pull from Infisical; the test suite runs
+against local Postgres + MinIO directly (no Infisical needed).
+
+## Quick start
+
+Prerequisites: Postgres running locally (`brew services start postgresql@18`),
+MinIO (`docker compose up -d`; first run creates the `expensify` bucket), and
+Infisical configured (see above).
 
 ```bash
 createdb expensify_dev          # once
 pnpm install
-DATABASE_URL=postgres://localhost/expensify_dev S3_ENDPOINT=http://localhost:9000 S3_BUCKET=expensify pnpm dev
+pnpm dev                        # env from Infisical dev
 ```
 
-Running without env vars falls back to local files (CSVs under `data/`).
+Running the server without env vars falls back to local files (CSVs under
+`data/`).
 
 ```bash
 pnpm check        # typegen + format + lint + typecheck
@@ -92,7 +119,7 @@ zero-config path builds one SSR function that serves every route.)
 4. Migrate the existing data once (from a machine with the CSVs):
 
    ```bash
-   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… pnpm migrate-data
+   infisical --env prod run -- pnpm migrate-data   # or pnpm migrate-data:prod
    ```
 
    It imports the CSVs under `data/` into Postgres and uploads `data/images/*`
@@ -102,14 +129,20 @@ zero-config path builds one SSR function that serves every route.)
 5. Deploy. Test the app is behind Deployment Protection or basic auth — the
    app has no built-in login (single-user personal tool).
 
-**Coolify (Docker):** same flow as Rentail — build the Docker image, push to
-GHCR, deploy with `coolify-ghcr-deploy`. Mount a persistent volume at `/app/data`
-(local backend) — or set `DATABASE_URL`/`BLOB_READ_WRITE_TOKEN`/`S3_ENDPOINT` in
-Coolify to use the cloud backends there too.
+**Coolify (Docker):** `./scripts/deploy` — mirrors Rentail: `pnpm check`,
+tests, build/push to GHCR, then `infisical export --env prod > .env` and
+`infisical --env prod run -- coolify-ghcr-deploy --env-file .env`. Requires the
+Infisical `dev` env to hold `GHCR_TOKEN` and the `prod` env to hold the runtime
+secrets (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, or `S3_ENDPOINT`/`S3_BUCKET`
+for local-file storage) plus `COOLIFY_TOKEN`.
 
 ```bash
-GHCR_TOKEN=… COOLIFY_URL=… COOLIFY_TOKEN=… COOLIFY_APP_ID=… ./scripts/deploy
+./scripts/deploy            # check + tests + deploy
+./scripts/deploy --skip-tests
 ```
+
+Vercel has its own environment management (dashboard), independent of
+Infisical — set `DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` there directly.
 
 ## Maps & geocoding
 

@@ -1,25 +1,33 @@
 #!/usr/bin/env bash
 # Build the image, push to GHCR, and deploy to Coolify.
-# Mirrors the Rentail deployment flow. Requires:
-#   GHCR_TOKEN      - GitHub container registry token
-#   COOLIFY_URL     - e.g. https://coolify.labnotes.org
-#   COOLIFY_TOKEN   - Coolify API token
-#   COOLIFY_APP_ID  - the Coolify application uuid for expensify
+# Mirrors the Rentail deployment flow — secrets come from Infisical.
+#   - prod env: DATABASE_URL, BLOB_READ_WRITE_TOKEN, S3_* (runtime env for the app)
+#   - dev env:  GHCR_TOKEN (registry auth)
 set -eo pipefail
 
 IMAGE="ghcr.io/assaf/expensify:latest"
 
-echo -e "\033[0;32m--- Step 1: Build and push image ---\033[0m"
-echo "${GHCR_TOKEN}" | docker login ghcr.io -u assaf --password-stdin
+echo -e "\033[0;32m--- Step 1: Check (fmt, lint, types) ---\033[0m"
+pnpm check
+
+if [ "$1" = "--skip-tests" ]; then
+  echo -e "\033[0;33m--- Step 2: Skipping tests ---\033[0m"
+else
+  echo -e "\033[0;32m--- Step 2: Run tests ---\033[0m"
+  pnpm test
+fi
+
+echo -e "\033[0;32m--- Step 3: Build and push image ---\033[0m"
+echo "$(infisical secrets get GHCR_TOKEN --env dev --plain)" | docker login ghcr.io -u assaf --password-stdin
 docker build -t "${IMAGE}" .
 docker push "${IMAGE}"
 
-echo -e "\033[0;32m--- Step 2: Deploy to Coolify ---\033[0m"
-coolify-ghcr-deploy \
+echo -e "\033[0;32m--- Step 4: Deploy to Coolify ---\033[0m"
+infisical export --env prod --format=dotenv > .env
+infisical --env prod run -- coolify-ghcr-deploy \
   --app-name "expensify" \
-  --coolify-url "${COOLIFY_URL}" \
-  --coolify-token "${COOLIFY_TOKEN}" \
-  --app-id "${COOLIFY_APP_ID}" \
+  --coolify-url "https://coolify.labnotes.org" \
+  --env-file ".env" \
   --image "${IMAGE}" \
   --healthcheck-timeout 60
 

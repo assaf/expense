@@ -6,8 +6,9 @@
     "build": "react-router build --force",
     "check": "./scripts/check",
     "clean": "rm -rf node_modules/.vite .react-router build",
-    "dev": "portless run -- react-router dev",
+    "dev": "infisical --env dev run -- portless run -- react-router dev",
     "migrate-data": "node scripts/migrate-data.ts",
+    "migrate-data:prod": "infisical --env prod run -- node scripts/migrate-data.ts",
     "start": "react-router-serve ./build/server/index.js",
     "test": "react-router build --force && vp test run",
     "prepare": "vp config"
