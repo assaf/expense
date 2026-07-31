@@ -138,38 +138,69 @@ export interface InboundDeps {
 
 // --- Webhook signature (Svix format) ----------------------------------------
 
+export interface WebhookHeaders {
+  id: string | null;
+  timestamp: string | null;
+  signature: string | null;
+}
+
 /**
- * Verify Resend's `Resend-Signature` header (`t=…,v1=…`), an HMAC-SHA256 of
- * `<timestamp>.<rawBody>` keyed with the signing secret (`whsec_…`). Includes
- * a 5-minute replay guard.
+ * The expected Svix signature (base64, no `v1,` prefix) for a webhook:
+ * HMAC-SHA256 of `<id>.<timestamp>.<rawBody>` keyed with the base64-decoded
+ * part of the signing secret after the `whsec_` prefix.
+ */
+export function computeWebhookSignature(
+  id: string,
+  timestamp: string,
+  rawBody: string,
+  secret: string,
+): string {
+  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  return createHmac("sha256", secretBytes)
+    .update(`${id}.${timestamp}.${rawBody}`)
+    .digest("base64");
+}
+
+/**
+ * Verify a Resend webhook (standard Svix/Standard-Webhooks format):
+ *  - headers `svix-id`, `svix-timestamp`, `svix-signature` (base64, space-
+ *    delimited `v1,<sig>` entries)
+ *  - signed content is `<id>.<timestamp>.<rawBody>`
+ *  - HMAC-SHA256 key is the base64-decoded part of the signing secret after
+ *    the `whsec_` prefix
+ * Includes a 5-minute replay guard on the timestamp.
  */
 export function verifyWebhookSignature(
-  signature: string,
+  headers: WebhookHeaders,
   rawBody: string,
   secret: string,
 ): boolean {
-  if (!signature || !secret) return false;
-  const parts = new Map<string, string>();
-  for (const pair of signature.split(",")) {
-    const eq = pair.indexOf("=");
-    if (eq > 0) parts.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
-  }
-  const ts = parts.get("t");
-  const v1 = parts.get("v1");
-  if (!ts || !v1) return false;
-  const tsNum = Number(ts);
+  const { id, timestamp, signature } = headers;
+  if (!id || !timestamp || !signature || !secret) return false;
+  const tsNum = Number(timestamp);
   const nowSec = Math.floor(Date.now() / 1000);
   if (!Number.isFinite(tsNum) || Math.abs(nowSec - tsNum) > 300) return false;
-  const key = secret.startsWith("whsec_")
-    ? secret.slice("whsec_".length)
-    : secret;
-  const expected = createHmac("sha256", key)
-    .update(`${ts}.${rawBody}`)
-    .digest("hex");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(v1);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+
+  const expected = computeWebhookSignature(id, timestamp, rawBody, secret);
+
+  // The header is a space-delimited list like "v1,<sig> v1,<sig2> …".
+  for (const entry of signature.split(" ")) {
+    const comma = entry.indexOf(",");
+    if (comma <= 0) continue;
+    const version = entry.slice(0, comma);
+    const candidate = entry.slice(comma + 1);
+    if (version !== "v1") continue;
+    if (safeBase64Equal(expected, candidate)) return true;
+  }
+  return false;
+}
+
+/** Constant-time comparison of two base64 signatures (any length). */
+function safeBase64Equal(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "base64");
+  const bb = Buffer.from(b, "base64");
+  if (ab.length !== bb.length || ab.length === 0) return false;
+  return timingSafeEqual(ab, bb);
 }
 
 // --- Date -------------------------------------------------------------------
@@ -532,9 +563,10 @@ export async function processInboundEvent(
     // Extract receipt data.
     const categories = (await readCategories(account.id)).map((c) => c.name);
     let extraction: ExtractionResult;
-    let receiptImage: Buffer;
+    let receiptImage: Buffer | null = null;
     let imageMime: string;
     let originalName: string;
+    let renderError = "";
 
     if (source.kind === "attachment") {
       const { buffer, contentType, filename } = source;
@@ -573,12 +605,20 @@ export async function processInboundEvent(
       }
     } else {
       const bodyText = source.text.slice(0, 20_000);
-      receiptImage = await deps.renderReceiptImage(bodyText, {
-        subject: email.subject,
-      });
+      try {
+        receiptImage = await deps.renderReceiptImage(bodyText, {
+          subject: email.subject,
+        });
+      } catch (err) {
+        renderError = err instanceof Error ? err.message : String(err);
+        receiptImage = null;
+      }
       imageMime = "image/png";
       originalName = "email-receipt.png";
       extraction = await deps.extractReceipt({ text: bodyText, categories });
+      if (renderError) {
+        console.error("[inbound] email receipt render failed:", renderError);
+      }
     }
 
     // Classify as receipt? If the model says it isn't one and gave nothing
@@ -640,6 +680,11 @@ export async function processInboundEvent(
           "Open the expense in the app to fill them in.",
           ...(extraction.notes
             ? [`Note: ${escapeHtml(extraction.notes)}`]
+            : []),
+          ...(renderError
+            ? [
+                `Note: the email body could not be rendered as a receipt image (${escapeHtml(renderError)}). You can attach a photo in the app.`,
+              ]
             : []),
           ...(extraction.currency && extraction.currency !== "USD"
             ? [

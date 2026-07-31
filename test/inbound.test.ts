@@ -1,9 +1,10 @@
-import { createHmac } from "node:crypto";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import sharp from "sharp";
 import { normalizeAmount } from "~/lib/format";
 import {
   processInboundEvent,
   verifyWebhookSignature,
+  computeWebhookSignature,
   parseDateString,
   extractDateFromForwardedText,
   extractDateFromEml,
@@ -13,6 +14,7 @@ import {
   pickReceiptAttachment,
   matchCategory,
 } from "~/lib/inbound-email.server";
+import type { WebhookHeaders } from "~/lib/inbound-email.server";
 import type {
   InboundDeps,
   EmailReceivedData,
@@ -209,20 +211,46 @@ afterEach(async () => {
 
 describe("Webhook signature", () => {
   const secret = "whsec_testsecret";
-  const key = "testsecret";
+  const id = "msg_test123";
   const body = JSON.stringify({ type: "email.received", data: {} });
 
-  function sign(ts: number, payload: string): string {
-    const v1 = createHmac("sha256", key)
-      .update(`${ts}.${payload}`)
-      .digest("hex");
-    return `t=${ts},v1=${v1}`;
+  function headers(ts: number, payload: string): WebhookHeaders {
+    const sig = computeWebhookSignature(id, String(ts), payload, secret);
+    return { id, timestamp: String(ts), signature: `v1,${sig}` };
   }
+
+  it("reproduces the Svix documented example exactly", () => {
+    // From https://docs.svix.com/receiving/verifying-payloads/how-manual
+    expect(
+      computeWebhookSignature(
+        "msg_loFOjxBNrRLzqYUf",
+        "1731705121",
+        '{"event_type":"ping","data":{"success":true}}',
+        "whsec_plJ3nmyCDGBKInavdOK15jsl",
+      ),
+    ).toBe("rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=");
+  });
 
   it("accepts a valid signature", () => {
     expect(
       verifyWebhookSignature(
-        sign(Math.floor(Date.now() / 1000), body),
+        headers(Math.floor(Date.now() / 1000), body),
+        body,
+        secret,
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts any entry in a space-delimited signature list", () => {
+    const ts = Math.floor(Date.now() / 1000);
+    const good = `v1,${computeWebhookSignature(id, String(ts), body, secret)}`;
+    expect(
+      verifyWebhookSignature(
+        {
+          id,
+          timestamp: String(ts),
+          signature: `v1,MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= ${good}`,
+        },
         body,
         secret,
       ),
@@ -230,23 +258,57 @@ describe("Webhook signature", () => {
   });
 
   it("rejects a tampered body", () => {
-    const sig = sign(Math.floor(Date.now() / 1000), body);
-    expect(verifyWebhookSignature(sig, body + "x", secret)).toBe(false);
+    expect(
+      verifyWebhookSignature(
+        headers(Math.floor(Date.now() / 1000), body),
+        body + "x",
+        secret,
+      ),
+    ).toBe(false);
   });
 
   it("rejects a wrong secret", () => {
-    const sig = sign(Math.floor(Date.now() / 1000), body);
-    expect(verifyWebhookSignature(sig, body, "whsec_other")).toBe(false);
+    const ts = Math.floor(Date.now() / 1000);
+    const bad = computeWebhookSignature(id, String(ts), body, "whsec_wrong");
+    expect(
+      verifyWebhookSignature(
+        { id, timestamp: String(ts), signature: `v1,${bad}` },
+        body,
+        secret,
+      ),
+    ).toBe(false);
   });
 
   it("rejects an expired timestamp (replay guard)", () => {
-    const sig = sign(Math.floor(Date.now() / 1000) - 600, body);
-    expect(verifyWebhookSignature(sig, body, secret)).toBe(false);
+    expect(
+      verifyWebhookSignature(
+        headers(Math.floor(Date.now() / 1000) - 600, body),
+        body,
+        secret,
+      ),
+    ).toBe(false);
   });
 
-  it("rejects missing or empty signatures", () => {
-    expect(verifyWebhookSignature("", body, secret)).toBe(false);
-    expect(verifyWebhookSignature("t=1", body, secret)).toBe(false);
+  it("rejects a non-v1 signature version", () => {
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = computeWebhookSignature(id, String(ts), body, secret);
+    expect(
+      verifyWebhookSignature(
+        { id, timestamp: String(ts), signature: `v2,${sig}` },
+        body,
+        secret,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects missing headers", () => {
+    expect(
+      verifyWebhookSignature(
+        { id: null, timestamp: null, signature: null },
+        body,
+        secret,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -466,6 +528,16 @@ describe("Receipt rendering", () => {
     expect(png[0]).toBe(0x89);
     expect(png[1]).toBe(0x50);
     expect(png.length).toBeGreaterThan(100);
+  });
+
+  it("renders visible ink, not a blank sheet", async () => {
+    const png = await renderReceiptImage(
+      "MERCHANT: Amazon\nTOTAL: 42.50\nDate: 2026-06-05",
+      { subject: "Fwd: Your receipt" },
+    );
+    const stats = await sharp(png).stats();
+    const minInk = Math.min(...stats.channels.slice(0, 3).map((c) => c.min));
+    expect(minInk).toBeLessThan(250); // at least one non-white pixel
   });
 });
 

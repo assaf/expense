@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { Resvg, type ResvgRenderOptions } from "@resvg/resvg-js";
 import { load } from "cheerio";
 import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
@@ -6,11 +7,14 @@ import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono
  * Turn an email body into a receipt image (no headless browser needed):
  *  - HTML bodies are reduced to readable text (htmlToText)
  *  - the text is laid out on a white canvas as a monospace "receipt sheet"
- *    and rasterized to PNG via resvg (SVG → PNG)
+ *    and rasterized to PNG — via sharp/librsvg with the font embedded as a
+ *    @font-face data URI, falling back to resvg (SVG → PNG) with the
+ *    bundled JetBrains Mono woff2 or system fonts.
  *
  * The bundled JetBrains Mono woff2 is embedded in the bundle (Vite ?inline)
- * and passed straight to resvg as a font buffer, so rendering works on
- * serverless runtimes that have no system fonts.
+ * so rendering works on serverless runtimes that have no system fonts; the
+ * fallback chain + ink check guards against runtimes whose font loading is
+ * broken (previously these silently produced blank white receipt images).
  */
 
 const FONT_FAMILY = "JetBrains Mono";
@@ -95,26 +99,96 @@ export function buildReceiptSvg(
   return parts.join("");
 }
 
-/** Rasterize a text receipt to a PNG buffer (white background, black mono text). */
+/** The SVG with the bundled font embedded as a data-URI @font-face. */
+function embedFontFace(svg: string): string {
+  const style = `<style>@font-face{font-family:'${FONT_FAMILY}';src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format('woff2')}</style>`;
+  return svg.replace(/(<svg[^>]*>)/, `$1<defs>${style}</defs>`);
+}
+
+/** True when the PNG has any pixel darker than near-white (i.e. real ink). */
+async function hasInk(png: Buffer): Promise<boolean> {
+  try {
+    const stats = await sharp(png).stats();
+    return stats.channels.slice(0, 3).some((c) => c.min < 250);
+  } catch {
+    // Can't inspect — assume the render is fine rather than degrade it.
+    return true;
+  }
+}
+
+/**
+ * Rasterize a text receipt to a PNG buffer (white background, black mono
+ * text). Renders through a fallback chain and refuses to return a blank
+ * image:
+ *  1. sharp (librsvg) with the font embedded via @font-face — sharp is
+ *     already used in the receipt pipeline (HEIC/BMP/TIFF → PNG) so its
+ *     native binary is guaranteed to be present on every runtime, and the
+ *     embedded font needs no runtime font files.
+ *  2. resvg with the bundled font (plus system fonts as a safety net).
+ *  3. resvg with system fonts only.
+ * Each step verifies the output actually contains ink; a silently blank
+ * render (e.g. a runtime whose font loading is broken) falls through to the
+ * next renderer instead of producing an invisible receipt.
+ */
 export async function renderReceiptImage(
   text: string,
   opts: { subject?: string } = {},
 ): Promise<Buffer> {
   const svg = buildReceiptSvg(text, opts);
+  const failures: string[] = [];
+
+  try {
+    const png = await sharp(Buffer.from(embedFontFace(svg)))
+      .png()
+      .toBuffer();
+    if (await hasInk(png)) return png;
+    failures.push("sharp svg render came back blank");
+  } catch (err) {
+    failures.push(
+      `sharp svg render failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   // fontBuffers is supported at runtime (resvg fontdb) but not yet in the
   // published type defs — extend the options shape via an intersection.
-  const options = {
-    fitTo: { mode: "original" },
-    font: {
-      fontBuffers: [fontBytes],
-      defaultFontFamily: FONT_FAMILY,
-      loadSystemFonts: false,
-    },
-  } as ResvgRenderOptions & {
-    font?: ResvgRenderOptions["font"] & { fontBuffers?: Buffer[] };
+  type ResvgFontOptions = ResvgRenderOptions["font"] & {
+    fontBuffers?: Buffer[];
   };
-  const resvg = new Resvg(svg, options);
-  return resvg.render().asPng();
+  const resvgFont = (
+    overrides: ResvgFontOptions,
+  ): ResvgRenderOptions & { font?: ResvgFontOptions } => ({
+    fitTo: { mode: "original" },
+    font: { loadSystemFonts: true, ...overrides },
+  });
+
+  const resvgAttempts = [
+    {
+      label: "resvg with bundled font",
+      options: resvgFont({
+        fontBuffers: [fontBytes],
+        defaultFontFamily: FONT_FAMILY,
+      }),
+    },
+    {
+      label: "resvg with system fonts",
+      options: resvgFont({}),
+    },
+  ];
+  for (const attempt of resvgAttempts) {
+    try {
+      const png = new Resvg(svg, attempt.options).render().asPng();
+      if (await hasInk(png)) return png;
+      failures.push(`${attempt.label} came back blank`);
+    } catch (err) {
+      failures.push(
+        `${attempt.label} failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  throw new Error(
+    `Unable to render email receipt image (${failures.join("; ")})`,
+  );
 }
 
 /**
