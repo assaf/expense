@@ -11,6 +11,7 @@ import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
 import { formatAmount, formatDate, parseAmount } from "~/lib/format";
+import { requireUser } from "~/lib/auth.server";
 import { readSettings } from "~/lib/settings.server";
 import {
   initStore,
@@ -20,12 +21,13 @@ import {
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/_index";
 
-export async function loader(_: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   await initStore();
   const [expenses, settings, merchants] = await Promise.all([
-    readExpenses(),
-    readSettings(),
-    readPriorMerchants(),
+    readExpenses(user.accountId),
+    readSettings(user.accountId),
+    readPriorMerchants(user.accountId),
   ]);
   const sorted = [...expenses].sort(sortByDateDesc);
   const currentYear = String(new Date().getFullYear());

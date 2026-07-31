@@ -18,6 +18,23 @@ export const IMAGE_BACKEND = env.IMAGE_BACKEND ?? "";
 
 export const isProd = env.NODE_ENV === "production";
 
+/**
+ * Bootstrap credentials for the very first account + user (created when the
+ * database is empty). Subsequent users are created via the signup/join UI.
+ */
+export const APP_USERNAME = env.APP_USERNAME ?? "";
+
+/** Bootstrap password (see APP_USERNAME). */
+export const APP_PASSWORD = env.APP_PASSWORD ?? "";
+
+/** Secret used to sign the session cookie. Required — the app fails fast without it. */
+export const SESSION_SECRET = env.SESSION_SECRET ?? "";
+
+/** True when the bootstrap credentials are configured. */
+export function hasAuth(): boolean {
+  return Boolean(APP_USERNAME && APP_PASSWORD && SESSION_SECRET);
+}
+
 /** True when Postgres storage is configured (required — the app fails fast without it). */
 export function hasDatabase(): boolean {
   return Boolean(DATABASE_URL);

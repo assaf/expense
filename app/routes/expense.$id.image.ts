@@ -4,12 +4,14 @@ import {
   saveImage,
   deleteImage,
 } from "~/lib/images.server";
+import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id.image";
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const expense = await readExpense(params.id);
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const user = await requireUser(request);
+  const expense = await readExpense(params.id, user.accountId);
   if (!expense || expense.type !== "receipt" || !expense.imageFile) {
     return new Response("Not found", { status: 404 });
   }
@@ -25,7 +27,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
 /** Replace or clear the receipt image without reloading the editor. */
 export async function action({ request, params }: Route.ActionArgs) {
-  const expense = await readExpense(params.id);
+  const user = await requireUser(request);
+  const expense = await readExpense(params.id, user.accountId);
   if (!expense || expense.type !== "receipt") {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -38,7 +41,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     expense.imageMime = "";
     expense.originalName = "";
     expense.updatedAt = new Date().toISOString();
-    await upsertExpense(expense);
+    await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, imageFile: "" });
   }
 
@@ -67,7 +70,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       expense.imageMime,
     );
     expense.imageFile = renamed;
-    await upsertExpense(expense);
+    await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, imageFile: renamed });
   }
 

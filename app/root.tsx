@@ -9,7 +9,17 @@ import {
   useRouteError,
 } from "react-router";
 import "~/global.css";
+import { requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/root";
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  // The login route (and its React Router `.data` requests) is public.
+  if (!url.pathname.startsWith("/login")) {
+    await requireUser(request);
+  }
+  return null;
+}
 
 export function meta(): Route.MetaDescriptors {
   return [

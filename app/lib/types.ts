@@ -52,6 +52,31 @@ export interface Category {
   name: string;
 }
 
+/**
+ * A shared workspace. Multiple users belong to one account and share its
+ * expenses, reports, categories, and settings. New accounts are created at
+ * signup; other users join with the account's invite code.
+ */
+export interface Account {
+  id: string;
+  /** Unique account name, shown in Settings. */
+  name: string;
+  /** Secret code used to join the account (regenerable). */
+  inviteCode: string;
+  createdAt: string;
+}
+
+/** A login identity, always linked to exactly one account. */
+export interface User {
+  id: string;
+  accountId: string;
+  /** Login name, unique, stored lowercase. */
+  username: string;
+  /** Display name (optional). */
+  name: string;
+  createdAt: string;
+}
+
 /** Settings stored as key/value rows (settings.csv locally, a settings table in Postgres). */
 export type Settings = {
   /** Home location used as the first/last stop of every mileage route. */

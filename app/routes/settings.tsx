@@ -1,14 +1,24 @@
-import { Plus, Trash2, ArrowLeft, MapPin } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ArrowLeft,
+  MapPin,
+  LogOut,
+  RefreshCw,
+} from "lucide-react";
 import { Link, Form } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { requireUser } from "~/lib/auth.server";
 import { geocode } from "~/lib/maps.server";
 import { readSettings, writeSettings } from "~/lib/settings.server";
 import {
   addCategory,
   addReport,
+  readAccount,
   readCategories,
   readReports,
+  regenerateInviteCode,
   removeCategory,
   removeReport,
 } from "~/lib/store.server";
@@ -16,14 +26,18 @@ import { normalizeAmount } from "~/lib/format";
 import { entryString, formString } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
-export async function loader(_: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
+  const account = await readAccount(user.accountId);
   const [reports, categories, settings] = await Promise.all([
-    readReports(),
-    readCategories(),
-    readSettings(),
+    readReports(user.accountId),
+    readCategories(user.accountId),
+    readSettings(user.accountId),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
+    accountName: account?.name ?? "",
+    inviteCode: account?.inviteCode ?? "",
     reports: reports.map((r) => r.name),
     categories: categories.map((c) => c.name),
     homeAddress: settings.homeAddress,
@@ -32,24 +46,28 @@ export async function loader(_: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser(request);
   const form = await request.formData();
   const intent = formString(form, "intent");
 
   switch (intent) {
+    case "regenerateCode":
+      await regenerateInviteCode(user.accountId);
+      break;
     case "addReport":
-      await addReport(formString(form, "name"));
+      await addReport(user.accountId, formString(form, "name"));
       break;
     case "removeReport":
-      await removeReport(formString(form, "name"));
+      await removeReport(user.accountId, formString(form, "name"));
       break;
     case "addCategory":
-      await addCategory(formString(form, "name"));
+      await addCategory(user.accountId, formString(form, "name"));
       break;
     case "removeCategory":
-      await removeCategory(formString(form, "name"));
+      await removeCategory(user.accountId, formString(form, "name"));
       break;
     case "saveRates": {
-      const settings = await readSettings();
+      const settings = await readSettings(user.accountId);
       const rates: Record<string, string> = {};
       for (const [key, value] of form.entries()) {
         const m = key.match(/^rate\.(.+)$/);
@@ -65,11 +83,11 @@ export async function action({ request }: Route.ActionArgs) {
         rates[newYear] = newRate;
       }
       settings.mileageRates = rates;
-      await writeSettings(settings);
+      await writeSettings(user.accountId, settings);
       break;
     }
     case "saveHome": {
-      const settings = await readSettings();
+      const settings = await readSettings(user.accountId);
       const address = formString(form, "homeAddress").trim();
       settings.homeAddress = address;
       if (address) {
@@ -80,7 +98,7 @@ export async function action({ request }: Route.ActionArgs) {
         settings.homeLat = null;
         settings.homeLng = null;
       }
-      await writeSettings(settings);
+      await writeSettings(user.accountId, settings);
       break;
     }
     default:
@@ -90,7 +108,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
-  const { reports, categories, homeAddress, rates } = loaderData;
+  const { reports, categories, homeAddress, rates, accountName, inviteCode } =
+    loaderData;
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <Link
@@ -100,6 +119,38 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         <ArrowLeft className="h-4 w-4" /> Back
       </Link>
       <h1 className="mb-6 text-2xl font-bold">Settings</h1>
+
+      <section className="mb-8">
+        <h2 className="mb-2 text-lg font-semibold">Account</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Everyone in this account shares expenses, reports, categories, and
+          settings.
+        </p>
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-gray-500">
+                Account name
+              </div>
+              <div className="font-semibold">{accountName}</div>
+            </div>
+            <Form method="post" className="contents">
+              <input type="hidden" name="intent" value="regenerateCode" />
+              <Button type="submit" size="sm" variant="secondary">
+                <RefreshCw className="h-4 w-4" /> New code
+              </Button>
+            </Form>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-gray-500">
+              Invite code — share to let someone join this account
+            </div>
+            <div className="font-mono text-2xl font-bold tracking-widest">
+              {inviteCode}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <NameList
         title="Reports"
@@ -172,6 +223,19 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </label>
           <Button type="submit" size="md">
             <MapPin className="h-4 w-4" /> Save
+          </Button>
+        </Form>
+      </section>
+
+      <section className="border-t border-gray-100 pt-6">
+        <h2 className="mb-2 text-lg font-semibold">Session</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Sign out of this device. You will need your username and password to
+          get back in.
+        </p>
+        <Form method="post" action="/sign-out">
+          <Button type="submit" size="md" variant="secondary">
+            <LogOut className="h-4 w-4" /> Sign out
           </Button>
         </Form>
       </section>

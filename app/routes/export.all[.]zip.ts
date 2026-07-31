@@ -1,5 +1,6 @@
 import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
+import { requireUser } from "~/lib/auth.server";
 import { readImage } from "~/lib/images.server";
 import { readExpenses } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
@@ -7,10 +8,11 @@ import { mileageMerchant, yearOf } from "~/lib/format";
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/export.all[.]zip";
 
-export async function loader(_: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const [expenses, settings] = await Promise.all([
-    readExpenses(),
-    readSettings(),
+    readExpenses(user.accountId),
+    readSettings(user.accountId),
   ]);
 
   const sorted = [...expenses].sort((a, b) => {

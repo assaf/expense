@@ -1,5 +1,6 @@
 import { Writable } from "node:stream";
 import PDFDocument from "pdfkit";
+import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { readImage } from "~/lib/images.server";
@@ -7,12 +8,13 @@ import { formatDate, mileageMerchant, yearOf } from "~/lib/format";
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const reportName = params.reportName;
   const [expenses, settings, reports] = await Promise.all([
-    readExpenses(),
-    readSettings(),
-    readReports(),
+    readExpenses(user.accountId),
+    readSettings(user.accountId),
+    readReports(user.accountId),
   ]);
   // Validate the report exists (avoid generating PDFs for arbitrary names).
   if (!reports.some((r) => r.name === reportName)) {

@@ -1,4 +1,5 @@
 import { recomputeMileage } from "~/lib/maps.server";
+import { requireUser } from "~/lib/auth.server";
 import type { Location } from "~/lib/types";
 import type { Route } from "./+types/api.route";
 
@@ -8,6 +9,7 @@ interface RouteRequestBody {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  await requireUser(request);
   let body: RouteRequestBody;
   try {
     body = (await request.json()) as RouteRequestBody;

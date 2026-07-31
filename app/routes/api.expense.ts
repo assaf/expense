@@ -1,4 +1,5 @@
 import { saveImage } from "~/lib/images.server";
+import { requireUser } from "~/lib/auth.server";
 import { initStore, newExpenseShell, upsertExpense } from "~/lib/store.server";
 import type { ReceiptExpense } from "~/lib/types";
 import { formString } from "~/lib/validation";
@@ -6,6 +7,7 @@ import type { Route } from "./+types/api.expense";
 
 /** Create a new expense (receipt or mileage), or a receipt from an uploaded image. */
 export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser(request);
   await initStore();
   const form = await request.formData();
   const intent = formString(form, "intent");
@@ -13,7 +15,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "create") {
     const type = formString(form, "type") as "receipt" | "mileage";
     const expense = newExpenseShell(type);
-    await upsertExpense(expense);
+    await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, id: expense.id });
   }
 
@@ -32,7 +34,7 @@ export async function action({ request }: Route.ActionArgs) {
     expense.imageFile = filename;
     expense.imageMime = mime;
     expense.originalName = file.name || "pasted.png";
-    await upsertExpense(expense);
+    await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, id: expense.id });
   }
 

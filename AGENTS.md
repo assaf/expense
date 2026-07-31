@@ -27,8 +27,9 @@ Run `pnpm check` before committing.
 Env load order: `process.env` (Vercel/Coolify/inline) → local `.env` (via
 dotenv in `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback.
 Dev/test use `.env`
-(`DATABASE_URL`, `IMAGE_BACKEND=pg`); prod uses the Vercel dashboard
-(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`); `scripts/deploy` and
+(`DATABASE_URL`, `IMAGE_BACKEND=pg`, and auth: `APP_USERNAME`,
+`APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
+(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, plus the same three auth vars); `scripts/deploy` and
 `pnpm migrate-data:prod` pull prod secrets from Infisical (`.infisical.json`,
 same pattern as Rentail). Tests hardcode local services (`expensify_test`,
 image blobs in Postgres), not `.env`/Infisical.
@@ -59,22 +60,42 @@ image blobs in Postgres), not `.env`/Infisical.
 
 ## Key files
 
-| File                              | Role                                               |
-| --------------------------------- | -------------------------------------------------- |
-| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.        |
-| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).     |
-| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.            |
-| `app/routes/api.route.ts`         | Recompute mileage distance + amount.               |
-| `app/routes/export.*`             | PDF per report + ZIP of everything.                |
-| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location. |
-| `app/lib/store.server.ts`         | Storage entry point (Postgres only).               |
-| `app/lib/store/database.ts`       | Postgres backend.                                  |
-| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                  |
+| File                              | Role                                                |
+| --------------------------------- | --------------------------------------------------- |
+| `app/routes/_index.tsx`           | Main list, add buttons, paste/upload image.         |
+| `app/routes/expense.$id.tsx`      | Receipt + mileage editor (save/cancel/delete).      |
+| `app/routes/expense.$id.image.ts` | Serve / replace / delete receipt image.             |
+| `app/routes/api.route.ts`         | Recompute mileage distance + amount.                |
+| `app/routes/export.*`             | PDF per report + ZIP of everything.                 |
+| `app/routes/settings.tsx`         | Reports, categories, mileage rates, home location.  |
+| `app/routes/login.tsx`            | Sign in / create account / join by invite code.     |
+| `app/routes/sign-out.ts`          | Destroys the session, redirects to /login.          |
+| `app/lib/auth.server.ts`          | Auth: session storage, `requireUser`, login/signup. |
+| `app/lib/passwords.ts`            | scrypt hashing + invite-code generation.            |
+| `app/lib/store.server.ts`         | Storage entry point (Postgres only).                |
+| `app/lib/database.ts`             | Postgres backend (accounts/users + scoped rows).    |
+| `app/lib/maps.server.ts`          | Geocode + route (Nominatim/OSRM).                   |
 
 ## Gotchas
 
-- **No auth** — a single-user personal app. Put it behind Coolify basic auth,
-  Vercel Deployment Protection, or a private network in production.
+- **Auth & accounts**: multi-user access control with account-level sharing.
+  Users live in Postgres (`users`, `accounts`); every expense, report,
+  category, setting, and mileage row is scoped by `accountId`. Users in the
+  same account share everything; other accounts are fully isolated (all
+  reads and writes are scoped — see `app/lib/database.ts`).
+  - Sign in with username/password (scrypt-hashed in `users.passwordHash`).
+  - Signup creates a new account; joining uses the account's invite code
+    (shown in Settings, regenerable). Session = signed HttpOnly cookie
+    (`SESSION_SECRET`, 30-day max age).
+  - **Bootstrap**: on an empty database, the first account + user are
+    created from `APP_USERNAME`/`APP_PASSWORD` (fail-closed if missing).
+    Single-user era rows are adopted into that account automatically
+    (idempotent migrations in `initStore`).
+  - Every loader/action calls `requireUser(request)` and passes
+    `user.accountId` to the store; the root loader guards all routes.
+  - Tests seed two accounts + three users; `launchBrowser.ts` signs in as
+    `testuser`; `test/auth.test.ts` covers login, signup, invite-code join,
+    sign-out, and cross-account isolation.
 - Tests and dev require local Postgres up (`brew services start postgresql@18`);
   without it the suite fails to connect. `pnpm test` uses `expensify_test`.
   No MinIO/other services needed — images live in Postgres (`IMAGE_BACKEND=pg`).

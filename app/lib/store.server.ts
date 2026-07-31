@@ -9,6 +9,9 @@ import * as db from "~/lib/database";
  * database.ts and the app refuses to start without DATABASE_URL (there is no
  * file fallback anymore). Image storage is selected separately in
  * images.server.ts (Vercel Blob vs Postgres BYTEA, no local fallback).
+ *
+ * Every function is scoped by accountId — the caller passes the logged-in
+ * user's account and only that account's rows are touched.
  */
 if (!hasDatabase()) {
   throw new Error(
@@ -19,6 +22,14 @@ if (!hasDatabase()) {
 const store = db;
 
 export const initStore = store.initStore;
+export const readAccount = store.readAccount;
+export const createAccount = store.createAccount;
+export const findAccountByInviteCode = store.findAccountByInviteCode;
+export const regenerateInviteCode = store.regenerateInviteCode;
+export const createUser = store.createUser;
+export const findUserByUsername = store.findUserByUsername;
+export const findUserById = store.findUserById;
+export const getPasswordHash = store.getPasswordHash;
 export const readExpenses = store.readExpenses;
 export const readExpense = store.readExpense;
 export const writeExpenses = store.writeExpenses;

@@ -15,10 +15,20 @@ describe("Settings", () => {
   });
 
   it("shows reports, categories, mileage rates, and home fields", async () => {
-    await expect(page.getByText("Reports")).toBeVisible();
-    await expect(page.getByText("Categories")).toBeVisible();
-    await expect(page.getByText("Mileage rates")).toBeVisible();
-    await expect(page.getByText("Home location")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Categories" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Mileage rates" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Home location" }),
+    ).toBeVisible();
+  });
+
+  it("shows the account invite code", async () => {
+    await expect(page.getByText("TESTCODE1")).toBeVisible();
   });
 
   it("displays the seeded reports", async () => {

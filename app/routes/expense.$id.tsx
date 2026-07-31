@@ -14,6 +14,7 @@ import { useFetcher, useNavigate } from "react-router";
 import { Link, redirect } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
+import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
 import { normalizeAmount, todayDate, yearOf } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
@@ -36,15 +37,16 @@ import type {
 import { formString, validateDateNotFuture } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const expense = await readExpense(params.id);
+export async function loader({ request, params }: Route.LoaderArgs) {
+  const user = await requireUser(request);
+  const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw new Response("Not found", { status: 404 });
   const [reports, categories, settings, merchants, all] = await Promise.all([
-    readReports(),
-    readCategories(),
-    readSettings(),
-    readPriorMerchants(),
-    readExpenses(),
+    readReports(user.accountId),
+    readCategories(user.accountId),
+    readSettings(user.accountId),
+    readPriorMerchants(user.accountId),
+    readExpenses(user.accountId),
   ]);
   const year = yearOf(expense.date);
   const rate = settings.mileageRates[year] ?? "";
@@ -79,13 +81,14 @@ function serializeExpense(e: Expense) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const existing = await readExpense(params.id);
+  const user = await requireUser(request);
+  const existing = await readExpense(params.id, user.accountId);
   if (!existing) throw new Response("Not found", { status: 404 });
   const form = await request.formData();
   const intent = formString(form, "intent");
 
   if (intent === "delete") {
-    await deleteExpense(params.id);
+    await deleteExpense(params.id, user.accountId);
     return redirect("/");
   }
 
@@ -121,7 +124,7 @@ export async function action({ request, params }: Route.ActionArgs) {
           updated.imageMime,
         );
       }
-      await upsertExpense(updated);
+      await upsertExpense(updated, user.accountId);
     } else {
       const locationsRaw = formString(form, "locations");
       const locations = safeParseLocations(locationsRaw);
@@ -137,7 +140,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         distanceMiles,
         updatedAt: now,
       };
-      await upsertExpense(updated);
+      await upsertExpense(updated, user.accountId);
     }
     return redirect("/");
   }

@@ -1,14 +1,16 @@
 import { FileDown, FileArchive, ArrowLeft } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
 import { formatAmount } from "~/lib/format";
 import type { Route } from "./+types/export";
 
-export async function loader(_: Route.LoaderArgs) {
+export async function loader({ request }: Route.LoaderArgs) {
+  const user = await requireUser(request);
   const [reports, expenses] = await Promise.all([
-    readReports(),
-    readExpenses(),
+    readReports(user.accountId),
+    readExpenses(user.accountId),
   ]);
   const byReport = new Map<string, { count: number; total: number }>();
   for (const e of expenses) {

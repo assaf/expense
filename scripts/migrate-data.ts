@@ -20,15 +20,42 @@ import "dotenv/config";
 import { readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
+import { randomBytes, scrypt as scryptCb } from "node:crypto";
+import { promisify } from "node:util";
 import { parse } from "csv-parse/sync";
 import postgres from "postgres";
+import { ulid } from "ulid";
 import { get, put } from "@vercel/blob";
 
 const DATA_DIR = process.env.DATA_DIR ?? "data";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN ?? "";
 const IMAGE_BACKEND = process.env.IMAGE_BACKEND ?? "";
+const APP_USERNAME = process.env.APP_USERNAME ?? "";
+const APP_PASSWORD = process.env.APP_PASSWORD ?? "";
 const BLOB_PREFIX = "images";
+
+// Mirrored from app/lib/passwords.ts (keeps this script self-contained).
+const scrypt = promisify(scryptCb) as (
+  password: string,
+  salt: string,
+  keylen: number,
+) => Promise<Buffer>;
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const hash = await scrypt(password, salt, 64);
+  return `${salt}:${hash.toString("hex")}`;
+}
+
+const INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateInviteCode(): string {
+  let code = "";
+  for (const byte of randomBytes(8))
+    code += INVITE_CHARS[byte % INVITE_CHARS.length];
+  return code;
+}
 
 type ImageBackend = "blob" | "pg" | "none";
 
@@ -75,8 +102,22 @@ async function uploadImage(
   return "skipped";
 }
 
-// Mirrors app/lib/store/database.ts
+// Mirrors app/lib/database.ts
 const DDL = `
+CREATE TABLE IF NOT EXISTS accounts (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL UNIQUE,
+  "inviteCode" TEXT NOT NULL UNIQUE,
+  "createdAt" TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS users (
+  "id" TEXT PRIMARY KEY,
+  "accountId" TEXT NOT NULL,
+  "username" TEXT NOT NULL UNIQUE,
+  "passwordHash" TEXT NOT NULL DEFAULT '',
+  "name" TEXT NOT NULL DEFAULT '',
+  "createdAt" TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS expenses (
   "id" TEXT PRIMARY KEY,
   "type" TEXT NOT NULL DEFAULT '',
@@ -92,24 +133,29 @@ CREATE TABLE IF NOT EXISTS expenses (
   "distanceMiles" TEXT NOT NULL DEFAULT '',
   "locations" JSONB NOT NULL DEFAULT '[]',
   "createdAt" TEXT NOT NULL DEFAULT '',
-  "updatedAt" TEXT NOT NULL DEFAULT ''
+  "updatedAt" TEXT NOT NULL DEFAULT '',
+  "accountId" TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS reports (
   "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL UNIQUE
+  "name" TEXT NOT NULL,
+  "accountId" TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS categories (
   "id" BIGSERIAL PRIMARY KEY,
-  "name" TEXT NOT NULL UNIQUE
+  "name" TEXT NOT NULL,
+  "accountId" TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS mileage (
   "date" TEXT NOT NULL DEFAULT '',
   "report" TEXT NOT NULL DEFAULT '',
   "locations" TEXT NOT NULL DEFAULT '',
-  "distanceMiles" TEXT NOT NULL DEFAULT ''
+  "distanceMiles" TEXT NOT NULL DEFAULT '',
+  "accountId" TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS "settings" (
-  "key" TEXT PRIMARY KEY,
+  "accountId" TEXT NOT NULL DEFAULT '',
+  "key" TEXT NOT NULL DEFAULT '',
   "value" TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS image_blobs (
@@ -215,6 +261,26 @@ async function main(): Promise<void> {
   const sql = db();
   await sql.unsafe(DDL);
 
+  // --- Bootstrap account + user (all imported rows land here) ----------------
+  const now = new Date().toISOString();
+  const accounts =
+    await sql`SELECT "id" FROM accounts ORDER BY "createdAt" LIMIT 1`;
+  let accountId: string;
+  if (accounts.length > 0) {
+    accountId = accounts[0].id as string;
+  } else {
+    if (!APP_USERNAME || !APP_PASSWORD) {
+      fail("No accounts exist and APP_USERNAME/APP_PASSWORD are not set");
+    }
+    const username = APP_USERNAME.trim().toLowerCase();
+    accountId = ulid();
+    await sql.begin(async (tx) => {
+      await tx`INSERT INTO accounts ("id", "name", "inviteCode", "createdAt") VALUES (${accountId}, ${APP_USERNAME.trim()}, ${generateInviteCode()}, ${now})`;
+      await tx`INSERT INTO users ("id", "accountId", "username", "passwordHash", "name", "createdAt") VALUES (${ulid()}, ${accountId}, ${username}, ${await hashPassword(APP_PASSWORD)}, ${APP_USERNAME.trim()}, ${now})`;
+    });
+    console.info(`Created bootstrap account + user "${username}"`);
+  }
+
   // --- Parse CSVs -----------------------------------------------------------
   const expenseRows = await readCsv("expenses.csv");
   const reportRows = await readCsv("reports.csv");
@@ -295,23 +361,25 @@ async function main(): Promise<void> {
   );
 
   // --- Load Postgres --------------------------------------------------------
-  console.info("Loading expenses, reports, categories, settings, mileage …");
+  console.info(
+    `Loading expenses, reports, categories, settings, mileage (account ${accountId}) …`,
+  );
   await sql.begin(async (tx) => {
     await tx`DELETE FROM expenses`;
     for (const e of expenses) {
-      await tx`INSERT INTO expenses ("id", "type", "date", "report", "category", "description", "amount", "merchant", "imageFile", "imageMime", "originalName", "distanceMiles", "locations", "createdAt", "updatedAt") VALUES (${e.id}, ${e.type}, ${e.date}, ${e.report}, ${e.category}, ${e.description}, ${e.amount}, ${e.merchant}, ${e.imageFile}, ${e.imageMime}, ${e.originalName}, ${e.distanceMiles}, ${JSON.stringify(e.locations)}, ${e.createdAt}, ${e.updatedAt})`;
+      await tx`INSERT INTO expenses ("id", "type", "date", "report", "category", "description", "amount", "merchant", "imageFile", "imageMime", "originalName", "distanceMiles", "locations", "createdAt", "updatedAt", "accountId") VALUES (${e.id}, ${e.type}, ${e.date}, ${e.report}, ${e.category}, ${e.description}, ${e.amount}, ${e.merchant}, ${e.imageFile}, ${e.imageMime}, ${e.originalName}, ${e.distanceMiles}, ${JSON.stringify(e.locations)}, ${e.createdAt}, ${e.updatedAt}, ${accountId})`;
     }
     await tx`DELETE FROM reports`;
     for (const name of reports) {
-      await tx`INSERT INTO reports ("name") VALUES (${name}) ON CONFLICT ("name") DO NOTHING`;
+      await tx`INSERT INTO reports ("name", "accountId") VALUES (${name}, ${accountId}) ON CONFLICT ("accountId", "name") DO NOTHING`;
     }
     await tx`DELETE FROM categories`;
     for (const name of categories) {
-      await tx`INSERT INTO categories ("name") VALUES (${name}) ON CONFLICT ("name") DO NOTHING`;
+      await tx`INSERT INTO categories ("name", "accountId") VALUES (${name}, ${accountId}) ON CONFLICT ("accountId", "name") DO NOTHING`;
     }
     await tx`DELETE FROM "settings"`;
     for (const [key, value] of Object.entries(settingsKv)) {
-      await tx`INSERT INTO "settings" ("key", "value") VALUES (${key}, ${value})`;
+      await tx`INSERT INTO "settings" ("accountId", "key", "value") VALUES (${accountId}, ${key}, ${value})`;
     }
     await tx`DELETE FROM mileage`;
     for (const e of expenses) {
@@ -320,7 +388,7 @@ async function main(): Promise<void> {
         .map((l) => l.address)
         .filter(Boolean)
         .join(" → ");
-      await tx`INSERT INTO mileage ("date", "report", "locations", "distanceMiles") VALUES (${e.date}, ${e.report}, ${locationsText}, ${e.distanceMiles})`;
+      await tx`INSERT INTO mileage ("date", "report", "locations", "distanceMiles", "accountId") VALUES (${e.date}, ${e.report}, ${locationsText}, ${e.distanceMiles}, ${accountId})`;
     }
   });
 

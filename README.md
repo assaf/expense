@@ -1,10 +1,22 @@
 # Expensify
 
-Personal expense tracking with receipts and mileage. Replaces Expensify for a
-single user. Built with React Router v8 (framework mode) + Tailwind v4. State
-lives in Postgres with receipt images in Vercel Blob (prod) or Postgres BYTEA
-(dev/test, no extra service). `DATABASE_URL` is required — there is no file-
-based fallback; `data/` exists only as the migration source for `pnpm migrate-data`.
+Personal expense tracking with receipts and mileage. Built with React Router
+v8 (framework mode) + Tailwind v4. State lives in Postgres with receipt
+images in Vercel Blob (prod) or Postgres BYTEA (dev/test, no extra service).
+`DATABASE_URL` is required — there is no file-based fallback; `data/` exists
+only as the migration source for `pnpm migrate-data`.
+
+## Accounts & sharing
+
+Login is username/password (scrypt-hashed). Every expense, report, category,
+and setting belongs to an **account**; everyone in an account shares them,
+and accounts are fully isolated from each other.
+
+- **Sign up** → creates a brand-new account (starts empty).
+- **Join** → enter an account's invite code (Settings → Account) to share
+  that account's data.
+- The first account/user is bootstrapped from `APP_USERNAME`/`APP_PASSWORD`
+  when the database is empty.
 
 ## What it does
 
@@ -68,15 +80,25 @@ inline) wins; a local `.env` file fills the gaps. `DATABASE_URL` is required;
 # .env (project root, gitignored)
 DATABASE_URL=postgres://localhost/expensify_dev
 IMAGE_BACKEND=pg        # receipt images live in Postgres — no extra service
+SESSION_SECRET=…         # signs the session cookie (random hex)
+APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
+APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
 ```
+
+On an empty database the first account + user are bootstrapped from
+`APP_USERNAME`/`APP_PASSWORD` (fail-closed if missing); afterwards users are
+created through the app's signup/join flow. `SESSION_SECRET` is always
+required. `APP_USERNAME`/`APP_PASSWORD` can be removed from `.env` once you
+have at least one user.
 
 Tests intentionally hardcode `expensify_test` (Postgres incl. image blobs) and
 ignore the local database.
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
-Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL) and
-`BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens). Vercel injects them
-at runtime; `.env` never exists there.
+Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
+`BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens), `SESSION_SECRET`,
+and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
+Vercel injects them at runtime; `.env` never exists there.
 
 **Coolify deploy — Infisical:** `scripts/deploy` mirrors Rentail and pulls
 prod secrets from [Infisical](https://infisical.com) (`infisical export --env
