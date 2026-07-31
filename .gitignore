@@ -19,3 +19,5 @@ __screenshots__/
 *.log
 server.log
 .test-server.json
+.vercel
+.env*
