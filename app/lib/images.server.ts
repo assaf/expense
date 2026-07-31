@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { del, get, put, rename as blobRename } from "@vercel/blob";
 import { ulid } from "ulid";
+import { Prisma } from "prisma/generated";
 import { IMAGE_BACKEND, hasBlob } from "~/lib/env";
 import prisma from "~/lib/prisma.server";
 import { sanitizeFilenamePart } from "~/lib/validation";
@@ -19,6 +21,10 @@ import { sanitizeFilenamePart } from "~/lib/validation";
  * accounts can never collide on the same filename (on either backend), and
  * every read/delete is scoped to the caller's account. Every function takes
  * the owning accountId.
+ *
+ * Names are unique at write time: if an intended name is already taken,
+ * `saveImage` / `renameImageToConvention` fall back to a GUID-suffixed
+ * alternative instead of overwriting or colliding.
  */
 
 const BLOB_PREFIX = "images";
@@ -89,6 +95,30 @@ async function pgExists(accountId: string, key: string): Promise<boolean> {
   return row !== null;
 }
 
+/** How many GUID-suffixed candidates to try before using a full GUID. */
+const MAX_NAME_ATTEMPTS = 6;
+
+/**
+ * Return a name for the account namespace that is not already taken,
+ * preferring `baseName` but switching to GUID-suffixed alternatives when it
+ * collides with an existing image. The exact name is unimportant — only that
+ * it never conflicts.
+ */
+async function uniqueName(
+  accountId: string,
+  baseName: string,
+  exists: (key: string) => Promise<boolean>,
+): Promise<string> {
+  const ext = extname(baseName);
+  const stem = baseName.slice(0, baseName.length - ext.length);
+  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
+    const candidate =
+      attempt === 0 ? baseName : `${stem}-${randomUUID().slice(0, 8)}${ext}`;
+    if (!(await exists(namespacedKey(accountId, candidate)))) return candidate;
+  }
+  return `${stem}-${randomUUID()}${ext}`;
+}
+
 /**
  * Build the convention filename (bare, no namespace):
  *   {YYYY-MM-DD}_{REPORT}_{FILENAME}.{ext}
@@ -125,9 +155,10 @@ export async function saveImage(
   const resolvedMime = mime || mimeForFile(originalName) || "image/png";
   const ext =
     extname(originalName).toLowerCase() || extForMime(resolvedMime) || ".png";
-  const pathname = namespacedKey(accountId, `${ulid()}${ext}`);
 
   if (backend() === "blob") {
+    const name = await uniqueName(accountId, `${ulid()}${ext}`, blobExists);
+    const pathname = namespacedKey(accountId, name);
     const blob = await put(pathname, buffer, {
       access: "public",
       contentType: resolvedMime,
@@ -136,15 +167,32 @@ export async function saveImage(
     return { filename: blob.pathname, mime: resolvedMime };
   }
 
-  await prisma.imageBlob.create({
-    data: {
-      accountId,
-      key: pathname,
-      mime: resolvedMime,
-      data: new Uint8Array(buffer),
-    },
-  });
-  return { filename: pathname, mime: resolvedMime };
+  // Postgres: `(accountId, key)` is the primary key, so the database itself
+  // rejects a duplicate name. Pick a free one first, and retry with a fresh
+  // GUID if a concurrent write wins the check-then-write race.
+  const base = `${ulid()}${ext}`;
+  let name = await uniqueName(accountId, base, (key) =>
+    pgExists(accountId, key),
+  );
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await prisma.imageBlob.create({
+        data: {
+          accountId,
+          key: namespacedKey(accountId, name),
+          mime: resolvedMime,
+          data: new Uint8Array(buffer),
+        },
+      });
+      return { filename: namespacedKey(accountId, name), mime: resolvedMime };
+    } catch (error) {
+      const isDuplicate =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002";
+      if (!isDuplicate || attempt >= MAX_NAME_ATTEMPTS) throw error;
+      name = `${randomUUID()}${ext}`;
+    }
+  }
 }
 
 /**
@@ -165,19 +213,17 @@ export async function renameImageToConvention(
 
   if (backend() === "blob") {
     if (!(await blobExists(currentFile))) return currentFile;
-    let to = namespacedKey(accountId, target);
-    if (await blobExists(to)) {
-      to = suffixedKey(accountId, target);
-    }
+    const name = await uniqueName(accountId, target, blobExists);
+    const to = namespacedKey(accountId, name);
     await blobRename(currentFile, to, { access: "public" });
     return to;
   }
 
   if (!(await pgExists(accountId, currentFile))) return currentFile;
-  let to = namespacedKey(accountId, target);
-  if (await pgExists(accountId, to)) {
-    to = suffixedKey(accountId, target);
-  }
+  const name = await uniqueName(accountId, target, (key) =>
+    pgExists(accountId, key),
+  );
+  const to = namespacedKey(accountId, name);
   await prisma.imageBlob.updateMany({
     where: { accountId, key: currentFile },
     data: { key: to },
@@ -221,13 +267,6 @@ export async function deleteImage(
   await prisma.imageBlob
     .deleteMany({ where: { accountId, key: filename } })
     .catch(() => {});
-}
-
-/** Collision-safe convention key: `<stem>-<6 chars><ext>` (all backends). */
-function suffixedKey(accountId: string, target: string): string {
-  const ext = extname(target);
-  const stem = target.slice(0, target.length - ext.length);
-  return namespacedKey(accountId, `${stem}-${ulid().slice(-6)}${ext}`);
 }
 
 async function blobExists(pathname: string): Promise<boolean> {
