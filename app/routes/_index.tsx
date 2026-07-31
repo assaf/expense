@@ -81,6 +81,7 @@ function toListItem(e: Expense) {
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
   const { expenses, mileageRate, reports } = loaderData;
+  const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -180,32 +181,62 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
 
       {reports.length > 0 ? (
         <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {reports.map((r) => (
-            <div
-              key={r.name}
-              className="rounded-xl border border-gray-200 bg-white p-3"
-            >
-              <div className="truncate text-sm font-medium text-gray-700">
-                {r.name}
-              </div>
-              <div className="text-lg font-semibold tabular-nums">
-                {formatAmount(r.total)}
-              </div>
-              <div className="text-xs text-gray-500">
-                {r.count} expense{r.count === 1 ? "" : "s"}
-              </div>
-            </div>
-          ))}
+          {reports.map((r) => {
+            const active = selectedReport === r.name;
+            return (
+              <button
+                key={r.name}
+                type="button"
+                onClick={() => setSelectedReport(active ? null : r.name)}
+                className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-gray-200 bg-white hover:border-gray-300"}`}
+              >
+                <div className="truncate text-sm font-medium text-gray-700">
+                  {r.name}
+                </div>
+                <div className="text-lg font-semibold tabular-nums">
+                  {formatAmount(r.total)}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {r.count} expense{r.count === 1 ? "" : "s"}
+                </div>
+              </button>
+            );
+          })}
         </section>
+      ) : null}
+
+      {selectedReport ? (
+        <div className="mb-3 flex items-center justify-between text-sm text-gray-600">
+          <span>
+            Showing{" "}
+            {selectedReport === "Unassigned" ? "unassigned" : selectedReport}{" "}
+            expenses
+          </span>
+          <button
+            type="button"
+            className="text-blue-600 hover:underline"
+            onClick={() => setSelectedReport(null)}
+          >
+            Show all
+          </button>
+        </div>
       ) : null}
 
       {expenses.length === 0 ? (
         <EmptyState />
       ) : (
         <ul className="flex flex-col gap-2">
-          {expenses.map((e) => (
-            <ExpenseRow key={e.id} expense={e} />
-          ))}
+          {expenses
+            .filter((e) =>
+              selectedReport === null
+                ? true
+                : selectedReport === "Unassigned"
+                  ? e.report === ""
+                  : e.report === selectedReport,
+            )
+            .map((e) => (
+              <ExpenseRow key={e.id} expense={e} />
+            ))}
         </ul>
       )}
     </main>
