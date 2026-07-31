@@ -2,7 +2,7 @@ import { ulid } from "ulid";
 import { hasDatabase } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
-import * as db from "~/lib/store/database";
+import * as db from "~/lib/database";
 
 /**
  * Storage entry point. Postgres is required — every read/write goes through
