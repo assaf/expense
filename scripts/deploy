@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the image, push to GHCR, and deploy to Coolify.
 # Mirrors the Rentail deployment flow — secrets come from Infisical.
-#   - prod env: DATABASE_URL, BLOB_READ_WRITE_TOKEN, S3_* (runtime env for the app)
+#   - prod env: DATABASE_URL, BLOB_READ_WRITE_TOKEN (runtime env for the app)
 #   - dev env:  GHCR_TOKEN (registry auth)
 set -eo pipefail
 

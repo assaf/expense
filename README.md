@@ -2,10 +2,9 @@
 
 Personal expense tracking with receipts and mileage. Replaces Expensify for a
 single user. Built with React Router v8 (framework mode) + Tailwind v4. State
-lives in Postgres with receipt images in Vercel Blob (prod), Postgres BYTEA
-(dev/test, no extra service), or any S3-compatible store (optional).
-`DATABASE_URL` is required — there is no file-based fallback; `data/` exists
-only as the migration source for `pnpm migrate-data`.
+lives in Postgres with receipt images in Vercel Blob (prod) or Postgres BYTEA
+(dev/test, no extra service). `DATABASE_URL` is required — there is no file-
+based fallback; `data/` exists only as the migration source for `pnpm migrate-data`.
 
 ## What it does
 
@@ -23,27 +22,25 @@ only as the migration source for `pnpm migrate-data`.
 
 Storage is Postgres-only. `DATABASE_URL` is required at startup (the app
 exits with a clear error otherwise). Receipt images go to Vercel Blob when
-`BLOB_READ_WRITE_TOKEN` is set (prod), to S3-compatible storage when
-`S3_ENDPOINT` + `S3_BUCKET` are set (R2/S3/MinIO), or into Postgres BYTEA when
+`BLOB_READ_WRITE_TOKEN` is set (prod), or into Postgres BYTEA when
 `IMAGE_BACKEND=pg` (dev/tests — no separate service). A missing image backend
 is an error, never a silent disk fallback.
 
 | Data                        | Images                                |
 | --------------------------- | ------------------------------------- |
 | `expenses` / `reports` /    | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
-| `categories` / `settings` / | S3 (`S3_ENDPOINT` + `S3_BUCKET`)      |
-| `mileage` tables            | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
+| `categories` / `settings` / | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
+| `mileage` tables            |                                       |
 
 All reads/writes go through `app/lib/store.server.ts` (→
 `app/lib/store/pg.server.ts`); image storage is behind
-`app/lib/images.server.ts` (`@vercel/blob` vs `@aws-sdk/client-s3` vs
-Postgres `image_blobs`). Keys are `images/...` pathnames on every backend, so
-data is portable between them.
+`app/lib/images.server.ts` (`@vercel/blob` vs Postgres `image_blobs`). Keys
+are `images/...` pathnames on every backend, so data is portable between them.
 
 ### `data/` — migration source only
 
 `data/` is gitignored and no longer read at runtime. It holds the original
-CSVs + receipt images that `pnpm migrate-data` imports into Postgres/Blob/S3:
+CSVs + receipt images that `pnpm migrate-data` imports into Postgres/Blob:
 
 | File             | Contents                                                     |
 | ---------------- | ------------------------------------------------------------ |
@@ -135,7 +132,7 @@ zero-config path builds one SSR function that serves every route.)
    ```
 
    It imports the CSVs under `data/` into Postgres and uploads `data/images/*`
-   to the configured image store (Blob, S3, or Postgres BYTEA with
+   to the configured image store (Blob or Postgres BYTEA with
    `IMAGE_BACKEND=pg`), keeping the same `images/<filename>` keys;
    already-uploaded files are skipped. Idempotent.
 
@@ -146,8 +143,7 @@ zero-config path builds one SSR function that serves every route.)
 tests, build/push to GHCR, then `infisical export --env prod > .env` and
 `infisical --env prod run -- coolify-ghcr-deploy --env-file .env`. Requires the
 Infisical `dev` env to hold `GHCR_TOKEN` and the `prod` env to hold the runtime
-secrets (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, or `S3_ENDPOINT`/`S3_BUCKET`
-for S3-backed images) plus `COOLIFY_TOKEN`.
+secrets (`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`) plus `COOLIFY_TOKEN`.
 
 ```bash
 ./scripts/deploy            # check + tests + deploy

@@ -8,7 +8,7 @@ import * as pgStore from "~/lib/store/pg.server";
  * Storage entry point. Postgres is required — every read/write goes through
  * pg.server.ts and the app refuses to start without DATABASE_URL (there is no
  * file fallback anymore). Image storage is selected separately in
- * images.server.ts (Vercel Blob vs S3-compatible, no local fallback).
+ * images.server.ts (Vercel Blob vs Postgres BYTEA, no local fallback).
  */
 if (!hasDatabase()) {
   throw new Error(

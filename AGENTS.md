@@ -4,8 +4,8 @@ Personal expense tracker (receipts + mileage). React Router v8 framework mode,
 Tailwind v4. Storage is Postgres-only (required): all reads/writes go through
 `app/lib/store.server.ts` → `app/lib/store/pg.server.ts`; receipt images via
 `app/lib/images.server.ts` (Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set,
-S3-compatible when `S3_ENDPOINT`+`S3_BUCKET` are set, or Postgres BYTEA with
-`IMAGE_BACKEND=pg` — the dev/test default; no separate service needed).
+or Postgres BYTEA with `IMAGE_BACKEND=pg` — the dev/test default; no separate
+service needed).
 Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`) only.
 Deployed to Coolify.
 
@@ -44,9 +44,8 @@ image blobs in Postgres), not `.env`/Infisical.
   all reads/writes go through `app/lib/store.server.ts` →
   `app/lib/store/pg.server.ts`.
 - **Images**: Vercel Blob `images/…` pathnames when `BLOB_READ_WRITE_TOKEN`
-  is set, else S3-compatible (R2/S3/MinIO) via `@aws-sdk/client-s3`, or
-  Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` — used by
-  dev/tests. No local fallback. See `app/lib/images.server.ts`.
+  is set, or Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` —
+  used by dev/tests. No local fallback. See `app/lib/images.server.ts`.
   Named `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
   otherwise a temp id-based name (renamed on save).
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`

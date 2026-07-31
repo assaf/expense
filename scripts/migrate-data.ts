@@ -4,10 +4,9 @@
  * receipt images under DATA_DIR/images) into Postgres + cloud images.
  *
  * Image backend is selected like the app does:
- *   BLOB_READ_WRITE_TOKEN       → Vercel Blob (prod)
- *   S3_ENDPOINT + S3_BUCKET      → S3-compatible (MinIO/R2)
- *   IMAGE_BACKEND=pg             → Postgres BYTEA (dev)
- *   neither                      → images are skipped (keys kept; data still loads)
+ *   BLOB_READ_WRITE_TOKEN  → Vercel Blob (prod)
+ *   IMAGE_BACKEND=pg        → Postgres BYTEA (dev)
+ *   neither                 → images are skipped (keys kept; data still loads)
  *
  * Run with:
  *   DATABASE_URL=postgres://… BLOB_READ_WRITE_TOKEN=… node scripts/migrate-data.ts   # prod
@@ -23,33 +22,21 @@ import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
 import { parse } from "csv-parse/sync";
 import postgres from "postgres";
-import {
-  HeadObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
 import { get, put } from "@vercel/blob";
 
 const DATA_DIR = process.env.DATA_DIR ?? "data";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN ?? "";
-const S3_ENDPOINT = process.env.S3_ENDPOINT ?? "";
-const S3_BUCKET = process.env.S3_BUCKET ?? "";
-const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID ?? "minioadmin";
-const S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY ?? "minioadmin";
 const IMAGE_BACKEND = process.env.IMAGE_BACKEND ?? "";
 const BLOB_PREFIX = "images";
 
-type ImageBackend = "blob" | "s3" | "pg" | "none";
+type ImageBackend = "blob" | "pg" | "none";
 
 function imageBackend(): ImageBackend {
   if (IMAGE_BACKEND === "pg") return "pg";
   if (BLOB_TOKEN) return "blob";
-  if (S3_ENDPOINT && S3_BUCKET) return "s3";
   return "none";
 }
-
-let s3Client: S3Client | undefined;
 
 let migrateSql: postgres.Sql | undefined;
 
@@ -59,30 +46,6 @@ function db(): postgres.Sql {
     migrateSql = postgres(DATABASE_URL, { max: 5, connect_timeout: 10 });
   }
   return migrateSql;
-}
-
-function s3(): S3Client {
-  if (!s3Client) {
-    s3Client = new S3Client({
-      region: process.env.S3_REGION ?? "us-east-1",
-      endpoint: S3_ENDPOINT,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: S3_ACCESS_KEY_ID,
-        secretAccessKey: S3_SECRET_ACCESS_KEY,
-      },
-    });
-  }
-  return s3Client;
-}
-
-async function s3Exists(key: string): Promise<boolean> {
-  try {
-    await s3().send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Upload one image to the active backend; returns "uploaded" | "skipped". */
@@ -100,18 +63,6 @@ async function uploadImage(
       contentType: mime,
       addRandomSuffix: false,
     });
-    return "uploaded";
-  }
-  if (backend === "s3") {
-    if (await s3Exists(pathname)) return "skipped";
-    await s3().send(
-      new PutObjectCommand({
-        Bucket: S3_BUCKET,
-        Key: pathname,
-        Body: buffer,
-        ContentType: mime,
-      }),
-    );
     return "uploaded";
   }
   if (backend === "pg") {
@@ -253,11 +204,9 @@ async function main(): Promise<void> {
   const backendName =
     backend === "blob"
       ? "Vercel Blob"
-      : backend === "s3"
-        ? `S3 (${S3_ENDPOINT})`
-        : backend === "pg"
-          ? "Postgres (BYTEA)"
-          : "none (image keys kept as-is)";
+      : backend === "pg"
+        ? "Postgres (BYTEA)"
+        : "none (image keys kept as-is)";
 
   console.info(
     `Migrating state from ${join(process.cwd(), DATA_DIR)} → Postgres + ${backendName}`,
