@@ -18,6 +18,8 @@ describe("Expense CRUD", () => {
     await page.waitForURL(/\/expense\//, { timeout: 10_000 });
     // Should be on the receipt editor (title is "New receipt" if merchant empty)
     await expect(page.locator("h1")).toBeVisible();
+    // Merchant should be focused on open
+    await expect(page.locator("input[list='merchants']")).toBeFocused();
   });
 
   it("fills and saves a receipt expense", async () => {

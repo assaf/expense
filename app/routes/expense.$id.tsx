@@ -285,6 +285,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     null | "save" | "cancel" | "delete"
   >(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const merchantRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
   const complete = useMemo(
@@ -357,12 +358,9 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       setTransition(null);
   }, [fetcher.state, transition]);
 
-  // Autofocus the amount field when opening a brand-new receipt.
+  // Autofocus the merchant field when the editor first opens.
   useEffect(() => {
-    if (!expense.date && !expense.merchant && !expense.imageFile) {
-      amountRef.current?.focus();
-      amountRef.current?.select();
-    }
+    merchantRef.current?.focus();
   }, []);
 
   async function onDelete() {
@@ -495,6 +493,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         <input
           type="text"
           list="merchants"
+          ref={merchantRef}
           className="rounded-lg border border-gray-300 px-3 py-2"
           value={merchant}
           onChange={(e) => setMerchant(e.target.value)}
