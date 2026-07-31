@@ -1,3 +1,4 @@
+import "dotenv/config";
 import "node:process";
 import { join } from "node:path";
 

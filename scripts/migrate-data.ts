@@ -10,6 +10,7 @@
  * in sync with app/lib/store/pg.server.ts. Idempotent: re-running replaces the
  * DB rows and skips images that already exist in Blob.
  */
+import "dotenv/config";
 import { readFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname } from "node:path";

@@ -23,10 +23,13 @@ Run `pnpm check` before committing.
 
 ## Secrets
 
-Env vars are loaded via Infisical, same as Rentail: `infisical --env <env> run -- …`
-for dev/deploy, `infisical export --env prod > .env` for the Coolify app. The
-`.infisical.json` workspace id is set up per-project (empty until `infisical init`).
-Tests intentionally use local services (expensify_test + MinIO), not Infisical.
+Env load order: `process.env` (Vercel/Coolify/inline) → local `.env` (via
+dotenv in `app/lib/env.ts`) → file fallback. Dev/test use `.env`
+(`DATABASE_URL`, `S3_ENDPOINT`, `S3_BUCKET`); prod uses the Vercel dashboard
+(`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`); `scripts/deploy` and
+`pnpm migrate-data:prod` pull prod secrets from Infisical (`.infisical.json`,
+same pattern as Rentail). Tests hardcode local services (`expensify_test` +
+MinIO), not `.env`/Infisical.
 
 ## Stack & conventions
 

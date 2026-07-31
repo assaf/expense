@@ -52,39 +52,46 @@ automatically on first run.
 
 ## Quick start
 
-## Environment variables (Infisical)
+## Environment variables
 
-Secrets are loaded the same way as Rentail — via [Infisical](https://infisical.com)
-(`infisical --env <dev|test|prod> run -- …`). One-time setup:
+Load order: real `process.env` (Vercel dashboard, Coolify app settings, or
+inline) wins; a local `.env` file fills the gaps; otherwise the app falls
+back to file-based storage. `.env` is gitignored.
+
+**dev / test — local `.env`:**
 
 ```bash
-infisical login           # your terminal, not the agent
-infisical init            # create/link the expensify project → writes .infisical.json
+# .env (project root, gitignored)
+DATABASE_URL=postgres://localhost/expensify_dev
+S3_ENDPOINT=http://localhost:9000
+S3_BUCKET=expensify
 ```
 
-Then add secrets to the `dev`, `test`, and `prod` environments:
+Tests intentionally hardcode `expensify_test` + MinIO (no `.env` needed) and
+ignore the local database.
 
-| Secret                  | dev (local)                          | prod (cloud)                      |
-| ----------------------- | ------------------------------------ | --------------------------------- |
-| `DATABASE_URL`          | `postgres://localhost/expensify_dev` | Vercel Postgres / Neon pooled URL |
-| `S3_ENDPOINT`           | `http://localhost:9000`              | (unused — Vercel Blob)            |
-| `S3_BUCKET`             | `expensify`                          | (unused)                          |
-| `BLOB_READ_WRITE_TOKEN` | —                                    | Vercel Storage → Blob → Tokens    |
-| `GHCR_TOKEN` (dev)      | registry token for `scripts/deploy`  | —                                 |
+**prod — Vercel:** set env vars in the project dashboard (Settings →
+Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL) and
+`BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens). Vercel injects them
+at runtime; `.env` never exists there.
 
-`pnpm dev` and `scripts/deploy` pull from Infisical; the test suite runs
-against local Postgres + MinIO directly (no Infisical needed).
+**Coolify deploy — Infisical:** `scripts/deploy` mirrors Rentail and pulls
+prod secrets from [Infisical](https://infisical.com) (`infisical export --env
+prod > .env` + `infisical --env prod run -- coolify-ghcr-deploy --env-file
+.env`); `GHCR_TOKEN` comes from the Infisical `dev` env. Requires `infisical
+login` / `infisical init` once (writes `.infisical.json`). The one-off prod
+migrations also run this way: `pnpm migrate-data:prod`.
 
 ## Quick start
 
 Prerequisites: Postgres running locally (`brew services start postgresql@18`),
-MinIO (`docker compose up -d`; first run creates the `expensify` bucket), and
-Infisical configured (see above).
+MinIO (`docker compose up -d`; first run creates the `expensify` bucket).
 
 ```bash
 createdb expensify_dev          # once
 pnpm install
-pnpm dev                        # env from Infisical dev
+# create .env with the local values above
+pnpm dev                        # reads .env
 ```
 
 Running the server without env vars falls back to local files (CSVs under
