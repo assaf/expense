@@ -13,6 +13,7 @@ export default defineConfig({
       "build/**",
       "node_modules/**",
       "data/**",
+      "data-test/**",
     ],
     printWidth: 80,
     tabWidth: 2,
@@ -25,6 +26,7 @@ export default defineConfig({
       "build/**",
       "node_modules/**",
       "data/**",
+      "data-test/**",
       // tsgolint overflows on vite config generics; tsc checks it cleanly.
       "vite.config.ts",
     ],
@@ -48,7 +50,26 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: "~", replacement: resolve("app") },
+      { find: "~/test", replacement: resolve("test") },
       { find: "+types", replacement: resolve(".react-router/types") },
     ],
+  },
+  test: {
+    browser: { screenshotDirectory: "__screenshots__" },
+    disableConsoleIntercept: !process.env.CI,
+    execArgv: ["--max-old-space-size=3072"],
+    fileParallelism: false,
+    globalSetup: "test/helpers/globalSetup.ts",
+    hookTimeout: 60_000,
+    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
+    maxConcurrency: 1,
+    maxWorkers: 1,
+    pool: "forks",
+    reporters: process.env.GITHUB_ACTIONS
+      ? ["github-actions", "verbose"]
+      : ["verbose"],
+    setupFiles: "test/helpers/testSuiteSetup.ts",
+    teardownTimeout: 5_000,
+    testTimeout: 30_000,
   },
 });

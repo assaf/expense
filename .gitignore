@@ -11,6 +11,11 @@ build/
 /data/
 !/data/.gitkeep
 
+# Test artifacts
+data-test/
+__screenshots__/
+
 # Logs
 *.log
 server.log
+.test-server.json

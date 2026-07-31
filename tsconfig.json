@@ -1,5 +1,11 @@
 {
-  "include": ["app/**/*.ts", "app/**/*.tsx", ".react-router/types/**/*"],
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    ".react-router/types/**/*"
+  ],
   "exclude": ["build", "node_modules", "public"],
   "compilerOptions": {
     "esModuleInterop": true,
@@ -10,6 +16,7 @@
     "noEmit": true,
     "paths": {
       "~/*": ["./app/*"],
+      "~/test/*": ["./test/*"],
       "+types/*": ["./.react-router/types/*"]
     },
     "resolveJsonModule": true,
