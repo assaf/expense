@@ -2,6 +2,12 @@
 
 Personal expense tracking with receipts and mileage.
 
+## Screenshots
+
+![Expense list — reports, receipts, and a mileage route](public/screenshot-home.png)
+
+![Receipt editor with the receipt image](public/screenshot-expense.png)
+
 What it does:
 
 - Log expenses two ways: receipt-based (upload/scan an image, add date, report,

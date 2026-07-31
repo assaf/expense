@@ -9,6 +9,7 @@
     "clean": "rm -rf node_modules/.vite .react-router build prisma/generated",
     "dev": "portless run -- react-router dev",
     "migrate-data": "node scripts/migrate-data.ts",
+    "screenshot": "SCREENSHOT=1 vp test run test/screenshot.test.ts",
     "start": "react-router-serve ./build/server/index.js",
     "test": "react-router build --force && vp test run",
     "prepare": "vp config",
