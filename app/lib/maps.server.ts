@@ -37,7 +37,7 @@ export async function geocode(address: string): Promise<Location> {
   }
 }
 
-export interface RouteResult {
+interface RouteResult {
   distanceMiles: number;
   coords: [number, number][]; // [lat, lng]
   approximate: boolean;
@@ -48,7 +48,7 @@ export interface RouteResult {
  *   locations[0] → locations[1] → ... → locations[n-1] → locations[0]
  * Uses OSRM; falls back to straight-line (Haversine) when unavailable.
  */
-export async function computeRouteDistance(
+async function computeRouteDistance(
   locations: Location[],
 ): Promise<RouteResult> {
   const points = locations.filter(

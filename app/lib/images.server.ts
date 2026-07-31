@@ -42,7 +42,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/heic": ".heic",
 };
 
-export function mimeForFile(filename: string, fallback = ""): string {
+function mimeForFile(filename: string, fallback = ""): string {
   const ext = extname(filename).toLowerCase();
   return MIME_BY_EXT[ext] ?? fallback;
 }
@@ -95,7 +95,7 @@ async function pgExists(accountId: string, key: string): Promise<boolean> {
  * Returns "" when date, report, or original name is missing — callers keep the
  * temporary name in that case and rename later once the expense is complete.
  */
-export function conventionImageName(
+function conventionImageName(
   date: string,
   report: string,
   originalName: string,

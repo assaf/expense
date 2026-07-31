@@ -7,7 +7,7 @@ const env = process.env;
 export const DATABASE_URL = env.DATABASE_URL ?? "";
 
 /** Vercel Blob read-write token. When set, receipt images go to Blob. */
-export const BLOB_READ_WRITE_TOKEN = env.BLOB_READ_WRITE_TOKEN ?? "";
+const BLOB_READ_WRITE_TOKEN = env.BLOB_READ_WRITE_TOKEN ?? "";
 
 /**
  * Force the image backend: "blob" | "pg". Defaults to Vercel Blob when
@@ -15,8 +15,6 @@ export const BLOB_READ_WRITE_TOKEN = env.BLOB_READ_WRITE_TOKEN ?? "";
  * used by dev/tests so no separate service is needed.
  */
 export const IMAGE_BACKEND = env.IMAGE_BACKEND ?? "";
-
-export const isProd = env.NODE_ENV === "production";
 
 /**
  * Bootstrap credentials for the very first account + user (created when the
@@ -29,11 +27,6 @@ export const APP_PASSWORD = env.APP_PASSWORD ?? "";
 
 /** Secret used to sign the session cookie. Required — the app fails fast without it. */
 export const SESSION_SECRET = env.SESSION_SECRET ?? "";
-
-/** True when the bootstrap credentials are configured. */
-export function hasAuth(): boolean {
-  return Boolean(APP_USERNAME && APP_PASSWORD && SESSION_SECRET);
-}
 
 /** True when Postgres storage is configured (required — the app fails fast without it). */
 export function hasDatabase(): boolean {

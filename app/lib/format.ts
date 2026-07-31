@@ -47,13 +47,6 @@ export function todayDate(): string {
   return new Date(now.getTime() - tzOffset).toISOString().slice(0, 10);
 }
 
-/** True when the date is today or in the past. Empty is allowed (incomplete). */
-export function isDateValidOrPast(date: string): boolean {
-  if (!date) return true;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  return date <= todayDate();
-}
-
 /** Calendar year for a YYYY-MM-DD date, or the current year if empty. */
 export function yearOf(date: string): string {
   if (date && /^\d{4}/.test(date)) return date.slice(0, 4);

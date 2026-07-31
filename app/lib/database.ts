@@ -271,7 +271,7 @@ export async function readExpense(
   return row ? rowToExpense(row) : undefined;
 }
 
-export async function writeExpenses(
+async function writeExpenses(
   accountId: string,
   expenses: Expense[],
 ): Promise<void> {
@@ -349,19 +349,6 @@ export async function readReports(accountId: string): Promise<Report[]> {
   return rows.map((r) => ({ name: r.name }));
 }
 
-export async function writeReports(
-  accountId: string,
-  reports: Report[],
-): Promise<void> {
-  await prisma.$transaction([
-    prisma.report.deleteMany({ where: { accountId } }),
-    prisma.report.createMany({
-      data: reports.map((r) => ({ name: r.name, accountId })),
-      skipDuplicates: true,
-    }),
-  ]);
-}
-
 export async function addReport(
   accountId: string,
   name: string,
@@ -381,30 +368,6 @@ export async function removeReport(
   await prisma.report.deleteMany({ where: { accountId, name } });
 }
 
-export async function renameReport(
-  accountId: string,
-  oldName: string,
-  newName: string,
-): Promise<void> {
-  const clean = newName.trim();
-  if (!clean || oldName === clean) return;
-  await prisma.$transaction(async (tx) => {
-    const clash = await tx.report.findFirst({
-      where: { accountId, name: clean, NOT: { name: oldName } },
-      select: { id: true },
-    });
-    if (clash) return;
-    await tx.report.updateMany({
-      where: { accountId, name: oldName },
-      data: { name: clean },
-    });
-    await tx.expense.updateMany({
-      where: { accountId, report: oldName },
-      data: { report: clean },
-    });
-  });
-}
-
 export async function readCategories(accountId: string): Promise<Category[]> {
   const rows = await prisma.category.findMany({
     where: { accountId, name: { not: "" } },
@@ -412,19 +375,6 @@ export async function readCategories(accountId: string): Promise<Category[]> {
     select: { name: true },
   });
   return rows.map((c) => ({ name: c.name }));
-}
-
-export async function writeCategories(
-  accountId: string,
-  categories: Category[],
-): Promise<void> {
-  await prisma.$transaction([
-    prisma.category.deleteMany({ where: { accountId } }),
-    prisma.category.createMany({
-      data: categories.map((c) => ({ name: c.name, accountId })),
-      skipDuplicates: true,
-    }),
-  ]);
 }
 
 export async function addCategory(

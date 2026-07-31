@@ -1,12 +1,12 @@
 /**
  * Domain model for the expense tracker.
  *
- * State is persisted either as CSV files on disk (local dev/tests) or in
- * Postgres with receipt images in Vercel Blob (production) — see
- * store.server.ts. These types describe the in-memory shape after parsing.
+ * State is persisted in Postgres (see database.ts) with receipt images in
+ * Vercel Blob or Postgres BYTEA (see images.server.ts). These types describe
+ * the in-memory shape after parsing.
  */
 
-export type ExpenseType = "receipt" | "mileage";
+type ExpenseType = "receipt" | "mileage";
 
 /** A single geocoded address used in a mileage route. */
 export interface Location {
