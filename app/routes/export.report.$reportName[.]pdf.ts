@@ -43,7 +43,50 @@ export async function loader({ params }: Route.LoaderArgs) {
   const categories = uniqueSorted(
     inReport.map((e) => e.category).filter(Boolean),
   );
+
+  // Fixed table columns: Date | Amount | Merchant | Description, with gutters.
+  const dateX = 50,
+    amountX = 134,
+    merchantX = 197,
+    descX = 330;
+  const dateW = 72,
+    amountW = 55,
+    merchantW = 125,
+    descW = 562 - descX;
+
+  // Column header.
+  doc.fontSize(10).font("Helvetica").fillColor("#6b7280");
+  const headerY = doc.y;
+  doc.text("Date", dateX, headerY, { width: dateW, lineBreak: false });
+  doc.text("Amount", amountX, headerY, {
+    width: amountW,
+    lineBreak: false,
+    align: "right",
+  });
+  doc.text("Merchant", merchantX, headerY, {
+    width: merchantW,
+    lineBreak: false,
+  });
+  doc.text("Description", descX, headerY, {
+    width: descW,
+    lineBreak: false,
+  });
+  doc
+    .moveDown(0.35)
+    .moveTo(dateX, doc.y)
+    .lineTo(descX + descW, doc.y)
+    .strokeColor("#e5e7eb")
+    .lineWidth(0.5)
+    .stroke();
+  doc.moveDown(0.35);
+  doc.fillColor("#111827");
+
   for (const category of categories) {
+    doc.moveDown(0.75);
+    // Don't orphan a category title at the very bottom of a page.
+    if (doc.y > doc.page.maxY() - 2 * doc.currentLineHeight()) {
+      doc.addPage();
+    }
     doc.fontSize(13).font("Helvetica-Bold").text(category);
     doc.moveDown(0.25);
     const inCat = inReport.filter((e) => e.category === category);
@@ -51,17 +94,35 @@ export async function loader({ params }: Route.LoaderArgs) {
       const merchant = merchantLabel(e, settings.mileageRates);
       const date = formatDate(e.date);
       const amount = e.amount ? `$${e.amount}` : "—";
-      doc.fontSize(10).font("Helvetica-Bold").text(`${date}   ${amount}`, {
-        continued: true,
+      const desc = e.description ?? "";
+
+      // Keep the whole row on one page.
+      doc.fontSize(10).font("Helvetica").fillColor("#111827");
+      if (doc.y + doc.currentLineHeight() > doc.page.maxY()) {
+        doc.addPage();
+      }
+      const rowY = doc.y;
+      doc.text(date, dateX, rowY, { width: dateW, lineBreak: false });
+      doc.text(amount, amountX, rowY, {
+        width: amountW,
+        lineBreak: false,
+        align: "right",
       });
-      doc.font("Helvetica").text(`   ${merchant}`);
-      if (e.description) {
-        doc.fontSize(9).fillColor("#4b5563").text(`   ${e.description}`);
+      doc.text(fitText(doc, merchant, merchantW, 20), merchantX, rowY, {
+        width: merchantW,
+        lineBreak: false,
+      });
+      if (desc) {
+        doc.fillColor("#4b5563").text(fitText(doc, desc, descW), descX, rowY, {
+          width: descW,
+          lineBreak: false,
+        });
         doc.fillColor("#111827");
       }
-      doc.moveDown(0.25);
+      doc.moveDown(0.3);
     }
-    doc.moveDown(0.5);
+    // Extra breathing room before the next category.
+    doc.moveDown(0.75);
   }
 
   // Receipt images appendix.
@@ -110,6 +171,28 @@ export async function loader({ params }: Route.LoaderArgs) {
 function merchantLabel(e: Expense, rates: Record<string, string>): string {
   if (e.type === "receipt") return e.merchant || "—";
   return mileageMerchant(e.distanceMiles, rates[yearOf(e.date)] ?? "");
+}
+
+/**
+ * Truncate text so it fits maxWidth. When maxChars is given, text is capped
+ * at that many characters. An ellipsis is appended whenever text was cut,
+ * and width is measured so the ellipsis always fits.
+ */
+function fitText(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  maxWidth: number,
+  maxChars?: number,
+): string {
+  let t = text;
+  if (maxChars !== undefined) t = t.slice(0, maxChars);
+  if (doc.widthOfString(t) <= maxWidth) {
+    return t === text ? t : `${t.slice(0, -1)}…`;
+  }
+  while (t.length > 1 && doc.widthOfString(`${t}…`) > maxWidth) {
+    t = t.slice(0, -1);
+  }
+  return `${t}…`;
 }
 
 function uniqueSorted(items: string[]): string[] {
