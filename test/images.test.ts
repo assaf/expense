@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { saveImage, renameImageToConvention } from "~/lib/images.server";
+import sharp from "sharp";
+import {
+  saveImage,
+  renameImageToConvention,
+  readImage,
+} from "~/lib/images.server";
 import {
   testPrisma,
   TEST_ACCOUNT_ID,
@@ -49,6 +54,122 @@ describe("saveImage", () => {
       });
       expect(row).not.toBeNull();
     }
+  });
+
+  it("passes through bytes it cannot decode (no re-encode crash)", async () => {
+    const { filename } = await saveImage(
+      TEST_ACCOUNT_ID,
+      BUFFER,
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    createdKeys.push(filename);
+    const image = await readImage(TEST_ACCOUNT_ID, filename);
+    expect(image?.buffer.equals(BUFFER)).toBe(true);
+    expect(image?.mime).toBe("image/jpeg");
+  });
+
+  it("downscales a large image to max 1024px wide and re-encodes as JPEG", async () => {
+    const big = await sharp({
+      create: {
+        width: 2400,
+        height: 1800,
+        channels: 3,
+        background: { r: 250, g: 250, b: 250 },
+      },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 1200,
+              height: 200,
+              channels: 3,
+              background: { r: 40, g: 40, b: 40 },
+            },
+          })
+            .png()
+            .toBuffer(),
+          left: 200,
+          top: 400,
+        },
+      ])
+      .jpeg({ quality: 95 })
+      .toBuffer();
+    expect(big.length).toBeGreaterThan(10_000);
+
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      big,
+      "image/jpeg",
+      "photo.jpg",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("image/jpeg");
+    expect(filename.endsWith(".jpg")).toBe(true);
+
+    const image = await readImage(TEST_ACCOUNT_ID, filename);
+    expect(image).not.toBeNull();
+    const meta = await sharp(image!.buffer).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBeLessThanOrEqual(1024);
+    expect(meta.height).toBe(768); // 1800 * 1024/2400
+    expect(image!.buffer.length).toBeLessThan(big.length);
+  });
+
+  it("keeps an already-small JPEG byte-identical (no generational loss)", async () => {
+    const small = await sharp({
+      create: {
+        width: 800,
+        height: 600,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      small,
+      "image/jpeg",
+      "small.jpg",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("image/jpeg");
+
+    const image = await readImage(TEST_ACCOUNT_ID, filename);
+    expect(image?.buffer.equals(small)).toBe(true);
+  });
+
+  it("converts a large PNG to a 1024px JPEG at save time", async () => {
+    const png = await sharp({
+      create: {
+        width: 2000,
+        height: 1400,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0.5 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "render.png",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("image/jpeg");
+    expect(filename.endsWith(".jpg")).toBe(true);
+
+    const image = await readImage(TEST_ACCOUNT_ID, filename);
+    expect(image).not.toBeNull();
+    const meta = await sharp(image!.buffer).metadata();
+    expect(meta.format).toBe("jpeg");
+    expect(meta.width).toBe(1024);
+    expect(meta.height).toBe(717); // 1400 * 1024/2000
   });
 });
 

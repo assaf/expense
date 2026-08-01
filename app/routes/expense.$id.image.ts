@@ -4,10 +4,19 @@ import {
   saveImage,
   deleteImage,
 } from "~/lib/images.server";
+import sharp from "sharp";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id.image";
+
+/**
+ * The list view renders 56px thumbnails per row — serving the full stored
+ * image for each is wasteful, so the loader resizes on the fly when asked
+ * (`?w=160`). Result is JPEG regardless of stored format; undecodable or
+ * out-of-range params fall back to the full image.
+ */
+const THUMB_MAX_WIDTH = 1024;
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -17,6 +26,32 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
   const image = await readImage(user.accountId, expense.imageFile);
   if (!image) return new Response("Not found", { status: 404 });
+
+  const url = new URL(request.url);
+  const width = Number(url.searchParams.get("w"));
+  if (Number.isInteger(width) && width >= 16 && width <= THUMB_MAX_WIDTH) {
+    try {
+      const thumb = await sharp(image.buffer)
+        .rotate()
+        .resize({
+          width,
+          height: width,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 80, mozjpeg: true })
+        .toBuffer();
+      return new Response(thumb as BodyInit, {
+        headers: {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "private, max-age=86400",
+        },
+      });
+    } catch {
+      // Fall through to the original bytes below.
+    }
+  }
+
   return new Response(image.buffer as BodyInit, {
     headers: {
       "Content-Type": image.mime || expense.imageMime || "image/png",

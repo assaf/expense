@@ -13,6 +13,7 @@
     "test": "react-router build --force && vp test run",
     "prepare": "vp config",
     "build:prisma": "prisma generate",
+    "compress:images": "node scripts/compress-images.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
     "knip": "knip",

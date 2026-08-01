@@ -293,7 +293,7 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
         {expense.imageFile ? (
           <img
-            src={`/expense/${expense.id}/image`}
+            src={`/expense/${expense.id}/image?w=160`}
             alt=""
             className="h-full w-full object-cover"
           />

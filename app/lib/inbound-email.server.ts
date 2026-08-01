@@ -730,6 +730,9 @@ export async function processInboundEvent(
         originalName,
       );
       imageFile = saved.filename;
+      // saveImage may have re-encoded the format (e.g. PNG → JPEG) — record
+      // the mime of the bytes actually stored, not the renderer's mime.
+      imageMime = saved.mime;
     } else {
       missing.push("receipt image");
     }

@@ -3,6 +3,7 @@ import { extname } from "node:path";
 import { ulid } from "ulid";
 import { Prisma } from "prisma/generated";
 import prisma from "~/lib/prisma.server";
+import { normalizeStoredImage } from "~/lib/image-normalize";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
@@ -106,7 +107,10 @@ function conventionImageName(
   mime: string,
 ): string {
   if (!date || !report || !originalName) return "";
-  const ext = extname(originalName).toLowerCase() || extForMime(mime);
+  // Prefer the extension that matches the *stored* mime — saveImage may have
+  // converted the format (e.g. PNG → JPEG), and the stored ext should be
+  // honest about the bytes. Falls back to the original name's extension.
+  const ext = extForMime(mime) || extname(originalName).toLowerCase();
   const filePart = sanitizeFilenamePart(
     originalName.slice(0, originalName.length - extname(originalName).length),
   );
@@ -131,8 +135,17 @@ export async function saveImage(
   originalName: string,
 ): Promise<{ filename: string; mime: string }> {
   const resolvedMime = mime || mimeForFile(originalName) || "image/png";
+
+  // Normalize before persisting: downscale past 1024px, flatten, re-encode
+  // as JPEG (q85). Undecodable/unchanged inputs pass through as-is.
+  const normalized = await normalizeStoredImage(buffer);
+  const storedBuffer = normalized?.buffer ?? buffer;
+  const storedMime = normalized?.mime ?? resolvedMime;
   const ext =
-    extname(originalName).toLowerCase() || extForMime(resolvedMime) || ".png";
+    (normalized ? extForMime(storedMime) : null) ||
+    extname(originalName).toLowerCase() ||
+    extForMime(resolvedMime) ||
+    ".png";
 
   const base = `${ulid()}${ext}`;
   let name = await uniqueName(accountId, base, (key) =>
@@ -144,11 +157,11 @@ export async function saveImage(
         data: {
           accountId,
           key: namespacedKey(accountId, name),
-          mime: resolvedMime,
-          data: new Uint8Array(buffer),
+          mime: storedMime,
+          data: new Uint8Array(storedBuffer),
         },
       });
-      return { filename: namespacedKey(accountId, name), mime: resolvedMime };
+      return { filename: namespacedKey(accountId, name), mime: storedMime };
     } catch (error) {
       const isDuplicate =
         error instanceof Prisma.PrismaClientKnownRequestError &&

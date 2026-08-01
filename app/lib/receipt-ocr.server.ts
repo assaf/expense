@@ -38,7 +38,9 @@ async function normalizeImage(buffer: Buffer, _mime: string): Promise<Buffer> {
 /**
  * Convert an attachment image to a browser-friendly format for storage:
  * HEIC/BMP/TIFF/AVIF → PNG; JPEG/PNG/WebP pass through (alpha flattened,
- * downscaled past 4000px). The stored receipt must render in <img> tags.
+ * downscaled past 1024px). The stored receipt must render in <img> tags.
+ * The width cap mirrors saveImage's normalization (see image-normalize.ts)
+ * so the intermediate stays small — re-encoding happens once, at save.
  */
 async function toBrowserImage(
   buffer: Buffer,
@@ -47,8 +49,8 @@ async function toBrowserImage(
   let img = sharp(buffer);
   const meta = await img.metadata().catch(() => null);
   if (!meta?.width) return { buffer, mime }; // not decodable — pass through
-  if (meta.width > 4000) {
-    img = img.resize({ width: 4000, withoutEnlargement: true });
+  if (meta.width > 1024) {
+    img = img.resize({ width: 1024, withoutEnlargement: true });
   }
   if (
     [

@@ -1,0 +1,74 @@
+import sharp, { type Metadata } from "sharp";
+
+/**
+ * Receipt image normalization for storage — resize + light compression,
+ * applied at save time so every stored receipt (manual upload, paste,
+ * inbound email, PDF render) is bounded in size.
+ *
+ * Kept dependency-free (no app imports, erasable TypeScript only) so the
+ * one-off backfill script (`scripts/compress-images.ts`) can reuse it with
+ * plain `node` type stripping — no tsx needed.
+ *
+ * Rules:
+ *  - Not decodable by sharp, GIF (animation), or SVG → pass through
+ *    unchanged (returns null).
+ *  - Already a JPEG within size limits → pass through (no generational
+ *    quality loss on re-save).
+ *  - Everything else decodable → EXIF-rotate, scale to fit within
+ *    STORED_IMAGE_MAX_WIDTH × STORED_IMAGE_MAX_HEIGHT (never upscale),
+ *    flatten alpha onto white (receipts are paper), re-encode as JPEG.
+ *    JPEG is chosen over WebP because PDFKit (report export) can embed
+ *    JPEG/PNG but not WebP, and browsers serve it everywhere.
+ *
+ * Returns `{ buffer, mime }` with the re-encoded bytes + "image/jpeg",
+ * or `null` when the input should be stored as-is.
+ */
+
+export const STORED_IMAGE_MAX_WIDTH = 1024;
+const STORED_IMAGE_MAX_HEIGHT = 4096;
+export const STORED_IMAGE_QUALITY = 85;
+
+/** Raster formats we will resize + re-encode. Anything else passes through. */
+const RASTER_FORMATS = new Set([
+  "jpeg",
+  "png",
+  "webp",
+  "heif",
+  "tiff",
+  "avif",
+  "bmp",
+]);
+
+export async function normalizeStoredImage(
+  buffer: Buffer,
+): Promise<{ buffer: Buffer; mime: string } | null> {
+  let meta: Metadata | undefined;
+  try {
+    meta = await sharp(buffer).metadata();
+  } catch {
+    return null; // not decodable by sharp — pass through
+  }
+  if (!meta.width || !meta.height || !meta.format) return null;
+  if (!RASTER_FORMATS.has(meta.format)) return null; // gif/svg/other
+  if (
+    meta.format === "jpeg" &&
+    meta.width <= STORED_IMAGE_MAX_WIDTH &&
+    meta.height <= STORED_IMAGE_MAX_HEIGHT
+  ) {
+    return null; // already small + compressed — store as-is
+  }
+
+  // .rotate() applies EXIF orientation so re-encoding never flips sideways.
+  const out = await sharp(buffer)
+    .rotate()
+    .resize({
+      width: STORED_IMAGE_MAX_WIDTH,
+      height: STORED_IMAGE_MAX_HEIGHT,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: STORED_IMAGE_QUALITY, mozjpeg: true })
+    .toBuffer();
+  return { buffer: out, mime: "image/jpeg" };
+}

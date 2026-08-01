@@ -737,7 +737,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.date).toBe("2026-06-05"); // forwarded message date, not header
     expect(created.category).toBe("Office Supplies"); // matched existing category
     expect(created.imageFile).not.toBe("");
-    expect(created.imageMime).toBe("image/png");
+    expect(created.imageMime).toBe("image/jpeg"); // body render stored as JPEG
     usedExpenseIds.push(expenseIdOf(result));
     // Success → no reply email.
     expect(deps.sent).toHaveLength(0);
@@ -1049,8 +1049,8 @@ describe("processInboundEvent (attachments)", () => {
     );
     expect(created.merchant).toBe("Amazon");
     expect(created.amount).toBe("9.99");
-    expect(created.originalName).toBe("invoice.png"); // PDF stored as PNG
-    expect(created.imageMime).toBe("image/png");
+    expect(created.originalName).toBe("invoice.png"); // PDF stored as PNG name
+    expect(created.imageMime).toBe("image/jpeg"); // re-encoded JPEG at save
     expect(created.date).toBe("2026-06-20"); // no forward block → header date
     // Logo was downloaded? No — only the chosen attachment is downloaded.
     expect(deps.downloads.map((m) => m.id)).toEqual(["att-pdf"]);
