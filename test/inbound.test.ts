@@ -322,6 +322,10 @@ describe("Date extraction", () => {
     expect(parseDateString("garbage")).toBeNull();
   });
 
+  it("parses Gmail-style human dates with 'at'", () => {
+    expect(parseDateString("Tue, Jun 2, 2026 at 3:14 PM")).toBe("2026-06-02");
+  });
+
   it("rejects future dates", () => {
     expect(parseDateString("Jan 1 2100")).toBeNull();
   });
@@ -347,6 +351,54 @@ describe("Date extraction", () => {
       "Subject: hi",
     ].join("\n");
     expect(extractDateFromForwardedText(text)).toBe("2026-03-02");
+  });
+
+  it("extracts the forwarded date when Gmail uses 'at' (the common case)", () => {
+    const text = [
+      "---------- Forwarded message ----------",
+      "From: Amazon <no-reply@amazon.com>",
+      "Date: Tue, Jun 2, 2026 at 3:14 PM",
+      "Subject: Your order receipt",
+      "To: me@gmail.com",
+      "",
+      "Order total $42.50",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-06-02");
+  });
+
+  it("extracts the forwarded date from Outlook-style forwards (no marker, Sent:)", () => {
+    const text = [
+      "From: Amazon <no-reply@amazon.com>",
+      "Sent: Tuesday, June 2, 2026 3:14 PM",
+      "To: me@outlook.com",
+      "Subject: Your order receipt",
+      "",
+      "Order total $42.50",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-06-02");
+  });
+
+  it("extracts the forwarded date from Outlook forwards with a Date: header", () => {
+    const text = [
+      "From: X <x@y.com>",
+      "Sent: Jun 2, 2026 3:14 PM",
+      "To: me@outlook.com",
+      "Cc: other@example.com",
+      "Subject: Your order receipt",
+      "Date: Tue, 2 Jun 2026 22:14:22 +0000",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-06-02");
+  });
+
+  it("extracts the forwarded date from Yahoo-style forwards (Sent:)", () => {
+    const text = [
+      "----- Forwarded Message -----",
+      "From: Amazon <no-reply@amazon.com>",
+      "To: me@yahoo.com",
+      "Sent: Tuesday, June 2, 2026 3:14 PM",
+      "Subject: Your order receipt",
+    ].join("\n");
+    expect(extractDateFromForwardedText(text)).toBe("2026-06-02");
   });
 
   it("extracts the date from an .eml attachment", () => {

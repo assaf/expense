@@ -214,28 +214,66 @@ function safeBase64Equal(a: string, b: string): boolean {
 
 /** Parse an RFC 2822 / human date string into YYYY-MM-DD (UTC). Null if invalid or in the future. */
 export function parseDateString(s: string): string | null {
-  const clean = s.trim();
+  let clean = s.trim();
   if (!clean) return null;
+  // Gmail-style human dates use "at": "Tue, Jun 2, 2026 at 3:14 PM".
+  clean = clean.replace(/\s+at\s+/gi, ", ");
   const t = Date.parse(clean);
   if (!Number.isFinite(t)) return null;
   if (t > Date.now() + 24 * 3600 * 1000) return null; // future → invalid
   return new Date(t).toISOString().slice(0, 10);
 }
 
-/** Extract the original email's date from a forwarded-message quote in the body. */
+/**
+ * Extract the original email's date from a forwarded-message quote in the
+ * body. Handles the common forward formats:
+ *  - Apple Mail / iOS: "Begin forwarded message:"
+ *  - Gmail / Yahoo / Thunderbird: "----- Forwarded message -----"
+ *  - Outlook: "From:/Sent:/Date:" header block with no marker
+ * Returns null when no forwarded date can be parsed.
+ */
 export function extractDateFromForwardedText(text: string): string | null {
   if (!text) return null;
-  const patterns = [
-    /Begin forwarded message:[\s\S]{0,600}?\n\s*Date:\s*([^\n]{6,80})/i,
-    /----------\s*Forwarded message\s*----------[\s\S]{0,600}?\n\s*Date:\s*([^\n]{6,80})/i,
-    /Forwarded message[\s\S]{0,300}?\n\s*Date:\s*([^\n]{6,80})/i,
-    /\n\s*(?:From|Sent):[^\n]*\n\s*Date:\s*([^\n]{6,80})/i,
+
+  // Marker-based: the quoted headers follow the marker (they may sit after
+  // a blank line, e.g. Apple Mail). Scan a bounded region so a receipt's
+  // body can't inject unrelated "Date:" lines, but long header blocks
+  // (Outlook Cc/Bcc/disclaimer chains) still fit.
+  const markers = [
+    /Begin forwarded message:/i,
+    /-{2,}\s*Forwarded message\s*-{2,}/i,
+    /Forwarded message:/i,
   ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (!m) continue;
-    const d = parseDateString(m[1]!);
-    if (d) return d;
+  let region: string | null = null;
+  for (const marker of markers) {
+    const m = text.match(marker);
+    if (m?.index !== undefined) {
+      region = text.slice(m.index, Math.min(m.index + 3_000, text.length));
+      break;
+    }
+  }
+  if (region) {
+    return firstParsedDate(region, [
+      /^\s*Date:\s*(.+)$/gim,
+      /^\s*Sent:\s*(.+)$/gim,
+    ]);
+  }
+
+  // Marker-less (Outlook/Live Mail): a "From:" line followed within a few
+  // header lines by a "Date:" or "Sent:" line.
+  return firstParsedDate(text, [
+    /(?:^|\n)\s*From:\s*[^\n]+(?:\n\s*(?:To|Cc|Bcc|Subject):[^\n]*){0,8}\n\s*Date:\s*(.+)/gi,
+    /(?:^|\n)\s*From:\s*[^\n]+(?:\n\s*(?:To|Cc|Bcc|Subject):[^\n]*){0,8}\n\s*Sent:\s*(.+)/gi,
+  ]);
+}
+
+/** Return the first Date:/Sent: capture that parses as a valid date. */
+function firstParsedDate(text: string, patterns: RegExp[]): string | null {
+  for (const pattern of patterns) {
+    for (const m of text.matchAll(pattern)) {
+      const date = parseDateString(m[1]!);
+      if (date) return date;
+    }
   }
   return null;
 }
