@@ -81,31 +81,32 @@ returns 503 when unconfigured and everything else still works.
 
 ## Key files
 
-| File                               | Role                                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------------- |
-| `app/routes/_index.tsx`            | Main list, add buttons, paste/upload image.                                           |
-| `app/routes/expense.$id.tsx`       | Receipt + mileage editor (save/cancel/delete).                                        |
-| `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                               |
-| `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                  |
-| `app/routes/export.*`              | PDF per report + ZIP of everything.                                                   |
-| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.          |
-| `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).               |
-| `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                       |
-| `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                            |
-| `app/lib/auth.server.ts`           | Auth: session storage, `requireUser`, login/signup.                                   |
-| `app/lib/passwords.ts`             | scrypt hashing + invite-code generation.                                              |
-| `app/lib/prisma.server.ts`         | Prisma client singleton (PrismaPg adapter).                                           |
-| `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies. |
-| `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                        |
-| `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                 |
-| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono).                  |
-| `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                              |
-| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                             |
-| `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                  |
-| `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                         |
-| `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                  |
-| `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                      |
-| `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                     |
+| File                               | Role                                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `app/routes/_index.tsx`            | Main list, add buttons, paste/upload image.                                                                             |
+| `app/routes/expense.$id.tsx`       | Receipt + mileage editor (save/cancel/delete).                                                                          |
+| `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                                                                 |
+| `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                                                    |
+| `app/routes/export.*`              | PDF per report + ZIP of everything.                                                                                     |
+| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.                                            |
+| `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                 |
+| `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                                                         |
+| `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                                                              |
+| `app/lib/auth.server.ts`           | Auth: session storage, `requireUser`, login/signup.                                                                     |
+| `app/lib/passwords.ts`             | scrypt hashing + invite-code generation.                                                                                |
+| `app/lib/prisma.server.ts`         | Prisma client singleton (PrismaPg adapter).                                                                             |
+| `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies.                                   |
+| `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                                                          |
+| `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                                                   |
+| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono).                                                    |
+| `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                                                                |
+| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                               |
+| `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                    |
+| `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                           |
+| `scripts/import-expensify.ts`      | API-driven Expensify import: effective SmartScan fields + receipt images (login-gated; `--cookie` or `--receipts-dir`). |
+| `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                                                    |
+| `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                                                        |
+| `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                                                       |
 
 ## Gotchas
 
