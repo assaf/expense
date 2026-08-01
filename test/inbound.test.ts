@@ -13,6 +13,8 @@ import {
   scoreAttachment,
   pickReceiptAttachment,
   matchCategory,
+  isPrivateHost,
+  fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
 import type { WebhookHeaders } from "~/lib/inbound-email.server";
 import type {
@@ -603,6 +605,118 @@ describe("DeepSeek JSON parsing", () => {
 
   it("extracts JSON from prose", () => {
     expect(parseJsonObject('Here: {"b": 2} thanks')).toEqual({ b: 2 });
+  });
+});
+
+describe("Remote image fetch guards", () => {
+  it("blocks loopback, private, link-local, and reserved hosts", () => {
+    expect(isPrivateHost("localhost")).toBe(true);
+    expect(isPrivateHost("127.0.0.1")).toBe(true);
+    expect(isPrivateHost("10.0.0.1")).toBe(true);
+    expect(isPrivateHost("172.16.0.1")).toBe(true);
+    expect(isPrivateHost("172.31.255.255")).toBe(true);
+    expect(isPrivateHost("192.168.1.1")).toBe(true);
+    expect(isPrivateHost("169.254.169.254")).toBe(true);
+    expect(isPrivateHost("fe80::1")).toBe(true);
+    expect(isPrivateHost("0.0.0.0")).toBe(true);
+    expect(isPrivateHost("255.255.255.255")).toBe(true);
+  });
+
+  it("allows public hosts and public IPs", () => {
+    expect(isPrivateHost("example.com")).toBe(false);
+    expect(isPrivateHost("stripe-images.stripecdn.com")).toBe(false);
+    expect(isPrivateHost("8.8.8.8")).toBe(false);
+    expect(isPrivateHost("93.184.216.34")).toBe(false);
+  });
+
+  it("rejects invalid, non-http(s), and private URLs without a network call", async () => {
+    expect(await fetchRemoteImageImpl("not a url")).toBeNull();
+    expect(await fetchRemoteImageImpl("ftp://example.com/a.png")).toBeNull();
+    expect(await fetchRemoteImageImpl("file:///etc/passwd")).toBeNull();
+    expect(await fetchRemoteImageImpl("data:image/png;base64,x")).toBeNull();
+    expect(await fetchRemoteImageImpl("http://127.0.0.1/a.png")).toBeNull();
+    expect(
+      await fetchRemoteImageImpl("http://localhost:8080/a.png"),
+    ).toBeNull();
+    expect(
+      await fetchRemoteImageImpl("http://169.254.169.254/latest/meta-data/"),
+    ).toBeNull();
+  });
+});
+
+describe("processInboundEvent (forward header + remote images)", () => {
+  it("strips the forward-quote header before rendering the email body", async () => {
+    const deps = fakeDeps();
+    const html = [
+      "<html><body>",
+      "<div>----- Original message -----</div>",
+      "<div>From: zai &lt;receipts@stripe.com&gt;</div>",
+      "<div>Date: Thursday, July 30, 2026 5:15 PM</div>",
+      "<div><br></div>",
+      "<div>MERCHANT: zai</div>",
+      "<div>TOTAL: 10.00</div>",
+      "<div>CATEGORY: office supplies</div>",
+      "</body></html>",
+    ].join("\n");
+    const rendered: string[] = [];
+    deps.fetchReceivedEmail = async () => receivedEmail({ html });
+    deps.renderEmailImage = async (h) => {
+      rendered.push(h);
+      return TINY_PNG;
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(rendered).toHaveLength(1);
+    expect(rendered[0]).not.toContain("Original message");
+    expect(rendered[0]).not.toContain("From: zai");
+    expect(rendered[0]).toContain("MERCHANT: zai");
+  });
+
+  it("passes a remote-image fetcher into the browser render", async () => {
+    const deps = fakeDeps();
+    let fetcher: unknown;
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ html: "<html><body>Receipt</body></html>" });
+    deps.renderEmailImage = async (_h, opts) => {
+      fetcher = opts?.fetchRemoteImage;
+      return TINY_PNG;
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(typeof fetcher).toBe("function");
+  });
+
+  it("strips the forward block from the text used for extraction", async () => {
+    const deps = fakeDeps();
+    const extracted: (string | undefined)[] = [];
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: [
+          "----- Original message -----",
+          "From: zai <receipts@stripe.com>",
+          "Date: Thu, 30 Jul 2026 5:15 PM",
+          "Subject: receipt",
+          "",
+          "MERCHANT: zai",
+          "TOTAL: 10.00",
+          "CATEGORY: office supplies",
+        ].join("\n"),
+      });
+    deps.extractReceipt = async (input) => {
+      extracted.push(input.text);
+      return fakeExtract(input.text);
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(extracted[0]).toContain("MERCHANT: zai");
+    expect(extracted[0]).not.toContain("Original message");
+    expect(extracted[0]).not.toContain("From:");
   });
 });
 

@@ -29,6 +29,7 @@
 import type { Browser } from "puppeteer-core";
 import puppeteer from "puppeteer-core";
 import chromiumSparticuz from "@sparticuz/chromium";
+import { load } from "cheerio";
 import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline";
 import { hasInk } from "~/lib/receipt-render.server";
 
@@ -44,6 +45,10 @@ export type CidResolver = (cid: string) => Promise<CidImage | null>;
 export interface RenderEmailOptions {
   /** Resolve `cid:` image references (inline attachments) to data URIs. */
   resolveImage?: CidResolver;
+  /** Pre-fetch remote (http/https) images and inline them as data URIs so
+   * the page stays network-blocked but the images still render. Return null
+   * to leave the URL untouched (the browser drops it, as today). */
+  fetchRemoteImage?: (url: string) => Promise<CidImage | null>;
 }
 
 /** Vite `?inline` returns the asset as a base64 string (older versions as a
@@ -189,6 +194,59 @@ async function rewriteCidImages(
   return out;
 }
 
+const REMOTE_IMAGE_CAP = 12; // never pre-fetch more than this many images
+const FORWARD_HEADER_CAP = 15; // bound the header-block walk (long To/Cc chains)
+
+/** The http(s) image URLs referenced by an email (img src/srcset/poster and
+ * CSS `url()`), deduped in document order. */
+export function collectRemoteImageUrls(html: string): string[] {
+  const urls = new Set<string>();
+  for (const m of html.matchAll(/(src|srcset|poster)=("|')(.*?)\2/gi)) {
+    const attr = m[1]!;
+    const value = m[3]!;
+    if (attr === "srcset") {
+      for (const u of value.matchAll(/https?:\/\/[^\s,)]+/gi)) {
+        urls.add(u[0]!);
+      }
+    } else if (/^https?:\/\//i.test(value)) {
+      urls.add(value);
+    }
+  }
+  for (const m of html.matchAll(
+    /url\(\s*("|')?(https?:\/\/[^)"']+)\1?\s*\)/gi,
+  )) {
+    urls.add(m[2]!);
+  }
+  return [...urls];
+}
+
+/** Pre-fetch remote images and rewrite their URLs to data: URIs. The page
+ * keeps all network blocked — only the caller-provided fetcher runs, and
+ * only against the bounded URL list above. Unresolvable images are left as
+ * remote URLs and the browser drops them, exactly as today. */
+async function rewriteRemoteImages(
+  html: string,
+  fetchRemoteImage: ((url: string) => Promise<CidImage | null>) | undefined,
+): Promise<string> {
+  if (!fetchRemoteImage) return html;
+  const urls = collectRemoteImageUrls(html).slice(0, REMOTE_IMAGE_CAP);
+  if (urls.length === 0) return html;
+  const resolved = await Promise.all(
+    urls.map(async (url) => {
+      const image = await fetchRemoteImage(url).catch(() => null);
+      return image ? ([url, image] as const) : null;
+    }),
+  );
+  let out = html;
+  for (const entry of resolved) {
+    if (!entry) continue;
+    const [url, image] = entry;
+    const uri = `data:${image.mime};base64,${image.buffer.toString("base64")}`;
+    out = out.split(url).join(uri);
+  }
+  return out;
+}
+
 /**
  * Render a document to a full-page PNG with the shared Chromium setup:
  * network blocked, bundled fonts, blank-output check, hard timeout. The
@@ -262,7 +320,8 @@ export async function renderEmailImage(
   // layout (see EMAIL_LAYOUT_CSS).
   const doctype = /<!doctype/i.test(trimmed) ? "" : "<!doctype html>";
   const body = await rewriteCidImages(trimmed, opts.resolveImage);
-  const doc = injectStyles(`${doctype}${body}`, [
+  const withRemote = await rewriteRemoteImages(body, opts.fetchRemoteImage);
+  const doc = injectStyles(`${doctype}${withRemote}`, [
     fontStyle(),
     EMAIL_LAYOUT_CSS,
   ]);
@@ -300,6 +359,108 @@ export async function renderTextEmail(
 /** Escape HTML-significant characters for the text document. */
 function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// --- Forwarded-message header stripping --------------------------------------
+//
+// Forwards (Fastmail, Gmail, Apple Mail, iOS, …) paste a header block in
+// front of the receipt: a marker line such as "----- Original message -----"
+// followed by From/To/Subject/Date lines. The receipt image should show the
+// receipt, not that envelope. `stripForwardHeader` removes the block from
+// HTML (for the browser render + htmlToText), `stripForwardedText` removes
+// it from plain text (for the text render, the resvg fallback, and LLM
+// extraction). Both only remove consecutive header-looking lines that
+// immediately follow a forward marker, so receipt content is never touched.
+
+const FORWARD_MARKERS = [
+  /-{2,}\s*Original message\s*-{2,}/i, // Fastmail / Apple Mail
+  /-{2,}\s*Forwarded message\s*-{2,}/i, // Gmail / Yahoo / Thunderbird
+  /Begin forwarded message:?/i, // Apple Mail / iOS
+  /Forwarded message:?/i,
+];
+
+const HEADER_LINE_RE =
+  /^(From|To|Cc|Bcc|Subject|Date|Sent|Reply-To|Reply To)\s*:/i;
+
+/** True when a line of plain text looks like an email header line. */
+function isHeaderLine(line: string): boolean {
+  return HEADER_LINE_RE.test(line.trim());
+}
+
+/** Remove a forward marker + its trailing header/blank lines from plain
+ * text. Returns the text unchanged when no forward block is found. */
+export function stripForwardedText(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  let start = -1;
+  for (const [i, line] of lines.entries()) {
+    if (FORWARD_MARKERS.some((m) => m.test(line.trim()))) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) return text;
+
+  let end = start + 1;
+  while (
+    end < lines.length &&
+    end - start <= FORWARD_HEADER_CAP &&
+    (isHeaderLine(lines[end]!) || !lines[end]!.trim())
+  ) {
+    end += 1;
+  }
+  // Drop a trailing run of blank lines that separated the header from the
+  // actual content.
+  let drop = end;
+  while (drop > start + 1 && !lines[drop - 1]!.trim()) drop -= 1;
+
+  const kept = [...lines.slice(0, start), ...lines.slice(drop)];
+  return kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Remove a forward marker element + its trailing header/blank sibling
+ * elements from HTML. Returns the HTML unchanged when no forward block is
+ * found. Uses cheerio (already a dependency via receipt-render) so entity
+ * decoding and arbitrary element nesting are handled.
+ */
+export function stripForwardHeader(html: string): string {
+  const $ = load(html);
+  const ownText = ($el: ReturnType<typeof $>) => {
+    const clone = $el.clone();
+    clone.children().remove();
+    return clone.text();
+  };
+
+  const found: ReturnType<typeof $>[] = [];
+  $("*").each((_, el) => {
+    const own = ownText($(el));
+    if (own && FORWARD_MARKERS.some((m) => m.test(own))) {
+      found.push($(el));
+    }
+  });
+  if (found.length === 0) return html;
+
+  for (const $el of found) {
+    // Remove the header lines that follow the marker as consecutive
+    // siblings (blank lines between them are spacer, removed too).
+    let sib = $el.next();
+    let walked = 0;
+    while (sib.length && walked < FORWARD_HEADER_CAP) {
+      const t = sib.text().trim();
+      if (isHeaderLine(t) || !t) {
+        const nxt = sib.next();
+        sib.remove();
+        sib = nxt;
+        walked += 1;
+      } else {
+        break;
+      }
+    }
+    $el.remove();
+  }
+  return $.html();
 }
 
 function buildTextDocument(text: string, opts: RenderTextEmailOptions): string {

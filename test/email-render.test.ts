@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
+import {
+  renderEmailImage,
+  renderTextEmail,
+  collectRemoteImageUrls,
+  stripForwardedText,
+  stripForwardHeader,
+} from "~/lib/email-render.server";
 
 const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -42,6 +48,29 @@ describe("renderEmailImage (headless chromium)", () => {
       '<html><body><img src="https://example.com/track.png"><p>Done</p></body></html>',
     );
     expect(Date.now() - started).toBeLessThan(15_000);
+    await expectInk(png);
+  });
+
+  it("inlines remote images through the fetcher when provided", async () => {
+    const fetched: string[] = [];
+    const png = await renderEmailImage(
+      '<html><body><img src="https://cdn.example.com/logo.png" width="8" height="8"><p>Receipt</p></body></html>',
+      {
+        fetchRemoteImage: async (url) => {
+          fetched.push(url);
+          return { buffer: TINY_PNG, mime: "image/png" };
+        },
+      },
+    );
+    expect(fetched).toEqual(["https://cdn.example.com/logo.png"]);
+    await expectInk(png);
+  });
+
+  it("leaves unfetchable remote images for the browser to drop", async () => {
+    const png = await renderEmailImage(
+      '<html><body><img src="https://cdn.example.com/broken.png"><p>Done</p></body></html>',
+      { fetchRemoteImage: async () => null },
+    );
     await expectInk(png);
   });
 
@@ -126,5 +155,138 @@ describe("renderTextEmail (plain-text emails)", () => {
   it("rejects empty text", async () => {
     await expect(renderTextEmail("")).rejects.toThrow(/empty/i);
     await expect(renderTextEmail("   \n ")).rejects.toThrow(/empty/i);
+  });
+});
+
+describe("collectRemoteImageUrls", () => {
+  it("collects img src, srcset, and CSS url() references but not links", () => {
+    const html = [
+      '<img src="https://cdn.example.com/a.png">',
+      '<img srcset="https://cdn.example.com/b.png 1x, https://cdn.example.com/c.png 2x">',
+      "<div style=\"background-image: url('https://cdn.example.com/d.png')\">",
+      "<style>.x{background:url(https://cdn.example.com/e.png)}</style>",
+      '<a href="https://cdn.example.com/not-an-image">link</a>',
+    ].join("");
+    expect(collectRemoteImageUrls(html)).toEqual([
+      "https://cdn.example.com/a.png",
+      "https://cdn.example.com/b.png",
+      "https://cdn.example.com/c.png",
+      "https://cdn.example.com/d.png",
+      "https://cdn.example.com/e.png",
+    ]);
+  });
+
+  it("returns [] for html with no remote images", () => {
+    expect(collectRemoteImageUrls("<p>no images</p>")).toEqual([]);
+  });
+});
+
+describe("stripForwardedText (plain-text forwards)", () => {
+  it("removes the Fastmail forward header block", () => {
+    const text = [
+      "— Assaf",
+      "",
+      "----- Original message -----",
+      "From: zai <receipts@stripe.com>",
+      "To: assaf@labnotes.org",
+      "Subject: Your zai receipt [#1909-8795]",
+      "Date: Thursday, July 30, 2026 5:15 PM",
+      "",
+      "Receipt from zai",
+      "Amount paid $10.00",
+    ].join("\n");
+    const out = stripForwardedText(text);
+    expect(out).not.toContain("Original message");
+    expect(out).not.toContain("From:");
+    expect(out).not.toContain("Subject:");
+    expect(out).toContain("Receipt from zai");
+    expect(out).toContain("Amount paid $10.00");
+  });
+
+  it("removes Gmail-style forward blocks", () => {
+    const text = [
+      "---------- Forwarded message ----------",
+      "From: X <x@y.com>",
+      "Date: Tue, Jun 2, 2026 at 3:14 PM",
+      "Subject: Your order receipt",
+      "To: me@gmail.com",
+      "",
+      "Order total $42.50",
+    ].join("\n");
+    const out = stripForwardedText(text);
+    expect(out).not.toContain("Forwarded message");
+    expect(out).not.toContain("From:");
+    expect(out).toBe("Order total $42.50");
+  });
+
+  it("removes Apple Mail / iOS forward blocks", () => {
+    expect(
+      stripForwardedText(
+        "Begin forwarded message:\nFrom: A <a@b.com>\nDate: Jun 2, 2026\n\nReceipt body",
+      ),
+    ).toBe("Receipt body");
+  });
+
+  it("leaves text without a forward marker untouched", () => {
+    const text = "Receipt from Acme\nTotal $12.00";
+    expect(stripForwardedText(text)).toBe(text);
+  });
+
+  it("does not strip receipt content that follows the header block", () => {
+    const text = [
+      "Begin forwarded message:",
+      "From: A <a@b.com>",
+      "Date: Jun 2, 2026",
+      "",
+      "Line one of the receipt",
+      "From: a follow-up line inside the receipt",
+    ].join("\n");
+    const out = stripForwardedText(text);
+    expect(out).toContain("Line one of the receipt");
+    expect(out).toContain("a follow-up line inside the receipt");
+  });
+});
+
+describe("stripForwardHeader (html forwards)", () => {
+  it("removes the Fastmail forward header elements", () => {
+    const html = [
+      "<html><body>",
+      "<div>— Assaf</div>",
+      "<div>----- Original message -----</div>",
+      "<div>From: zai &lt;receipts@stripe.com&gt;</div>",
+      "<div>To:&nbsp;assaf@labnotes.org</div>",
+      "<div>Subject: Your zai receipt [#1909-8795]</div>",
+      "<div>Date: Thursday, July 30, 2026 5:15 PM</div>",
+      "<div><br></div>",
+      '<div type="cite"><h1>Receipt from zai</h1></div>',
+      "</body></html>",
+    ].join("\n");
+    const out = stripForwardHeader(html);
+    expect(out).not.toContain("Original message");
+    expect(out).not.toContain("From: zai");
+    expect(out).not.toContain("Subject:");
+    expect(out).toContain("Receipt from zai");
+  });
+
+  it("removes Gmail-style header divs inside a gmail_quote", () => {
+    const html = [
+      '<div class="gmail_quote">',
+      '<div dir="ltr">---------- Forwarded message ----------<br></div>',
+      '<div dir="ltr"><b>From:</b> X &lt;x@y.com&gt;<br></div>',
+      '<div dir="ltr"><b>Date:</b> Tue, Jun 2, 2026<br></div>',
+      '<div dir="ltr"><b>Subject:</b> hi<br></div>',
+      "<div><br></div>",
+      "<div>Order total $42.50</div>",
+      "</div>",
+    ].join("\n");
+    const out = stripForwardHeader(html);
+    expect(out).not.toContain("Forwarded message");
+    expect(out).not.toContain("From:");
+    expect(out).toContain("Order total $42.50");
+  });
+
+  it("returns the html unchanged when there is no forward block", () => {
+    const html = "<html><body><h1>Your receipt</h1></body></html>";
+    expect(stripForwardHeader(html)).toBe(html);
   });
 });
