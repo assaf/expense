@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { renderEmailImage } from "~/lib/email-render.server";
+import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
 
 const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -51,5 +51,60 @@ describe("renderEmailImage (headless chromium)", () => {
     await expect(
       renderEmailImage(`<p>${"x".repeat(4_000_001)}</p>`),
     ).rejects.toThrow(/too large/i);
+  });
+});
+
+describe("renderTextEmail (plain-text emails)", () => {
+  it("renders text in a 600px column with 24px margins and 14pt text", async () => {
+    const png = await renderTextEmail(
+      "THE COFFEE ROASTERY\n2134 Sunset Blvd, Los Angeles, CA\n\nTOTAL 23.21",
+      {
+        subject: "Your receipt",
+        from: "receipts@coffeeroastery.example",
+      },
+    );
+    const meta = await sharp(png).metadata();
+    expect(meta.width).toBe(648); // 600px column + 24px margins each side
+    // Both 24px margins are pure white.
+    for (const left of [0, meta.width! - 24]) {
+      const strip = await sharp(
+        await sharp(png)
+          .extract({
+            left,
+            top: 0,
+            width: 24,
+            height: Math.min(meta.height!, 200),
+          })
+          .png()
+          .toBuffer(),
+      ).stats();
+      const min = Math.min(...strip.channels.slice(0, 3).map((c) => c.min));
+      expect(min).toBeGreaterThanOrEqual(250);
+    }
+    await expectInk(png);
+  });
+
+  it("wraps long unbroken lines instead of overflowing the column", async () => {
+    const png = await renderTextEmail(`Long link: ${"a".repeat(400)}\n\nEnd`);
+    const meta = await sharp(png).metadata();
+    // Right margin stays white → nothing overflowed the 600px column.
+    const right = await sharp(
+      await sharp(png)
+        .extract({
+          left: meta.width! - 24,
+          top: 0,
+          width: 24,
+          height: Math.min(meta.height!, 300),
+        })
+        .png()
+        .toBuffer(),
+    ).stats();
+    const min = Math.min(...right.channels.slice(0, 3).map((c) => c.min));
+    expect(min).toBeGreaterThanOrEqual(250);
+  });
+
+  it("rejects empty text", async () => {
+    await expect(renderTextEmail("")).rejects.toThrow(/empty/i);
+    await expect(renderTextEmail("   \n ")).rejects.toThrow(/empty/i);
   });
 });

@@ -24,6 +24,7 @@ import type {
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import type { ProcessResult } from "~/lib/inbound-email.server";
 import type { Expense, ReceiptExpense } from "~/lib/types";
+import type { RenderTextEmailOptions } from "~/lib/email-render.server";
 import {
   buildReceiptSvg,
   htmlToText,
@@ -146,6 +147,7 @@ function fakeDeps(): InboundDeps & {
     renderPdfToPng: async () => TINY_PNG,
     renderReceiptImage,
     renderEmailImage: async () => TINY_PNG,
+    renderTextEmail: async () => TINY_PNG,
     sendReply: async (input) => {
       sent.push({ subject: input.subject, html: input.html, to: input.to });
     },
@@ -646,9 +648,14 @@ describe("processInboundEvent (body receipt)", () => {
       }),
     ];
     const renderedHtml: string[] = [];
+    let textRenderCalls = 0;
     deps.renderEmailImage = async (h, opts) => {
       renderedHtml.push(h);
       await opts?.resolveImage?.("logo1");
+      return TINY_PNG;
+    };
+    deps.renderTextEmail = async () => {
+      textRenderCalls += 1;
       return TINY_PNG;
     };
     const result = await processInboundEvent(eventData(), deps);
@@ -656,6 +663,7 @@ describe("processInboundEvent (body receipt)", () => {
     usedExpenseIds.push(expenseIdOf(result));
     expect(result).toMatchObject({ status: "created" });
     expect(renderedHtml).toEqual([html]);
+    expect(textRenderCalls).toBe(0);
     // The inline image referenced by the HTML was downloaded for the render.
     expect(deps.downloads.map((d) => d.filename)).toContain("logo.png");
   });
@@ -680,18 +688,30 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(0); // fully imported — no reply email
   });
 
-  it("skips the browser render for text-only emails", async () => {
+  it("renders text-only emails through the plain-text renderer", async () => {
     const deps = fakeDeps();
-    let browserCalls = 0;
+    let htmlRenderCalls = 0;
+    let textRenderCalls = 0;
+    let textOptions: RenderTextEmailOptions | undefined;
     deps.renderEmailImage = async () => {
-      browserCalls += 1;
+      htmlRenderCalls += 1;
+      return TINY_PNG;
+    };
+    deps.renderTextEmail = async (_text, opts) => {
+      textRenderCalls += 1;
+      textOptions = opts;
       return TINY_PNG;
     };
     const result = await processInboundEvent(eventData(), deps);
     usedEmailIds.push("email-1");
     usedExpenseIds.push(expenseIdOf(result));
     expect(result).toMatchObject({ status: "created" });
-    expect(browserCalls).toBe(0);
+    expect(htmlRenderCalls).toBe(0);
+    expect(textRenderCalls).toBe(1);
+    expect(textOptions).toEqual({
+      subject: "Fwd: Receipt from Amazon",
+      from: `Forwarder <${SENDER}>`,
+    });
   });
 
   it("sends no expense to the other account", async () => {

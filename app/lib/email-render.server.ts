@@ -1,7 +1,11 @@
 /**
- * Render an email's HTML body into a receipt image using a real browser
- * engine (headless Chromium), so the stored image shows the email as the
- * sender designed it — not a flattened text sheet.
+ * Render an email body into a receipt image using a real browser engine
+ * (headless Chromium), so the stored image shows the email as the sender
+ * designed it — not a flattened text sheet. Two entry points:
+ *  - `renderEmailImage`: render an email's HTML (network blocked, inline
+ *    `cid:` images rewritten by the caller-provided resolver).
+ *  - `renderTextEmail`: render a plain-text email as a 600px text column
+ *    with 24px margins at 14pt.
  *
  * Binary selection:
  *  - Vercel (`process.env.VERCEL === "1"`): `@sparticuz/chromium` — the
@@ -53,6 +57,11 @@ const HTML_MAX = 4_000_000; // refuse to render absurdly large bodies
 const RENDER_TIMEOUT_MS = 10_000;
 const PAGE_TIMEOUT_MS = 8_000;
 const VIEWPORT_WIDTH = 640; // standard email content width
+// Plain-text emails: 600px text column + 24px margins on each side.
+const TEXT_VIEWPORT_WIDTH = 648;
+const TEXT_COLUMN_MAX = "600px";
+const TEXT_MARGIN = 24;
+const TEXT_FONT_SIZE = "14pt";
 
 // Email CSS almost always names a system stack (Arial/Helvetica/Verdana/...).
 // Serverless runtimes have no system fonts, so shadow those families with
@@ -160,28 +169,20 @@ async function rewriteCidImages(
 }
 
 /**
- * Render an email's HTML to a full-page PNG (white background, network
- * blocked, bundled fonts). Throws on empty/oversized input, blank output,
- * or browser failure — callers fall back to the resvg text sheet.
+ * Render a document to a full-page PNG with the shared Chromium setup:
+ * network blocked, bundled fonts, blank-output check, hard timeout. The
+ * page is closed on every path.
  */
-export async function renderEmailImage(
-  html: string,
-  opts: RenderEmailOptions = {},
+async function renderDocument(
+  doc: string,
+  viewportWidth: number,
 ): Promise<Buffer> {
-  const trimmed = html.trim();
-  if (!trimmed) throw new Error("Empty HTML body");
-  if (trimmed.length > HTML_MAX) {
-    throw new Error("HTML body too large to render");
-  }
-
-  const doc = injectFonts(await rewriteCidImages(trimmed, opts.resolveImage));
-
   const browser = await getBrowser();
   const page = await browser.newPage();
   let timer: NodeJS.Timeout | undefined;
   try {
     page.setDefaultTimeout(PAGE_TIMEOUT_MS);
-    await page.setViewport({ width: VIEWPORT_WIDTH, height: 800 });
+    await page.setViewport({ width: viewportWidth, height: 800 });
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const url = request.url();
@@ -197,7 +198,7 @@ export async function renderEmailImage(
     };
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error("Email render timed out")),
+        () => reject(new Error("Render timed out")),
         RENDER_TIMEOUT_MS,
       );
     });
@@ -210,4 +211,74 @@ export async function renderEmailImage(
     clearTimeout(timer);
     await page.close();
   }
+}
+
+/**
+ * Render an email's HTML to a full-page PNG (white background, network
+ * blocked, bundled fonts). Throws on empty/oversized input, blank output,
+ * or browser failure — callers fall back to the resvg text sheet.
+ */
+export async function renderEmailImage(
+  html: string,
+  opts: RenderEmailOptions = {},
+): Promise<Buffer> {
+  const trimmed = html.trim();
+  if (!trimmed) throw new Error("Empty HTML body");
+  if (trimmed.length > HTML_MAX) {
+    throw new Error("HTML body too large to render");
+  }
+  const doc = injectFonts(await rewriteCidImages(trimmed, opts.resolveImage));
+  return renderDocument(doc, VIEWPORT_WIDTH);
+}
+
+export interface RenderTextEmailOptions {
+  /** Show the sender line in a small envelope bar (e.g. "Jane <j@x.com>"). */
+  from?: string;
+  /** Show the subject line in a small envelope bar. */
+  subject?: string;
+}
+
+/**
+ * Render a plain-text email to a full-page PNG: a 600px text column with
+ * 24px margins and 14pt sans-serif text, so the body reads like an email
+ * rather than a wide mono sheet. Throws on empty/oversized input, blank
+ * output, or browser failure — callers fall back to the resvg text sheet.
+ */
+export async function renderTextEmail(
+  text: string,
+  opts: RenderTextEmailOptions = {},
+): Promise<Buffer> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Empty text body");
+  if (trimmed.length > HTML_MAX) {
+    throw new Error("Text body too large to render");
+  }
+  return renderDocument(
+    injectFonts(buildTextDocument(trimmed, opts)),
+    TEXT_VIEWPORT_WIDTH,
+  );
+}
+
+/** Escape HTML-significant characters for the text document. */
+function escapeText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildTextDocument(text: string, opts: RenderTextEmailOptions): string {
+  const envelope =
+    opts.from || opts.subject
+      ? `<div style="background-color:#f8fafc;border-bottom:1px solid #e2e8f0;padding:10px 24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#475569">` +
+        (opts.from ? `<div><b>From:</b> ${escapeText(opts.from)}</div>` : "") +
+        (opts.subject
+          ? `<div><b>Subject:</b> ${escapeText(opts.subject)}</div>`
+          : "") +
+        `</div>`
+      : "";
+  return `<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:${TEXT_FONT_SIZE};line-height:1.55;color:#1f2937">
+  <div style="max-width:${TEXT_COLUMN_MAX};margin:${TEXT_MARGIN}px auto;padding:0">
+    ${envelope}
+    <div style="white-space:pre-wrap;overflow-wrap:anywhere;padding:24px">${escapeText(text)}</div>
+  </div>
+</body></html>`;
 }

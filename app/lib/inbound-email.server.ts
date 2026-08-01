@@ -2,9 +2,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { ulid } from "ulid";
 import {
   renderEmailImage,
+  renderTextEmail,
   type CidImage,
   type CidResolver,
   type RenderEmailOptions,
+  type RenderTextEmailOptions,
 } from "~/lib/email-render.server";
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import {
@@ -140,6 +142,7 @@ export interface InboundDeps {
     opts?: { subject?: string },
   ): Promise<Buffer>;
   renderEmailImage(html: string, opts?: RenderEmailOptions): Promise<Buffer>;
+  renderTextEmail(text: string, opts?: RenderTextEmailOptions): Promise<Buffer>;
   sendReply(input: ReplyInput): Promise<void>;
 }
 
@@ -461,6 +464,7 @@ const defaultDeps: InboundDeps = {
   renderPdfToPng,
   renderReceiptImage,
   renderEmailImage,
+  renderTextEmail,
   sendReply: sendReplyEmail,
 };
 
@@ -651,14 +655,24 @@ export async function processInboundEvent(
       }
     } else {
       const bodyText = source.text.slice(0, 20_000);
-      // Render the actual email (headless Chromium) when there's an HTML
-      // part — inline images resolved from cid: refs — and fall back to the
-      // resvg text sheet for text-only emails or any render failure (e.g. a
-      // runtime without a browser binary).
+      // Render the actual email with headless Chromium — the HTML part when
+      // present, otherwise the plain text as a narrow email-style column.
+      // The resvg text sheet stays as the final fallback (e.g. a runtime
+      // without a browser binary).
       if (email.html) {
         try {
           receiptImage = await deps.renderEmailImage(email.html, {
             resolveImage: makeCidResolver(attachments, email.html, deps),
+          });
+        } catch (err) {
+          renderError = err instanceof Error ? err.message : String(err);
+          receiptImage = null;
+        }
+      } else {
+        try {
+          receiptImage = await deps.renderTextEmail(bodyText, {
+            subject: email.subject,
+            from: email.from,
           });
         } catch (err) {
           renderError = err instanceof Error ? err.message : String(err);

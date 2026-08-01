@@ -82,34 +82,34 @@ returns 503 when unconfigured and everything else still works.
 
 ## Key files
 
-| File                               | Role                                                                                                                                                                               |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/routes/_index.tsx`            | Main list, add buttons, paste/upload image.                                                                                                                                        |
-| `app/routes/expense.$id.tsx`       | Receipt + mileage editor (save/cancel/delete).                                                                                                                                     |
-| `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                                                                                                                            |
-| `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                                                                                                               |
-| `app/routes/export.*`              | PDF per report + ZIP of everything.                                                                                                                                                |
-| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.                                                                                                       |
-| `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                                                                            |
-| `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                                                                                                                    |
-| `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                                                                                                                         |
-| `app/lib/auth.server.ts`           | Auth: session storage, `requireUser`, login/signup.                                                                                                                                |
-| `app/lib/passwords.ts`             | scrypt hashing + invite-code generation.                                                                                                                                           |
-| `app/lib/prisma.server.ts`         | Prisma client singleton (PrismaPg adapter).                                                                                                                                        |
-| `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies.                                                                                              |
-| `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                                                                                                                     |
-| `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                                                                                                              |
-| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono); fallback renderer.                                                                                            |
-| `app/lib/email-render.server.ts`   | Render email HTML → PNG with real headless Chromium (puppeteer-core + @sparticuz/chromium on Vercel, Playwright Chromium locally; `RENDER_BROWSER=local                            | sparticuz | none` overrides). |     |
-| `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                                                                                                                           |
-| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                                                                                          |
-| `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                               |
-| `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                                                                                      |
-| `scripts/clone`                    | Clone prod (Neon) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                          |
-| `scripts/import-expensify.ts`      | API-driven Expensify import: effective SmartScan fields + receipt images (needs `EXPENSIFY_PARTNER_USER_ID`/`_SECRET`; receipts are login-gated — `--cookie` or `--receipts-dir`). |
-| `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                                                                                                               |
-| `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                                                                                                                   |
-| `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                                                                                                                  |
+| File                               | Role                                                                                                                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/routes/_index.tsx`            | Main list, add buttons, paste/upload image.                                                                                                                                                                   |
+| `app/routes/expense.$id.tsx`       | Receipt + mileage editor (save/cancel/delete).                                                                                                                                                                |
+| `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                                                                                                                                                       |
+| `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                                                                                                                                          |
+| `app/routes/export.*`              | PDF per report + ZIP of everything.                                                                                                                                                                           |
+| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.                                                                                                                                  |
+| `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                                                                                                       |
+| `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                                                                                                                                               |
+| `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                                                                                                                                                    |
+| `app/lib/auth.server.ts`           | Auth: session storage, `requireUser`, login/signup.                                                                                                                                                           |
+| `app/lib/passwords.ts`             | scrypt hashing + invite-code generation.                                                                                                                                                                      |
+| `app/lib/prisma.server.ts`         | Prisma client singleton (PrismaPg adapter).                                                                                                                                                                   |
+| `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies.                                                                                                                         |
+| `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                                                                                                                                                |
+| `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                                                                                                                                         |
+| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono); fallback renderer.                                                                                                                       |
+| `app/lib/email-render.server.ts`   | Render email bodies → PNG with real headless Chromium (HTML + plain-text column; puppeteer-core + @sparticuz/chromium on Vercel, Playwright Chromium locally; RENDER_BROWSER=local/sparticuz/none overrides). |
+| `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                                                                                                                                                      |
+| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                                                                                                                     |
+| `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                                                          |
+| `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                                                                                                                 |
+| `scripts/clone`                    | Clone prod (Neon) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                                                     |
+| `scripts/import-expensify.ts`      | API-driven Expensify import: effective SmartScan fields + receipt images (needs `EXPENSIFY_PARTNER_USER_ID`/`_SECRET`; receipts are login-gated — `--cookie` or `--receipts-dir`).                            |
+| `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                                                                                                                                          |
+| `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                                                                                                                                              |
+| `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                                                                                                                                             |
 
 ## Gotchas
 
@@ -157,11 +157,12 @@ returns 503 when unconfigured and everything else still works.
     "Begin forwarded message" Date → .eml attachment Date → received header).
   - Only the best receipt attachment (PDF/image, heuristic + model tiebreak)
     is used; logos/signatures/inline decoration are skipped; otherwise the
-    email body (text or HTML→text) becomes the receipt image. With an HTML
-    part, the body is rendered to a PNG with headless Chromium
-    (`email-render.server.ts`; inline `cid:` images are downloaded and
-    rewritten to data URIs; network is blocked in the page), falling back to
-    the resvg text sheet for text-only emails or any browser failure.
+    email body becomes the receipt image: with an HTML part it is rendered
+    to a PNG with headless Chromium (`email-render.server.ts`; inline `cid:`
+    images are downloaded and rewritten to data URIs; network is blocked in
+    the page); text-only emails render as a 600px text column (24px margins,
+    14pt). The resvg text sheet (`receipt-render.server.ts`) is the final
+    fallback for any browser failure.
   - PDF attachments are stored as rendered PNGs; the stored image is always
     browser-displayable (HEIC/BMP/TIFF → PNG via sharp).
   - The hosted DeepSeek API is text-only today — image OCR falls back to
