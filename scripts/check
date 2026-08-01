@@ -13,3 +13,27 @@ vp check --fix
 
 echo -e "\033[0;32m--- Run knip ---\033[0m"
 knip
+
+echo -e "\033[0;32m--- Verify tesseract.js patch is applied ---\033[0m"
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join, dirname } from "node:path";
+import { pathToFileURL } from "node:url";
+const req = createRequire(pathToFileURL(join(process.cwd(), "package.json")).href);
+const worker = req.resolve("tesseract.js/src/worker-script/node/index.js");
+const getCore = readFileSync(join(dirname(worker), "getCore.js"), "utf8");
+if (!getCore.includes(".wasm.js")) {
+  console.error(
+    "tesseract.js patch is not applied — embedded wasm core variants are missing.",
+  );
+  console.error(
+    "Regenerate it: pnpm patch tesseract.js@<version>, edit src/worker-script/node/getCore.js",
+  );
+  console.error(
+    "to require the .wasm.js variants, then pnpm patch-commit. See patches/tesseract.js@7.0.0.patch.",
+  );
+  process.exit(1);
+}
+console.log("pass: tesseract.js patch applied (embedded wasm core)")
+'
