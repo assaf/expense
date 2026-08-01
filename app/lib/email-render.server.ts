@@ -72,8 +72,17 @@ const FONT_FAMILIES = [
   "Verdana",
   "Tahoma",
   "Segoe UI",
+  "Open Sans",
   "sans-serif",
 ];
+
+// Receipt/confirmation emails love `<pre>` with long unbroken lines, and
+// `pre` refuses to wrap — a 600-char paragraph can inflate the layout to
+// thousands of pixels wide (and Puppeteer's fullPage screenshot captures the
+// full scroll width). Force wrapping; the clip is a final safety net.
+const EMAIL_LAYOUT_CSS =
+  "pre{white-space:pre-wrap!important;overflow-wrap:anywhere!important}" +
+  "html,body{overflow-x:clip!important}";
 
 interface BrowserConfig {
   executablePath: string;
@@ -131,17 +140,29 @@ function getBrowser(): Promise<Browser> {
 }
 
 /** Embed the bundled font as @font-face aliases for common email families. */
-function injectFonts(html: string): string {
-  const fontCss = [
+function injectStyles(html: string, styles: string[]): string {
+  const style = `<style>${styles.join("")}</style>`;
+  const head = html.match(/<head[^>]*>/i);
+  if (head) return html.replace(head[0], `${head[0]}${style}`);
+  const body = html.match(/<body[^>]*>/i);
+  if (body) return html.replace(body[0], `${body[0]}${style}`);
+  return `${style}${html}`;
+}
+
+/** The bundled-font CSS: aliases common email families to Inter. */
+function fontStyle(): string {
+  return [
     ...FONT_FAMILIES.map(
       (family) =>
         `@font-face{font-family:'${family}';src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format('woff2');font-weight:100 900;font-style:normal}`,
     ),
     "html,body{font-family:Arial,Helvetica,sans-serif}",
   ].join("");
-  const style = `<style>${fontCss}</style>`;
-  const head = html.match(/<head[^>]*>/i);
-  return head ? html.replace(head[0], `${head[0]}${style}`) : `${style}${html}`;
+}
+
+/** Embed the bundled font into an email/text document. */
+function injectFonts(html: string): string {
+  return injectStyles(html, [fontStyle()]);
 }
 
 /** Rewrite `cid:` references (src/srcset/url()) to data: URIs via the
@@ -194,7 +215,15 @@ async function renderDocument(
     });
     const render = async (): Promise<Uint8Array> => {
       await page.setContent(doc, { waitUntil: "load" });
-      return page.screenshot({ fullPage: true, type: "png" });
+      // Capture the content at the fixed viewport width using the measured
+      // height — NOT fullPage, which would grow the capture to the full
+      // scroll width (a wide email element would produce a huge blank
+      // strip). Content beyond the cap is clipped, like an email client.
+      const height = await page.evaluate(() =>
+        Math.min(document.documentElement.scrollHeight, 20_000),
+      );
+      await page.setViewport({ width: viewportWidth, height });
+      return page.screenshot({ type: "png" });
     };
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(
@@ -227,7 +256,16 @@ export async function renderEmailImage(
   if (trimmed.length > HTML_MAX) {
     throw new Error("HTML body too large to render");
   }
-  const doc = injectFonts(await rewriteCidImages(trimmed, opts.resolveImage));
+  // Email HTML often arrives as a fragment; without a doctype Chromium
+  // renders in quirks mode, which inflates percentage table widths. Force
+  // standards mode, then clamp pre-wrapping so long lines can't widen the
+  // layout (see EMAIL_LAYOUT_CSS).
+  const doctype = /<!doctype/i.test(trimmed) ? "" : "<!doctype html>";
+  const body = await rewriteCidImages(trimmed, opts.resolveImage);
+  const doc = injectStyles(`${doctype}${body}`, [
+    fontStyle(),
+    EMAIL_LAYOUT_CSS,
+  ]);
   return renderDocument(doc, VIEWPORT_WIDTH);
 }
 

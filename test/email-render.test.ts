@@ -49,8 +49,28 @@ describe("renderEmailImage (headless chromium)", () => {
     await expect(renderEmailImage("")).rejects.toThrow(/empty/i);
     await expect(renderEmailImage("  \n ")).rejects.toThrow(/empty/i);
     await expect(
-      renderEmailImage(`<p>${"x".repeat(4_000_001)}</p>`),
+      renderEmailImage("<p>" + "x".repeat(4_000_001) + "</p>"),
     ).rejects.toThrow(/too large/i);
+  });
+
+  it("clamps emails with long unbroken <pre> lines to the viewport width", async () => {
+    const png = await renderEmailImage(
+      "<!doctype html><html><body><pre>" +
+        "x".repeat(3_000) +
+        "</pre><p>done</p></body></html>",
+    );
+    const meta = await sharp(png).metadata();
+    expect(meta.width).toBe(640);
+    await expectInk(png);
+  });
+
+  it("renders doctype-less HTML fragments in standards mode", async () => {
+    const png = await renderEmailImage(
+      '<table width="100%"><tr><td>Cell</td></tr></table><p>More</p>',
+    );
+    const meta = await sharp(png).metadata();
+    expect(meta.width).toBe(640);
+    await expectInk(png);
   });
 });
 
