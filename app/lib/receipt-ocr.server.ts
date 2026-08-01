@@ -80,6 +80,11 @@ const nodeRequire = createRequire(import.meta.url);
  * only accepts a local file path (a CDN URL throws ERR_WORKER_PATH); the
  * script is small, and the wasm core is required from tesseract.js-core at
  * runtime. Only the traineddata (`langPath`) is fetched from a CDN.
+ *
+ * The core loads the base64-embedded `.wasm.js` variants (patched via
+ * patches/tesseract.js@7.0.0.patch) instead of the separate `.wasm` files,
+ * because Vercel's dependency tracer ships JS but drops binary `.wasm`
+ * references — the embedded variants survive tracing.
  */
 const TESSERACT_NODE_WORKER = nodeRequire.resolve(
   "tesseract.js/src/worker-script/node/index.js",

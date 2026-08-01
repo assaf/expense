@@ -1,0 +1,31 @@
+diff --git a/src/worker-script/node/getCore.js b/src/worker-script/node/getCore.js
+index 3c1d4cb1055040078ae53d7bdee6fde7abe4d702..121a37d428006a0fda5cff5a9b173906acde4e11 100644
+--- a/src/worker-script/node/getCore.js
++++ b/src/worker-script/node/getCore.js
+@@ -17,20 +17,20 @@ module.exports = async (oem, _, res) => {
+     res.progress({ status: statusText, progress: 0 });
+     if (relaxedSimdSupport) {
+       if ([OEM.DEFAULT, OEM.LSTM_ONLY].includes(oem)) {
+-        TesseractCore = require('tesseract.js-core/tesseract-core-relaxedsimd-lstm');
++        TesseractCore = require('tesseract.js-core/tesseract-core-relaxedsimd-lstm.wasm.js');
+       } else {
+-        TesseractCore = require('tesseract.js-core/tesseract-core-relaxedsimd');
++        TesseractCore = require('tesseract.js-core/tesseract-core-relaxedsimd.wasm.js');
+       }
+     } else if (simdSupport) {
+       if ([OEM.DEFAULT, OEM.LSTM_ONLY].includes(oem)) {
+-        TesseractCore = require('tesseract.js-core/tesseract-core-simd-lstm');
++        TesseractCore = require('tesseract.js-core/tesseract-core-simd-lstm.wasm.js');
+       } else {
+-        TesseractCore = require('tesseract.js-core/tesseract-core-simd');
++        TesseractCore = require('tesseract.js-core/tesseract-core-simd.wasm.js');
+       }
+     } else if ([OEM.DEFAULT, OEM.LSTM_ONLY].includes(oem)) {
+-      TesseractCore = require('tesseract.js-core/tesseract-core-lstm');
++      TesseractCore = require('tesseract.js-core/tesseract-core-lstm.wasm.js');
+     } else {
+-      TesseractCore = require('tesseract.js-core/tesseract-core');
++      TesseractCore = require('tesseract.js-core/tesseract-core.wasm.js');
+     }
+     res.progress({ status: statusText, progress: 1 });
+   }

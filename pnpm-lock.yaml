@@ -13,6 +13,9 @@ catalogs:
 overrides:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.6
 
+patchedDependencies:
+  tesseract.js@7.0.0: f33477c45a121b0e6a42c7d1660b67b7ba2614c4c1b3d04d21b673d3e3b959c9
+
 importers:
 
   .:
@@ -112,7 +115,7 @@ importers:
         version: 4.3.3
       tesseract.js:
         specifier: ^7.0.0
-        version: 7.0.0
+        version: 7.0.0(patch_hash=f33477c45a121b0e6a42c7d1660b67b7ba2614c4c1b3d04d21b673d3e3b959c9)
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
@@ -6595,7 +6598,7 @@ snapshots:
 
   tesseract.js-core@7.0.0: {}
 
-  tesseract.js@7.0.0:
+  tesseract.js@7.0.0(patch_hash=f33477c45a121b0e6a42c7d1660b67b7ba2614c4c1b3d04d21b673d3e3b959c9):
     dependencies:
       bmp-js: 0.1.0
       idb-keyval: 6.3.0
