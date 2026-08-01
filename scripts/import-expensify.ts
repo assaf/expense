@@ -63,6 +63,15 @@ for (const arg of process.argv) {
   }
 }
 
+// Optional local dir with receipt files keyed by their stored filename
+// (e.g. exported via the browser session when the API download is gated).
+const RECEIPTS_DIR =
+  process.env.EXPENSIFY_RECEIPTS_DIR ??
+  process.argv
+    .find((a) => a.startsWith("--receipts-dir="))
+    ?.slice("--receipts-dir=".length) ??
+  "";
+
 if (!PARTNER_USER_SECRET) {
   console.error("EXPENSIFY_PARTNER_USER_SECRET is required");
   process.exit(1);
@@ -290,17 +299,38 @@ async function loadCanvasFromPng(buffer: Buffer): Promise<Image> {
 async function downloadReceipt(
   url: string,
   type: string,
+  filename: string,
 ): Promise<{ buffer: Buffer; mime: string } | null> {
-  const headers: Record<string, string> = {
-    "User-Agent":
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
-  };
-  if (COOKIE) headers["Cookie"] = COOKIE;
-  const res = await fetch(url, { headers });
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (res.status !== 200 || buf.length < 100) {
-    console.warn(`  receipt download failed (${res.status}): ${url}`);
-    return null;
+  let buf: Buffer | null = null;
+  if (RECEIPTS_DIR) {
+    // Local files from a browser-driven export: keyed by stored filename.
+    const { readFileSync, existsSync } = await import("node:fs");
+    const local = RECEIPTS_DIR.endsWith("/")
+      ? RECEIPTS_DIR
+      : `${RECEIPTS_DIR}/`;
+    const bare = url.split("/").pop() ?? "";
+    const found = existsSync(`${local}${filename}`)
+      ? `${local}${filename}`
+      : existsSync(`${local}${bare}`)
+        ? `${local}${bare}`
+        : null;
+    if (!found) {
+      console.warn(`  receipt file missing locally: ${filename}`);
+      return null;
+    }
+    buf = readFileSync(found);
+  } else {
+    const headers: Record<string, string> = {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
+    };
+    if (COOKIE) headers["Cookie"] = COOKIE;
+    const res = await fetch(url, { headers });
+    buf = Buffer.from(await res.arrayBuffer());
+    if (res.status !== 200 || buf.length < 100) {
+      console.warn(`  receipt download failed (${res.status}): ${url}`);
+      return null;
+    }
   }
   if (type === "pdf" || url.toLowerCase().endsWith(".pdf")) {
     try {
@@ -405,7 +435,11 @@ async function reconcile(
         receiptsSkipped++;
         continue;
       }
-      const img = await downloadReceipt(t.receiptURL, t.receiptType);
+      const img = await downloadReceipt(
+        t.receiptURL,
+        t.receiptType,
+        t.receiptFilename,
+      );
       if (!img) {
         receiptsSkipped++;
         continue;
