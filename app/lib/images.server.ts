@@ -9,9 +9,10 @@ import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
  * Receipt image storage, selected by environment:
- *  1. Vercel Blob under the `images/` prefix when BLOB_READ_WRITE_TOKEN is set
- *     (Vercel production).
- *  2. Postgres BYTEA when IMAGE_BACKEND=pg (dev/tests — no separate service).
+ *  1. Postgres BYTEA when IMAGE_BACKEND=pg (prod and dev/tests — no separate
+ *     service; the image_blobs table is the only store in use today).
+ *  2. Vercel Blob under the `images/` prefix when BLOB_READ_WRITE_TOKEN is
+ *     set (legacy path, kept for portability).
  *
  * IMAGE_BACKEND can force either; otherwise Blob token → error. A backend is
  * required: save/read/rename/delete throw a clear error instead of silently

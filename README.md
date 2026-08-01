@@ -25,7 +25,7 @@ Stack:
 - React Router v8 (framework mode) + Tailwind v4, TypeScript
 - Postgres via Prisma — accounts, users, expenses, reports, categories,
   settings, mileage, image blobs
-- Images: Vercel Blob in prod, Postgres BYTEA in dev/test
+- Images: Postgres BYTEA (prod and dev/test) via `IMAGE_BACKEND=pg`
 - Deployed on Vercel + Neon (git push to main auto-deploys)
 
 Auth & accounts (the recent work):
@@ -67,24 +67,23 @@ Storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the
 single schema source of truth; the client is generated to
 `prisma/generated` by `pnpm build:prisma`). `DATABASE_URL` is required at
 startup (the app exits with a clear error otherwise). Receipt images go to
-Vercel Blob when `BLOB_READ_WRITE_TOKEN` is set (prod), or into Postgres
-BYTEA when `IMAGE_BACKEND=pg` (dev/tests — no separate service). A missing
+Postgres BYTEA (`image_blobs`, `IMAGE_BACKEND=pg`) in prod and dev — no
+separate storage service. A missing
 image backend is an error, never a silent disk fallback.
 
-| Data                        | Images                                |
-| --------------------------- | ------------------------------------- |
-| `accounts` / `users` /      | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
-| `expenses` / `reports` /    | Postgres BYTEA (`IMAGE_BACKEND=pg`)   |
-| `categories` / `settings` / |                                       |
-| `mileage` / `image_blobs`   |                                       |
+| Data                        | Images                              |
+| --------------------------- | ----------------------------------- |
+| `accounts` / `users` /      | Postgres BYTEA (`IMAGE_BACKEND=pg`, |
+| `expenses` / `reports` /    | prod and dev)                       |
+| `categories` / `settings` / |                                     |
+| `mileage` / `image_blobs`   |                                     |
 
 All reads/writes go through `app/lib/store.server.ts` (→
 `app/lib/database.ts`, Prisma queries scoped by `accountId`); image storage
-is behind `app/lib/images.server.ts` (`@vercel/blob` vs Prisma `imageBlob`).
+is behind `app/lib/images.server.ts` (Prisma `imageBlob`).
 Keys are `images/{accountId}/...` pathnames on every backend — namespaced
-per account so two accounts can never collide on the same filename — and
-data is portable between them. Schema changes: edit
-`prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
+per account so two accounts can never collide on the same filename.
+Schema changes: edit `prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
 `pnpm db:push` (or `pnpm db:migrate`) before deploying.
 
 ### `data/` — migration source only (removed)
@@ -128,7 +127,7 @@ ignore the local database, and reset the schema from Prisma on each run
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
-`BLOB_READ_WRITE_TOKEN` (Vercel Storage → Blob → Tokens), `SESSION_SECRET`,
+`IMAGE_BACKEND=pg`, `SESSION_SECRET`,
 and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
 

@@ -17,6 +17,7 @@ __screenshots__/
 # Prisma
 generated/
 prisma/generated/
+prisma/backup.sql
 
 # Logs
 *.log
