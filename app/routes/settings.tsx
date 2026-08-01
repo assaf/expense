@@ -595,7 +595,7 @@ function ReportRow({ report }: { report: ReportItem }) {
                 flags.push(`contains ${report.count} expenses`);
               const loss =
                 report.count > 0
-                  ? ` Deleting it also deletes those expense${
+                  ? ` Deleting it also deletes the expense${
                       report.count === 1 ? "" : "s"
                     } and any receipt images.`
                   : "";

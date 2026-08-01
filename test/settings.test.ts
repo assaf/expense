@@ -310,6 +310,68 @@ describe("Settings", () => {
     await page.close();
   });
 
+  it("deleting a report deletes its receipt images", async () => {
+    // Seed a report with one receipt that has a stored image blob, then
+    // delete the report through the UI and check the image is cleaned up.
+    const key = "2026-01-01_Image Test.png";
+    const now = new Date().toISOString();
+    await testPrisma.report.createMany({
+      data: [{ name: "Image Test", accountId: TEST_ACCOUNT_ID }],
+      skipDuplicates: true,
+    });
+    await testPrisma.imageBlob.create({
+      data: {
+        accountId: TEST_ACCOUNT_ID,
+        key,
+        mime: "image/png",
+        data: Buffer.from("fake-receipt-bytes"),
+      },
+    });
+    await testPrisma.expense.createMany({
+      data: [
+        {
+          id: "exp_imgtest1",
+          type: "receipt",
+          date: "2026-01-01",
+          report: "Image Test",
+          category: "Testing",
+          description: "",
+          amount: "10.00",
+          merchant: "Photo Shop",
+          imageFile: key,
+          imageMime: "image/png",
+          originalName: "receipt.png",
+          distanceMiles: "",
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+          accountId: TEST_ACCOUNT_ID,
+        },
+      ],
+    });
+
+    const page = await goto("/settings");
+    const reports = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Reports" }),
+    });
+    const row = reports.locator("ul li").filter({ hasText: "Image Test" });
+    // One open expense — no confirmation needed.
+    await row.getByRole("button", { name: /remove image test/i }).click();
+    await expect(row).toHaveCount(0);
+
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, report: "Image Test" },
+      }),
+    ).toBe(0);
+    expect(
+      await testPrisma.imageBlob.count({
+        where: { accountId: TEST_ACCOUNT_ID, key },
+      }),
+    ).toBe(0);
+    await page.close();
+  });
+
   afterAll(async () => {
     await page?.close();
   });
