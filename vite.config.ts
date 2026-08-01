@@ -12,7 +12,6 @@ export default defineConfig({
       ".react-router/**",
       "build/**",
       "node_modules/**",
-      "data/**",
       "data-test/**",
       "prisma/generated/**",
     ],
@@ -26,7 +25,6 @@ export default defineConfig({
       ".react-router/**",
       "build/**",
       "node_modules/**",
-      "data/**",
       "data-test/**",
       "prisma/generated/**",
       // tsgolint overflows on vite config generics; tsc checks it cleanly.

@@ -84,11 +84,13 @@ per account so two accounts can never collide on the same filename.
 Schema changes: edit `prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
 `pnpm db:push` (or `pnpm db:migrate`) before deploying.
 
-### `data/` — migration source only (removed)
+### `data/` — removed
 
-The original CSVs + receipt images that fed `pnpm migrate-data` were deleted
-in the Jul 2026 cleanup; the data now lives in the database (prod + dev
-verified). `data/` stays in `.gitignore` and was never tracked in git history.
+The file-era migration source (`data/*.csv` + `data/images/*` and the
+`pnpm migrate-data` one-off) was deleted in the Jul 2026 cleanup — data now
+lives in the database, and importing from Expensify happens via
+`scripts/import-expensify.ts`. Cloning prod uses `scripts/clone`
+(`prisma/backup.sql`).
 
 ## Quick start
 
@@ -245,11 +247,8 @@ zero-config path builds one SSR function that serves every route.)
      project settings if Vercel doesn't match automatically.
 4. One-time data import is done — the CSV source under `data/` was deleted
    in the Jul 2026 cleanup (data verified in the database: 306 expenses,
-   247 images). Re-import would require restoring the CSVs first.
-
-   ```bash
-   pnpm migrate-data   # idempotent import from data/*.csv + data/images/*
-   ```
+   247 images). Import from Expensify now goes through
+   `scripts/import-expensify.ts`; cloning prod locally uses `scripts/clone`.
 
 5. Deploy. Test the app is behind Deployment Protection or basic auth — the
    app has no built-in login (single-user personal tool).

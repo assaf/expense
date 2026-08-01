@@ -6,18 +6,14 @@ node_modules/
 .react-router/
 build/
 
-# Runtime state (file-based persistence) — volume-mounted in production.
-# Do not commit expenses/images (sensitive financial data).
-/data/
-
-# Test artifacts
-data-test/
-__screenshots__/
-
 # Prisma
 generated/
 prisma/generated/
 prisma/backup.sql
+
+# Test artifacts
+data-test/
+__screenshots__/
 
 # Logs
 *.log
