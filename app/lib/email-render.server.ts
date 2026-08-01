@@ -300,6 +300,21 @@ async function renderDocument(
   }
 }
 
+/** Remove `<img>` elements that have no usable src (missing, empty, or a bare
+ * placeholder like `#`). With the page's network blocked they could never
+ * render — they'd only show as broken-image glyphs in the receipt image.
+ * Regex-based so the rest of the email HTML is left byte-for-byte intact. */
+export function dropSourcelessImages(html: string): string {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = tag.match(/\bsrc\s*=\s*("[^"]*"|'[^']*'|[^\s>"']+)/i)?.[1];
+    if (src) {
+      const value = src.replace(/^["']|["']$/g, "").trim();
+      if (value && value !== "#") return tag;
+    }
+    return "";
+  });
+}
+
 /**
  * Render an email's HTML to a full-page PNG (white background, network
  * blocked, bundled fonts). Throws on empty/oversized input, blank output,
@@ -319,7 +334,10 @@ export async function renderEmailImage(
   // standards mode, then clamp pre-wrapping so long lines can't widen the
   // layout (see EMAIL_LAYOUT_CSS).
   const doctype = /<!doctype/i.test(trimmed) ? "" : "<!doctype html>";
-  const body = await rewriteCidImages(trimmed, opts.resolveImage);
+  const body = await rewriteCidImages(
+    dropSourcelessImages(trimmed),
+    opts.resolveImage,
+  );
   const withRemote = await rewriteRemoteImages(body, opts.fetchRemoteImage);
   const doc = injectStyles(`${doctype}${withRemote}`, [
     fontStyle(),

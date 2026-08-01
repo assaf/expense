@@ -6,6 +6,7 @@ import {
   collectRemoteImageUrls,
   stripForwardedText,
   stripForwardHeader,
+  dropSourcelessImages,
 } from "~/lib/email-render.server";
 
 const TINY_PNG = Buffer.from(
@@ -70,6 +71,13 @@ describe("renderEmailImage (headless chromium)", () => {
     const png = await renderEmailImage(
       '<html><body><img src="https://cdn.example.com/broken.png"><p>Done</p></body></html>',
       { fetchRemoteImage: async () => null },
+    );
+    await expectInk(png);
+  });
+
+  it("renders emails with src-less images (dropped, no broken glyph)", async () => {
+    const png = await renderEmailImage(
+      '<html><body><img alt="Logo"><img src=""><p>Receipt body</p></body></html>',
     );
     await expectInk(png);
   });
@@ -155,6 +163,33 @@ describe("renderTextEmail (plain-text emails)", () => {
   it("rejects empty text", async () => {
     await expect(renderTextEmail("")).rejects.toThrow(/empty/i);
     await expect(renderTextEmail("   \n ")).rejects.toThrow(/empty/i);
+  });
+});
+
+describe("dropSourcelessImages", () => {
+  it("drops imgs with no src, empty src, or a bare # placeholder", () => {
+    const html = [
+      '<img alt="logo no src">',
+      '<img src="">',
+      '<img src="#">',
+      '<img src="https://cdn.example.com/real.png">',
+      '<img src="cid:logo1">',
+      '<img srcset="https://cdn.example.com/a.png 1x" src="https://cdn.example.com/fallback.png">',
+      '<img SRC="https://cdn.example.com/UPPER.png">',
+    ].join("\n");
+    const out = dropSourcelessImages(html);
+    expect(out).not.toContain("no src");
+    expect(out).not.toContain('src=""');
+    expect(out).not.toContain('src="#"');
+    expect(out).toContain("real.png");
+    expect(out).toContain("cid:logo1");
+    expect(out).toContain("fallback.png");
+    expect(out).toContain("UPPER.png");
+  });
+
+  it("leaves html without images untouched", () => {
+    const html = "<p>no images here</p>";
+    expect(dropSourcelessImages(html)).toBe(html);
   });
 });
 
