@@ -1,0 +1,6 @@
+# Local database clone (large, sensitive) — see scripts/clone
+prisma/backup.sql
+
+# File-era data / one-off snapshots
+data/
+backup-*.sql
