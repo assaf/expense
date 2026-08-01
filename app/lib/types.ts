@@ -46,6 +46,9 @@ export type Expense = ReceiptExpense | MileageExpense;
 
 export interface Report {
   name: string;
+  /** True once the report is closed — closing freezes it; deleting a closed
+   *  report (or one with several expenses) requires explicit confirmation. */
+  closed: boolean;
 }
 
 export interface Category {

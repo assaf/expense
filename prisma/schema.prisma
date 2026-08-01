@@ -78,6 +78,7 @@ model Report {
   id        BigInt @id @default(autoincrement())
   name      String
   accountId String
+  closed    Boolean @default(false)
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 

@@ -7,6 +7,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, Form, useNavigation, useSearchParams } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
@@ -21,11 +22,14 @@ import {
   listInboundSenders,
   readAccount,
   readCategories,
+  readCategoryCounts,
+  readReportCounts,
   readReports,
   regenerateInviteCode,
   removeCategory,
   removeInboundSender,
   removeReport,
+  setReportClosed,
 } from "~/lib/store.server";
 import { normalizeAmount } from "~/lib/format";
 import { entryString, formString } from "~/lib/validation";
@@ -34,18 +38,34 @@ import type { Route } from "./+types/settings";
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const account = await readAccount(user.accountId);
-  const [reports, categories, settings, inboundSenders] = await Promise.all([
+  const [
+    reports,
+    categories,
+    settings,
+    inboundSenders,
+    reportCounts,
+    categoryCounts,
+  ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
     readSettings(user.accountId),
     listInboundSenders(user.accountId),
+    readReportCounts(user.accountId),
+    readCategoryCounts(user.accountId),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
     accountName: account?.name ?? "",
     inviteCode: account?.inviteCode ?? "",
-    reports: reports.map((r) => r.name),
-    categories: categories.map((c) => c.name),
+    reports: reports.map((r) => ({
+      name: r.name,
+      closed: r.closed,
+      count: reportCounts.get(r.name) ?? 0,
+    })),
+    categories: categories.map((c) => ({
+      name: c.name,
+      count: categoryCounts.get(c.name) ?? 0,
+    })),
     homeAddress: settings.homeAddress,
     inboundSenders,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
@@ -72,6 +92,13 @@ export async function action({ request }: Route.ActionArgs) {
     }
     case "removeReport":
       await removeReport(user.accountId, formString(form, "name"));
+      break;
+    case "setReportClosed":
+      await setReportClosed(
+        user.accountId,
+        formString(form, "name"),
+        formString(form, "closed") === "true",
+      );
       break;
     case "addCategory": {
       const name = formString(form, "name").trim();
@@ -192,15 +219,17 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         title="Reports"
         items={reports}
         addIntent="addReport"
-        removeIntent="removeReport"
+        addPlaceholder="Add report"
         highlight={searchParams.get("addedReport") ?? undefined}
+        renderItem={(report) => <ReportRow report={report} />}
       />
       <NameList
         title="Categories"
         items={categories}
         addIntent="addCategory"
-        removeIntent="removeCategory"
+        addPlaceholder="Add category"
         highlight={searchParams.get("addedCategory") ?? undefined}
+        renderItem={(category) => <CategoryRow category={category} />}
       />
 
       <section className="mb-8">
@@ -358,17 +387,20 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   );
 }
 
-function NameList({
+function NameList<T extends { name: string }>({
   title,
   items,
   addIntent,
-  removeIntent,
+  addPlaceholder,
   highlight,
+  renderItem,
 }: {
   title: string;
-  items: string[];
+  items: readonly T[];
   addIntent: string;
-  removeIntent: string;
+  addPlaceholder: string;
+  /** Full row content for every item in the list. */
+  renderItem: (item: T) => ReactNode;
   /** The entry just added via this list's add form — flashed for 3 seconds. */
   highlight?: string;
 }) {
@@ -424,26 +456,15 @@ function NameList({
         {items.length === 0 ? (
           <li className="text-sm text-gray-400">None yet.</li>
         ) : (
-          items.map((name) => (
+          items.map((item) => (
             <li
-              key={name}
-              ref={name === flashName ? flashRef : undefined}
-              className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition-colors duration-500 ${
-                name === flashName ? "bg-amber-200" : "bg-gray-50"
+              key={item.name}
+              ref={item.name === flashName ? flashRef : undefined}
+              className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition-colors duration-500 ${
+                item.name === flashName ? "bg-amber-200" : "bg-gray-50"
               }`}
             >
-              <span>{name}</span>
-              <Form method="post" className="contents">
-                <input type="hidden" name="intent" value={removeIntent} />
-                <input type="hidden" name="name" value={name} />
-                <button
-                  type="submit"
-                  className="text-gray-400 hover:text-red-600"
-                  aria-label={`Remove ${name}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </Form>
+              {renderItem(item)}
             </li>
           ))
         )}
@@ -454,7 +475,7 @@ function NameList({
           ref={addInputRef}
           type="text"
           name="name"
-          placeholder={`Add ${title.toLowerCase().slice(0, -1)}`}
+          placeholder={addPlaceholder}
           className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
         />
         <Button type="submit" size="md" variant="secondary">
@@ -462,5 +483,140 @@ function NameList({
         </Button>
       </Form>
     </section>
+  );
+}
+
+type ReportItem = { name: string; closed: boolean; count: number };
+
+/**
+ * One category row in Settings: name + the number of expenses in reports
+ * that are not closed, and a delete button. Deleting a category used by
+ * more than one such expense asks for confirmation first.
+ */
+type CategoryItem = { name: string; count: number };
+
+function CategoryRow({ category }: { category: CategoryItem }) {
+  const needsConfirm = category.count > 1;
+  const countLabel =
+    category.count === 0
+      ? "No expenses"
+      : `${category.count} expense${category.count === 1 ? "" : "s"}`;
+  return (
+    <>
+      <span className="truncate">{category.name}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className="text-xs text-gray-500"
+          title="Expenses in reports that are not closed"
+        >
+          {countLabel}
+        </span>
+        <Form
+          method="post"
+          className="contents"
+          onSubmit={(e) => {
+            if (needsConfirm) {
+              const ok = window.confirm(
+                `This category contains ${category.count} expenses in open reports. Delete it anyway?`,
+              );
+              if (!ok) e.preventDefault();
+            }
+          }}
+        >
+          <input type="hidden" name="intent" value="removeCategory" />
+          <input type="hidden" name="name" value={category.name} />
+          <button
+            type="submit"
+            className="text-gray-400 hover:text-red-600"
+            aria-label={`Remove ${category.name}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </Form>
+      </div>
+    </>
+  );
+}
+
+/**
+ * One report row in Settings: name + Open/Closed badge, expense count, a
+ * Close/Reopen toggle, and a delete button. Deleting a closed report or one
+ * with several expenses asks for confirmation first.
+ */
+function ReportRow({ report }: { report: ReportItem }) {
+  const needsConfirm = report.closed || report.count > 1;
+  const countLabel =
+    report.count === 0
+      ? "No expenses"
+      : `${report.count} expense${report.count === 1 ? "" : "s"}`;
+  return (
+    <>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate">{report.name}</span>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+            report.closed
+              ? "bg-gray-200 text-gray-600"
+              : "bg-green-100 text-green-700"
+          }`}
+        >
+          {report.closed ? "Closed" : "Open"}
+        </span>
+      </div>
+      <span className="shrink-0 text-xs text-gray-500">{countLabel}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <Form method="post" className="contents">
+          <input type="hidden" name="intent" value="setReportClosed" />
+          <input type="hidden" name="name" value={report.name} />
+          <input
+            type="hidden"
+            name="closed"
+            value={report.closed ? "false" : "true"}
+          />
+          <button
+            type="submit"
+            className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+              report.closed
+                ? "border-gray-300 text-gray-600 hover:bg-gray-200"
+                : "border-green-300 text-green-700 hover:bg-green-50"
+            }`}
+          >
+            {report.closed ? "Reopen" : "Close"}
+          </button>
+        </Form>
+        <Form
+          method="post"
+          className="contents"
+          onSubmit={(e) => {
+            if (needsConfirm) {
+              const flags: string[] = [];
+              if (report.closed) flags.push("is closed");
+              if (report.count > 1)
+                flags.push(`contains ${report.count} expenses`);
+              const loss =
+                report.count > 0
+                  ? ` Deleting it also deletes those expense${
+                      report.count === 1 ? "" : "s"
+                    } and any receipt images.`
+                  : "";
+              const ok = window.confirm(
+                `This report ${flags.join(" and ")}.${loss} Delete it anyway?`,
+              );
+              if (!ok) e.preventDefault();
+            }
+          }}
+        >
+          <input type="hidden" name="intent" value="removeReport" />
+          <input type="hidden" name="name" value={report.name} />
+          <button
+            type="submit"
+            className="text-gray-400 hover:text-red-600"
+            aria-label={`Remove ${report.name}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </Form>
+      </div>
+    </>
   );
 }

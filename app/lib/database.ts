@@ -359,9 +359,52 @@ export async function readReports(accountId: string): Promise<Report[]> {
   const rows = await prisma.report.findMany({
     where: { accountId, name: { not: "" } },
     orderBy: { id: "asc" },
-    select: { name: true },
+    select: { name: true, closed: true },
   });
-  return rows.map((r) => ({ name: r.name }));
+  return rows.map((r) => ({ name: r.name, closed: r.closed }));
+}
+
+/**
+ * Number of expenses in each report (reports are referenced by name — no
+ * foreign key). Only reports that actually have expenses appear in the map.
+ */
+export async function readReportCounts(
+  accountId: string,
+): Promise<Map<string, number>> {
+  const groups = await prisma.expense.groupBy({
+    by: ["report"],
+    where: { accountId, report: { not: "" } },
+    _count: { _all: true },
+  });
+  return new Map(groups.map((g) => [g.report, g._count._all]));
+}
+
+/**
+ * Expenses per category that belong to reports that are NOT closed (an
+ * expense with no report counts — it isn't in any closed report). Categories
+ * are referenced by name; only categories with live expenses appear.
+ */
+export async function readCategoryCounts(
+  accountId: string,
+): Promise<Map<string, number>> {
+  const [groups, reports] = await Promise.all([
+    prisma.expense.groupBy({
+      by: ["category", "report"],
+      where: { accountId, category: { not: "" } },
+      _count: { _all: true },
+    }),
+    prisma.report.findMany({
+      where: { accountId },
+      select: { name: true, closed: true },
+    }),
+  ]);
+  const closed = new Set(reports.filter((r) => r.closed).map((r) => r.name));
+  const counts = new Map<string, number>();
+  for (const g of groups) {
+    if (closed.has(g.report)) continue;
+    counts.set(g.category, (counts.get(g.category) ?? 0) + g._count._all);
+  }
+  return counts;
 }
 
 /**
@@ -381,11 +424,44 @@ export async function addReport(
   return result.count > 0;
 }
 
+/**
+ * Delete a report together with every expense in it — including their
+ * receipt images and the derived mileage rows. Expenses reference reports
+ * by name, so the cascade is a same-account name match, executed in one
+ * transaction. An empty name is a no-op: it must never touch the
+ * "unassigned" expenses (report: "").
+ */
 export async function removeReport(
   accountId: string,
   name: string,
 ): Promise<void> {
-  await prisma.report.deleteMany({ where: { accountId, name } });
+  if (!name.trim()) return;
+  const removed = await prisma.expense.findMany({
+    where: { accountId, report: name },
+    select: { type: true, imageFile: true },
+  });
+  for (const e of removed) {
+    if (e.type === "receipt" && e.imageFile) {
+      await deleteImage(accountId, e.imageFile).catch(() => {});
+    }
+  }
+  await prisma.$transaction([
+    prisma.expense.deleteMany({ where: { accountId, report: name } }),
+    prisma.mileage.deleteMany({ where: { accountId, report: name } }),
+    prisma.report.deleteMany({ where: { accountId, name } }),
+  ]);
+}
+
+/** Mark a report closed (or reopen it). Closed reports delete with confirmation. */
+export async function setReportClosed(
+  accountId: string,
+  name: string,
+  closed: boolean,
+): Promise<void> {
+  await prisma.report.updateMany({
+    where: { accountId, name },
+    data: { closed },
+  });
 }
 
 export async function readCategories(accountId: string): Promise<Category[]> {
