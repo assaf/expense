@@ -4,6 +4,8 @@ import {
   ReceiptText,
   Settings,
   Download,
+  Mail,
+  Info,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
@@ -12,6 +14,7 @@ import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
 import { formatAmount, formatDate, parseAmount } from "~/lib/format";
 import { requireUser } from "~/lib/auth.server";
+import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { readSettings } from "~/lib/settings.server";
 import {
   initStore,
@@ -59,6 +62,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     mileageRate: settings.mileageRates[currentYear] ?? "",
     merchants,
     reports,
+    inboundAddress: INBOUND_EMAIL_ADDRESS,
   };
 }
 
@@ -87,8 +91,9 @@ function toListItem(e: Expense) {
 }
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
-  const { expenses, mileageRate, reports } = loaderData;
+  const { expenses, mileageRate, reports, inboundAddress } = loaderData;
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [showEmailHelp, setShowEmailHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -186,6 +191,46 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
             : " Set a mileage rate in Settings."}
         </p>
       </div>
+
+      {inboundAddress ? (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 shrink-0 text-gray-400" />
+            <span className="min-w-0 text-sm text-gray-600">
+              Send receipts to{" "}
+              <span className="font-mono font-semibold text-gray-800">
+                {inboundAddress}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowEmailHelp((v) => !v)}
+              aria-expanded={showEmailHelp}
+              aria-label="Receipt email instructions"
+              className="ml-auto shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          </div>
+          {showEmailHelp ? (
+            <div className="mt-2 border-t border-gray-100 pt-2">
+              <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-gray-500">
+                <li>
+                  Forward a receipt email to the address above and it is added
+                  automatically — merchant, amount, and category are parsed for
+                  you.
+                </li>
+                <li>The expense date is the date of the forwarded email.</li>
+                <li>PDF and image attachments are supported.</li>
+                <li>
+                  Only emails from your allowed sender addresses are imported —
+                  manage them in Settings → Receipts by email.
+                </li>
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {reports.length > 0 ? (
         <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
