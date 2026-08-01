@@ -37,6 +37,12 @@ export function meta(): Route.MetaDescriptors {
 
 export const links: LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+  { rel: "icon", href: "/favicon.ico", sizes: "any" },
+  { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+  {
+    rel: "apple-touch-icon-precomposed",
+    href: "/apple-touch-icon-precomposed.png",
+  },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
