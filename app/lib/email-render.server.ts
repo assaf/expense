@@ -262,6 +262,12 @@ async function renderDocument(
   try {
     page.setDefaultTimeout(PAGE_TIMEOUT_MS);
     await page.setViewport({ width: viewportWidth, height: 800 });
+    // Email HTML is untrusted input — never run its JavaScript. Inline
+    // <script> blocks, event-handler attributes, and any dynamic behavior
+    // are all inert; the render is static markup + CSS, exactly like a real
+    // email client. (External scripts were already unreachable — the
+    // request interception below blocks every http(s) fetch.)
+    await page.setJavaScriptEnabled(false);
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const url = request.url();
@@ -277,8 +283,14 @@ async function renderDocument(
       // height — NOT fullPage, which would grow the capture to the full
       // scroll width (a wide email element would produce a huge blank
       // strip). Content beyond the cap is clipped, like an email client.
-      const height = await page.evaluate(() =>
-        Math.min(document.documentElement.scrollHeight, 20_000),
+      // page.evaluate is unavailable with JavaScript disabled, so the
+      // layout size comes from the CDP layout metrics instead.
+      const cdp = await page.createCDPSession();
+      const { cssContentSize } = await cdp.send("Page.getLayoutMetrics");
+      await cdp.detach();
+      const height = Math.min(
+        Math.max(1, Math.ceil(cssContentSize.height)),
+        20_000,
       );
       await page.setViewport({ width: viewportWidth, height });
       return page.screenshot({ type: "png" });

@@ -82,6 +82,34 @@ describe("renderEmailImage (headless chromium)", () => {
     await expectInk(png);
   });
 
+  it("does not execute inline scripts from the email", async () => {
+    // If the email's script ran, the body background would be red.
+    const png = await renderEmailImage(
+      '<html><body><script>document.body.style.backgroundColor = "red";</script><p>Receipt</p></body></html>',
+    );
+    const stats = await sharp(png).stats();
+    const channels = stats.channels.slice(0, 3); // rgb
+    const redish = channels[0]!.mean > 200; // red channel high
+    const notGreenBlue = channels[1]!.mean < 100 && channels[2]!.mean < 100;
+    expect(redish && notGreenBlue).toBe(false); // no red background → script did not run
+    await expectInk(png);
+  });
+
+  it("does not execute event-handler attributes from the email", async () => {
+    // If onload ran, the body would be hidden and the render blank.
+    const png = await renderEmailImage(
+      "<html><body onload=\"this.style.display='none'\"><p>Receipt</p></body></html>",
+    );
+    await expectInk(png);
+  });
+
+  it("does not load external scripts (network blocked)", async () => {
+    const png = await renderEmailImage(
+      '<html><body><script src="https://example.com/evil.js"></script><p>Receipt</p></body></html>',
+    );
+    await expectInk(png);
+  });
+
   it("rejects empty and oversized HTML", async () => {
     await expect(renderEmailImage("")).rejects.toThrow(/empty/i);
     await expect(renderEmailImage("  \n ")).rejects.toThrow(/empty/i);
