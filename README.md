@@ -25,7 +25,7 @@ Stack:
 - React Router v8 (framework mode) + Tailwind v4, TypeScript
 - Postgres via Prisma — accounts, users, expenses, reports, categories,
   settings, mileage, image blobs
-- Images: Postgres BYTEA (prod and dev/test) via `IMAGE_BACKEND=pg`
+- Images: Postgres BYTEA (prod and dev/test) — no external store
 - Deployed on Vercel + Neon (git push to main auto-deploys)
 
 Auth & accounts (the recent work):
@@ -66,17 +66,15 @@ and accounts are fully isolated from each other.
 Storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the
 single schema source of truth; the client is generated to
 `prisma/generated` by `pnpm build:prisma`). `DATABASE_URL` is required at
-startup (the app exits with a clear error otherwise). Receipt images go to
-Postgres BYTEA (`image_blobs`, `IMAGE_BACKEND=pg`) in prod and dev — no
-separate storage service. A missing
-image backend is an error, never a silent disk fallback.
+startup (the app exits with a clear error otherwise). Receipt images live in
+Postgres BYTEA (`image_blobs`) in prod and dev — no separate storage service.
 
-| Data                        | Images                              |
-| --------------------------- | ----------------------------------- |
-| `accounts` / `users` /      | Postgres BYTEA (`IMAGE_BACKEND=pg`, |
-| `expenses` / `reports` /    | prod and dev)                       |
-| `categories` / `settings` / |                                     |
-| `mileage` / `image_blobs`   |                                     |
+| Data                        | Images                         |
+| --------------------------- | ------------------------------ |
+| `accounts` / `users` /      | Postgres BYTEA (`image_blobs`, |
+| `expenses` / `reports` /    | prod and dev)                  |
+| `categories` / `settings` / |                                |
+| `mileage` / `image_blobs`   |                                |
 
 All reads/writes go through `app/lib/store.server.ts` (→
 `app/lib/database.ts`, Prisma queries scoped by `accountId`); image storage
@@ -105,7 +103,6 @@ Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
 ```bash
 # .env (project root, gitignored)
 DATABASE_URL=postgres://assaf@localhost/expensify_dev   # include the local user
-IMAGE_BACKEND=pg        # receipt images live in Postgres — no extra service
 SESSION_SECRET=…         # signs the session cookie (random hex)
 APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
 APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
@@ -127,7 +124,7 @@ ignore the local database, and reset the schema from Prisma on each run
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
-`IMAGE_BACKEND=pg`, `SESSION_SECRET`,
+`SESSION_SECRET`,
 and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
 
@@ -244,7 +241,6 @@ zero-config path builds one SSR function that serves every route.)
 3. Set env vars in the project (Settings → Environment Variables):
    - `DATABASE_URL` — Vercel Postgres / Neon pooled URL. Tables are created
      automatically on first request.
-   - `BLOB_READ_WRITE_TOKEN` — Vercel Storage → Blob → Tokens.
    - Node 24+ (`engines`; the project runs on Node 26); pick Node 26 in
      project settings if Vercel doesn't match automatically.
 4. One-time data import is done — the CSV source under `data/` was deleted
@@ -263,8 +259,9 @@ zero-config path builds one SSR function that serves every route.)
 ./scripts/deploy --skip-tests
 ```
 
-Vercel has its own environment management (dashboard) — set `DATABASE_URL` and
-`BLOB_READ_WRITE_TOKEN` there directly.
+Vercel has its own environment management (dashboard) — set `DATABASE_URL`
+there directly (all images are stored in the database, so no other storage
+env is needed).
 
 ## Maps & geocoding
 

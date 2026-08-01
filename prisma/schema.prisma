@@ -122,9 +122,9 @@ model Settings {
   @@map("settings")
 }
 
-/// Receipt image bytes when IMAGE_BACKEND=pg (dev/tests). Keys are
-/// namespaced per account (`images/{accountId}/…`) so the same filename in
-/// two accounts never collides — on any backend.
+/// Receipt image bytes — all images live in Postgres (no external store).
+/// Keys are namespaced per account (`images/{accountId}/…`) so the same
+/// filename in two accounts never collides.
 model ImageBlob {
   accountId String
   key       String

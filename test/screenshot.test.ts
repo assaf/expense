@@ -292,7 +292,7 @@ async function seedScreenshotData() {
   });
 
   // Receipts with generated receipt images (stored in image_blobs, like the
-  // app does with IMAGE_BACKEND=pg).
+  // app does — all images live in Postgres).
   for (const spec of RECEIPTS) {
     const png = await sharp(Buffer.from(receiptSvg(spec)), { density: 144 })
       .png()

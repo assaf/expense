@@ -1,34 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { extname } from "node:path";
-import { del, get, put, rename as blobRename } from "@vercel/blob";
 import { ulid } from "ulid";
 import { Prisma } from "prisma/generated";
-import { IMAGE_BACKEND, hasBlob } from "~/lib/env";
 import prisma from "~/lib/prisma.server";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
- * Receipt image storage, selected by environment:
- *  1. Postgres BYTEA when IMAGE_BACKEND=pg (prod and dev/tests — no separate
- *     service; the image_blobs table is the only store in use today).
- *  2. Vercel Blob under the `images/` prefix when BLOB_READ_WRITE_TOKEN is
- *     set (legacy path, kept for portability).
- *
- * IMAGE_BACKEND can force either; otherwise Blob token → error. A backend is
- * required: save/read/rename/delete throw a clear error instead of silently
- * falling back to disk.
+ * Receipt image storage — Postgres BYTEA only (`image_blobs` table). No
+ * external storage service; every image lives in the database.
  *
  * Every key is namespaced per account: `images/{accountId}/{name}`. Two
- * accounts can never collide on the same filename (on either backend), and
- * every read/delete is scoped to the caller's account. Every function takes
- * the owning accountId.
+ * accounts can never collide on the same filename, and every read/delete is
+ * scoped to the caller's account. Every function takes the owning accountId.
  *
  * Names are unique at write time: if an intended name is already taken,
  * `saveImage` / `renameImageToConvention` fall back to a GUID-suffixed
  * alternative instead of overwriting or colliding.
  */
 
-const BLOB_PREFIX = "images";
+const IMAGE_PREFIX = "images";
 
 const MIME_BY_EXT: Record<string, string> = {
   ".jpg": "image/jpeg",
@@ -60,32 +50,15 @@ function extForMime(mime: string): string {
 
 /** Build a namespaced key: `images/{accountId}/{name}`. */
 function namespacedKey(accountId: string, name: string): string {
-  return `${BLOB_PREFIX}/${accountId}/${name}`;
+  return `${IMAGE_PREFIX}/${accountId}/${name}`;
 }
 
 /** Strip the account namespace from a stored key (for comparisons). */
 function bareName(storedKey: string, accountId: string): string {
-  const prefix = `${BLOB_PREFIX}/${accountId}/`;
+  const prefix = `${IMAGE_PREFIX}/${accountId}/`;
   return storedKey.startsWith(prefix)
     ? storedKey.slice(prefix.length)
     : storedKey;
-}
-
-type Backend = "blob" | "pg";
-
-function backend(): Backend {
-  if (IMAGE_BACKEND) {
-    if (IMAGE_BACKEND === "blob" || IMAGE_BACKEND === "pg") {
-      return IMAGE_BACKEND;
-    }
-    throw new Error(
-      `Unknown IMAGE_BACKEND "${IMAGE_BACKEND}" — expected "blob" or "pg".`,
-    );
-  }
-  if (hasBlob()) return "blob";
-  throw new Error(
-    "No image storage configured — set BLOB_READ_WRITE_TOKEN or IMAGE_BACKEND=pg.",
-  );
 }
 
 async function pgExists(accountId: string, key: string): Promise<boolean> {
@@ -146,6 +119,10 @@ function conventionImageName(
 /**
  * Persist an uploaded image buffer under a temporary (id-based) key in the
  * account's namespace. Returns the storage key written and the mime type.
+ *
+ * `(accountId, key)` is the primary key, so the database itself rejects a
+ * duplicate name. A free name is picked first, and a fresh GUID is retried if
+ * a concurrent write wins the check-then-write race.
  */
 export async function saveImage(
   accountId: string,
@@ -157,20 +134,6 @@ export async function saveImage(
   const ext =
     extname(originalName).toLowerCase() || extForMime(resolvedMime) || ".png";
 
-  if (backend() === "blob") {
-    const name = await uniqueName(accountId, `${ulid()}${ext}`, blobExists);
-    const pathname = namespacedKey(accountId, name);
-    const blob = await put(pathname, buffer, {
-      access: "public",
-      contentType: resolvedMime,
-      addRandomSuffix: false,
-    });
-    return { filename: blob.pathname, mime: resolvedMime };
-  }
-
-  // Postgres: `(accountId, key)` is the primary key, so the database itself
-  // rejects a duplicate name. Pick a free one first, and retry with a fresh
-  // GUID if a concurrent write wins the check-then-write race.
   const base = `${ulid()}${ext}`;
   let name = await uniqueName(accountId, base, (key) =>
     pgExists(accountId, key),
@@ -212,14 +175,6 @@ export async function renameImageToConvention(
   const currentBare = bareName(currentFile, accountId);
   if (!target || target === currentBare) return currentFile;
 
-  if (backend() === "blob") {
-    if (!(await blobExists(currentFile))) return currentFile;
-    const name = await uniqueName(accountId, target, blobExists);
-    const to = namespacedKey(accountId, name);
-    await blobRename(currentFile, to, { access: "public" });
-    return to;
-  }
-
   if (!(await pgExists(accountId, currentFile))) return currentFile;
   const name = await uniqueName(accountId, target, (key) =>
     pgExists(accountId, key),
@@ -238,13 +193,6 @@ export async function readImage(
 ): Promise<{ buffer: Buffer; mime: string } | null> {
   if (!filename) return null;
 
-  if (backend() === "blob") {
-    const result = await get(filename, { access: "public" });
-    if (!result) return null;
-    const buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
-    return { buffer, mime: result.blob.contentType ?? mimeForFile(filename) };
-  }
-
   const row = await prisma.imageBlob.findFirst({
     where: { accountId, key: filename },
     select: { data: true, mime: true },
@@ -261,16 +209,7 @@ export async function deleteImage(
   filename: string,
 ): Promise<void> {
   if (!filename) return;
-  if (backend() === "blob") {
-    await del(filename).catch(() => {});
-    return;
-  }
   await prisma.imageBlob
     .deleteMany({ where: { accountId, key: filename } })
     .catch(() => {});
-}
-
-async function blobExists(pathname: string): Promise<boolean> {
-  const blob = await get(pathname, { access: "public" });
-  return blob !== null;
 }

@@ -65,7 +65,6 @@ export default defineConfig({
     disableConsoleIntercept: !process.env.CI,
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expensify_test",
-      IMAGE_BACKEND: "pg",
     },
     execArgv: ["--max-old-space-size=3072"],
     fileParallelism: false,

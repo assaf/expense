@@ -19,9 +19,7 @@
  *      modifiedAmount (cents), modifiedCreated, comment, and the real
  *      receipt URL (receiptObject.url).
  *   2. Downloads each receipt and stores a browser-displayable image
- *      (PDFs are rasterized to PNG) in the same store the app uses
- *      (Vercel Blob when BLOB_READ_WRITE_TOKEN is set, else Postgres BYTEA
- *      with IMAGE_BACKEND=pg).
+ *      (PDFs are rasterized to PNG) in Postgres (image_blobs).
  *   3. Rebuilds the expenses table for the account from the live data.
  *
  * Receipt downloads are login-gated by Expensify; pass an authenticated
@@ -29,14 +27,13 @@
  * import still fixes all metadata and leaves imageFile empty for later.
  *
  * Usage:
- *   DATABASE_URL=… BLOB_READ_WRITE_TOKEN=… \
+ *   DATABASE_URL=… \
  *     EXPENSIFY_PARTNER_USER_ID=… EXPENSIFY_PARTNER_USER_SECRET=… \
  *     node scripts/import-expensify.ts [--cookie '…'] [--dry-run]
  */
 import "dotenv/config";
 import { parse } from "csv-parse/sync";
 import { ulid } from "ulid";
-import { put } from "@vercel/blob";
 import sharp from "sharp";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { createCanvas, loadImage, type Image } from "@napi-rs/canvas";
@@ -51,8 +48,6 @@ const PARTNER_USER_ID =
 const PARTNER_USER_SECRET = process.env.EXPENSIFY_PARTNER_USER_SECRET ?? "";
 const COOKIE = process.env.EXPENSIFY_COOKIE ?? "";
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
-const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN ?? "";
-const IMAGE_BACKEND = process.env.IMAGE_BACKEND ?? "";
 const DRY_RUN = process.argv.includes("--dry-run");
 const START_YEAR = process.env.EXPENSIFY_START_YEAR ?? "2026";
 
@@ -425,9 +420,7 @@ async function reconcile(
   );
 
   // Download receipts first (outside the transaction so partial failures
-  // don't lose everything) and upload to the image store.
-  const imageBackend =
-    IMAGE_BACKEND === "pg" ? "pg" : BLOB_TOKEN ? "blob" : "none";
+  // don't lose everything) and store them in Postgres (image_blobs).
   let receiptsStored = 0;
   let receiptsSkipped = 0;
   const imageKeys = new Map<string, { key: string; mime: string }>(); // txn -> stored image
@@ -450,41 +443,26 @@ async function reconcile(
       const ext = mimeToExt(img.mime);
       const keyName = `${t.date}_${t.reportName.replace(/\s+/g, "_")}_${t.transactionID}${ext}`;
       const pathname = `images/${accountId}/${keyName}`;
-      if (imageBackend === "blob") {
-        await put(pathname, img.buffer, {
-          access: "public",
-          contentType: img.mime,
-          addRandomSuffix: false,
-          allowOverwrite: true,
-        });
-      } else if (imageBackend === "pg") {
-        await prisma.imageBlob.upsert({
-          where: { accountId_key: { accountId, key: pathname } },
-          create: {
-            accountId,
-            key: pathname,
-            mime: img.mime,
-            data: new Uint8Array(img.buffer),
-          },
-          update: {
-            mime: img.mime,
-            data: new Uint8Array(img.buffer),
-          },
-        });
-      } else {
-        console.warn(
-          `  no image backend; skipping receipt ${t.receiptFilename}`,
-        );
-        receiptsSkipped++;
-        continue;
-      }
+      await prisma.imageBlob.upsert({
+        where: { accountId_key: { accountId, key: pathname } },
+        create: {
+          accountId,
+          key: pathname,
+          mime: img.mime,
+          data: new Uint8Array(img.buffer),
+        },
+        update: {
+          mime: img.mime,
+          data: new Uint8Array(img.buffer),
+        },
+      });
       imageKeys.set(t.transactionID, { key: pathname, mime: img.mime });
       receiptsStored++;
       if (receiptsStored % 25 === 0)
         console.info(`  ${receiptsStored} receipts stored …`);
     }
     console.info(
-      `Receipts: ${receiptsStored} stored, ${receiptsSkipped} skipped (${imageBackend})`,
+      `Receipts: ${receiptsStored} stored, ${receiptsSkipped} skipped (pg)`,
     );
   } else {
     console.info(

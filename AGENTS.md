@@ -5,7 +5,7 @@ Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
 (schema in `prisma/schema.prisma` — the single source of truth; client in
 `app/lib/prisma.server.ts`). Domain reads/writes go through
 `app/lib/store.server.ts` → `app/lib/database.ts`; receipt images via
-`app/lib/images.server.ts` (Postgres BYTEA with `IMAGE_BACKEND=pg` — prod
+`app/lib/images.server.ts` (Postgres BYTEA — prod
 and local both; no separate storage service). There is **no runtime DDL** —
 schema changes go through
 Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
@@ -38,7 +38,7 @@ Run `pnpm check` before committing.
 
 Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback. Dev/test use
-`.env` (`DATABASE_URL`, `IMAGE_BACKEND=pg`, and auth: `APP_USERNAME`,
+`.env` (`DATABASE_URL`, and auth: `APP_USERNAME`,
 `APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
 (`DATABASE_URL`, plus the same three auth vars). Pull
 prod env with `npx vercel env pull --environment=production .env.prod` (use
@@ -62,11 +62,11 @@ returns 503 when unconfigured and everything else still works.
   `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
   by `accountId`). `prisma/generated` is the generated client (gitignored,
   produced by `pnpm build:prisma`).
-- **Images**: Postgres BYTEA (`image_blobs` table) with `IMAGE_BACKEND=pg` —
-  used by prod and dev/tests; no external storage, no separate service.
-  (`BLOB_READ_WRITE_TOKEN` may linger in pulled env dumps but is not used.) See `app/lib/images.server.ts`.
+- **Images**: Postgres BYTEA (`image_blobs` table) — all images live in
+  the database; no external storage, no separate service.
+  See `app/lib/images.server.ts`.
   **Keys are namespaced per account** (`images/{accountId}/…`) so the same
-  filename in two accounts never collides on either backend; every
+  filename in two accounts never collides; every
   save/read/rename/delete takes the owning `accountId`. Named
   `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
   otherwise a temp id-based name (renamed on save). Legacy (pre-account)
@@ -132,7 +132,7 @@ returns 503 when unconfigured and everything else still works.
     sign-out, and cross-account isolation.
 - Tests and dev require local Postgres up (`brew services start postgresql@18`);
   without it the suite fails to connect. `pnpm test` uses `expensify_test`.
-  No MinIO/other services needed — images live in Postgres (`IMAGE_BACKEND=pg`).
+  No MinIO/other services needed — images live in Postgres.
 - When renaming a report, expenses update but image files are **not** auto-renamed
   (they keep their old convention name). Re-saving each receipt rewrites the name.
 - `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
