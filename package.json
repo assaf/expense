@@ -1,5 +1,5 @@
 {
-  "name": "expensify",
+  "name": "expense",
   "private": true,
   "type": "module",
   "scripts": {
@@ -73,5 +73,5 @@
     "node": ">=24"
   },
   "packageManager": "pnpm@11.18.0",
-  "portless": "expensify"
+  "portless": "expense"
 }

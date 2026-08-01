@@ -41,7 +41,7 @@ describe("Access control", () => {
     await page.goto("/", { waitUntil: "load", timeout: 15_000 });
     await expect(page).toHaveURL(/\/login$/);
     await expect(
-      page.getByRole("heading", { name: "Sign in to Expensify" }),
+      page.getByRole("heading", { name: "Sign in to Expense" }),
     ).toBeVisible();
     await page.close();
   });

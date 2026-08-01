@@ -73,7 +73,7 @@ export default function LoginPage() {
 
   const titles: Record<Mode, { title: string; blurb: string }> = {
     signin: {
-      title: "Sign in to Expensify",
+      title: "Sign in to Expense",
       blurb: "Personal expense tracking — receipts and mileage.",
     },
     create: {

@@ -12,12 +12,12 @@ jobs:
     timeout-minutes: 20
     services:
       # Matches the hardcoded test URL in vite.config.ts:
-      # postgres://assaf@localhost/expensify_test (passwordless)
+      # postgres://assaf@localhost/expense_test (passwordless)
       postgres:
         image: postgres:18
         env:
           POSTGRES_USER: assaf
-          POSTGRES_DB: expensify_test
+          POSTGRES_DB: expense_test
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432

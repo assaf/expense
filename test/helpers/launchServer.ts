@@ -19,7 +19,7 @@ export async function launchServer(): Promise<string> {
     NODE_ENV: "test",
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
-    DATABASE_URL: "postgres://assaf@localhost/expensify_test",
+    DATABASE_URL: "postgres://assaf@localhost/expense_test",
   };
 
   serverProcess = spawn("pnpm", ["start"], {

@@ -1,5 +1,5 @@
 /**
- * Seed the test database (expensify_test) with two accounts, three users, and
+ * Seed the test database (expense_test) with two accounts, three users, and
  * known expenses/reports/categories/settings. Requires Postgres running
  * locally — the schema is created by `pnpm test:db:push` (globalSetup ensures
  * it before seeding). Idempotent: replaces all rows on each call. Foreign
@@ -10,10 +10,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "prisma/generated";
 import { hashPassword } from "~/lib/passwords";
 
-export const TEST_DB_URL = "postgres://assaf@localhost/expensify_test";
+export const TEST_DB_URL = "postgres://assaf@localhost/expense_test";
 
 /**
- * Test-only Prisma client pinned to expensify_test — never inherits the
+ * Test-only Prisma client pinned to expense_test — never inherits the
  * process DATABASE_URL (which may point at the dev database).
  */
 export const testPrisma = new PrismaClient({

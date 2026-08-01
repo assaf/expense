@@ -1,4 +1,4 @@
-// Expensify schema — single source of truth for the Postgres database.
+// Expense schema — single source of truth for the Postgres database.
 // Managed with `pnpm db:push` (dev/deploy) and versioned migrations
 // (prisma/migrations). See app/lib/database.ts for the store layer.
 

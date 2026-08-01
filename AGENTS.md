@@ -1,4 +1,4 @@
-# Agent guide — Expensify
+# Agent guide — Expense
 
 Personal expense tracker (receipts + mileage). React Router v8 framework mode,
 Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
@@ -9,7 +9,7 @@ Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
 and local both; no separate storage service). There is **no runtime DDL** —
 schema changes go through
 Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
-Dev/tests run on local Postgres (`expensify_dev`/`expensify_test`) only.
+Dev/tests run on local Postgres (`expense_dev`/`expense_test`) only.
 Deployed to **Vercel** (Neon Postgres; GitHub push to `main` auto-deploys).
 
 ## Commands
@@ -22,7 +22,7 @@ pnpm build:prisma    # prisma generate (writes prisma/generated, gitignored)
 pnpm start           # serve production build (port 3000)
 pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
-pnpm test            # force-resets expensify_test schema + 91 tests (incl. image blobs)
+pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
 ./scripts/clone              # clone the prod (Neon) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
@@ -43,7 +43,7 @@ Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 (`DATABASE_URL`, plus the same three auth vars). Pull
 prod env with `npx vercel env pull --environment=production .env.prod` (use
 `DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local services
-(`expensify_test`, image blobs in Postgres), not `.env`.
+(`expense_test`, image blobs in Postgres), not `.env`.
 
 Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_SECRET`,
 `INBOUND_EMAIL_FROM`, `INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
@@ -133,7 +133,7 @@ returns 503 when unconfigured and everything else still works.
     `testuser`; `test/auth.test.ts` covers login, signup, invite-code join,
     sign-out, and cross-account isolation.
 - Tests and dev require local Postgres up (`brew services start postgresql@18`);
-  without it the suite fails to connect. `pnpm test` uses `expensify_test`.
+  without it the suite fails to connect. `pnpm test` uses `expense_test`.
   No MinIO/other services needed — images live in Postgres.
 - `prisma/backup.sql` (the `./scripts/clone` dump) is ~300MB and must stay out
   of Vercel uploads — `.vercelignore` excludes it (and `backup-*.sql`); don't

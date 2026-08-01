@@ -12,14 +12,14 @@
 #
 # Usage: ./scripts/clone
 # Env:   LOCAL_DB_URL overrides the local database (default: .env DATABASE_URL
-#        or postgres://assaf@localhost/expensify_dev)
+#        or postgres://assaf@localhost/expense_dev)
 set -eo pipefail
 
 # Local database: explicit override → .env → default.
 LOCAL_DB_URL="${LOCAL_DB_URL:-$(
   grep '^DATABASE_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'
 )}"
-LOCAL_DB_URL="${LOCAL_DB_URL:-postgres://assaf@localhost/expensify_dev}"
+LOCAL_DB_URL="${LOCAL_DB_URL:-postgres://assaf@localhost/expense_dev}"
 BACKUP_FILE="prisma/backup.sql"
 
 # 1. Pull production env from Vercel when .env.prod is missing.
@@ -62,4 +62,4 @@ echo "  - Local login uses prod credentials (APP_USERNAME / APP_PASSWORD in .env
 echo "  - Receipt images are in image_blobs and come with the clone."
 
 # 5. Open the local site (dev server must be running: pnpm dev).
-open "https://expensify.localhost"
+open "https://expense.localhost"

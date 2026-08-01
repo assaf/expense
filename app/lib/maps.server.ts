@@ -18,7 +18,7 @@ export async function geocode(address: string): Promise<Location> {
     const res = await fetch(url, {
       headers: {
         // Nominatim usage policy requires a descriptive User-Agent.
-        "User-Agent": "expensify-personal/1.0 (assaf@labnotes.org)",
+        "User-Agent": "expense-personal/1.0 (assaf@labnotes.org)",
         Accept: "application/json",
       },
       signal: AbortSignal.timeout(8_000),

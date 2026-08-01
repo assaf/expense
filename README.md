@@ -1,4 +1,4 @@
-# Expensify
+# Expense
 
 Personal expense tracking with receipts and mileage.
 
@@ -104,7 +104,7 @@ Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
 
 ```bash
 # .env (project root, gitignored)
-DATABASE_URL=postgres://assaf@localhost/expensify_dev   # include the local user
+DATABASE_URL=postgres://assaf@localhost/expense_dev   # include the local user
 SESSION_SECRET=…         # signs the session cookie (random hex)
 APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
 APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
@@ -120,7 +120,7 @@ created through the app's signup/join flow. `SESSION_SECRET` is always
 required. `APP_USERNAME`/`APP_PASSWORD` can be removed from `.env` once you
 have at least one user.
 
-Tests intentionally hardcode `expensify_test` (Postgres incl. image blobs),
+Tests intentionally hardcode `expense_test` (Postgres incl. image blobs),
 ignore the local database, and reset the schema from Prisma on each run
 (`pnpm test:db:push` in the test setup).
 
@@ -210,7 +210,7 @@ Notes:
 Prerequisites: Postgres running locally (`brew services start postgresql@18`).
 
 ```bash
-createdb expensify_dev          # once
+createdb expense_dev          # once
 pnpm install
 # create .env with the local values above
 pnpm db:push                    # create the schema from prisma/schema.prisma
@@ -224,7 +224,7 @@ error — there is no file-based fallback.
 pnpm check        # prisma generate + typegen + format + lint + typecheck
 pnpm build        # production build (build:prisma runs first)
 pnpm start        # serve the production build (port 3000)
-pnpm test         # resets expensify_test from Prisma and runs the suite
+pnpm test         # resets expense_test from Prisma and runs the suite
 ```
 
 Node 24+ and pnpm 11+ (developed/tested on Node 26).
@@ -237,8 +237,8 @@ is still pinned to React Router v7 as of this writing — track
 [vercel/vercel#16730](https://github.com/vercel/vercel/issues/16730); the
 zero-config path builds one SSR function that serves every route.)
 
-1. Push to GitHub (already configured: `origin` → `assaf/expensify`).
-2. In Vercel: **Add New → Project → Import `assaf/expensify`**. Framework is
+1. Push to GitHub (already configured: `origin` → `assaf/expense`).
+2. In Vercel: **Add New → Project → Import `assaf/expense`**. Framework is
    auto-detected as React Router; `vercel.json` pins the build command.
 3. Set env vars in the project (Settings → Environment Variables):
    - `DATABASE_URL` — Vercel Postgres / Neon pooled URL. Tables are created

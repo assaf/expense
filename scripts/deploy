@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy expensify to production:
+# Deploy expense to production:
 #   1. sync the production database schema (Neon; prod env pulled from Vercel)
 #   2. deploy with the Vercel CLI
 #   3. open the production site
@@ -11,7 +11,7 @@
 # restored pre-account dump), and `migrate resolve` re-records the baseline.
 set -eo pipefail
 
-PROD_DOMAIN="expensify.labnotes.org"
+PROD_DOMAIN="expense.labnotes.org"
 
 echo -e "\033[0;32m--- Step 1: Check (fmt, lint, types) ---\033[0m"
 pnpm check

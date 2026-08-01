@@ -13,7 +13,7 @@ export default defineConfig({
     get shadowDatabaseUrl() {
       return (
         process.env.SHADOW_DATABASE_URL ??
-        "postgres://assaf@localhost/expensify_shadow"
+        "postgres://assaf@localhost/expense_shadow"
       );
     },
   },

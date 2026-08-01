@@ -432,7 +432,7 @@ function replyHtml(title: string, paragraphs: string[]): string {
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
 <h2 style="font-size:18px;margin:0 0 12px">${title}</h2>
 ${paragraphs.map((p) => `<p style="margin:8px 0">${p}</p>`).join("")}
-<p style="margin-top:20px;color:#6b7280;font-size:12px">Expensify — receipts by email</p>
+<p style="margin-top:20px;color:#6b7280;font-size:12px">Expense — receipts by email</p>
 </div>`;
 }
 

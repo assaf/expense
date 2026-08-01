@@ -62,7 +62,7 @@ export default defineConfig({
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,
     env: {
-      DATABASE_URL: "postgres://assaf@localhost/expensify_test",
+      DATABASE_URL: "postgres://assaf@localhost/expense_test",
     },
     execArgv: ["--max-old-space-size=3072"],
     fileParallelism: false,

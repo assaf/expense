@@ -3,7 +3,7 @@
  *
  *   SCREENSHOT=1 pnpm exec vp test run test/screenshot.test.ts
  *
- * Reuses the test-suite harness: seeds expensify_test with a realistic mock
+ * Reuses the test-suite harness: seeds expense_test with a realistic mock
  * dataset (real-ish merchants, reports, categories, generated receipt
  * images), boots the app server, signs in through the real login flow, and
  * captures full-page screenshots with Playwright into public/.
