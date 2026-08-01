@@ -4,7 +4,7 @@ import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
-import { DEFAULT_SETTINGS } from "~/lib/types";
+import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from "~/lib/types";
 import type {
   Account,
   Category,
@@ -148,6 +148,10 @@ async function ensureBootstrapUser(): Promise<User> {
         createdAt: now,
       },
     }),
+    prisma.category.createMany({
+      data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
+      skipDuplicates: true,
+    }),
   ]);
   return {
     id: userId,
@@ -186,7 +190,15 @@ export async function createAccount(name: string): Promise<Account> {
     inviteCode: generateInviteCode(),
     createdAt: new Date().toISOString(),
   };
-  await prisma.account.create({ data: account });
+  // The account is created with the IRS Schedule C default categories so
+  // receipts can be categorized immediately.
+  await prisma.$transaction([
+    prisma.account.create({ data: account }),
+    prisma.category.createMany({
+      data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId: account.id })),
+      skipDuplicates: true,
+    }),
+  ]);
   return account;
 }
 
@@ -341,6 +353,8 @@ export async function readPriorMerchants(accountId: string): Promise<string[]> {
 
 // --- Reports & Categories --------------------------------------------------
 
+// Reports come back in creation order: auto-increment ids are strictly
+// increasing, so `id asc` is chronological — oldest first, newest last.
 export async function readReports(accountId: string): Promise<Report[]> {
   const rows = await prisma.report.findMany({
     where: { accountId, name: { not: "" } },
@@ -350,16 +364,21 @@ export async function readReports(accountId: string): Promise<Report[]> {
   return rows.map((r) => ({ name: r.name }));
 }
 
+/**
+ * Create a report if it doesn't exist yet. Returns true when a new row was
+ * created — false for an empty name or an existing duplicate.
+ */
 export async function addReport(
   accountId: string,
   name: string,
-): Promise<void> {
+): Promise<boolean> {
   const clean = name.trim();
-  if (!clean) return;
-  await prisma.report.createMany({
+  if (!clean) return false;
+  const result = await prisma.report.createMany({
     data: [{ name: clean, accountId }],
     skipDuplicates: true,
   });
+  return result.count > 0;
 }
 
 export async function removeReport(
@@ -372,22 +391,31 @@ export async function removeReport(
 export async function readCategories(accountId: string): Promise<Category[]> {
   const rows = await prisma.category.findMany({
     where: { accountId, name: { not: "" } },
-    orderBy: { id: "asc" },
     select: { name: true },
   });
-  return rows.map((c) => ({ name: c.name }));
+  // Alphabetical (case-insensitive) so the settings list and the pickers in
+  // the editor are easy to scan, whatever order the rows were created in.
+  return rows
+    .map((c) => c.name)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((name) => ({ name }));
 }
 
+/**
+ * Create a category if it doesn't exist yet. Returns true when a new row was
+ * created — false for an empty name or an existing duplicate.
+ */
 export async function addCategory(
   accountId: string,
   name: string,
-): Promise<void> {
+): Promise<boolean> {
   const clean = name.trim();
-  if (!clean) return;
-  await prisma.category.createMany({
+  if (!clean) return false;
+  const result = await prisma.category.createMany({
     data: [{ name: clean, accountId }],
     skipDuplicates: true,
   });
+  return result.count > 0;
 }
 
 export async function removeCategory(

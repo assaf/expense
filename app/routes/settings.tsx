@@ -6,7 +6,8 @@ import {
   LogOut,
   RefreshCw,
 } from "lucide-react";
-import { Link, Form } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, Form, useNavigation, useSearchParams } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
@@ -61,15 +62,24 @@ export async function action({ request }: Route.ActionArgs) {
     case "regenerateCode":
       await regenerateInviteCode(user.accountId);
       break;
-    case "addReport":
-      await addReport(user.accountId, formString(form, "name"));
-      break;
+    case "addReport": {
+      const name = formString(form, "name").trim();
+      // Flash the new entry on the reloaded page (only when actually created).
+      const added = await addReport(user.accountId, name);
+      return added
+        ? redirect(`/settings?addedReport=${encodeURIComponent(name)}`)
+        : redirect("/settings");
+    }
     case "removeReport":
       await removeReport(user.accountId, formString(form, "name"));
       break;
-    case "addCategory":
-      await addCategory(user.accountId, formString(form, "name"));
-      break;
+    case "addCategory": {
+      const name = formString(form, "name").trim();
+      const added = await addCategory(user.accountId, name);
+      return added
+        ? redirect(`/settings?addedCategory=${encodeURIComponent(name)}`)
+        : redirect("/settings");
+    }
     case "removeCategory":
       await removeCategory(user.accountId, formString(form, "name"));
       break;
@@ -125,6 +135,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
+  const [searchParams] = useSearchParams();
   const {
     reports,
     categories,
@@ -182,12 +193,14 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         items={reports}
         addIntent="addReport"
         removeIntent="removeReport"
+        highlight={searchParams.get("addedReport") ?? undefined}
       />
       <NameList
         title="Categories"
         items={categories}
         addIntent="addCategory"
         removeIntent="removeCategory"
+        highlight={searchParams.get("addedCategory") ?? undefined}
       />
 
       <section className="mb-8">
@@ -350,12 +363,60 @@ function NameList({
   items,
   addIntent,
   removeIntent,
+  highlight,
 }: {
   title: string;
   items: string[];
   addIntent: string;
   removeIntent: string;
+  /** The entry just added via this list's add form — flashed for 3 seconds. */
+  highlight?: string;
 }) {
+  const navigation = useNavigation();
+  const [flashName, setFlashName] = useState<string | null>(null);
+  const flashRef = useRef<HTMLLIElement | null>(null);
+  const addInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingAdd = useRef(false);
+
+  // Flash whenever the page carries an ?added* param. React Router submits
+  // the add form client-side and keeps this component mounted, so the URL
+  // param arrives after mount — it can't seed useState, it must be synced.
+  useEffect(() => {
+    if (highlight) setFlashName(highlight);
+  }, [highlight]);
+
+  // Time-box the flash and drop the ?added* params so a refresh doesn't
+  // re-flash. The router keeps the params internally after replaceState, so
+  // the highlight prop stays stable and this runs once per add.
+  useEffect(() => {
+    if (!flashName) return;
+    flashRef.current?.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("addedReport");
+    url.searchParams.delete("addedCategory");
+    window.history.replaceState(null, "", url);
+    const timer = setTimeout(() => setFlashName(null), 3000);
+    return () => clearTimeout(timer);
+  }, [flashName]);
+
+  // Empty the add input once this list's add submission settles — the input
+  // is uncontrolled, so a client-side navigation would otherwise keep its
+  // value. Only reacts to this list's own intent.
+  useEffect(() => {
+    if (
+      navigation.state === "submitting" &&
+      navigation.formData?.get("intent") === addIntent
+    ) {
+      pendingAdd.current = true;
+    } else if (navigation.state === "idle" && pendingAdd.current) {
+      pendingAdd.current = false;
+      if (addInputRef.current) addInputRef.current.value = "";
+    }
+  }, [navigation.state, navigation.formData, addIntent]);
+
   return (
     <section className="mb-8">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
@@ -366,7 +427,10 @@ function NameList({
           items.map((name) => (
             <li
               key={name}
-              className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5"
+              ref={name === flashName ? flashRef : undefined}
+              className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition-colors duration-500 ${
+                name === flashName ? "bg-amber-200" : "bg-gray-50"
+              }`}
             >
               <span>{name}</span>
               <Form method="post" className="contents">
@@ -387,6 +451,7 @@ function NameList({
       <Form method="post" className="flex items-center gap-2">
         <input type="hidden" name="intent" value={addIntent} />
         <input
+          ref={addInputRef}
           type="text"
           name="name"
           placeholder={`Add ${title.toLowerCase().slice(0, -1)}`}

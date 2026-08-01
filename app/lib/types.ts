@@ -94,6 +94,38 @@ export const DEFAULT_SETTINGS: Settings = {
   mileageRates: {},
 };
 
+/**
+ * Default categories seeded for every new account. These mirror the expense
+ * categories on IRS Schedule C (Form 1040), Part II, lines 8–27a, so
+ * receipts can be tagged with the same buckets used on the tax return.
+ * Users can rename, add, or remove categories later in Settings.
+ */
+export const DEFAULT_CATEGORIES: string[] = [
+  "Advertising",
+  "Car and truck expenses",
+  "Commissions and fees",
+  "Contract labor",
+  "Depletion",
+  "Depreciation and section 179 expense deduction",
+  "Employee benefit programs",
+  "Insurance (other than health)",
+  "Mortgage interest paid to banks, etc.",
+  "Other interest",
+  "Legal and professional services",
+  "Office expenses",
+  "Pension and profit-sharing plans",
+  "Rent or lease: vehicles, machinery, and equipment",
+  "Rent or lease: other business property",
+  "Repairs and maintenance",
+  "Supplies",
+  "Taxes and licenses",
+  "Travel",
+  "Meals and entertainment",
+  "Utilities",
+  "Wages",
+  "Other expenses",
+];
+
 /** One processed inbound email (idempotency + audit). */
 export interface InboundEmailRecord {
   emailId: string;

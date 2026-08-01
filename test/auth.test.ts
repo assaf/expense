@@ -4,11 +4,13 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 import { signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
+  TEST_ACCOUNT_ID,
   TEST_INVITE_CODE,
   TEST_PASSWORD,
   TEST_USERNAME,
   testPrisma,
 } from "./helpers/seedTestData";
+import { DEFAULT_CATEGORIES } from "~/lib/types";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 
@@ -104,6 +106,43 @@ describe("Access control", () => {
     // A new account starts empty — none of the seeded data may appear.
     await expect(page.getByText("Test Store")).not.toBeVisible();
     await page.close();
+  });
+
+  it("seeds the IRS Schedule C default categories at signup", async () => {
+    const page = await openPage();
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    await page.getByRole("button", { name: "Create a new account" }).click();
+    await page.fill('input[name="accountName"]', "IRS Fresh");
+    await page.fill('input[name="userName"]', "IRS Person");
+    await page.fill('input[name="username"]', "irsfreshuser");
+    await page.fill('input[name="password"]', "irs-fresh-password");
+    await page.click('button[type="submit"]');
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
+    await page.close();
+
+    const user = await testPrisma.user.findUnique({
+      where: { username: "irsfreshuser" },
+    });
+    if (!user) throw new Error("No irsfreshuser row after signup");
+    const names = (
+      await testPrisma.category.findMany({
+        where: { accountId: user.accountId },
+        orderBy: { id: "asc" },
+        select: { name: true },
+      })
+    ).map((c) => c.name);
+    expect(names).toEqual(DEFAULT_CATEGORIES);
+
+    // The seeded accounts keep their hand-picked categories, not the defaults.
+    const testAccountNames = (
+      await testPrisma.category.findMany({
+        where: { accountId: TEST_ACCOUNT_ID },
+        select: { name: true },
+      })
+    ).map((c) => c.name);
+    expect(testAccountNames).not.toContain(DEFAULT_CATEGORIES[0]);
   });
 
   it("joins an account with its invite code and shares its data", async () => {
