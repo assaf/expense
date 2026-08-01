@@ -14,6 +14,7 @@ import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import {
   classifyReceiptAttachment,
   extractReceipt,
+  matchCategory,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -928,13 +929,4 @@ export async function fetchRemoteImageImpl(
 }
 
 /** Best-matching existing category name, or "" when nothing matches. */
-export function matchCategory(suggested: string, existing: string[]): string {
-  const s = suggested.trim().toLowerCase();
-  if (!s) return "";
-  const exact = existing.find((c) => c.toLowerCase() === s);
-  if (exact) return exact;
-  const fuzzy = existing.find(
-    (c) => c.toLowerCase().includes(s) || s.includes(c.toLowerCase()),
-  );
-  return fuzzy ?? "";
-}
+export { matchCategory };

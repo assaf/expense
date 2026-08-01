@@ -201,6 +201,18 @@ export async function extractReceipt(
   };
 }
 
+/** Best-matching existing category name, or "" when nothing matches. */
+export function matchCategory(suggested: string, existing: string[]): string {
+  const s = suggested.trim().toLowerCase();
+  if (!s) return "";
+  const exact = existing.find((c) => c.toLowerCase() === s);
+  if (exact) return exact;
+  const fuzzy = existing.find(
+    (c) => c.toLowerCase().includes(s) || s.includes(c.toLowerCase()),
+  );
+  return fuzzy ?? "";
+}
+
 /** True when the hosted API rejected the request because it can't read images. */
 export function isVisionUnsupportedError(err: unknown): boolean {
   if (!(err instanceof DeepSeekError)) return false;

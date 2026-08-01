@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
@@ -72,17 +73,26 @@ async function toBrowserImage(
   };
 }
 
-const TESSERACT_VERSION = "7.0.0";
+const nodeRequire = createRequire(import.meta.url);
 
 /**
- * OCR an image with tesseract.js. Worker/core/lang files load from a CDN at
- * runtime so the native bundle stays small and serverless-safe.
+ * Absolute path to tesseract.js's Node worker script. Node's worker_threads
+ * only accepts a local file path (a CDN URL throws ERR_WORKER_PATH); the
+ * script is small, and the wasm core is required from tesseract.js-core at
+ * runtime. Only the traineddata (`langPath`) is fetched from a CDN.
+ */
+const TESSERACT_NODE_WORKER = nodeRequire.resolve(
+  "tesseract.js/src/worker-script/node/index.js",
+);
+
+/**
+ * OCR an image with tesseract.js. The wasm core comes from the local
+ * tesseract.js-core package; traineddata downloads from a CDN at runtime.
  */
 async function ocrImage(buffer: Buffer, mime: string): Promise<string> {
   const png = await normalizeImage(buffer, mime);
   const worker = await createWorker(["eng"], 1, {
-    workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
-    corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@v6/tesseract-core-simd.wasm.js`,
+    workerPath: TESSERACT_NODE_WORKER,
     langPath: "https://tessdata.projectnaptha.com/4.0.0",
   });
   try {
