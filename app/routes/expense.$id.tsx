@@ -59,7 +59,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
   return {
     expense: serializeExpense(expense),
-    reports: reports.map((r) => r.name),
+    // Closed reports can't be selected; the expense's current report is
+    // still shown when it is closed (SelectField prepends it as the value).
+    reports: reports.filter((r) => !r.closed).map((r) => r.name),
     categories: categories.map((c) => c.name),
     merchants,
     home: homeLocation(settings),
@@ -98,6 +100,17 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (dateError) return Response.json({ error: dateError }, { status: 400 });
 
     const report = formString(form, "report");
+    // A closed report can't be assigned — but an expense already in one
+    // keeps it when saved unchanged.
+    if (report && report !== existing.report) {
+      const reports = await readReports(user.accountId);
+      if (reports.some((r) => r.name === report && r.closed)) {
+        return Response.json(
+          { error: `Report "${report}" is closed.` },
+          { status: 400 },
+        );
+      }
+    }
     const category = formString(form, "category");
     const description = formString(form, "description");
     const amount = normalizeAmount(formString(form, "amount"));

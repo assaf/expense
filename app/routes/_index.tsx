@@ -17,6 +17,7 @@ import {
   initStore,
   readExpenses,
   readPriorMerchants,
+  readReports,
 } from "~/lib/store.server";
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/_index";
@@ -24,15 +25,19 @@ import type { Route } from "./+types/_index";
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   await initStore();
-  const [expenses, settings, merchants] = await Promise.all([
+  const [expenses, settings, merchants, allReports] = await Promise.all([
     readExpenses(user.accountId),
     readSettings(user.accountId),
     readPriorMerchants(user.accountId),
+    readReports(user.accountId),
   ]);
-  const sorted = [...expenses].sort(sortByDateDesc);
+  // Closed reports stay off the home page: no summary card, no expenses.
+  const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
+  const open = expenses.filter((e) => !closed.has(e.report));
+  const sorted = [...open].sort(sortByDateDesc);
   const currentYear = String(new Date().getFullYear());
   const reportSummary = new Map<string, { count: number; total: number }>();
-  for (const e of expenses) {
+  for (const e of open) {
     const name = e.report || "Unassigned";
     const s = reportSummary.get(name) ?? { count: 0, total: 0 };
     s.count++;
