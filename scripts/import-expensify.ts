@@ -200,7 +200,10 @@ async function exportTransactions(): Promise<LiveTransaction[]> {
   for (const r of rows) {
     const effMerchant =
       (r.effectiveMerchant ?? "").trim() || (r.merchant ?? "").trim();
-    const effCents = (r.effectiveAmountCents ?? r.amountCents ?? "").trim();
+    // Modified amount (SmartScan/user edit) wins; fall back to the original
+    // amount when it is empty — but treat "0" as a real value, not empty.
+    const effCents =
+      (r.effectiveAmountCents ?? "").trim() || (r.amountCents ?? "").trim();
     const cents = effCents ? Number(effCents) : 0;
     out.push({
       transactionID: (r.transactionID ?? "").trim(),
@@ -452,12 +455,18 @@ async function reconcile(
           access: "public",
           contentType: img.mime,
           addRandomSuffix: false,
+          allowOverwrite: true,
         });
       } else if (imageBackend === "pg") {
-        await prisma.imageBlob.create({
-          data: {
+        await prisma.imageBlob.upsert({
+          where: { accountId_key: { accountId, key: pathname } },
+          create: {
             accountId,
             key: pathname,
+            mime: img.mime,
+            data: new Uint8Array(img.buffer),
+          },
+          update: {
             mime: img.mime,
             data: new Uint8Array(img.buffer),
           },
