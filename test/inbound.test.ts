@@ -145,6 +145,7 @@ function fakeDeps(): InboundDeps & {
       "MERCHANT: Amazon\nTOTAL: 9.99\nCATEGORY: office supplies",
     renderPdfToPng: async () => TINY_PNG,
     renderReceiptImage,
+    renderEmailImage: async () => TINY_PNG,
     sendReply: async (input) => {
       sent.push({ subject: input.subject, html: input.html, to: input.to });
     },
@@ -572,6 +573,73 @@ describe("processInboundEvent (body receipt)", () => {
     usedExpenseIds.push(expenseIdOf(result));
     // Success → no reply email.
     expect(deps.sent).toHaveLength(0);
+  });
+
+  it("renders the HTML body through the browser renderer and resolves cid images", async () => {
+    const deps = fakeDeps();
+    const html =
+      '<html><body><img src="cid:logo1"><h1>Your receipt</h1></body></html>';
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        html,
+        text: "MERCHANT: Amazon\nTOTAL: 42.50\nCATEGORY: office supplies",
+      });
+    deps.listAttachments = async () => [
+      attachment({
+        id: "att-logo",
+        filename: "logo.png",
+        content_type: "image/png",
+        content_disposition: "inline",
+        content_id: "logo1",
+      }),
+    ];
+    const renderedHtml: string[] = [];
+    deps.renderEmailImage = async (h, opts) => {
+      renderedHtml.push(h);
+      await opts?.resolveImage?.("logo1");
+      return TINY_PNG;
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(renderedHtml).toEqual([html]);
+    // The inline image referenced by the HTML was downloaded for the render.
+    expect(deps.downloads.map((d) => d.filename)).toContain("logo.png");
+  });
+
+  it("falls back to the resvg text sheet when the browser render fails", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ html: "<html><body>Receipt</body></html>" });
+    deps.renderEmailImage = async () => {
+      throw new Error("chromium boom");
+    };
+    let textSheetCalls = 0;
+    deps.renderReceiptImage = async (text, opts) => {
+      textSheetCalls += 1;
+      return renderReceiptImage(text, opts);
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(textSheetCalls).toBe(1);
+    expect(deps.sent).toHaveLength(0); // fully imported — no reply email
+  });
+
+  it("skips the browser render for text-only emails", async () => {
+    const deps = fakeDeps();
+    let browserCalls = 0;
+    deps.renderEmailImage = async () => {
+      browserCalls += 1;
+      return TINY_PNG;
+    };
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    expect(browserCalls).toBe(0);
   });
 
   it("sends no expense to the other account", async () => {

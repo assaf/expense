@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ulid } from "ulid";
+import {
+  renderEmailImage,
+  type CidImage,
+  type CidResolver,
+  type RenderEmailOptions,
+} from "~/lib/email-render.server";
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import {
   classifyReceiptAttachment,
@@ -133,6 +139,7 @@ export interface InboundDeps {
     text: string,
     opts?: { subject?: string },
   ): Promise<Buffer>;
+  renderEmailImage(html: string, opts?: RenderEmailOptions): Promise<Buffer>;
   sendReply(input: ReplyInput): Promise<void>;
 }
 
@@ -415,6 +422,7 @@ const defaultDeps: InboundDeps = {
   extractPdfText,
   renderPdfToPng,
   renderReceiptImage,
+  renderEmailImage,
   sendReply: sendReplyEmail,
 };
 
@@ -605,13 +613,30 @@ export async function processInboundEvent(
       }
     } else {
       const bodyText = source.text.slice(0, 20_000);
-      try {
-        receiptImage = await deps.renderReceiptImage(bodyText, {
-          subject: email.subject,
-        });
-      } catch (err) {
-        renderError = err instanceof Error ? err.message : String(err);
-        receiptImage = null;
+      // Render the actual email (headless Chromium) when there's an HTML
+      // part — inline images resolved from cid: refs — and fall back to the
+      // resvg text sheet for text-only emails or any render failure (e.g. a
+      // runtime without a browser binary).
+      if (email.html) {
+        try {
+          receiptImage = await deps.renderEmailImage(email.html, {
+            resolveImage: makeCidResolver(attachments, email.html, deps),
+          });
+        } catch (err) {
+          renderError = err instanceof Error ? err.message : String(err);
+          receiptImage = null;
+        }
+      }
+      if (!receiptImage) {
+        try {
+          receiptImage = await deps.renderReceiptImage(bodyText, {
+            subject: email.subject,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          renderError = renderError ? `${renderError}; ${message}` : message;
+          receiptImage = null;
+        }
       }
       imageMime = "image/png";
       originalName = "email-receipt.png";
@@ -721,6 +746,39 @@ export async function processInboundEvent(
       "Fix the problem and forward the receipt again, or add the expense manually in the app.",
     ]);
   }
+}
+
+/**
+ * Resolve `cid:` image references in the email HTML to base64 data URIs so
+ * the browser render is self-contained (the renderer blocks the network, so
+ * unrewritten cid: refs would show as broken images). Only inline
+ * attachments actually referenced by the HTML are downloaded, bounded by
+ * count and size.
+ */
+function makeCidResolver(
+  attachments: AttachmentMeta[],
+  html: string,
+  deps: InboundDeps,
+): CidResolver {
+  const wanted = attachments.filter(
+    (a) => a.content_id && html.includes(`cid:${a.content_id}`),
+  );
+  const cache = new Map<string, CidImage>();
+  return async (cid: string): Promise<CidImage | null> => {
+    const cached = cache.get(cid);
+    if (cached) return cached;
+    const meta = wanted.find((a) => a.content_id === cid);
+    if (!meta || cache.size >= 8) return null;
+    try {
+      const buffer = await deps.downloadAttachment(meta);
+      if (buffer.length > 5_000_000) return null;
+      const image = { buffer, mime: meta.content_type || "image/png" };
+      cache.set(cid, image);
+      return image;
+    } catch {
+      return null;
+    }
+  };
 }
 
 /** Best-matching existing category name, or "" when nothing matches. */

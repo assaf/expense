@@ -99,7 +99,8 @@ returns 503 when unconfigured and everything else still works.
 | `app/lib/inbound-email.server.ts`  | Receipt-by-email pipeline: signature, date, attachment pick, expense create, replies.                                                                                              |
 | `app/lib/receipt-ai.server.ts`     | DeepSeek extraction client (text + vision attempt, JSON mode).                                                                                                                     |
 | `app/lib/receipt-ocr.server.ts`    | OCR (tesseract fallback) + PDF text/render (pdfjs + @napi-rs/canvas).                                                                                                              |
-| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono).                                                                                                               |
+| `app/lib/receipt-render.server.ts` | HTML→text + text→PNG receipt image (resvg + bundled JetBrains Mono); fallback renderer.                                                                                            |
+| `app/lib/email-render.server.ts`   | Render email HTML → PNG with real headless Chromium (puppeteer-core + @sparticuz/chromium on Vercel, Playwright Chromium locally; `RENDER_BROWSER=local                            | sparticuz | none` overrides). |     |
 | `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                                                                                                                           |
 | `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                                                                                          |
 | `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                               |
@@ -156,7 +157,11 @@ returns 503 when unconfigured and everything else still works.
     "Begin forwarded message" Date → .eml attachment Date → received header).
   - Only the best receipt attachment (PDF/image, heuristic + model tiebreak)
     is used; logos/signatures/inline decoration are skipped; otherwise the
-    email body (text or HTML→text) becomes the receipt image.
+    email body (text or HTML→text) becomes the receipt image. With an HTML
+    part, the body is rendered to a PNG with headless Chromium
+    (`email-render.server.ts`; inline `cid:` images are downloaded and
+    rewritten to data URIs; network is blocked in the page), falling back to
+    the resvg text sheet for text-only emails or any browser failure.
   - PDF attachments are stored as rendered PNGs; the stored image is always
     browser-displayable (HEIC/BMP/TIFF → PNG via sharp).
   - The hosted DeepSeek API is text-only today — image OCR falls back to

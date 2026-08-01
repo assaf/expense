@@ -106,7 +106,7 @@ function embedFontFace(svg: string): string {
 }
 
 /** True when the PNG has any pixel darker than near-white (i.e. real ink). */
-async function hasInk(png: Buffer): Promise<boolean> {
+export async function hasInk(png: Buffer): Promise<boolean> {
   try {
     const stats = await sharp(png).stats();
     return stats.channels.slice(0, 3).some((c) => c.min < 250);
