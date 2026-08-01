@@ -33,7 +33,6 @@
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "csv-parse": "^7.0.1",
     "csv-stringify": "^6.8.1",
     "dotenv": "^17.4.2",
     "fflate": "^0.8.3",
