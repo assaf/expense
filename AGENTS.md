@@ -24,6 +24,7 @@ pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expensify_test schema + 79 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
+./scripts/clone              # clone the prod (Neon) DB into the local dev DB (data/backup.sql)
 # NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
 # sync (preflight + db push, via `vercel env pull`), CLI deploy, and opening the
 # site. `git push origin main` also auto-deploys. Schema changes: `prisma migrate

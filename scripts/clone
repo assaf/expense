@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Clone the Vercel production database (Neon) to the local development database.
+#
+# Prod env comes from `vercel env pull` (see AGENTS.md); DATABASE_URL_UNPOOLED
+# is used for the dump — the pooled URL is for runtime queries. The backup is
+# written to data/backup.sql, which is gitignored (sensitive financial data)
+# and overwritten on every run.
+#
+# After the clone, the local app logs in with the same credentials as prod
+# (APP_USERNAME/APP_PASSWORD). Receipt images live in Vercel Blob, not in the
+# database — to see them locally, set IMAGE_BACKEND=blob and
+# BLOB_READ_WRITE_TOKEN in .env (they're already in .env.prod).
+#
+# Usage: ./scripts/clone
+# Env:   LOCAL_DB_URL overrides the local database (default: .env DATABASE_URL
+#        or postgres://assaf@localhost/expensify_dev)
+set -eo pipefail
+
+# Local database: explicit override → .env → default.
+LOCAL_DB_URL="${LOCAL_DB_URL:-$(
+  grep '^DATABASE_URL=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'
+)}"
+LOCAL_DB_URL="${LOCAL_DB_URL:-postgres://assaf@localhost/expensify_dev}"
+BACKUP_FILE="data/backup.sql"
+
+# 1. Pull production env from Vercel when .env.prod is missing.
+if [ ! -f .env.prod ]; then
+  echo -e "\033[0;32mPulling production env from Vercel …\033[0m"
+  npx -y vercel@latest env pull --environment=production --yes .env.prod
+fi
+set -a
+source .env.prod
+set +a
+PROD_DB_URL="${DATABASE_URL_UNPOOLED:-${DATABASE_URL:-}}"
+if [ -z "$PROD_DB_URL" ]; then
+  echo -e "\033[0;31mNo DATABASE_URL_UNPOOLED in .env.prod — pull it with:\033[0m"
+  echo "  npx vercel env pull --environment=production --yes .env.prod"
+  exit 1
+fi
+
+# 2. Make sure the local database exists.
+mkdir -p data
+if ! psql "$LOCAL_DB_URL" -c "select 1" >/dev/null 2>&1; then
+  echo -e "\033[0;32mCreating local database …\033[0m"
+  createdb "$LOCAL_DB_URL"
+fi
+
+# 3. Dump production (plain dump; the local schema is dropped and recreated
+#    before restore, so the dump must not carry --clean's drop statements).
+echo -e "\033[0;32mDumping production database → $BACKUP_FILE …\033[0m"
+pg_dump "$PROD_DB_URL" \
+  --file "$BACKUP_FILE" \
+  --schema public \
+  --no-owner \
+  --no-privileges
+
+# 4. Drop the local schema (the dump recreates it), then restore.
+echo -e "\033[0;32mRestoring into $LOCAL_DB_URL …\033[0m"
+psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE;"
+psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f "$BACKUP_FILE" >/dev/null
+
+echo -e "\033[0;32mClone complete.\033[0m"
+echo "  - Local login uses prod credentials (APP_USERNAME / APP_PASSWORD in .env)."
+echo "  - Receipt images are in Vercel Blob; to view them locally, set"
+echo "    IMAGE_BACKEND=blob and BLOB_READ_WRITE_TOKEN in .env."
+
+# 5. Open the local site (dev server must be running: pnpm dev).
+open "https://expensify.localhost"
