@@ -128,17 +128,24 @@ describe("Settings", () => {
     await page.close();
   });
 
-  it("does not flash when the added category already exists", async () => {
+  it("shows an error when adding a duplicate category", async () => {
     const page = await goto("/settings");
     const section = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Categories" }),
     });
     await section.locator('input[type="text"][name="name"]').fill("Testing");
     await section.getByRole("button", { name: "Add" }).click();
-    // Duplicate — no flash URL, no highlight on the existing row.
-    await expect(page).not.toHaveURL(/addedCategory=/);
+    // Duplicate — the action reports it inline; the existing row doesn't
+    // flash and the input keeps the typed value so the user can correct it.
+    await expect(section.getByText(/already exists/i)).toBeVisible();
     const existing = section.locator("ul li").filter({ hasText: "Testing" });
     await expect(existing).not.toHaveClass(/bg-amber-200/);
+    await expect(
+      section.locator('input[type="text"][name="name"]'),
+    ).toHaveValue("Testing");
+    // Typing clears the error.
+    await section.locator('input[type="text"][name="name"]').fill("New Name");
+    await expect(section.getByText(/already exists/i)).toHaveCount(0);
     await page.close();
   });
 
@@ -214,6 +221,208 @@ describe("Settings", () => {
         where: { accountId: TEST_ACCOUNT_ID, category: "Development" },
       }),
     ).toBe(2);
+    await page.close();
+  });
+
+  it("renames a category and updates its expenses", async () => {
+    // Seed a category plus one unassigned expense using it, then rename
+    // through the UI and check the expense's reference followed.
+    const now = new Date().toISOString();
+    await testPrisma.category.createMany({
+      data: [{ name: "Temp Category", accountId: TEST_ACCOUNT_ID }],
+      skipDuplicates: true,
+    });
+    await testPrisma.expense.createMany({
+      data: [
+        {
+          id: "exp_renamecat1",
+          type: "receipt",
+          date: "2026-01-01",
+          report: "",
+          category: "Temp Category",
+          description: "",
+          amount: "5.00",
+          merchant: "Rename Shop",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          distanceMiles: "",
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+          accountId: TEST_ACCOUNT_ID,
+        },
+      ],
+    });
+
+    const page = await goto("/settings");
+    const categories = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Categories" }),
+    });
+    const row = categories
+      .locator("ul li")
+      .filter({ hasText: "Temp Category" });
+    // Renames happen in place: no navigation, no page jump. Pin the scroll
+    // position before renaming and check it's untouched afterwards.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await row.scrollIntoViewIfNeeded();
+    const scrollY = await page.evaluate(() => window.scrollY);
+    await row.getByRole("button", { name: /rename temp category/i }).click();
+    // The row is now an editor (input + Save/Cancel) — locate it via the
+    // section, since the row's text no longer contains the old name.
+    const input = categories.locator('input[name="newName"]');
+    await expect(input).toBeVisible();
+    await input.fill("Temp Category 2");
+    await categories.getByRole("button", { name: "Save" }).click();
+
+    await expect(
+      categories.locator("ul li").filter({ hasText: "Temp Category 2" }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+    // The expense's category reference moved with the rename.
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, category: "Temp Category 2" },
+      }),
+    ).toBe(1);
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, category: "Temp Category" },
+      }),
+    ).toBe(0);
+    await page.close();
+  });
+
+  it("renames a report and updates its expenses and mileage", async () => {
+    // Seed a report with one receipt and one mileage expense (plus its
+    // derived mileage row), rename it, and check every reference moved.
+    const now = new Date().toISOString();
+    await testPrisma.report.createMany({
+      data: [{ name: "Draft Q3", accountId: TEST_ACCOUNT_ID }],
+      skipDuplicates: true,
+    });
+    await testPrisma.expense.createMany({
+      data: [
+        {
+          id: "exp_renamerep1",
+          type: "receipt",
+          date: "2026-02-01",
+          report: "Draft Q3",
+          category: "Testing",
+          description: "",
+          amount: "7.00",
+          merchant: "R Shop",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          distanceMiles: "",
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+          accountId: TEST_ACCOUNT_ID,
+        },
+        {
+          id: "exp_renamerep2",
+          type: "mileage",
+          date: "2026-02-02",
+          report: "Draft Q3",
+          category: "Testing",
+          description: "",
+          amount: "3.00",
+          merchant: "",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          distanceMiles: "5.00",
+          locations: [{ address: "A", lat: null, lng: null }],
+          createdAt: now,
+          updatedAt: now,
+          accountId: TEST_ACCOUNT_ID,
+        },
+      ],
+    });
+    await testPrisma.mileage.createMany({
+      data: [
+        {
+          date: "2026-02-02",
+          report: "Draft Q3",
+          locations: "A",
+          distanceMiles: "5.00",
+          accountId: TEST_ACCOUNT_ID,
+        },
+      ],
+    });
+
+    const page = await goto("/settings");
+    const reports = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Reports" }),
+    });
+    const row = reports.locator("ul li").filter({ hasText: "Draft Q3" });
+    await row.getByRole("button", { name: /rename draft q3/i }).click();
+    await reports.locator('input[name="newName"]').fill("Final Q3");
+    await reports.getByRole("button", { name: "Save" }).click();
+
+    await expect(
+      reports.locator("ul li").filter({ hasText: "Final Q3" }),
+    ).toBeVisible();
+    expect(
+      await testPrisma.report.count({
+        where: { accountId: TEST_ACCOUNT_ID, name: "Final Q3" },
+      }),
+    ).toBe(1);
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, report: "Final Q3" },
+      }),
+    ).toBe(2);
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, report: "Draft Q3" },
+      }),
+    ).toBe(0);
+    expect(
+      await testPrisma.mileage.count({
+        where: { accountId: TEST_ACCOUNT_ID, report: "Final Q3" },
+      }),
+    ).toBe(1);
+    await page.close();
+  });
+
+  it("does not rename a category to an existing name", async () => {
+    // Seed two categories; renaming one onto the other must be a no-op that
+    // leaves the editor open (rows only remount on a successful rename).
+    await testPrisma.category.createMany({
+      data: [
+        { name: "Temp Category 3", accountId: TEST_ACCOUNT_ID },
+        { name: "Temp Dupe", accountId: TEST_ACCOUNT_ID },
+      ],
+      skipDuplicates: true,
+    });
+
+    const page = await goto("/settings");
+    const categories = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Categories" }),
+    });
+    const row = categories
+      .locator("ul li")
+      .filter({ hasText: "Temp Category 3" });
+    await row.getByRole("button", { name: /rename temp category 3/i }).click();
+    await categories.locator('input[name="newName"]').fill("Temp Dupe");
+    await categories.getByRole("button", { name: "Save" }).click();
+
+    // The action reports the duplicate inline, and the editor stays open so
+    // the user can fix the name.
+    await expect(categories.getByText(/already exists/i)).toBeVisible();
+    await expect(categories.locator('input[name="newName"]')).toBeVisible();
+    await categories.getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      categories.locator("ul li").filter({ hasText: "Temp Category 3" }),
+    ).toBeVisible();
+    expect(
+      await testPrisma.category.count({
+        where: { accountId: TEST_ACCOUNT_ID, name: "Temp Dupe" },
+      }),
+    ).toBe(1);
     await page.close();
   });
 

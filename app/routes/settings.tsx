@@ -1,6 +1,7 @@
 import {
   Plus,
   Trash2,
+  Pencil,
   ArrowLeft,
   MapPin,
   LogOut,
@@ -8,7 +9,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Link, Form, useNavigation, useSearchParams } from "react-router";
+import { Link, Form, useFetcher } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
@@ -29,6 +30,8 @@ import {
   removeCategory,
   removeInboundSender,
   removeReport,
+  renameCategory,
+  renameReport,
   setReportClosed,
 } from "~/lib/store.server";
 import { normalizeAmount } from "~/lib/format";
@@ -84,15 +87,22 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     case "addReport": {
       const name = formString(form, "name").trim();
-      // Flash the new entry on the reloaded page (only when actually created).
-      const added = await addReport(user.accountId, name);
-      return added
-        ? redirect(`/settings?addedReport=${encodeURIComponent(name)}`)
-        : redirect("/settings");
+      // Fetcher-driven: return the created name (or the error) so the list
+      // can flash the new row in place — no page navigation.
+      const result = await addReport(user.accountId, name);
+      return Response.json(result.ok ? { ok: true, name } : result);
     }
     case "removeReport":
       await removeReport(user.accountId, formString(form, "name"));
       break;
+    case "renameReport": {
+      const result = await renameReport(
+        user.accountId,
+        formString(form, "name"),
+        formString(form, "newName"),
+      );
+      return Response.json(result);
+    }
     case "setReportClosed":
       await setReportClosed(
         user.accountId,
@@ -102,14 +112,20 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     case "addCategory": {
       const name = formString(form, "name").trim();
-      const added = await addCategory(user.accountId, name);
-      return added
-        ? redirect(`/settings?addedCategory=${encodeURIComponent(name)}`)
-        : redirect("/settings");
+      const result = await addCategory(user.accountId, name);
+      return Response.json(result.ok ? { ok: true, name } : result);
     }
     case "removeCategory":
       await removeCategory(user.accountId, formString(form, "name"));
       break;
+    case "renameCategory": {
+      const result = await renameCategory(
+        user.accountId,
+        formString(form, "name"),
+        formString(form, "newName"),
+      );
+      return Response.json(result);
+    }
     case "saveRates": {
       const settings = await readSettings(user.accountId);
       const rates: Record<string, string> = {};
@@ -162,7 +178,6 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
-  const [searchParams] = useSearchParams();
   const {
     reports,
     categories,
@@ -220,16 +235,16 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         items={reports}
         addIntent="addReport"
         addPlaceholder="Add report"
-        highlight={searchParams.get("addedReport") ?? undefined}
-        renderItem={(report) => <ReportRow report={report} />}
+        renderItem={(report) => <ReportRow key={report.name} report={report} />}
       />
       <NameList
         title="Categories"
         items={categories}
         addIntent="addCategory"
         addPlaceholder="Add category"
-        highlight={searchParams.get("addedCategory") ?? undefined}
-        renderItem={(category) => <CategoryRow category={category} />}
+        renderItem={(category) => (
+          <CategoryRow key={category.name} category={category} />
+        )}
       />
 
       <section className="mb-8">
@@ -392,7 +407,6 @@ function NameList<T extends { name: string }>({
   items,
   addIntent,
   addPlaceholder,
-  highlight,
   renderItem,
 }: {
   title: string;
@@ -401,53 +415,39 @@ function NameList<T extends { name: string }>({
   addPlaceholder: string;
   /** Full row content for every item in the list. */
   renderItem: (item: T) => ReactNode;
-  /** The entry just added via this list's add form — flashed for 3 seconds. */
-  highlight?: string;
 }) {
-  const navigation = useNavigation();
+  const fetcher = useFetcher<{ ok: boolean; name?: string; error?: string }>();
   const [flashName, setFlashName] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const flashRef = useRef<HTMLLIElement | null>(null);
-  const addInputRef = useRef<HTMLInputElement | null>(null);
-  const pendingAdd = useRef(false);
 
-  // Flash whenever the page carries an ?added* param. React Router submits
-  // the add form client-side and keeps this component mounted, so the URL
-  // param arrives after mount — it can't seed useState, it must be synced.
+  // A new entry landed (fetcher, no page navigation): flash it and clear
+  // the add input. A rejected add (duplicate) shows its error inline. The
+  // loader revalidation has already added the row by the time this runs,
+  // so the flash ref is available on the next render.
   useEffect(() => {
-    if (highlight) setFlashName(highlight);
-  }, [highlight]);
+    const { data } = fetcher;
+    if (!data) return;
+    if (data.ok && data.name) {
+      setFlashName(data.name);
+      setError(null);
+      setDraft("");
+    } else if (data.error) {
+      setError(data.error);
+    }
+  }, [fetcher.data]);
 
-  // Time-box the flash and drop the ?added* params so a refresh doesn't
-  // re-flash. The router keeps the params internally after replaceState, so
-  // the highlight prop stays stable and this runs once per add.
+  // Time-box the flash and bring the new row into view.
   useEffect(() => {
     if (!flashName) return;
     flashRef.current?.scrollIntoView({
       block: "nearest",
       behavior: "smooth",
     });
-    const url = new URL(window.location.href);
-    url.searchParams.delete("addedReport");
-    url.searchParams.delete("addedCategory");
-    window.history.replaceState(null, "", url);
     const timer = setTimeout(() => setFlashName(null), 3000);
     return () => clearTimeout(timer);
   }, [flashName]);
-
-  // Empty the add input once this list's add submission settles — the input
-  // is uncontrolled, so a client-side navigation would otherwise keep its
-  // value. Only reacts to this list's own intent.
-  useEffect(() => {
-    if (
-      navigation.state === "submitting" &&
-      navigation.formData?.get("intent") === addIntent
-    ) {
-      pendingAdd.current = true;
-    } else if (navigation.state === "idle" && pendingAdd.current) {
-      pendingAdd.current = false;
-      if (addInputRef.current) addInputRef.current.value = "";
-    }
-  }, [navigation.state, navigation.formData, addIntent]);
 
   return (
     <section className="mb-8">
@@ -469,19 +469,32 @@ function NameList<T extends { name: string }>({
           ))
         )}
       </ul>
-      <Form method="post" className="flex items-center gap-2">
+      <fetcher.Form method="post" className="flex items-center gap-2">
         <input type="hidden" name="intent" value={addIntent} />
         <input
-          ref={addInputRef}
           type="text"
           name="name"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
           placeholder={addPlaceholder}
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+          aria-invalid={error ? true : undefined}
+          className={`flex-1 rounded-lg border px-3 py-2 ${
+            error ? "border-red-400" : "border-gray-300"
+          }`}
         />
-        <Button type="submit" size="md" variant="secondary">
+        <Button
+          type="submit"
+          size="md"
+          variant="secondary"
+          disabled={!draft.trim()}
+        >
           <Plus className="h-4 w-4" /> Add
         </Button>
-      </Form>
+      </fetcher.Form>
+      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
     </section>
   );
 }
@@ -495,12 +508,112 @@ type ReportItem = { name: string; closed: boolean; count: number };
  */
 type CategoryItem = { name: string; count: number };
 
+/**
+ * Inline rename editor: an input pre-filled with the current name, Save,
+ * and Cancel. Submits through a fetcher (no page navigation — the page
+ * stays put, and the action's error, e.g. a duplicate name, is shown
+ * inline). The row that hosts it is keyed by name, so a successful rename
+ * remounts the row and closes the editor.
+ */
+type RenameResult = { ok: boolean; error?: string };
+
+function RenameForm({
+  intent,
+  name,
+  onCancel,
+}: {
+  intent: string;
+  /** Current name — also the hidden `name` field the action matches on. */
+  name: string;
+  onCancel: () => void;
+}) {
+  const fetcher = useFetcher<RenameResult>();
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fetcher.data?.error) setError(fetcher.data.error);
+    else if (fetcher.data?.ok) setError(null);
+  }, [fetcher.data]);
+
+  return (
+    <div className="flex w-full flex-col gap-1">
+      <fetcher.Form method="post" className="flex w-full items-center gap-2">
+        <input type="hidden" name="intent" value={intent} />
+        <input type="hidden" name="name" value={name} />
+        <input
+          type="text"
+          name="newName"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onCancel();
+          }}
+          autoFocus
+          aria-invalid={error ? true : undefined}
+          className={`min-w-0 flex-1 rounded-lg border px-2 py-1 ${
+            error ? "border-red-400" : "border-gray-300"
+          }`}
+        />
+        <Button
+          type="submit"
+          size="sm"
+          disabled={!draft.trim() || draft === name}
+        >
+          Save
+        </Button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="shrink-0 text-sm text-gray-500 hover:text-ink"
+        >
+          Cancel
+        </button>
+      </fetcher.Form>
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
+function RenameButton({
+  onClick,
+  name,
+}: {
+  onClick: () => void;
+  name: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-gray-400 hover:text-ink"
+      aria-label={`Rename ${name}`}
+    >
+      <Pencil className="h-4 w-4" />
+    </button>
+  );
+}
+
 function CategoryRow({ category }: { category: CategoryItem }) {
   const needsConfirm = category.count > 1;
+  const [editing, setEditing] = useState(false);
+  const removeFetcher = useFetcher();
   const countLabel =
     category.count === 0
       ? "No expenses"
       : `${category.count} expense${category.count === 1 ? "" : "s"}`;
+  if (editing) {
+    return (
+      <RenameForm
+        intent="renameCategory"
+        name={category.name}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
   return (
     <>
       <span className="truncate">{category.name}</span>
@@ -511,7 +624,8 @@ function CategoryRow({ category }: { category: CategoryItem }) {
         >
           {countLabel}
         </span>
-        <Form
+        <RenameButton onClick={() => setEditing(true)} name={category.name} />
+        <removeFetcher.Form
           method="post"
           className="contents"
           onSubmit={(e) => {
@@ -532,7 +646,7 @@ function CategoryRow({ category }: { category: CategoryItem }) {
           >
             <Trash2 className="h-4 w-4" />
           </button>
-        </Form>
+        </removeFetcher.Form>
       </div>
     </>
   );
@@ -545,10 +659,22 @@ function CategoryRow({ category }: { category: CategoryItem }) {
  */
 function ReportRow({ report }: { report: ReportItem }) {
   const needsConfirm = report.closed || report.count > 1;
+  const [editing, setEditing] = useState(false);
+  const toggleFetcher = useFetcher();
+  const removeFetcher = useFetcher();
   const countLabel =
     report.count === 0
       ? "No expenses"
       : `${report.count} expense${report.count === 1 ? "" : "s"}`;
+  if (editing) {
+    return (
+      <RenameForm
+        intent="renameReport"
+        name={report.name}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
   return (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -565,7 +691,7 @@ function ReportRow({ report }: { report: ReportItem }) {
       </div>
       <span className="shrink-0 text-xs text-gray-500">{countLabel}</span>
       <div className="flex shrink-0 items-center gap-2">
-        <Form method="post" className="contents">
+        <toggleFetcher.Form method="post" className="contents">
           <input type="hidden" name="intent" value="setReportClosed" />
           <input type="hidden" name="name" value={report.name} />
           <input
@@ -583,8 +709,9 @@ function ReportRow({ report }: { report: ReportItem }) {
           >
             {report.closed ? "Reopen" : "Close"}
           </button>
-        </Form>
-        <Form
+        </toggleFetcher.Form>
+        <RenameButton onClick={() => setEditing(true)} name={report.name} />
+        <removeFetcher.Form
           method="post"
           className="contents"
           onSubmit={(e) => {
@@ -615,7 +742,7 @@ function ReportRow({ report }: { report: ReportItem }) {
           >
             <Trash2 className="h-4 w-4" />
           </button>
-        </Form>
+        </removeFetcher.Form>
       </div>
     </>
   );
