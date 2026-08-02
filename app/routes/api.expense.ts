@@ -1,9 +1,9 @@
-import { deleteImage, saveImage } from "~/lib/images.server";
+import { deleteImage, readUploadedFile, saveImage } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import { initStore, readCategories } from "~/lib/store.server";
+import { readCategories } from "~/lib/store.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { matchCategory } from "~/lib/receipt-ai.server";
-import { formString } from "~/lib/validation";
+import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
 /** OCR + extraction can take a while (DeepSeek, or tesseract on first run). */
@@ -18,18 +18,15 @@ export const config = { maxDuration: 60 };
  */
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
-  await initStore();
   const form = await request.formData();
   const intent = formString(form, "intent");
 
   if (intent === "draft-upload") {
-    const file = form.get("file");
-    if (!(file instanceof File) || file.size === 0) {
+    const uploaded = await readUploadedFile(form);
+    if (!uploaded) {
       return Response.json({ error: "No image received." }, { status: 400 });
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const mime = file.type || "image/png";
-    const originalName = file.name || "pasted.png";
+    const { buffer, mime, originalName } = uploaded;
 
     // Save the image and OCR it in parallel. No expense row is created —
     // extraction just pre-fills the draft editor when it succeeds.
@@ -58,7 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: true });
   }
 
-  return Response.json({ error: "Unknown intent." }, { status: 400 });
+  return unknownIntent();
 }
 
 /**

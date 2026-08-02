@@ -121,6 +121,26 @@ function conventionImageName(
 }
 
 /**
+ * Read an uploaded image file from a form's `file` field, or null when
+ * absent/empty. The mime falls back to the filename extension then to PNG —
+ * the same resolution saveImage applies — so files whose type the browser
+ * leaves empty (e.g. HEIC) are labeled honestly before normalization.
+ */
+export async function readUploadedFile(form: FormData): Promise<{
+  buffer: Buffer;
+  mime: string;
+  originalName: string;
+} | null> {
+  const file = form.get("file");
+  if (!(file instanceof File) || file.size === 0) return null;
+  return {
+    buffer: Buffer.from(await file.arrayBuffer()),
+    mime: file.type || mimeForFile(file.name) || "image/png",
+    originalName: file.name || "pasted.png",
+  };
+}
+
+/**
  * Persist an uploaded image buffer under a temporary (id-based) key in the
  * account's namespace. Returns the storage key written and the mime type.
  *

@@ -21,6 +21,11 @@ export function entryString(v: FormDataEntryValue): string {
   return v instanceof File ? "" : v;
 }
 
+/** Standard 400 response for an unrecognized form action intent. */
+export function unknownIntent(): Response {
+  return Response.json({ error: "Unknown intent." }, { status: 400 });
+}
+
 /** Validate that a date string is YYYY-MM-DD and not in the future. */
 export function validateDateNotFuture(date: string): string | null {
   if (!date) return null;

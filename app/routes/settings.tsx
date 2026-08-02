@@ -30,7 +30,7 @@ import {
   setReportClosed,
 } from "~/lib/store.server";
 import { countLabel, normalizeAmount } from "~/lib/format";
-import { entryString, formString } from "~/lib/validation";
+import { entryString, formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -166,7 +166,7 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     }
     default:
-      return Response.json({ error: "Unknown intent" }, { status: 400 });
+      return unknownIntent();
   }
   return redirect("/settings");
 }

@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-import { resizeIfWider } from "~/lib/image-normalize";
+import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import { RECEIPT_OCR_MODE } from "~/lib/env";
 import { extractReceipt, isVisionUnsupportedError } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
@@ -46,17 +46,19 @@ async function normalizeImage(buffer: Buffer, _mime: string): Promise<Buffer> {
 }
 
 /**
- * Convert an attachment image to a browser-friendly format for storage:
- * HEIC/BMP/TIFF/AVIF → PNG; JPEG/PNG/WebP pass through (alpha flattened,
- * downscaled past 1024px). The stored receipt must render in <img> tags.
- * The width cap mirrors saveImage's normalization (see image-normalize.ts)
- * so the intermediate stays small — re-encoding happens once, at save.
+ * Convert an attachment image to a browser-friendly format for OCR + storage:
+ * HEIC/BMP/TIFF/AVIF → PNG (tesseract can't read them); JPEG/PNG/WebP pass
+ * through downscaled to the storage cap. JPEG is returned without re-encoding
+ * — it has no alpha, so flatten is a no-op, and saveImage's normalizer
+ * (normalizeStoredImage, same width cap) handles storage without a second
+ * lossy pass. PNG/WebP are flattened onto white here because OCR sees this
+ * buffer before storage does.
  */
 async function toBrowserImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ buffer: Buffer; mime: string }> {
-  const resized = await resizeIfWider(buffer, 1024);
+  const resized = await resizeIfWider(buffer, STORED_IMAGE_MAX_WIDTH);
   if (resized === null) return { buffer, mime }; // not decodable — pass through
   if (
     [
@@ -71,6 +73,11 @@ async function toBrowserImage(
       buffer: await sharp(resized).png({ compressionLevel: 6 }).toBuffer(),
       mime: "image/png",
     };
+  }
+  if (mime === "image/jpeg") {
+    // JPEG never has an alpha channel: flatten is a no-op, so the bytes go
+    // to saveImage untouched (small JPEGs pass its normalizer as-is).
+    return { buffer: resized, mime };
   }
   return {
     buffer: await sharp(resized).flatten({ background: "#ffffff" }).toBuffer(),

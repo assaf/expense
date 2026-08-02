@@ -25,17 +25,10 @@ import { Select } from "~/components/ui/Select";
 import { Textarea } from "~/components/ui/Textarea";
 import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
+import { loadEditorContext } from "~/lib/editor.server";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
-import { normalizeAmount, sortExpenses, todayDate, yearOf } from "~/lib/format";
-import { homeLocation, readSettings } from "~/lib/settings.server";
-import {
-  deleteExpense,
-  readCategories,
-  readExpense,
-  readExpenses,
-  readPriorMerchants,
-  readReports,
-} from "~/lib/store.server";
+import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
+import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
 import type {
   Expense,
   Location,
@@ -44,42 +37,26 @@ import type {
 } from "~/lib/types";
 import { geocodedLocations } from "~/lib/types";
 import { usePasteImage } from "~/lib/use-paste-image";
-import { formString } from "~/lib/validation";
+import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw new Response("Not found", { status: 404 });
-  const [reports, categories, settings, merchants, all] = await Promise.all([
-    readReports(user.accountId),
-    readCategories(user.accountId),
-    readSettings(user.accountId),
-    readPriorMerchants(user.accountId),
+  // Editor context (open reports, categories, merchants, home, rate) and
+  // neighbours in the main list order (newest first, empty dates last).
+  const [all, context] = await Promise.all([
     readExpenses(user.accountId),
+    loadEditorContext(user.accountId, expense),
   ]);
-  const year = yearOf(expense.date);
-  const rate = settings.mileageRates[year] ?? "";
-  // Neighbours in the main list order (newest first, empty dates last).
   const sorted = sortExpenses(all);
   const i = sorted.findIndex((e) => e.id === expense.id);
   const nav = {
     prevId: i > 0 ? sorted[i - 1]!.id : null,
     nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
   };
-  return {
-    mode: "edit" as const,
-    expense,
-    // Closed reports can't be selected; the expense's current report is
-    // still shown when it is closed (SelectField prepends it as the value).
-    reports: reports.filter((r) => !r.closed).map((r) => r.name),
-    categories: categories.map((c) => c.name),
-    merchants,
-    home: homeLocation(settings),
-    rate,
-    year,
-    nav,
-  };
+  return { mode: "edit" as const, ...context, nav };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -100,7 +77,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     return redirect("/");
   }
 
-  return Response.json({ error: "Unknown intent" }, { status: 400 });
+  return unknownIntent();
 }
 
 /**

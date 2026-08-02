@@ -1,22 +1,24 @@
 import {
-  renameImageToConvention,
-  readImage,
-  saveImage,
   deleteImage,
+  readImage,
+  readUploadedFile,
+  renameImageToConvention,
+  saveImage,
 } from "~/lib/images.server";
-import { resizeToJpeg } from "~/lib/image-normalize";
+import { resizeToJpeg, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
-import { formString } from "~/lib/validation";
+import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id.image";
 
 /**
  * The list view renders 56px thumbnails per row — serving the full stored
  * image for each is wasteful, so the loader resizes on the fly when asked
  * (`?w=160`). Result is JPEG regardless of stored format; undecodable or
- * out-of-range params fall back to the full image.
+ * out-of-range params fall back to the full image. The cap matches the
+ * storage normalizer (image-normalize.ts) so a thumbnail request can never
+ * upscale beyond the stored resolution.
  */
-const THUMB_MAX_WIDTH = 1024;
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -29,7 +31,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const width = Number(url.searchParams.get("w"));
-  if (Number.isInteger(width) && width >= 16 && width <= THUMB_MAX_WIDTH) {
+  if (
+    Number.isInteger(width) &&
+    width >= 16 &&
+    width <= STORED_IMAGE_MAX_WIDTH
+  ) {
     try {
       const thumb = await resizeToJpeg(image.buffer, {
         maxWidth: width,
@@ -76,21 +82,21 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === "upload") {
-    const file = form.get("file");
-    if (!(file instanceof File) || file.size === 0) {
+    const uploaded = await readUploadedFile(form);
+    if (!uploaded) {
       return Response.json({ error: "No image" }, { status: 400 });
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const { filename, mime } = await saveImage(
+    const { buffer, mime, originalName } = uploaded;
+    const { filename, mime: storedMime } = await saveImage(
       user.accountId,
       buffer,
-      file.type,
-      file.name || "pasted.png",
+      mime,
+      originalName,
     );
     if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
     expense.imageFile = filename;
-    expense.imageMime = mime;
-    expense.originalName = file.name || "pasted.png";
+    expense.imageMime = storedMime;
+    expense.originalName = originalName;
     expense.updatedAt = new Date().toISOString();
     // Rename to convention immediately if date+report already set.
     const renamed = await renameImageToConvention(
@@ -106,5 +112,5 @@ export async function action({ request, params }: Route.ActionArgs) {
     return Response.json({ ok: true, imageFile: renamed });
   }
 
-  return Response.json({ error: "Unknown intent" }, { status: 400 });
+  return unknownIntent();
 }
