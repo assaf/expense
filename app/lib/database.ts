@@ -403,24 +403,97 @@ export async function readCategoryCounts(
   return counts;
 }
 
-/**
- * Create a report if it doesn't exist yet. Returns an error message when
- * the name is empty or already taken.
- */
-export async function addReport(
+// --- Add/rename helpers shared by reports and categories -------------------
+
+/** The report/category model shape used by the add/rename helpers. */
+interface NamedModel {
+  createMany(args: {
+    data: { name: string; accountId: string }[];
+    skipDuplicates: boolean;
+  }): Promise<{ count: number }>;
+  findFirst(args: {
+    where: { accountId: string; name: string };
+  }): Promise<{ name: string } | null>;
+  updateMany(args: {
+    where: { accountId: string; name: string };
+    data: { name: string };
+  }): Prisma.PrismaPromise<Prisma.BatchPayload>;
+}
+
+type NamedResult = { ok: true } | { ok: false; error: string };
+
+/** Add a named row (report/category) if it doesn't exist yet. */
+async function addNamedRow(
+  model: NamedModel,
+  noun: string,
   accountId: string,
   name: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<NamedResult> {
   const clean = name.trim();
   if (!clean) return { ok: false, error: "Name can't be empty." };
-  const result = await prisma.report.createMany({
+  const result = await model.createMany({
     data: [{ name: clean, accountId }],
     skipDuplicates: true,
   });
   if (result.count === 0) {
-    return { ok: false, error: `A report named "${clean}" already exists.` };
+    return { ok: false, error: `A ${noun} named "${clean}" already exists.` };
   }
   return { ok: true };
+}
+
+/**
+ * Rename a named row (report/category) and every expense that references it
+ * by name. `expenseField` selects the expense column to rewrite
+ * ("report" or "category"); reports also rename their derived mileage rows.
+ */
+async function renameNamedRow(
+  model: NamedModel,
+  noun: string,
+  expenseField: "report" | "category",
+  accountId: string,
+  name: string,
+  newName: string,
+): Promise<NamedResult> {
+  const clean = newName.trim();
+  if (!clean) return { ok: false, error: "Name can't be empty." };
+  if (clean === name) return { ok: false, error: "That's already the name." };
+  const dup = await model.findFirst({ where: { accountId, name: clean } });
+  if (dup) {
+    return { ok: false, error: `A ${noun} named "${clean}" already exists.` };
+  }
+  const operations: Prisma.PrismaPromise<{ count: number }>[] = [
+    prisma.expense.updateMany({
+      where: { accountId, [expenseField]: name },
+      data: { [expenseField]: clean },
+    }),
+  ];
+  if (expenseField === "report") {
+    operations.push(
+      prisma.mileage.updateMany({
+        where: { accountId, report: name },
+        data: { report: clean },
+      }),
+    );
+  }
+  operations.push(
+    model.updateMany({ where: { accountId, name }, data: { name: clean } }),
+  );
+  const results = await prisma.$transaction(operations);
+  if (results[results.length - 1]!.count === 0) {
+    return { ok: false, error: `That ${noun} no longer exists.` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Create a report if it doesn't exist yet. Returns an error message when
+ * the name is empty or already taken.
+ */
+export function addReport(
+  accountId: string,
+  name: string,
+): Promise<NamedResult> {
+  return addNamedRow(prisma.report, "report", accountId, name);
 }
 
 /**
@@ -457,40 +530,19 @@ export async function removeReport(
  * convention name — re-saving a receipt rewrites them. Returns an error
  * message when the rename can't happen (empty, unchanged, duplicate).
  */
-export async function renameReport(
+export function renameReport(
   accountId: string,
   name: string,
   newName: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const clean = newName.trim();
-  if (!clean) return { ok: false, error: "Name can't be empty." };
-  if (clean === name) {
-    return { ok: false, error: "That's already the name." };
-  }
-  const dup = await prisma.report.findFirst({
-    where: { accountId, name: clean },
-  });
-  if (dup) {
-    return { ok: false, error: `A report named "${clean}" already exists.` };
-  }
-  const [, , reports] = await prisma.$transaction([
-    prisma.expense.updateMany({
-      where: { accountId, report: name },
-      data: { report: clean },
-    }),
-    prisma.mileage.updateMany({
-      where: { accountId, report: name },
-      data: { report: clean },
-    }),
-    prisma.report.updateMany({
-      where: { accountId, name },
-      data: { name: clean },
-    }),
-  ]);
-  if (reports.count === 0) {
-    return { ok: false, error: "That report no longer exists." };
-  }
-  return { ok: true };
+): Promise<NamedResult> {
+  return renameNamedRow(
+    prisma.report,
+    "report",
+    "report",
+    accountId,
+    name,
+    newName,
+  );
 }
 
 /** Mark a report closed (or reopen it). Closed reports delete with confirmation. */
@@ -522,56 +574,30 @@ export async function readCategories(accountId: string): Promise<Category[]> {
  * Rename a category and every expense that uses it. Returns an error
  * message when the rename can't happen (empty, unchanged, duplicate).
  */
-export async function renameCategory(
+export function renameCategory(
   accountId: string,
   name: string,
   newName: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const clean = newName.trim();
-  if (!clean) return { ok: false, error: "Name can't be empty." };
-  if (clean === name) {
-    return { ok: false, error: "That's already the name." };
-  }
-  const dup = await prisma.category.findFirst({
-    where: { accountId, name: clean },
-  });
-  if (dup) {
-    return { ok: false, error: `A category named "${clean}" already exists.` };
-  }
-  const [, categories] = await prisma.$transaction([
-    prisma.expense.updateMany({
-      where: { accountId, category: name },
-      data: { category: clean },
-    }),
-    prisma.category.updateMany({
-      where: { accountId, name },
-      data: { name: clean },
-    }),
-  ]);
-  if (categories.count === 0) {
-    return { ok: false, error: "That category no longer exists." };
-  }
-  return { ok: true };
+): Promise<NamedResult> {
+  return renameNamedRow(
+    prisma.category,
+    "category",
+    "category",
+    accountId,
+    name,
+    newName,
+  );
 }
 
 /**
  * Create a category if it doesn't exist yet. Returns an error message when
  * the name is empty or already taken.
  */
-export async function addCategory(
+export function addCategory(
   accountId: string,
   name: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const clean = name.trim();
-  if (!clean) return { ok: false, error: "Name can't be empty." };
-  const result = await prisma.category.createMany({
-    data: [{ name: clean, accountId }],
-    skipDuplicates: true,
-  });
-  if (result.count === 0) {
-    return { ok: false, error: `A category named "${clean}" already exists.` };
-  }
-  return { ok: true };
+): Promise<NamedResult> {
+  return addNamedRow(prisma.category, "category", accountId, name);
 }
 
 export async function removeCategory(

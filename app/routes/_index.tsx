@@ -7,7 +7,7 @@ import {
   Mail,
   Info,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
@@ -21,6 +21,7 @@ import {
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { readSettings } from "~/lib/settings.server";
+import { usePasteImage } from "~/lib/use-paste-image";
 import {
   readExpenses,
   readPriorMerchants,
@@ -379,26 +380,4 @@ function EmptyState() {
       No expenses yet. Add a receipt or mileage expense to get started.
     </div>
   );
-}
-
-/** Listen for paste events containing an image and forward the file. */
-function usePasteImage(onPaste: (file: File) => void) {
-  useEffect(() => {
-    const handler = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            onPaste(file);
-            return;
-          }
-        }
-      }
-    };
-    document.addEventListener("paste", handler);
-    return () => document.removeEventListener("paste", handler);
-  }, [onPaste]);
 }

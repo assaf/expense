@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { Resvg, type ResvgRenderOptions } from "@resvg/resvg-js";
 import { load } from "cheerio";
+import { escapeHtml } from "~/lib/escape";
 import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
 
 /**
@@ -31,15 +32,6 @@ const fontBytes = Buffer.from(
   fontInline.includes("base64,") ? fontInline.split("base64,")[1]! : fontInline,
   "base64",
 );
-
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
 
 /** Split text into lines of at most maxChars characters (hard wrap). */
 function wrapLines(text: string, maxChars: number): string[] {
@@ -90,7 +82,7 @@ export function buildReceiptSvg(
     const isHeader = i < headerLines.length;
     const weight = isHeader ? ' font-weight="700"' : "";
     parts.push(
-      `<text x="${PADDING}" y="${y}"${weight}>${escapeXml(line)}</text>`,
+      `<text x="${PADDING}" y="${y}"${weight}>${escapeHtml(line)}</text>`,
     );
     y += LINE_HEIGHT;
     if (isHeader && i === headerLines.length - 1) y += gap;

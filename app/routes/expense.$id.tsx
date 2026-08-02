@@ -30,6 +30,7 @@ import {
 } from "~/lib/store.server";
 import { parseLocations } from "~/lib/types";
 import type { Location, MileageExpense, ReceiptExpense } from "~/lib/types";
+import { usePasteImage } from "~/lib/use-paste-image";
 import { formString, validateDateNotFuture } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
@@ -289,24 +290,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   }
 
   // Paste an image anywhere to replace the receipt image.
-  useEffect(() => {
-    const handler = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith("image/")) {
-          const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            void replaceImage(file);
-            return;
-          }
-        }
-      }
-    };
-    document.addEventListener("paste", handler);
-    return () => document.removeEventListener("paste", handler);
-  }, [expense.id]);
+  usePasteImage(replaceImage);
 
   function onSave() {
     const form = new FormData();

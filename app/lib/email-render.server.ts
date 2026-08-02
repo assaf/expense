@@ -31,6 +31,7 @@ import puppeteer from "puppeteer-core";
 import chromiumSparticuz from "@sparticuz/chromium";
 import { load } from "cheerio";
 import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline";
+import { escapeHtml } from "~/lib/escape";
 import { hasInk } from "~/lib/receipt-render.server";
 
 /** A resolved inline image (cid → data URI payload). */
@@ -386,11 +387,6 @@ export async function renderTextEmail(
   );
 }
 
-/** Escape HTML-significant characters for the text document. */
-function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 // --- Forwarded-message header stripping --------------------------------------
 //
 // Forwards (Fastmail, Gmail, Apple Mail, iOS, …) paste a header block in
@@ -497,9 +493,9 @@ function buildTextDocument(text: string, opts: RenderTextEmailOptions): string {
   const envelope =
     opts.from || opts.subject
       ? `<div style="background-color:#f8fafc;border-bottom:1px solid #e2e8f0;padding:10px 24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#475569">` +
-        (opts.from ? `<div><b>From:</b> ${escapeText(opts.from)}</div>` : "") +
+        (opts.from ? `<div><b>From:</b> ${escapeHtml(opts.from)}</div>` : "") +
         (opts.subject
-          ? `<div><b>Subject:</b> ${escapeText(opts.subject)}</div>`
+          ? `<div><b>Subject:</b> ${escapeHtml(opts.subject)}</div>`
           : "") +
         `</div>`
       : "";
@@ -507,7 +503,7 @@ function buildTextDocument(text: string, opts: RenderTextEmailOptions): string {
 <body style="margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:${TEXT_FONT_SIZE};line-height:1.55;color:#1f2937">
   <div style="max-width:${TEXT_COLUMN_MAX};margin:${TEXT_MARGIN}px auto;padding:0">
     ${envelope}
-    <div style="white-space:pre-wrap;overflow-wrap:anywhere;padding:24px">${escapeText(text)}</div>
+    <div style="white-space:pre-wrap;overflow-wrap:anywhere;padding:24px">${escapeHtml(text)}</div>
   </div>
 </body></html>`;
 }

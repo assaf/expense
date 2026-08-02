@@ -25,7 +25,8 @@ import {
   extractPdfText,
   renderPdfToPng,
 } from "~/lib/receipt-ocr.server";
-import { escapeHtml, sendReplyEmail } from "~/lib/reply.server";
+import { escapeHtml } from "~/lib/escape";
+import { sendReplyEmail } from "~/lib/reply.server";
 import type { ReplyInput } from "~/lib/reply.server";
 import {
   findAccountByInboundSender,
