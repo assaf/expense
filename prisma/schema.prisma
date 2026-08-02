@@ -43,7 +43,6 @@ model User {
   accountId    String
   username     String  @unique
   passwordHash String
-  name         String
   createdAt    String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)

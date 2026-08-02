@@ -112,8 +112,6 @@ export interface User {
   accountId: string;
   /** Login name, unique, stored lowercase. */
   username: string;
-  /** Display name (optional). */
-  name: string;
   createdAt: string;
 }
 

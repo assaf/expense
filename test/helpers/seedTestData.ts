@@ -68,7 +68,6 @@ export async function seedTestData() {
         accountId: TEST_ACCOUNT_ID,
         username: TEST_USERNAME,
         passwordHash: await hashPassword(TEST_PASSWORD),
-        name: "Test User",
         createdAt: now,
       },
       {
@@ -76,7 +75,6 @@ export async function seedTestData() {
         accountId: OTHER_ACCOUNT_ID,
         username: "otheruser",
         passwordHash: await hashPassword("other-password"),
-        name: "Other User",
         createdAt: now,
       },
     ],

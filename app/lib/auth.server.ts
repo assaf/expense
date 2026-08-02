@@ -106,7 +106,6 @@ export async function login(
  */
 export async function createAccountWithUser(input: {
   accountName: string;
-  userName: string;
   username: string;
   password: string;
 }): Promise<string> {
@@ -117,7 +116,6 @@ export async function createAccountWithUser(input: {
     accountId: account.id,
     username: input.username,
     passwordHash: await hashPassword(input.password),
-    name: input.userName,
   });
   return commitUserSession(user.id);
 }
@@ -128,7 +126,6 @@ export async function createAccountWithUser(input: {
  */
 export async function joinAccountWithInviteCode(input: {
   inviteCode: string;
-  userName: string;
   username: string;
   password: string;
 }): Promise<string> {
@@ -142,7 +139,6 @@ export async function joinAccountWithInviteCode(input: {
     accountId: account.id,
     username: input.username,
     passwordHash: await hashPassword(input.password),
-    name: input.userName,
   });
   return commitUserSession(user.id);
 }

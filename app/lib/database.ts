@@ -150,7 +150,6 @@ async function ensureBootstrapUser(): Promise<User> {
         accountId,
         username: APP_USERNAME.trim().toLowerCase(),
         passwordHash: await hashPassword(APP_PASSWORD),
-        name: APP_USERNAME.trim(),
         createdAt: now,
       },
     }),
@@ -163,7 +162,6 @@ async function ensureBootstrapUser(): Promise<User> {
     id: userId,
     accountId,
     username: APP_USERNAME.trim().toLowerCase(),
-    name: APP_USERNAME.trim(),
     createdAt: now,
   };
 }
@@ -222,7 +220,6 @@ export async function createUser(input: {
   accountId: string;
   username: string;
   passwordHash: string;
-  name: string;
 }): Promise<User> {
   await initStore();
   const username = input.username.trim().toLowerCase();
@@ -233,7 +230,6 @@ export async function createUser(input: {
     id: ulid(),
     accountId: input.accountId,
     username,
-    name: input.name.trim() || username,
     createdAt: new Date().toISOString(),
   };
   await prisma.user.create({

@@ -266,7 +266,6 @@ async function seedScreenshotData() {
       accountId: ACCOUNT,
       username: TEST_USERNAME,
       passwordHash: await hashPassword(TEST_PASSWORD),
-      name: "Test User",
       createdAt: NOW,
     },
   });

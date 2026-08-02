@@ -121,7 +121,6 @@ describe("Access control", () => {
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
     await page.getByRole("button", { name: "Create a new account" }).click();
     await page.fill('input[name="accountName"]', "Fresh Account");
-    await page.fill('input[name="userName"]', "Fresh Person");
     await page.fill('input[name="username"]', "freshuser");
     await page.fill('input[name="password"]', "fresh-password");
     await page.click('button[type="submit"]');
@@ -139,7 +138,6 @@ describe("Access control", () => {
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
     await page.getByRole("button", { name: "Create a new account" }).click();
     await page.fill('input[name="accountName"]', "IRS Fresh");
-    await page.fill('input[name="userName"]', "IRS Person");
     await page.fill('input[name="username"]', "irsfreshuser");
     await page.fill('input[name="password"]', "irs-fresh-password");
     await page.click('button[type="submit"]');
@@ -180,7 +178,6 @@ describe("Access control", () => {
       })
       .click();
     await page.fill('input[name="inviteCode"]', TEST_INVITE_CODE);
-    await page.fill('input[name="userName"]', "Second User");
     await page.fill('input[name="username"]', "seconduser");
     await page.fill('input[name="password"]', "second-password");
     await page.click('button[type="submit"]');
@@ -201,7 +198,6 @@ describe("Access control", () => {
       })
       .click();
     await page.fill('input[name="inviteCode"]', "NOPE1234");
-    await page.fill('input[name="userName"]', "Third User");
     await page.fill('input[name="username"]', "thirduser");
     await page.fill('input[name="password"]', "third-password");
     await page.click('button[type="submit"]');

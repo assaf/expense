@@ -44,14 +44,12 @@ export async function action({ request }: Route.ActionArgs) {
     if (mode === "create") {
       cookie = await createAccountWithUser({
         accountName: formString(form, "accountName"),
-        userName: formString(form, "userName"),
         username,
         password,
       });
     } else if (mode === "join") {
       cookie = await joinAccountWithInviteCode({
         inviteCode: formString(form, "inviteCode"),
-        userName: formString(form, "userName"),
         username,
         password,
       });
@@ -121,14 +119,6 @@ export default function LoginPage() {
               name="inviteCode"
               autoComplete="off"
               placeholder="e.g. K7M2QXD4"
-            />
-          )}
-          {mode !== "signin" && (
-            <AuthField
-              label="Your name"
-              name="userName"
-              autoComplete="name"
-              placeholder="Jane Doe"
             />
           )}
           <AuthField
