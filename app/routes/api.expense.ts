@@ -1,35 +1,28 @@
-import { saveImage } from "~/lib/images.server";
+import { deleteImage, saveImage } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import {
-  initStore,
-  newExpenseShell,
-  readCategories,
-  upsertExpense,
-} from "~/lib/store.server";
+import { initStore, readCategories } from "~/lib/store.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { matchCategory } from "~/lib/receipt-ai.server";
-import type { ReceiptExpense } from "~/lib/types";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
 /** OCR + extraction can take a while (DeepSeek, or tesseract on first run). */
 export const config = { maxDuration: 60 };
 
-/** Create a new expense (receipt or mileage), or a receipt from an uploaded image. */
+/**
+ * Receipt image drafts — the home page's "Add receipt" opens the editor
+ * without creating anything, so an uploaded/pasted image has nowhere to live
+ * until Save. These intents store the image blob (and OCR it) without an
+ * expense row; the editor's Save action attaches the draft to the new
+ * expense, and Cancel deletes it.
+ */
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
   await initStore();
   const form = await request.formData();
   const intent = formString(form, "intent");
 
-  if (intent === "create") {
-    const type = formString(form, "type") as "receipt" | "mileage";
-    const expense = newExpenseShell(type);
-    await upsertExpense(expense, user.accountId);
-    return Response.json({ ok: true, id: expense.id });
-  }
-
-  if (intent === "upload") {
+  if (intent === "draft-upload") {
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return Response.json({ error: "No image received." }, { status: 400 });
@@ -38,27 +31,31 @@ export async function action({ request }: Route.ActionArgs) {
     const mime = file.type || "image/png";
     const originalName = file.name || "pasted.png";
 
-    // Save the image and OCR it in parallel. The expense is always created;
-    // extraction just pre-fills merchant, amount, and category when possible.
+    // Save the image and OCR it in parallel. No expense row is created —
+    // extraction just pre-fills the draft editor when it succeeds.
     const [ocr, saved] = await Promise.all([
       extractFromUploadedImage(user.accountId, buffer, mime).catch((err) => {
-        console.warn("[upload] receipt extraction failed:", err);
+        console.warn("[draft-upload] receipt extraction failed:", err);
         return null;
       }),
       saveImage(user.accountId, buffer, mime, originalName),
     ]);
 
-    const expense = newExpenseShell("receipt") as ReceiptExpense;
-    expense.imageFile = saved.filename;
-    expense.imageMime = saved.mime;
-    expense.originalName = originalName;
-    if (ocr) {
-      expense.merchant = ocr.merchant;
-      expense.amount = ocr.amount;
-      expense.category = ocr.category;
-    }
-    await upsertExpense(expense, user.accountId);
-    return Response.json({ ok: true, id: expense.id });
+    return Response.json({
+      ok: true,
+      draftKey: saved.filename,
+      mime: saved.mime,
+      originalName,
+      merchant: ocr?.merchant ?? "",
+      amount: ocr?.amount ?? "",
+      category: ocr?.category ?? "",
+    });
+  }
+
+  if (intent === "draft-delete") {
+    const draftKey = formString(form, "draftKey");
+    if (draftKey) await deleteImage(user.accountId, draftKey);
+    return Response.json({ ok: true });
   }
 
   return Response.json({ error: "Unknown intent." }, { status: 400 });
@@ -67,7 +64,7 @@ export async function action({ request }: Route.ActionArgs) {
 /**
  * OCR an uploaded receipt image and map the suggested category onto one the
  * account already uses. Throws when extraction fails — callers decide whether
- * that is fatal (it isn't for uploads).
+ * that is fatal (it isn't for drafts).
  */
 async function extractFromUploadedImage(
   accountId: string,

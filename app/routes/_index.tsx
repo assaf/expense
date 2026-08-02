@@ -148,40 +148,19 @@ function ExpenseList({
   const [showEmailHelp, setShowEmailHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
 
   usePasteImage(uploadImage);
 
-  async function createExpense(type: "receipt" | "mileage") {
-    setBusy(true);
-    try {
-      const form = new FormData();
-      form.set("intent", "create");
-      form.set("type", type);
-      const res = await fetch("/api/expense", { method: "POST", body: form });
-      if (res.ok) {
-        const json = (await res.json()) as { id?: string };
-        if (json.id) void navigate(`/expense/${json.id}`);
-      }
-    } finally {
-      setBusy(false);
-    }
+  /** Open the editor without creating anything — the row appears on Save. */
+  function createExpense(type: "receipt" | "mileage") {
+    void navigate(
+      type === "receipt" ? "/expense/new" : "/expense/new?type=mileage",
+    );
   }
 
-  async function uploadImage(file: File) {
-    setBusy(true);
-    const form = new FormData();
-    form.set("intent", "upload");
-    form.set("file", file);
-    try {
-      const res = await fetch("/api/expense", { method: "POST", body: form });
-      if (res.ok) {
-        const json = (await res.json()) as { id?: string };
-        if (json.id) void navigate(`/expense/${json.id}`);
-      }
-    } finally {
-      setBusy(false);
-    }
+  /** Carry the pasted/uploaded file into the new editor as its draft image. */
+  function uploadImage(file: File) {
+    void navigate("/expense/new", { state: { file } });
   }
 
   return (
@@ -203,21 +182,16 @@ function ExpenseList({
       </header>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <Button onClick={() => void createExpense("receipt")} disabled={busy}>
+        <Button onClick={() => createExpense("receipt")}>
           <ReceiptText className="h-4 w-4" /> Add receipt
         </Button>
-        <Button
-          onClick={() => void createExpense("mileage")}
-          variant="secondary"
-          disabled={busy}
-        >
+        <Button onClick={() => createExpense("mileage")} variant="secondary">
           <MapPinned className="h-4 w-4" /> Add mileage
         </Button>
         <Button
           type="button"
           variant="secondary"
           onClick={() => fileRef.current?.click()}
-          disabled={busy}
         >
           <Upload className="h-4 w-4" /> Upload image
         </Button>
@@ -228,13 +202,10 @@ function ExpenseList({
           className="hidden"
           onChange={(e) => {
             const f = e.currentTarget.files?.[0];
-            if (f) void uploadImage(f);
+            if (f) uploadImage(f);
             e.currentTarget.value = "";
           }}
         />
-        {busy ? (
-          <span className="self-center text-sm text-gray-500">Saving…</span>
-        ) : null}
         <p className="basis-full text-xs text-gray-400">
           Tip: paste an image (⌘V) anywhere to create a receipt — the amount,
           merchant, and category are filled in automatically.

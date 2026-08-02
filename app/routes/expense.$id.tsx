@@ -10,7 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useFetcher, useNavigate } from "react-router";
+import { useFetcher, useLocation, useNavigate } from "react-router";
 import { Link, redirect } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
@@ -29,7 +29,12 @@ import {
   upsertExpense,
 } from "~/lib/store.server";
 import { parseLocations } from "~/lib/types";
-import type { Location, MileageExpense, ReceiptExpense } from "~/lib/types";
+import type {
+  Expense,
+  Location,
+  MileageExpense,
+  ReceiptExpense,
+} from "~/lib/types";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { formString, validateDateNotFuture } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
@@ -55,6 +60,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
   };
   return {
+    mode: "edit" as const,
     expense,
     // Closed reports can't be selected; the expense's current report is
     // still shown when it is closed (SelectField prepends it as the value).
@@ -148,14 +154,34 @@ export async function action({ request, params }: Route.ActionArgs) {
   return Response.json({ error: "Unknown intent" }, { status: 400 });
 }
 
+/**
+ * Data shape shared by the edit route (/expense/:id) and the create route
+ * (/expense/new). Create mode renders the same editors against a skeleton
+ * expense — nothing is persisted until Save.
+ */
+export type EditorData = {
+  mode: "create" | "edit";
+  expense: Expense;
+  reports: string[];
+  categories: string[];
+  merchants: string[];
+  home: Location;
+  rate: string;
+  year: string;
+  nav?: { prevId: string | null; nextId: string | null } | null;
+};
+
 export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
-  const { expense } = loaderData;
-  // key by id so navigating to a different expense remounts the editor with
-  // fresh field state (useState initializers re-run from the new loaderData).
-  return expense.type === "receipt" ? (
-    <ReceiptEditor key={expense.id} data={loaderData} />
+  return <Editor data={loaderData} />;
+}
+
+/** Shared entry point for both routes; keys by id so navigating to a
+ * different expense remounts the editor with fresh field state. */
+export function Editor({ data }: { data: EditorData }) {
+  return data.expense.type === "receipt" ? (
+    <ReceiptEditor key={data.expense.id} data={data} />
   ) : (
-    <MileageEditor key={expense.id} data={loaderData} />
+    <MileageEditor key={data.expense.id} data={data} />
   );
 }
 
@@ -163,11 +189,13 @@ function Shell({
   title,
   nav,
   dimmed,
+  onBack,
   children,
 }: {
   title: string;
-  nav?: { prevId: string | null; nextId: string | null };
+  nav?: { prevId: string | null; nextId: string | null } | null;
   dimmed?: boolean;
+  onBack?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -175,12 +203,22 @@ function Shell({
       className={`mx-auto max-w-2xl px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""}`}
     >
       <div className="mb-4 flex items-center justify-between">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back
-        </Link>
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
+        ) : (
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back
+          </Link>
+        )}
         {nav ? (
           <div className="flex items-center gap-1">
             <Link
@@ -248,9 +286,10 @@ function SelectField({
 
 // --- Receipt editor --------------------------------------------------------
 
-function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
+function ReceiptEditor({ data }: { data: EditorData }) {
   const { reports, categories, merchants } = data;
   const expense = data.expense as ReceiptExpense;
+  const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
   const [date, setDate] = useState(expense.date);
   const [merchant, setMerchant] = useState(expense.merchant);
@@ -261,6 +300,13 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const [imageVersion, setImageVersion] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [draft, setDraft] = useState<{
+    key: string;
+    mime: string;
+    originalName: string;
+  } | null>(null);
+  const [draftPreview, setDraftPreview] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -277,7 +323,73 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     [expense, date, merchant, amount, report, category],
   );
 
+  // Create mode: a file carried from the home page (paste/upload) becomes the
+  // draft image, and OCR pre-fills the fields when it returns.
+  const location = useLocation();
+  useEffect(() => {
+    const file = (location.state as { file?: File } | null)?.file;
+    if (isNew && file) void uploadDraft(file);
+  }, []);
+
+  async function uploadDraft(file: File) {
+    // Show the image immediately; OCR fills the fields in the background.
+    setDraftPreview(URL.createObjectURL(file));
+    setDrafting(true);
+    const form = new FormData();
+    form.set("intent", "draft-upload");
+    form.set("file", file);
+    try {
+      const res = await fetch("/api/expense", { method: "POST", body: form });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        draftKey: string;
+        mime: string;
+        originalName: string;
+        merchant?: string;
+        amount?: string;
+        category?: string;
+      };
+      // Replace any earlier draft so a draft never outlives the editor.
+      if (draft) await deleteDraftBlob(draft.key);
+      setDraft({
+        key: json.draftKey,
+        mime: json.mime,
+        originalName: json.originalName,
+      });
+      if (json.merchant) setMerchant(json.merchant);
+      if (json.amount) setAmount(json.amount);
+      if (json.category) setCategory(json.category);
+    } catch {
+      // Keep the preview; the user can still fill the fields by hand.
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  async function deleteDraftBlob(key: string) {
+    const form = new FormData();
+    form.set("intent", "draft-delete");
+    form.set("draftKey", key);
+    await fetch("/api/expense", { method: "POST", body: form }).catch(() => {});
+  }
+
+  async function removeDraft() {
+    if (draft) await deleteDraftBlob(draft.key);
+    setDraft(null);
+    setDraftPreview(null);
+  }
+
+  /** Cancel without saving: drop any draft image, then leave the editor. */
+  function onCancel() {
+    if (isNew && draft) void deleteDraftBlob(draft.key);
+    doCancel();
+  }
+
   async function replaceImage(file: File) {
+    if (isNew) {
+      await uploadDraft(file);
+      return;
+    }
     const form = new FormData();
     form.set("intent", "upload");
     form.set("file", file);
@@ -297,6 +409,12 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     form.set("report", report);
     form.set("category", category);
     form.set("description", description);
+    if (isNew) {
+      form.set("type", "receipt");
+      form.set("draftKey", draft?.key ?? "");
+      form.set("draftMime", draft?.mime ?? "");
+      form.set("draftOriginalName", draft?.originalName ?? "");
+    }
     void fetcher.submit(form, { method: "post" });
   }
 
@@ -314,8 +432,8 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const error = fetcherError(fetcher.data);
   useFormKeys({
     onSave: () => doSave(onSave),
-    onCancel: doCancel,
-    disabled: fetcher.state !== "idle",
+    onCancel,
+    disabled: fetcher.state !== "idle" || drafting,
     blocked: lightbox || confirmDelete,
   });
 
@@ -324,6 +442,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       title={expense.merchant || "New receipt"}
       nav={data.nav}
       dimmed={!!transition}
+      onBack={isNew ? onCancel : undefined}
     >
       <ErrorBanner error={error} />
 
@@ -351,12 +470,16 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             >
               <Upload className="h-4 w-4" /> Replace
             </Button>
-            {expense.imageFile ? (
+            {(isNew ? draftPreview : expense.imageFile) ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={async () => {
+                  if (isNew) {
+                    await removeDraft();
+                    return;
+                  }
                   await fetch(`/expense/${expense.id}/image`, {
                     method: "POST",
                     body: (() => {
@@ -373,7 +496,25 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             ) : null}
           </span>
         </div>
-        {expense.imageFile ? (
+        {isNew ? (
+          draftPreview ? (
+            <button
+              type="button"
+              onClick={() => setLightbox(true)}
+              className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
+            >
+              <img
+                src={draftPreview}
+                alt="Receipt"
+                className="min-h-53 max-h-120 w-full object-cover object-top"
+              />
+            </button>
+          ) : (
+            <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-400">
+              No image. Upload or paste one (⌘V).
+            </div>
+          )
+        ) : expense.imageFile ? (
           <button
             type="button"
             onClick={() => setLightbox(true)}
@@ -391,9 +532,15 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
             No image. Upload or paste one (⌘V).
           </div>
         )}
-        <p className="mt-1 text-xs text-gray-400">
-          Click the image to view full screen.
-        </p>
+        {isNew && drafting ? (
+          <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+            <Loader2 className="h-3 w-3 animate-spin" /> Reading receipt…
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-400">
+            Click the image to view full screen.
+          </p>
+        )}
       </div>
 
       <DateAmountFields
@@ -433,15 +580,19 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 
       <EditorActions
         complete={complete}
-        saving={fetcher.state !== "idle"}
-        onCancel={doCancel}
+        saving={fetcher.state !== "idle" || drafting}
+        onCancel={onCancel}
         onSave={() => doSave(onSave)}
-        onDelete={() => setConfirmDelete(true)}
+        onDelete={isNew ? undefined : () => setConfirmDelete(true)}
       />
 
-      {lightbox && expense.imageFile ? (
+      {lightbox && (isNew ? draftPreview : expense.imageFile) ? (
         <Lightbox
-          src={`/expense/${expense.id}/image?v=${imageVersion}`}
+          src={
+            isNew
+              ? (draftPreview ?? "")
+              : `/expense/${expense.id}/image?v=${imageVersion}`
+          }
           onClose={() => {
             setLightbox(false);
             amountRef.current?.focus();
@@ -464,9 +615,10 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 
 // --- Mileage editor --------------------------------------------------------
 
-function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
+function MileageEditor({ data }: { data: EditorData }) {
   const { reports, categories, home, rate } = data;
   const expense = data.expense as MileageExpense;
+  const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
 
   const [locations, setLocations] = useState<Location[]>(() =>
@@ -566,6 +718,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   function onSave() {
     const form = new FormData();
     form.set("intent", "save");
+    if (isNew) form.set("type", "mileage");
     form.set("date", date);
     form.set("amount", amount);
     form.set("report", report);
@@ -689,7 +842,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
         onSave={() => doSave(onSave)}
-        onDelete={() => doDelete(onDelete)}
+        onDelete={isNew ? undefined : () => doDelete(onDelete)}
       />
       {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
@@ -881,19 +1034,23 @@ function EditorActions({
   saving: boolean;
   onCancel: () => void;
   onSave: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div className="mt-8 flex items-center justify-between border-t border-gray-200 pt-4">
-      <Button
-        type="button"
-        variant="danger"
-        tabIndex={-1}
-        onClick={onDelete}
-        disabled={saving}
-      >
-        <Trash2 className="h-4 w-4" /> Delete
-      </Button>
+      {onDelete ? (
+        <Button
+          type="button"
+          variant="danger"
+          tabIndex={-1}
+          onClick={onDelete}
+          disabled={saving}
+        >
+          <Trash2 className="h-4 w-4" /> Delete
+        </Button>
+      ) : (
+        <span />
+      )}
       <div className="flex items-center gap-2">
         {!complete ? (
           <span className="text-sm text-amber-700">Incomplete</span>
