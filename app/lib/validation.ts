@@ -1,3 +1,5 @@
+import { todayDate } from "~/lib/format";
+
 /** Sanitize a free-text name into a filesystem-safe token (spaces → _). */
 export function sanitizeFilenamePart(input: string): string {
   return input
@@ -23,11 +25,6 @@ export function entryString(v: FormDataEntryValue): string {
 export function validateDateNotFuture(date: string): string | null {
   if (!date) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Use a valid calendar date.";
-  const today = new Date();
-  const tzOffset = today.getTimezoneOffset() * 60_000;
-  const todayStr = new Date(today.getTime() - tzOffset)
-    .toISOString()
-    .slice(0, 10);
-  if (date > todayStr) return "Date cannot be in the future.";
+  if (date > todayDate()) return "Date cannot be in the future.";
   return null;
 }

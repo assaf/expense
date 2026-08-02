@@ -11,6 +11,7 @@ import {
   formatDate,
   mileageMerchant,
   yearOf,
+  summarizeByReport,
 } from "~/lib/format";
 import type { ReceiptExpense, MileageExpense } from "~/lib/types";
 
@@ -116,5 +117,26 @@ describe("Format helpers", () => {
   it("gets year from date", () => {
     expect(yearOf("2026-03-10")).toBe("2026");
     expect(yearOf("")).toBe(String(new Date().getFullYear()));
+  });
+
+  it("summarizes expenses per report", () => {
+    const summary = summarizeByReport([
+      makeReceipt({ report: "A", amount: "10.00" }),
+      makeReceipt({ report: "A", amount: "5.50" }),
+      makeReceipt({ report: "", amount: "3.00" }),
+      makeReceipt({ report: "B", amount: "" }),
+    ]);
+    expect(summary.get("A")).toEqual({ count: 2, total: 15.5 });
+    expect(summary.get("B")).toEqual({ count: 1, total: 0 });
+    // Expenses without a report are skipped unless the bucket is requested.
+    expect(summary.has("Unassigned")).toBe(false);
+  });
+
+  it("summarizeByReport can bucket unassigned expenses", () => {
+    const summary = summarizeByReport(
+      [makeReceipt({ report: "", amount: "3.00" })],
+      { includeUnassigned: true },
+    );
+    expect(summary.get("Unassigned")).toEqual({ count: 1, total: 3 });
   });
 });

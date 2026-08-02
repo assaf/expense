@@ -91,3 +91,26 @@ export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
     return desc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
   });
 }
+
+/**
+ * Per-report expense counts + totals (amounts parsed, empty amounts don't
+ * contribute). Expenses with no report are grouped under "Unassigned" only
+ * when `includeUnassigned` is set; otherwise they are skipped — the export
+ * page only lists real reports, the home page shows the Unassigned bucket.
+ */
+export function summarizeByReport(
+  expenses: Expense[],
+  opts: { includeUnassigned?: boolean } = {},
+): Map<string, { count: number; total: number }> {
+  const summary = new Map<string, { count: number; total: number }>();
+  for (const e of expenses) {
+    const name = e.report || (opts.includeUnassigned ? "Unassigned" : "");
+    if (!name) continue;
+    const s = summary.get(name) ?? { count: 0, total: 0 };
+    s.count++;
+    const amt = parseAmount(e.amount);
+    if (amt !== null) s.total += amt;
+    summary.set(name, s);
+  }
+  return summary;
+}

@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
-import { formatAmount } from "~/lib/format";
+import { formatAmount, summarizeByReport } from "~/lib/format";
 import type { Route } from "./+types/export";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -12,15 +12,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     readReports(user.accountId),
     readExpenses(user.accountId),
   ]);
-  const byReport = new Map<string, { count: number; total: number }>();
-  for (const e of expenses) {
-    if (!e.report) continue;
-    const cur = byReport.get(e.report) ?? { count: 0, total: 0 };
-    cur.count += 1;
-    const amt = Number(e.amount);
-    if (Number.isFinite(amt)) cur.total += amt;
-    byReport.set(e.report, cur);
-  }
+  const byReport = summarizeByReport(expenses);
   return {
     reports: reports.map((r) => ({
       name: r.name,

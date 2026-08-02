@@ -5,6 +5,7 @@ import { readExpenses, readReports } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { readImage } from "~/lib/images.server";
 import { formatDate, merchantLabel, sortExpenses } from "~/lib/format";
+import { sanitizeFilenamePart } from "~/lib/validation";
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";
 
@@ -141,7 +142,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return new Response(stream.value as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename(reportName)}.pdf"`,
+      "Content-Disposition": `attachment; filename="${sanitizeFilenamePart(reportName)}.pdf"`,
       "Cache-Control": "no-store",
     },
   });
@@ -171,10 +172,6 @@ function fitText(
 
 function uniqueSorted(items: string[]): string[] {
   return [...new Set(items)].sort((a, b) => a.localeCompare(b));
-}
-
-function filename(report: string): string {
-  return report.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
 }
 
 /** Collect a PDFKit document's output into a Buffer. */

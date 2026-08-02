@@ -16,8 +16,8 @@ import { isComplete } from "~/lib/completeness";
 import {
   formatAmount,
   formatDate,
-  parseAmount,
   sortExpenses,
+  summarizeByReport,
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
@@ -48,16 +48,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const open = expenses.filter((e) => !closed.has(e.report));
   const sorted = sortExpenses(open);
   const currentYear = String(new Date().getFullYear());
-  const reportSummary = new Map<string, { count: number; total: number }>();
-  for (const e of open) {
-    const name = e.report || "Unassigned";
-    const s = reportSummary.get(name) ?? { count: 0, total: 0 };
-    s.count++;
-    const amt = parseAmount(e.amount);
-    if (amt !== null) s.total += amt;
-    reportSummary.set(name, s);
-  }
-  const reports = [...reportSummary]
+  const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
     .sort((a, b) =>
       a.name === "Unassigned"

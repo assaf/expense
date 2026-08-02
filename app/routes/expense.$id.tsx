@@ -16,8 +16,8 @@ import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
+import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { normalizeAmount, sortExpenses, todayDate, yearOf } from "~/lib/format";
-import { renameImageToConvention } from "~/lib/images.server";
 import { homeLocation, readSettings } from "~/lib/settings.server";
 import {
   deleteExpense,
@@ -26,9 +26,7 @@ import {
   readExpenses,
   readPriorMerchants,
   readReports,
-  upsertExpense,
 } from "~/lib/store.server";
-import { parseLocations } from "~/lib/types";
 import type {
   Expense,
   Location,
@@ -36,7 +34,7 @@ import type {
   ReceiptExpense,
 } from "~/lib/types";
 import { usePasteImage } from "~/lib/use-paste-image";
-import { formString, validateDateNotFuture } from "~/lib/validation";
+import { formString } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -87,67 +85,8 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === "save") {
-    const date = formString(form, "date");
-    const dateError = validateDateNotFuture(date);
-    if (dateError) return Response.json({ error: dateError }, { status: 400 });
-
-    const report = formString(form, "report");
-    // A closed report can't be assigned — but an expense already in one
-    // keeps it when saved unchanged.
-    if (report && report !== existing.report) {
-      const reports = await readReports(user.accountId);
-      if (reports.some((r) => r.name === report && r.closed)) {
-        return Response.json(
-          { error: `Report "${report}" is closed.` },
-          { status: 400 },
-        );
-      }
-    }
-    const category = formString(form, "category");
-    const description = formString(form, "description");
-    const amount = normalizeAmount(formString(form, "amount"));
-    const now = new Date().toISOString();
-
-    if (existing.type === "receipt") {
-      const merchant = formString(form, "merchant").trim();
-      const updated: ReceiptExpense = {
-        ...existing,
-        date,
-        report,
-        category,
-        description,
-        amount,
-        merchant,
-        updatedAt: now,
-      };
-      if (updated.imageFile) {
-        updated.imageFile = await renameImageToConvention(
-          user.accountId,
-          updated.imageFile,
-          date,
-          report,
-          updated.originalName,
-          updated.imageMime,
-        );
-      }
-      await upsertExpense(updated, user.accountId);
-    } else {
-      const locationsRaw = formString(form, "locations");
-      const locations = parseLocations(locationsRaw);
-      const distanceMiles = formString(form, "distanceMiles");
-      const updated: MileageExpense = {
-        ...existing,
-        date,
-        report,
-        category,
-        description,
-        amount,
-        locations,
-        distanceMiles,
-        updatedAt: now,
-      };
-      await upsertExpense(updated, user.accountId);
-    }
+    const error = await saveExpenseFromForm(form, user.accountId, existing);
+    if (error) return Response.json({ error }, { status: 400 });
     return redirect("/");
   }
 
