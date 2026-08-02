@@ -18,7 +18,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       name: r.name,
       closed: r.closed,
       count: byReport.get(r.name)?.count ?? 0,
-      total: byReport.get(r.name)?.total ?? 0,
+      // Exact 2-dp string (Decimal.toFixed rounds half-up); used for display.
+      total: byReport.get(r.name)?.total.toFixed(2) ?? "0.00",
     })),
   };
 }
@@ -27,7 +28,7 @@ type ReportItem = {
   name: string;
   closed: boolean;
   count: number;
-  total: number;
+  total: string;
 };
 
 function ReportList({ reports }: { reports: ReportItem[] }) {
@@ -44,7 +45,7 @@ function ReportList({ reports }: { reports: ReportItem[] }) {
           <div>
             <div className="font-medium">{r.name}</div>
             <div className="text-sm text-gray-500">
-              {countLabel(r.count)} · {formatAmount(r.total.toFixed(2))}
+              {countLabel(r.count)} · {formatAmount(r.total)}
             </div>
           </div>
           <a

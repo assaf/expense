@@ -1,3 +1,5 @@
+import Decimal from "decimal.js";
+
 import { geocodedLocations, type Location } from "~/lib/types";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
@@ -116,6 +118,12 @@ function haversine(
 /**
  * Recompute a mileage expense: geocode any un-geocoded addresses, compute the
  * route distance, and derive the amount from the per-year mileage rate.
+ *
+ * Money is computed with decimal.js: `distance × rate` is exact and rounded
+ * once to cents with ROUND_HALF_UP (a half cent rounds up, e.g. 122.15 mi ×
+ * $0.70 → $85.51). The route distance is a float measurement (meters / mile),
+ * but multiplying by the rate and rounding on a Decimal keeps the money side
+ * exact.
  */
 export async function recomputeMileage(
   locations: Location[],
@@ -127,7 +135,16 @@ export async function recomputeMileage(
   approximate: boolean;
   coords: [number, number][];
 }> {
-  const rateNum = Number(rate);
+  // No rate configured for the year (or an unparseable one) → no amount,
+  // not $0.00.
+  let rateDec: Decimal | null = null;
+  if (rate.trim() !== "") {
+    try {
+      rateDec = new Decimal(rate);
+    } catch {
+      rateDec = null;
+    }
+  }
   // Geocode addresses missing coordinates.
   const geocoded = await Promise.all(
     locations.map(async (l) =>
@@ -135,11 +152,14 @@ export async function recomputeMileage(
     ),
   );
   const route = await computeRouteDistance(geocoded);
-  const distanceStr =
-    route.distanceMiles > 0 ? route.distanceMiles.toFixed(2) : "";
+  const distance = new Decimal(route.distanceMiles);
+  const distanceStr = distance.gt(0) ? distance.toFixed(2) : "";
   const amount =
-    route.distanceMiles > 0 && Number.isFinite(rateNum)
-      ? (route.distanceMiles * rateNum).toFixed(2)
+    distance.gt(0) && rateDec !== null && rateDec.isFinite()
+      ? distance
+          .times(rateDec)
+          .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+          .toString()
       : "";
   return {
     locations: geocoded,

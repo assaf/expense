@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import PDFDocument from "pdfkit";
 import {
   isComplete,
@@ -15,6 +15,7 @@ import {
   summarizeByReport,
 } from "~/lib/format";
 import { extractPdfText } from "~/lib/receipt-ocr.server";
+import { recomputeMileage } from "~/lib/maps.server";
 import type { ReceiptExpense, MileageExpense } from "~/lib/types";
 
 const makeReceipt = (
@@ -95,15 +96,18 @@ describe("Format helpers", () => {
     expect(formatAmount("")).toBe("—");
   });
 
-  it("parseAmount parses or returns null", () => {
-    expect(parseAmount("42.50")).toBe(42.5);
+  it("parseAmount parses into an exact Decimal or null", () => {
+    expect(parseAmount("42.50")?.toString()).toBe("42.5");
+    expect(parseAmount("0.10")?.add("0.20").toString()).toBe("0.3");
     expect(parseAmount("")).toBe(null);
     expect(parseAmount("abc")).toBe(null);
   });
 
-  it("normalizeAmount rounds to 2 decimals", () => {
+  it("normalizeAmount rounds to 2 decimals (exact half-up)", () => {
     expect(normalizeAmount("42.5")).toBe("42.50");
     expect(normalizeAmount("42.501")).toBe("42.50");
+    expect(normalizeAmount("1.005")).toBe("1.01");
+    expect(normalizeAmount("42.995")).toBe("43.00");
     expect(normalizeAmount("")).toBe("");
   });
 
@@ -121,15 +125,17 @@ describe("Format helpers", () => {
     expect(yearOf("")).toBe(String(new Date().getFullYear()));
   });
 
-  it("summarizes expenses per report", () => {
+  it("summarizes expenses per report with exact totals", () => {
     const summary = summarizeByReport([
       makeReceipt({ report: "A", amount: "10.00" }),
       makeReceipt({ report: "A", amount: "5.50" }),
       makeReceipt({ report: "", amount: "3.00" }),
       makeReceipt({ report: "B", amount: "" }),
     ]);
-    expect(summary.get("A")).toEqual({ count: 2, total: 15.5 });
-    expect(summary.get("B")).toEqual({ count: 1, total: 0 });
+    expect(summary.get("A")?.count).toBe(2);
+    expect(summary.get("A")?.total.toString()).toBe("15.5");
+    expect(summary.get("B")?.count).toBe(1);
+    expect(summary.get("B")?.total.isZero()).toBe(true);
     // Expenses without a report are skipped unless the bucket is requested.
     expect(summary.has("Unassigned")).toBe(false);
   });
@@ -139,7 +145,76 @@ describe("Format helpers", () => {
       [makeReceipt({ report: "", amount: "3.00" })],
       { includeUnassigned: true },
     );
-    expect(summary.get("Unassigned")).toEqual({ count: 1, total: 3 });
+    expect(summary.get("Unassigned")?.total.toString()).toBe("3");
+  });
+
+  it("report totals don't drift on repeated float-unfriendly additions", () => {
+    // 0.1 + 0.2 in float64 is 0.30000000000000004; 100 × $0.10 sums to
+    // 9.99999999999998. Decimal addition stays exact.
+    const expenses = Array.from({ length: 100 }, (_, i) =>
+      makeReceipt({ report: "A", amount: "0.10", id: `r${i}` }),
+    );
+    const total = summarizeByReport(expenses).get("A")!.total;
+    expect(total.toString()).toBe("10");
+    expect(formatAmount(total)).toBe("$10.00");
+  });
+
+  it("formatAmount accepts a Decimal directly", () => {
+    expect(formatAmount(parseAmount("0.10")!.add("0.20"))).toBe("$0.30");
+  });
+});
+
+describe("recomputeMileage money math", () => {
+  const A = { address: "A", lat: 34.05, lng: -118.2 };
+  const B = { address: "B", lat: 34.06, lng: -118.1 };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubOsrm(distanceMeters: number): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          routes: [
+            {
+              distance: distanceMeters,
+              geometry: {
+                coordinates: [
+                  [-118.2, 34.05],
+                  [-118.1, 34.06],
+                ],
+              },
+            },
+          ],
+        }),
+      }),
+    );
+  }
+
+  it("rounds distance × rate to cents with ROUND_HALF_UP (not float toFixed)", async () => {
+    // 122.15 mi × $0.70 is exactly $85.505 → $85.51. Float64 computes the
+    // product a hair below .505, so .toFixed(2) yields "85.50"; decimal.js
+    // keeps the exact half and rounds up.
+    stubOsrm(122.15 * 1609.344);
+    const r = await recomputeMileage([A, B], "0.70");
+    expect(r.distanceMiles).toBe("122.15");
+    expect(r.amount).toBe("85.51");
+  });
+
+  it("produces no amount when no rate is configured (not $0.00)", async () => {
+    stubOsrm(10_000);
+    const r = await recomputeMileage([A, B], "");
+    expect(r.distanceMiles).toBe("6.21");
+    expect(r.amount).toBe("");
+  });
+
+  it("produces no amount for an unparseable rate", async () => {
+    stubOsrm(10_000);
+    const r = await recomputeMileage([A, B], "not-a-rate");
+    expect(r.amount).toBe("");
   });
 });
 

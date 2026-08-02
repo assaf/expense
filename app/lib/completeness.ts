@@ -3,8 +3,8 @@ import { parseAmount } from "~/lib/format";
 
 /** A non-zero monetary amount is required for completeness (0 / empty = incomplete). */
 function hasAmount(amount: string): boolean {
-  const n = parseAmount(amount);
-  return n !== null && n !== 0;
+  const d = parseAmount(amount);
+  return d !== null && !d.isZero();
 }
 
 /** A receipt is complete when it has date, merchant, amount, image, category, report. */

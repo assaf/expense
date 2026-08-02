@@ -1,31 +1,55 @@
 /** Formatting helpers shared across server and client. */
 
+import Decimal from "decimal.js";
+
 import type { Expense } from "~/lib/types";
 
+/**
+ * All money arithmetic goes through decimal.js (never IEEE float64). Amounts
+ * are stored as decimal strings, parsed exactly, summed exactly, and rounded
+ * exactly once at display time with ROUND_HALF_UP (`Decimal.toFixed`'s
+ * default). The one float leak left is display-only: `formatAmount` feeds
+ * `Intl.NumberFormat` a Number because its typings reject strings, but the
+ * double error is far below half a cent for any real-world expense total,
+ * so the displayed cent is always the exact one.
+ */
+
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
 /** Format a decimal string ("12.3" / "12" / "12.34") as "$12.34". */
-export function formatAmount(amount: string): string {
-  const n = parseAmount(amount);
-  if (n === null) return "—";
-  return n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
+export function formatAmount(amount: string | Decimal): string {
+  const d = typeof amount === "string" ? parseAmount(amount) : amount;
+  if (d === null) return "—";
+  return usd.format(d.toNumber());
 }
 
-/** Strictly parse a decimal string into a number, or null if invalid/empty. */
-export function parseAmount(amount: string): number | null {
+/**
+ * Strictly parse a decimal string into an exact Decimal, or null if
+ * invalid/empty. Never returns an IEEE float — arithmetic on the result is
+ * exact (see `summarizeByReport`).
+ */
+export function parseAmount(amount: string): Decimal | null {
   const trimmed = amount.trim();
   if (trimmed === "") return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return null;
-  return n;
+  try {
+    return new Decimal(trimmed);
+  } catch {
+    return null;
+  }
 }
 
-/** Normalize a user-typed amount to two fractional digits. "" stays "". */
+/**
+ * Normalize a user-typed amount to two fractional digits (ROUND_HALF_UP —
+ * `Decimal.toFixed`'s default). "" stays "". Unlike Number.prototype.toFixed
+ * this rounds exact decimal halves correctly: "1.005" → "1.01".
+ */
 export function normalizeAmount(amount: string): string {
-  const n = parseAmount(amount);
-  if (n === null) return "";
-  return n.toFixed(2);
+  const d = parseAmount(amount);
+  if (d === null) return "";
+  return d.toFixed(2);
 }
 
 /** Format a YYYY-MM-DD date as "Jan 2, 2026". Empty → "—". */
@@ -98,23 +122,22 @@ export function countLabel(count: number): string {
 }
 
 /**
- * Per-report expense counts + totals (amounts parsed, empty amounts don't
- * contribute). Expenses with no report are grouped under "Unassigned" only
- * when `includeUnassigned` is set; otherwise they are skipped — the export
- * page only lists real reports, the home page shows the Unassigned bucket.
+ * Per-report expense counts + exact totals. Amounts are parsed as Decimals
+ * and accumulated with exact decimal addition — no float drift, so a report
+ * total is the exact sum of its line items.
  */
 export function summarizeByReport(
   expenses: Expense[],
   opts: { includeUnassigned?: boolean } = {},
-): Map<string, { count: number; total: number }> {
-  const summary = new Map<string, { count: number; total: number }>();
+): Map<string, { count: number; total: Decimal }> {
+  const summary = new Map<string, { count: number; total: Decimal }>();
   for (const e of expenses) {
     const name = e.report || (opts.includeUnassigned ? "Unassigned" : "");
     if (!name) continue;
-    const s = summary.get(name) ?? { count: 0, total: 0 };
+    const s = summary.get(name) ?? { count: 0, total: new Decimal(0) };
     s.count++;
     const amt = parseAmount(e.amount);
-    if (amt !== null) s.total += amt;
+    if (amt !== null) s.total = s.total.add(amt);
     summary.set(name, s);
   }
   return summary;
