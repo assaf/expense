@@ -522,6 +522,10 @@ export async function processInboundEvent(
   if (existing?.status === "created" || existing?.status === "partial") {
     return { status: "duplicate" };
   }
+  // Remember whether this email already failed once: the first failure
+  // emails the sender, but webhook retries (after the route's non-2xx
+  // response) must not send a second, duplicate error reply.
+  const previousStatus = existing?.status;
   await upsertInboundEmail({
     emailId: data.email_id,
     accountId: account.id,
@@ -534,13 +538,15 @@ export async function processInboundEvent(
     error: string,
     paragraphs: string[],
   ): Promise<ProcessResult> => {
-    await deps.sendReply({
-      to: data.from,
-      subject: "Receipt not imported — something went wrong",
-      html: replyHtml("Receipt not imported", paragraphs),
-      inReplyTo: data.message_id,
-      idempotencyKey: data.email_id,
-    });
+    if (previousStatus !== "error") {
+      await deps.sendReply({
+        to: data.from,
+        subject: "Receipt not imported — something went wrong",
+        html: replyHtml("Receipt not imported", paragraphs),
+        inReplyTo: data.message_id,
+        idempotencyKey: data.email_id,
+      });
+    }
     await upsertInboundEmail({
       emailId: data.email_id,
       accountId: account.id,

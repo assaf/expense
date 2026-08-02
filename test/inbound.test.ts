@@ -874,6 +874,22 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent[0]!.html).toContain("couldn't find a receipt");
   });
 
+  it("does not send a second error reply when the webhook is retried", async () => {
+    const deps = fakeDeps();
+    const email = receivedEmail({ text: "", html: null });
+    deps.fetchReceivedEmail = async () => email;
+    const first = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(first).toMatchObject({ status: "error" });
+    expect(deps.sent).toHaveLength(1);
+    // Resend retries after the route's non-2xx response: the pipeline
+    // re-runs and fails again, but the sender must not get a second,
+    // duplicate error email.
+    const second = await processInboundEvent(eventData(), deps);
+    expect(second).toMatchObject({ status: "error" });
+    expect(deps.sent).toHaveLength(1);
+  });
+
   it("replies when the content is not a receipt", async () => {
     const deps = fakeDeps();
     const email = receivedEmail({ text: "Hi, what's up?", html: null });

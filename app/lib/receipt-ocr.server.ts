@@ -3,9 +3,22 @@ import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { RECEIPT_OCR_MODE } from "~/lib/env";
 import { extractReceipt, isVisionUnsupportedError } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
+
+/**
+ * pdfjs runs its "fake worker" on the main thread. It normally loads
+ * pdf.worker.mjs through a dynamic import whose specifier is a variable
+ * annotated with a bundler ignore-hint — Vite and Vercel's tracer never
+ * follow it, so the worker file is missing from the serverless bundle and
+ * every PDF fails with "Setting up fake worker failed: Cannot find module
+ * …pdf.worker.mjs". Statically importing the module and exposing its
+ * WorkerMessageHandler makes pdfjs use it directly, with no file load — the
+ * same code path its fake worker would have taken.
+ */
+globalThis.pdfjsWorker = pdfjsWorker;
 
 /**
  * OCR + PDF handling for receipt attachments.

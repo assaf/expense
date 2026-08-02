@@ -3,7 +3,10 @@ import {
   processInboundEvent,
   verifyWebhookSignature,
 } from "~/lib/inbound-email.server";
-import type { EmailReceivedData } from "~/lib/inbound-email.server";
+import type {
+  EmailReceivedData,
+  ProcessResult,
+} from "~/lib/inbound-email.server";
 import type { Route } from "./+types/api.inbound-email";
 
 /**
@@ -56,7 +59,24 @@ export async function action({ request }: Route.ActionArgs) {
   if (!isEmailReceivedEvent(event)) {
     return Response.json({ ok: true });
   }
-  const result = await processInboundEvent(event.data);
+  let result: ProcessResult;
+  try {
+    result = await processInboundEvent(event.data);
+  } catch (err) {
+    // processInboundEvent handles its own failures, but a hard error (DB
+    // down, reply send throwing) must still surface as non-2xx so Resend
+    // marks the delivery failed and retries instead of silently dropping it.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[inbound] webhook processing threw:", err);
+    return Response.json({ error: message }, { status: 500 });
+  }
   console.info(`[inbound] ${result.status} — ${event.data.email_id}`);
+  if (result.status === "error") {
+    // A processing failure has to be a non-2xx response: the webhook
+    // dashboard then shows the delivery as failed, and Resend retries
+    // (the pipeline is idempotent per email_id, and the error reply is
+    // sent only once — see processInboundEvent).
+    return Response.json({ error: result.error }, { status: 500 });
+  }
   return Response.json({ ok: true, result });
 }

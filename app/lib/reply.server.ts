@@ -1,12 +1,19 @@
-import { INBOUND_EMAIL_FROM, RESEND_API_KEY } from "~/lib/env";
+import {
+  INBOUND_EMAIL_ADDRESS,
+  INBOUND_EMAIL_FROM,
+  RESEND_API_KEY,
+} from "~/lib/env";
 
 /**
  * Send a reply email back to the person who forwarded a receipt (via the
  * Resend Email API). Only used for failures and partial results — successful
  * imports land in the app without an email.
  *
- * If RESEND_API_KEY / INBOUND_EMAIL_FROM are not configured the reply is
- * skipped (the error is logged); this must never break webhook processing.
+ * The From address is INBOUND_EMAIL_FROM, falling back to
+ * INBOUND_EMAIL_ADDRESS (same verified domain) so a deployment that only
+ * configures the inbound address still gets replies. If neither is set the
+ * reply is skipped (the error is logged); this must never break webhook
+ * processing.
  */
 
 export interface ReplyInput {
@@ -21,7 +28,10 @@ export interface ReplyInput {
 }
 
 export async function sendReplyEmail(input: ReplyInput): Promise<void> {
-  if (!RESEND_API_KEY || !INBOUND_EMAIL_FROM) {
+  // INBOUND_EMAIL_FROM is the dedicated reply address; the inbound address
+  // (same verified domain) is the fallback so replies work out of the box.
+  const from = INBOUND_EMAIL_FROM || INBOUND_EMAIL_ADDRESS;
+  if (!RESEND_API_KEY || !from) {
     console.warn(
       `[inbound] reply skipped (RESEND_API_KEY/INBOUND_EMAIL_FROM unset): ${input.subject}`,
     );
@@ -37,7 +47,7 @@ export async function sendReplyEmail(input: ReplyInput): Promise<void> {
         : {}),
     },
     body: JSON.stringify({
-      from: INBOUND_EMAIL_FROM,
+      from: from,
       to: [input.to],
       subject: input.subject,
       html: input.html,
