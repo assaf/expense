@@ -9,8 +9,10 @@ name: deployment-smoke
 #
 # To make this gate production promotion:
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
-#      SMOKE_TEST_SECRET — the last must equal the SMOKE_TEST_SECRET env var
-#      on the Vercel project).
+#      SMOKE_TEST_SECRET — must equal the SMOKE_TEST_SECRET env var on the
+#      Vercel project — and VERCEL_PROTECTION_BYPASS, the project's Protection
+#      Bypass for Automation secret, needed because deployment URLs are SSO-
+#      protected).
 #   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
 #      Add Checks → provider GitHub → require "pdf-ocr-smoke".
 #   3. Vercel then holds each production deployment (never aliases it to
@@ -92,13 +94,20 @@ jobs:
         env:
           DEPLOY_URL: ${{ steps.deployment.outputs.url }}
           SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
+          VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
         run: |
           set -euo pipefail
-          if [ -z "$SMOKE_TEST_SECRET" ]; then
-            echo "::error::SMOKE_TEST_SECRET is not configured as a GitHub Actions secret (must equal the Vercel project env var)"
-            exit 1
-          fi
+          for required in SMOKE_TEST_SECRET VERCEL_PROTECTION_BYPASS; do
+            if [ -z "${!required}" ]; then
+              echo "::error::$required is not configured as a GitHub Actions secret (must equal the Vercel project settings)"
+              exit 1
+            fi
+          done
+          # x-vercel-protection-bypass: deployment URLs are behind Vercel SSO
+          # protection; the bypass lets the check reach the fresh deployment
+          # even while Deployment Checks hold it from the production alias.
           BODY=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
+            -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
             -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "https://${DEPLOY_URL}/api/smoke")
           echo "$BODY" | node -e '
             let body = "";

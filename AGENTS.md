@@ -57,6 +57,13 @@ route is disabled (404) and `scripts/deploy` skips the check with a warning.
 It must also be set as a **GitHub Actions secret** (same value) for
 `.github/workflows/deployment-smoke.yml`.
 
+`VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
+Automation secret (Vercel → Settings → Security). Deployment URLs are behind
+Vercel SSO protection, so both `scripts/deploy` and the smoke workflow send
+it as the `x-vercel-protection-bypass` header to reach the fresh deployment
+while Deployment Checks hold it from the production alias. Set it as a Vercel
+production env var (for the deploy script) and as a GitHub Actions secret.
+
 ## Stack & conventions
 
 - **Routing**: React Router v8, flat file routes in `app/routes/`. `app/routes.ts`

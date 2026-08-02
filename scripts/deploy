@@ -96,27 +96,33 @@ if [ -z "$SMOKE_TEST_SECRET" ]; then
   echo "Add it in the Vercel dashboard (Settings → Environment Variables, production):"
   echo "it gates GET /api/smoke via the x-smoke-secret header, which this script curls after each deploy."
 else
-  RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
-    -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "${DEPLOY_URL}/api/smoke") \
-    || {
-      echo -e "\033[0;31mSmoke check failed (network/HTTP). Check ${DEPLOY_URL}/api/smoke manually.\033[0m"
+  if [ -z "$VERCEL_PROTECTION_BYPASS" ]; then
+    echo -e "\033[0;33mVERCEL_PROTECTION_BYPASS is not set — the smoke check cannot reach the protected deployment URL; skipping.\033[0m"
+    echo "Create it in Vercel (Settings → Security → Protection Bypass for Automation) and add it as a production env var."
+  else
+    RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
+      -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
+      -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "${DEPLOY_URL}/api/smoke") \
+      || {
+        echo -e "\033[0;31mSmoke check failed (network/HTTP). Check ${DEPLOY_URL}/api/smoke manually.\033[0m"
+        exit 1
+      }
+    echo "$RESPONSE" | node -e '
+      let body = "";
+      process.stdin.on("data", (c) => (body += c));
+      process.stdin.on("end", () => {
+        const r = JSON.parse(body);
+        if (r.ok !== true) {
+          console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
+          process.exit(1);
+        }
+        console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "(" + r.ms + "ms)");
+      });
+    ' || {
+      echo -e "\033[0;31mSmoke check failed: PDF/OCR pipeline did not pass on ${DEPLOY_URL}.\033[0m"
       exit 1
     }
-  echo "$RESPONSE" | node -e '
-    let body = "";
-    process.stdin.on("data", (c) => (body += c));
-    process.stdin.on("end", () => {
-      const r = JSON.parse(body);
-      if (r.ok !== true) {
-        console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
-        process.exit(1);
-      }
-      console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "(" + r.ms + "ms)");
-    });
-  ' || {
-    echo -e "\033[0;31mSmoke check failed: PDF/OCR pipeline did not pass on ${DEPLOY_URL}.\033[0m"
-    exit 1
-  }
+  fi
 fi
 
 echo -e "\033[0;32m--- Step 6: Open production site ---\033[0m"
