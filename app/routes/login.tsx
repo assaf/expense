@@ -1,5 +1,5 @@
 import { AlertCircle, ReceiptText } from "lucide-react";
-import { redirect, useFetcher } from "react-router";
+import { redirect, useFetcher, useSearchParams } from "react-router";
 import { useState } from "react";
 import { Button } from "~/components/ui/Button";
 import {
@@ -67,7 +67,12 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function LoginPage() {
   const fetcher = useFetcher<{ error?: string }>();
-  const [mode, setMode] = useState<Mode>("signin");
+  // The landing page links straight to the signup form: /login?mode=create.
+  const [searchParams] = useSearchParams();
+  const urlMode = searchParams.get("mode");
+  const [mode, setMode] = useState<Mode>(
+    urlMode === "create" ? "create" : urlMode === "join" ? "join" : "signin",
+  );
   const error = fetcher.data?.error;
   const busy = fetcher.state !== "idle";
 

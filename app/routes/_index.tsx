@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import LandingPage from "~/components/LandingPage";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
@@ -18,7 +19,7 @@ import {
   parseAmount,
   sortExpenses,
 } from "~/lib/format";
-import { requireUser } from "~/lib/auth.server";
+import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -31,6 +32,10 @@ import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/_index";
 
 export async function loader({ request }: Route.LoaderArgs) {
+  // Anonymous visitors see the landing page; signed-in users see the app.
+  if (!(await isAuthenticated(request))) {
+    return { mode: "landing" as const };
+  }
   const user = await requireUser(request);
   const [expenses, settings, merchants, allReports] = await Promise.all([
     readExpenses(user.accountId),
@@ -62,6 +67,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           : a.name.localeCompare(b.name),
     );
   return {
+    mode: "app" as const,
     expenses: sorted.map(toListItem),
     mileageRate: settings.mileageRates[currentYear] ?? "",
     merchants,
@@ -86,8 +92,58 @@ function toListItem(e: Expense) {
   };
 }
 
+const SITE_URL = "https://expense.labnotes.org";
+
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (loaderData?.mode === "landing") {
+    return [
+      { title: "Expense — every receipt, ready for tax season" },
+      {
+        name: "description",
+        content:
+          "Expense collects your receipts — snapped, pasted, or forwarded from email — reads the amount and merchant with OCR, and files each expense into IRS-style categories and reports for tax season.",
+      },
+      { property: "og:url", content: SITE_URL },
+      {
+        property: "og:title",
+        content: "Expense — every receipt, ready for tax season",
+      },
+      {
+        property: "og:description",
+        content:
+          "Snap or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into reports and IRS-style categories, export-ready at tax time.",
+      },
+      { property: "og:type", content: "website" },
+      { property: "og:image", content: `${SITE_URL}/screenshot-og.png` },
+    ];
+  }
+  return [{ title: "Expenses" }];
+}
+
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
-  const { expenses, mileageRate, reports, inboundAddress } = loaderData;
+  return loaderData.mode === "landing" ? (
+    <LandingPage />
+  ) : (
+    <ExpenseList
+      expenses={loaderData.expenses}
+      mileageRate={loaderData.mileageRate}
+      reports={loaderData.reports}
+      inboundAddress={loaderData.inboundAddress}
+    />
+  );
+}
+
+function ExpenseList({
+  expenses,
+  mileageRate,
+  reports,
+  inboundAddress,
+}: {
+  expenses: ReturnType<typeof toListItem>[];
+  mileageRate: string;
+  reports: { name: string; count: number; total: string }[];
+  inboundAddress: string;
+}) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [showEmailHelp, setShowEmailHelp] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);

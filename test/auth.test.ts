@@ -38,13 +38,35 @@ describe("Access control", () => {
     return page;
   }
 
-  it("redirects unauthenticated visitors to /login", async () => {
+  it("shows the landing page to unauthenticated visitors", async () => {
     const page = await openPage();
     await page.goto("/", { waitUntil: "load", timeout: 15_000 });
-    await expect(page).toHaveURL(/\/login$/);
     await expect(
-      page.getByRole("heading", { name: "Sign in to Expense" }),
+      page.getByRole("heading", {
+        name: "Every receipt, ready for tax season.",
+      }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Create your account" }).first(),
+    ).toHaveAttribute("href", "/login?mode=create");
+    await expect(
+      page.getByRole("link", { name: /GitHub/ }).first(),
+    ).toHaveAttribute("href", "https://github.com/assaf/expense");
+    // The app itself stays behind the session.
+    await expect(page.getByText("Test Store")).not.toBeVisible();
+    await page.close();
+  });
+
+  it("deep-links the landing CTA straight to the signup form", async () => {
+    const page = await openPage();
+    await page.goto("/login?mode=create", {
+      waitUntil: "load",
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByRole("heading", { name: "Create your account" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Account name")).toBeVisible();
     await page.close();
   });
 
@@ -74,9 +96,13 @@ describe("Access control", () => {
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.waitForURL(/\/login$/, { timeout: 15_000 });
 
-    // A subsequent visit must be blocked again.
+    // A subsequent visit shows the landing page, not the app.
     await page.goto("/", { waitUntil: "load", timeout: 15_000 });
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(
+      page.getByRole("heading", {
+        name: "Every receipt, ready for tax season.",
+      }),
+    ).toBeVisible();
     await page.close();
   });
 
