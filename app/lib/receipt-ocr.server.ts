@@ -124,6 +124,13 @@ export async function ocrImage(buffer: Buffer, mime: string): Promise<string> {
  * pdf.js fetches the standard-14 fonts (Helvetica etc.) from the package's
  * standard_fonts dir; in serverless bundles that dir isn't shipped, so point
  * at the CDN copy. Non-fatal if unreachable — text extraction still works.
+ *
+ * useWorkerFetch MUST be true: in the Node build it makes the worker fetch
+ * standard-font data over HTTP (fetchBinaryData). With useWorkerFetch: false
+ * the data is read via fs.readFile(standardFontDataUrl) — a CDN URL can't be
+ * read as a file, so the font falls back to built-in rendering, which
+ * produces visible glyphs locally but BLANK pages in the serverless bundle
+ * (confirmed via the /api/smoke PNG pixel stats: mean 255, darkFraction 0).
  */
 const PDFJS_STANDARD_FONTS =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/standard_fonts/";
@@ -134,12 +141,12 @@ function pdfData(buffer: Buffer): Uint8Array {
 
 /**
  * Node has no FontFace API — render glyphs as paths (disableFontFace) and
- * fetch standard-font metrics from the CDN copy of pdfjs-dist.
+ * fetch standard-font data from the CDN copy of pdfjs-dist over HTTP.
  */
 const pdfParams = {
   disableFontFace: true,
   standardFontDataUrl: PDFJS_STANDARD_FONTS,
-  useWorkerFetch: false,
+  useWorkerFetch: true,
   verbosity: 0,
 } as const;
 
