@@ -251,8 +251,7 @@ function SelectField({
 function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const { reports, categories, merchants } = data;
   const expense = data.expense as ReceiptExpense;
-  const fetcher = useFetcher<typeof action>();
-  const navigate = useNavigate();
+  const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
   const [date, setDate] = useState(expense.date);
   const [merchant, setMerchant] = useState(expense.merchant);
   const [amount, setAmount] = useState(expense.amount);
@@ -262,9 +261,6 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const [imageVersion, setImageVersion] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [transition, setTransition] = useState<
-    null | "save" | "cancel" | "delete"
-  >(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -304,30 +300,12 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     void fetcher.submit(form, { method: "post" });
   }
 
-  const doSave = () => {
-    setTransition("save");
-    onSave();
-  };
-  const doCancel = () => {
-    setTransition("cancel");
-    void navigate("/");
-  };
-  // Clear the overlay if the submission finishes without navigating (validation error).
-  useEffect(() => {
-    if (
-      fetcher.state === "idle" &&
-      (transition === "save" || transition === "delete")
-    )
-      setTransition(null);
-  }, [fetcher.state, transition]);
-
   // Autofocus the amount field when the editor first opens.
   useEffect(() => {
     amountRef.current?.focus();
   }, []);
 
-  async function onDelete() {
-    setTransition("delete");
+  function onDelete() {
     const form = new FormData();
     form.set("intent", "delete");
     void fetcher.submit(form, { method: "post" });
@@ -335,7 +313,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
-    onSave: doSave,
+    onSave: () => doSave(onSave),
     onCancel: doCancel,
     disabled: fetcher.state !== "idle",
     blocked: lightbox || confirmDelete,
@@ -347,11 +325,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       nav={data.nav}
       dimmed={!!transition}
     >
-      {error ? (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
+      <ErrorBanner error={error} />
 
       <div className="mb-6">
         <div className="mb-1 flex items-center justify-between">
@@ -422,34 +396,13 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Date</span>
-          <input
-            type="date"
-            tabIndex={-1}
-            max={todayDate()}
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Amount</span>
-          <input
-            type="number"
-            step="0.01"
-            inputMode="decimal"
-            placeholder="0.00"
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            value={amount}
-            ref={amountRef}
-            onClick={(e) => e.currentTarget.select()}
-            onChange={(e) => setAmount(e.target.value)}
-            onBlur={(e) => setAmount(normalizeAmount(e.target.value))}
-          />
-        </label>
-      </div>
+      <DateAmountFields
+        date={date}
+        onDate={setDate}
+        amount={amount}
+        onAmount={setAmount}
+        amountRef={amountRef}
+      />
 
       <label className="mt-4 flex flex-col gap-1">
         <span className="text-sm font-medium text-gray-700">Merchant</span>
@@ -467,36 +420,22 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         </datalist>
       </label>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <SelectField
-          label="Report"
-          value={report}
-          onChange={setReport}
-          options={reports}
-        />
-        <SelectField
-          label="Category"
-          value={category}
-          onChange={setCategory}
-          options={categories}
-        />
-      </div>
+      <ReportCategoryFields
+        report={report}
+        onReport={setReport}
+        reports={reports}
+        category={category}
+        onCategory={setCategory}
+        categories={categories}
+      />
 
-      <label className="mt-4 flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Description</span>
-        <textarea
-          rows={3}
-          className="rounded-lg border border-gray-300 px-3 py-2"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </label>
+      <DescriptionField value={description} onChange={setDescription} />
 
       <EditorActions
         complete={complete}
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
-        onSave={doSave}
+        onSave={() => doSave(onSave)}
         onDelete={() => setConfirmDelete(true)}
       />
 
@@ -513,7 +452,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
       {confirmDelete ? (
         <ConfirmDialog
           message="Delete this expense? This cannot be undone."
-          onConfirm={onDelete}
+          onConfirm={() => doDelete(onDelete)}
           onCancel={() => setConfirmDelete(false)}
           deleting={fetcher.state !== "idle"}
         />
@@ -528,8 +467,7 @@ function ReceiptEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   const { reports, categories, home, rate } = data;
   const expense = data.expense as MileageExpense;
-  const fetcher = useFetcher<typeof action>();
-  const navigate = useNavigate();
+  const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
 
   const [locations, setLocations] = useState<Location[]>(() =>
     initLocations(expense, home),
@@ -545,9 +483,6 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
   );
   const [approximate, setApproximate] = useState(false);
   const [computing, setComputing] = useState(false);
-  const [transition, setTransition] = useState<
-    null | "save" | "cancel" | "delete"
-  >(null);
   const manualAmount = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSig = useRef("");
@@ -641,25 +576,15 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
     void fetcher.submit(form, { method: "post" });
   }
 
-  const doSave = () => {
-    setTransition("save");
-    onSave();
-  };
-  const doCancel = () => {
-    setTransition("cancel");
-    void navigate("/");
-  };
-  useEffect(() => {
-    if (
-      fetcher.state === "idle" &&
-      (transition === "save" || transition === "delete")
-    )
-      setTransition(null);
-  }, [fetcher.state, transition]);
+  function onDelete() {
+    const form = new FormData();
+    form.set("intent", "delete");
+    void fetcher.submit(form, { method: "post" });
+  }
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
-    onSave: doSave,
+    onSave: () => doSave(onSave),
     onCancel: doCancel,
     disabled: fetcher.state !== "idle",
     blocked: false,
@@ -675,11 +600,7 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
 
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
-      {error ? (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      ) : null}
+      <ErrorBanner error={error} />
 
       <div className="mb-6 overflow-hidden rounded-xl border border-gray-200">
         <MapView coords={coords} stops={stops} height={260} interactive />
@@ -701,36 +622,15 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Date</span>
-          <input
-            type="date"
-            tabIndex={-1}
-            max={todayDate()}
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Amount</span>
-          <input
-            type="number"
-            step="0.01"
-            inputMode="decimal"
-            placeholder="0.00"
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            value={amount}
-            onClick={(e) => e.currentTarget.select()}
-            onChange={(e) => {
-              manualAmount.current = true;
-              setAmount(e.target.value);
-            }}
-            onBlur={(e) => setAmount(normalizeAmount(e.target.value))}
-          />
-        </label>
-      </div>
+      <DateAmountFields
+        date={date}
+        onDate={setDate}
+        amount={amount}
+        onAmount={setAmount}
+        onManualAmount={() => {
+          manualAmount.current = true;
+        }}
+      />
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between">
@@ -773,42 +673,23 @@ function MileageEditor({ data }: { data: Route.ComponentProps["loaderData"] }) {
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
-        <SelectField
-          label="Report"
-          value={report}
-          onChange={setReport}
-          options={reports}
-        />
-        <SelectField
-          label="Category"
-          value={category}
-          onChange={setCategory}
-          options={categories}
-        />
-      </div>
+      <ReportCategoryFields
+        report={report}
+        onReport={setReport}
+        reports={reports}
+        category={category}
+        onCategory={setCategory}
+        categories={categories}
+      />
 
-      <label className="mt-4 flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Description</span>
-        <textarea
-          rows={3}
-          className="rounded-lg border border-gray-300 px-3 py-2"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </label>
+      <DescriptionField value={description} onChange={setDescription} />
 
       <EditorActions
         complete={complete}
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
-        onSave={doSave}
-        onDelete={() => {
-          setTransition("delete");
-          const form = new FormData();
-          form.set("intent", "delete");
-          void fetcher.submit(form, { method: "post" });
-        }}
+        onSave={() => doSave(onSave)}
+        onDelete={() => doDelete(onDelete)}
       />
       {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
@@ -831,6 +712,163 @@ function straightLine(locations: Location[]): [number, number][] {
 }
 
 // --- Shared editor chrome --------------------------------------------------
+
+/**
+ * Shared editor flow: the save/cancel/delete transition state and the
+ * fetcher, plus clearing the transition overlay when a submission finishes
+ * without navigating (validation error). `doSave`/`doDelete` set the overlay
+ * and then run the caller's submit; `doCancel` navigates home.
+ */
+function useEditorFlow() {
+  const fetcher = useFetcher<typeof action>();
+  const navigate = useNavigate();
+  const [transition, setTransition] = useState<
+    null | "save" | "cancel" | "delete"
+  >(null);
+
+  const doSave = (submit: () => void) => {
+    setTransition("save");
+    submit();
+  };
+  const doDelete = (submit: () => void) => {
+    setTransition("delete");
+    submit();
+  };
+  const doCancel = () => {
+    setTransition("cancel");
+    void navigate("/");
+  };
+
+  useEffect(() => {
+    if (
+      fetcher.state === "idle" &&
+      (transition === "save" || transition === "delete")
+    )
+      setTransition(null);
+  }, [fetcher.state, transition]);
+
+  return { fetcher, transition, doSave, doDelete, doCancel };
+}
+
+/** Inline validation error shown at the top of an editor; renders nothing
+ * when there is no error. */
+function ErrorBanner({ error }: { error: string }) {
+  if (!error) return null;
+  return (
+    <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+      {error}
+    </p>
+  );
+}
+
+/** The Date + Amount field pair shared by both editors (amount normalizes on
+ * blur; mileage marks manual edits so route recomputation won't overwrite). */
+function DateAmountFields({
+  date,
+  onDate,
+  amount,
+  onAmount,
+  amountRef,
+  onManualAmount,
+}: {
+  date: string;
+  onDate: (v: string) => void;
+  amount: string;
+  onAmount: (v: string) => void;
+  /** Receipt: the field to autofocus when the editor opens. */
+  amountRef?: React.RefObject<HTMLInputElement | null>;
+  /** Mileage: runs before each keystroke (marks the amount as hand-edited). */
+  onManualAmount?: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-gray-700">Date</span>
+        <input
+          type="date"
+          tabIndex={-1}
+          max={todayDate()}
+          className="rounded-lg border border-gray-300 px-3 py-2"
+          value={date}
+          onChange={(e) => onDate(e.target.value)}
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-gray-700">Amount</span>
+        <input
+          type="number"
+          step="0.01"
+          inputMode="decimal"
+          placeholder="0.00"
+          className="rounded-lg border border-gray-300 px-3 py-2"
+          value={amount}
+          ref={amountRef}
+          onClick={(e) => e.currentTarget.select()}
+          onChange={(e) => {
+            onManualAmount?.();
+            onAmount(e.target.value);
+          }}
+          onBlur={(e) => onAmount(normalizeAmount(e.target.value))}
+        />
+      </label>
+    </div>
+  );
+}
+
+/** The Report + Category picker pair shared by both editors. */
+function ReportCategoryFields({
+  report,
+  onReport,
+  reports,
+  category,
+  onCategory,
+  categories,
+}: {
+  report: string;
+  onReport: (v: string) => void;
+  reports: string[];
+  category: string;
+  onCategory: (v: string) => void;
+  categories: string[];
+}) {
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-4">
+      <SelectField
+        label="Report"
+        value={report}
+        onChange={onReport}
+        options={reports}
+      />
+      <SelectField
+        label="Category"
+        value={category}
+        onChange={onCategory}
+        options={categories}
+      />
+    </div>
+  );
+}
+
+/** The Description textarea shared by both editors. */
+function DescriptionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="mt-4 flex flex-col gap-1">
+      <span className="text-sm font-medium text-gray-700">Description</span>
+      <textarea
+        rows={3}
+        className="rounded-lg border border-gray-300 px-3 py-2"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
 
 function EditorActions({
   complete,

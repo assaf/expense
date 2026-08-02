@@ -4,7 +4,7 @@ import {
   saveImage,
   deleteImage,
 } from "~/lib/images.server";
-import sharp from "sharp";
+import { resizeToJpeg } from "~/lib/image-normalize";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString } from "~/lib/validation";
@@ -31,16 +31,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const width = Number(url.searchParams.get("w"));
   if (Number.isInteger(width) && width >= 16 && width <= THUMB_MAX_WIDTH) {
     try {
-      const thumb = await sharp(image.buffer)
-        .rotate()
-        .resize({
-          width,
-          height: width,
-          fit: "inside",
-          withoutEnlargement: true,
-        })
-        .jpeg({ quality: 80, mozjpeg: true })
-        .toBuffer();
+      const thumb = await resizeToJpeg(image.buffer, {
+        maxWidth: width,
+        maxHeight: width,
+        quality: 80,
+      });
       return new Response(thumb as BodyInit, {
         headers: {
           "Content-Type": "image/jpeg",

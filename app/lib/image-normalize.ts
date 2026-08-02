@@ -59,16 +59,35 @@ export async function normalizeStoredImage(
   }
 
   // .rotate() applies EXIF orientation so re-encoding never flips sideways.
-  const out = await sharp(buffer)
-    .rotate()
-    .resize({
-      width: STORED_IMAGE_MAX_WIDTH,
-      height: STORED_IMAGE_MAX_HEIGHT,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: STORED_IMAGE_QUALITY, mozjpeg: true })
-    .toBuffer();
+  const out = await resizeToJpeg(buffer, {
+    maxWidth: STORED_IMAGE_MAX_WIDTH,
+    maxHeight: STORED_IMAGE_MAX_HEIGHT,
+    quality: STORED_IMAGE_QUALITY,
+    flatten: true,
+  });
   return { buffer: out, mime: "image/jpeg" };
+}
+
+/**
+ * Resize + re-encode an image as JPEG: EXIF-rotate, fit inside the given box
+ * (never upscale), optionally flatten alpha onto white. Shared by the storage
+ * normalizer (saveImage) and the list thumbnail route.
+ */
+export async function resizeToJpeg(
+  buffer: Buffer,
+  opts: {
+    maxWidth: number;
+    maxHeight: number;
+    quality?: number;
+    flatten?: boolean;
+  },
+): Promise<Buffer> {
+  let img = sharp(buffer).rotate().resize({
+    width: opts.maxWidth,
+    height: opts.maxHeight,
+    fit: "inside",
+    withoutEnlargement: true,
+  });
+  if (opts.flatten) img = img.flatten({ background: "#ffffff" });
+  return img.jpeg({ quality: opts.quality ?? 80, mozjpeg: true }).toBuffer();
 }
