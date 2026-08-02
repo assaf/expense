@@ -12,6 +12,8 @@ import type { ReactNode } from "react";
 import { Link, Form, useFetcher } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Field } from "~/components/ui/Field";
+import { Input } from "~/components/ui/Input";
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
@@ -255,28 +257,28 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           <input type="hidden" name="intent" value="saveRates" />
           {rates.map((r) => (
             <div key={r.year} className="flex items-center gap-2">
-              <input
+              <Input
                 type="text"
                 name={`rate.${r.year}`}
                 defaultValue={r.rate}
-                className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-right"
+                className="w-24 px-2 py-1.5 text-right"
               />
               <span className="text-sm text-gray-500">/ mi for {r.year}</span>
             </div>
           ))}
           <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2">
-            <input
+            <Input
               type="text"
               name="newYear"
               placeholder="YYYY"
-              className="w-24 rounded-lg border border-gray-300 px-2 py-1.5"
+              className="w-24 px-2 py-1.5"
             />
-            <input
+            <Input
               type="text"
               name="newRate"
               placeholder="0.70"
               inputMode="decimal"
-              className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-right"
+              className="w-24 px-2 py-1.5 text-right"
             />
             <span className="text-sm text-gray-500">/ mi (new year)</span>
           </div>
@@ -293,15 +295,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </p>
         <Form method="post" className="flex items-end gap-2">
           <input type="hidden" name="intent" value="saveHome" />
-          <label className="flex flex-1 flex-col gap-1">
-            <span className="text-sm font-medium text-gray-700">Address</span>
-            <input
-              type="text"
-              name="homeAddress"
-              defaultValue={homeAddress}
-              className="rounded-lg border border-gray-300 px-3 py-2"
-            />
-          </label>
+          <Field label="Address" className="flex-1">
+            <Input type="text" name="homeAddress" defaultValue={homeAddress} />
+          </Field>
           <Button type="submit" size="md">
             <MapPin className="h-4 w-4" /> Save
           </Button>
@@ -371,12 +367,12 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </div>
           <Form method="post" className="flex items-center gap-2">
             <input type="hidden" name="intent" value="addInboundSender" />
-            <input
+            <Input
               type="email"
               name="address"
               placeholder="you@example.com"
               required
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              className="flex-1"
             />
             <Button type="submit" size="sm" variant="secondary">
               <Plus className="h-4 w-4" /> Add address
@@ -470,7 +466,7 @@ function NameList<T extends { name: string }>({
       </ul>
       <fetcher.Form method="post" className="flex items-center gap-2">
         <input type="hidden" name="intent" value={addIntent} />
-        <input
+        <Input
           type="text"
           name="name"
           value={draft}
@@ -480,9 +476,8 @@ function NameList<T extends { name: string }>({
           }}
           placeholder={addPlaceholder}
           aria-invalid={error ? true : undefined}
-          className={`flex-1 rounded-lg border px-3 py-2 ${
-            error ? "border-red-400" : "border-gray-300"
-          }`}
+          invalid={!!error}
+          className="flex-1"
         />
         <Button
           type="submit"
@@ -540,7 +535,7 @@ function RenameForm({
       <fetcher.Form method="post" className="flex w-full items-center gap-2">
         <input type="hidden" name="intent" value={intent} />
         <input type="hidden" name="name" value={name} />
-        <input
+        <Input
           type="text"
           name="newName"
           value={draft}
@@ -553,9 +548,8 @@ function RenameForm({
           }}
           autoFocus
           aria-invalid={error ? true : undefined}
-          className={`min-w-0 flex-1 rounded-lg border px-2 py-1 ${
-            error ? "border-red-400" : "border-gray-300"
-          }`}
+          invalid={!!error}
+          className="min-w-0 flex-1 px-2 py-1"
         />
         <Button
           type="submit"

@@ -14,6 +14,10 @@ import { useFetcher, useLocation, useNavigate } from "react-router";
 import { Link, redirect } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
+import { Field } from "~/components/ui/Field";
+import { Input } from "~/components/ui/Input";
+import { Select } from "~/components/ui/Select";
+import { Textarea } from "~/components/ui/Textarea";
 import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
@@ -205,21 +209,16 @@ function SelectField({
   const opts =
     value && !options.includes(value) ? [value, ...options] : options;
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
-      <select
-        className="rounded-lg border border-gray-300 px-3 py-2"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
+    <Field label={label}>
+      <Select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">—</option>
         {opts.map((o) => (
           <option key={o} value={o}>
             {o}
           </option>
         ))}
-      </select>
-    </label>
+      </Select>
+    </Field>
   );
 }
 
@@ -490,12 +489,10 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         amountRef={amountRef}
       />
 
-      <label className="mt-4 flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Merchant</span>
-        <input
+      <Field label="Merchant" className="mt-4">
+        <Input
           type="text"
           list="merchants"
-          className="rounded-lg border border-gray-300 px-3 py-2"
           value={merchant}
           onChange={(e) => setMerchant(e.target.value)}
         />
@@ -504,7 +501,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             <option key={m} value={m} />
           ))}
         </datalist>
-      </label>
+      </Field>
 
       <ReportCategoryFields
         report={report}
@@ -737,10 +734,10 @@ function MileageEditor({ data }: { data: EditorData }) {
               <span className="w-16 shrink-0 text-xs font-medium text-gray-500">
                 {i === 0 ? "Home" : `Stop ${i}`}
               </span>
-              <input
+              <Input
                 type="text"
                 placeholder="Address"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+                className="flex-1"
                 value={l.address}
                 onChange={(e) => updateLocation(i, e.target.value)}
               />
@@ -874,25 +871,21 @@ function DateAmountFields({
 }) {
   return (
     <div className="grid grid-cols-2 gap-4">
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Date</span>
-        <input
+      <Field label="Date">
+        <Input
           type="date"
           tabIndex={-1}
           max={todayDate()}
-          className="rounded-lg border border-gray-300 px-3 py-2"
           value={date}
           onChange={(e) => onDate(e.target.value)}
         />
-      </label>
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Amount</span>
-        <input
+      </Field>
+      <Field label="Amount">
+        <Input
           type="number"
           step="0.01"
           inputMode="decimal"
           placeholder="0.00"
-          className="rounded-lg border border-gray-300 px-3 py-2"
           value={amount}
           ref={amountRef}
           onClick={(e) => e.currentTarget.select()}
@@ -902,7 +895,7 @@ function DateAmountFields({
           }}
           onBlur={(e) => onAmount(normalizeAmount(e.target.value))}
         />
-      </label>
+      </Field>
     </div>
   );
 }
@@ -950,15 +943,13 @@ function DescriptionField({
   onChange: (v: string) => void;
 }) {
   return (
-    <label className="mt-4 flex flex-col gap-1">
-      <span className="text-sm font-medium text-gray-700">Description</span>
-      <textarea
+    <Field label="Description" className="mt-4">
+      <Textarea
         rows={3}
-        className="rounded-lg border border-gray-300 px-3 py-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-    </label>
+    </Field>
   );
 }
 
