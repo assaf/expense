@@ -25,9 +25,6 @@ export const RESEND_API_KEY = env.RESEND_API_KEY ?? "";
 export const INBOUND_EMAIL_WEBHOOK_SECRET =
   env.INBOUND_EMAIL_WEBHOOK_SECRET ?? "";
 
-/** Sender used for reply emails, e.g. "Expense <expense@labnotes.org>". */
-export const INBOUND_EMAIL_FROM = env.INBOUND_EMAIL_FROM ?? "";
-
 /** The address users forward receipts to — shown in Settings (e.g. receipts@labnotes.org). */
 export const INBOUND_EMAIL_ADDRESS = env.INBOUND_EMAIL_ADDRESS ?? "";
 

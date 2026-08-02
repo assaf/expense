@@ -46,7 +46,7 @@ prod env with `npx vercel env pull --environment=production .env.prod` (use
 (`expense_test`, image blobs in Postgres), not `.env`.
 
 Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_SECRET`,
-`INBOUND_EMAIL_FROM`, `INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
+`INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
 `DEEPSEEK_MODEL` (default `deepseek-v4-flash`), `RECEIPT_OCR_MODE`
 (`auto` default | `deepseek` | `tesseract`). All optional — the webhook route
 returns 503 when unconfigured and everything else still works.
