@@ -16,7 +16,7 @@ import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
-import { normalizeAmount, todayDate, yearOf } from "~/lib/format";
+import { normalizeAmount, sortExpenses, todayDate, yearOf } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
 import { homeLocation, readSettings } from "~/lib/settings.server";
 import {
@@ -28,12 +28,8 @@ import {
   readReports,
   upsertExpense,
 } from "~/lib/store.server";
-import type {
-  Expense,
-  Location,
-  ReceiptExpense,
-  MileageExpense,
-} from "~/lib/types";
+import { parseLocations } from "~/lib/types";
+import type { Location, MileageExpense, ReceiptExpense } from "~/lib/types";
 import { formString, validateDateNotFuture } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
@@ -51,14 +47,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const year = yearOf(expense.date);
   const rate = settings.mileageRates[year] ?? "";
   // Neighbours in the main list order (newest first, empty dates last).
-  const sorted = [...all].sort(sortByDateDesc);
+  const sorted = sortExpenses(all);
   const i = sorted.findIndex((e) => e.id === expense.id);
   const nav = {
     prevId: i > 0 ? sorted[i - 1]!.id : null,
     nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
   };
   return {
-    expense: serializeExpense(expense),
+    expense,
     // Closed reports can't be selected; the expense's current report is
     // still shown when it is closed (SelectField prepends it as the value).
     reports: reports.filter((r) => !r.closed).map((r) => r.name),
@@ -69,17 +65,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     year,
     nav,
   };
-}
-
-function sortByDateDesc(a: Expense, b: Expense): number {
-  if (!a.date && !b.date) return b.createdAt.localeCompare(a.createdAt);
-  if (!a.date) return 1;
-  if (!b.date) return -1;
-  return b.date.localeCompare(a.date);
-}
-
-function serializeExpense(e: Expense) {
-  return e;
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -141,7 +126,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       await upsertExpense(updated, user.accountId);
     } else {
       const locationsRaw = formString(form, "locations");
-      const locations = safeParseLocations(locationsRaw);
+      const locations = parseLocations(locationsRaw);
       const distanceMiles = formString(form, "distanceMiles");
       const updated: MileageExpense = {
         ...existing,
@@ -160,24 +145,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   return Response.json({ error: "Unknown intent" }, { status: 400 });
-}
-
-function safeParseLocations(raw: string): Location[] {
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (v): v is Record<string, unknown> => v != null && typeof v === "object",
-      )
-      .map((v) => ({
-        address: typeof v.address === "string" ? v.address : "",
-        lat: typeof v.lat === "number" ? v.lat : null,
-        lng: typeof v.lng === "number" ? v.lng : null,
-      }));
-  } catch {
-    return [];
-  }
 }
 
 export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {

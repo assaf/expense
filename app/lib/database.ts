@@ -4,7 +4,11 @@ import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
-import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from "~/lib/types";
+import {
+  DEFAULT_CATEGORIES,
+  DEFAULT_SETTINGS,
+  parseLocations,
+} from "~/lib/types";
 import type {
   Account,
   Category,
@@ -117,7 +121,7 @@ async function migrateImageBlobKeys(bootstrapAccountId: string): Promise<void> {
  */
 async function ensureBootstrapUser(): Promise<User> {
   const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-  if (first) return rowToUser(first);
+  if (first) return first;
 
   if (!APP_USERNAME || !APP_PASSWORD) {
     throw new Error(
@@ -164,17 +168,9 @@ async function ensureBootstrapUser(): Promise<User> {
 
 // --- Accounts & Users ------------------------------------------------------
 
-function rowToAccount(row: Account): Account {
-  return row;
-}
-
-function rowToUser(row: User): User {
-  return row;
-}
-
 export async function readAccount(id: string): Promise<Account | undefined> {
   const row = await prisma.account.findUnique({ where: { id } });
-  return row ? rowToAccount(row) : undefined;
+  return row ?? undefined;
 }
 
 /** Create a new account. Throws if the name is already taken. */
@@ -206,7 +202,7 @@ export async function findAccountByInviteCode(
   inviteCode: string,
 ): Promise<Account | undefined> {
   const row = await prisma.account.findUnique({ where: { inviteCode } });
-  return row ? rowToAccount(row) : undefined;
+  return row ?? undefined;
 }
 
 /** Replace an account's invite code with a fresh one; returns the new code. */
@@ -250,12 +246,12 @@ export async function findUserByUsername(
   const row = await prisma.user.findUnique({
     where: { username: username.trim().toLowerCase() },
   });
-  return row ? rowToUser(row) : undefined;
+  return row ?? undefined;
 }
 
 export async function findUserById(id: string): Promise<User | undefined> {
   const row = await prisma.user.findUnique({ where: { id } });
-  return row ? rowToUser(row) : undefined;
+  return row ?? undefined;
 }
 
 /** The stored password hash for a user (never exposed on the User type). */
@@ -819,26 +815,4 @@ function rowToExpense(row: {
     distanceMiles: row.distanceMiles ?? "",
   };
   return mileage;
-}
-
-function parseLocations(raw: unknown): MileageExpense["locations"] {
-  if (Array.isArray(raw)) {
-    return raw
-      .filter(
-        (v): v is { address: string; lat: number | null; lng: number | null } =>
-          v && typeof v === "object" && "address" in v,
-      )
-      .map((v) => ({
-        address: typeof v.address === "string" ? v.address : "",
-        lat: typeof v.lat === "number" ? v.lat : null,
-        lng: typeof v.lng === "number" ? v.lng : null,
-      }));
-  }
-  try {
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (!Array.isArray(parsed)) return [];
-    return parseLocations(parsed);
-  } catch {
-    return [];
-  }
 }

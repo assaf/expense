@@ -1,5 +1,7 @@
 /** Formatting helpers shared across server and client. */
 
+import type { Expense } from "~/lib/types";
+
 /** Format a decimal string ("12.3" / "12" / "12.34") as "$12.34". */
 export function formatAmount(amount: string): string {
   const n = parseAmount(amount);
@@ -59,4 +61,33 @@ export function mileageMerchant(distanceMiles: string, rate: string): string {
   const r = parseAmount(rate);
   if (d === null || r === null) return "";
   return `${d.toFixed(2)} mi @ $${r.toFixed(2)} / mi`;
+}
+
+/** The "merchant" label for an expense: the receipt merchant, or the mileage
+ * label for mileage expenses. "" when there is nothing to show. */
+export function merchantLabel(
+  e: Expense,
+  rates: Record<string, string>,
+): string {
+  if (e.type === "receipt") return e.merchant;
+  return mileageMerchant(e.distanceMiles, rates[yearOf(e.date)] ?? "");
+}
+
+/**
+ * Sort expenses by date; empty dates sort last (ties broken by createdAt).
+ * `desc` (default) is newest-first — the home list and editor navigation;
+ * pass `false` for chronological order (PDF/ZIP exports). Returns a new
+ * array (callers' input is never mutated).
+ */
+export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
+  return [...expenses].sort((a, b) => {
+    if (!a.date && !b.date) {
+      return desc
+        ? b.createdAt.localeCompare(a.createdAt)
+        : a.createdAt.localeCompare(b.createdAt);
+    }
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return desc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
+  });
 }

@@ -44,6 +44,31 @@ export interface MileageExpense extends ExpenseBase {
 
 export type Expense = ReceiptExpense | MileageExpense;
 
+/** Parse stored/transmitted location data (JSON array or array) into
+ * typed locations, dropping malformed entries. Used for the DB JSON column
+ * and for the editor's `locations` form field. */
+export function parseLocations(raw: unknown): Location[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter(
+        (v): v is { address: string; lat: number | null; lng: number | null } =>
+          v && typeof v === "object" && "address" in v,
+      )
+      .map((v) => ({
+        address: typeof v.address === "string" ? v.address : "",
+        lat: typeof v.lat === "number" ? v.lat : null,
+        lng: typeof v.lng === "number" ? v.lng : null,
+      }));
+  }
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parseLocations(parsed);
+  } catch {
+    return [];
+  }
+}
+
 export interface Report {
   name: string;
   /** True once the report is closed — closing freezes it; deleting a closed

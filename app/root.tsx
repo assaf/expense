@@ -65,6 +65,11 @@ export default function App() {
         <Links />
       </head>
       <body>
+        {process.env.NODE_ENV === "development" ? (
+          <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-md bg-green-600 px-2 py-0.5 text-xs font-bold tracking-wider text-white shadow">
+            DEV
+          </div>
+        ) : null}
         <Outlet />
         <ScrollRestoration />
         <Scripts />

@@ -4,8 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { readImage } from "~/lib/images.server";
 import { readExpenses } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
-import { mileageMerchant, yearOf } from "~/lib/format";
-import type { Expense } from "~/lib/types";
+import { merchantLabel, sortExpenses } from "~/lib/format";
 import type { Route } from "./+types/export.all[.]zip";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -15,12 +14,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     readSettings(user.accountId),
   ]);
 
-  const sorted = [...expenses].sort((a, b) => {
-    if (!a.date && !b.date) return a.createdAt.localeCompare(b.createdAt);
-    if (!a.date) return 1;
-    if (!b.date) return -1;
-    return a.date.localeCompare(b.date);
-  });
+  const sorted = sortExpenses(expenses, false);
 
   const csvRows: string[][] = [
     ["date", "merchant", "amount", "category", "report", "description"],
@@ -60,9 +54,4 @@ export async function loader({ request }: Route.LoaderArgs) {
       "Cache-Control": "no-store",
     },
   });
-}
-
-function merchantLabel(e: Expense, rates: Record<string, string>): string {
-  if (e.type === "receipt") return e.merchant;
-  return mileageMerchant(e.distanceMiles, rates[yearOf(e.date)] ?? "");
 }

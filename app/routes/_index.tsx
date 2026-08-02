@@ -12,12 +12,16 @@ import { Link, useNavigate } from "react-router";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
-import { formatAmount, formatDate, parseAmount } from "~/lib/format";
+import {
+  formatAmount,
+  formatDate,
+  parseAmount,
+  sortExpenses,
+} from "~/lib/format";
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { readSettings } from "~/lib/settings.server";
 import {
-  initStore,
   readExpenses,
   readPriorMerchants,
   readReports,
@@ -27,7 +31,6 @@ import type { Route } from "./+types/_index";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  await initStore();
   const [expenses, settings, merchants, allReports] = await Promise.all([
     readExpenses(user.accountId),
     readSettings(user.accountId),
@@ -37,7 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
-  const sorted = [...open].sort(sortByDateDesc);
+  const sorted = sortExpenses(open);
   const currentYear = String(new Date().getFullYear());
   const reportSummary = new Map<string, { count: number; total: number }>();
   for (const e of open) {
@@ -64,14 +67,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     reports,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
   };
-}
-
-function sortByDateDesc(a: Expense, b: Expense): number {
-  // Empty dates sort last.
-  if (!a.date && !b.date) return b.createdAt.localeCompare(a.createdAt);
-  if (!a.date) return 1;
-  if (!b.date) return -1;
-  return b.date.localeCompare(a.date);
 }
 
 function toListItem(e: Expense) {

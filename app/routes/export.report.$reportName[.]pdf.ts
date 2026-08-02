@@ -4,7 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { readImage } from "~/lib/images.server";
-import { formatDate, mileageMerchant, yearOf } from "~/lib/format";
+import { formatDate, merchantLabel, sortExpenses } from "~/lib/format";
 import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";
 
@@ -21,9 +21,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return new Response("Report not found", { status: 404 });
   }
 
-  const inReport = expenses
-    .filter((e) => e.report === reportName)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const inReport = sortExpenses(
+    expenses.filter((e) => e.report === reportName),
+    false,
+  );
 
   const doc = new PDFDocument({ margin: 50, size: "LETTER" });
   const stream = collectStream(doc);
@@ -69,7 +70,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     doc.moveDown(0.25);
     const inCat = inReport.filter((e) => e.category === category);
     for (const e of inCat) {
-      const merchant = merchantLabel(e, settings.mileageRates);
+      const merchant = merchantLabel(e, settings.mileageRates) || "—";
       const date = formatDate(e.date);
       const amount = e.amount ? `$${e.amount}` : "—";
       const desc = e.description ?? "";
@@ -144,11 +145,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       "Cache-Control": "no-store",
     },
   });
-}
-
-function merchantLabel(e: Expense, rates: Record<string, string>): string {
-  if (e.type === "receipt") return e.merchant || "—";
-  return mileageMerchant(e.distanceMiles, rates[yearOf(e.date)] ?? "");
 }
 
 /**
