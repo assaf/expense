@@ -302,7 +302,7 @@ async function writeExpenses(
             .map((l) => l.address)
             .filter(Boolean)
             .join(" → "),
-          distanceMiles: e.distanceMiles,
+          distanceMiles: e.distanceMiles === "" ? null : e.distanceMiles,
           accountId,
         })),
     }),
@@ -778,7 +778,8 @@ function expenseData(
     report: e.report,
     category: e.category,
     description: e.description,
-    amount: e.amount,
+    // "" is the domain's "no amount" sentinel → NULL (nullable Decimal).
+    amount: e.amount === "" ? null : e.amount,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
   };
@@ -789,7 +790,7 @@ function expenseData(
       imageFile: e.imageFile,
       imageMime: e.imageMime,
       originalName: e.originalName,
-      distanceMiles: "",
+      distanceMiles: null,
       locations: [],
     };
   }
@@ -799,7 +800,7 @@ function expenseData(
     imageFile: "",
     imageMime: "",
     originalName: "",
-    distanceMiles: e.distanceMiles,
+    distanceMiles: e.distanceMiles === "" ? null : e.distanceMiles,
     locations: e.locations as unknown as Prisma.InputJsonValue,
   };
 }
@@ -811,12 +812,12 @@ function rowToExpense(row: {
   report: string;
   category: string;
   description: string;
-  amount: string;
+  amount: Prisma.Decimal | null;
   merchant: string;
   imageFile: string;
   imageMime: string;
   originalName: string;
-  distanceMiles: string;
+  distanceMiles: Prisma.Decimal | null;
   locations: unknown;
   createdAt: string;
   updatedAt: string;
@@ -828,7 +829,9 @@ function rowToExpense(row: {
     report: row.report ?? "",
     category: row.category ?? "",
     description: row.description ?? "",
-    amount: row.amount ?? "",
+    // Decimal → 2-dp string (the domain's "" means no amount). toFixed(2) is
+    // a lossless pad: numeric(10,2) already stores exactly two digits.
+    amount: row.amount?.toFixed(2) ?? "",
     createdAt: row.createdAt ?? "",
     updatedAt: row.updatedAt ?? "",
   };
@@ -847,7 +850,7 @@ function rowToExpense(row: {
     ...base,
     type: "mileage",
     locations: parseLocations(row.locations),
-    distanceMiles: row.distanceMiles ?? "",
+    distanceMiles: row.distanceMiles?.toFixed(2) ?? "",
   };
   return mileage;
 }

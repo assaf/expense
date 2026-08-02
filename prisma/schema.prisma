@@ -58,12 +58,12 @@ model Expense {
   report       String
   category     String
   description  String
-  amount       String
+  amount       Decimal? @db.Decimal(10, 2)
   merchant     String
   imageFile    String
   imageMime    String
   originalName String
-  distanceMiles String
+  distanceMiles Decimal? @db.Decimal(10, 2)
   locations    Json
   createdAt    String
   updatedAt    String
@@ -103,7 +103,7 @@ model Mileage {
   date         String
   report       String
   locations    String
-  distanceMiles String
+  distanceMiles Decimal? @db.Decimal(10, 2)
   accountId    String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)

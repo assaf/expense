@@ -34,6 +34,44 @@ echo -e "\033[0;32m--- Step 4: Sync production database schema ---\033[0m"
 node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
 rm -f /tmp/preflight-prod.sql
+
+# Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
+# diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
+# conversion runs explicitly before db push. Guarded on the column still being
+# TEXT — idempotent on re-runs.
+echo -e "\033[0;33m--- Step 4b: Convert money columns TEXT → NUMERIC(10,2) ---\033[0m"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'amount'
+      AND data_type = 'text'
+  ) THEN
+    ALTER TABLE "expenses"
+      ALTER COLUMN "amount" DROP NOT NULL,
+      ALTER COLUMN "amount" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "amount" = '' THEN NULL ELSE "amount"::decimal(10,2) END,
+      ALTER COLUMN "distanceMiles" DROP NOT NULL,
+      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'mileage' AND column_name = 'distanceMiles'
+      AND data_type = 'text'
+  ) THEN
+    ALTER TABLE "mileage"
+      ALTER COLUMN "distanceMiles" DROP NOT NULL,
+      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
+  END IF;
+END $$;
+SQL
+
 pnpm prisma db push --accept-data-loss
 # Record the baseline migrations so future `prisma migrate deploy` has
 # history. Errors when already recorded (P3008) are expected on re-runs.
@@ -41,6 +79,7 @@ pnpm prisma migrate resolve --applied 0_init || true
 pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
 pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
 pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
+pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
 
 echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
 npx -y vercel@latest deploy --prod --yes
