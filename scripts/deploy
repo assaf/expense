@@ -82,7 +82,42 @@ pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
 pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
 
 echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
-npx -y vercel@latest deploy --prod --yes
+DEPLOY_OUTPUT=$(npx -y vercel@latest deploy --prod --yes 2>&1)
+echo "$DEPLOY_OUTPUT"
+DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -1 || true)
+if [ -z "$DEPLOY_URL" ]; then
+  echo -e "\033[0;33mCould not determine the deployment URL — falling back to the production alias.\033[0m"
+  DEPLOY_URL="https://${PROD_DOMAIN}"
+fi
+
+echo -e "\033[0;32m--- Step 5b: Post-deploy smoke check (PDF + OCR) ---\033[0m"
+if [ -z "$SMOKE_TEST_SECRET" ]; then
+  echo -e "\033[0;33mSMOKE_TEST_SECRET is not set in the Vercel environment — skipping the PDF/OCR smoke check.\033[0m"
+  echo "Add it in the Vercel dashboard (Settings → Environment Variables, production):"
+  echo "it gates GET /api/smoke via the x-smoke-secret header, which this script curls after each deploy."
+else
+  RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
+    -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "${DEPLOY_URL}/api/smoke") \
+    || {
+      echo -e "\033[0;31mSmoke check failed (network/HTTP). Check ${DEPLOY_URL}/api/smoke manually.\033[0m"
+      exit 1
+    }
+  echo "$RESPONSE" | node -e '
+    let body = "";
+    process.stdin.on("data", (c) => (body += c));
+    process.stdin.on("end", () => {
+      const r = JSON.parse(body);
+      if (r.ok !== true) {
+        console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
+        process.exit(1);
+      }
+      console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "(" + r.ms + "ms)");
+    });
+  ' || {
+    echo -e "\033[0;31mSmoke check failed: PDF/OCR pipeline did not pass on ${DEPLOY_URL}.\033[0m"
+    exit 1
+  }
+fi
 
 echo -e "\033[0;32m--- Step 6: Open production site ---\033[0m"
 open "https://${PROD_DOMAIN}"

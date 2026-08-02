@@ -51,6 +51,12 @@ Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_S
 (`auto` default | `deepseek` | `tesseract`). All optional — the webhook route
 returns 503 when unconfigured and everything else still works.
 
+`SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR smoke check at
+GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the
+route is disabled (404) and `scripts/deploy` skips the check with a warning.
+It must also be set as a **GitHub Actions secret** (same value) for
+`.github/workflows/deployment-smoke.yml`.
+
 ## Stack & conventions
 
 - **Routing**: React Router v8, flat file routes in `app/routes/`. `app/routes.ts`
@@ -185,6 +191,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/routes/export.*`              | PDF per report + ZIP of everything.                                                                                                                                                                           |
 | `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.                                                                                                                                  |
 | `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                                                                                                       |
+| `app/routes/api.smoke.ts`          | Post-deploy PDF+OCR health check (secret-gated GET `/api/smoke`; `maxDuration: 60`). `scripts/deploy` curls it after every deploy and fails the deploy if the pipeline breaks in the serverless bundle.       |
 | `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                                                                                                                                               |
 | `app/routes/sign-out.ts`           | Destroys the session, redirects to /login.                                                                                                                                                                    |
 | `app/lib/editor.server.ts`         | Editor context shared by the /expense/:id and /expense/new loaders (reports, categories, merchants, home, rate, year).                                                                                        |
@@ -237,6 +244,21 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   (they keep their old convention name). Re-saving each receipt rewrites the name.
 - `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
   still type-checks it.
+- **PDF/OCR can't be fully verified locally** — local tests run against
+  node_modules, where every file exists; Vercel's dependency tracer is what
+  drops pdf.worker.mjs / tesseract wasm and breaks PDF/OCR in production.
+  Real coverage: `test/pdf-ocr.test.ts` (text extraction + rasterization in
+  `pnpm test`; tesseract round-trip opt-in via `RUN_OCR_TESTS=1`, on in CI)
+  and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
+  runs in the deployed serverless bundle — `scripts/deploy` curls it after
+  CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
+  push to `main` against the git-integration deployment. To gate production
+  promotion on it: Vercel → project → Settings → Build & Deployment →
+  Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (plus
+  `check-and-test` if desired); requires `VERCEL_TOKEN`,
+  `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
+  `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
+  it stable.
 - **Receipts by email**: the `/api/inbound-email` route is public (no session) —
   it verifies Resend's webhook (standard Svix/Standard-Webhooks format:
   `svix-id` / `svix-timestamp` / `svix-signature` headers, HMAC-SHA256 of

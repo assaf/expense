@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import PDFDocument from "pdfkit";
 import {
   isComplete,
   isReceiptComplete,
@@ -14,7 +13,6 @@ import {
   yearOf,
   summarizeByReport,
 } from "~/lib/format";
-import { extractPdfText } from "~/lib/receipt-ocr.server";
 import { recomputeMileage } from "~/lib/maps.server";
 import type { ReceiptExpense, MileageExpense } from "~/lib/types";
 
@@ -215,33 +213,5 @@ describe("recomputeMileage money math", () => {
     stubOsrm(10_000);
     const r = await recomputeMileage([A, B], "not-a-rate");
     expect(r.amount).toBe("");
-  });
-});
-
-/** A tiny one-page PDF containing the given text (pdfkit embeds the font). */
-function makePdf(text: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument();
-    doc.on("data", (c: Buffer) => chunks.push(c));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-    doc.text(text);
-    doc.end();
-  });
-}
-
-/**
- * Real pdfjs text extraction — exercises the main-thread worker setup in
- * receipt-ocr.server.ts (extractPdfText is faked everywhere else, so a
- * broken worker — e.g. "Setting up fake worker failed" on serverless
- * bundles — would go unnoticed).
- */
-describe("PDF text extraction", () => {
-  it("extracts the text layer via the main-thread worker", async () => {
-    const pdf = await makePdf("MERCHANT: Test Store\nTOTAL: 12.34");
-    const text = await extractPdfText(pdf);
-    expect(text).toContain("MERCHANT: Test Store");
-    expect(text).toContain("12.34");
   });
 });

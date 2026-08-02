@@ -49,3 +49,10 @@ export const RECEIPT_OCR_MODE = (env.RECEIPT_OCR_MODE || "auto") as
 export function hasDatabase(): boolean {
   return Boolean(DATABASE_URL);
 }
+
+/**
+ * Secret gating GET /api/smoke (post-deploy PDF+OCR health check). Requests
+ * must send it in the `x-smoke-secret` header; when unset the route is
+ * disabled (404). `scripts/deploy` uses it after every production deploy.
+ */
+export const SMOKE_TEST_SECRET = env.SMOKE_TEST_SECRET ?? "";

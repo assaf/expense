@@ -32,6 +32,9 @@ jobs:
       APP_USERNAME: testuser
       APP_PASSWORD: test-password
       SESSION_SECRET: ci-only-session-secret-0123456789abcdef
+      # Runs the real tesseract OCR round-trip in test/pdf-ocr.test.ts
+      # (downloads eng.traineddata from a CDN; skipped locally by default).
+      RUN_OCR_TESTS: "1"
     steps:
       - uses: actions/checkout@v7
 

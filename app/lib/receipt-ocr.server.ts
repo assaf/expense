@@ -106,7 +106,7 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
  * OCR an image with tesseract.js. The wasm core comes from the local
  * tesseract.js-core package; traineddata downloads from a CDN at runtime.
  */
-async function ocrImage(buffer: Buffer, mime: string): Promise<string> {
+export async function ocrImage(buffer: Buffer, mime: string): Promise<string> {
   const png = await normalizeImage(buffer, mime);
   const worker = await createWorker(["eng"], 1, {
     workerPath: TESSERACT_NODE_WORKER,

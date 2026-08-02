@@ -1,0 +1,114 @@
+name: deployment-smoke
+
+# Post-deploy PDF/OCR smoke check, wired into Vercel Deployment Checks.
+#
+# Every push to main auto-deploys a production build on Vercel. This workflow
+# locates that deployment, curls its /api/smoke endpoint (which runs the real
+# pdfkit → pdfjs → tesseract pipeline inside the deployed serverless bundle —
+# see app/routes/api.smoke.ts), and fails the job when the pipeline is broken.
+#
+# To make this gate production promotion:
+#   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
+#      SMOKE_TEST_SECRET — the last must equal the SMOKE_TEST_SECRET env var
+#      on the Vercel project).
+#   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
+#      Add Checks → provider GitHub → require "pdf-ocr-smoke".
+#   3. Vercel then holds each production deployment (never aliases it to
+#      expense.labnotes.org) until this check passes. You can also require
+#      the "check-and-test" job from deployment-check.yml.
+#
+# NOTE: the job name IS the check name Vercel matches — keep it stable.
+# Renaming it requires updating the Deployment Checks settings to match.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pdf-ocr-smoke:
+    name: pdf-ocr-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Wait for the Vercel production deployment (this commit)
+        id: deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for required in VERCEL_TOKEN VERCEL_PROJECT_ID; do
+            if [ -z "${!required}" ]; then
+              echo "::error::$required is not configured as a GitHub Actions secret (see workflow comments)"
+              exit 1
+            fi
+          done
+          # Team scope (optional for personal accounts; required for teams).
+          TEAM=""
+          if [ -n "$VERCEL_ORG_ID" ]; then
+            TEAM="&teamId=${VERCEL_ORG_ID}"
+          fi
+          API="https://api.vercel.com/v7/deployments?projectId=${VERCEL_PROJECT_ID}&target=production&limit=50${TEAM}"
+          DEADLINE=$(( $(date +%s) + 600 ))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            RESPONSE=$(curl -sS -H "Authorization: Bearer ${VERCEL_TOKEN}" "$API")
+            # Fail fast on auth/API errors instead of polling for 10 minutes.
+            if echo "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
+              echo "::error::Vercel API error: $(echo "$RESPONSE" | jq -r '.error.message // .error.code')"
+              exit 1
+            fi
+            URL=$(echo "$RESPONSE" | jq -r --arg sha "$EXPECTED_SHA" '
+              [.deployments[] | select(
+                ((.meta.githubCommitSha // .meta.commitSha // "") == $sha)
+                and (.readyState == "READY" or .readyState == "BLOCKED")
+              )] | first | .url // empty')
+            if [ -n "$URL" ]; then
+              echo "url=$URL" >> "$GITHUB_OUTPUT"
+              echo "Deployment ready: https://$URL"
+              exit 0
+            fi
+            # A build that errored for this commit will never become READY.
+            BUILD_ERROR=$(echo "$RESPONSE" | jq -r --arg sha "$EXPECTED_SHA" '
+              [.deployments[] | select(
+                ((.meta.githubCommitSha // .meta.commitSha // "") == $sha)
+                and .readyState == "ERROR"
+              )][0] | if . then .errorMessage else empty end')
+            if [ -n "$BUILD_ERROR" ]; then
+              echo "::error::Vercel production build failed for this commit: $BUILD_ERROR"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for the Vercel production deployment of $EXPECTED_SHA (check the Vercel dashboard)."
+          exit 1
+
+      - name: Run the PDF/OCR smoke check
+        env:
+          DEPLOY_URL: ${{ steps.deployment.outputs.url }}
+          SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SMOKE_TEST_SECRET" ]; then
+            echo "::error::SMOKE_TEST_SECRET is not configured as a GitHub Actions secret (must equal the Vercel project env var)"
+            exit 1
+          fi
+          BODY=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
+            -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "https://${DEPLOY_URL}/api/smoke")
+          echo "$BODY" | node -e '
+            let body = "";
+            process.stdin.on("data", (c) => (body += c));
+            process.stdin.on("end", () => {
+              const r = JSON.parse(body);
+              if (r.ok !== true) {
+                console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
+                process.exit(1);
+              }
+              console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, `(${r.ms}ms)`);
+            });
+          '
