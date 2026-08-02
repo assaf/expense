@@ -92,6 +92,11 @@ export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
   });
 }
 
+/** "1 expense" / "3 expenses" — human count label. */
+export function countLabel(count: number): string {
+  return `${count} expense${count === 1 ? "" : "s"}`;
+}
+
 /**
  * Per-report expense counts + totals (amounts parsed, empty amounts don't
  * contribute). Expenses with no report are grouped under "Unassigned" only

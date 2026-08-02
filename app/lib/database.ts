@@ -37,6 +37,14 @@ import type {
  * adopts single-user era rows (accountId '') into that account.
  */
 
+/** The subset of Prisma delegates that carry legacy accountId "" rows. */
+interface AccountAdopter {
+  updateMany(args: {
+    where: { accountId: string };
+    data: { accountId: string };
+  }): Promise<unknown>;
+}
+
 let ready: Promise<void> | undefined;
 
 /** One-time (per process) data seeding: bootstrap user + adopt legacy rows. */
@@ -44,26 +52,20 @@ export async function initStore(): Promise<void> {
   if (!ready) {
     ready = (async () => {
       const bootstrap = await ensureBootstrapUser();
-      await prisma.expense.updateMany({
-        where: { accountId: "" },
-        data: { accountId: bootstrap.accountId },
-      });
-      await prisma.report.updateMany({
-        where: { accountId: "" },
-        data: { accountId: bootstrap.accountId },
-      });
-      await prisma.category.updateMany({
-        where: { accountId: "" },
-        data: { accountId: bootstrap.accountId },
-      });
-      await prisma.mileage.updateMany({
-        where: { accountId: "" },
-        data: { accountId: bootstrap.accountId },
-      });
-      await prisma.settings.updateMany({
-        where: { accountId: "" },
-        data: { accountId: bootstrap.accountId },
-      });
+      // Adopt single-user era rows (accountId "") into the bootstrap account.
+      const adopters: AccountAdopter[] = [
+        prisma.expense,
+        prisma.report,
+        prisma.category,
+        prisma.mileage,
+        prisma.settings,
+      ];
+      for (const model of adopters) {
+        await model.updateMany({
+          where: { accountId: "" },
+          data: { accountId: bootstrap.accountId },
+        });
+      }
       await migrateImageBlobKeys(bootstrap.accountId);
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.

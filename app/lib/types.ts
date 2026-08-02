@@ -69,6 +69,18 @@ export function parseLocations(raw: unknown): Location[] {
   }
 }
 
+/** Locations that already have coordinates (geocoded so far), narrowed to
+ * non-null lat/lng. Used by the map rendering, route computation, and the
+ * list thumbnails. */
+export function geocodedLocations(
+  locations: Location[],
+): (Location & { lat: number; lng: number })[] {
+  return locations.filter(
+    (l): l is Location & { lat: number; lng: number } =>
+      l.lat !== null && l.lng !== null,
+  );
+}
+
 export interface Report {
   name: string;
   /** True once the report is closed — closing freezes it; deleting a closed

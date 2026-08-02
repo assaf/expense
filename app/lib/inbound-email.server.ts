@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ulid } from "ulid";
 import {
+  FORWARD_MARKERS,
   renderEmailImage,
   renderTextEmail,
   stripForwardedText,
@@ -245,15 +246,10 @@ export function extractDateFromForwardedText(text: string): string | null {
   // Marker-based: the quoted headers follow the marker (they may sit after
   // a blank line, e.g. Apple Mail). Scan a bounded region so a receipt's
   // body can't inject unrelated "Date:" lines, but long header blocks
-  // (Outlook Cc/Bcc/disclaimer chains) still fit.
-  const markers = [
-    /Begin forwarded message:/i,
-    /-{2,}\s*Forwarded message\s*-{2,}/i,
-    /Forwarded message:/i,
-    /-{2,}\s*Original message\s*-{2,}/i,
-  ];
+  // (Outlook Cc/Bcc/disclaimer chains) still fit. The marker list is the
+  // same one email-render.server.ts uses for stripping forward blocks.
   let region: string | null = null;
-  for (const marker of markers) {
+  for (const marker of FORWARD_MARKERS) {
     const m = text.match(marker);
     if (m?.index !== undefined) {
       region = text.slice(m.index, Math.min(m.index + 3_000, text.length));

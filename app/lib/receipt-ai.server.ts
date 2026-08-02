@@ -148,9 +148,7 @@ function stringField(obj: Record<string, unknown>, key: string): string {
 }
 
 function confidenceField(v: unknown): Confidence {
-  // The first equality check already covers the exact strings — everything
-  // else is a case-insensitive match or a default.
-  if (v === "high" || v === "medium" || v === "low") return v;
+  // Exact or case-insensitive match on high/medium/low; anything else → low.
   if (typeof v === "string") {
     const lower = v.toLowerCase();
     if (lower === "high" || lower === "medium" || lower === "low") {

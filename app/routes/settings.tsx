@@ -1,19 +1,12 @@
-import {
-  Plus,
-  Trash2,
-  Pencil,
-  ArrowLeft,
-  MapPin,
-  LogOut,
-  RefreshCw,
-} from "lucide-react";
+import { Plus, Trash2, Pencil, MapPin, LogOut, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Link, Form, useFetcher } from "react-router";
+import { Form, useFetcher } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
+import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
@@ -36,7 +29,7 @@ import {
   renameReport,
   setReportClosed,
 } from "~/lib/store.server";
-import { normalizeAmount } from "~/lib/format";
+import { countLabel, normalizeAmount } from "~/lib/format";
 import { entryString, formString } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
@@ -190,15 +183,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     inboundAddress,
   } = loaderData;
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <Link
-        to="/"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </Link>
-      <h1 className="mb-6 text-2xl font-bold">Settings</h1>
-
+    <PageShell title="Settings">
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Account</h2>
         <p className="mb-3 text-sm text-gray-500">
@@ -393,7 +378,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Button>
         </Form>
       </section>
-    </main>
+    </PageShell>
   );
 }
 
@@ -594,10 +579,6 @@ function CategoryRow({ category }: { category: CategoryItem }) {
   const needsConfirm = category.count > 1;
   const [editing, setEditing] = useState(false);
   const removeFetcher = useFetcher();
-  const countLabel =
-    category.count === 0
-      ? "No expenses"
-      : `${category.count} expense${category.count === 1 ? "" : "s"}`;
   if (editing) {
     return (
       <RenameForm
@@ -615,7 +596,7 @@ function CategoryRow({ category }: { category: CategoryItem }) {
           className="text-xs text-gray-500"
           title="Expenses in reports that are not closed"
         >
-          {countLabel}
+          {category.count === 0 ? "No expenses" : countLabel(category.count)}
         </span>
         <RenameButton onClick={() => setEditing(true)} name={category.name} />
         <removeFetcher.Form
@@ -655,10 +636,6 @@ function ReportRow({ report }: { report: ReportItem }) {
   const [editing, setEditing] = useState(false);
   const toggleFetcher = useFetcher();
   const removeFetcher = useFetcher();
-  const countLabel =
-    report.count === 0
-      ? "No expenses"
-      : `${report.count} expense${report.count === 1 ? "" : "s"}`;
   if (editing) {
     return (
       <RenameForm
@@ -682,7 +659,9 @@ function ReportRow({ report }: { report: ReportItem }) {
           {report.closed ? "Closed" : "Open"}
         </span>
       </div>
-      <span className="shrink-0 text-xs text-gray-500">{countLabel}</span>
+      <span className="shrink-0 text-xs text-gray-500">
+        {report.count === 0 ? "No expenses" : countLabel(report.count)}
+      </span>
       <div className="flex shrink-0 items-center gap-2">
         <toggleFetcher.Form method="post" className="contents">
           <input type="hidden" name="intent" value="setReportClosed" />

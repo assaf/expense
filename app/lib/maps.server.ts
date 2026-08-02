@@ -1,4 +1,4 @@
-import type { Location } from "~/lib/types";
+import { geocodedLocations, type Location } from "~/lib/types";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
@@ -51,9 +51,8 @@ interface RouteResult {
 async function computeRouteDistance(
   locations: Location[],
 ): Promise<RouteResult> {
-  const points = locations.filter(
-    (l): l is Location & { lat: number; lng: number } =>
-      l.lat !== null && l.lng !== null && l.address.trim() !== "",
+  const points = geocodedLocations(locations).filter(
+    (l) => l.address.trim() !== "",
   );
   if (points.length < 2) {
     return { distanceMiles: 0, coords: [], approximate: false };

@@ -403,7 +403,7 @@ export async function renderTextEmail(
 // extraction). Both only remove consecutive header-looking lines that
 // immediately follow a forward marker, so receipt content is never touched.
 
-const FORWARD_MARKERS = [
+export const FORWARD_MARKERS = [
   /-{2,}\s*Original message\s*-{2,}/i, // Fastmail / Apple Mail
   /-{2,}\s*Forwarded message\s*-{2,}/i, // Gmail / Yahoo / Thunderbird
   /Begin forwarded message:?/i, // Apple Mail / iOS

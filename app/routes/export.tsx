@@ -1,9 +1,9 @@
-import { FileDown, FileArchive, ArrowLeft } from "lucide-react";
-import { Link } from "react-router";
+import { FileDown, FileArchive } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
-import { formatAmount, summarizeByReport } from "~/lib/format";
+import { countLabel, formatAmount, summarizeByReport } from "~/lib/format";
 import type { Route } from "./+types/export";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -44,8 +44,7 @@ function ReportList({ reports }: { reports: ReportItem[] }) {
           <div>
             <div className="font-medium">{r.name}</div>
             <div className="text-sm text-gray-500">
-              {r.count} expense{r.count === 1 ? "" : "s"} ·{" "}
-              {formatAmount(r.total.toFixed(2))}
+              {countLabel(r.count)} · {formatAmount(r.total.toFixed(2))}
             </div>
           </div>
           <a
@@ -71,15 +70,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
   const open = reports.filter((r) => !r.closed);
   const main = split ? open : reports;
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <Link
-        to="/"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </Link>
-      <h1 className="mb-6 text-2xl font-bold">Export</h1>
-
+    <PageShell title="Export">
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Reports (PDF)</h2>
         <p className="mb-3 text-sm text-gray-500">
@@ -122,6 +113,6 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           </a>
         </Button>
       </section>
-    </main>
+    </PageShell>
   );
 }

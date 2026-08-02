@@ -6,13 +6,18 @@ import {
   Plus,
   MapPinned,
   Loader2,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useFetcher, useLocation, useNavigate } from "react-router";
-import { Link, redirect } from "react-router";
+import {
+  useFetcher,
+  useLocation,
+  useNavigate,
+  Link,
+  redirect,
+} from "react-router";
 import MapView from "~/components/MapView";
+import { PageShell } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
@@ -37,6 +42,7 @@ import type {
   MileageExpense,
   ReceiptExpense,
 } from "~/lib/types";
+import { geocodedLocations } from "~/lib/types";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
@@ -142,27 +148,12 @@ function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <main
-      className={`mx-auto max-w-2xl px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""}`}
-    >
-      <div className="mb-4 flex items-center justify-between">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </button>
-        ) : (
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
-          >
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Link>
-        )}
-        {nav ? (
+    <PageShell
+      title={title}
+      dimmed={dimmed}
+      onBack={onBack}
+      headerRight={
+        nav ? (
           <div className="flex items-center gap-1">
             <Link
               to={`/expense/${nav.prevId}`}
@@ -187,11 +178,11 @@ function Shell({
               <ChevronRight className="h-5 w-5" />
             </Link>
           </div>
-        ) : null}
-      </div>
-      <h1 className="mb-6 text-2xl font-bold">{title}</h1>
+        ) : null
+      }
+    >
       {children}
-    </main>
+    </PageShell>
   );
 }
 
@@ -434,25 +425,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             ) : null}
           </span>
         </div>
-        {isNew ? (
-          draftPreview ? (
-            <button
-              type="button"
-              onClick={() => setLightbox(true)}
-              className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
-            >
-              <img
-                src={draftPreview}
-                alt="Receipt"
-                className="min-h-53 max-h-120 w-full object-cover object-top"
-              />
-            </button>
-          ) : (
-            <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-400">
-              No image. Upload or paste one (⌘V).
-            </div>
-          )
-        ) : expense.imageFile ? (
+        {(isNew ? draftPreview : expense.imageFile) ? (
           <button
             type="button"
             onClick={() => setLightbox(true)}
@@ -460,7 +433,11 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           >
             <img
               key={imageVersion}
-              src={`/expense/${expense.id}/image?v=${imageVersion}`}
+              src={
+                isNew
+                  ? (draftPreview ?? "")
+                  : `/expense/${expense.id}/image?v=${imageVersion}`
+              }
               alt="Receipt"
               className="min-h-53 max-h-120 w-full object-cover object-top"
             />
@@ -679,13 +656,11 @@ function MileageEditor({ data }: { data: EditorData }) {
     blocked: false,
   });
 
-  const stops = locations
-    .filter((l) => l.lat !== null && l.lng !== null)
-    .map((l, i) => ({
-      lat: l.lat as number,
-      lng: l.lng as number,
-      label: i === 0 ? "Home" : `Stop ${i}`,
-    }));
+  const stops = geocodedLocations(locations).map((l, i) => ({
+    lat: l.lat,
+    lng: l.lng,
+    label: i === 0 ? "Home" : `Stop ${i}`,
+  }));
 
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
@@ -795,9 +770,7 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
 }
 
 function straightLine(locations: Location[]): [number, number][] {
-  return locations
-    .filter((l) => l.lat !== null && l.lng !== null)
-    .map((l) => [l.lat as number, l.lng as number]);
+  return geocodedLocations(locations).map((l) => [l.lat, l.lng]);
 }
 
 // --- Shared editor chrome --------------------------------------------------

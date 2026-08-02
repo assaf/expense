@@ -14,6 +14,7 @@ import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { isComplete } from "~/lib/completeness";
 import {
+  countLabel,
   formatAmount,
   formatDate,
   sortExpenses,
@@ -28,7 +29,7 @@ import {
   readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
-import type { Expense } from "~/lib/types";
+import { geocodedLocations, type Expense } from "~/lib/types";
 import type { Route } from "./+types/_index";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -264,7 +265,7 @@ function ExpenseList({
                   {formatAmount(r.total)}
                 </div>
                 <div className="text-xs text-gray-500">
-                  {r.count} expense{r.count === 1 ? "" : "s"}
+                  {countLabel(r.count)}
                 </div>
               </button>
             );
@@ -371,9 +372,10 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
     );
   }
 
-  const stops = expense.locations
-    .filter((l) => l.lat !== null && l.lng !== null)
-    .map((l) => ({ lat: l.lat!, lng: l.lng! }));
+  const stops = geocodedLocations(expense.locations).map((l) => ({
+    lat: l.lat,
+    lng: l.lng,
+  }));
   const loop = stops.length >= 2 ? [...stops, stops[0]] : stops;
   return (
     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200">
