@@ -324,9 +324,7 @@ export async function deleteExpense(
 ): Promise<void> {
   const all = await readExpenses(accountId);
   const target = all.find((e) => e.id === id);
-  if (target?.type === "receipt" && target.imageFile) {
-    await deleteImage(accountId, target.imageFile).catch(() => {});
-  }
+  if (target) await deleteReceiptImages(accountId, [target]);
   await writeExpenses(
     accountId,
     all.filter((e) => e.id !== id),
@@ -512,11 +510,7 @@ export async function removeReport(
     where: { accountId, report: name },
     select: { type: true, imageFile: true },
   });
-  for (const e of removed) {
-    if (e.type === "receipt" && e.imageFile) {
-      await deleteImage(accountId, e.imageFile).catch(() => {});
-    }
-  }
+  await deleteReceiptImages(accountId, removed);
   await prisma.$transaction([
     prisma.expense.deleteMany({ where: { accountId, report: name } }),
     prisma.mileage.deleteMany({ where: { accountId, report: name } }),
@@ -757,6 +751,19 @@ export async function removeInboundSender(
 }
 
 // --- Helpers ---------------------------------------------------------------
+
+/** Delete the stored images of receipt expenses, best-effort (image rows
+ * may already be gone). Used when expenses are deleted wholesale. */
+async function deleteReceiptImages(
+  accountId: string,
+  expenses: readonly { type: string; imageFile?: string }[],
+): Promise<void> {
+  for (const e of expenses) {
+    if (e.type === "receipt" && e.imageFile) {
+      await deleteImage(accountId, e.imageFile).catch(() => {});
+    }
+  }
+}
 
 /** Expense fields for create/update, split by type. */
 function expenseData(

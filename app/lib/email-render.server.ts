@@ -171,6 +171,23 @@ function injectFonts(html: string): string {
   return injectStyles(html, [fontStyle()]);
 }
 
+/** Replace each reference (cid: or URL) with its base64 data URI. Unresolved
+ * entries (null) are left untouched. Shared by the cid: and remote-image
+ * rewrites below. */
+function rewriteToDataUris(
+  html: string,
+  entries: Iterable<readonly [reference: string, image: CidImage] | null>,
+): string {
+  let out = html;
+  for (const entry of entries) {
+    if (!entry) continue;
+    const [reference, image] = entry;
+    const uri = `data:${image.mime};base64,${image.buffer.toString("base64")}`;
+    out = out.split(reference).join(uri);
+  }
+  return out;
+}
+
 /** Rewrite `cid:` references (src/srcset/url()) to data: URIs via the
  * resolver; unresolvable refs are left for the browser to drop. */
 async function rewriteCidImages(
@@ -187,12 +204,7 @@ async function rewriteCidImages(
     if (image) resolved.set(cid, image);
   }
   if (resolved.size === 0) return html;
-  let out = html;
-  for (const [cid, image] of resolved) {
-    const uri = `data:${image.mime};base64,${image.buffer.toString("base64")}`;
-    out = out.split(`cid:${cid}`).join(uri);
-  }
-  return out;
+  return rewriteToDataUris(html, resolved);
 }
 
 const REMOTE_IMAGE_CAP = 12; // never pre-fetch more than this many images
@@ -238,14 +250,7 @@ async function rewriteRemoteImages(
       return image ? ([url, image] as const) : null;
     }),
   );
-  let out = html;
-  for (const entry of resolved) {
-    if (!entry) continue;
-    const [url, image] = entry;
-    const uri = `data:${image.mime};base64,${image.buffer.toString("base64")}`;
-    out = out.split(url).join(uri);
-  }
-  return out;
+  return rewriteToDataUris(html, resolved);
 }
 
 /**

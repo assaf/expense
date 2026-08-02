@@ -325,25 +325,36 @@ export function extractEmailAddress(addr: string): string {
 
 // --- Attachment selection ----------------------------------------------------
 
-function isPdf(meta: AttachmentMeta): boolean {
+/** Content-type/filename matchers shared by the scoring and the pipeline.
+ * The pipeline also operates on raw (contentType, filename) pairs, so the
+ * checks live on strings and the AttachmentMeta variants are thin wrappers. */
+function isPdfType(contentType: string, filename: string): boolean {
+  return contentType.toLowerCase().includes("pdf") || /\\.pdf$/i.test(filename);
+}
+
+function isImageType(contentType: string, filename: string): boolean {
   return (
-    meta.content_type?.toLowerCase().includes("pdf") ||
-    /\.pdf$/i.test(meta.filename)
+    contentType.toLowerCase().startsWith("image/") ||
+    /\\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?|avif)$/i.test(filename)
   );
+}
+
+function isEmlType(contentType: string, filename: string): boolean {
+  return (
+    contentType.toLowerCase() === "message/rfc822" || /\\.eml$/i.test(filename)
+  );
+}
+
+function isPdf(meta: AttachmentMeta): boolean {
+  return isPdfType(meta.content_type ?? "", meta.filename);
 }
 
 function isImage(meta: AttachmentMeta): boolean {
-  return (
-    meta.content_type?.toLowerCase().startsWith("image/") ||
-    /\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?|avif)$/i.test(meta.filename)
-  );
+  return isImageType(meta.content_type ?? "", meta.filename);
 }
 
 function isEml(meta: AttachmentMeta): boolean {
-  return (
-    meta.content_type?.toLowerCase() === "message/rfc822" ||
-    /\.eml$/i.test(meta.filename)
-  );
+  return isEmlType(meta.content_type ?? "", meta.filename);
 }
 
 /**
@@ -597,7 +608,11 @@ export async function processInboundEvent(
             Boolean(meta.content_id) &&
             Boolean(email.html?.includes(`cid:${meta.content_id}`)),
         }))
-        .filter((c) => /pdf|image/i.test(c.contentType));
+        .filter(
+          (c) =>
+            isPdfType(c.contentType, c.filename) ||
+            isImageType(c.contentType, c.filename),
+        );
       const chosen = await deps.classifyAttachment(candidates);
       if (chosen !== null && attachments[chosen]) {
         const meta = attachments[chosen]!;
@@ -631,9 +646,7 @@ export async function processInboundEvent(
 
     if (source.kind === "attachment") {
       const { buffer, contentType, filename } = source;
-      const isPdfAttachment =
-        /pdf/i.test(contentType) || /\.pdf$/i.test(filename);
-      if (isPdfAttachment) {
+      if (isPdfType(contentType, filename)) {
         const pdfText = await deps.extractPdfText(buffer);
         const png = await deps.renderPdfToPng(buffer);
         receiptImage = png;

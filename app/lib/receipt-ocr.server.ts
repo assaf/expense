@@ -4,6 +4,7 @@ import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
+import { resizeIfWider } from "~/lib/image-normalize";
 import { RECEIPT_OCR_MODE } from "~/lib/env";
 import { extractReceipt, isVisionUnsupportedError } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
@@ -36,17 +37,12 @@ globalThis.pdfjsWorker = pdfjsWorker;
 
 /** Normalize an image for OCR: decode, flatten alpha, cap width at 3000px. */
 async function normalizeImage(buffer: Buffer, _mime: string): Promise<Buffer> {
-  let img = sharp(buffer);
-  const meta = await img.metadata().catch(() => null);
-  if (!meta?.width) return buffer; // not decodable by sharp — pass through
-  if (meta.width > 3000) {
-    img = img.resize({ width: 3000, withoutEnlargement: true });
-  }
-  const png = await img
+  const resized = await resizeIfWider(buffer, 3000);
+  if (resized === null) return buffer; // not decodable by sharp — pass through
+  return sharp(resized)
     .flatten({ background: "#ffffff" })
     .png({ compressionLevel: 6 })
     .toBuffer();
-  return png;
 }
 
 /**
@@ -60,12 +56,8 @@ async function toBrowserImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ buffer: Buffer; mime: string }> {
-  let img = sharp(buffer);
-  const meta = await img.metadata().catch(() => null);
-  if (!meta?.width) return { buffer, mime }; // not decodable — pass through
-  if (meta.width > 1024) {
-    img = img.resize({ width: 1024, withoutEnlargement: true });
-  }
+  const resized = await resizeIfWider(buffer, 1024);
+  if (resized === null) return { buffer, mime }; // not decodable — pass through
   if (
     [
       "image/heic",
@@ -76,12 +68,12 @@ async function toBrowserImage(
     ].includes(mime)
   ) {
     return {
-      buffer: await img.png({ compressionLevel: 6 }).toBuffer(),
+      buffer: await sharp(resized).png({ compressionLevel: 6 }).toBuffer(),
       mime: "image/png",
     };
   }
   return {
-    buffer: await img.flatten({ background: "#ffffff" }).toBuffer(),
+    buffer: await sharp(resized).flatten({ background: "#ffffff" }).toBuffer(),
     mime,
   };
 }

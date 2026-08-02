@@ -69,6 +69,26 @@ export async function normalizeStoredImage(
 }
 
 /**
+ * Downscale an image to fit within `maxWidth` (never upscale). Returns the
+ * original buffer when it already fits, or null when sharp can't decode it
+ * — callers treat null as "pass through unchanged". Shared by the OCR and
+ * attachment-image normalizers in receipt-ocr.server.ts.
+ */
+export async function resizeIfWider(
+  buffer: Buffer,
+  maxWidth: number,
+): Promise<Buffer | null> {
+  const meta = await sharp(buffer)
+    .metadata()
+    .catch(() => null);
+  if (!meta?.width) return null; // not decodable by sharp
+  if (meta.width <= maxWidth) return buffer; // already fits — no re-encode
+  return sharp(buffer)
+    .resize({ width: maxWidth, withoutEnlargement: true })
+    .toBuffer();
+}
+
+/**
  * Resize + re-encode an image as JPEG: EXIF-rotate, fit inside the given box
  * (never upscale), optionally flatten alpha onto white. Shared by the storage
  * normalizer (saveImage) and the list thumbnail route.

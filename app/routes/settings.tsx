@@ -147,13 +147,12 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     }
     case "addInboundSender": {
-      const address = formString(form, "address").trim().toLowerCase();
-      await addInboundSender(user.accountId, address);
+      // The store normalizes the address (trim + lowercase) for storage.
+      await addInboundSender(user.accountId, formString(form, "address"));
       break;
     }
     case "removeInboundSender": {
-      const address = formString(form, "address").trim().toLowerCase();
-      await removeInboundSender(user.accountId, address);
+      await removeInboundSender(user.accountId, formString(form, "address"));
       break;
     }
     case "saveHome": {
