@@ -74,11 +74,105 @@ returns 503 when unconfigured and everything else still works.
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`
   at load and breaks SSR). Geocoding via Nominatim, routing via OSRM — no API
   keys. See `app/lib/maps.server.ts`.
-- **Validation**: Zod in `app/lib/validation.ts`; completeness rules in
-  `app/lib/completeness.ts`.
-- **Formatting**: double quotes, 2-space indent, 80 cols (Oxfmt via `vp`).
-  No `console.log` (use `.info/.warn/.error/.assert`). Functional components,
-  no enums, prefer early returns.
+- **Validation**: plain helper validators in `app/lib/validation.ts`;
+  completeness rules in `app/lib/completeness.ts` (no Zod dependency).
+- **Code style**: formatting, lint, React, testing, and commit conventions —
+  see "Code style" below.
+
+## Code style
+
+Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
+
+### TypeScript
+
+- **Strict mode required** — code must pass `vp check` (type-aware linting:
+  `typeAware: true`, `typeCheck: true`).
+- **Prefer interfaces over types** for object shapes (`interface Location`);
+  use `type` for unions and aliases (`type Expense = ReceiptExpense | MileageExpense`).
+- **No enums** — use string unions (`type ExpenseType = "receipt" | "mileage"`).
+- **Avoid `any`** — `typescript/no-explicit-any` warns; narrow with `unknown`.
+- **Descriptive names** — auxiliary-verb booleans: `isComplete`, `hasAmount`.
+- **No classes** — pure functions; the only classes are error subclasses
+  (`class DeepSeekError extends Error`).
+- **Early returns** — handle errors/guards at the top of functions, avoid deep nesting.
+
+### Imports & organization
+
+- **Path alias** `~/*` → `app/*` (`~/test` → `test`); relative imports only
+  for same-directory siblings (`./x`), never `../` — e.g.
+  `import { Editor } from "./expense.$id"`.
+- **Group imports by origin**: `node:` builtins → external packages → `~/*` →
+  relative — with `./+types/<name>` last where present.
+- **`import type`** for type-only imports.
+- **No barrel files** — import from the concrete module.
+- **File structure**: exports at top, then module-level helpers/constants,
+  then types (see `database.ts`, `inbound-email.server.ts`).
+
+### Formatting (oxfmt via `vp`)
+
+- Double quotes, 2-space indent, 80-col print width, semicolons
+  (`vite.config.ts` fmt block: `printWidth: 80`, `tabWidth: 2`,
+  `singleQuote: false`, `semi: true`).
+- Never hand-wrap or hand-sort — run `pnpm check` (`vp check --fix` also runs
+  on staged files).
+
+### React & components
+
+- **Functional components only** — no class components.
+- **Named exports** for shared components (`export function Button`); route
+  modules `export default` the page component.
+- **Component naming**: PascalCase; files in `app/components/` (`ui/` for
+  primitives).
+- **Hooks at top level** — `react-hooks/rules-of-hooks` errors,
+  `exhaustive-deps` warns.
+- **No `dangerouslySetInnerHTML`** — `react/no-danger` errors; escape
+  untrusted text with `escapeHtml` (`app/lib/escape.ts`).
+
+### Conditionals & logic
+
+- **Prefer early returns** over nested if/else.
+- **No `forEach`** — use `for...of`, `.map()`, `.filter()`, `.flatMap()`
+  (`unicorn/no-array-for-each` warns, `unicorn/prefer-array-flat-map` errors).
+
+### Error handling & validation
+
+- **Validate at the boundary** — plain helper validators in
+  `app/lib/validation.ts`, completeness rules in `app/lib/completeness.ts`.
+- Handle errors first (guard clauses); return early on bad input
+  (`unknownIntent()` → 400).
+- Catch at boundaries and log with `console.warn`/`console.error` (see Logging).
+
+### Logging
+
+- **No `console.log`** — `no-console` errors; allowed methods are `.assert`,
+  `.error`, `.info`, `.warn`.
+- Prefix runtime logs with a context tag: `console.warn("[draft-upload] …")`,
+  `console.error("[inbound] …")`.
+
+### Security
+
+- **scrypt** for password hashing (`app/lib/passwords.ts`); never store
+  plaintext.
+- Escape untrusted text before embedding in HTML/SVG/email (`escapeHtml`);
+  `react/no-danger` is an error.
+- Sanitize free-text filenames (`sanitizeFilenamePart`).
+
+### Testing (`vp test` + Playwright)
+
+- Test files live in `test/*.test.ts` — NOT alongside source.
+- Browser tests via Playwright (vitest provider); helpers in `test/helpers/`
+  (`launchBrowser.ts` → `goto`/`signIn`, `seedTestData.ts` → `testPrisma` +
+  seeded constants, `launchServer.ts`).
+- Use `testPrisma` for DB assertions; seed with the account/user constants.
+- Requires local Postgres (`expense_test`); the schema is force-reset each run.
+
+### Git commits
+
+- **Conventional commits**, lowercase type, optional scope:
+  `type(scope): subject` — e.g. `feat(analytics): …`, `fix(monetary): …`,
+  `refactor(db): …`. **No emoji prefixes in this repo.**
+- Imperative mood, atomic commits, explain why not just what.
+- Run `pnpm check` before committing.
 
 ## Key files
 
