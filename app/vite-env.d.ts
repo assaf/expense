@@ -18,3 +18,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Umami tracker global (script.js loads only in production).
+interface Window {
+  umami?: {
+    identify: (data: Record<string, string>) => void;
+    track: (event: string, data?: Record<string, unknown>) => void;
+  };
+}

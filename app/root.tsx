@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { LinksFunction } from "react-router";
 import {
   Links,
@@ -7,9 +8,10 @@ import {
   ScrollRestoration,
   isRouteErrorResponse,
   useRouteError,
+  useRouteLoaderData,
 } from "react-router";
 import "~/global.css";
-import { requireUser } from "~/lib/auth.server";
+import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/root";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -21,10 +23,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     url.pathname === "/" ||
     url.pathname.startsWith("/login") ||
     url.pathname.startsWith("/api/inbound-email");
-  if (!isPublic) {
-    await requireUser(request);
+  let user = null;
+  if (isPublic) {
+    // Anonymous visitors stay anonymous; signed-in users still get
+    // identified (e.g. landing page views from a session).
+    if (await isAuthenticated(request)) user = await requireUser(request);
+  } else {
+    user = await requireUser(request);
   }
-  return null;
+  return { user: user ? { id: user.id } : null };
 }
 
 export function meta(): Route.MetaDescriptors {
@@ -58,6 +65,13 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
+  const { user } = useRouteLoaderData<typeof loader>("root") ?? {};
+  useEffect(() => {
+    if (!user) return;
+    // Link this session's pageviews/events to the signed-in user. Safe even
+    // before the (deferred) script has run — identify is a no-op then.
+    window.umami?.identify?.({ id: user.id });
+  }, [user]);
   return (
     <html lang="en">
       <head>
@@ -65,11 +79,15 @@ export default function App() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        <script
-          defer
-          src="https://cloud.umami.is/script.js"
-          data-website-id="262a3181-12ef-46cb-902a-9bc2462413da"
-        ></script>
+        {/* Umami is production-only: no tracking script (or identify calls)
+        in dev — dev traffic would pollute the stats. */}
+        {process.env.NODE_ENV === "production" ? (
+          <script
+            defer
+            src="https://cloud.umami.is/script.js"
+            data-website-id="262a3181-12ef-46cb-902a-9bc2462413da"
+          ></script>
+        ) : null}
       </head>
       <body>
         {process.env.NODE_ENV === "development" ? (

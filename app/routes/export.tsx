@@ -58,6 +58,8 @@ function ReportList({ reports }: { reports: ReportItem[] }) {
           </div>
           <a
             href={`/export/report/${encodeURIComponent(r.name)}.pdf`}
+            data-umami-event="file-download"
+            data-umami-event-file={`${r.name}.pdf`}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
           >
             <FileDown className="h-4 w-4" /> PDF
@@ -119,7 +121,11 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           report.
         </p>
         <Button asChild>
-          <a href="/export/all.zip">
+          <a
+            href="/export/all.zip"
+            data-umami-event="file-download"
+            data-umami-event-file="all.zip"
+          >
             <FileArchive className="h-4 w-4" /> Download ZIP
           </a>
         </Button>
