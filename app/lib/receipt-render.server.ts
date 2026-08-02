@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { Resvg, type ResvgRenderOptions } from "@resvg/resvg-js";
 import { load } from "cheerio";
 import { escapeHtml } from "~/lib/escape";
+import { decodeInlineAsset } from "~/lib/inline-asset";
 import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
 
 /**
@@ -26,12 +27,7 @@ const SVG_WIDTH = 820;
 // Monospace advance ≈ 0.6em → ~90 chars fit per line at 14px in 764px.
 const CHARS_PER_LINE = 90;
 
-// Vite `?inline` returns the asset as a base64 string (older versions as a
-// `data:` URI) — normalize to raw bytes either way.
-const fontBytes = Buffer.from(
-  fontInline.includes("base64,") ? fontInline.split("base64,")[1]! : fontInline,
-  "base64",
-);
+const fontBytes = decodeInlineAsset(fontInline);
 
 /** Split text into lines of at most maxChars characters (hard wrap). */
 function wrapLines(text: string, maxChars: number): string[] {

@@ -1,7 +1,7 @@
 import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
 import { requireUser } from "~/lib/auth.server";
-import { readImage } from "~/lib/images.server";
+import { bareName, readImage } from "~/lib/images.server";
 import { readExpenses } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { merchantLabel, sortExpenses } from "~/lib/format";
@@ -40,9 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const image = await readImage(user.accountId, e.imageFile);
     if (!image) continue;
     // Strip the account namespace so zip entries keep the plain filename.
-    files[e.imageFile.replace(/^images\/[^/]+\//, "")] = new Uint8Array(
-      image.buffer,
-    );
+    files[bareName(e.imageFile, user.accountId)] = new Uint8Array(image.buffer);
   }
 
   const zip = zipSync(files, { level: 9 });

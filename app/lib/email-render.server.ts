@@ -32,6 +32,7 @@ import chromiumSparticuz from "@sparticuz/chromium";
 import { load } from "cheerio";
 import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline";
 import { escapeHtml } from "~/lib/escape";
+import { decodeInlineAsset } from "~/lib/inline-asset";
 import { hasInk } from "~/lib/receipt-render.server";
 
 /** A resolved inline image (cid → data URI payload). */
@@ -52,12 +53,7 @@ export interface RenderEmailOptions {
   fetchRemoteImage?: (url: string) => Promise<CidImage | null>;
 }
 
-/** Vite `?inline` returns the asset as a base64 string (older versions as a
- * `data:` URI) — normalize to raw bytes either way. */
-const fontBytes = Buffer.from(
-  interWoff2.includes("base64,") ? interWoff2.split("base64,")[1]! : interWoff2,
-  "base64",
-);
+const fontBytes = decodeInlineAsset(interWoff2);
 
 const HTML_MAX = 4_000_000; // refuse to render absurdly large bodies
 const RENDER_TIMEOUT_MS = 10_000;

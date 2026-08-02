@@ -1,9 +1,9 @@
-import { Writable } from "node:stream";
 import PDFDocument from "pdfkit";
 import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { readImage } from "~/lib/images.server";
+import { pdfToBuffer } from "~/lib/pdf.server";
 import { formatDate, merchantLabel, sortExpenses } from "~/lib/format";
 import { sanitizeFilenamePart } from "~/lib/validation";
 import type { Expense } from "~/lib/types";
@@ -28,7 +28,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   );
 
   const doc = new PDFDocument({ margin: 50, size: "LETTER" });
-  const stream = collectStream(doc);
+  const pdf = pdfToBuffer(doc);
 
   // Title
   doc.fontSize(20).font("Helvetica-Bold").text(reportName, { align: "left" });
@@ -137,9 +137,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   doc.end();
-  await stream.done;
 
-  return new Response(stream.value as BodyInit, {
+  return new Response((await pdf) as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${sanitizeFilenamePart(reportName)}.pdf"`,
@@ -172,27 +171,4 @@ function fitText(
 
 function uniqueSorted(items: string[]): string[] {
   return [...new Set(items)].sort((a, b) => a.localeCompare(b));
-}
-
-/** Collect a PDFKit document's output into a Buffer. */
-function collectStream(doc: PDFKit.PDFDocument) {
-  const chunks: Buffer[] = [];
-  const stream = new Writable({
-    write(chunk, _enc, cb) {
-      chunks.push(Buffer.from(chunk));
-      cb();
-    },
-  });
-  doc.pipe(stream);
-  let resolve!: () => void;
-  const done = new Promise<void>((r) => {
-    resolve = r;
-  });
-  stream.on("finish", () => resolve());
-  return {
-    done,
-    get value() {
-      return Buffer.concat(chunks);
-    },
-  };
 }

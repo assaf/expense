@@ -668,25 +668,17 @@ export async function upsertInboundEmail(input: {
   error: string;
 }): Promise<void> {
   const now = new Date().toISOString();
-  const existing = await prisma.inboundEmail.findUnique({
+  await prisma.inboundEmail.upsert({
     where: { emailId: input.emailId },
+    update: {
+      accountId: input.accountId,
+      subject: input.subject,
+      status: input.status,
+      error: input.error,
+      updatedAt: now,
+    },
+    create: { ...input, createdAt: now, updatedAt: now },
   });
-  if (existing) {
-    await prisma.inboundEmail.update({
-      where: { emailId: input.emailId },
-      data: {
-        accountId: input.accountId,
-        subject: input.subject,
-        status: input.status,
-        error: input.error,
-        updatedAt: now,
-      },
-    });
-  } else {
-    await prisma.inboundEmail.create({
-      data: { ...input, createdAt: now, updatedAt: now },
-    });
-  }
 }
 
 /**

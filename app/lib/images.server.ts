@@ -54,8 +54,10 @@ function namespacedKey(accountId: string, name: string): string {
   return `${IMAGE_PREFIX}/${accountId}/${name}`;
 }
 
-/** Strip the account namespace from a stored key (for comparisons). */
-function bareName(storedKey: string, accountId: string): string {
+/** Strip the account namespace from a stored key (`images/{accountId}/…` →
+ * bare name). Shared by the internal key comparisons and the ZIP export,
+ * which keeps plain filenames in the archive. */
+export function bareName(storedKey: string, accountId: string): string {
   const prefix = `${IMAGE_PREFIX}/${accountId}/`;
   return storedKey.startsWith(prefix)
     ? storedKey.slice(prefix.length)

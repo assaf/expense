@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
+import { pdfToBuffer } from "~/lib/pdf.server";
 import {
   extractPdfText,
   ocrImage,
@@ -40,15 +41,11 @@ function hasSmokeSecret(header: string | null): boolean {
 
 /** A one-page LETTER PDF with the smoke text at 40pt (readable by OCR). */
 function makePdf(text: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    const doc = new PDFDocument({ size: "LETTER" });
-    doc.on("data", (c: Buffer) => chunks.push(c));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-    doc.fontSize(40).text(text);
-    doc.end();
-  });
+  const doc = new PDFDocument({ size: "LETTER" });
+  const pdf = pdfToBuffer(doc);
+  doc.fontSize(40).text(text);
+  doc.end();
+  return pdf;
 }
 
 function fail(message: string): Response {
