@@ -353,9 +353,12 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         await ocrDraft(file);
         return;
       }
-      if (json.merchant) setMerchant(json.merchant);
-      if (json.amount) setAmount(json.amount);
-      if (json.category) setCategory(json.category);
+      // Extraction only fills fields the user hasn't typed yet — a slow OCR
+      // response arriving after the user started editing must not overwrite
+      // what they wrote.
+      setMerchant((prev) => prev || json.merchant || "");
+      setAmount((prev) => prev || json.amount || "");
+      setCategory((prev) => prev || json.category || "");
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
@@ -378,9 +381,10 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         amount?: string;
         category?: string;
       };
-      if (json.merchant) setMerchant(json.merchant);
-      if (json.amount) setAmount(json.amount);
-      if (json.category) setCategory(json.category);
+      // Same rule as the draft upload: fill only what's still empty.
+      setMerchant((prev) => prev || json.merchant || "");
+      setAmount((prev) => prev || json.amount || "");
+      setCategory((prev) => prev || json.category || "");
     } catch {
       // Fields stay empty; the user can fill them by hand.
     }

@@ -144,6 +144,6 @@ function mileageKey(
 }
 
 /** Case- and whitespace-insensitive merchant comparison. */
-function normalizeMerchant(merchant: string): string {
+export function normalizeMerchant(merchant: string): string {
   return merchant.trim().replace(/\s+/g, " ").toLowerCase();
 }

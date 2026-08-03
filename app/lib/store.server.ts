@@ -39,6 +39,7 @@ export {
   upsertExpense,
   deleteExpense,
   readPriorMerchants,
+  readMerchantCategories,
   readReports,
   readReportCounts,
   readCategoryCounts,

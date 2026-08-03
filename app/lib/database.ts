@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import { duplicatePairKey } from "~/lib/duplicates";
+import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
@@ -372,6 +372,41 @@ export async function readPriorMerchants(accountId: string): Promise<string[]> {
       (b._max.createdAt ?? "").localeCompare(a._max.createdAt ?? ""),
     )
     .map((g) => g.merchant);
+}
+
+/**
+ * The most recent category each merchant was filed under, keyed by the
+ * normalized merchant name (same normalization as duplicate detection, so
+ * "Blue Bottle" and "blue  bottle" are the same merchant). Only merchants
+ * with at least one categorized expense appear; when a merchant has
+ * categorized expenses from different times, the newest wins. Used when a
+ * new receipt's merchant matches a previous one — the category is reused
+ * instead of guessed.
+ */
+export async function readMerchantCategories(
+  accountId: string,
+): Promise<Map<string, string>> {
+  const rows = await prisma.expense.findMany({
+    where: {
+      accountId,
+      type: "receipt",
+      merchant: { not: "" },
+      category: { not: "" },
+    },
+    select: { merchant: true, category: true, createdAt: true },
+  });
+  const latest = new Map<string, { category: string; createdAt: string }>();
+  for (const row of rows) {
+    const key = normalizeMerchant(row.merchant);
+    if (!key) continue;
+    const prev = latest.get(key);
+    if (!prev || row.createdAt > prev.createdAt) {
+      latest.set(key, { category: row.category, createdAt: row.createdAt });
+    }
+  }
+  const byMerchant = new Map<string, string>();
+  for (const [key, value] of latest) byMerchant.set(key, value.category);
+  return byMerchant;
 }
 
 // --- Reports & Categories --------------------------------------------------

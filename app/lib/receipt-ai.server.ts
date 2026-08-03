@@ -1,4 +1,5 @@
 import { DEEPSEEK_API_KEY, DEEPSEEK_MODEL } from "~/lib/env";
+import { normalizeMerchant } from "~/lib/duplicates";
 import { normalizeAmount } from "~/lib/format";
 
 /**
@@ -205,6 +206,26 @@ export function matchCategory(suggested: string, existing: string[]): string {
     (c) => c.toLowerCase().includes(s) || s.includes(c.toLowerCase()),
   );
   return fuzzy ?? "";
+}
+
+/**
+ * Pick the category for a new receipt. A previous expense for the same
+ * merchant (normalized name match, same rule as duplicate detection) wins —
+ * the merchant was already categorized, so its category is reused instead of
+ * guessed. Without a prior category, the model's suggestion is mapped onto
+ * an existing category name ("" when nothing fits).
+ */
+export function resolveCategory(
+  merchant: string,
+  suggested: string,
+  merchantCategories: ReadonlyMap<string, string>,
+  existing: string[],
+): string {
+  if (merchant.trim()) {
+    const prior = merchantCategories.get(normalizeMerchant(merchant));
+    if (prior) return prior;
+  }
+  return matchCategory(suggested, existing);
 }
 
 /** True when the hosted API rejected the request because it can't read images. */

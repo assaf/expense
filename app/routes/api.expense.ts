@@ -7,9 +7,9 @@ import {
   saveImage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import { readCategories } from "~/lib/store.server";
+import { readCategories, readMerchantCategories } from "~/lib/store.server";
 import { extractFromImage, renderPdfToPng } from "~/lib/receipt-ocr.server";
-import { matchCategory } from "~/lib/receipt-ai.server";
+import { resolveCategory } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
@@ -144,20 +144,31 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 /**
- * OCR an uploaded receipt image and map the suggested category onto one the
- * account already uses. Throws when extraction fails — callers decide whether
- * that is fatal (it isn't for drafts).
+ * OCR an uploaded receipt image and fill in the fields: merchant and amount
+ * straight from the extraction, and the category as the merchant's previous
+ * category when one exists (a merchant the user already categorized is
+ * reused, not re-guessed), else the suggested category mapped onto one the
+ * account already uses. Throws when extraction fails — callers decide
+ * whether that is fatal (it isn't for drafts).
  */
 async function extractFromUploadedImage(
   accountId: string,
   buffer: Buffer,
   mime: string,
 ): Promise<{ merchant: string; amount: string; category: string }> {
-  const categories = (await readCategories(accountId)).map((c) => c.name);
+  const [categories, merchantCategories] = await Promise.all([
+    readCategories(accountId).then((cs) => cs.map((c) => c.name)),
+    readMerchantCategories(accountId),
+  ]);
   const { result } = await extractFromImage({ buffer, mime, categories });
   return {
     merchant: result.merchant,
     amount: result.amount,
-    category: matchCategory(result.category, categories),
+    category: resolveCategory(
+      result.merchant,
+      result.category,
+      merchantCategories,
+      categories,
+    ),
   };
 }
