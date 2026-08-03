@@ -97,10 +97,21 @@ describe("Expense CRUD", () => {
     await selects.nth(1).selectOption("Testing");
     // Submit — only now is the row written.
     await page.getByText("Save").click();
-    // Should redirect to home page
-    await page.waitForURL("/", { timeout: 10_000 });
+    // Should redirect to home page (with ?new=<id> to highlight the row)
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 10_000,
+    });
     // The new expense should appear in the list
     await expect(page.getByText("Test Merchant")).toBeVisible();
+    // The just-added expense is highlighted on arrival.
+    const newRow = page.locator("li").filter({ hasText: "Test Merchant" });
+    await expect(newRow.locator("a")).toHaveClass(/ring-blue-400/);
+    // The highlight clears itself after three seconds.
+    await expect
+      .poll(() => newRow.locator("a").getAttribute("class"), {
+        timeout: 10_000,
+      })
+      .not.toContain("ring-blue-400");
     expect(
       await testPrisma.expense.count({
         where: { accountId: TEST_ACCOUNT_ID },
@@ -183,7 +194,9 @@ describe("Expense CRUD", () => {
 
     // Save creates the row with the draft image attached.
     await page.getByText("Save").click();
-    await page.waitForURL("/", { timeout: 15_000 });
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
     const created = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -291,7 +304,9 @@ describe("Expense CRUD", () => {
 
     // Save attaches the draft and the row appears.
     await page.getByText("Save").click();
-    await page.waitForURL("/", { timeout: 15_000 });
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
     const created = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],

@@ -32,9 +32,11 @@ export async function action({ request }: Route.ActionArgs) {
     return unknownIntent();
   }
 
-  const error = await saveExpenseFromForm(form, user.accountId, null);
-  if (error) return Response.json({ error }, { status: 400 });
-  return redirect("/");
+  const result = await saveExpenseFromForm(form, user.accountId, null);
+  if (result.error)
+    return Response.json({ error: result.error }, { status: 400 });
+  // Carry the new expense's id home so the list can highlight it briefly.
+  return redirect(`/?new=${result.id}`);
 }
 
 export default function NewExpensePage({ loaderData }: Route.ComponentProps) {

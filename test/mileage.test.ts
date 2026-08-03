@@ -47,7 +47,9 @@ describe("Mileage expense", () => {
     // A new mileage expense starts with today's date too.
     await expect(page.locator("input[type='date']")).toHaveValue(todayLocal());
     await page.getByText("Save").click();
-    await page.waitForURL("/", { timeout: 15_000 });
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
     expect(
       await testPrisma.expense.count({
         where: { accountId: TEST_ACCOUNT_ID },

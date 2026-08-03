@@ -27,22 +27,23 @@ import { formString, validateDateNotFuture } from "~/lib/validation";
  *  - a receipt image is renamed to its convention name when date + report
  *    are now set
  *
- * Returns an error message for the caller to surface, or null on success.
+ * Returns the saved expense's id on success (the caller may redirect with
+ * it, e.g. to highlight the new row), or an error message to surface.
  */
 export async function saveExpenseFromForm(
   form: FormData,
   accountId: string,
   existing: Expense | null,
-): Promise<string | null> {
+): Promise<{ error: string; id: null } | { error: null; id: string }> {
   const date = formString(form, "date");
   const dateError = validateDateNotFuture(date);
-  if (dateError) return dateError;
+  if (dateError) return { error: dateError, id: null };
 
   const report = formString(form, "report");
   if (report && (!existing || report !== existing.report)) {
     const reports = await readReports(accountId);
     if (reports.some((r) => r.name === report && r.closed)) {
-      return `Report "${report}" is closed.`;
+      return { error: `Report "${report}" is closed.`, id: null };
     }
   }
 
@@ -69,7 +70,7 @@ export async function saveExpenseFromForm(
       updatedAt: now,
     };
     await upsertExpense(expense, accountId);
-    return null;
+    return { error: null, id: expense.id };
   }
 
   const receipt: ReceiptExpense = {
@@ -105,5 +106,5 @@ export async function saveExpenseFromForm(
     );
   }
   await upsertExpense(receipt, accountId);
-  return null;
+  return { error: null, id: receipt.id };
 }

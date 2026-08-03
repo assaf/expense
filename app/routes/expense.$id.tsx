@@ -80,8 +80,9 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === "save") {
-    const error = await saveExpenseFromForm(form, user.accountId, existing);
-    if (error) return Response.json({ error }, { status: 400 });
+    const result = await saveExpenseFromForm(form, user.accountId, existing);
+    if (result.error)
+      return Response.json({ error: result.error }, { status: 400 });
     return redirect("/");
   }
 

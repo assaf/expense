@@ -7,8 +7,8 @@ import {
   Mail,
   Info,
 } from "lucide-react";
-import { useRef, useState, type DragEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { useEffect, useRef, useState, type DragEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
@@ -139,9 +139,32 @@ function ExpenseList({
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [showEmailHelp, setShowEmailHelp] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Id of the expense created just now — the create action redirects here
+  // with `?new=<id>`; the row stays highlighted for three seconds.
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const navigate = useNavigate();
+
+  // Consume `?new=<id>` from the create redirect: start the highlight and
+  // drop the query param so a reload doesn't re-highlight (replace keeps it
+  // out of history).
+  useEffect(() => {
+    const newId = searchParams.get("new");
+    if (!newId) return;
+    setHighlightId(newId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Clear the highlight three seconds after it starts.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 3000);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
 
   usePasteImage(uploadImage);
 
@@ -352,7 +375,7 @@ function ExpenseList({
                   : e.report === selectedReport,
             )
             .map((e) => (
-              <ExpenseRow key={e.id} expense={e} />
+              <ExpenseRow key={e.id} expense={e} isNew={e.id === highlightId} />
             ))}
         </ul>
       )}
@@ -360,16 +383,37 @@ function ExpenseList({
   );
 }
 
-function ExpenseRow({ expense }: { expense: ReturnType<typeof toListItem> }) {
+function ExpenseRow({
+  expense,
+  isNew = false,
+}: {
+  expense: ReturnType<typeof toListItem>;
+  isNew?: boolean;
+}) {
   const to = `/expense/${expense.id}`;
+  const rowRef = useRef<HTMLLIElement>(null);
+
+  // A newly added expense sorts near the top, but the list may have been
+  // scrolled — bring the highlighted row into view.
+  useEffect(() => {
+    if (isNew) {
+      rowRef.current?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [isNew]);
+
   return (
-    <li>
+    <li ref={rowRef}>
       <Link
         to={to}
         className={`flex items-center gap-4 rounded-xl border p-3 transition-colors hover:border-gray-400 ${
-          expense.complete
-            ? "border-gray-200 bg-white"
-            : "border-amber-300 bg-amber-50"
+          isNew
+            ? "border-blue-400 bg-blue-100 ring-2 ring-blue-400"
+            : expense.complete
+              ? "border-gray-200 bg-white"
+              : "border-amber-300 bg-amber-50"
         }`}
       >
         <Thumbnail expense={expense} />
