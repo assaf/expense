@@ -366,9 +366,9 @@ describe("Mileage expense", () => {
     });
     await inputs.nth(1).pressSequentially("456 Dev Ave", { delay: 20 });
     // Blur the focused field to fire the geocode, then hover the first
-    // stop marker (amber-filled; the casing/line are drawn underneath).
+    // stop bubble (numbered; the casing/line are drawn underneath).
     await inputs.nth(1).blur();
-    const marker = page.locator(".leaflet-overlay-pane path[fill='#fbbf24']");
+    const marker = page.locator(".map-stop-bubble");
     await expect.poll(() => marker.count()).toBe(2);
     // Hover ~12px from the marker's center — just inside the invisible 14px
     // hit area but well outside the small visible dot — proving the bigger

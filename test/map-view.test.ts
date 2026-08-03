@@ -5,9 +5,10 @@ import { goto } from "./helpers/launchBrowser";
 
 /**
  * Mileage map rendering: the light Carto basemap, the cased route (white
- * underlay + blue line), the stop markers with their invisible hit areas,
- * and — critically — that redrawing the route replaces the old layers
- * instead of accumulating them.
+ * underlay + blue line) with a gray dashed return leg, the numbered stop
+ * bubbles with their invisible hit areas, and — critically — that
+ * redrawing the route replaces the old layers instead of accumulating
+ * them.
  */
 describe("Mileage map rendering", () => {
   let page: Page;
@@ -35,6 +36,10 @@ describe("Mileage map rendering", () => {
           coords: [
             [34.05, -118.24],
             [34.06, -118.23],
+          ],
+          returnCoords: [
+            [34.06, -118.23],
+            [34.05, -118.24],
           ],
           approximate: false,
         }),
@@ -74,14 +79,13 @@ describe("Mileage map rendering", () => {
     expect(tileSrcs.length).toBeGreaterThan(0);
     expect(tileSrcs[0]!).toContain("cartocdn");
 
-    // The route is a white casing + blue line (2 polylines), each stop has
-    // a visible amber marker and an invisible hit area, and the polylines
-    // are drawn underneath the markers.
-    await expect
-      .poll(() =>
-        page.locator(".leaflet-overlay-pane path[fill='#fbbf24']").count(),
-      )
-      .toBe(2); // visible stop markers
+    // The route is a white casing + blue line (2 polylines) with a gray
+    // dashed return leg, each stop has a numbered bubble and an invisible
+    // hit area, and the polylines are drawn underneath the bubbles.
+    await expect.poll(() => page.locator(".map-stop-bubble").count()).toBe(2);
+    expect(await page.locator(".map-stop-bubble").first().textContent()).toBe(
+      "S",
+    ); // the start bubble is labeled S
     expect(
       await page.locator(".leaflet-overlay-pane path[fill='#000000']").count(),
     ).toBe(2); // invisible hit areas
@@ -95,17 +99,18 @@ describe("Mileage map rendering", () => {
         .locator(".leaflet-overlay-pane path[stroke='#ffffff']")
         .count(),
     ).toBe(1); // white casing
+    expect(
+      await page
+        .locator(".leaflet-overlay-pane path[stroke='#6b7280']")
+        .count(),
+    ).toBe(1); // gray dashed return leg
 
     // Redrawing (a second geocode) replaces the layers — the counts must
     // not grow (regression: stop markers used to accumulate).
     await page.goto("/", { waitUntil: "load" });
     const { inputs } = await openEditorWithRoute();
     await inputs.first().blur();
-    await expect
-      .poll(() =>
-        page.locator(".leaflet-overlay-pane path[fill='#fbbf24']").count(),
-      )
-      .toBe(2);
+    await expect.poll(() => page.locator(".map-stop-bubble").count()).toBe(2);
     expect(
       await page.locator(".leaflet-overlay-pane path[fill='#000000']").count(),
     ).toBe(2);
@@ -117,6 +122,11 @@ describe("Mileage map rendering", () => {
     expect(
       await page
         .locator(".leaflet-overlay-pane path[stroke='#ffffff']")
+        .count(),
+    ).toBe(1);
+    expect(
+      await page
+        .locator(".leaflet-overlay-pane path[stroke='#6b7280']")
         .count(),
     ).toBe(1);
     await page.unroute("**/api/route");

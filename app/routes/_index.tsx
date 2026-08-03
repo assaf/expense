@@ -712,7 +712,8 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
       {stops.length >= 2 ? (
         <MapView
           coords={loop.map((s) => [s.lat, s.lng])}
-          stops={stops}
+          showStops={false}
+          lineWidth="thin"
           height={56}
         />
       ) : (

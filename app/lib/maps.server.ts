@@ -254,7 +254,11 @@ export async function geocode(address: string): Promise<Location> {
 
 interface RouteResult {
   distanceMiles: number;
-  coords: [number, number][]; // [lat, lng]
+  /** Route geometry in [lat, lng] — the outbound legs, start → last stop. */
+  coords: [number, number][];
+  /** Return leg (last stop → start) geometry in [lat, lng], drawn dashed
+   *  on the map. Straight line when OSRM is unavailable. */
+  returnCoords: [number, number][];
   approximate: boolean;
 }
 
@@ -262,6 +266,13 @@ interface RouteResult {
  * Compute the driving distance for a closed route:
  *   locations[0] → locations[1] → ... → locations[n-1] → locations[0]
  * Uses OSRM; falls back to straight-line (Haversine) when unavailable.
+ *
+ * OSRM's route service connects waypoints in order but never closes the
+ * loop, so the start is repeated as the last waypoint. The response then
+ * carries the whole loop (outbound + return) in one call; the geometry is
+ * split at the last real stop — its snapped location is a point on the
+ * geometry, so the nearest geometry index is exactly where the return leg
+ * begins — into `coords` (outbound) and `returnCoords` (return to start).
  */
 async function computeRouteDistance(
   locations: Location[],
@@ -270,11 +281,18 @@ async function computeRouteDistance(
     (l) => l.address.trim() !== "",
   );
   if (points.length < 2) {
-    return { distanceMiles: 0, coords: [], approximate: false };
+    return {
+      distanceMiles: 0,
+      coords: [],
+      returnCoords: [],
+      approximate: false,
+    };
   }
 
-  const coords = points.map((p) => `${p.lng},${p.lat}`).join(";");
-  const url = `${OSRM_URL}/${coords}?overview=full&geometries=geojson`;
+  const loopParam = [...points, points[0]]
+    .map((p) => `${p.lng},${p.lat}`)
+    .join(";");
+  const url = `${OSRM_URL}/${loopParam}?overview=full&geometries=geojson`;
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -286,13 +304,35 @@ async function computeRouteDistance(
           distance: number;
           geometry?: { coordinates: [number, number][] };
         }[];
+        waypoints?: { location?: [number, number] }[];
       };
       const route = json.routes?.[0];
-      if (route) {
-        const geomCoords = route.geometry?.coordinates ?? [];
+      if (route && route.geometry) {
+        const geom = route.geometry.coordinates;
+        // The last real waypoint is second-to-last in the response (the
+        // final entry is the repeated start). Its snapped location lies on
+        // the geometry, so the nearest index is where the return leg
+        // begins — split exactly there.
+        const lastStop = json.waypoints?.[json.waypoints.length - 2]?.location;
+        let split = geom.length;
+        if (lastStop) {
+          let best = Infinity;
+          for (let i = 0; i < geom.length; i++) {
+            const dx = geom[i]![0] - lastStop[0];
+            const dy = geom[i]![1] - lastStop[1];
+            const d2 = dx * dx + dy * dy;
+            if (d2 < best) {
+              best = d2;
+              split = i;
+            }
+          }
+        }
+        const toLatLng = (g: [number, number][]): [number, number][] =>
+          g.map(([lng, lat]): [number, number] => [lat, lng]);
         return {
           distanceMiles: route.distance / METERS_PER_MILE,
-          coords: geomCoords.map(([lng, lat]) => [lat, lng]),
+          coords: toLatLng(geom.slice(0, split)),
+          returnCoords: split < geom.length ? toLatLng(geom.slice(split)) : [],
           approximate: false,
         };
       }
@@ -307,9 +347,14 @@ async function computeRouteDistance(
   for (let i = 1; i < loop.length; i++) {
     meters += haversine(loop[i - 1], loop[i]);
   }
+  const last = points[points.length - 1];
   return {
     distanceMiles: meters / METERS_PER_MILE,
     coords: points.map((p) => [p.lat, p.lng]),
+    returnCoords: [
+      [last.lat, last.lng],
+      [points[0]!.lat, points[0]!.lng],
+    ],
     approximate: true,
   };
 }
@@ -353,6 +398,7 @@ export async function recomputeMileage(
   amount: string;
   approximate: boolean;
   coords: [number, number][];
+  returnCoords: [number, number][];
 }> {
   // No rate configured for the year (or an unparseable one) → no amount,
   // not $0.00.
@@ -402,5 +448,6 @@ export async function recomputeMileage(
     amount,
     approximate: route.approximate,
     coords: route.coords,
+    returnCoords: route.returnCoords,
   };
 }

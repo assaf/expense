@@ -655,6 +655,9 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [coords, setCoords] = useState<[number, number][]>(
     straightLine(initLocations(expense, home)),
   );
+  const [returnCoords, setReturnCoords] = useState<[number, number][]>(() =>
+    returnLeg(initLocations(expense, home)),
+  );
   const [approximate, setApproximate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [computing, setComputing] = useState(false);
@@ -680,6 +683,7 @@ function MileageEditor({ data }: { data: EditorData }) {
     distanceMiles: string;
     amount: string;
     coords: [number, number][];
+    returnCoords: [number, number][];
     approximate: boolean;
   } | null> {
     if (!locations.some((l) => l.address.trim())) return null;
@@ -696,6 +700,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         distanceMiles: string;
         amount: string;
         coords: [number, number][];
+        returnCoords: [number, number][];
         approximate: boolean;
       };
     } catch {
@@ -751,6 +756,7 @@ function MileageEditor({ data }: { data: EditorData }) {
       );
       setResolved(result.locations);
       setCoords(result.coords);
+      setReturnCoords(result.returnCoords ?? []);
       setDistanceMiles(result.distanceMiles);
       if (!manualAmount.current) setAmount(result.amount);
       setApproximate(result.approximate);
@@ -890,6 +896,8 @@ function MileageEditor({ data }: { data: EditorData }) {
       lat: l.lat,
       lng: l.lng,
       label,
+      // Bubble label on the map: S for the start, 1/2/… for the stops.
+      number: i === 0 ? "S" : String(i),
       tooltip: `${escapeHtml(label)} — ${escapeHtml(shortAddress(l.address))}`,
     };
   });
@@ -902,7 +910,13 @@ function MileageEditor({ data }: { data: EditorData }) {
       ) : null}
 
       <div className="mb-6 overflow-hidden rounded-xl border border-gray-200">
-        <MapView coords={coords} stops={stops} height={260} interactive />
+        <MapView
+          coords={coords}
+          returnCoords={returnCoords}
+          stops={stops}
+          height={260}
+          interactive
+        />
         <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
           <span className="flex items-center gap-2 text-gray-600">
             {computing ? (
@@ -1039,6 +1053,19 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
 
 function straightLine(locations: Location[]): [number, number][] {
   return geocodedLocations(locations).map((l) => [l.lat, l.lng]);
+}
+
+/** The return leg — last stop back to the start — as a straight line, used
+ * until the routed geometry arrives from /api/route. */
+function returnLeg(locations: Location[]): [number, number][] {
+  const geo = geocodedLocations(locations);
+  if (geo.length < 2) return [];
+  const last = geo[geo.length - 1]!;
+  const first = geo[0]!;
+  return [
+    [last.lat, last.lng],
+    [first.lat, first.lng],
+  ];
 }
 
 /** "Street, city" form of a canonical address — the first two comma parts,

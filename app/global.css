@@ -53,3 +53,24 @@ a:focus-visible {
   width: 100%;
   background: #e5e7eb;
 }
+
+/* Numbered stop bubble on the route map (S, 1, 2, …) — white disc with a
+   blue ring and bold blue label, matching the blue route line. */
+.map-stop-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid #2563eb;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+}
+
+.map-stop-bubble span {
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
