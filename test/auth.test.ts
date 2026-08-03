@@ -85,7 +85,7 @@ describe("Access control", () => {
 
   it("signs in with the seeded credentials", async () => {
     const page = await signedInPage();
-    await expect(page.locator("h1")).toContainText("Expenses");
+    await expect(page.locator("h1")).toContainText("Expense");
     await expect(page.getByText("Test Store")).toBeVisible();
     await page.close();
   });
@@ -127,7 +127,7 @@ describe("Access control", () => {
     await page.waitForURL((url) => url.pathname === "/", {
       timeout: 15_000,
     });
-    await expect(page.locator("h1")).toContainText("Expenses");
+    await expect(page.locator("h1")).toContainText("Expense");
     // A new account starts empty — none of the seeded data may appear.
     await expect(page.getByText("Test Store")).not.toBeVisible();
     await page.close();

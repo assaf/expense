@@ -204,7 +204,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       },
     ];
   }
-  return [{ title: "Expenses" }];
+  return [{ title: "Expense" }];
 }
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
@@ -379,7 +379,7 @@ function ExpenseList({
       onDrop={onDrop}
     >
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Expenses</h1>
+        <h1 className="text-2xl font-bold">Expense</h1>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link to="/export">

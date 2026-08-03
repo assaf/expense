@@ -11,7 +11,7 @@ describe("Home page", () => {
   });
 
   it("shows the title", async () => {
-    await expect(page.locator("h1")).toContainText("Expenses");
+    await expect(page.locator("h1")).toContainText("Expense");
   });
 
   it("shows report summary cards", async () => {
