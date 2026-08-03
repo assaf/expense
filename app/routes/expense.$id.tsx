@@ -654,12 +654,12 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
   const [coords, setCoords] = useState<[number, number][]>(() =>
-    initRouteCoords(expense, home),
+    // Saved driving geometry when present; empty otherwise — the map never
+    // draws a line until real directions are computed (or were saved).
+    expense.route.coords.length >= 2 ? expense.route.coords : [],
   );
   const [returnCoords, setReturnCoords] = useState<[number, number][]>(() =>
-    expense.route.coords.length >= 2
-      ? expense.route.returnCoords
-      : returnLeg(initLocations(expense, home)),
+    expense.route.coords.length >= 2 ? expense.route.returnCoords : [],
   );
   const [approximate, setApproximate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -681,10 +681,11 @@ function MileageEditor({ data }: { data: EditorData }) {
   const lastRoute = useRef<RouteGeometry | null>(null);
 
   // Legacy expenses (created before routes were persisted) load with no
-  // geometry — compute it once on open so the map shows the driving route
-  // instead of straight point-to-point lines. New expenses start empty
-  // (nothing to geocode yet) and compute on the first blur. Distance and
-  // amount are left as saved; they refresh on the next explicit recompute.
+  // geometry — compute it once on open so the driving route appears. Until
+  // it resolves, the map shows the stops unconnected (never a guessed
+  // point-to-point line). New expenses start empty (nothing to geocode yet)
+  // and compute on the first blur. Distance and amount are left as saved;
+  // they refresh on the next explicit recompute.
   useEffect(() => {
     if (expense.route.coords.length >= 2) return;
     const geo = geocodedLocations(locations);
@@ -704,7 +705,6 @@ function MileageEditor({ data }: { data: EditorData }) {
       cancelled = true;
     };
     // Run once per editor open (the component is keyed by expense id).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Geocode the addresses and compute the route + amount via /api/route.
@@ -1130,33 +1130,6 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
     ? { ...home }
     : { address: "", lat: null, lng: null };
   return [first, { address: "", lat: null, lng: null }];
-}
-
-function straightLine(locations: Location[]): [number, number][] {
-  return geocodedLocations(locations).map((l) => [l.lat, l.lng]);
-}
-
-/** The editor's initial route: the saved driving geometry when present,
- * straight point-to-point lines until a route has been computed. */
-function initRouteCoords(
-  expense: MileageExpense,
-  home: Location,
-): [number, number][] {
-  if (expense.route.coords.length >= 2) return expense.route.coords;
-  return straightLine(initLocations(expense, home));
-}
-
-/** The return leg — last stop back to the start — as a straight line, used
- * until the routed geometry arrives from /api/route. */
-function returnLeg(locations: Location[]): [number, number][] {
-  const geo = geocodedLocations(locations);
-  if (geo.length < 2) return [];
-  const last = geo[geo.length - 1]!;
-  const first = geo[0]!;
-  return [
-    [last.lat, last.lng],
-    [first.lat, first.lng],
-  ];
 }
 
 /** "Street, city" form of a canonical address — the first two comma parts,

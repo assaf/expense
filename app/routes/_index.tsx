@@ -13,7 +13,6 @@ import {
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
 import LandingPage from "~/components/LandingPage";
-import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { isComplete } from "~/lib/completeness";
@@ -37,7 +36,7 @@ import {
   readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
-import { geocodedLocations, type Expense } from "~/lib/types";
+import type { Expense } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/_index";
 
@@ -122,7 +121,6 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     complete: isComplete(e),
     imageFile: e.type === "receipt" ? e.imageFile : "",
     locations: e.type === "mileage" ? e.locations : [],
-    route: e.type === "mileage" ? e.route : undefined,
     distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
     merchant: e.type === "mileage" ? "" : e.merchant,
     duplicates: (matches ?? []).map((m) => ({
@@ -703,35 +701,32 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
     );
   }
 
-  const stops = geocodedLocations(expense.locations).map((l) => ({
-    lat: l.lat,
-    lng: l.lng,
-  }));
-  const route = expense.route;
-  const loop = stops.length >= 2 ? [...stops, stops[0]] : stops;
+  // Mileage rows all share the same generic route image — a stylized
+  // A → B → back trip — instead of the real route: the tiny tile can't
+  // show real driving directions usefully, and the list stays consistent.
   return (
-    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200">
-      {stops.length >= 2 ? (
-        <MapView
-          // Saved driving geometry when present; straight point-to-point
-          // fallback for legacy rows that predate route persistence.
-          coords={
-            route && route.coords.length >= 2
-              ? route.coords
-              : loop.map((s) => [s.lat, s.lng])
-          }
-          returnCoords={
-            route && route.coords.length >= 2 ? route.returnCoords : undefined
-          }
-          showStops={false}
-          lineWidth="thin"
-          height={56}
+    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-200">
+      <svg viewBox="0 0 56 56" className="h-full w-full" aria-hidden="true">
+        {/* Outbound, A → B, along a couple of turns. */}
+        <path
+          d="M10 46 L24 38 L30 24 L46 12"
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-gray-300">
-          <MapPinned className="h-6 w-6" />
-        </div>
-      )}
+        {/* Return, B → A, dashed to read as the way back. */}
+        <path
+          d="M46 12 L38 36 L10 46"
+          fill="none"
+          stroke="#6b7280"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="3 4"
+        />
+      </svg>
     </div>
   );
 }

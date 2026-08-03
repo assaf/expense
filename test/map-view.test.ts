@@ -132,6 +132,78 @@ describe("Mileage map rendering", () => {
     await page.unroute("**/api/route");
   });
 
+  it("shows stops unconnected until directions are computed", async () => {
+    // The seeded mileage expense predates route persistence — it opens
+    // with its two stops but no route line until the on-open recompute
+    // resolves. Hold the response so the in-between state is observable.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    await page.route("**/api/route", async (route) => {
+      await gate;
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as {
+        address: string;
+        lat: number | null;
+        lng: number | null;
+      }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) => ({
+            address: l.address,
+            lat: l.lat ?? 34.05,
+            lng: l.lng ?? -118.24,
+          })),
+          distanceMiles: "32.00",
+          amount: "22.40",
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.25],
+          ],
+          returnCoords: [
+            [34.06, -118.25],
+            [34.05, -118.24],
+          ],
+          approximate: false,
+        }),
+      });
+    });
+
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByRole("link", { name: /22\.40/ }).click();
+    await page.waitForURL(/\/expense\//, { timeout: 10_000 });
+    await expect(page.getByText("Mileage expense")).toBeVisible();
+
+    // The stops are there (numbered bubbles), but nothing is connected —
+    // no route line until the directions arrive.
+    await expect.poll(() => page.locator(".map-stop-bubble").count()).toBe(2);
+    expect(
+      await page
+        .locator(".leaflet-overlay-pane path[stroke='#2563eb']")
+        .count(),
+    ).toBe(0);
+
+    // Directions resolve → the route line appears.
+    release();
+    await expect
+      .poll(() =>
+        page.locator(".leaflet-overlay-pane path[stroke='#2563eb']").count(),
+      )
+      .toBe(1);
+    await page.unroute("**/api/route");
+  });
+
+  it("shows a generic route image for mileage rows, not the actual route", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    // The mileage thumbnail is the generic A → B → back SVG (identical for
+    // every row) and the list renders no Leaflet maps at all.
+    await expect(
+      page.locator("path[d='M10 46 L24 38 L30 24 L46 12']"),
+    ).toHaveCount(1);
+    await expect(page.locator(".leaflet-container")).toHaveCount(0);
+  });
+
   afterAll(async () => {
     await page?.close();
   });
