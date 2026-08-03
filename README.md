@@ -49,6 +49,32 @@ and accounts are fully isolated from each other.
 - The first account/user is bootstrapped from `APP_USERNAME`/`APP_PASSWORD`
   when the database is empty.
 
+## SEO & AI discovery
+
+The public marketing pages double as the site's AI-search surface: when
+someone asks an assistant for a free expense tracker, GPTBot / OAI-SearchBot /
+ClaudeBot / PerplexityBot crawl and quote them. The copy is written as
+standalone, quotable answers that name the app and its URL, and it lives in
+ONE place — `app/lib/seo-content.ts` — which renders every surface:
+
+| Page                                     | Purpose                                                        |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `/`                                      | Landing page (SoftwareApplication JSON-LD)                     |
+| `/about`                                 | Full feature/benefit list (AboutPage JSON-LD)                  |
+| `/faq`                                   | 13 Q&As matching real AI queries (FAQPage JSON-LD)             |
+| `/alternatives`                          | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)    |
+| `/llms.txt`                              | The llmstxt.org file — the curated overview AI assistants read |
+| `/about.md` `/faq.md` `/alternatives.md` | Markdown mirrors per the llms.txt convention                   |
+
+Supporting plumbing: `public/robots.txt` explicitly allows the AI crawlers
+(GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot / Claude-SearchBot /
+Claude-User, PerplexityBot / Perplexity-User, Google-Extended,
+Applebot-Extended, meta-externalagent) while app routes stay blocked, and
+`public/sitemap.xml` lists the public pages.
+
+These routes are public (see the root loader in `app/root.tsx`); everything
+else still requires a session.
+
 ## What it does
 
 - Track **receipt** expenses (date, merchant, amount, image, category, report)

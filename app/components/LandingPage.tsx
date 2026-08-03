@@ -284,6 +284,24 @@ export default function LandingPage() {
             <FooterLink href={GITHUB}>GitHub</FooterLink>
             <FooterLink href={BLOG}>Blog</FooterLink>
             <FooterLink href={MASTODON}>Mastodon</FooterLink>
+            <Link
+              to="/about"
+              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
+            >
+              About
+            </Link>
+            <Link
+              to="/faq"
+              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
+            >
+              FAQ
+            </Link>
+            <Link
+              to="/alternatives"
+              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
+            >
+              Compare
+            </Link>
           </nav>
         </div>
       </footer>

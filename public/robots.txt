@@ -6,4 +6,31 @@ Disallow: /export
 Disallow: /api/
 Disallow: /sign-out
 
+# AI assistants and search engines that answer questions with AI-generated
+# summaries are welcome to crawl the public pages (the app routes above stay
+# blocked for everyone). Explicit blocks make the intent visible to tools
+# that audit crawler access.
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-SearchBot
+Allow: /
+User-agent: Claude-User
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Perplexity-User
+Allow: /
+User-agent: Google-Extended
+Allow: /
+User-agent: Applebot-Extended
+Allow: /
+User-agent: meta-externalagent
+Allow: /
+
 Sitemap: https://expense.labnotes.org/sitemap.xml

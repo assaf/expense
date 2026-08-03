@@ -14,15 +14,22 @@ import "~/global.css";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/root";
 
+/** Public marketing/SEO pages (plus their markdown mirrors like /faq.md). */
+const PUBLIC_PAGES = new Set(["/about", "/faq", "/alternatives", "/llms.txt"]);
+
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  // The home page (landing for anonymous visitors), the login route, and
-  // the inbound email webhook are public; everything else requires a
-  // session (the webhook verifies its own Resend signature).
+  // The home page (landing for anonymous visitors), the login route, the
+  // inbound email webhook, and the public marketing pages are open;
+  // everything else requires a session (the webhook verifies its own
+  // Resend signature).
+  let path = url.pathname;
+  if (path.endsWith(".md")) path = path.slice(0, -3);
   const isPublic =
-    url.pathname === "/" ||
-    url.pathname.startsWith("/login") ||
-    url.pathname.startsWith("/api/inbound-email");
+    path === "/" ||
+    path.startsWith("/login") ||
+    path.startsWith("/api/inbound-email") ||
+    PUBLIC_PAGES.has(path);
   let user = null;
   if (isPublic) {
     // Anonymous visitors stay anonymous; signed-in users still get
