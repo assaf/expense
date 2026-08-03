@@ -150,6 +150,14 @@ const pdfParams = {
   verbosity: 0,
 } as const;
 
+/** Detect a PDF by mime or magic bytes — covers mislabeled uploads. */
+function isPdfInput(buffer: Buffer, mime: string): boolean {
+  return (
+    mime === "application/pdf" ||
+    (buffer.length >= 5 && buffer.subarray(0, 5).toString("latin1") === "%PDF-")
+  );
+}
+
 /** Extract the text layer of a PDF (up to the first 4 pages). */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   const task = getDocument({
@@ -231,6 +239,12 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
  * error (or when forced to tesseract) falls back to local OCR + text parsing.
  * `stored` is the normalized, browser-friendly image for saving as the
  * receipt image.
+ *
+ * PDFs are rasterized to PNG first — the stored image must be displayable in
+ * an <img> — and extraction prefers the PDF text layer, only OCR'ing the
+ * rendered pages when the text is empty (scanned PDF). Mirrors the
+ * inbound-email path; a corrupt/undecodable PDF throws here and callers
+ * decide the fate (the draft flow stores nothing and surfaces the error).
  */
 export async function extractFromImage(input: {
   buffer: Buffer;
@@ -241,6 +255,29 @@ export async function extractFromImage(input: {
   text: string;
   stored: { buffer: Buffer; mime: string };
 }> {
+  if (isPdfInput(input.buffer, input.mime)) {
+    const pdfText = await extractPdfText(input.buffer);
+    const png = await renderPdfToPng(input.buffer);
+    const result =
+      pdfText.trim().length >= 20
+        ? await extractReceipt({
+            text: pdfText,
+            categories: input.categories,
+          })
+        : (
+            await extractFromImage({
+              buffer: png,
+              mime: "image/png",
+              categories: input.categories,
+            })
+          ).result;
+    return {
+      result,
+      text: pdfText,
+      stored: { buffer: png, mime: "image/png" },
+    };
+  }
+
   const stored = await toBrowserImage(input.buffer, input.mime);
   let result: ExtractionResult | null = null;
   let text = "";

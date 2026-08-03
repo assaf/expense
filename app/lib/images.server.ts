@@ -29,6 +29,7 @@ const MIME_BY_EXT: Record<string, string> = {
   ".webp": "image/webp",
   ".bmp": "image/bmp",
   ".heic": "image/heic",
+  ".pdf": "application/pdf",
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -140,6 +141,31 @@ export async function readUploadedFile(form: FormData): Promise<{
     mime: file.type || mimeForFile(file.name) || "image/png",
     originalName: file.name || "pasted.png",
   };
+}
+
+/**
+ * True when an uploaded file is a PDF — by mime, extension, or magic bytes
+ * (covers mislabeled uploads, e.g. a browser that reports no type). PDFs
+ * must be rasterized to PNG before storage: receipts are always displayed
+ * as images, never served as raw PDFs.
+ */
+export function isPdfUpload(uploaded: {
+  buffer: Buffer;
+  mime: string;
+  originalName: string;
+}): boolean {
+  return (
+    uploaded.mime === "application/pdf" ||
+    /\.pdf$/i.test(uploaded.originalName) ||
+    (uploaded.buffer.length >= 5 &&
+      uploaded.buffer.subarray(0, 5).toString("latin1") === "%PDF-")
+  );
+}
+
+/** The stored name for a rasterized PDF upload: `receipt.pdf` → `receipt.png`. */
+export function pdfImageName(originalName: string): string {
+  const stem = originalName.replace(/\.pdf$/i, "").trim();
+  return `${stem || "receipt"}.png`;
 }
 
 /**

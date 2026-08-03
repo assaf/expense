@@ -238,8 +238,11 @@ function ReceiptEditor({ data }: { data: EditorData }) {
   }, []);
 
   async function uploadDraft(file: File) {
-    // Show the image immediately; OCR fills the fields in the background.
-    setDraftPreview(URL.createObjectURL(file));
+    // Images render straight from a blob URL. PDFs can't (an <img> can't
+    // display a PDF), so their preview is the rasterized PNG served from
+    // storage once the upload completes.
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!isPdf) setDraftPreview(URL.createObjectURL(file));
     setDrafting(true);
     const form = new FormData();
     form.set("intent", "draft-upload");
@@ -262,6 +265,11 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         mime: json.mime,
         originalName: json.originalName,
       });
+      if (isPdf) {
+        setDraftPreview(
+          `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
+        );
+      }
       if (json.merchant) setMerchant(json.merchant);
       if (json.amount) setAmount(json.amount);
       if (json.category) setCategory(json.category);
@@ -361,7 +369,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf"
               className="hidden"
               onChange={(e) => {
                 const f = e.currentTarget.files?.[0];

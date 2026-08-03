@@ -1,11 +1,14 @@
 import {
   deleteImage,
+  isPdfUpload,
+  pdfImageName,
   readImage,
   readUploadedFile,
   renameImageToConvention,
   saveImage,
 } from "~/lib/images.server";
 import { resizeToJpeg, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
+import { renderPdfToPng } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -87,16 +90,35 @@ export async function action({ request, params }: Route.ActionArgs) {
       return Response.json({ error: "No image" }, { status: 400 });
     }
     const { buffer, mime, originalName } = uploaded;
+    // PDFs are rasterized to PNG before storage: receipts are always
+    // displayed as images, and the thumbnail/export pipelines assume the
+    // stored bytes are decodable by sharp. Only an unreadable PDF fails.
+    let saveBuffer = buffer;
+    let saveMime = mime;
+    let saveName = originalName;
+    if (isPdfUpload(uploaded)) {
+      try {
+        saveBuffer = await renderPdfToPng(buffer);
+      } catch (err) {
+        console.warn("[image-upload] PDF render failed:", err);
+        return Response.json(
+          { error: "Couldn't read that PDF." },
+          { status: 400 },
+        );
+      }
+      saveMime = "image/png";
+      saveName = pdfImageName(originalName);
+    }
     const { filename, mime: storedMime } = await saveImage(
       user.accountId,
-      buffer,
-      mime,
-      originalName,
+      saveBuffer,
+      saveMime,
+      saveName,
     );
     if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
     expense.imageFile = filename;
     expense.imageMime = storedMime;
-    expense.originalName = originalName;
+    expense.originalName = saveName;
     expense.updatedAt = new Date().toISOString();
     // Rename to convention immediately if date+report already set.
     const renamed = await renameImageToConvention(

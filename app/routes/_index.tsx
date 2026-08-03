@@ -190,7 +190,7 @@ function ExpenseList({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           className="hidden"
           onChange={(e) => {
             const f = e.currentTarget.files?.[0];
@@ -199,8 +199,9 @@ function ExpenseList({
           }}
         />
         <p className="basis-full text-xs text-gray-400">
-          Tip: paste an image (⌘V) anywhere to create a receipt — the amount,
-          merchant, and category are filled in automatically.
+          Tip: upload an image or PDF, or paste an image (⌘V) anywhere to create
+          a receipt — the amount, merchant, and category are filled in
+          automatically.
           {mileageRate
             ? ` Current mileage rate: $${mileageRate}/mi.`
             : " Set a mileage rate in Settings."}
