@@ -26,6 +26,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     loadEditorContext(user.accountId, expense),
     readExpenses(user.accountId),
   ]);
+  // New mileage expenses default to the Travel category when the account has
+  // one (the IRS Schedule C bucket every new account is seeded with).
+  if (expense.type === "mileage" && context.categories.includes("Travel")) {
+    expense.category = "Travel";
+  }
   return { mode: "create" as const, ...context, existing, nav: null };
 }
 

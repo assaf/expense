@@ -3,10 +3,11 @@ import { requireUser } from "~/lib/auth.server";
 import { readExpenses, readReports } from "~/lib/store.server";
 import { readSettings } from "~/lib/settings.server";
 import { readImage } from "~/lib/images.server";
+import { renderRouteMap } from "~/lib/map-image.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import { formatDate, merchantLabel, sortExpenses } from "~/lib/format";
+import { geocodedLocations, type Expense } from "~/lib/types";
 import { sanitizeFilenamePart } from "~/lib/validation";
-import type { Expense } from "~/lib/types";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -71,27 +72,43 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     doc.moveDown(0.25);
     const inCat = inReport.filter((e) => e.category === category);
     for (const e of inCat) {
-      const merchant = merchantLabel(e, settings.mileageRates) || "—";
+      const isMileage = e.type === "mileage";
+      const merchant =
+        merchantLabel(e, settings.mileageRates) ||
+        (isMileage ? "Mileage" : "—");
       const date = formatDate(e.date);
       const amount = e.amount ? `$${e.amount}` : "—";
       const desc = e.description ?? "";
+      // Mileage rows get a second line with the route (Start › … › Start
+      // implied), so the trip is visible even without a rate or a map.
+      // (PDF's base-14 fonts can't encode "→", so routes use "›".)
+      const route = isMileage
+        ? e.locations
+            .map((l) => l.address.trim())
+            .filter(Boolean)
+            .join(" › ")
+        : "";
 
-      // Keep the whole row on one page.
-      doc.fontSize(10).font("Helvetica").fillColor("#111827");
-      if (doc.y + doc.currentLineHeight() > doc.page.maxY()) {
+      // Keep the whole row (including the route line) on one page.
+      const lineH = doc.fontSize(10).currentLineHeight();
+      const rowH = lineH + (route ? lineH + 4 : 0);
+      if (doc.y + rowH > doc.page.maxY()) {
         doc.addPage();
       }
       const rowY = doc.y;
+      doc.font("Helvetica").fillColor("#111827");
       doc.text(date, dateX, rowY, { width: dateW, lineBreak: false });
       doc.text(amount, amountX, rowY, {
         width: amountW,
         lineBreak: false,
         align: "right",
       });
-      doc.text(fitText(doc, merchant, merchantW, 20), merchantX, rowY, {
-        width: merchantW,
-        lineBreak: false,
-      });
+      doc.text(
+        fitText(doc, merchant, merchantW, isMileage ? undefined : 20),
+        merchantX,
+        rowY,
+        { width: merchantW, lineBreak: false },
+      );
       if (desc) {
         doc.fillColor("#4b5563").text(fitText(doc, desc, descW), descX, rowY, {
           width: descW,
@@ -99,10 +116,57 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         });
         doc.fillColor("#111827");
       }
+      if (route) {
+        doc
+          .fontSize(8)
+          .fillColor("#6b7280")
+          .text(fitText(doc, route, descW + descX - dateX), dateX, doc.y + 1, {
+            width: descW + descX - dateX,
+            lineBreak: false,
+          });
+        doc.fillColor("#111827");
+      }
       doc.moveDown(0.3);
     }
     // Extra breathing room before the next category.
     doc.moveDown(0.75);
+  }
+
+  // Mileage routes appendix: a rendered route map per trip (2+ geocoded
+  // stops); a trip without coordinates falls back to the text summary only.
+  const mileages = inReport.filter(
+    (e): e is Extract<Expense, { type: "mileage" }> => e.type === "mileage",
+  );
+  if (mileages.length > 0) {
+    doc.addPage();
+    doc.fontSize(13).font("Helvetica-Bold").text("Mileage routes");
+    doc.moveDown(0.5);
+    for (const [i, e] of mileages.entries()) {
+      // One page per trip — but no trailing blank page after the last one.
+      if (i > 0) doc.addPage();
+      const label = merchantLabel(e, settings.mileageRates) || "Mileage";
+      const route = e.locations
+        .map((l) => l.address.trim())
+        .filter(Boolean)
+        .join(" › ");
+      doc
+        .fontSize(9)
+        .font("Helvetica")
+        .fillColor("#4b5563")
+        .text(
+          [formatDate(e.date), label, ...(route ? [route] : [])].join(" — "),
+        );
+      doc.fillColor("#111827");
+      if (geocodedLocations(e.locations).length >= 2) {
+        try {
+          const png = await renderRouteMap(e.locations);
+          doc.image(png, { fit: [500, 300], align: "center" });
+        } catch {
+          // The text summary above stands on its own — never embed a
+          // broken or blank map.
+        }
+      }
+    }
   }
 
   // Receipt images appendix.
@@ -114,7 +178,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     doc.addPage();
     doc.fontSize(13).font("Helvetica-Bold").text("Receipts");
     doc.moveDown(0.5);
-    for (const e of receipts) {
+    for (const [i, e] of receipts.entries()) {
+      // One page per receipt — but no trailing blank page after the last.
+      if (i > 0) doc.addPage();
       const image = await readImage(user.accountId, e.imageFile);
       if (!image) continue;
       doc
@@ -132,7 +198,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           .text("(image could not be embedded)");
         doc.fillColor("#111827");
       }
-      doc.addPage();
     }
   }
 

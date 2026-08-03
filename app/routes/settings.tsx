@@ -274,9 +274,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-2 text-lg font-semibold">Home location</h2>
+        <h2 className="mb-2 text-lg font-semibold">Start location</h2>
         <p className="mb-3 text-sm text-gray-500">
-          Used as the first and last stop of every mileage route.
+          Used as the start and end of every mileage route.
         </p>
         <Form method="post" className="flex items-end gap-2">
           <input type="hidden" name="intent" value="saveHome" />

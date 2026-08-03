@@ -72,6 +72,294 @@ describe("Mileage expense", () => {
     await expect(page.getByRole("link", { name: /22\.40/ })).toBeVisible();
   });
 
+  it("only geocodes and updates the map when an address field loses focus", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const first = page.locator("input[placeholder='Address']").first();
+    await first.fill("");
+
+    const calls: string[] = [];
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      calls.push(body);
+      const addresses = JSON.parse(body).locations as {
+        address: string;
+      }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) => ({
+            address: l.address,
+            lat: l.address.trim() ? 34.05 : null,
+            lng: l.address.trim() ? -118.24 : null,
+          })),
+          distanceMiles: "10.00",
+          amount: "7.00",
+          coords: [[34.05, -118.24]],
+          approximate: false,
+        }),
+      });
+    });
+
+    // Typing must NOT fire a route request — the map only updates after
+    // the field loses focus and the address geocodes successfully.
+    await first.pressSequentially("1600 Amphitheatre Pkwy", { delay: 20 });
+    await page.waitForTimeout(800);
+    expect(calls.length).toBe(0);
+    expect(await first.inputValue()).toBe("1600 Amphitheatre Pkwy");
+
+    // Blurring geocodes: exactly one request, carrying the typed address;
+    // the recomputed amount lands in the amount field; the text field keeps
+    // exactly what was typed (it is never rewritten to an older value).
+    await first.blur();
+    await expect.poll(() => calls.length).toBe(1);
+    expect(
+      (JSON.parse(calls[0]!).locations as { address: string }[])[0]!.address,
+    ).toBe("1600 Amphitheatre Pkwy");
+    expect(await first.inputValue()).toBe("1600 Amphitheatre Pkwy");
+    await expect(page.locator("input[type='number']")).toHaveValue("7.00");
+    await page.unroute("**/api/route");
+  });
+
+  it("defaults a new mileage expense to Travel when that category exists", async () => {
+    await testPrisma.category.create({
+      data: { name: "Travel", accountId: TEST_ACCOUNT_ID },
+    });
+    try {
+      await page.goto("/", { waitUntil: "load" });
+      await page.getByText("Add mileage").click();
+      await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+        timeout: 10_000,
+      });
+      // Report + Category selects; the category is the second one.
+      await expect(page.locator("select").nth(1)).toHaveValue("Travel");
+    } finally {
+      await testPrisma.category.deleteMany({
+        where: { name: "Travel", accountId: TEST_ACCOUNT_ID },
+      });
+    }
+  });
+
+  it("leaves the category unset when no Travel category exists", async () => {
+    // The seeded categories have no Travel — the editor starts unset.
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    await expect(page.locator("select").nth(1)).toHaveValue("");
+  });
+
+  it("always keeps a start and a first stop; extra stops can be removed", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+
+    // A new mileage starts with Start + Stop 1 and no remove buttons.
+    const inputs = page.locator("input[placeholder='Address']");
+    await expect(inputs).toHaveCount(2);
+    await expect(page.getByText("Start", { exact: true })).toBeVisible();
+    await expect(page.getByText("Stop 1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove stop" })).toHaveCount(
+      0,
+    );
+
+    // Adding stops gives them a remove button; the start + first stop stay
+    // protected.
+    await page.getByRole("button", { name: "Add stop" }).click();
+    await expect(inputs).toHaveCount(3);
+    await expect(page.getByText("Stop 2", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove stop" })).toHaveCount(
+      1,
+    );
+
+    // The extra stop can be removed; the required two cannot.
+    await page.getByRole("button", { name: "Remove stop" }).click();
+    await expect(inputs).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Remove stop" })).toHaveCount(
+      0,
+    );
+  });
+
+  it("updates the field to the geocoded address on blur, or shows an error", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const first = page.locator("input[placeholder='Address']").first();
+    await first.fill("");
+
+    let fail = false;
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) =>
+            fail || !l.address.trim()
+              ? { address: l.address, lat: null, lng: null }
+              : {
+                  address: `${l.address}, Mountain View, CA, USA`,
+                  lat: 34.05,
+                  lng: -118.24,
+                },
+          ),
+          distanceMiles: "10.00",
+          amount: "7.00",
+          coords: [[34.05, -118.24]],
+          approximate: false,
+        }),
+      });
+    });
+
+    // Successful geocode → the field is updated to the geocoded address.
+    await first.pressSequentially("1600 Amphitheatre Pkwy", { delay: 20 });
+    await first.blur();
+    await expect
+      .poll(() => first.inputValue())
+      .toBe("1600 Amphitheatre Pkwy, Mountain View, CA, USA");
+
+    // Failed geocode → an error under the field; the typed text is kept
+    // (never guessed at).
+    fail = true;
+    await first.fill("Nowhere Lane ZZ");
+    await first.blur();
+    await expect(page.getByText("Couldn't find that address")).toBeVisible();
+    expect(await first.inputValue()).toBe("Nowhere Lane ZZ");
+
+    // Editing the field clears the error (it will be retried on blur).
+    await first.fill("1600 Amphitheatre Pkwy");
+    await expect(page.getByText("Couldn't find that address")).toHaveCount(0);
+    await page.unroute("**/api/route");
+  });
+
+  it("shows a geocoding indicator while the address is being geocoded", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const first = page.locator("input[placeholder='Address']").first();
+    await first.fill("");
+
+    // Hold every route response so the geocode stays in flight on demand.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    await page.route("**/api/route", async (route) => {
+      await gate;
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) =>
+            l.address.trim()
+              ? {
+                  address: `${l.address}, Mountain View, CA, USA`,
+                  lat: 34.05,
+                  lng: -118.24,
+                }
+              : { address: l.address, lat: null, lng: null },
+          ),
+          distanceMiles: "10.00",
+          amount: "7.00",
+          coords: [[34.05, -118.24]],
+          approximate: false,
+        }),
+      });
+    });
+
+    const spinner = page.getByLabel("Geocoding address");
+    await first.pressSequentially("1600 Amphitheatre Pkwy", { delay: 20 });
+    await first.blur();
+
+    // The per-field spinner is visible while the geocode is in flight…
+    await expect(spinner).toBeVisible();
+    // …and once it resolves, the field shows the geocoded address and the
+    // spinner is gone.
+    release();
+    await expect
+      .poll(() => first.inputValue())
+      .toBe("1600 Amphitheatre Pkwy, Mountain View, CA, USA");
+    await expect(spinner).toHaveCount(0);
+    await page.unroute("**/api/route");
+  });
+
+  it("geocodes un-blurred addresses when saving", async () => {
+    // Typing addresses and hitting Save without blurring the fields must
+    // still geocode the trip, so the saved expense keeps its route,
+    // distance, and amount.
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const inputs = page.locator("input[placeholder='Address']");
+    await inputs.first().fill("");
+    await inputs.nth(1).fill("");
+    await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
+      delay: 10,
+    });
+    await inputs.nth(1).pressSequentially("456 Dev Ave", { delay: 10 });
+
+    let calls = 0;
+    await page.route("**/api/route", async (route) => {
+      calls++;
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) => ({
+            address: l.address,
+            lat: l.address.trim() ? 34.05 : null,
+            lng: l.address.trim() ? -118.24 : null,
+          })),
+          distanceMiles: "10.00",
+          amount: "7.00",
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.25],
+          ],
+          approximate: false,
+        }),
+      });
+    });
+
+    await page.getByText("Save").click();
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
+    expect(calls).toBeGreaterThan(0);
+
+    const saved = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, type: "mileage" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(saved?.distanceMiles?.toFixed(2)).toBe("10.00");
+    expect(saved?.amount?.toFixed(2)).toBe("7.00");
+    const locations = saved?.locations as {
+      address: string;
+      lat: number | null;
+    }[];
+    expect(locations[0]?.lat).toBe(34.05);
+    expect(locations[1]?.lat).toBe(34.05);
+    await page.unroute("**/api/route");
+  });
+
   afterAll(async () => {
     await page?.close();
   });

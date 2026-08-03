@@ -1,6 +1,8 @@
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
+import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { extractPdfText } from "~/lib/receipt-ocr.server";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
@@ -148,6 +150,42 @@ describe("Export", () => {
       mainSection.locator("li", { hasText: "Closed Alpha" }),
     ).toHaveCount(0);
     await page.close();
+  });
+
+  it("includes mileage with its route and map in the report PDF", async () => {
+    // The "2026 Test" report contains the seeded mileage trip (32.00 mi,
+    // two geocoded stops, rate $0.70 for 2026).
+    const res = await page
+      .context()
+      .request.get("/export/report/2026%20Test.pdf");
+    expect(res.status()).toBe(200);
+    const buf = Buffer.from(await res.body());
+
+    // The mileage label renders in full (no rate-independent blanking) and
+    // the route addresses appear as the row's second line + appendix text.
+    const text = await extractPdfText(buf);
+    expect(text).toContain("32.00 mi @ $0.70 / mi");
+    expect(text).toContain("123 Test St, Testing, CA");
+    expect(text).toContain("456 Dev Ave, Coding, CA");
+    expect(text).toContain("Mileage routes");
+
+    // The mileage appendix page embeds the rendered route map image.
+    const task = getDocument({ data: new Uint8Array(buf), verbosity: 0 });
+    const doc = await task.promise;
+    try {
+      expect(doc.numPages).toBeGreaterThan(1);
+      let imageOps = 0;
+      for (let p = 1; p <= doc.numPages; p++) {
+        const pageDoc = await doc.getPage(p);
+        const ops = await pageDoc.getOperatorList();
+        imageOps += ops.fnArray.filter(
+          (fn) => fn === OPS.paintImageXObject,
+        ).length;
+      }
+      expect(imageOps).toBeGreaterThan(0);
+    } finally {
+      await task.destroy();
+    }
   });
 
   afterAll(async () => {

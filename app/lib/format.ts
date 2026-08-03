@@ -79,12 +79,14 @@ export function yearOf(date: string): string {
   return String(new Date().getFullYear());
 }
 
-/** Build the mileage "merchant" label, e.g. "122.13 mi @ $0.70 / mi". */
+/** Build the mileage label, e.g. "32.00 mi @ $0.70 / mi". Without a rate
+ * (no rate configured for the year) the distance still shows: "32.00 mi". */
 export function mileageMerchant(distanceMiles: string, rate: string): string {
   const d = parseAmount(distanceMiles);
+  if (d === null) return "";
   const r = parseAmount(rate);
-  if (d === null || r === null) return "";
-  return `${d.toFixed(2)} mi @ $${r.toFixed(2)} / mi`;
+  const distance = `${d.toFixed(2)} mi`;
+  return r === null ? distance : `${distance} @ $${r.toFixed(2)} / mi`;
 }
 
 /** The "merchant" label for an expense: the receipt merchant, or the mileage

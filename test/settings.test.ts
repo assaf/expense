@@ -28,7 +28,7 @@ describe("Settings", () => {
       page.getByRole("heading", { name: "Mileage rates" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Home location" }),
+      page.getByRole("heading", { name: "Start location" }),
     ).toBeVisible();
   });
 

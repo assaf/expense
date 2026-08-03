@@ -638,6 +638,13 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [locations, setLocations] = useState<Location[]>(() =>
     initLocations(expense, home),
   );
+  // The last geocoded result from /api/route: what the map, the distance,
+  // and the saved locations use. Distinct from `locations` (the typed text)
+  // so a route response can never rewrite what the user is typing — a slow,
+  // stale response would otherwise yank text out from under the cursor.
+  const [resolved, setResolved] = useState<Location[]>(() =>
+    initLocations(expense, home),
+  );
   const [distanceMiles, setDistanceMiles] = useState(expense.distanceMiles);
   const [amount, setAmount] = useState(expense.amount);
   const [date, setDate] = useState(expense.date);
@@ -645,77 +652,126 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
   const [coords, setCoords] = useState<[number, number][]>(
-    straightLine(locations),
+    straightLine(initLocations(expense, home)),
   );
   const [approximate, setApproximate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [computing, setComputing] = useState(false);
+  // Per-field geocoding errors, aligned with `locations` (null = no error).
+  const [addressErrors, setAddressErrors] = useState<(string | null)[]>([]);
+  // Indexes of fields currently being geocoded (in-flight blur geocodes and
+  // the save-time flush) — drives the per-field spinner.
+  const [geocodingFields, setGeocodingFields] = useState<number[]>([]);
   const manualAmount = useRef(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSig = useRef("");
+  // Monotonic id for route requests: only the latest request may update
+  // shared state, so an out-of-order response can't overwrite newer
+  // results. Typing bumps it too — any in-flight geocode is stale the
+  // moment the addresses change.
+  const requestSeq = useRef(0);
 
-  // Recompute route + amount when locations or rate change (debounced).
-  useEffect(() => {
-    const sig = locations.map((l) => l.address).join("|") + "@" + rate;
-    // Skip when nothing relevant changed (e.g. coords just got filled in).
-    if (sig === lastSig.current) return;
-    lastSig.current = sig;
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      const hasAddresses = locations.some((l) => l.address.trim());
-      if (!hasAddresses) {
-        setDistanceMiles("");
-        if (!manualAmount.current) setAmount("");
-        setCoords([]);
-        return;
-      }
-      setComputing(true);
-      try {
-        const res = await fetch("/api/route", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ locations, rate }),
-        });
-        if (res.ok) {
-          const json = (await res.json()) as {
-            locations: Location[];
-            distanceMiles: string;
-            amount: string;
-            coords: [number, number][];
-            approximate: boolean;
-          };
-          setLocations(json.locations);
-          setDistanceMiles(json.distanceMiles);
-          if (!manualAmount.current) setAmount(json.amount);
-          setCoords(json.coords);
-          setApproximate(json.approximate);
-        }
-      } finally {
-        setComputing(false);
-      }
-    }, 600);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [locations, rate]);
+  /** Geocode the addresses and compute the route + amount via /api/route.
+   * Pure — no state writes — so callers decide what to apply. */
+  async function computeRoute(
+    locations: Location[],
+    rate: string,
+  ): Promise<{
+    locations: Location[];
+    distanceMiles: string;
+    amount: string;
+    coords: [number, number][];
+    approximate: boolean;
+  } | null> {
+    if (!locations.some((l) => l.address.trim())) return null;
+    setComputing(true);
+    try {
+      const res = await fetch("/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locations, rate }),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as {
+        locations: Location[];
+        distanceMiles: string;
+        amount: string;
+        coords: [number, number][];
+        approximate: boolean;
+      };
+    } catch {
+      return null;
+    } finally {
+      setComputing(false);
+    }
+  }
 
   function updateLocation(i: number, address: string) {
     manualAmount.current = false;
+    // Any in-flight geocode is stale the moment the text changes.
+    requestSeq.current += 1;
     setLocations((prev) =>
       prev.map((l, idx) =>
         idx === i ? { ...l, address, lat: null, lng: null } : l,
       ),
     );
+    // Editing clears the field's geocoding error (it'll be retried on blur)
+    // and stops its in-flight spinner.
+    setAddressErrors((prev) =>
+      prev.map((err, idx) => (idx === i ? null : err)),
+    );
+    setGeocodingFields((prev) => prev.filter((x) => x !== i));
+  }
+
+  /** Focus leaving a location field geocodes the trip and updates the map —
+   * but only when that field's address geocodes successfully. The map never
+   * changes while typing. On success the field is updated to the geocoded
+   * (canonical) address; on failure an error is shown under the field and
+   * the typed text is kept as-is. */
+  async function commitLocation(i: number) {
+    const address = locations[i]?.address ?? "";
+    if (!address.trim()) return; // nothing to geocode
+    setGeocodingFields((prev) => (prev.includes(i) ? prev : [...prev, i]));
+    try {
+      const seq = ++requestSeq.current;
+      const result = await computeRoute(locations, rate);
+      if (!result || requestSeq.current !== seq) return;
+      const r = result.locations[i];
+      if (!r || r.lat === null || r.lng === null) {
+        // Geocode failed — tell the user, never guess an address.
+        setAddressErrors((prev) => {
+          const next = [...prev];
+          next[i] =
+            "Couldn't find that address. Try a more complete address with city and state.";
+          return next;
+        });
+        return;
+      }
+      setAddressErrors((prev) =>
+        prev.map((err, idx) => (idx === i ? null : err)),
+      );
+      setResolved(result.locations);
+      setCoords(result.coords);
+      setDistanceMiles(result.distanceMiles);
+      if (!manualAmount.current) setAmount(result.amount);
+      setApproximate(result.approximate);
+      setLocations((prev) => prev.map((l, idx) => (idx === i ? r : l)));
+    } finally {
+      setGeocodingFields((prev) => prev.filter((x) => x !== i));
+    }
   }
 
   function addLocation() {
+    requestSeq.current += 1;
     setLocations((prev) => [...prev, { address: "", lat: null, lng: null }]);
+    setResolved((prev) => [...prev, { address: "", lat: null, lng: null }]);
+    setAddressErrors((prev) => [...prev, null]);
   }
 
   function removeLocation(i: number) {
     manualAmount.current = false;
+    requestSeq.current += 1;
     setLocations((prev) => prev.filter((_, idx) => idx !== i));
+    setResolved((prev) => prev.filter((_, idx) => idx !== i));
+    setAddressErrors((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   const complete = useMemo(
@@ -742,18 +798,70 @@ function MileageEditor({ data }: { data: EditorData }) {
     [isNew, expense, date, locations, distanceMiles, data.existing],
   );
 
-  function onSave() {
-    const form = new FormData();
-    form.set("intent", "save");
-    if (isNew) form.set("type", "mileage");
-    form.set("date", date);
-    form.set("amount", amount);
-    form.set("report", report);
-    form.set("category", category);
-    form.set("description", description);
-    form.set("distanceMiles", distanceMiles);
-    form.set("locations", JSON.stringify(locations));
-    void fetcher.submit(form, { method: "post" });
+  const savingRef = useRef(false);
+
+  async function onSave() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    try {
+      // Flush any address typed but never geocoded (Save without blurring
+      // the field) so the saved expense keeps its route, distance, and
+      // amount; otherwise the geocoded result is already in `resolved`.
+      const needsGeocode = locations.some(
+        (l) => l.address.trim() !== "" && (l.lat === null || l.lng === null),
+      );
+      let saveLocations = locations.map((l, i) => {
+        const r = resolved[i];
+        return r && r.address === l.address ? r : l;
+      });
+      let saveDistance = distanceMiles;
+      let saveAmount = amount;
+      if (needsGeocode) {
+        // Show the per-field spinner on every address the flush will geocode.
+        const toGeocode = locations
+          .map((l, i) =>
+            l.address.trim() !== "" && (l.lat === null || l.lng === null)
+              ? i
+              : null,
+          )
+          .filter((i): i is number => i !== null);
+        setGeocodingFields((prev) => [...new Set([...prev, ...toGeocode])]);
+        try {
+          const seq = ++requestSeq.current;
+          const result = await computeRoute(locations, rate);
+          if (result && requestSeq.current === seq) {
+            // The flush's locations are the canonical geocoded forms (they
+            // differ from what was typed), so match on coordinates, not text.
+            saveLocations = locations.map((l, i) => {
+              const r = result.locations[i];
+              return r && r.lat !== null && r.lng !== null ? r : l;
+            });
+            saveDistance = result.distanceMiles;
+            if (!manualAmount.current) saveAmount = result.amount;
+          }
+        } finally {
+          setGeocodingFields((prev) =>
+            prev.filter((x) => !toGeocode.includes(x)),
+          );
+        }
+      }
+      const form = new FormData();
+      form.set("intent", "save");
+      if (isNew) form.set("type", "mileage");
+      form.set("date", date);
+      form.set("amount", saveAmount);
+      form.set("report", report);
+      form.set("category", category);
+      form.set("description", description);
+      form.set("distanceMiles", saveDistance);
+      form.set("locations", JSON.stringify(saveLocations));
+      // Submit through the shared flow so the "Saving…" overlay covers the
+      // actual request + redirect (the geocode flush above shows the map's
+      // computing spinner).
+      doSave(() => void fetcher.submit(form, { method: "post" }));
+    } finally {
+      savingRef.current = false;
+    }
   }
 
   function onDelete() {
@@ -764,16 +872,19 @@ function MileageEditor({ data }: { data: EditorData }) {
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
-    onSave: () => doSave(onSave),
+    onSave: () => void onSave(),
     onCancel: doCancel,
     disabled: fetcher.state !== "idle",
     blocked: confirmDelete,
   });
 
-  const stops = geocodedLocations(locations).map((l, i) => ({
+  // The map shows the geocoded route (`resolved`), not the raw typed text —
+  // it only changes when an address field loses focus and its address
+  // geocodes successfully, never while typing.
+  const stops = geocodedLocations(resolved).map((l, i) => ({
     lat: l.lat,
     lng: l.lng,
-    label: i === 0 ? "Home" : `Stop ${i}`,
+    label: i === 0 ? "Start" : `Stop ${i}`,
   }));
 
   return (
@@ -822,35 +933,54 @@ function MileageEditor({ data }: { data: EditorData }) {
         </div>
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
-            <li key={i} className="flex items-center gap-2">
-              <span className="w-16 shrink-0 text-xs font-medium text-gray-500">
-                {i === 0 ? "Home" : `Stop ${i}`}
+            <li key={i} className="flex items-start gap-2">
+              <span className="w-16 shrink-0 pt-2 text-xs font-medium text-gray-500">
+                {i === 0 ? "Start" : `Stop ${i}`}
               </span>
-              <Input
-                type="text"
-                placeholder="Address"
-                className="flex-1"
-                value={l.address}
-                onChange={(e) => updateLocation(i, e.target.value)}
-              />
-              <button
-                type="button"
-                className="text-gray-400 hover:text-red-600"
-                onClick={() => removeLocation(i)}
-                aria-label="Remove location"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="min-w-0 flex-1">
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="Address"
+                    invalid={!!addressErrors[i]}
+                    className={`w-full ${
+                      geocodingFields.includes(i) ? "pr-9" : ""
+                    }`}
+                    value={l.address}
+                    onChange={(e) => updateLocation(i, e.target.value)}
+                    onBlur={() => commitLocation(i)}
+                  />
+                  {geocodingFields.includes(i) ? (
+                    <Loader2
+                      aria-label="Geocoding address"
+                      className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400"
+                    />
+                  ) : null}
+                </div>
+                {addressErrors[i] ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {addressErrors[i]}
+                  </p>
+                ) : null}
+              </div>
+              {/* The start and the first stop are required — only extra
+                  stops can be removed. */}
+              {i >= 2 ? (
+                <button
+                  type="button"
+                  className="mt-2 text-gray-400 hover:text-red-600"
+                  onClick={() => removeLocation(i)}
+                  aria-label="Remove stop"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
             </li>
           ))}
-          {locations.length === 0 ? (
-            <li className="rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-400">
-              No locations. Add one to start a route.
-            </li>
-          ) : null}
         </ol>
         <p className="mt-1 text-xs text-gray-400">
-          The route runs Home → stops → Home. Distance updates automatically.
+          The route runs Start → stops → back to Start. Distance updates
+          automatically.
         </p>
       </div>
 
@@ -869,7 +999,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         complete={complete}
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
-        onSave={() => doSave(onSave)}
+        onSave={() => void onSave()}
         onDelete={isNew ? undefined : () => setConfirmDelete(true)}
         saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
       />
@@ -887,8 +1017,13 @@ function MileageEditor({ data }: { data: EditorData }) {
 }
 
 function initLocations(expense: MileageExpense, home: Location): Location[] {
-  if (expense.locations.length > 0)
-    return expense.locations.map((l) => ({ ...l }));
+  const saved = expense.locations.map((l) => ({ ...l }));
+  // A mileage expense always has a start and a first stop — pad trips that
+  // predate that rule (or start fresh from the account's start location).
+  if (saved.length === 1) {
+    return [...saved, { address: "", lat: null, lng: null }];
+  }
+  if (saved.length > 1) return saved;
   const first: Location = home.address
     ? { ...home }
     : { address: "", lat: null, lng: null };

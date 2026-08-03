@@ -9,13 +9,183 @@ const METERS_PER_MILE = 1609.344;
 interface NominatimResult {
   lat: string;
   lon: string;
+  display_name: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    county?: string;
+    state?: string;
+    country?: string;
+    /** State-level ISO code, e.g. "US-CA" — the reliable source for the
+     * postal abbreviation. */
+    "ISO3166-2-lvl4"?: string;
+  };
 }
 
-/** Geocode a free-text address to coordinates via Nominatim (no API key). */
-export async function geocode(address: string): Promise<Location> {
+/** US state + DC names → postal abbreviations. Fallback when the geocoder's
+ * ISO3166-2-lvl4 code is missing; non-US states keep their full name. */
+const US_STATE_ABBREVIATIONS: Record<string, string> = {
+  Alabama: "AL",
+  Alaska: "AK",
+  Arizona: "AZ",
+  Arkansas: "AR",
+  California: "CA",
+  Colorado: "CO",
+  Connecticut: "CT",
+  Delaware: "DE",
+  "District of Columbia": "DC",
+  Florida: "FL",
+  Georgia: "GA",
+  Hawaii: "HI",
+  Idaho: "ID",
+  Illinois: "IL",
+  Indiana: "IN",
+  Iowa: "IA",
+  Kansas: "KS",
+  Kentucky: "KY",
+  Louisiana: "LA",
+  Maine: "ME",
+  Maryland: "MD",
+  Massachusetts: "MA",
+  Michigan: "MI",
+  Minnesota: "MN",
+  Mississippi: "MS",
+  Missouri: "MO",
+  Montana: "MT",
+  Nebraska: "NE",
+  Nevada: "NV",
+  "New Hampshire": "NH",
+  "New Jersey": "NJ",
+  "New Mexico": "NM",
+  "New York": "NY",
+  "North Carolina": "NC",
+  "North Dakota": "ND",
+  Ohio: "OH",
+  Oklahoma: "OK",
+  Oregon: "OR",
+  Pennsylvania: "PA",
+  "Rhode Island": "RI",
+  "South Carolina": "SC",
+  "South Dakota": "SD",
+  Tennessee: "TN",
+  Texas: "TX",
+  Utah: "UT",
+  Vermont: "VT",
+  Virginia: "VA",
+  Washington: "WA",
+  "West Virginia": "WV",
+  Wisconsin: "WI",
+  Wyoming: "WY",
+};
+
+const US_COUNTRY_NAMES = new Set([
+  "united states",
+  "united states of america",
+  "usa",
+  "us",
+]);
+
+/** The state for the canonical address: postal abbreviation for US states
+ * (from the geocoder's ISO code, or the name map), full name elsewhere. */
+function stateAbbreviation(hit: NominatimResult): string {
+  const a = hit.address ?? {};
+  const iso = a["ISO3166-2-lvl4"] ?? "";
+  if (iso.startsWith("US-")) return iso.slice(3);
+  const name = a.state ?? "";
+  return US_STATE_ABBREVIATIONS[name] ?? name;
+}
+
+/** The country for the canonical address: omitted for the US (the default),
+ * full name otherwise. */
+function countryName(hit: NominatimResult): string {
+  const country = (hit.address?.country ?? "").trim();
+  return country && !US_COUNTRY_NAMES.has(country.toLowerCase()) ? country : "";
+}
+
+/**
+ * Build the canonical display address from the geocoder's own structured
+ * parts: street, city, abbreviated state, and the country only when it is
+ * not the US. Never guessed or invented. Falls back to the full
+ * display_name when the structured parts are too sparse.
+ */
+function canonicalAddress(hit: NominatimResult): string {
+  const a = hit.address ?? {};
+  const street = [a.house_number ?? "", a.road ?? ""].join(" ").trim();
+  const city = a.city ?? a.town ?? a.village ?? a.county ?? "";
+  const parts = [street, city, stateAbbreviation(hit), countryName(hit)].filter(
+    Boolean,
+  );
+  if (parts.length >= 2) return parts.join(", ");
+  return hit.display_name ?? "";
+}
+
+/** "City, ST" locality of a match — the hint for geocoding the next partial
+ * address in the same trip (street-like queries get the previous stop's
+ * locality appended so they don't default to a faraway city). */
+function localityHint(hit: NominatimResult): string {
+  const a = hit.address ?? {};
+  const city = a.city ?? a.town ?? a.village ?? a.county ?? "";
+  if (!city) return "";
+  const state = stateAbbreviation(hit);
+  return state ? `${city}, ${state}` : city;
+}
+
+/** Best-effort locality hint ("City, ST") parsed from a canonical address
+ * string — the last two comma segments. Used when the previous stop already
+ * has coordinates but no structured geocoder data (e.g. loaded from a saved
+ * expense). */
+function localityFromAddress(address: string): string {
+  const parts = address
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.slice(-2).join(", ");
+}
+
+const STREET_SUFFIX =
+  /\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|pkwy|parkway|ct|court|cir|circle|pl|place|ter|terrace|hwy|highway|loop|row|sq|square)\.?$/i;
+
+/** A street-like address (has a house number or ends in a street suffix).
+ * Only these get the locality hint — a city-only query ("Los Angeles") must
+ * geocode on its own, appending a previous city would point it somewhere
+ * else entirely. */
+function isStreetLike(address: string): boolean {
+  return /\d/.test(address) || STREET_SUFFIX.test(address);
+}
+
+/** A single Nominatim lookup result: the canonical location plus the
+ * locality hint for the next address in the trip. */
+interface GeocodeMatch {
+  location: Location;
+  locality: string;
+}
+
+/**
+ * Nominatim sometimes matches only the street and drops the house number
+ * the user typed (no address point exists, so the top result is the road
+ * itself). The number is the user's own input — never a guess — so it is
+ * kept: prepend it when the geocoder's result doesn't already contain it.
+ */
+function preserveHouseNumber(typed: string, address: string): string {
+  const match = typed.trim().match(/^(\d+[a-z]?)\b/i);
+  if (!match) return address;
+  const number = match[1]!;
+  if (new RegExp(`\\b${number}\\b`).test(address)) return address;
+  return `${number} ${address}`;
+}
+
+/** One Nominatim query (no locality inference). */
+async function geocodeMatch(address: string): Promise<GeocodeMatch> {
   const trimmed = address.trim();
-  if (!trimmed) return { address, lat: null, lng: null };
-  const url = `${NOMINATIM_URL}?format=json&limit=1&q=${encodeURIComponent(trimmed)}`;
+  const noMatch: GeocodeMatch = {
+    location: { address, lat: null, lng: null },
+    locality: "",
+  };
+  if (!trimmed) return noMatch;
+  const url = `${NOMINATIM_URL}?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(trimmed)}`;
   try {
     const res = await fetch(url, {
       headers: {
@@ -25,18 +195,61 @@ export async function geocode(address: string): Promise<Location> {
       },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return { address, lat: null, lng: null };
+    if (!res.ok) return noMatch;
     const json = (await res.json()) as NominatimResult[];
     const hit = json[0];
-    if (!hit) return { address, lat: null, lng: null };
+    if (!hit) return noMatch;
     return {
-      address,
-      lat: Number(hit.lat),
-      lng: Number(hit.lon),
+      location: {
+        address: preserveHouseNumber(address, canonicalAddress(hit) || address),
+        lat: Number(hit.lat),
+        lng: Number(hit.lon),
+      },
+      locality: localityHint(hit),
     };
   } catch {
-    return { address, lat: null, lng: null };
+    return noMatch;
   }
+}
+
+/**
+ * Geocode one address, biasing street-like addresses toward the previous
+ * stop's locality when the plain lookup lands far away. Without a hint (or
+ * for a city-only query) this is a single Nominatim call; with a hint it
+ * retries once with "city, ST" appended and keeps whichever result is
+ * closer to the previous stop. Never guesses — both candidates come from
+ * the geocoder.
+ */
+async function geocodeWithLocality(
+  address: string,
+  hint: string,
+  prevCoord: { lat: number; lng: number } | null,
+): Promise<GeocodeMatch> {
+  const plain = await geocodeMatch(address);
+  const plainLat = plain.location.lat;
+  const plainLng = plain.location.lng;
+  if (plainLat === null || plainLng === null) return plain;
+  if (!isStreetLike(address) || !hint || !prevCoord) return plain;
+  const plainLoc = { lat: plainLat, lng: plainLng };
+  // The plain result is already near the previous stop — no retry needed.
+  if (haversine(prevCoord, plainLoc) < 50_000) return plain;
+  const hinted = await geocodeMatch(`${address}, ${hint}`);
+  const hintedLat = hinted.location.lat;
+  const hintedLng = hinted.location.lng;
+  if (hintedLat === null || hintedLng === null) return plain;
+  const hintedLoc = { lat: hintedLat, lng: hintedLng };
+  const plainDist = haversine(prevCoord, plainLoc);
+  const hintedDist = haversine(prevCoord, hintedLoc);
+  return hintedDist < plainDist ? hinted : plain;
+}
+
+/** Geocode a free-text address to coordinates via Nominatim (no API key).
+ * Returns the canonical (geocoded) address form; on no match or a network
+ * failure the coordinates are null and the address stays as typed. Used for
+ * single-address lookups (e.g. the start location in Settings); trip
+ * geocoding goes through recomputeMileage, which threads the locality hint. */
+export async function geocode(address: string): Promise<Location> {
+  return (await geocodeMatch(address)).location;
 }
 
 interface RouteResult {
@@ -119,6 +332,12 @@ function haversine(
  * Recompute a mileage expense: geocode any un-geocoded addresses, compute the
  * route distance, and derive the amount from the per-year mileage rate.
  *
+ * Un-geocoded addresses are geocoded in trip order, threading the previous
+ * stop's locality ("city, ST") as a hint: a street-like address that would
+ * otherwise default to a faraway city (e.g. "123 Main St" → some other
+ * state) is retried with the previous stop's city/state appended and the
+ * closer result is kept. City-only queries geocode on their own.
+ *
  * Money is computed with decimal.js: `distance × rate` is exact and rounded
  * once to cents with ROUND_HALF_UP (a half cent rounds up, e.g. 122.15 mi ×
  * $0.70 → $85.51). The route distance is a float measurement (meters / mile),
@@ -145,12 +364,28 @@ export async function recomputeMileage(
       rateDec = null;
     }
   }
-  // Geocode addresses missing coordinates.
-  const geocoded = await Promise.all(
-    locations.map(async (l) =>
-      l.lat === null || l.lng === null ? geocode(l.address) : l,
-    ),
-  );
+  // Geocode addresses missing coordinates, threading the previous stop's
+  // locality so a partial street address doesn't default to a faraway city.
+  const geocoded: Location[] = [];
+  let hint = "";
+  let prevCoord: { lat: number; lng: number } | null = null;
+  for (const l of locations) {
+    if (l.lat !== null && l.lng !== null) {
+      geocoded.push(l);
+      prevCoord = { lat: l.lat, lng: l.lng };
+      // No structured data for an already-geocoded stop — the locality hint
+      // comes from its canonical address string.
+      const fromAddress = localityFromAddress(l.address);
+      if (fromAddress) hint = fromAddress;
+      continue;
+    }
+    const match = await geocodeWithLocality(l.address, hint, prevCoord);
+    geocoded.push(match.location);
+    if (match.location.lat !== null && match.location.lng !== null) {
+      if (match.locality) hint = match.locality;
+      prevCoord = { lat: match.location.lat, lng: match.location.lng };
+    }
+  }
   const route = await computeRouteDistance(geocoded);
   const distance = new Decimal(route.distanceMiles);
   const distanceStr = distance.gt(0) ? distance.toFixed(2) : "";
