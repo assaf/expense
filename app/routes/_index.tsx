@@ -7,7 +7,7 @@ import {
   Mail,
   Info,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import MapView from "~/components/MapView";
@@ -138,7 +138,9 @@ function ExpenseList({
 }) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [showEmailHelp, setShowEmailHelp] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const navigate = useNavigate();
 
   usePasteImage(uploadImage);
@@ -155,8 +157,54 @@ function ExpenseList({
     void navigate("/expense/new", { state: { file } });
   }
 
+  /** The file types the drop zone accepts — matches the upload input. */
+  function isReceiptFile(file: File): boolean {
+    return (
+      file.type.startsWith("image/") ||
+      file.type === "application/pdf" ||
+      /\.pdf$/i.test(file.name)
+    );
+  }
+
+  // dragenter/dragleave fire for every child element crossed, so track depth
+  // instead of toggling on each event — prevents the highlight from flickering.
+  function onDragEnter(e: DragEvent<HTMLElement>) {
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragOver(true);
+  }
+
+  function onDragOver(e: DragEvent<HTMLElement>) {
+    // preventDefault is required to turn the drag into a drop target.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDragLeave(e: DragEvent<HTMLElement>) {
+    e.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setDragOver(false);
+    }
+  }
+
+  function onDrop(e: DragEvent<HTMLElement>) {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && isReceiptFile(file)) uploadImage(file);
+  }
+
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <main
+      className={`mx-auto max-w-4xl px-4 py-8 ${dragOver ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500" : ""}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Expenses</h1>
         <nav className="flex items-center gap-2">
@@ -199,9 +247,9 @@ function ExpenseList({
           }}
         />
         <p className="basis-full text-xs text-gray-400">
-          Tip: upload an image or PDF, or paste an image (⌘V) anywhere to create
-          a receipt — the amount, merchant, and category are filled in
-          automatically.
+          Tip: upload an image or PDF, paste an image (⌘V), or drag a file
+          anywhere on this page to create a receipt — the amount, merchant, and
+          category are filled in automatically.
           {mileageRate
             ? ` Current mileage rate: $${mileageRate}/mi.`
             : " Set a mileage rate in Settings."}

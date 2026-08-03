@@ -284,6 +284,73 @@ describe("Expense CRUD", () => {
     }
   });
 
+  it("drags a file onto the home page to create a receipt draft", async () => {
+    await page.goto("/", { waitUntil: "load" });
+
+    // Dropping an unsupported file does nothing — no navigation.
+    const textDrop = await page.evaluateHandle(() => new DataTransfer());
+    await textDrop.evaluate((dt) => {
+      dt.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
+    });
+    await page.locator("main").dispatchEvent("drop", {
+      dataTransfer: textDrop,
+    });
+    await expect(page).toHaveURL("/");
+
+    const blobsBefore = await testPrisma.imageBlob.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    const expensesBefore = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+
+    // Dropping a receipt image opens the editor and uploads it as a draft.
+    const png = await tinyPng();
+    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+    await dataTransfer.evaluate(
+      (dt, bytes) => {
+        dt.items.add(
+          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
+        );
+      },
+      [...png],
+    );
+    const [resp] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/expense") && r.request().method() === "POST",
+        { timeout: 30_000 },
+      ),
+      page.locator("main").dispatchEvent("drop", { dataTransfer }),
+    ]);
+    await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+    expect(resp.ok()).toBeTruthy();
+    expect(
+      await testPrisma.imageBlob.count({
+        where: { accountId: TEST_ACCOUNT_ID },
+      }),
+    ).toBe(blobsBefore + 1);
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID },
+      }),
+    ).toBe(expensesBefore);
+    // The draft preview is the image rendered from the blob URL.
+    await expect(page.locator("img").first()).toHaveAttribute("src", /^blob:/);
+
+    // Leave the database as we found it (the draft is never saved).
+    const draft = await testPrisma.imageBlob.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID },
+      orderBy: { key: "desc" },
+      select: { key: true },
+    });
+    if (draft) {
+      await testPrisma.imageBlob.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, key: draft.key },
+      });
+    }
+  });
+
   afterAll(async () => {
     await page?.close();
   });

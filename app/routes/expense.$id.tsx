@@ -40,6 +40,14 @@ import { usePasteImage } from "~/lib/use-paste-image";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
+/**
+ * Files carried from the home page (paste/upload) that are being uploaded as
+ * editor drafts. Module scope so the guard survives StrictMode's dev
+ * double-mount — without it a carried file would be uploaded and OCR'd
+ * twice, orphaning the first draft blob.
+ */
+const draftUploadsInFlight = new WeakSet<File>();
+
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const expense = await readExpense(params.id, user.accountId);
@@ -230,11 +238,17 @@ function ReceiptEditor({ data }: { data: EditorData }) {
   );
 
   // Create mode: a file carried from the home page (paste/upload) becomes the
-  // draft image, and OCR pre-fills the fields when it returns.
+  // draft image, and OCR pre-fills the fields when it returns. StrictMode's
+  // dev double-mount must not upload the carried file twice (it would OCR
+  // and store two drafts, orphaning the first), so in-flight files are
+  // tracked at module scope where they survive the remount.
   const location = useLocation();
   useEffect(() => {
     const file = (location.state as { file?: File } | null)?.file;
-    if (isNew && file) void uploadDraft(file);
+    if (isNew && file && !draftUploadsInFlight.has(file)) {
+      draftUploadsInFlight.add(file);
+      void uploadDraft(file);
+    }
   }, []);
 
   async function uploadDraft(file: File) {
