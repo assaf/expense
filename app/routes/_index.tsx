@@ -6,13 +6,17 @@ import {
   Download,
   Mail,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { isComplete } from "~/lib/completeness";
+import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
+import type { DuplicateMatch } from "~/lib/duplicates";
 import {
   countLabel,
   formatAmount,
@@ -25,11 +29,14 @@ import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
 import {
+  deleteExpense,
+  dismissDuplicatePair,
   readExpenses,
   readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
 import { geocodedLocations, type Expense } from "~/lib/types";
+import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/_index";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -48,6 +55,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
   const sorted = sortExpenses(open);
+  // Which rows look like each other (both sides of a pair). Matched against
+  // ALL expenses — including rows in closed reports — so a re-uploaded
+  // receipt still warns when the original was already filed.
+  const dismissed = new Set(settings.duplicateDismissals);
+  const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
   const currentYear = String(new Date().getFullYear());
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
@@ -60,7 +72,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   return {
     mode: "app" as const,
-    expenses: sorted.map(toListItem),
+    expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
     mileageRate: settings.mileageRates[currentYear] ?? "",
     merchants,
     reports,
@@ -68,7 +80,35 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-function toListItem(e: Expense) {
+/** List-level actions: dismiss a duplicate warning or delete a row.
+ * Deleting from the list still goes through the confirm dialog — deletion
+ * has no undo, so it always asks first. */
+export async function action({ request }: Route.ActionArgs) {
+  const user = await requireUser(request);
+  const form = await request.formData();
+  const intent = formString(form, "intent");
+
+  if (intent === "dismiss-duplicate") {
+    const id = formString(form, "id");
+    const otherIds = formString(form, "otherIds")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const otherId of otherIds) {
+      await dismissDuplicatePair(user.accountId, id, otherId);
+    }
+    return null;
+  }
+
+  if (intent === "delete") {
+    await deleteExpense(formString(form, "id"), user.accountId);
+    return null;
+  }
+
+  return unknownIntent();
+}
+
+function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
   return {
     id: e.id,
     type: e.type,
@@ -81,6 +121,11 @@ function toListItem(e: Expense) {
     locations: e.type === "mileage" ? e.locations : [],
     distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
     merchant: e.type === "mileage" ? "" : e.merchant,
+    duplicates: (matches ?? []).map((m) => ({
+      expenseId: m.expense.id,
+      reason: m.reason,
+      label: duplicateLabel(m.expense),
+    })),
   };
 }
 
@@ -143,9 +188,11 @@ function ExpenseList({
   // with `?new=<id>`; the row stays highlighted for three seconds.
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const navigate = useNavigate();
+  const fetcher = useFetcher();
 
   // Consume `?new=<id>` from the create redirect: start the highlight and
   // drop the query param so a reload doesn't re-highlight (replace keeps it
@@ -178,6 +225,27 @@ function ExpenseList({
   /** Carry the pasted/uploaded file into the new editor as its draft image. */
   function uploadImage(file: File) {
     void navigate("/expense/new", { state: { file } });
+  }
+
+  /** Dismiss every duplicate warning on a row — "not a duplicate" is a
+   * one-click, permanent dismissal for the pair (no confirm needed: it
+   * only hides a warning, it never deletes anything). */
+  function dismissDuplicate(expenseId: string, otherIds: string[]) {
+    const form = new FormData();
+    form.set("intent", "dismiss-duplicate");
+    form.set("id", expenseId);
+    form.set("otherIds", otherIds.join(","));
+    void fetcher.submit(form, { method: "post" });
+  }
+
+  /** Delete a row from the list — always after the confirm dialog. */
+  function removeExpense() {
+    if (!confirmDeleteId) return;
+    const form = new FormData();
+    form.set("intent", "delete");
+    form.set("id", confirmDeleteId);
+    setConfirmDeleteId(null);
+    void fetcher.submit(form, { method: "post" });
   }
 
   /** The file types the drop zone accepts — matches the upload input. */
@@ -375,10 +443,25 @@ function ExpenseList({
                   : e.report === selectedReport,
             )
             .map((e) => (
-              <ExpenseRow key={e.id} expense={e} isNew={e.id === highlightId} />
+              <ExpenseRow
+                key={e.id}
+                expense={e}
+                isNew={e.id === highlightId}
+                onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
+                onRemove={() => setConfirmDeleteId(e.id)}
+              />
             ))}
         </ul>
       )}
+
+      {confirmDeleteId ? (
+        <ConfirmDialog
+          message="Delete this expense? This cannot be undone."
+          onConfirm={removeExpense}
+          onCancel={() => setConfirmDeleteId(null)}
+          deleting={fetcher.state !== "idle"}
+        />
+      ) : null}
     </main>
   );
 }
@@ -386,12 +469,17 @@ function ExpenseList({
 function ExpenseRow({
   expense,
   isNew = false,
+  onDismiss,
+  onRemove,
 }: {
   expense: ReturnType<typeof toListItem>;
   isNew?: boolean;
+  onDismiss: (otherIds: string[]) => void;
+  onRemove: () => void;
 }) {
   const to = `/expense/${expense.id}`;
   const rowRef = useRef<HTMLLIElement>(null);
+  const dup = expense.duplicates[0];
 
   // A newly added expense sorts near the top, but the list may have been
   // scrolled — bring the highlighted row into view.
@@ -406,9 +494,8 @@ function ExpenseRow({
 
   return (
     <li ref={rowRef}>
-      <Link
-        to={to}
-        className={`flex items-center gap-4 rounded-xl border p-3 transition-colors hover:border-gray-400 ${
+      <div
+        className={`overflow-hidden rounded-xl border transition-colors ${
           isNew
             ? "border-blue-400 bg-blue-100 ring-2 ring-blue-400"
             : expense.complete
@@ -416,32 +503,74 @@ function ExpenseRow({
               : "border-amber-300 bg-amber-50"
         }`}
       >
-        <Thumbnail expense={expense} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="truncate font-medium">
-              {expense.type === "receipt"
-                ? expense.merchant || "Untitled receipt"
-                : "Mileage"}
-            </span>
-            <span className="shrink-0 font-semibold tabular-nums">
-              {formatAmount(expense.amount)}
-            </span>
-          </div>
-          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
-            <span>{formatDate(expense.date)}</span>
-            {expense.category ? (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
-                {expense.category}
+        <Link
+          to={to}
+          className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5"
+        >
+          <Thumbnail expense={expense} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate font-medium">
+                {expense.type === "receipt"
+                  ? expense.merchant || "Untitled receipt"
+                  : "Mileage"}
               </span>
-            ) : null}
-            {expense.report ? <span>{expense.report}</span> : null}
-            {!expense.complete ? (
-              <span className="font-medium text-amber-700">Incomplete</span>
-            ) : null}
+              <span className="shrink-0 font-semibold tabular-nums">
+                {formatAmount(expense.amount)}
+              </span>
+            </div>
+            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
+              <span>{formatDate(expense.date)}</span>
+              {expense.category ? (
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                  {expense.category}
+                </span>
+              ) : null}
+              {expense.report ? <span>{expense.report}</span> : null}
+              {!expense.complete ? (
+                <span className="font-medium text-amber-700">Incomplete</span>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </Link>
+        </Link>
+        {dup ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <span className="flex items-center gap-1.5 font-medium">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Possible duplicate of {dup.label}
+                {expense.duplicates.length > 1
+                  ? ` (+${expense.duplicates.length - 1} more)`
+                  : ""}
+                .
+              </span>
+            </span>
+            <span className="flex-1" />
+            <Link
+              to={`/expense/${dup.expenseId}`}
+              className="text-blue-700 hover:underline"
+            >
+              View
+            </Link>
+            <button
+              type="button"
+              onClick={() =>
+                onDismiss(expense.duplicates.map((d) => d.expenseId))
+              }
+              className="hover:underline"
+            >
+              Not a duplicate
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="font-semibold text-red-700 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+      </div>
     </li>
   );
 }

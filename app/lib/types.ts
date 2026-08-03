@@ -123,6 +123,9 @@ export type Settings = {
   homeLng: number | null;
   /** Mileage reimbursement rate per calendar year, e.g. { "2026": "0.70" }. */
   mileageRates: Record<string, string>;
+  /** Expense pairs the user marked "not a duplicate" (`duplicatePairKey`
+   * strings, order-independent) — the warning never shows for them again. */
+  duplicateDismissals: string[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -130,6 +133,7 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLat: null,
   homeLng: null,
   mileageRates: {},
+  duplicateDismissals: [],
 };
 
 /**

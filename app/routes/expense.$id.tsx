@@ -8,6 +8,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import {
   useFetcher,
@@ -19,6 +20,7 @@ import {
 import MapView from "~/components/MapView";
 import { PageShell } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
@@ -27,6 +29,8 @@ import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
 import { loadEditorContext } from "~/lib/editor.server";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
+import { duplicateLabel, findDuplicates } from "~/lib/duplicates";
+import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
 import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
 import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
 import type {
@@ -64,7 +68,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     prevId: i > 0 ? sorted[i - 1]!.id : null,
     nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
   };
-  return { mode: "edit" as const, ...context, nav };
+  return { mode: "edit" as const, ...context, nav, existing: all };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -97,6 +101,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 export type EditorData = {
   mode: "create" | "edit";
   expense: Expense;
+  existing: Expense[];
   reports: string[];
   categories: string[];
   merchants: string[];
@@ -117,6 +122,36 @@ export function Editor({ data }: { data: EditorData }) {
     <ReceiptEditor key={data.expense.id} data={data} />
   ) : (
     <MileageEditor key={data.expense.id} data={data} />
+  );
+}
+
+/** Why a matching expense looks like the same entry, in plain words. */
+function reasonText(reason: DuplicateReason): string {
+  return reason === "same-date-merchant-amount"
+    ? "same date, merchant, and amount"
+    : "the same trip on the same day";
+}
+
+/** Inline warning in the create editors: the draft looks like an existing
+ * expense. Informational — it never blocks Save; the Save button turns into
+ * "Save anyway" so keeping the entry is deliberate. */
+function DuplicateWarning({ matches }: { matches: DuplicateMatch[] }) {
+  const first = matches[0]!;
+  const extra = matches.length - 1;
+  return (
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>
+        This looks like a duplicate of{" "}
+        <Link
+          to={`/expense/${first.expense.id}`}
+          className="font-medium text-blue-700 hover:underline"
+        >
+          {duplicateLabel(first.expense)}
+        </Link>
+        {extra > 0 ? ` (+${extra} more)` : ""} — {reasonText(first.reason)}.
+      </span>
+    </div>
   );
 }
 
@@ -238,6 +273,19 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         category,
       } as ReceiptExpense),
     [expense, date, merchant, amount, report, category],
+  );
+
+  // Create mode: does the draft look like an expense that already exists?
+  // Computed live as the fields change; the banner warns but never blocks.
+  const duplicateMatches = useMemo(
+    () =>
+      isNew
+        ? findDuplicates(
+            { ...expense, date, merchant, amount, report, category },
+            data.existing,
+          )
+        : [],
+    [isNew, expense, date, merchant, amount, report, category, data.existing],
   );
 
   // Create mode: a file carried from the home page (paste/upload) becomes the
@@ -416,6 +464,9 @@ function ReceiptEditor({ data }: { data: EditorData }) {
       onBack={isNew ? onCancel : undefined}
     >
       <ErrorBanner error={error} />
+      {duplicateMatches.length > 0 ? (
+        <DuplicateWarning matches={duplicateMatches} />
+      ) : null}
 
       <div className="mb-6">
         <div className="mb-1 flex items-center justify-between">
@@ -546,6 +597,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         onCancel={onCancel}
         onSave={() => doSave(onSave)}
         onDelete={isNew ? undefined : () => setConfirmDelete(true)}
+        saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
       />
 
       {lightbox && (isNew ? draftPreview : expense.imageFile) ? (
@@ -596,6 +648,7 @@ function MileageEditor({ data }: { data: EditorData }) {
     straightLine(locations),
   );
   const [approximate, setApproximate] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [computing, setComputing] = useState(false);
   const manualAmount = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -677,6 +730,18 @@ function MileageEditor({ data }: { data: EditorData }) {
     [expense, date, report, amount, locations],
   );
 
+  // Create mode: does this trip look like one that already exists?
+  const duplicateMatches = useMemo(
+    () =>
+      isNew
+        ? findDuplicates(
+            { ...expense, date, locations, distanceMiles },
+            data.existing,
+          )
+        : [],
+    [isNew, expense, date, locations, distanceMiles, data.existing],
+  );
+
   function onSave() {
     const form = new FormData();
     form.set("intent", "save");
@@ -702,7 +767,7 @@ function MileageEditor({ data }: { data: EditorData }) {
     onSave: () => doSave(onSave),
     onCancel: doCancel,
     disabled: fetcher.state !== "idle",
-    blocked: false,
+    blocked: confirmDelete,
   });
 
   const stops = geocodedLocations(locations).map((l, i) => ({
@@ -714,6 +779,9 @@ function MileageEditor({ data }: { data: EditorData }) {
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
       <ErrorBanner error={error} />
+      {duplicateMatches.length > 0 ? (
+        <DuplicateWarning matches={duplicateMatches} />
+      ) : null}
 
       <div className="mb-6 overflow-hidden rounded-xl border border-gray-200">
         <MapView coords={coords} stops={stops} height={260} interactive />
@@ -802,8 +870,17 @@ function MileageEditor({ data }: { data: EditorData }) {
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
         onSave={() => doSave(onSave)}
-        onDelete={isNew ? undefined : () => doDelete(onDelete)}
+        onDelete={isNew ? undefined : () => setConfirmDelete(true)}
+        saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
       />
+      {confirmDelete ? (
+        <ConfirmDialog
+          message="Delete this expense? This cannot be undone."
+          onConfirm={() => doDelete(onDelete)}
+          onCancel={() => setConfirmDelete(false)}
+          deleting={fetcher.state !== "idle"}
+        />
+      ) : null}
       {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
   );
@@ -1009,12 +1086,14 @@ function EditorActions({
   onCancel,
   onSave,
   onDelete,
+  saveLabel,
 }: {
   complete: boolean;
   saving: boolean;
   onCancel: () => void;
   onSave: () => void;
   onDelete?: () => void;
+  saveLabel?: string;
 }) {
   return (
     <div className="mt-8 flex items-center justify-between border-t border-gray-200 pt-4">
@@ -1045,7 +1124,7 @@ function EditorActions({
           Cancel
         </Button>
         <Button type="button" onClick={onSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? "Saving…" : (saveLabel ?? "Save")}
         </Button>
       </div>
     </div>
@@ -1158,40 +1237,6 @@ function TransitionOverlay({ kind }: { kind: "save" | "cancel" | "delete" }) {
               ? "Deleting…"
               : "Closing…"}
         </span>
-      </div>
-    </div>
-  );
-}
-
-function ConfirmDialog({
-  message,
-  onConfirm,
-  onCancel,
-  deleting,
-}: {
-  message: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-  deleting: boolean;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="mb-4 text-center text-gray-700">{message}</p>
-        <div className="flex justify-center gap-2">
-          <Button variant="ghost" onClick={onCancel} disabled={deleting}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={deleting}>
-            {deleting ? "Deleting…" : "Delete"}
-          </Button>
-        </div>
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ export {
   renameCategory,
   readSettings,
   writeSettings,
+  dismissDuplicatePair,
   readInboundEmail,
   upsertInboundEmail,
   findAccountByInboundSender,

@@ -4,7 +4,7 @@ import { requireUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { todayDate } from "~/lib/format";
-import { newExpenseShell } from "~/lib/store.server";
+import { newExpenseShell, readExpenses } from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.new";
 
@@ -21,8 +21,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     url.searchParams.get("type") === "mileage" ? "mileage" : "receipt";
   const expense = newExpenseShell(type);
   expense.date = todayDate();
-  const context = await loadEditorContext(user.accountId, expense);
-  return { mode: "create" as const, ...context, nav: null };
+  // Existing expenses feed the live duplicate warning in the create editor.
+  const [context, existing] = await Promise.all([
+    loadEditorContext(user.accountId, expense),
+    readExpenses(user.accountId),
+  ]);
+  return { mode: "create" as const, ...context, existing, nav: null };
 }
 
 export async function action({ request }: Route.ActionArgs) {

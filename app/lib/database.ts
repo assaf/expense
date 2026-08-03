@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { duplicatePairKey } from "~/lib/duplicates";
 import { APP_PASSWORD, APP_USERNAME } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
@@ -611,11 +612,26 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.homeAddress = kv["homeAddress"] ?? "";
   settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
   settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
+  settings.duplicateDismissals = parseDuplicateDismissals(
+    kv["duplicateDismissals"] ?? "",
+  );
   for (const [k, v] of Object.entries(kv)) {
     const m = k.match(/^mileageRate\.(.+)$/);
     if (m && v) settings.mileageRates[m[1]] = v;
   }
   return settings;
+}
+
+/** Parse the stored dismissal list (a JSON array of pair keys). */
+function parseDuplicateDismissals(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return [];
+  }
 }
 
 export async function writeSettings(
@@ -634,6 +650,11 @@ export async function writeSettings(
       key: "homeLng",
       value: settings.homeLng === null ? "" : String(settings.homeLng),
     },
+    {
+      accountId,
+      key: "duplicateDismissals",
+      value: JSON.stringify(settings.duplicateDismissals),
+    },
   ];
   for (const [year, rate] of Object.entries(settings.mileageRates)) {
     rows.push({ accountId, key: `mileageRate.${year}`, value: rate });
@@ -642,6 +663,25 @@ export async function writeSettings(
     prisma.settings.deleteMany({ where: { accountId } }),
     prisma.settings.createMany({ data: rows }),
   ]);
+}
+
+/**
+ * Mark an expense pair as "not a duplicate" so the warning never shows for
+ * it again. The key is order-independent, so dismissing works no matter
+ * which side of the pair the user acted on. Idempotent.
+ */
+export async function dismissDuplicatePair(
+  accountId: string,
+  idA: string,
+  idB: string,
+): Promise<void> {
+  const settings = await readSettings(accountId);
+  const key = duplicatePairKey(idA, idB);
+  if (settings.duplicateDismissals.includes(key)) return;
+  await writeSettings(accountId, {
+    ...settings,
+    duplicateDismissals: [...settings.duplicateDismissals, key],
+  });
 }
 
 // --- Inbound email ----------------------------------------------------------

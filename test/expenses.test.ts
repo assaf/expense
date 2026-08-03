@@ -103,12 +103,13 @@ describe("Expense CRUD", () => {
     });
     // The new expense should appear in the list
     await expect(page.getByText("Test Merchant")).toBeVisible();
-    // The just-added expense is highlighted on arrival.
+    // The just-added expense is highlighted on arrival (the ring lives on
+    // the row container, which wraps the link and any duplicate strip).
     const newRow = page.locator("li").filter({ hasText: "Test Merchant" });
-    await expect(newRow.locator("a")).toHaveClass(/ring-blue-400/);
+    await expect(newRow.locator(":scope > div")).toHaveClass(/ring-blue-400/);
     // The highlight clears itself after three seconds.
     await expect
-      .poll(() => newRow.locator("a").getAttribute("class"), {
+      .poll(() => newRow.locator(":scope > div").getAttribute("class"), {
         timeout: 10_000,
       })
       .not.toContain("ring-blue-400");
