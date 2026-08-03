@@ -7,8 +7,10 @@ import {
   Mail,
   Info,
   AlertTriangle,
+  Search,
+  X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import MapView from "~/components/MapView";
@@ -116,6 +118,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     amount: e.amount,
     category: e.category,
     report: e.report,
+    description: e.description,
     complete: isComplete(e),
     imageFile: e.type === "receipt" ? e.imageFile : "",
     locations: e.type === "mileage" ? e.locations : [],
@@ -127,6 +130,30 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
       label: duplicateLabel(m.expense),
     })),
   };
+}
+
+/** Text fields the search box filters on — the merchant (or "mileage" with
+ * the route addresses for mileage rows), description, category, and the
+ * amount formatted as "$x.xx" so a query like "$7" matches "$7.50". */
+function searchableText(e: ReturnType<typeof toListItem>): string {
+  const parts = [
+    e.type === "receipt" ? e.merchant : "mileage",
+    e.type === "mileage" ? e.locations.map((l) => l.address).join(" ") : "",
+    e.description,
+    e.category,
+    e.amount ? formatAmount(e.amount) : "",
+  ];
+  return parts.join(" ").toLowerCase();
+}
+
+/** Case-insensitive word filter: every whitespace-separated word in the
+ * query must appear somewhere in the row's searchable text; "" matches
+ * everything (all rows). */
+function matchesSearch(e: ReturnType<typeof toListItem>, query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = searchableText(e);
+  return words.every((word) => haystack.includes(word));
 }
 
 const SITE_URL = "https://expense.labnotes.org";
@@ -182,6 +209,8 @@ function ExpenseList({
   inboundAddress: string;
 }) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showEmailHelp, setShowEmailHelp] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Id of the expense created just now — the create action redirects here
@@ -212,6 +241,29 @@ function ExpenseList({
     const timer = setTimeout(() => setHighlightId(null), 3000);
     return () => clearTimeout(timer);
   }, [highlightId]);
+
+  // Debounce the search box: wait 200ms after the last keystroke before
+  // applying the filter, and collapse a burst of edits into one update
+  // (only the final value ever reaches the list).
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Both list filters run client-side: the report chips narrow by report,
+  // the search box by text (amount, merchant, description, category).
+  const filtered = useMemo(
+    () =>
+      expenses.filter(
+        (e) =>
+          (selectedReport === null ||
+            (selectedReport === "Unassigned"
+              ? e.report === ""
+              : e.report === selectedReport)) &&
+          matchesSearch(e, debouncedQuery),
+      ),
+    [expenses, selectedReport, debouncedQuery],
+  );
 
   usePasteImage(uploadImage);
 
@@ -246,6 +298,13 @@ function ExpenseList({
     form.set("id", confirmDeleteId);
     setConfirmDeleteId(null);
     void fetcher.submit(form, { method: "post" });
+  }
+
+  /** Reset both list filters — the report chips and the search box. */
+  function clearFilters() {
+    setSelectedReport(null);
+    setQuery("");
+    setDebouncedQuery("");
   }
 
   /** The file types the drop zone accepts — matches the upload input. */
@@ -312,7 +371,7 @@ function ExpenseList({
         </nav>
       </header>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <Button onClick={() => createExpense("receipt")}>
           <ReceiptText className="h-4 w-4" /> Add receipt
         </Button>
@@ -337,6 +396,27 @@ function ExpenseList({
             e.currentTarget.value = "";
           }}
         />
+        <div className="relative ml-auto w-full sm:w-96">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search amount, merchant, description, or category"
+            aria-label="Search expenses"
+            className="h-10 w-full rounded-lg border border-gray-300 pl-9 pr-9 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
         <p className="basis-full text-xs text-gray-400">
           Tip: upload an image or PDF, paste an image (⌘V), or drag a file
           anywhere on this page to create a receipt — the amount, merchant, and
@@ -413,17 +493,19 @@ function ExpenseList({
         </section>
       ) : null}
 
-      {selectedReport ? (
-        <div className="mb-3 flex items-center justify-between text-sm text-gray-600">
+      {selectedReport !== null || debouncedQuery ? (
+        <div className="mb-3 flex items-center justify-between gap-2 text-sm text-gray-600">
           <span>
-            Showing{" "}
-            {selectedReport === "Unassigned" ? "unassigned" : selectedReport}{" "}
-            expenses
+            {debouncedQuery
+              ? `Showing ${filtered.length} of ${expenses.length} expenses`
+              : selectedReport === "Unassigned"
+                ? "Showing unassigned expenses"
+                : `Showing ${selectedReport} expenses`}
           </span>
           <button
             type="button"
             className="text-blue-600 hover:underline"
-            onClick={() => setSelectedReport(null)}
+            onClick={clearFilters}
           >
             Show all
           </button>
@@ -432,25 +514,21 @@ function ExpenseList({
 
       {expenses.length === 0 ? (
         <EmptyState />
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-gray-500">
+          No expenses match these filters.
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
-          {expenses
-            .filter((e) =>
-              selectedReport === null
-                ? true
-                : selectedReport === "Unassigned"
-                  ? e.report === ""
-                  : e.report === selectedReport,
-            )
-            .map((e) => (
-              <ExpenseRow
-                key={e.id}
-                expense={e}
-                isNew={e.id === highlightId}
-                onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
-                onRemove={() => setConfirmDeleteId(e.id)}
-              />
-            ))}
+          {filtered.map((e) => (
+            <ExpenseRow
+              key={e.id}
+              expense={e}
+              isNew={e.id === highlightId}
+              onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
+              onRemove={() => setConfirmDeleteId(e.id)}
+            />
+          ))}
         </ul>
       )}
 
