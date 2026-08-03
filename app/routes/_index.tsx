@@ -372,31 +372,46 @@ function ExpenseList({
       </header>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <Button onClick={() => createExpense("receipt")}>
-          <ReceiptText className="h-4 w-4" /> Add receipt
-        </Button>
-        <Button onClick={() => createExpense("mileage")} variant="secondary">
-          <MapPinned className="h-4 w-4" /> Add mileage
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload className="h-4 w-4" /> Upload image
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.currentTarget.files?.[0];
-            if (f) uploadImage(f);
-            e.currentTarget.value = "";
-          }}
-        />
-        <div className="relative ml-auto w-full sm:w-96">
+        <div className="flex flex-wrap items-center gap-0.5 sm:gap-2">
+          <Button onClick={() => createExpense("receipt")}>
+            <ReceiptText className="h-4 w-4" /> Add receipt
+          </Button>
+          <Button onClick={() => createExpense("mileage")} variant="secondary">
+            <MapPinned className="h-4 w-4" /> Add mileage
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="h-4 w-4" /> Upload image
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.currentTarget.files?.[0];
+              if (f) uploadImage(f);
+              e.currentTarget.value = "";
+            }}
+          />
+          {inboundAddress ? (
+            <button
+              type="button"
+              onClick={() => setShowEmailHelp((v) => !v)}
+              aria-expanded={showEmailHelp}
+              aria-controls="receipt-email-help"
+              aria-label="Receipts by email"
+              title="Receipts by email"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+        <div className="relative w-full sm:min-w-56 sm:flex-1 sm:max-w-96">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -427,8 +442,11 @@ function ExpenseList({
         </p>
       </div>
 
-      {inboundAddress ? (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-3">
+      {inboundAddress && showEmailHelp ? (
+        <div
+          id="receipt-email-help"
+          className="mb-6 rounded-xl border border-gray-200 bg-white p-3"
+        >
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 shrink-0 text-gray-400" />
             <span className="min-w-0 text-sm text-gray-600">
@@ -437,33 +455,22 @@ function ExpenseList({
                 {inboundAddress}
               </span>
             </span>
-            <button
-              type="button"
-              onClick={() => setShowEmailHelp((v) => !v)}
-              aria-expanded={showEmailHelp}
-              aria-label="Receipt email instructions"
-              className="ml-auto shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            >
-              <Info className="h-4 w-4" />
-            </button>
           </div>
-          {showEmailHelp ? (
-            <div className="mt-2 border-t border-gray-100 pt-2">
-              <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-gray-500">
-                <li>
-                  Forward a receipt email to the address above and it is added
-                  automatically — merchant, amount, and category are parsed for
-                  you.
-                </li>
-                <li>The expense date is the date of the forwarded email.</li>
-                <li>PDF and image attachments are supported.</li>
-                <li>
-                  Only emails from your allowed sender addresses are imported —
-                  manage them in Settings → Receipts by email.
-                </li>
-              </ul>
-            </div>
-          ) : null}
+          <div className="mt-2 border-t border-gray-100 pt-2">
+            <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-gray-500">
+              <li>
+                Forward a receipt email to the address above and it is added
+                automatically — merchant, amount, and category are parsed for
+                you.
+              </li>
+              <li>The expense date is the date of the forwarded email.</li>
+              <li>PDF and image attachments are supported.</li>
+              <li>
+                Only emails from your allowed sender addresses are imported —
+                manage them in Settings → Receipts by email.
+              </li>
+            </ul>
+          </div>
         </div>
       ) : null}
 
