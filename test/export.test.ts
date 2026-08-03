@@ -152,7 +152,7 @@ describe("Export", () => {
     await page.close();
   });
 
-  it("includes mileage with its route and map in the report PDF", async () => {
+  it("includes mileage with its distance and route in the report PDF", async () => {
     // The "2026 Test" report contains the seeded mileage trip (32.00 mi,
     // two geocoded stops, rate $0.70 for 2026).
     const res = await page
@@ -161,21 +161,20 @@ describe("Export", () => {
     expect(res.status()).toBe(200);
     const buf = Buffer.from(await res.body());
 
-    // The mileage label renders in full (no rate-independent blanking) and
-    // the route addresses appear as the row's second line + appendix text.
+    // The mileage row shows the distance (the rate is folded into the
+    // amount) and the route addresses as the row's second line — no map.
     const text = await extractPdfText(buf);
-    expect(text).toContain("32.00 mi @ $0.70 / mi");
+    expect(text).toContain("(32.00 miles)");
     expect(text).toContain("123 Test St, Testing, CA");
     expect(text).toContain("456 Dev Ave, Coding, CA");
-    expect(text).toContain("Mileage routes");
+    expect(text).not.toContain("Mileage routes");
 
-    // The mileage appendix page embeds the rendered route map image. The
-    // report has no receipt images, so the PDF is exactly two pages: the
-    // rows + the "Mileage routes" appendix — no trailing blank page.
+    // The report has no receipt images and no map appendix, so the PDF is
+    // exactly one page with no embedded images.
     const task = getDocument({ data: new Uint8Array(buf), verbosity: 0 });
     const doc = await task.promise;
     try {
-      expect(doc.numPages).toBe(2);
+      expect(doc.numPages).toBe(1);
       let imageOps = 0;
       for (let p = 1; p <= doc.numPages; p++) {
         const pageDoc = await doc.getPage(p);
@@ -184,7 +183,7 @@ describe("Export", () => {
           (fn) => fn === OPS.paintImageXObject,
         ).length;
       }
-      expect(imageOps).toBeGreaterThan(0);
+      expect(imageOps).toBe(0);
     } finally {
       await task.destroy();
     }

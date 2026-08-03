@@ -89,6 +89,12 @@ export function mileageMerchant(distanceMiles: string, rate: string): string {
   return r === null ? distance : `${distance} @ $${r.toFixed(2)} / mi`;
 }
 
+/** Mileage distance shown as "(9.45 miles)". "" when unset/unparseable. */
+export function mileageDistanceLabel(distanceMiles: string): string {
+  const d = parseAmount(distanceMiles);
+  return d === null ? "" : `(${d.toFixed(2)} miles)`;
+}
+
 /** The "merchant" label for an expense: the receipt merchant, or the mileage
  * label for mileage expenses. "" when there is nothing to show. */
 export function merchantLabel(
