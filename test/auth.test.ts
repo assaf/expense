@@ -10,7 +10,7 @@ import {
   TEST_USERNAME,
   testPrisma,
 } from "./helpers/seedTestData";
-import { DEFAULT_CATEGORIES } from "~/lib/types";
+import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 

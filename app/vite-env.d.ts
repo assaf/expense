@@ -7,6 +7,12 @@ declare module "*.woff2?inline" {
   export default src;
 }
 
+// Bundled CSV data file (raw UTF-8 string), e.g. default categories.
+declare module "*.csv?raw" {
+  const src: string;
+  export default src;
+}
+
 interface ImportMetaEnv {
   BASE_URL: string;
   MODE: string;

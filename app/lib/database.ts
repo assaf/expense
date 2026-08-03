@@ -5,11 +5,8 @@ import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
-import {
-  DEFAULT_CATEGORIES,
-  DEFAULT_SETTINGS,
-  parseLocations,
-} from "~/lib/types";
+import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
+import { DEFAULT_SETTINGS, parseLocations } from "~/lib/types";
 import type {
   Account,
   Category,
