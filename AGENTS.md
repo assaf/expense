@@ -259,10 +259,12 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
   runs in the deployed serverless bundle — `scripts/deploy` curls it after
   CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
-  push to `main` against the git-integration deployment. To gate production
-  promotion on it: Vercel → project → Settings → Build & Deployment →
-  Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (plus
-  `check-and-test` if desired); requires `VERCEL_TOKEN`,
+  push to `main` (after the `check-and-test` CI job, same workflow — the
+  smoke job fails fast when CI fails, so a broken build never reports a
+  passing smoke check). To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
+  Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (that
+  single check is enough — it fails when CI fails; requiring `check-and-test`
+  too is optional); requires `VERCEL_TOKEN`,
   `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
   `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
   it stable.

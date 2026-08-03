@@ -60,7 +60,7 @@ describe("PDF rasterization", () => {
  *
  * Skipped unless RUN_OCR_TESTS=1: tesseract downloads eng.traineddata from a
  * CDN on first run (network + a few seconds), so it's opt-in locally and
- * enabled in CI (.github/workflows/deployment-check.yml).
+ * enabled in CI (.github/workflows/deployment-smoke.yml).
  */
 describe.skipIf(!process.env.RUN_OCR_TESTS)(
   "OCR round-trip (RUN_OCR_TESTS)",

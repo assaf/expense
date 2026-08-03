@@ -1,11 +1,22 @@
-name: deployment-smoke
+name: deployment-checks
 
-# Post-deploy PDF/OCR smoke check, wired into Vercel Deployment Checks.
+# CI + post-deploy smoke checks for every push to main, wired into Vercel
+# Deployment Checks. Both jobs live in ONE workflow on purpose:
 #
-# Every push to main auto-deploys a production build on Vercel. This workflow
-# locates that deployment, curls its /api/smoke endpoint (which runs the real
-# pdfkit → pdfjs → tesseract pipeline inside the deployed serverless bundle —
-# see app/routes/api.smoke.ts), and fails the job when the pipeline is broken.
+#   - Ordering: GitHub has no cross-workflow dependencies, so a separate
+#     smoke workflow could run (and even pass) before the CI checks finished.
+#     Here `pdf-ocr-smoke` needs `check-and-test`, so the smoke check never
+#     starts until CI is done — and when CI fails, the smoke job fails fast
+#     instead of being skipped (GitHub reports a skipped job as success, which
+#     could let Vercel promote a broken build).
+#   - Emails: GitHub sends one notification email per failed workflow run.
+#     Two workflows meant up to two emails per push; one workflow means at
+#     most one.
+#
+# The smoke check locates the Vercel production deployment for this commit,
+# curls its /api/smoke endpoint (which runs the real pdfkit → pdfjs →
+# tesseract pipeline inside the deployed serverless bundle — see
+# app/routes/api.smoke.ts), and fails the job when the pipeline is broken.
 #
 # To make this gate production promotion:
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
@@ -14,28 +25,92 @@ name: deployment-smoke
 #      Bypass for Automation secret, needed because deployment URLs are SSO-
 #      protected).
 #   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
-#      Add Checks → provider GitHub → require "pdf-ocr-smoke".
+#      Add Checks → provider GitHub → require "pdf-ocr-smoke". Because the
+#      smoke job fails when CI fails, that single check is enough to gate
+#      promotion; requiring "Check & Test" too is optional.
 #   3. Vercel then holds each production deployment (never aliases it to
-#      expense.labnotes.org) until this check passes. You can also require
-#      the "check-and-test" job from deployment-check.yml.
+#      expense.labnotes.org) until the required checks pass.
 #
-# NOTE: the job name IS the check name Vercel matches — keep it stable.
-# Renaming it requires updating the Deployment Checks settings to match.
+# NOTE: the job names ARE the check names Vercel matches — keep them stable.
+# Renaming either requires updating the Deployment Checks settings to match.
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  check-and-test:
+    name: Check & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Matches the hardcoded test URL in vite.config.ts:
+      # postgres://assaf@localhost/expense_test (passwordless)
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: assaf
+          POSTGRES_DB: expense_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U assaf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # initStore bootstraps an account from these on an empty database
+      # (tests force-reset the schema, so they must be present).
+      APP_USERNAME: testuser
+      APP_PASSWORD: test-password
+      SESSION_SECRET: ci-only-session-secret-0123456789abcdef
+      # Runs the real tesseract OCR round-trip in test/pdf-ocr.test.ts
+      # (downloads eng.traineddata from a CDN; skipped locally by default).
+      RUN_OCR_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm check
+
+      # Playwright browsers are not installed by pnpm install; the E2E tests
+      # launch headless Chromium, so download it (with OS deps) first.
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test
+
   pdf-ocr-smoke:
     name: pdf-ocr-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Run the smoke only after CI passes. `if: always()` + an explicit guard
+    # (instead of the default skip-on-failure) so a broken build reports a
+    # failing smoke check to Vercel rather than a skipped/passing one.
+    needs: check-and-test
+    if: always() && github.ref == 'refs/heads/main'
     steps:
+      - name: Require CI to pass first
+        if: needs.check-and-test.result != 'success'
+        run: |
+          echo "::error::Not running the PDF/OCR smoke check: 'check-and-test' ${{ needs.check-and-test.result }}."
+          exit 1
+
       - name: Wait for the Vercel production deployment (this commit)
         id: deployment
         env:
