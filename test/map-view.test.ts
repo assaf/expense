@@ -98,6 +98,7 @@ describe("Mileage map rendering", () => {
 
     // Redrawing (a second geocode) replaces the layers — the counts must
     // not grow (regression: stop markers used to accumulate).
+    await page.goto("/", { waitUntil: "load" });
     const { inputs } = await openEditorWithRoute();
     await inputs.first().blur();
     await expect
