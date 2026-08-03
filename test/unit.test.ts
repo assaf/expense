@@ -50,6 +50,7 @@ const makeMileage = (
     { address: "B", lat: 34.06, lng: -118.25 },
   ],
   distanceMiles: "32.00",
+  route: { coords: [], returnCoords: [] },
   createdAt: "",
   updatedAt: "",
   ...overrides,

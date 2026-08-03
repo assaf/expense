@@ -1,6 +1,11 @@
 import { ulid } from "ulid";
 import { hasDatabase } from "~/lib/env";
-import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
+import {
+  EMPTY_ROUTE,
+  type Expense,
+  type MileageExpense,
+  type ReceiptExpense,
+} from "~/lib/types";
 
 /**
  * Storage entry point. Postgres is required — every read/write goes through
@@ -85,6 +90,7 @@ export function newExpenseShell(type: Expense["type"]): Expense {
     type: "mileage",
     locations: [],
     distanceMiles: "",
+    route: EMPTY_ROUTE,
   };
   return mileage;
 }

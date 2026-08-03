@@ -39,6 +39,7 @@ import type {
   Location,
   MileageExpense,
   ReceiptExpense,
+  RouteGeometry,
 } from "~/lib/types";
 import { geocodedLocations } from "~/lib/types";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -652,11 +653,13 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [report, setReport] = useState(expense.report);
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
-  const [coords, setCoords] = useState<[number, number][]>(
-    straightLine(initLocations(expense, home)),
+  const [coords, setCoords] = useState<[number, number][]>(() =>
+    initRouteCoords(expense, home),
   );
   const [returnCoords, setReturnCoords] = useState<[number, number][]>(() =>
-    returnLeg(initLocations(expense, home)),
+    expense.route.coords.length >= 2
+      ? expense.route.returnCoords
+      : returnLeg(initLocations(expense, home)),
   );
   const [approximate, setApproximate] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -672,6 +675,37 @@ function MileageEditor({ data }: { data: EditorData }) {
   // results. Typing bumps it too — any in-flight geocode is stale the
   // moment the addresses change.
   const requestSeq = useRef(0);
+  // The latest computed route geometry — saved with the expense so the map
+  // shows the driving route everywhere (list thumbnails, editor on open),
+  // not just while this session's recompute result is in state.
+  const lastRoute = useRef<RouteGeometry | null>(null);
+
+  // Legacy expenses (created before routes were persisted) load with no
+  // geometry — compute it once on open so the map shows the driving route
+  // instead of straight point-to-point lines. New expenses start empty
+  // (nothing to geocode yet) and compute on the first blur. Distance and
+  // amount are left as saved; they refresh on the next explicit recompute.
+  useEffect(() => {
+    if (expense.route.coords.length >= 2) return;
+    const geo = geocodedLocations(locations);
+    if (geo.length < 2) return;
+    let cancelled = false;
+    void (async () => {
+      const result = await computeRoute(locations, rate);
+      if (!result || cancelled) return;
+      lastRoute.current = {
+        coords: result.coords,
+        returnCoords: result.returnCoords ?? [],
+      };
+      setCoords(result.coords);
+      setReturnCoords(result.returnCoords ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Run once per editor open (the component is keyed by expense id).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Geocode the addresses and compute the route + amount via /api/route.
    * Pure — no state writes — so callers decide what to apply. */
@@ -686,7 +720,19 @@ function MileageEditor({ data }: { data: EditorData }) {
     returnCoords: [number, number][];
     approximate: boolean;
   } | null> {
-    if (!locations.some((l) => l.address.trim())) return null;
+    if (!locations.some((l) => l.address.trim())) {
+      // Everything is empty — there is no trip to compute. Return a blank
+      // result so callers reset the map and distance to nothing instead of
+      // leaving a stale route on screen.
+      return {
+        locations,
+        distanceMiles: "",
+        amount: "",
+        coords: [],
+        returnCoords: [],
+        approximate: false,
+      };
+    }
     setComputing(true);
     try {
       const res = await fetch("/api/route", {
@@ -727,22 +773,31 @@ function MileageEditor({ data }: { data: EditorData }) {
     setGeocodingFields((prev) => prev.filter((x) => x !== i));
   }
 
-  /** Focus leaving a location field geocodes the trip and updates the map —
-   * but only when that field's address geocodes successfully. The map never
-   * changes while typing. On success the field is updated to the geocoded
-   * (canonical) address; on failure an error is shown under the field and
-   * the typed text is kept as-is. */
+  /** Focus leaving a location field recomputes the trip: an address that
+   * geocodes successfully updates the map; a failed geocode shows an error
+   * under the field and keeps the typed text; an emptied field that was
+   * part of the route drops out (the server ignores blank addresses) and
+   * the map, distance, and amount recompute without it. The map never
+   * changes while typing. */
   async function commitLocation(i: number) {
     const address = locations[i]?.address ?? "";
-    if (!address.trim()) return; // nothing to geocode
+    // A field that was never filled (or already emptied and committed)
+    // blurs without changing the trip — no recompute. Only a field with
+    // typed content, or one that was part of the committed route and is
+    // now being emptied, triggers a recompute.
+    const wasGeocoded =
+      (resolved[i]?.address.trim() ?? "") !== "" || resolved[i]?.lat !== null;
+    if (!address.trim() && !wasGeocoded) return;
     setGeocodingFields((prev) => (prev.includes(i) ? prev : [...prev, i]));
     try {
       const seq = ++requestSeq.current;
       const result = await computeRoute(locations, rate);
       if (!result || requestSeq.current !== seq) return;
       const r = result.locations[i];
-      if (!r || r.lat === null || r.lng === null) {
-        // Geocode failed — tell the user, never guess an address.
+      // A non-empty field that failed to geocode is an error — tell the
+      // user, never guess an address. An emptied field is expected to come
+      // back without coordinates (it is excluded from the route).
+      if (address.trim() && (!r || r.lat === null || r.lng === null)) {
         setAddressErrors((prev) => {
           const next = [...prev];
           next[i] =
@@ -757,6 +812,10 @@ function MileageEditor({ data }: { data: EditorData }) {
       setResolved(result.locations);
       setCoords(result.coords);
       setReturnCoords(result.returnCoords ?? []);
+      lastRoute.current = {
+        coords: result.coords,
+        returnCoords: result.returnCoords ?? [],
+      };
       setDistanceMiles(result.distanceMiles);
       if (!manualAmount.current) setAmount(result.amount);
       setApproximate(result.approximate);
@@ -844,6 +903,10 @@ function MileageEditor({ data }: { data: EditorData }) {
               return r && r.lat !== null && r.lng !== null ? r : l;
             });
             saveDistance = result.distanceMiles;
+            lastRoute.current = {
+              coords: result.coords,
+              returnCoords: result.returnCoords ?? [],
+            };
             if (!manualAmount.current) saveAmount = result.amount;
           }
         } finally {
@@ -862,6 +925,10 @@ function MileageEditor({ data }: { data: EditorData }) {
       form.set("description", description);
       form.set("distanceMiles", saveDistance);
       form.set("locations", JSON.stringify(saveLocations));
+      form.set(
+        "route",
+        lastRoute.current ? JSON.stringify(lastRoute.current) : "",
+      );
       // Submit through the shared flow so the "Saving…" overlay covers the
       // actual request + redirect (the geocode flush above shows the map's
       // computing spinner).
@@ -909,7 +976,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         <DuplicateWarning matches={duplicateMatches} />
       ) : null}
 
-      <div className="mb-6 overflow-hidden rounded-xl border border-gray-200">
+      <div className="relative mb-6 overflow-hidden rounded-xl border border-gray-200">
         <MapView
           coords={coords}
           returnCoords={returnCoords}
@@ -917,6 +984,20 @@ function MileageEditor({ data }: { data: EditorData }) {
           height={260}
           interactive
         />
+        {computing ? (
+          // Geocoding + OSRM can take a couple of seconds — a pill centered
+          // over the map says a recompute is in flight instead of leaving
+          // the stale route on screen with no feedback.
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span
+              role="status"
+              className="flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-sm font-medium text-gray-700 shadow-lg"
+            >
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              Calculating route…
+            </span>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
           <span className="flex items-center gap-2 text-gray-600">
             {computing ? (
@@ -1053,6 +1134,16 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
 
 function straightLine(locations: Location[]): [number, number][] {
   return geocodedLocations(locations).map((l) => [l.lat, l.lng]);
+}
+
+/** The editor's initial route: the saved driving geometry when present,
+ * straight point-to-point lines until a route has been computed. */
+function initRouteCoords(
+  expense: MileageExpense,
+  home: Location,
+): [number, number][] {
+  if (expense.route.coords.length >= 2) return expense.route.coords;
+  return straightLine(initLocations(expense, home));
 }
 
 /** The return leg — last stop back to the start — as a straight line, used

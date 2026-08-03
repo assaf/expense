@@ -6,7 +6,9 @@ import {
   upsertExpense,
 } from "~/lib/store.server";
 import {
+  EMPTY_ROUTE,
   parseLocations,
+  parseRoute,
   type Expense,
   type MileageExpense,
   type ReceiptExpense,
@@ -56,6 +58,16 @@ export async function saveExpenseFromForm(
     ? existing.type === "mileage"
     : formString(form, "type") === "mileage";
   if (isMileage) {
+    // The form carries the latest computed route geometry (empty when the
+    // session never recomputed — keep the stored route then, so a legacy
+    // expense saved unchanged doesn't wipe its geometry).
+    const sentRoute = parseRoute(formString(form, "route"));
+    const route =
+      sentRoute.coords.length >= 2
+        ? sentRoute
+        : existing && existing.type === "mileage"
+          ? existing.route
+          : EMPTY_ROUTE;
     const expense: MileageExpense = {
       ...(existing && existing.type === "mileage"
         ? existing
@@ -71,6 +83,7 @@ export async function saveExpenseFromForm(
         (l) => l.address.trim() !== "",
       ),
       distanceMiles: formString(form, "distanceMiles"),
+      route,
       updatedAt: now,
     };
     await upsertExpense(expense, accountId);

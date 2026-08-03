@@ -6,7 +6,7 @@ import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
-import { DEFAULT_SETTINGS, parseLocations } from "~/lib/types";
+import { DEFAULT_SETTINGS, parseLocations, parseRoute } from "~/lib/types";
 import { isEmail } from "~/lib/validation";
 import type {
   Account,
@@ -850,6 +850,7 @@ function expenseData(
       originalName: e.originalName,
       distanceMiles: null,
       locations: [],
+      route: undefined,
     };
   }
   return {
@@ -860,6 +861,7 @@ function expenseData(
     originalName: "",
     distanceMiles: e.distanceMiles === "" ? null : e.distanceMiles,
     locations: e.locations as unknown as Prisma.InputJsonValue,
+    route: e.route as unknown as Prisma.InputJsonValue,
   };
 }
 
@@ -877,6 +879,7 @@ function rowToExpense(row: {
   originalName: string;
   distanceMiles: Prisma.Decimal | null;
   locations: unknown;
+  route: unknown;
   createdAt: string;
   updatedAt: string;
 }): Expense {
@@ -909,6 +912,7 @@ function rowToExpense(row: {
     type: "mileage",
     locations: parseLocations(row.locations),
     distanceMiles: row.distanceMiles?.toFixed(2) ?? "",
+    route: parseRoute(row.route),
   };
   return mileage;
 }

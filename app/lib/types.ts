@@ -40,6 +40,50 @@ export interface MileageExpense extends ExpenseBase {
   type: "mileage";
   locations: Location[];
   distanceMiles: string; // decimal string "122.13", "" when unset
+  /** Driving-route geometry persisted with the expense so every map (the
+   * list thumbnails and the editor on open) shows the routed trip, not
+   * straight point-to-point lines. Empty until a route is computed. */
+  route: RouteGeometry;
+}
+
+/** Driving-route geometry as [lat, lng] pairs: `coords` is the outbound
+ * route (start → last stop), `returnCoords` the last stop → start leg. */
+export interface RouteGeometry {
+  coords: [number, number][];
+  returnCoords: [number, number][];
+}
+
+export const EMPTY_ROUTE: RouteGeometry = { coords: [], returnCoords: [] };
+
+/** Parse stored/transmitted route geometry, tolerating malformed or missing
+ * data (legacy rows predate the column, so it defaults to empty). */
+export function parseRoute(raw: unknown): RouteGeometry {
+  let obj: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch {
+      return EMPTY_ROUTE;
+    }
+  }
+  if (!obj || typeof obj !== "object") return EMPTY_ROUTE;
+  const o = obj as { coords?: unknown; returnCoords?: unknown };
+  const parsePairs = (v: unknown): [number, number][] => {
+    if (!Array.isArray(v)) return [];
+    return v
+      .filter(
+        (p): p is [number, number] =>
+          Array.isArray(p) &&
+          p.length >= 2 &&
+          typeof p[0] === "number" &&
+          typeof p[1] === "number",
+      )
+      .map((p) => [p[0], p[1]]);
+  };
+  return {
+    coords: parsePairs(o.coords),
+    returnCoords: parsePairs(o.returnCoords),
+  };
 }
 
 export type Expense = ReceiptExpense | MileageExpense;

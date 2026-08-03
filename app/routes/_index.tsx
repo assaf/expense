@@ -122,6 +122,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     complete: isComplete(e),
     imageFile: e.type === "receipt" ? e.imageFile : "",
     locations: e.type === "mileage" ? e.locations : [],
+    route: e.type === "mileage" ? e.route : undefined,
     distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
     merchant: e.type === "mileage" ? "" : e.merchant,
     duplicates: (matches ?? []).map((m) => ({
@@ -706,12 +707,22 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
     lat: l.lat,
     lng: l.lng,
   }));
+  const route = expense.route;
   const loop = stops.length >= 2 ? [...stops, stops[0]] : stops;
   return (
     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200">
       {stops.length >= 2 ? (
         <MapView
-          coords={loop.map((s) => [s.lat, s.lng])}
+          // Saved driving geometry when present; straight point-to-point
+          // fallback for legacy rows that predate route persistence.
+          coords={
+            route && route.coords.length >= 2
+              ? route.coords
+              : loop.map((s) => [s.lat, s.lng])
+          }
+          returnCoords={
+            route && route.coords.length >= 2 ? route.returnCoords : undefined
+          }
           showStops={false}
           lineWidth="thin"
           height={56}

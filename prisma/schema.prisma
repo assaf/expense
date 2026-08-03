@@ -66,6 +66,10 @@ model Expense {
   originalName String
   distanceMiles Decimal? @db.Decimal(10, 2)
   locations    Json
+  /// Driving-route geometry ({ coords, returnCoords } as [lat, lng] pairs)
+  /// persisted so the map shows the routed trip everywhere — the list
+  /// thumbnails and the editor on open — not just after a recompute.
+  route        Json?
   createdAt    String
   updatedAt    String
   accountId    String

@@ -287,13 +287,17 @@ describe("Mileage expense", () => {
 
     // The per-field spinner is visible while the geocode is in flight…
     await expect(spinner).toBeVisible();
-    // …and once it resolves, the field shows the geocoded address and the
-    // spinner is gone.
+    // …and so is the "Calculating route…" pill over the map (geocoding +
+    // OSRM can take a couple of seconds — the pill is the feedback).
+    await expect(page.getByText("Calculating route…")).toBeVisible();
+    // …and once it resolves, the field shows the geocoded address, the
+    // spinner is gone, and the pill disappears.
     release();
     await expect
       .poll(() => first.inputValue())
       .toBe("1600 Amphitheatre Pkwy, Mountain View, CA, USA");
     await expect(spinner).toHaveCount(0);
+    await expect(page.getByText("Calculating route…")).toHaveCount(0);
     await page.unroute("**/api/route");
   });
 
@@ -323,6 +327,57 @@ describe("Mileage expense", () => {
     expect(locations[0]!.address).toBe("123 Test St, Testing, CA");
     // The blank stop is not persisted even as a placeholder.
     expect(locations.some((l) => l.address.trim() === "")).toBe(false);
+  });
+
+  it("recomputes the route without a location when its field is emptied", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const inputs = page.locator("input[placeholder='Address']");
+    const calls: string[] = [];
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      calls.push(body);
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      const filled = addresses.filter((l) => l.address.trim() !== "");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) =>
+            l.address.trim()
+              ? { address: l.address, lat: 34.05, lng: -118.24 }
+              : { address: l.address, lat: null, lng: null },
+          ),
+          // Distance/amount scale with how many stops remain in the trip.
+          distanceMiles: String(filled.length * 10),
+          amount: String(filled.length * 7),
+          coords: filled.map(() => [34.05, -118.24]),
+          returnCoords: [],
+          approximate: false,
+        }),
+      });
+    });
+
+    // Two stops → blurring the second geocodes the trip (2 × $7).
+    await inputs.first().fill("1600 Amphitheatre Pkwy");
+    await inputs.nth(1).fill("456 Dev Ave");
+    await inputs.nth(1).blur();
+    await expect(page.locator("input[type='number']")).toHaveValue("14");
+
+    // Emptying a stop and blurring recomputes the trip without it — the
+    // latest request carries the blank address (the server drops it) and
+    // the amount reflects the single remaining stop.
+    await inputs.nth(1).fill("");
+    await inputs.nth(1).blur();
+    await expect(page.locator("input[type='number']")).toHaveValue("7");
+    const sent = JSON.parse(calls[calls.length - 1]!) as {
+      locations: { address: string }[];
+    };
+    expect(sent.locations[1]!.address.trim()).toBe("");
+    await page.unroute("**/api/route");
   });
 
   it("shows the stop address (street, city) in the map tooltip", async () => {
@@ -447,6 +502,25 @@ describe("Mileage expense", () => {
     }[];
     expect(locations[0]?.lat).toBe(34.05);
     expect(locations[1]?.lat).toBe(34.05);
+    // The computed route geometry is persisted with the expense, so every
+    // map shows the driving route — not straight point-to-point lines.
+    const route = saved?.route as {
+      coords: [number, number][];
+      returnCoords: [number, number][];
+    } | null;
+    expect(route?.coords).toEqual([
+      [34.05, -118.24],
+      [34.06, -118.25],
+    ]);
+
+    // Reopening the saved expense renders that saved route on load (the
+    // blue line draws from the stored geometry, no recompute needed).
+    await page.goto(`/expense/${saved!.id}`, { waitUntil: "load" });
+    await expect
+      .poll(() =>
+        page.locator(".leaflet-overlay-pane path[stroke='#2563eb']").count(),
+      )
+      .toBe(1);
     await page.unroute("**/api/route");
   });
 
