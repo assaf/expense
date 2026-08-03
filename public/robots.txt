@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /expense
+Disallow: /settings
+Disallow: /export
+Disallow: /api/
+Disallow: /sign-out
+
+Sitemap: https://expense.labnotes.org/sitemap.xml

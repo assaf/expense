@@ -14,6 +14,30 @@ import { Button } from "~/components/ui/Button";
 const GITHUB = "https://github.com/assaf/expense";
 const BLOG = "https://labnotes.org";
 const MASTODON = "https://mas.to/@assaf";
+const SITE_URL = "https://expense.labnotes.org";
+
+/** Structured data for rich search results (Google reads JSON-LD). */
+const SOFTWARE_SCHEMA = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Expense",
+  url: SITE_URL,
+  image: `${SITE_URL}/screenshot-og.png`,
+  description:
+    "Expense collects your receipts — snapped, pasted, or forwarded from email — reads the amount and merchant with OCR, and files each expense into IRS-style categories and reports for tax season.",
+  applicationCategory: "FinanceApplication",
+  operatingSystem: "Web",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+  },
+  author: {
+    "@type": "Person",
+    name: "Assaf Arkin",
+    url: BLOG,
+  },
+};
 
 const FEATURES = [
   {
@@ -56,6 +80,9 @@ const STEPS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
+      <script type="application/ld+json">
+        {JSON.stringify(SOFTWARE_SCHEMA)}
+      </script>
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
         <Link
           to="/"

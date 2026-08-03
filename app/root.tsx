@@ -36,11 +36,17 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Expense tracking" },
+    { title: "Expense — personal expense tracking" },
     {
       name: "description",
-      content: "Personal expense tracking with receipts and mileage.",
+      content:
+        "Expense collects your receipts — snapped, pasted, or forwarded from email — and organizes them into IRS-style categories and reports for tax season.",
     },
+    // Social sharing defaults (og:site_name, og:locale, og:type,
+    // twitter:card, theme-color) live as static tags in the root <head> —
+    // route meta arrays replace (not merge) parent meta in React Router, so
+    // only per-page values (title, description, canonical, og:image) belong
+    // here. The landing page overrides this title/description.
   ];
 }
 
@@ -52,6 +58,7 @@ export const links: LinksFunction = () => [
     rel: "apple-touch-icon-precomposed",
     href: "/apple-touch-icon-precomposed.png",
   },
+  { rel: "manifest", href: "/manifest.json" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -77,6 +84,14 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* Global, page-agnostic metadata. Route-level meta arrays replace
+        (not merge) parent meta in React Router, so these apply everywhere
+        while each page's meta() owns its title/description/canonical. */}
+        <meta property="og:site_name" content="Expense" />
+        <meta property="og:locale" content="en_US" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="theme-color" content="#111827" />
         <Meta />
         <Links />
         {/* Umami is production-only: no tracking script (or identify calls)

@@ -23,6 +23,20 @@ function safeNext(raw: string | null): string {
   return raw;
 }
 
+const SITE_URL = "https://expense.labnotes.org";
+
+export function meta(): Route.MetaDescriptors {
+  return [
+    { title: "Sign in to Expense" },
+    {
+      name: "description",
+      content:
+        "Sign in to Expense — personal expense tracking with receipts and mileage.",
+    },
+    { tagName: "link", rel: "canonical", href: `${SITE_URL}/login` },
+  ];
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   if (await isAuthenticated(request)) {
     const url = new URL(request.url);

@@ -157,6 +157,7 @@ function matchesSearch(e: ReturnType<typeof toListItem>, query: string) {
 }
 
 const SITE_URL = "https://expense.labnotes.org";
+const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (loaderData?.mode === "landing") {
@@ -167,7 +168,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
         content:
           "Expense collects your receipts — snapped, pasted, or forwarded from email — reads the amount and merchant with OCR, and files each expense into IRS-style categories and reports for tax season.",
       },
-      { property: "og:url", content: SITE_URL },
+      { tagName: "link", rel: "canonical", href: `${SITE_URL}/` },
+      { property: "og:url", content: `${SITE_URL}/` },
       {
         property: "og:title",
         content: "Expense — every receipt, ready for tax season",
@@ -177,8 +179,29 @@ export function meta({ loaderData }: Route.MetaArgs) {
         content:
           "Snap or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into reports and IRS-style categories, export-ready at tax time.",
       },
-      { property: "og:type", content: "website" },
-      { property: "og:image", content: `${SITE_URL}/screenshot-og.png` },
+      { property: "og:image", content: OG_IMAGE },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content:
+          "The Expense home page — report totals, receipts with thumbnails, and a mileage entry",
+      },
+      {
+        name: "twitter:title",
+        content: "Expense — every receipt, ready for tax season",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "Snap or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into reports and IRS-style categories, export-ready at tax time.",
+      },
+      { name: "twitter:image", content: OG_IMAGE },
+      {
+        name: "twitter:image:alt",
+        content:
+          "The Expense home page — report totals, receipts with thumbnails, and a mileage entry",
+      },
     ];
   }
   return [{ title: "Expenses" }];
