@@ -209,8 +209,20 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
 
+    // The editor then runs a second POST (draft-ocr) to fill in the fields —
+    // count responses so the assertion is race-free.
+    let posts = 0;
+    let ocrOk: boolean | undefined;
+    page.on("response", (r) => {
+      if (r.url().includes("/api/expense") && r.request().method() === "POST") {
+        posts += 1;
+        if (posts === 2) ocrOk = r.ok();
+      }
+    });
+
     // Upload a PDF: the draft-upload response is gated on rasterization
-    // (and extraction), so wait for it before asserting on the stored bytes.
+    // only — OCR runs as a separate request (see below) so a slow scan can
+    // never block the draft.
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) =>
@@ -224,6 +236,12 @@ describe("Expense CRUD", () => {
       }),
     ]);
     expect(resp.ok()).toBeTruthy();
+
+    // The draft-upload response comes back without OCR fields; the separate
+    // draft-ocr POST must still complete (fields may be empty without an AI
+    // key — the request itself is the contract).
+    await expect.poll(() => posts, { timeout: 60_000 }).toBe(2);
+    expect(ocrOk).toBe(true);
 
     // The draft is stored as rasterized, browser-displayable bytes — never
     // the raw PDF (an <img> can't render one). Draft keys are ULID-prefixed,

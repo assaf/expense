@@ -221,6 +221,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
   } | null>(null);
   const [draftPreview, setDraftPreview] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -257,13 +258,20 @@ function ReceiptEditor({ data }: { data: EditorData }) {
     // storage once the upload completes.
     const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
     if (!isPdf) setDraftPreview(URL.createObjectURL(file));
+    setDraftError(null);
     setDrafting(true);
     const form = new FormData();
     form.set("intent", "draft-upload");
     form.set("file", file);
     try {
       const res = await fetch("/api/expense", { method: "POST", body: form });
-      if (!res.ok) return;
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setDraftError(body?.error ?? "Couldn't load that file.");
+        return;
+      }
       const json = (await res.json()) as {
         draftKey: string;
         mime: string;
@@ -280,9 +288,13 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         originalName: json.originalName,
       });
       if (isPdf) {
+        // PDF uploads return before OCR runs (a slow scan must never block
+        // the draft); extract as a second request so fields fill when ready.
         setDraftPreview(
           `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
         );
+        await ocrDraft(file);
+        return;
       }
       if (json.merchant) setMerchant(json.merchant);
       if (json.amount) setAmount(json.amount);
@@ -291,6 +303,28 @@ function ReceiptEditor({ data }: { data: EditorData }) {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
       setDrafting(false);
+    }
+  }
+
+  /** PDFs: OCR runs after the draft is stored, filling the fields in when
+   * the scan is ready. Failures leave the fields empty — never the draft. */
+  async function ocrDraft(file: File) {
+    const form = new FormData();
+    form.set("intent", "draft-ocr");
+    form.set("file", file);
+    try {
+      const res = await fetch("/api/expense", { method: "POST", body: form });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        merchant?: string;
+        amount?: string;
+        category?: string;
+      };
+      if (json.merchant) setMerchant(json.merchant);
+      if (json.amount) setAmount(json.amount);
+      if (json.category) setCategory(json.category);
+    } catch {
+      // Fields stay empty; the user can fill them by hand.
     }
   }
 
@@ -305,6 +339,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
     if (draft) await deleteDraftBlob(draft.key);
     setDraft(null);
     setDraftPreview(null);
+    setDraftError(null);
   }
 
   /** Cancel without saving: drop any draft image, then leave the editor. */
@@ -446,7 +481,9 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             No image. Upload or paste one (⌘V).
           </div>
         )}
-        {isNew && drafting ? (
+        {draftError ? (
+          <p className="mt-1 text-xs text-red-600">{draftError}</p>
+        ) : isNew && drafting ? (
           <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
             <Loader2 className="h-3 w-3 animate-spin" /> Reading receipt…
           </p>

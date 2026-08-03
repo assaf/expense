@@ -54,29 +54,16 @@ export async function action({ request }: Route.ActionArgs) {
     const { buffer, mime, originalName } = uploaded;
 
     // PDFs are rasterized to PNG before they can be displayed or stored (the
-    // editor renders receipts as <img>). Extraction runs first so its rendered
-    // PNG is reused for storage; when extraction fails (e.g. the AI API being
-    // down) the render is still stored, so the draft survives and the user can
-    // fill the fields by hand. Only an unreadable PDF fails the upload.
+    // editor renders receipts as <img>). The draft is saved immediately after
+    // rendering — OCR never blocks it, so a slow scan or OCR timeout can't
+    // prevent the upload (the editor runs a separate draft-ocr request for
+    // the fields). Only an unreadable PDF fails the upload.
     if (isPdfUpload(uploaded)) {
-      let ocr: Awaited<ReturnType<typeof extractFromUploadedImage>> | null =
-        null;
+      let png: Buffer;
       try {
-        ocr = await extractFromUploadedImage(user.accountId, buffer, mime);
+        png = await renderPdfToPng(buffer);
       } catch (err) {
-        console.warn("[draft-upload] PDF extraction failed:", err);
-      }
-      let png: Buffer | null = null;
-      if (ocr) {
-        png = ocr.stored.buffer;
-      } else {
-        try {
-          png = await renderPdfToPng(buffer);
-        } catch (err) {
-          console.warn("[draft-upload] PDF render failed:", err);
-        }
-      }
-      if (!png) {
+        console.warn("[draft-upload] PDF render failed:", err);
         return Response.json(
           { error: "Couldn't read that PDF." },
           { status: 400 },
@@ -94,9 +81,6 @@ export async function action({ request }: Route.ActionArgs) {
         draftKey: saved.filename,
         mime: saved.mime,
         originalName: storedName,
-        merchant: ocr?.merchant ?? "",
-        amount: ocr?.amount ?? "",
-        category: ocr?.category ?? "",
       });
     }
 
@@ -127,36 +111,53 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: true });
   }
 
+  if (intent === "draft-ocr") {
+    // PDFs store their draft before OCR finishes (see draft-upload); this
+    // intent re-runs extraction on the original file so the editor's fields
+    // fill in when the scan is ready. A failure only loses the fields — the
+    // draft is already stored — so the response is always ok.
+    const uploaded = await readUploadedFile(form);
+    if (!uploaded) {
+      return Response.json({ error: "No image received." }, { status: 400 });
+    }
+    const { buffer, mime } = uploaded;
+    try {
+      const ocr = await extractFromUploadedImage(user.accountId, buffer, mime);
+      return Response.json({
+        ok: true,
+        merchant: ocr.merchant,
+        amount: ocr.amount,
+        category: ocr.category,
+      });
+    } catch (err) {
+      console.warn("[draft-ocr] receipt extraction failed:", err);
+      return Response.json({
+        ok: true,
+        merchant: "",
+        amount: "",
+        category: "",
+      });
+    }
+  }
+
   return unknownIntent();
 }
 
 /**
  * OCR an uploaded receipt image and map the suggested category onto one the
- * account already uses. Returns the browser-friendly stored image too, so
- * callers that must rasterize (PDFs) don't render twice. Throws when
- * extraction fails — callers decide whether that is fatal (it isn't for
- * drafts).
+ * account already uses. Throws when extraction fails — callers decide whether
+ * that is fatal (it isn't for drafts).
  */
 async function extractFromUploadedImage(
   accountId: string,
   buffer: Buffer,
   mime: string,
-): Promise<{
-  merchant: string;
-  amount: string;
-  category: string;
-  stored: { buffer: Buffer; mime: string };
-}> {
+): Promise<{ merchant: string; amount: string; category: string }> {
   const categories = (await readCategories(accountId)).map((c) => c.name);
-  const { result, stored } = await extractFromImage({
-    buffer,
-    mime,
-    categories,
-  });
+  const { result } = await extractFromImage({ buffer, mime, categories });
   return {
     merchant: result.merchant,
     amount: result.amount,
     category: matchCategory(result.category, categories),
-    stored,
   };
 }
