@@ -110,8 +110,8 @@ export interface Account {
 export interface User {
   id: string;
   accountId: string;
-  /** Login name, unique, stored lowercase. */
-  username: string;
+  /** Login name — the email address, stored lowercase. */
+  email: string;
   createdAt: string;
 }
 

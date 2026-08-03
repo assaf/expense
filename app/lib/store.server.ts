@@ -26,7 +26,7 @@ export {
   findAccountByInviteCode,
   regenerateInviteCode,
   createUser,
-  findUserByUsername,
+  findUserByEmail,
   findUserById,
   getPasswordHash,
   readExpenses,

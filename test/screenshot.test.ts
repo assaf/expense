@@ -18,11 +18,7 @@ import { describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import { signIn } from "./helpers/launchBrowser";
-import {
-  TEST_PASSWORD,
-  TEST_USERNAME,
-  testPrisma,
-} from "./helpers/seedTestData";
+import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const ACCOUNT = "acct_screenshot";
 const NOW = "2026-07-31T12:00:00.000Z";
@@ -264,7 +260,7 @@ async function seedScreenshotData() {
     data: {
       id: "user_screenshot",
       accountId: ACCOUNT,
-      username: TEST_USERNAME,
+      email: TEST_EMAIL,
       passwordHash: await hashPassword(TEST_PASSWORD),
       createdAt: NOW,
     },
@@ -445,7 +441,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       const page = await context.newPage();
       const pageErrors: string[] = [];
       page.on("pageerror", (err) => pageErrors.push(String(err)));
-      await signIn(page, TEST_USERNAME, TEST_PASSWORD);
+      await signIn(page, TEST_EMAIL, TEST_PASSWORD);
 
       await captureHome(page);
       console.info("wrote public/screenshot-home.png");

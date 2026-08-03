@@ -72,6 +72,26 @@ BEGIN
 END $$;
 SQL
 
+# Login identity: users.username → users.email (rename). Prisma's diff for a
+# String → String rename is DROP COLUMN + ADD COLUMN NOT NULL, which fails on
+# a non-empty users table — so the rename runs explicitly before db push,
+# mirroring the money-column conversion above. Guarded on the column still
+# being named "username" (idempotent on re-runs). The app's initStore then
+# backfills the bootstrap user's email from APP_EMAIL (see database.ts).
+echo -e "\033[0;33m--- Step 4c: Rename users.username → users.email ---\033[0m"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+  ) THEN
+    ALTER TABLE "users" RENAME COLUMN "username" TO "email";
+    ALTER INDEX IF EXISTS "users_username_key" RENAME TO "users_email_key";
+  END IF;
+END $$;
+SQL
+
 pnpm prisma db push --accept-data-loss
 # Record the baseline migrations so future `prisma migrate deploy` has
 # history. Errors when already recorded (P3008) are expected on re-runs.
@@ -80,6 +100,7 @@ pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope ||
 pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
 pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
 pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
+pnpm prisma migrate resolve --applied 20260803131818_username_to_email || true
 
 echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
 DEPLOY_OUTPUT=$(npx -y vercel@latest deploy --prod --yes 2>&1)

@@ -1,5 +1,5 @@
 // One-time baseline for a database created before the account migration.
-// Reads APP_USERNAME/APP_PASSWORD (the bootstrap credentials) and emits
+// Reads APP_EMAIL/APP_PASSWORD (the bootstrap credentials) and emits
 // idempotent SQL that:
 //   1. adds accountId to every pre-account table (defaulting to a freshly
 //      created bootstrap account, so NOT NULL + FK constraints validate),
@@ -14,10 +14,10 @@
 import { hashPassword, generateInviteCode } from "../app/lib/passwords.ts";
 import { ulid } from "ulid";
 
-const username = process.env.APP_USERNAME ?? "";
+const email = (process.env.APP_EMAIL ?? "").trim().toLowerCase();
 const password = process.env.APP_PASSWORD ?? "";
-if (!username || !password) {
-  console.error("preflight-prod: APP_USERNAME and APP_PASSWORD must be set.");
+if (!email || !password) {
+  console.error("preflight-prod: APP_EMAIL and APP_PASSWORD must be set.");
   process.exit(1);
 }
 
@@ -58,19 +58,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS "accounts_inviteCode_key" ON "accounts"("invit
 CREATE TABLE IF NOT EXISTS "users" (
     "id" TEXT NOT NULL,
     "accountId" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
     "createdAt" TEXT NOT NULL,
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username");
+CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
 
 INSERT INTO "accounts" ("id", "name", "inviteCode", "createdAt")
-VALUES ('${accountId}', '${username}', '${inviteCode}', '${createdAt}')
+VALUES ('${accountId}', '${email}', '${inviteCode}', '${createdAt}')
 ON CONFLICT ("name") DO NOTHING;
 
-INSERT INTO "users" ("id", "accountId", "username", "passwordHash", "name", "createdAt")
-VALUES ('${userId}', '${accountId}', '${username}', '${passwordHash}', '${username}', '${createdAt}')
-ON CONFLICT ("username") DO NOTHING;
+INSERT INTO "users" ("id", "accountId", "email", "passwordHash", "createdAt")
+VALUES ('${userId}', '${accountId}', '${email}', '${passwordHash}', '${createdAt}')
+ON CONFLICT ("email") DO NOTHING;
 `);

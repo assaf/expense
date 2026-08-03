@@ -8,7 +8,7 @@
 # Images live in Postgres (image_blobs, IMAGE_BACKEND=pg in prod and dev), so
 # the clone carries the receipt images with it — no external storage to sync.
 # After the clone, the local app logs in with the same credentials as prod
-# (APP_USERNAME/APP_PASSWORD).
+# (APP_EMAIL/APP_PASSWORD).
 #
 # Usage: ./scripts/clone
 # Env:   LOCAL_DB_URL overrides the local database (default: .env DATABASE_URL
@@ -58,7 +58,7 @@ psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE;"
 psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f "$BACKUP_FILE" >/dev/null
 
 echo -e "\033[0;32mClone complete.\033[0m"
-echo "  - Local login uses prod credentials (APP_USERNAME / APP_PASSWORD in .env)."
+echo "  - Local login uses prod credentials (APP_EMAIL / APP_PASSWORD in .env)."
 echo "  - Receipt images are in image_blobs and come with the clone."
 
 # 5. Open the local site (dev server must be running: pnpm dev).

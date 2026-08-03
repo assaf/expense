@@ -38,10 +38,12 @@ model Account {
 }
 
 /// A login identity, always linked to exactly one account.
+/// The email is the login name (stored lowercase) — unique per user, and
+/// format-validated at signup/join.
 model User {
   id           String  @id
   accountId    String
-  username     String  @unique
+  email        String  @unique
   passwordHash String
   createdAt    String
 

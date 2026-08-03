@@ -5,9 +5,9 @@ import { signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
+  TEST_EMAIL,
   TEST_INVITE_CODE,
   TEST_PASSWORD,
-  TEST_USERNAME,
   testPrisma,
 } from "./helpers/seedTestData";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
@@ -34,7 +34,7 @@ describe("Access control", () => {
   /** A fresh context signed in as the seeded testuser. */
   async function signedInPage(): Promise<Page> {
     const page = await openPage();
-    await signIn(page, TEST_USERNAME, TEST_PASSWORD);
+    await signIn(page, TEST_EMAIL, TEST_PASSWORD);
     return page;
   }
 
@@ -73,11 +73,11 @@ describe("Access control", () => {
   it("rejects a wrong password with an error", async () => {
     const page = await openPage();
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
-    await page.fill('input[name="username"]', TEST_USERNAME);
+    await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', "definitely-wrong");
     await page.click('button[type="submit"]');
     await expect(page.getByRole("alert")).toContainText(
-      "Invalid username or password",
+      "Invalid email or password",
     );
     await expect(page).toHaveURL(/\/login$/);
     await page.close();
@@ -121,7 +121,7 @@ describe("Access control", () => {
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
     await page.getByRole("button", { name: "Create a new account" }).click();
     await page.fill('input[name="accountName"]', "Fresh Account");
-    await page.fill('input[name="username"]', "freshuser");
+    await page.fill('input[name="email"]', "freshuser@example.com");
     await page.fill('input[name="password"]', "fresh-password");
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => url.pathname === "/", {
@@ -138,7 +138,7 @@ describe("Access control", () => {
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
     await page.getByRole("button", { name: "Create a new account" }).click();
     await page.fill('input[name="accountName"]', "IRS Fresh");
-    await page.fill('input[name="username"]', "irsfreshuser");
+    await page.fill('input[name="email"]', "irsfreshuser@example.com");
     await page.fill('input[name="password"]', "irs-fresh-password");
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => url.pathname === "/", {
@@ -147,7 +147,7 @@ describe("Access control", () => {
     await page.close();
 
     const user = await testPrisma.user.findUnique({
-      where: { username: "irsfreshuser" },
+      where: { email: "irsfreshuser@example.com" },
     });
     if (!user) throw new Error("No irsfreshuser row after signup");
     const names = (
@@ -178,7 +178,7 @@ describe("Access control", () => {
       })
       .click();
     await page.fill('input[name="inviteCode"]', TEST_INVITE_CODE);
-    await page.fill('input[name="username"]', "seconduser");
+    await page.fill('input[name="email"]', "seconduser@example.com");
     await page.fill('input[name="password"]', "second-password");
     await page.click('button[type="submit"]');
     await page.waitForURL((url) => url.pathname === "/", {
@@ -198,7 +198,7 @@ describe("Access control", () => {
       })
       .click();
     await page.fill('input[name="inviteCode"]', "NOPE1234");
-    await page.fill('input[name="username"]', "thirduser");
+    await page.fill('input[name="email"]', "thirduser@example.com");
     await page.fill('input[name="password"]', "third-password");
     await page.click('button[type="submit"]');
     await expect(page.getByRole("alert")).toContainText(

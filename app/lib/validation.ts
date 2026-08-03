@@ -26,6 +26,16 @@ export function unknownIntent(): Response {
   return Response.json({ error: "Unknown intent." }, { status: 400 });
 }
 
+/**
+ * Pragmatic email check: non-empty local part, @, dotted domain, no spaces.
+ * Not RFC-complete (no IDN/quoting rules) — good enough to keep typos and
+ * junk out of the login identity, which is all this app needs.
+ */
+export function isEmail(input: string): boolean {
+  const email = input.trim().toLowerCase();
+  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
 /** Validate that a date string is YYYY-MM-DD and not in the future. */
 export function validateDateNotFuture(date: string): string | null {
   if (!date) return null;

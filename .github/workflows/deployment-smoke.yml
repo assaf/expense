@@ -67,7 +67,7 @@ jobs:
     env:
       # initStore bootstraps an account from these on an empty database
       # (tests force-reset the schema, so they must be present).
-      APP_USERNAME: testuser
+      APP_EMAIL: testuser@example.com
       APP_PASSWORD: test-password
       SESSION_SECRET: ci-only-session-secret-0123456789abcdef
       # Runs the real tesseract OCR round-trip in test/pdf-ocr.test.ts

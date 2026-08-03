@@ -10,9 +10,9 @@ export const DATABASE_URL = env.DATABASE_URL ?? "";
  * Bootstrap credentials for the very first account + user (created when the
  * database is empty). Subsequent users are created via the signup/join UI.
  */
-export const APP_USERNAME = env.APP_USERNAME ?? "";
+export const APP_EMAIL = env.APP_EMAIL ?? "";
 
-/** Bootstrap password (see APP_USERNAME). */
+/** Bootstrap password (see APP_EMAIL). */
 export const APP_PASSWORD = env.APP_PASSWORD ?? "";
 
 /** Secret used to sign the session cookie. Required — the app fails fast without it. */

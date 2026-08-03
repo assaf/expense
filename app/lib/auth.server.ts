@@ -5,11 +5,12 @@ import {
   createAccount,
   createUser,
   findAccountByInviteCode,
+  findUserByEmail,
   findUserById,
-  findUserByUsername,
   getPasswordHash,
   initStore,
 } from "./store.server";
+import { isEmail } from "./validation";
 import type { User } from "./types";
 
 /**
@@ -19,7 +20,7 @@ import type { User } from "./types";
  * the account — before touching any data, so users only ever see their own
  * account's expenses/settings.
  *
- * The very first user/account is bootstrapped from APP_USERNAME /
+ * The very first user/account is bootstrapped from APP_EMAIL /
  * APP_PASSWORD when the database is empty (see database.ts).
  */
 
@@ -87,15 +88,12 @@ async function commitUserSession(userId: string): Promise<string> {
  * for the session. Throws on invalid credentials. Pass the result to
  * `redirect(…, { headers: { "Set-Cookie": value } })`.
  */
-export async function login(
-  username: string,
-  password: string,
-): Promise<string> {
+export async function login(email: string, password: string): Promise<string> {
   await initStore();
-  const user = await findUserByUsername(username);
+  const user = await findUserByEmail(email);
   const stored = user ? await getPasswordHash(user.id) : "";
   if (!user || !stored || !(await verifyPassword(password, stored))) {
-    throw new Error("Invalid username or password");
+    throw new Error("Invalid email or password");
   }
   return commitUserSession(user.id);
 }
@@ -106,15 +104,15 @@ export async function login(
  */
 export async function createAccountWithUser(input: {
   accountName: string;
-  username: string;
+  email: string;
   password: string;
 }): Promise<string> {
   await initStore();
-  validateSignup(input.username, input.password);
+  validateSignup(input.email, input.password);
   const account = await createAccount(input.accountName);
   const user = await createUser({
     accountId: account.id,
-    username: input.username,
+    email: input.email,
     passwordHash: await hashPassword(input.password),
   });
   return commitUserSession(user.id);
@@ -122,30 +120,30 @@ export async function createAccountWithUser(input: {
 
 /**
  * Join an existing account via its invite code and return the session cookie.
- * Throws with a user-facing message on a bad code or duplicate username.
+ * Throws with a user-facing message on a bad code or duplicate email.
  */
 export async function joinAccountWithInviteCode(input: {
   inviteCode: string;
-  username: string;
+  email: string;
   password: string;
 }): Promise<string> {
   await initStore();
-  validateSignup(input.username, input.password);
+  validateSignup(input.email, input.password);
   const account = await findAccountByInviteCode(
     normalizeInviteCode(input.inviteCode),
   );
   if (!account) throw new Error("That invite code is not valid");
   const user = await createUser({
     accountId: account.id,
-    username: input.username,
+    email: input.email,
     passwordHash: await hashPassword(input.password),
   });
   return commitUserSession(user.id);
 }
 
-function validateSignup(username: string, password: string): void {
-  if (username.trim().length < 3) {
-    throw new Error("Username must be at least 3 characters");
+function validateSignup(email: string, password: string): void {
+  if (!isEmail(email)) {
+    throw new Error("Enter a valid email address");
   }
   if (password.length < 8) {
     throw new Error("Password must be at least 8 characters");

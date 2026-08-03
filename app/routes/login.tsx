@@ -50,7 +50,7 @@ export async function action({ request }: Route.ActionArgs) {
   const mode = formString(form, "mode") as Mode;
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
-  const username = formString(form, "username").trim().toLowerCase();
+  const email = formString(form, "email").trim().toLowerCase();
   const password = formString(form, "password");
 
   try {
@@ -58,17 +58,17 @@ export async function action({ request }: Route.ActionArgs) {
     if (mode === "create") {
       cookie = await createAccountWithUser({
         accountName: formString(form, "accountName"),
-        username,
+        email,
         password,
       });
     } else if (mode === "join") {
       cookie = await joinAccountWithInviteCode({
         inviteCode: formString(form, "inviteCode"),
-        username,
+        email,
         password,
       });
     } else {
-      cookie = await login(username, password);
+      cookie = await login(email, password);
     }
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
@@ -136,10 +136,11 @@ export default function LoginPage() {
             />
           )}
           <AuthField
-            label="Username"
-            name="username"
-            autoComplete="username"
-            placeholder="jane"
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
           />
           <AuthField
             label="Password"
@@ -233,6 +234,7 @@ function AuthField({
         minLength={name === "password" ? 8 : undefined}
         autoComplete={autoComplete}
         placeholder={placeholder}
+        inputMode={type === "email" ? "email" : undefined}
       />
     </Field>
   );

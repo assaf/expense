@@ -26,10 +26,13 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
 ./scripts/clone              # clone the prod (Neon) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
-# sync (preflight + db push, via `vercel env pull`), CLI deploy, and opening the
-# site. `git push origin main` also auto-deploys. Schema changes: `prisma migrate
-# dev` locally, then run deploy to sync prod (migration history exists since Jul
-# 2026).
+# sync (preflight + Step 4c rename + db push, via `vercel env pull`), CLI
+# deploy, and opening the site. `git push origin main` also auto-deploys.
+# Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
+# (migration history exists since Jul 2026). When Prisma can't express a
+# change as a lossless diff (e.g. column renames), deploy runs an explicit,
+# guarded SQL step before db push — mirror the money-column and username→email
+# conversions there instead of relying on `--accept-data-loss`.
 ```
 
 Run `pnpm check` before committing.
@@ -38,7 +41,7 @@ Run `pnpm check` before committing.
 
 Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback. Dev/test use
-`.env` (`DATABASE_URL`, and auth: `APP_USERNAME`,
+`.env` (`DATABASE_URL`, and auth: `APP_EMAIL`,
 `APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
 (`DATABASE_URL`, plus the same three auth vars). Pull
 prod env with `npx vercel env pull --environment=production .env.prod` (use
@@ -228,12 +231,17 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   category, setting, and mileage row is scoped by `accountId`. Users in the
   same account share everything; other accounts are fully isolated (all
   reads and writes are scoped — see `app/lib/database.ts`).
-  - Sign in with username/password (scrypt-hashed in `users.passwordHash`).
+  - Sign in with email/password (scrypt-hashed in `users.passwordHash`);
+    the email is the login name — stored lowercase, unique, format-
+    validated at signup/join (`isEmail` in `app/lib/validation.ts`).
   - Signup creates a new account; joining uses the account's invite code
     (shown in Settings, regenerable). Session = signed HttpOnly cookie
     (`SESSION_SECRET`, 30-day max age).
   - **Bootstrap**: on an empty database, the first account + user are
-    created from `APP_USERNAME`/`APP_PASSWORD` (fail-closed if missing).
+    created from `APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing). On
+    existing pre-email databases, `initStore` backfills the bootstrap
+    (oldest) user's login from `APP_EMAIL` when their stored email is not
+    a valid address (legacy username-era rows).
     Single-user era rows are adopted into that account automatically. This
     is app-side data seeding (`initStore` in database.ts, memoized per
     process) — the SCHEMA itself is managed by Prisma (no runtime DDL).

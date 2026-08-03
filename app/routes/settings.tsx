@@ -369,8 +369,8 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       <section className="border-t border-gray-100 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
         <p className="mb-3 text-sm text-gray-500">
-          Sign out of this device. You will need your username and password to
-          get back in.
+          Sign out of this device. You will need your email and password to get
+          back in.
         </p>
         <Form method="post" action="/sign-out">
           <Button type="submit" size="md" variant="secondary">

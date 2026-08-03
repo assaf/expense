@@ -34,7 +34,7 @@ export const TEST_INVITE_CODE = "TESTCODE1";
 export const OTHER_ACCOUNT_ID = "acct_test2";
 
 /** Test login credentials (matches the seeded testuser row). */
-export const TEST_USERNAME = "testuser";
+export const TEST_EMAIL = "testuser@example.com";
 export const TEST_PASSWORD = "test-password";
 
 export async function seedTestData() {
@@ -66,14 +66,14 @@ export async function seedTestData() {
       {
         id: "user_test1",
         accountId: TEST_ACCOUNT_ID,
-        username: TEST_USERNAME,
+        email: TEST_EMAIL,
         passwordHash: await hashPassword(TEST_PASSWORD),
         createdAt: now,
       },
       {
         id: "user_test2",
         accountId: OTHER_ACCOUNT_ID,
-        username: "otheruser",
+        email: "otheruser@example.com",
         passwordHash: await hashPassword("other-password"),
         createdAt: now,
       },

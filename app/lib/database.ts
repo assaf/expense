@@ -1,12 +1,13 @@
 import { ulid } from "ulid";
 import { duplicatePairKey } from "~/lib/duplicates";
-import { APP_PASSWORD, APP_USERNAME } from "~/lib/env";
+import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { DEFAULT_SETTINGS, parseLocations } from "~/lib/types";
+import { isEmail } from "~/lib/validation";
 import type {
   Account,
   Category,
@@ -31,8 +32,10 @@ import type {
  *
  * There is no runtime DDL: schema changes go through `prisma migrate` /
  * `pnpm db:push`. `initStore` only performs one-time data seeding: it
- * bootstraps the first account/user from APP_USERNAME/APP_PASSWORD and
- * adopts single-user era rows (accountId '') into that account.
+ * bootstraps the first account/user from APP_EMAIL/APP_PASSWORD, backfills
+ * the bootstrap user's email from APP_EMAIL (legacy pre-email accounts
+ * logged in with a plain username), and adopts single-user era rows
+ * (accountId '') into that account.
  */
 
 /** The subset of Prisma delegates that carry legacy accountId "" rows. */
@@ -115,18 +118,53 @@ async function migrateImageBlobKeys(bootstrapAccountId: string): Promise<void> {
 
 /**
  * Guarantee at least one user exists. On an empty database, creates the
- * bootstrap account + user from APP_USERNAME/APP_PASSWORD (fail-closed if
+ * bootstrap account + user from APP_EMAIL/APP_PASSWORD (fail-closed if
  * missing). Otherwise returns the oldest existing user — used as the target
  * account for adopting legacy (pre-account) rows.
+ *
+ * One-time legacy fix-up: accounts created before emails were login names
+ * stored a plain username (e.g. "assaf") in the email column. When
+ * APP_EMAIL is configured, the bootstrap user (the oldest user — the same
+ * one the bootstrap flow would have created) gets that address, so the
+ * configured credentials keep working after the username→email switch.
  */
 async function ensureBootstrapUser(): Promise<User> {
   const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-  if (first) return first;
+  if (!first) return bootstrapUser();
 
-  if (!APP_USERNAME || !APP_PASSWORD) {
+  const email = APP_EMAIL.trim().toLowerCase();
+  if (email && !isEmail(first.email)) {
+    const taken = await prisma.user.findUnique({ where: { email } });
+    if (!taken) {
+      await prisma.user.update({
+        where: { id: first.id },
+        data: { email },
+      });
+      console.warn(
+        "[initStore] Backfilled bootstrap user email from APP_EMAIL: %s → %s",
+        first.email,
+        email,
+      );
+      return { ...first, email };
+    }
+  }
+  return first;
+}
+
+/** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */
+async function bootstrapUser(): Promise<User> {
+  if (!APP_EMAIL || !APP_PASSWORD) {
     throw new Error(
-      "No users exist and APP_USERNAME/APP_PASSWORD are not configured — " +
+      "No users exist and APP_EMAIL/APP_PASSWORD are not configured — " +
         "set them to create the first account and user.",
+    );
+  }
+
+  const email = APP_EMAIL.trim().toLowerCase();
+  if (!isEmail(email)) {
+    throw new Error(
+      "APP_EMAIL is not a valid email address — fix it in .env / the " +
+        "deployment dashboard.",
     );
   }
 
@@ -137,7 +175,7 @@ async function ensureBootstrapUser(): Promise<User> {
     prisma.account.create({
       data: {
         id: accountId,
-        name: APP_USERNAME.trim(),
+        name: email,
         inviteCode: generateInviteCode(),
         createdAt: now,
       },
@@ -146,7 +184,7 @@ async function ensureBootstrapUser(): Promise<User> {
       data: {
         id: userId,
         accountId,
-        username: APP_USERNAME.trim().toLowerCase(),
+        email,
         passwordHash: await hashPassword(APP_PASSWORD),
         createdAt: now,
       },
@@ -156,12 +194,7 @@ async function ensureBootstrapUser(): Promise<User> {
       skipDuplicates: true,
     }),
   ]);
-  return {
-    id: userId,
-    accountId,
-    username: APP_USERNAME.trim().toLowerCase(),
-    createdAt: now,
-  };
+  return { id: userId, accountId, email, createdAt: now };
 }
 
 // --- Accounts & Users ------------------------------------------------------
@@ -213,21 +246,21 @@ export async function regenerateInviteCode(accountId: string): Promise<string> {
   return code;
 }
 
-/** Create a user in an account. Throws if the username is already taken. */
+/** Create a user in an account. Throws if the email is already taken. */
 export async function createUser(input: {
   accountId: string;
-  username: string;
+  email: string;
   passwordHash: string;
 }): Promise<User> {
   await initStore();
-  const username = input.username.trim().toLowerCase();
-  if (!username) throw new Error("Username is required");
-  const clash = await prisma.user.findUnique({ where: { username } });
-  if (clash) throw new Error("That username is already taken");
+  const email = input.email.trim().toLowerCase();
+  if (!email) throw new Error("Email is required");
+  const clash = await prisma.user.findUnique({ where: { email } });
+  if (clash) throw new Error("That email is already in use");
   const user: User = {
     id: ulid(),
     accountId: input.accountId,
-    username,
+    email,
     createdAt: new Date().toISOString(),
   };
   await prisma.user.create({
@@ -236,11 +269,11 @@ export async function createUser(input: {
   return user;
 }
 
-export async function findUserByUsername(
-  username: string,
+export async function findUserByEmail(
+  email: string,
 ): Promise<User | undefined> {
   const row = await prisma.user.findUnique({
-    where: { username: username.trim().toLowerCase() },
+    where: { email: email.trim().toLowerCase() },
   });
   return row ?? undefined;
 }

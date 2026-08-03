@@ -30,7 +30,7 @@ Stack:
 
 Auth & accounts (the recent work):
 
-- Username/password login (scrypt-hashed), sessions via signed cookies
+- Email/password login (scrypt-hashed), sessions via signed cookies
 - Multi-user accounts: each account has its own data, users in the same account
   share everything, other accounts fully isolated
 - New users join an account via an 8-char invite code (shown in Settings,
@@ -39,15 +39,17 @@ Auth & accounts (the recent work):
 
 ## Accounts & sharing
 
-Login is username/password (scrypt-hashed). Every expense, report, category,
-and setting belongs to an **account**; everyone in an account shares them,
-and accounts are fully isolated from each other.
+Login is email/password (scrypt-hashed) — the email is the login name, stored
+lowercase and unique, format-validated at signup/join. Every expense, report,
+category, and setting belongs to an **account**; everyone in an account shares
+them, and accounts are fully isolated from each other.
 
 - **Sign up** → creates a brand-new account (starts empty).
 - **Join** → enter an account's invite code (Settings → Account) to share
   that account's data.
-- The first account/user is bootstrapped from `APP_USERNAME`/`APP_PASSWORD`
-  when the database is empty.
+- The first account/user is bootstrapped from `APP_EMAIL`/`APP_PASSWORD`
+  when the database is empty; pre-email accounts get their login backfilled
+  from `APP_EMAIL` on first start (initStore).
 
 ## SEO & AI discovery
 
@@ -132,7 +134,7 @@ Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
 # .env (project root, gitignored)
 DATABASE_URL=postgres://assaf@localhost/expense_dev   # include the local user
 SESSION_SECRET=…         # signs the session cookie (random hex)
-APP_USERNAME=…           # bootstrap: first account's username (empty DB only)
+APP_EMAIL=…           # bootstrap: first account's email (empty DB only)
 APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
 # Receipts by email (all optional):
 # RESEND_API_KEY=re_…            INBOUND_EMAIL_WEBHOOK_SECRET=whsec_…
@@ -141,10 +143,15 @@ APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
 ```
 
 On an empty database the first account + user are bootstrapped from
-`APP_USERNAME`/`APP_PASSWORD` (fail-closed if missing); afterwards users are
+`APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing); afterwards users are
 created through the app's signup/join flow. `SESSION_SECRET` is always
-required. `APP_USERNAME`/`APP_PASSWORD` can be removed from `.env` once you
+required. `APP_EMAIL`/`APP_PASSWORD` can be removed from `.env` once you
 have at least one user.
+
+Accounts created before email login (username era) keep their old username
+as the stored email until `APP_EMAIL` is set — `initStore` then backfills
+that address onto the bootstrap (oldest) user, so the configured credentials
+keep working.
 
 Tests intentionally hardcode `expense_test` (Postgres incl. image blobs),
 ignore the local database, and reset the schema from Prisma on each run
@@ -153,7 +160,7 @@ ignore the local database, and reset the schema from Prisma on each run
 **prod — Vercel:** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
 `SESSION_SECRET`,
-and (only until the first user exists) `APP_USERNAME` / `APP_PASSWORD`.
+and (only until the first user exists) `APP_EMAIL` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
 
 ## Receipts by email
