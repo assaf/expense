@@ -222,6 +222,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
   const [draftPreview, setDraftPreview] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftStage, setDraftStage] = useState<"convert" | "ocr" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
 
@@ -260,6 +261,10 @@ function ReceiptEditor({ data }: { data: EditorData }) {
     if (!isPdf) setDraftPreview(URL.createObjectURL(file));
     setDraftError(null);
     setDrafting(true);
+    // PDFs rasterize before they can be displayed; images show a preview
+    // immediately and only read fields. The stage label tells the user which
+    // phase is running while they wait.
+    setDraftStage(isPdf ? "convert" : "ocr");
     const form = new FormData();
     form.set("intent", "draft-upload");
     form.set("file", file);
@@ -293,6 +298,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         setDraftPreview(
           `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
         );
+        setDraftStage("ocr");
         await ocrDraft(file);
         return;
       }
@@ -303,6 +309,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
       setDrafting(false);
+      setDraftStage(null);
     }
   }
 
@@ -478,15 +485,20 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           </button>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-400">
-            No image. Upload or paste one (⌘V).
+            {isNew && drafting && !draftPreview ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Preparing your
+                receipt…
+              </span>
+            ) : (
+              "No image. Upload or paste one (⌘V)."
+            )}
           </div>
         )}
         {draftError ? (
           <p className="mt-1 text-xs text-red-600">{draftError}</p>
         ) : isNew && drafting ? (
-          <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
-            <Loader2 className="h-3 w-3 animate-spin" /> Reading receipt…
-          </p>
+          <DraftProgress stage={draftStage} />
         ) : (
           <p className="mt-1 text-xs text-gray-400">
             Click the image to view full screen.
@@ -856,6 +868,34 @@ function ErrorBanner({ error }: { error: string }) {
     <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
       {error}
     </p>
+  );
+}
+
+/**
+ * Prominent in-progress indicator for a receipt draft: a spinner, the stage
+ * currently running (PDF rasterization or OCR/extraction), and an
+ * indeterminate progress bar so the wait reads as active work.
+ */
+function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
+  const converting = stage === "convert";
+  return (
+    <div
+      role="status"
+      className="mt-2 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"
+    >
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
+        <span>{converting ? "Converting PDF…" : "Reading receipt…"}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+        <div className="h-full w-1/3 animate-[progress-slide_1.2s_ease-in-out_infinite] rounded-full bg-blue-500" />
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        {converting
+          ? "Rasterizing the PDF so it can be displayed and read."
+          : "Extracting the merchant, amount, and category."}
+      </p>
+    </div>
   );
 }
 

@@ -27,15 +27,18 @@ async function tinyPng(): Promise<Buffer> {
     .toBuffer();
 }
 
-/** A tiny one-page LETTER PDF with a real text layer (pdfkit). */
-function tinyPdf(): Promise<Buffer> {
+/** A tiny multi-page LETTER PDF with a real text layer (pdfkit). */
+function tinyPdf(pages = 1): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const doc = new PDFDocument({ size: "LETTER" });
     doc.on("data", (c: Buffer) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
-    doc.fontSize(12).text("MERCHANT: Pdf Test\nTOTAL: 45.67");
+    for (let i = 1; i <= pages; i++) {
+      doc.fontSize(12).text(`MERCHANT: Pdf Test ${i}\nTOTAL: ${i}0.00`);
+      if (i < pages) doc.addPage();
+    }
     doc.end();
   });
 }
@@ -222,20 +225,31 @@ describe("Expense CRUD", () => {
 
     // Upload a PDF: the draft-upload response is gated on rasterization
     // only — OCR runs as a separate request (see below) so a slow scan can
-    // never block the draft.
-    const [resp] = await Promise.all([
-      page.waitForResponse(
-        (r) =>
-          r.url().includes("/api/expense") && r.request().method() === "POST",
-        { timeout: 30_000 },
-      ),
-      page.locator('input[type="file"]').setInputFiles({
-        name: "receipt.pdf",
-        mimeType: "application/pdf",
-        buffer: await tinyPdf(),
-      }),
-    ]);
+    // never block the draft. Two pages give the conversion stage a visible
+    // window to assert against.
+    const upload = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/expense") && r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "receipt.pdf",
+      mimeType: "application/pdf",
+      buffer: await tinyPdf(2),
+    });
+    // The progress indicator shows the stage while the server rasterizes.
+    await expect(page.getByText("Converting PDF")).toBeVisible({
+      timeout: 10_000,
+    });
+    const resp = await upload;
     expect(resp.ok()).toBeTruthy();
+
+    // While the second request reads the receipt, the indicator switches to
+    // the OCR stage. Assert it before the OCR completes (the poll below
+    // resolves when the panel disappears).
+    await expect(page.getByText("Reading receipt")).toBeVisible({
+      timeout: 30_000,
+    });
 
     // The draft-upload response comes back without OCR fields; the separate
     // draft-ocr POST must still complete (fields may be empty without an AI

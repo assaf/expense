@@ -29,6 +29,17 @@ body {
   scrollbar-width: thin;
 }
 
+/* Indeterminate bar for the draft-upload progress indicator (PDF convert →
+ * OCR). Slides a third-width segment across the track repeatedly. */
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
 /* Visible keyboard focus for links (buttons use their own ring utility). */
 a:focus-visible {
   outline: 2px solid #2563eb;
