@@ -477,6 +477,112 @@ describe("recomputeMileage locality hint", () => {
     );
     expect(r.locations[1]!.address).toBe("New York, NY");
   });
+
+  it("falls back to the plain result when the hinted lookup fails", async () => {
+    // The street doesn't exist in the previous stop's city: the hinted
+    // query comes back empty and the plain result is kept.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (url: string | URL | Request) => {
+        const href = String(url);
+        if (href.includes("/route/v1/driving")) {
+          return {
+            ok: true,
+            json: async () => ({
+              routes: [
+                {
+                  distance: 10_000,
+                  geometry: { coordinates: [[-118.24, 34.05]] },
+                },
+              ],
+            }),
+          };
+        }
+        const q = decodeURIComponent(href.match(/q=([^&]*)/)?.[1] ?? "");
+        if (q === "123 Main St") {
+          return {
+            ok: true,
+            json: async () => [
+              {
+                lat: "37.7749",
+                lon: "-122.4194",
+                display_name: "123 Main St, San Francisco, CA",
+                address: {
+                  house_number: "123",
+                  road: "Main St",
+                  city: "San Francisco",
+                  state: "California",
+                  country: "United States",
+                  "ISO3166-2-lvl4": "US-CA",
+                },
+              },
+            ],
+          };
+        }
+        expect(q).toBe("123 Main St, Los Angeles, CA"); // the hinted retry
+        return { ok: true, json: async () => [] }; // no match in LA
+      }),
+    );
+
+    const r = await recomputeMileage(
+      [LA, { address: "123 Main St", lat: null, lng: null }],
+      "0.70",
+    );
+    // The LA lookup failed — the San Francisco result is kept rather than
+    // guessing or dropping the address.
+    expect(r.locations[1]!.address).toBe("123 Main St, San Francisco, CA");
+  });
+
+  it("skips the hinted retry when the plain result is already near the previous stop", async () => {
+    // The plain query already resolves in/near Los Angeles — no second
+    // Nominatim call is made (the 50km short-circuit).
+    const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
+      const href = String(url);
+      if (href.includes("/route/v1/driving")) {
+        return {
+          ok: true,
+          json: async () => ({
+            routes: [
+              {
+                distance: 10_000,
+                geometry: { coordinates: [[-118.24, 34.05]] },
+              },
+            ],
+          }),
+        };
+      }
+      const q = decodeURIComponent(href.match(/q=([^&]*)/)?.[1] ?? "");
+      expect(q).toBe("123 Main St"); // only the plain call
+      return {
+        ok: true,
+        json: async () => [
+          {
+            lat: "33.98",
+            lon: "-118.25", // El Segundo, ~8km from downtown LA
+            display_name: "123 Main St, El Segundo, CA",
+            address: {
+              house_number: "123",
+              road: "Main St",
+              city: "El Segundo",
+              state: "California",
+              country: "United States",
+              "ISO3166-2-lvl4": "US-CA",
+            },
+          },
+        ],
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await recomputeMileage(
+      [LA, { address: "123 Main St", lat: null, lng: null }],
+      "0.70",
+    );
+    expect(r.locations[1]!.address).toBe("123 Main St, El Segundo, CA");
+    // Exactly one Nominatim call (the plain query) + the OSRM route call.
+    const calls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(calls.filter((u) => u.includes("/search")).length).toBe(1);
+  });
 });
 
 describe("recomputeMileage money math", () => {

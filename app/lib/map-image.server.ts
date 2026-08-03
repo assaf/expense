@@ -71,7 +71,7 @@ function buildRouteMapSvg(locations: Location[]): string {
     `<g font-family="${FONT_FAMILY}">`,
   ];
 
-  // The route runs Home → … → Home, so the polyline closes back to the
+  // The route runs Start › … › Start, so the polyline closes back to the
   // first stop when there are 2+ geocoded stops.
   if (stops.length >= 2) {
     const loop = [...stops, stops[0]];
@@ -79,7 +79,7 @@ function buildRouteMapSvg(locations: Location[]): string {
       .map((s) => `${x(s.lng).toFixed(1)},${y(s.lat).toFixed(1)}`)
       .join(" ");
     parts.push(
-      `<polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`,
+      `<polyline points="${points}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`,
     );
   }
 

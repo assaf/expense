@@ -169,11 +169,13 @@ describe("Export", () => {
     expect(text).toContain("456 Dev Ave, Coding, CA");
     expect(text).toContain("Mileage routes");
 
-    // The mileage appendix page embeds the rendered route map image.
+    // The mileage appendix page embeds the rendered route map image. The
+    // report has no receipt images, so the PDF is exactly two pages: the
+    // rows + the "Mileage routes" appendix — no trailing blank page.
     const task = getDocument({ data: new Uint8Array(buf), verbosity: 0 });
     const doc = await task.promise;
     try {
-      expect(doc.numPages).toBeGreaterThan(1);
+      expect(doc.numPages).toBe(2);
       let imageOps = 0;
       for (let p = 1; p <= doc.numPages; p++) {
         const pageDoc = await doc.getPage(p);

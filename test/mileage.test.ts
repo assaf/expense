@@ -297,6 +297,96 @@ describe("Mileage expense", () => {
     await page.unroute("**/api/route");
   });
 
+  it("drops empty addresses when saving", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    // The Start is prefilled with the seeded home address; Stop 1 is left
+    // blank. Saving must persist only the real address.
+    const inputs = page.locator("input[placeholder='Address']");
+    await expect(inputs).toHaveCount(2);
+    await inputs.nth(1).fill("");
+
+    await page.getByText("Save").click();
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
+
+    const saved = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, type: "mileage" },
+      orderBy: { createdAt: "desc" },
+    });
+    const locations = saved?.locations as { address: string }[];
+    expect(locations.length).toBe(1);
+    expect(locations[0]!.address).toBe("123 Test St, Testing, CA");
+    // The blank stop is not persisted even as a placeholder.
+    expect(locations.some((l) => l.address.trim() === "")).toBe(false);
+  });
+
+  it("shows the stop address (street, city) in the map tooltip", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const inputs = page.locator("input[placeholder='Address']");
+    // Mock the route API BEFORE typing so no real geocode ever fires.
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          // Contains HTML-ish text on purpose: tooltip content is rendered
+          // as HTML by Leaflet, so it must arrive escaped.
+          locations: addresses.map((l, i) => ({
+            address: l.address.trim()
+              ? "1600 <b>Amphitheatre</b> Parkway, Mountain View, CA"
+              : l.address,
+            lat: l.address.trim() ? 34.05 + i * 0.01 : null,
+            lng: l.address.trim() ? -118.24 + i * 0.01 : null,
+          })),
+          distanceMiles: "10.00",
+          amount: "7.00",
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.23],
+          ],
+          approximate: false,
+        }),
+      });
+    });
+    await inputs.first().fill("");
+    await inputs.nth(1).fill("");
+    await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
+      delay: 20,
+    });
+    await inputs.nth(1).pressSequentially("456 Dev Ave", { delay: 20 });
+    // Blur the focused field to fire the geocode, then hover the first
+    // stop marker (amber-filled; the casing/line are drawn underneath).
+    await inputs.nth(1).blur();
+    const marker = page.locator(".leaflet-overlay-pane path[fill='#fbbf24']");
+    await expect.poll(() => marker.count()).toBe(2);
+    // Hover ~12px from the marker's center — just inside the invisible 14px
+    // hit area but well outside the small visible dot — proving the bigger
+    // target, not just a hover dead-center on the marker.
+    const box = (await marker.first().boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2);
+    const tooltip = page.locator(".leaflet-tooltip");
+    await expect(tooltip).toBeVisible();
+    // Street + city only — the state is left off the tooltip.
+    await expect(tooltip).toContainText("Start — 1600");
+    await expect(tooltip).not.toContainText("Mountain View, CA");
+    // The address's HTML-like text is escaped — it shows literally as text,
+    // never as a real <b> element.
+    await expect(tooltip).toContainText("<b>Amphitheatre</b>");
+    await expect(tooltip.locator("b")).toHaveCount(0);
+    await page.unroute("**/api/route");
+  });
+
   it("geocodes un-blurred addresses when saving", async () => {
     // Typing addresses and hitting Save without blurring the fields must
     // still geocode the trip, so the saved expense keeps its route,

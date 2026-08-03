@@ -65,7 +65,11 @@ export async function saveExpenseFromForm(
       category,
       description,
       amount,
-      locations: parseLocations(formString(form, "locations")),
+      // Empty/blank addresses are never persisted — the editor keeps blank
+      // rows as placeholders, but a saved trip only stores real stops.
+      locations: parseLocations(formString(form, "locations")).filter(
+        (l) => l.address.trim() !== "",
+      ),
       distanceMiles: formString(form, "distanceMiles"),
       updatedAt: now,
     };

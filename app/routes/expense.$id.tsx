@@ -31,6 +31,7 @@ import { loadEditorContext } from "~/lib/editor.server";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { duplicateLabel, findDuplicates } from "~/lib/duplicates";
 import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
+import { escapeHtml } from "~/lib/escape";
 import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
 import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
 import type {
@@ -880,12 +881,18 @@ function MileageEditor({ data }: { data: EditorData }) {
 
   // The map shows the geocoded route (`resolved`), not the raw typed text —
   // it only changes when an address field loses focus and its address
-  // geocodes successfully, never while typing.
-  const stops = geocodedLocations(resolved).map((l, i) => ({
-    lat: l.lat,
-    lng: l.lng,
-    label: i === 0 ? "Start" : `Stop ${i}`,
-  }));
+  // geocodes successfully, never while typing. The tooltip shows the stop's
+  // role + its street-and-city form (no state/country), escaped because
+  // Leaflet renders tooltip content as HTML.
+  const stops = geocodedLocations(resolved).map((l, i) => {
+    const label = i === 0 ? "Start" : `Stop ${i}`;
+    return {
+      lat: l.lat,
+      lng: l.lng,
+      label,
+      tooltip: `${escapeHtml(label)} — ${escapeHtml(shortAddress(l.address))}`,
+    };
+  });
 
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
@@ -1032,6 +1039,17 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
 
 function straightLine(locations: Location[]): [number, number][] {
   return geocodedLocations(locations).map((l) => [l.lat, l.lng]);
+}
+
+/** "Street, city" form of a canonical address — the first two comma parts,
+ * used for map tooltips so the state/country don't crowd the popup. Falls
+ * back to the full address when it has fewer than two parts. */
+function shortAddress(address: string): string {
+  const parts = address
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.slice(0, 2).join(", ") || address;
 }
 
 // --- Shared editor chrome --------------------------------------------------
