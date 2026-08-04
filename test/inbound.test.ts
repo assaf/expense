@@ -743,6 +743,27 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(0);
   });
 
+  it("reuses the category a previous expense for the same merchant used", async () => {
+    // The model suggests a different category, but a seeded prior expense
+    // for "Test Store" is filed under Testing — the merchant's own category
+    // wins over the guess.
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: "MERCHANT: Test Store\nTOTAL: 7.25\nCATEGORY: office supplies",
+      });
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
+    expect(created.merchant).toBe("Test Store");
+    expect(created.category).toBe("Testing");
+  });
+
   it("renders the HTML body through the browser renderer and resolves cid images", async () => {
     const deps = fakeDeps();
     const html =

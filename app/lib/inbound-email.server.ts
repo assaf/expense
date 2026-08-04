@@ -16,6 +16,7 @@ import {
   classifyReceiptAttachment,
   extractReceipt,
   matchCategory,
+  resolveCategory,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -32,6 +33,7 @@ import type { ReplyInput } from "~/lib/reply.server";
 import {
   findAccountByInboundSender,
   readCategories,
+  readMerchantCategories,
   readInboundEmail,
   upsertExpense,
   upsertInboundEmail,
@@ -633,7 +635,10 @@ export async function processInboundEvent(
     }
 
     // Extract receipt data.
-    const categories = (await readCategories(account.id)).map((c) => c.name);
+    const [categories, merchantCategories] = await Promise.all([
+      readCategories(account.id).then((cs) => cs.map((c) => c.name)),
+      readMerchantCategories(account.id),
+    ]);
     let extraction: ExtractionResult;
     let receiptImage: Buffer | null = null;
     let imageMime: string;
@@ -754,7 +759,12 @@ export async function processInboundEvent(
       missing.push("receipt image");
     }
 
-    const category = matchCategory(extraction.category, categories);
+    const category = resolveCategory(
+      extraction.merchant,
+      extraction.category,
+      merchantCategories,
+      categories,
+    );
     if (!category) missing.push("category");
 
     const now = new Date().toISOString();
