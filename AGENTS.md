@@ -79,7 +79,9 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 # runs the deployed bundle against the prod schema and fails on any schema
 # change if the migration was skipped. Migrations must NEVER run before the
 # test suite: `scripts/deploy` runs `pnpm test` before calling migrate-prod,
-# and the CI `migrate-db` job `needs: check-and-test`.
+# and the CI `migrate-db` job needs both `check` and `test` (which run in
+# parallel). The workflow's job timeouts bound the whole run (~6m ceiling —
+# max(check 2m, test 3m) + migrate 1m + smoke 2m — typical ~4m).
 # Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
 # (migration history exists since Jul 2026). When Prisma can't express a
 # change as a lossless diff (e.g. column renames), the sync runs an explicit,
@@ -373,14 +375,15 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
   runs in the deployed serverless bundle — `scripts/deploy` curls it after
   CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
-  push to `main`. The workflow is three strictly-ordered jobs: `check-and-test`
-  → `migrate-db` (runs `./scripts/migrate-prod --ci` against prod via the
+  push to `main`. The workflow: `check` + `test` run in parallel, then
+  `migrate-db` (runs `./scripts/migrate-prod --ci` against prod via the
   `DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass — never
   before) → `pdf-ocr-smoke`. The smoke job fails fast when
   CI or the migration fails, so a broken build or an unmigrated schema never
-  reports a passing smoke check. To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
+  reports a passing smoke check. Job timeouts (2/3/1/2 minutes) bound the
+  whole run to a ~6m ceiling; typical runs are ~4m. To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
   Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (that
-  single check is enough — it fails when CI fails; requiring `check-and-test`
+  single check is enough — it fails when CI fails; requiring `check`/`test`
   too is optional); requires `VERCEL_TOKEN`,
   `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
   `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep

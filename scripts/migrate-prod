@@ -45,6 +45,11 @@ if [ "$CI_MODE" = "1" ]; then
   fi
   export DATABASE_URL="$DATABASE_URL_UNPOOLED"
   echo "--- CI mode: using DATABASE_URL_UNPOOLED from the environment ---"
+  # CI also skips the guarded one-time conversions below: they are no-ops on
+  # the baselined prod DB (guarded on the old TEXT/username shapes, which
+  # were migrated long ago), and skipping them lets the CI job drop psql
+  # entirely. scripts/deploy (non-CI) still runs them for restored
+  # pre-account dumps.
 else
   echo "--- Pull production env (Vercel) ---"
   npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
@@ -57,14 +62,13 @@ else
   node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
   rm -f /tmp/preflight-prod.sql
-fi
 
-# Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
-# diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
-# conversion runs explicitly before db push. Guarded on the column still being
-# TEXT — idempotent on re-runs.
-echo "--- Convert money columns TEXT → NUMERIC(10,2) ---"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+  # Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
+  # diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
+  # conversion runs explicitly before db push. Guarded on the column still being
+  # TEXT — idempotent on re-runs.
+  echo "--- Convert money columns TEXT → NUMERIC(10,2) ---"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
   IF EXISTS (
@@ -102,8 +106,10 @@ SQL
 # mirroring the money-column conversion above. Guarded on the column still
 # being named "username" (idempotent on re-runs). The app's initStore then
 # backfills the bootstrap user's email from APP_EMAIL (see database.ts).
-echo "--- Rename users.username → users.email ---"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+  # Skipped in CI mode like the other one-time conversions (no-op on the
+  # baselined prod DB).
+  echo "--- Rename users.username → users.email ---"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 DO $$
 BEGIN
   IF EXISTS (
@@ -115,6 +121,7 @@ BEGIN
   END IF;
 END $$;
 SQL
+fi
 
 echo "--- prisma db push (schema.prisma → prod) ---"
 pnpm prisma db push --accept-data-loss
