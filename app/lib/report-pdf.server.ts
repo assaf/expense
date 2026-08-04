@@ -190,7 +190,7 @@ export async function buildReportPdf(
       }
     }
     // Mileage route maps: the real map with the date, mileage, and amount
-    // listed beside it, and the trip's locations below.
+    // listed beside it.
     for (const { e, map } of routes) {
       pageForNext();
       const mapW = 380;
@@ -216,36 +216,6 @@ export async function buildReportPdf(
         ty += 28;
       }
       doc.fillColor("#111827");
-
-      // The trip's stops, in route order — there's room below the map.
-      const locations = e.locations
-        .map((l) => l.address.trim())
-        .filter(Boolean);
-      if (locations.length > 0) {
-        doc.moveDown(0.5);
-        const locH = 16 + locations.length * 13;
-        // Don't orphan the list onto a clipped page bottom: move a long
-        // list onto its own page rather than run past the margin.
-        if (doc.y + locH > doc.page.maxY()) doc.addPage();
-        doc.fontSize(9).font("Helvetica-Bold").text("Locations");
-        doc.moveDown(0.1);
-        for (const [i, address] of locations.entries()) {
-          const label = i === 0 ? "Start/end" : `Stop ${i}`;
-          const ly = doc.y;
-          doc
-            .font("Helvetica")
-            .fontSize(9)
-            .fillColor("#6b7280")
-            .text(label, 50, ly, { width: 70, lineBreak: false });
-          doc
-            .fillColor("#111827")
-            .text(fitText(doc, address, 512 - 130), 130, ly, {
-              width: 512 - 130,
-              lineBreak: false,
-            });
-          doc.moveDown(0.3);
-        }
-      }
     }
   }
 
