@@ -152,29 +152,28 @@ describe("Export", () => {
     await page.close();
   });
 
-  it("includes mileage with its distance and route in the report PDF", async () => {
+  it("includes mileage with its type, rate, distance, route, and a route map in the report PDF", async () => {
     // The "2026 Test" report contains the seeded mileage trip (32.00 mi,
-    // two geocoded stops, rate $0.70 for 2026).
+    // two geocoded stops; business rate for Mar 2026 is $0.725).
     const res = await page
       .context()
       .request.get("/export/report/2026%20Test.pdf");
     expect(res.status()).toBe(200);
     const buf = Buffer.from(await res.body());
 
-    // The mileage row shows the distance (the rate is folded into the
-    // amount) and the route addresses as the row's second line — no map.
+    // The mileage row shows the IRS type and rate in the merchant column,
+    // and the distance + route addresses as the row's second line.
     const text = await extractPdfText(buf);
+    expect(text).toContain("Business · $0.725/mi");
     expect(text).toContain("(32.00 miles)");
     expect(text).toContain("123 Test St, Testing, CA");
     expect(text).toContain("456 Dev Ave, Coding, CA");
-    expect(text).not.toContain("Mileage routes");
 
-    // The report has no receipt images and no map appendix, so the PDF is
-    // exactly one page with no embedded images.
+    // The trip's route map is embedded as an image (the fallback straight-
+    // line render — the seeded expense predates saved route geometry).
     const task = getDocument({ data: new Uint8Array(buf), verbosity: 0 });
     const doc = await task.promise;
     try {
-      expect(doc.numPages).toBe(1);
       let imageOps = 0;
       for (let p = 1; p <= doc.numPages; p++) {
         const pageDoc = await doc.getPage(p);
@@ -183,7 +182,7 @@ describe("Export", () => {
           (fn) => fn === OPS.paintImageXObject,
         ).length;
       }
-      expect(imageOps).toBe(0);
+      expect(imageOps).toBeGreaterThan(0);
     } finally {
       await task.destroy();
     }

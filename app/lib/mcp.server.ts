@@ -800,6 +800,7 @@ function createMcpServer(accountId: string): McpServer {
         name,
         await readExpenses(accountId),
         reports,
+        await readMileageRates(),
       );
       return ok({
         filename: `${name}.pdf`,

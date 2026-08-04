@@ -20,6 +20,8 @@ import {
   mileageAmount,
   mileageRateFor,
 } from "~/lib/mileage-rates";
+import { renderRouteMap } from "~/lib/route-map.server";
+import sharp from "sharp";
 import type { ReceiptExpense, MileageExpense } from "~/lib/types";
 
 const makeReceipt = (
@@ -764,5 +766,67 @@ describe("mileage rates (master table helpers)", () => {
     expect(formatRate("0.235")).toBe("0.235");
     expect(formatRate("0.760")).toBe("0.76");
     expect(formatRate("0.7")).toBe("0.70");
+  });
+});
+
+describe("route map rendering (report PDF)", () => {
+  it("renders a PNG from the saved route geometry", async () => {
+    const trip = makeMileage({
+      route: {
+        coords: [
+          [34.05, -118.24],
+          [34.06, -118.25],
+          [34.04, -118.27],
+        ],
+        returnCoords: [
+          [34.04, -118.27],
+          [34.05, -118.24],
+        ],
+      },
+    });
+    const png = await renderRouteMap(trip);
+    expect(png).not.toBeNull();
+    const meta = await sharp(png!).metadata();
+    expect(meta.format).toBe("png");
+    expect(meta.width).toBe(460);
+    expect(meta.height).toBe(220);
+
+    // The map actually draws: a solid blue outbound route, a dashed gray
+    // return leg, and white stop markers on a light background.
+    const { data, info } = await sharp(png!).raw().toBuffer({
+      resolveWithObject: true,
+    });
+    let blue = 0;
+    let gray = 0;
+    let white = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+      if (b > 150 && b > r + 60 && b > g + 60) blue++;
+      if (Math.abs(r - g) < 30 && Math.abs(g - b) < 30 && r > 110 && r < 215)
+        gray++;
+      if (r > 245 && g > 245 && b > 245) white++;
+    }
+    expect(blue).toBeGreaterThan(200);
+    expect(gray).toBeGreaterThan(50);
+    expect(white).toBeGreaterThan(100);
+  });
+
+  it("falls back to straight lines between geocoded stops", async () => {
+    // The makeMileage fixture has two geocoded stops and no route geometry.
+    const png = await renderRouteMap(makeMileage());
+    expect(png).not.toBeNull();
+    const meta = await sharp(png!).metadata();
+    expect(meta.format).toBe("png");
+    expect(meta.width).toBe(460);
+  });
+
+  it("returns null when there is nothing drawable", async () => {
+    const trip = makeMileage({
+      locations: [{ address: "Lone stop", lat: null, lng: null }],
+      route: { coords: [], returnCoords: [] },
+    });
+    expect(await renderRouteMap(trip)).toBeNull();
   });
 });

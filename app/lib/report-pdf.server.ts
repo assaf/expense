@@ -2,6 +2,17 @@ import PDFDocument from "pdfkit";
 import { readImage } from "~/lib/images.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import { formatDate, mileageDistanceLabel, sortExpenses } from "~/lib/format";
+import {
+  MILEAGE_TYPE_LABELS,
+  formatRate,
+  mileageRateFor,
+  type MileageRateEntry,
+} from "~/lib/mileage-rates";
+import {
+  ROUTE_MAP_HEIGHT,
+  ROUTE_MAP_WIDTH,
+  renderRouteMap,
+} from "~/lib/route-map.server";
 import type { Expense, Report } from "~/lib/types";
 
 /**
@@ -9,13 +20,16 @@ import type { Expense, Report } from "~/lib/types";
  * download uses, extracted so the MCP `export_report` tool can reuse it.
  *
  * Grouped by category (chronological within each), with a receipts image
- * appendix. Base-14 PDF fonts can't encode "→", so routes use "›".
+ * appendix. Mileage rows show the IRS type and rate, the distance, and an
+ * embedded route map of the trip. Base-14 PDF fonts can't encode "→", so
+ * routes use "›".
  */
 export async function buildReportPdf(
   accountId: string,
   reportName: string,
   expenses: Expense[],
   reports: Report[],
+  rates: MileageRateEntry[],
 ): Promise<Buffer> {
   const inReport = sortExpenses(
     expenses.filter((e) => e.report === reportName),
@@ -67,26 +81,42 @@ export async function buildReportPdf(
     const inCat = inReport.filter((e) => e.category === category);
     for (const e of inCat) {
       const isMileage = e.type === "mileage";
-      // Mileage rows show the distance in the merchant column; the rate is
-      // already reflected in the amount.
-      const merchant = isMileage
-        ? mileageDistanceLabel(e.distanceMiles) || "Mileage"
-        : e.merchant || "—";
+      let merchant: string;
+      let route = "";
+      let map: Buffer | null = null;
+      if (isMileage) {
+        // The IRS type and the rate for the trip's (date, type); the actual
+        // mileage and amount are the distance line and the amount column.
+        const rate = mileageRateFor(rates, e.date, e.mileageType);
+        merchant = rate
+          ? `${MILEAGE_TYPE_LABELS[e.mileageType]} · $${formatRate(rate)}/mi`
+          : MILEAGE_TYPE_LABELS[e.mileageType];
+        const addresses = e.locations
+          .map((l) => l.address.trim())
+          .filter(Boolean);
+        // Second line: distance + route addresses (Start › … › Start
+        // implied).
+        route = [mileageDistanceLabel(e.distanceMiles), addresses.join(" › ")]
+          .filter(Boolean)
+          .join(" — ");
+        // The map shows the route the mileage was calculated from; a render
+        // failure must never break the export.
+        try {
+          map = await renderRouteMap(e);
+        } catch {
+          map = null;
+        }
+      } else {
+        merchant = e.merchant || "—";
+      }
       const date = formatDate(e.date);
       const amount = e.amount ? `$${e.amount}` : "—";
       const desc = e.description ?? "";
-      // Mileage rows get a second line with the route (Start › … › Start
-      // implied).
-      const route = isMileage
-        ? e.locations
-            .map((l) => l.address.trim())
-            .filter(Boolean)
-            .join(" › ")
-        : "";
 
-      // Keep the whole row (including the route line) on one page.
+      // Keep the whole row (including the route line and map) on one page.
       const lineH = doc.fontSize(10).currentLineHeight();
-      const rowH = lineH + (route ? lineH + 4 : 0);
+      const mapH = map ? ROUTE_MAP_HEIGHT + 12 : 0;
+      const rowH = lineH + (route ? lineH + 4 : 0) + mapH;
       if (doc.y + rowH > doc.page.maxY()) {
         doc.addPage();
       }
@@ -118,6 +148,15 @@ export async function buildReportPdf(
             lineBreak: false,
           });
         doc.fillColor("#111827");
+      }
+      if (map) {
+        doc.moveDown(0.15);
+        try {
+          doc.image(map, { fit: [ROUTE_MAP_WIDTH, ROUTE_MAP_HEIGHT] });
+        } catch {
+          // Skip the map rather than fail the whole export.
+        }
+        doc.moveDown(0.2);
       }
       doc.moveDown(0.3);
     }
