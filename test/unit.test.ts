@@ -10,6 +10,7 @@ import {
   normalizeAmount,
   formatDate,
   mileageMerchant,
+  merchantLabel,
   yearOf,
   summarizeByReport,
 } from "~/lib/format";
@@ -129,6 +130,27 @@ describe("Format helpers", () => {
     // No rate configured for the year — the distance still shows.
     expect(mileageMerchant("32.00", "")).toBe("32.00 mi");
     expect(mileageMerchant("", "0.70")).toBe("");
+  });
+
+  it("prefixes the merchant label with the mileage type", () => {
+    const rates = [
+      {
+        type: "business" as const,
+        startDate: "2026-01-01",
+        endDate: "2026-06-30",
+        rate: "0.725",
+      },
+    ];
+    expect(merchantLabel(makeMileage({ date: "2026-03-10" }), rates)).toBe(
+      "Business · 32.00 mi @ $0.725 / mi",
+    );
+    // A trip without a distance shows just the type.
+    expect(
+      merchantLabel(
+        makeMileage({ date: "2026-03-10", distanceMiles: "" }),
+        rates,
+      ),
+    ).toBe("Business");
   });
 
   it("gets year from date", () => {

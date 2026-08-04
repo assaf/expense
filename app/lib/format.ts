@@ -3,6 +3,7 @@
 import Decimal from "decimal.js";
 
 import {
+  MILEAGE_TYPE_LABELS,
   formatRate,
   mileageRateFor,
   type MileageRateEntry,
@@ -106,10 +107,12 @@ export function mileageDistanceLabel(distanceMiles: string): string {
  * master table by the trip's date + type. "" when there is nothing to show. */
 export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
   if (e.type === "receipt") return e.merchant;
-  return mileageMerchant(
+  const label = MILEAGE_TYPE_LABELS[e.mileageType];
+  const distance = mileageMerchant(
     e.distanceMiles,
     mileageRateFor(rates, e.date, e.mileageType),
   );
+  return distance ? `${label} · ${distance}` : label;
 }
 
 /**
