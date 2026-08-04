@@ -90,6 +90,13 @@ MCP clients see the public origin instead of the proxy-internal `http://`
 one — otherwise they refuse to authenticate ("Protected resource … does not
 match expected"). Without it, the request origin is used, honoring
 `x-forwarded-proto`/`x-forwarded-host` for http requests.
+
+`SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable
+Sentry error monitoring (server runtime + browser build-time respectively;
+see `app/entry.server.tsx` / `app/entry.client.tsx` and
+`app/lib/errors.server.ts`). Unset → Sentry is fully disabled. Both must be
+set in Vercel; `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is
+read at runtime.
 `.github/workflows/deployment-smoke.yml`.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
@@ -271,6 +278,17 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/lib/maps.server.ts`           | Geocode + route (Nominatim/OSRM).                                                                                                                                                                                                                                                                                                 |
 
 ## Gotchas
+
+- **Supabase session pooler cap**: the session-mode pooler limits total
+  connections (default `pool_size: 15`). Every Vercel serverless instance
+  opens its own Prisma pool, so a burst of concurrent DB requests (the
+  image-heavy list page is the classic trigger) can exhaust the cap and
+  every DB call 500s with `(EMAXCONNSESSION) max clients reached in session
+mode`. `app/lib/prisma.server.ts` keeps the per-instance pool small
+  (`max: 2`, 4s idle release) and `findUserById` caches lookups for 30s to
+  cut auth query churn — if 500s reappear under load, raise the pooler's
+  pool_size in the Supabase dashboard (Database → Connection pooling) and/or
+  loosen `max`.
 
 - **Auth & accounts**: multi-user access control with account-level sharing.
   Users live in Postgres (`users`, `accounts`); every expense, report,

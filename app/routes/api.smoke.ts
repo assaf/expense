@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
+import { captureError } from "~/lib/errors.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import {
@@ -96,8 +97,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       ms: Date.now() - started,
     });
   } catch (err) {
+    captureError(err);
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[smoke] smoke check threw:", err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
 }

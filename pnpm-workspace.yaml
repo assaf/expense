@@ -5,6 +5,7 @@ allowBuilds:
   "@prisma/engines": true
   prisma: true
   tesseract.js: true
+  "@sentry/cli": set this to true or false
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"

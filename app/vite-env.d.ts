@@ -19,6 +19,8 @@ interface ImportMetaEnv {
   DEV: boolean;
   PROD: boolean;
   SSR: boolean;
+  /** Sentry client DSN (build-time; server uses process.env.SENTRY_DSN). */
+  VITE_SENTRY_DSN?: string;
 }
 
 interface ImportMeta {

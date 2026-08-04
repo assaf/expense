@@ -17,12 +17,20 @@ if (!DATABASE_URL) {
 /**
  * node-postgres reads `sslmode` from the connection string (Neon/Vercel
  * prod URLs carry `?sslmode=require`); local dev/test URLs omit it → no TLS.
+ *
+ * Pool sizing matters here: prod connects through Supabase's session-mode
+ * pooler, which caps total sessions (default pool_size 15). Every Vercel
+ * serverless instance gets its own pool, so a burst of concurrent requests
+ * (e.g. the image-heavy list page) can exhaust the cap with `(EMAXCONNSESSION)
+ * max clients reached` 500s. Keep the per-instance pool small and release
+ * idle sessions fast so slots recycle between requests; if you raise the
+ * pooler's pool_size in the Supabase dashboard you can loosen `max` again.
  */
 const adapter = new PrismaPg({
   connectionString: DATABASE_URL,
-  max: 5,
-  idleTimeoutMillis: 20_000,
-  connectionTimeoutMillis: 10_000,
+  max: 2,
+  idleTimeoutMillis: 4_000,
+  connectionTimeoutMillis: 5_000,
   allowExitOnIdle: true,
 });
 

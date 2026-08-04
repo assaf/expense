@@ -297,9 +297,30 @@ export async function findUserByEmail(
   return row ?? undefined;
 }
 
+/** Short-lived in-process cache for findUserById — every request re-resolves
+ * the session's user (requireUser), and image-heavy pages fire dozens of
+ * those per render; caching the lookup for a few seconds cuts the connection
+ * churn that exhausts the Supabase session pooler under load. Only successful
+ * lookups are cached; a deleted user is re-checked after the TTL (and a stale
+ * hit merely means the next request redirects to login). */
+const userCache = new Map<string, { user: User; expiresAt: number }>();
+const USER_CACHE_TTL_MS = 30_000;
+
 export async function findUserById(id: string): Promise<User | undefined> {
+  const cached = userCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) return cached.user;
   const row = await prisma.user.findUnique({ where: { id } });
-  return row ?? undefined;
+  const user = row
+    ? {
+        id: row.id,
+        accountId: row.accountId,
+        email: row.email,
+        createdAt: row.createdAt,
+      }
+    : undefined;
+  if (user)
+    userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+  return user;
 }
 
 /** The stored password hash for a user (never exposed on the User type). */
