@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock3, ReceiptText, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
+import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { verifyInboundSenderAddress } from "~/lib/store.server";
 import type { Route } from "./+types/receipts-email-verify";
 
@@ -14,7 +15,11 @@ import type { Route } from "./+types/receipts-email-verify";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const token = new URL(request.url).searchParams.get("token") ?? "";
-  return verifyInboundSenderAddress(token);
+  const outcome = await verifyInboundSenderAddress(token);
+  // The forward-to address, so the page states the same sentence the email
+  // does ("Receipts forwarded from X to Y will be added to …") — the user can
+  // read it in the email and copy the same details from the page.
+  return { ...outcome, forwardTo: INBOUND_EMAIL_ADDRESS };
 }
 
 export default function VerifySenderPage({ loaderData }: Route.ComponentProps) {
@@ -30,8 +35,9 @@ export default function VerifySenderPage({ loaderData }: Route.ComponentProps) {
         <>
           <p>
             Receipts forwarded from{" "}
-            <b className="font-mono">{outcome.address}</b> will now be added to
-            the <b>{outcome.accountName}</b> account.
+            <b className="font-mono">{outcome.address}</b> to{" "}
+            <b className="font-mono">{outcome.forwardTo}</b> will be added to
+            the <b>{outcome.accountName}</b> account on Expense.
           </p>
           <p>
             No other account can use this address anymore. Forward a receipt to
@@ -46,9 +52,10 @@ export default function VerifySenderPage({ loaderData }: Route.ComponentProps) {
       body = (
         <>
           <p>
-            <b className="font-mono">{outcome.address}</b> is already verified —
-            receipts forwarded from it are imported into{" "}
-            <b>{outcome.accountName}</b>.
+            Receipts forwarded from{" "}
+            <b className="font-mono">{outcome.address}</b> to{" "}
+            <b className="font-mono">{outcome.forwardTo}</b> will be added to
+            the <b>{outcome.accountName}</b> account on Expense.
           </p>
           <p>This link has been used up; no further action is needed.</p>
         </>
