@@ -51,7 +51,7 @@ export async function sendVerificationEmail(input: {
   const subject = "Verify your email to receive receipts by email";
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
 <h2 style="font-size:18px;margin:0 0 12px">Verify your email</h2>
-<p style="margin:8px 0">Receipts forwarded from <b>${escapeHtml(input.to)}</b> will be added to the <b>${escapeHtml(input.accountName)}</b> account on Expense.</p>
+<p style="margin:8px 0">Receipts forwarded from <b>${escapeHtml(input.to)}</b> to <b>${escapeHtml(INBOUND_EMAIL_ADDRESS)}</b> will be added to the <b>${escapeHtml(input.accountName)}</b> account on Expense.</p>
 <p style="margin:8px 0">Until you verify, receipts from this address are <b>not</b> imported. Click below to confirm this address is yours:</p>
 <p style="margin:16px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f2937;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify ${escapeHtml(input.to)}</a></p>
 <p style="margin:8px 0">This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.</p>
