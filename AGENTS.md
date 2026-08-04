@@ -17,12 +17,29 @@ Deployed to **Vercel** with a **Supabase** Postgres database (project ref
 
 Supabase direct connections (`db.<ref>.supabase.co:5432`) are **IPv6-only** for
 new projects — this network has no working IPv6 route, and Vercel functions
-should not rely on it either. Use the **Supavisor session-mode pooler**
-(`aws-1-us-west-2.pooler.supabase.com:5432`) for everything: it is IPv4,
-behaves like a direct connection, and — unlike transaction mode (port 6543) —
-supports prepared statements, which the node-postgres driver adapter needs.
-Both `DATABASE_URL` (runtime) and `DATABASE_URL_UNPOOLED` (psql/prisma DDL in
-`scripts/deploy`/`scripts/clone`) are set to the same session-pooler URL.
+should not rely on it either. Use the **Supavisor pooler** on
+`aws-1-us-west-2.pooler.supabase.com` (IPv4):
+
+- **`DATABASE_URL` (runtime) — transaction-mode pooler, port 6543.** Every
+  Vercel serverless instance opens its own Prisma pool, so session mode (one
+  dedicated backend connection per pooled client) exhausted the pooler cap
+  under the image-heavy list page. Transaction mode shares one small backend
+  pool across all clients — connections are checked out only for the duration
+  of a query/transaction, so serverless instances stop holding dedicated
+  slots. Supavisor's transaction mode handles the extended protocol /
+  prepared statements and Prisma's batch + interactive transactions (verified
+  against prod with the PrismaPg adapter).
+- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy` and
+  `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL
+  want stable sessions; the session pooler behaves like a direct connection.
+  Keep it here, not on the transaction pooler.
+
+Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
+pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for
+30s (the image-list burst). Pooler `pool_size` is capped at **80% of the
+DB's `max_connections`** (48 on the current 60-connection compute); the
+session pooler is set to 40. Rollback if anything misbehaves: flip
+`DATABASE_URL` back to port 5432.
 
 When setting these in Vercel, add them with `vercel env add … --no-sensitive`:
 a _Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which
@@ -279,18 +296,18 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 
 ## Gotchas
 
-- **Supabase session pooler cap**: the session-mode pooler limits total
-  connections (default `pool_size: 15`). Every Vercel serverless instance
-  opens its own Prisma pool, so a burst of concurrent DB requests (the
-  image-heavy list page is the classic trigger) can exhaust the cap and
-  every DB call 500s with `(EMAXCONNSESSION) max clients reached in session
-mode`. `app/lib/prisma.server.ts` keeps the per-instance pool small
-  (`max: 2`, 4s idle release) and `findUserById` caches lookups for 30s to
-  cut auth query churn. The pooler's pool_size is capped at **80% of the
-  database's max_connections** (48 on the current 60-connection compute —
-  the dashboard warns if you exceed it); the recommended setting is 40
-  (Database → Connection pooling → session pooler). Scaling compute raises
-  max_connections and the ceiling with it.
+- **Pooler caps and serverless pools**: the Supavisor poolers cap total
+  connections (session pooler: `pool_size: 40`, max 80% of the DB's
+  `max_connections`, which is 60 on the current compute). Every Vercel
+  serverless instance opens its own Prisma pool, so a burst of concurrent DB
+  requests (the image-heavy list page) can exhaust the cap and every DB call
+  500s with `(EMAXCONNSESSION) max clients reached in session mode`. The
+  runtime `DATABASE_URL` therefore uses the **transaction-mode pooler (port 6543)**, which shares one backend pool across all clients (see "Database
+  connections (Supabase)"); session mode is only used for DDL
+  (`DATABASE_URL_UNPOOLED`). `app/lib/prisma.server.ts` still keeps the
+  per-instance pool small (`max: 2`, 4s idle release) and `findUserById`
+  caches lookups for 30s. If 500s reappear under load, check the pooler
+  sizes in the Supabase dashboard and Sentry for `EMAXCONNSESSION`.
 
 - **Auth & accounts**: multi-user access control with account-level sharing.
   Users live in Postgres (`users`, `accounts`); every expense, report,
