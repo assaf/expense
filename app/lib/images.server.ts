@@ -41,7 +41,10 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/heic": ".heic",
 };
 
-function mimeForFile(filename: string, fallback = ""): string {
+/** Mime for a filename's extension, or `fallback` when unknown. The single
+ * mime-by-extension map for the app — the MCP capture path guesses the same
+ * way (images.server is the source of truth). */
+export function mimeForFile(filename: string, fallback = ""): string {
   const ext = extname(filename).toLowerCase();
   return MIME_BY_EXT[ext] ?? fallback;
 }

@@ -2,8 +2,8 @@ import { normalizeAmount } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import {
+  findOpenReport,
   newExpenseShell,
-  readReports,
   upsertExpense,
 } from "~/lib/store.server";
 import {
@@ -44,10 +44,10 @@ export async function saveExpenseFromForm(
 
   const report = formString(form, "report");
   if (report && (!existing || report !== existing.report)) {
-    const reports = await readReports(accountId);
-    if (reports.some((r) => r.name === report && r.closed)) {
-      return { error: `Report "${report}" is closed.`, id: null };
-    }
+    // The report must exist and be open — an expense already in a closed
+    // report keeps it when saved unchanged (the check above skips that case).
+    const { error } = await findOpenReport(accountId, report);
+    if (error) return { error, id: null };
   }
 
   const category = formString(form, "category");

@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { MILEAGE_RATES } from "~/data/mileage-rates";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
+import { summarizeByReport } from "~/lib/format";
 import { deleteImage } from "~/lib/images.server";
 import { isMileageType, type MileageRateEntry } from "~/lib/mileage-rates";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
@@ -608,6 +609,69 @@ export async function readCategoryCounts(
     counts.set(g.category, (counts.get(g.category) ?? 0) + g._count._all);
   }
   return counts;
+}
+
+/** True when a report with this name exists (open or closed). Used by the
+ * MCP export_report tool — the report must exist, but closed reports are
+ * still exportable. */
+export async function reportExists(
+  accountId: string,
+  name: string,
+): Promise<boolean> {
+  return (await readReports(accountId)).some((r) => r.name === name);
+}
+
+/**
+ * Find a report that can accept expenses: exists and is not closed. Returns
+ * the report, or an error message when it doesn't exist or is closed. Every
+ * "report must exist and be open" check — the web expense save path and the
+ * MCP capture_receipt / log_mileage / add_to_report tools — goes through
+ * this one helper, so the validation and its error text live in one place.
+ */
+export async function findOpenReport(
+  accountId: string,
+  name: string,
+): Promise<{ report: Report; error: null } | { report: null; error: string }> {
+  const report = (await readReports(accountId)).find((r) => r.name === name);
+  if (!report) {
+    return {
+      report: null,
+      error: `Report "${name}" doesn't exist — create it first with create_report.`,
+    };
+  }
+  if (report.closed) {
+    return { report: null, error: `Report "${name}" is closed.` };
+  }
+  return { report, error: null };
+}
+
+/** One report's expense count and exact total (2-dp string). */
+export interface ReportSummary {
+  name: string;
+  closed: boolean;
+  count: number;
+  total: string;
+}
+
+/**
+ * All reports with their expense counts and exact totals — the shape shared
+ * by the export page and the MCP list_reports tool. Counts and totals come
+ * from the same summarizeByReport pass, so they always agree.
+ */
+export async function readReportSummaries(
+  accountId: string,
+): Promise<ReportSummary[]> {
+  const [reports, expenses] = await Promise.all([
+    readReports(accountId),
+    readExpenses(accountId),
+  ]);
+  const byReport = summarizeByReport(expenses);
+  return reports.map((r) => ({
+    name: r.name,
+    closed: r.closed,
+    count: byReport.get(r.name)?.count ?? 0,
+    total: byReport.get(r.name)?.total.toFixed(2) ?? "0.00",
+  }));
 }
 
 // --- Add/rename helpers shared by reports and categories -------------------

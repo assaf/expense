@@ -17,8 +17,9 @@ import {
   findUserById,
   readExpenses,
   readExpense,
-  readReports,
-  readReportCounts,
+  findOpenReport,
+  reportExists,
+  readReportSummaries,
   readCategories,
   readSettings,
   readMileageRates,
@@ -37,9 +38,12 @@ import {
   parseAmount,
   sortExpenses,
   todayDate,
-  summarizeByReport,
 } from "~/lib/format";
-import { saveImage, renameImageToConvention } from "~/lib/images.server";
+import {
+  mimeForFile,
+  renameImageToConvention,
+  saveImage,
+} from "~/lib/images.server";
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
 import { resolveCategory } from "~/lib/receipt-ai.server";
@@ -684,20 +688,7 @@ function createMcpServer(accountId: string): McpServer {
       inputSchema: z.object({}),
     },
     async () => {
-      const [reports, reportCounts, expenses] = await Promise.all([
-        readReports(accountId),
-        readReportCounts(accountId),
-        readExpenses(accountId),
-      ]);
-      const totals = summarizeByReport(expenses);
-      return ok(
-        reports.map((r) => ({
-          name: r.name,
-          closed: r.closed,
-          count: reportCounts.get(r.name) ?? 0,
-          total: totals.get(r.name)?.total.toFixed(2) ?? "0.00",
-        })),
-      );
+      return ok(await readReportSummaries(accountId));
     },
   );
 
@@ -747,13 +738,8 @@ function createMcpServer(accountId: string): McpServer {
     async ({ expenseId, report }) => {
       const expense = await readExpense(expenseId, accountId);
       if (!expense) return fail(`No expense with id "${expenseId}".`);
-      const reports = await readReports(accountId);
-      const target = reports.find((r) => r.name === report);
-      if (!target)
-        return fail(
-          `Report "${report}" doesn't exist — create it first with create_report.`,
-        );
-      if (target.closed) return fail(`Report "${report}" is closed.`);
+      const { error } = await findOpenReport(accountId, report);
+      if (error) return fail(error);
       const updated: Expense = {
         ...expense,
         report,
@@ -791,15 +777,13 @@ function createMcpServer(accountId: string): McpServer {
       }),
     },
     async ({ name }) => {
-      const reports = await readReports(accountId);
-      if (!reports.some((r) => r.name === name)) {
+      if (!(await reportExists(accountId, name))) {
         return fail(`Report "${name}" doesn't exist.`);
       }
       const pdf = await buildReportPdf(
         accountId,
         name,
         await readExpenses(accountId),
-        reports,
         await readMileageRates(),
       );
       return ok({
@@ -957,7 +941,7 @@ async function captureReceipt(
 
   if (args.imageData) {
     buffer = Buffer.from(args.imageData, "base64");
-    mime = args.mime?.trim() || guessMime(args.filename) || "image/png";
+    mime = args.mime?.trim() || mimeForFile(args.filename ?? "") || "image/png";
     originalName = args.filename?.trim() || "receipt.png";
   } else if (args.url) {
     let res: Response;
@@ -973,7 +957,7 @@ async function captureReceipt(
     mime =
       args.mime?.trim() ||
       res.headers.get("content-type")?.split(";")[0]?.trim() ||
-      guessMime(fromUrl) ||
+      mimeForFile(fromUrl) ||
       "image/png";
     originalName = fromUrl;
   } else {
@@ -1030,13 +1014,8 @@ async function captureReceipt(
 
   const report = args.report?.trim() ?? "";
   if (report) {
-    const reports = await readReports(accountId);
-    const target = reports.find((r) => r.name === report);
-    if (!target)
-      return fail(
-        `Report "${report}" doesn't exist — create it first with create_report.`,
-      );
-    if (target.closed) return fail(`Report "${report}" is closed.`);
+    const { error } = await findOpenReport(accountId, report);
+    if (error) return fail(error);
   }
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
@@ -1097,13 +1076,8 @@ async function logMileage(
 
   const report = args.report?.trim() ?? "";
   if (report) {
-    const reports = await readReports(accountId);
-    const target = reports.find((r) => r.name === report);
-    if (!target)
-      return fail(
-        `Report "${report}" doesn't exist — create it first with create_report.`,
-      );
-    if (target.closed) return fail(`Report "${report}" is closed.`);
+    const { error } = await findOpenReport(accountId, report);
+    if (error) return fail(error);
   }
 
   const stops: Location[] = args.locations.map((l) =>
@@ -1160,28 +1134,6 @@ async function logMileage(
         }
       : {}),
   });
-}
-
-/** Mime guess from a filename extension, mirroring images.server.ts. */
-function guessMime(filename: string | undefined): string {
-  const ext = (filename ?? "").toLowerCase().split(".").pop();
-  switch (ext) {
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "png":
-      return "image/png";
-    case "webp":
-      return "image/webp";
-    case "heic":
-      return "image/heic";
-    case "pdf":
-      return "application/pdf";
-    case "gif":
-      return "image/gif";
-    default:
-      return "";
-  }
 }
 
 function urlFilename(url: string): string {

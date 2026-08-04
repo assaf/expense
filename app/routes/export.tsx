@@ -2,36 +2,19 @@ import { FileDown, FileArchive } from "lucide-react";
 import { Button } from "~/components/ui/Button";
 import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
-import { readExpenses, readReports } from "~/lib/store.server";
-import { countLabel, formatAmount, summarizeByReport } from "~/lib/format";
+import { readReportSummaries } from "~/lib/store.server";
+import type { ReportSummary } from "~/lib/store.server";
+import { countLabel, formatAmount } from "~/lib/format";
 import type { Route } from "./+types/export";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const [reports, expenses] = await Promise.all([
-    readReports(user.accountId),
-    readExpenses(user.accountId),
-  ]);
-  const byReport = summarizeByReport(expenses);
-  return {
-    reports: reports.map((r) => ({
-      name: r.name,
-      closed: r.closed,
-      count: byReport.get(r.name)?.count ?? 0,
-      // Exact 2-dp string (Decimal.toFixed rounds half-up); used for display.
-      total: byReport.get(r.name)?.total.toFixed(2) ?? "0.00",
-    })),
-  };
+  // All reports with their exact counts + totals (one query pass).
+  const reports = await readReportSummaries(user.accountId);
+  return { reports };
 }
 
-type ReportItem = {
-  name: string;
-  closed: boolean;
-  count: number;
-  total: string;
-};
-
-function ReportList({ reports }: { reports: ReportItem[] }) {
+function ReportList({ reports }: { reports: ReportSummary[] }) {
   if (reports.length === 0) {
     return <p className="text-sm text-gray-400">No reports yet.</p>;
   }

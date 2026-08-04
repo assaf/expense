@@ -9,7 +9,7 @@ import {
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import { renderRouteMap } from "~/lib/route-map.server";
-import type { Expense, MileageExpense, Report } from "~/lib/types";
+import type { Expense, MileageExpense } from "~/lib/types";
 
 /**
  * Build the PDF for one report — the same layout the /export/report/:name
@@ -24,7 +24,6 @@ export async function buildReportPdf(
   accountId: string,
   reportName: string,
   expenses: Expense[],
-  reports: Report[],
   rates: MileageRateEntry[],
 ): Promise<Buffer> {
   const inReport = sortExpenses(
