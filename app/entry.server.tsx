@@ -61,6 +61,10 @@ export default Sentry.wrapSentryHandleRequest(
  * logs readable too.
  */
 export function handleError(error: unknown, { request }: { request: Request }) {
+  if (!request.signal.aborted) {
+    Sentry.captureException(error);
+  }
   if (request.signal.aborted) return;
   captureError(error, { url: request.url, method: request.method });
 }
+export const instrumentations = [Sentry.createSentryServerInstrumentation()];

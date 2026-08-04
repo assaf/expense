@@ -29,3 +29,6 @@ eng.traineddata
 
 # Scripted demo artifacts (scripts/run-demo.ts)
 demo-output/
+
+# Sentry Config File
+.env.sentry-build-plugin

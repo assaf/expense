@@ -1,12 +1,14 @@
+import { sentryReactRouter } from "@sentry/react-router";
 import { resolve } from "node:path";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite-plus";
 
-export default defineConfig({
+export default defineConfig((config) => ({
   staged: {
     "*": "vp check --fix",
   },
+
   fmt: {
     ignorePatterns: [
       ".react-router/**",
@@ -20,6 +22,7 @@ export default defineConfig({
     singleQuote: false,
     semi: true,
   },
+
   lint: {
     ignorePatterns: [
       ".react-router/**",
@@ -46,7 +49,20 @@ export default defineConfig({
       "unicorn/prefer-array-flat-map": "error",
     },
   },
-  plugins: [tailwindcss(), reactRouter()],
+
+  plugins: [
+    tailwindcss(),
+    reactRouter(),
+    sentryReactRouter(
+      {
+        org: "labnotes",
+        project: "expense",
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+      },
+      config,
+    ),
+  ],
+
   resolve: {
     alias: [
       { find: "~", replacement: resolve("app") },
@@ -58,6 +74,7 @@ export default defineConfig({
       { find: "+types", replacement: resolve(".react-router/types") },
     ],
   },
+
   test: {
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,
@@ -79,4 +96,8 @@ export default defineConfig({
     teardownTimeout: 5_000,
     testTimeout: 30_000,
   },
-});
+
+  optimizeDeps: {
+    exclude: ["@sentry/react-router"],
+  },
+}));

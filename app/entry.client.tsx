@@ -26,7 +26,7 @@ startTransition(() => {
   hydrateRoot(
     document,
     <StrictMode>
-      <HydratedRouter />
+      <HydratedRouter onError={Sentry.sentryOnError} />
     </StrictMode>,
   );
 });

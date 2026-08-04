@@ -6,6 +6,7 @@ allowBuilds:
   prisma: true
   tesseract.js: true
   "@sentry/cli": set this to true or false
+  "@sentry/node-cpu-profiler": set this to true or false
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
