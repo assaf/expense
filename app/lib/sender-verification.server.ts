@@ -22,8 +22,12 @@ import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
  * it for proxy-terminated TLS setups, matching the OAuth metadata behavior.
  */
 function verificationLink(origin: string | undefined, token: string): string {
-  const base = (origin || PUBLIC_URL || "").replace(/\/$/, "");
-  return `${base}/receipts-email-verify?token=${encodeURIComponent(token)}`;
+  return `${appBase(origin)}/receipts-email-verify?token=${encodeURIComponent(token)}`;
+}
+
+/** The app's public origin (home page base), for links inside the email. */
+function appBase(origin: string | undefined): string {
+  return (origin || PUBLIC_URL || "").replace(/\/$/, "");
 }
 
 /** Resend POST /emails request body, returning true when it was sent. */
@@ -48,6 +52,7 @@ export async function sendVerificationEmail(input: {
     );
     return false;
   }
+  const home = appBase(input.origin);
   const subject = "Verify your email to receive receipts by email";
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
 <h2 style="font-size:18px;margin:0 0 12px">Verify your email</h2>
@@ -55,7 +60,9 @@ export async function sendVerificationEmail(input: {
 <p style="margin:8px 0">Until you verify, receipts from this address are <b>not</b> imported. Click below to confirm this address is yours:</p>
 <p style="margin:16px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f2937;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify ${escapeHtml(input.to)}</a></p>
 <p style="margin:8px 0">This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.</p>
-<p style="margin-top:20px;color:#6b7280;font-size:12px">Expense — receipts by email</p>
+<p style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:12px;color:#6b7280;font-size:12px;line-height:1.5">
+  <a href="${escapeHtml(home)}/" style="color:#2563eb;text-decoration:none;font-weight:600">Expense</a> — free expense tracking for tax season. Snap a photo, forward a receipt, or log mileage, and Expense sorts it into IRS Schedule C categories and ready-to-file reports.
+</p>
 </div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
