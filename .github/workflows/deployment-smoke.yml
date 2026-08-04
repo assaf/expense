@@ -141,6 +141,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The build imports prisma/generated (gitignored) — pnpm check generates
+      # it in the parallel check job, but each job is a fresh checkout.
+      - run: pnpm build:prisma
+
       # Playwright browsers are not installed by pnpm install; the E2E tests
       # launch headless Chromium, so download it (with OS deps) first — and
       # cache the browsers so the ~20-40s install only happens once per lockfile.
