@@ -25,7 +25,7 @@ const HEIGHT = 220;
 const TILE = 256;
 const PAD = 28;
 const FONT = "JetBrains Mono";
-const USER_AGENT = "expense-personal/1.0 (assaf@labnotes.org)";
+const USER_AGENT = "expense-personal/1.0 (assaf@expense.labnotes.org)";
 const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
 const TILE_CACHE_MAX = 200;
 

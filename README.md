@@ -238,7 +238,7 @@ Vercel has no inbound email, so receipt emails are received by **Resend**
 (`deepseek-v4-flash`). Replies on failure go out through Resend too.
 
 1. Create a [Resend](https://resend.com) account and add a domain (e.g.
-   `labnotes.org`) — you'll point MX/DKIM/SPF DNS records at Resend.
+   `expense.labnotes.org`) — you'll point MX/DKIM/SPF DNS records at Resend.
 2. Resend → **Receiving**: add a receiving domain and an inbound route
    (catch-all or `receipts@…`) that POSTs to
    `https://<your-app>/api/inbound-email`.

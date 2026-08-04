@@ -190,7 +190,7 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
     const res = await fetch(url, {
       headers: {
         // Nominatim usage policy requires a descriptive User-Agent.
-        "User-Agent": "expense-personal/1.0 (assaf@labnotes.org)",
+        "User-Agent": "expense-personal/1.0 (assaf@expense.labnotes.org)",
         Accept: "application/json",
       },
       signal: AbortSignal.timeout(8_000),
