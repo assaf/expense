@@ -63,13 +63,38 @@ CREATE TABLE IF NOT EXISTS "users" (
     "createdAt" TEXT NOT NULL,
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
+-- The unique index below only makes sense once the username→email rename
+-- (Step 4c in scripts/deploy) has happened. On a pre-email database
+-- (username-era users table), the CREATE TABLE IF NOT EXISTS above is a
+-- no-op and the column is still named "username" — creating the index would
+-- fail. Guard it on the email column existing; Step 4c + db push create
+-- users_email_key as part of the rename.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email'
+  ) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS "users_email_key" ON "users"("email");
+  END IF;
+END $$;
 
 INSERT INTO "accounts" ("id", "name", "inviteCode", "createdAt")
 VALUES ('${accountId}', '${email}', '${inviteCode}', '${createdAt}')
 ON CONFLICT ("name") DO NOTHING;
 
-INSERT INTO "users" ("id", "accountId", "email", "passwordHash", "createdAt")
-VALUES ('${userId}', '${accountId}', '${email}', '${passwordHash}', '${createdAt}')
-ON CONFLICT ("email") DO NOTHING;
+-- Bootstrap the app's first user only when the users table is the email-era
+-- shape (the pre-email username table is migrated by Step 4c + db push,
+-- and initStore backfills the login from APP_EMAIL).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email'
+  ) THEN
+    INSERT INTO "users" ("id", "accountId", "email", "passwordHash", "createdAt")
+    VALUES ('${userId}', '${accountId}', '${email}', '${passwordHash}', '${createdAt}')
+    ON CONFLICT ("email") DO NOTHING;
+  END IF;
+END $$;
 `);

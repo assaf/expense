@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy expense to production:
-#   1. sync the production database schema (Neon; prod env pulled from Vercel)
+#   1. sync the production database schema (Supabase; prod env pulled from Vercel)
 #   2. deploy with the Vercel CLI
 #   3. open the production site
 #
@@ -100,6 +100,7 @@ pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope ||
 pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
 pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
 pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
+pnpm prisma migrate resolve --applied 20260802120544_drop_user_name || true
 pnpm prisma migrate resolve --applied 20260803131818_username_to_email || true
 
 echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
