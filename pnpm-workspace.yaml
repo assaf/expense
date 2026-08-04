@@ -5,10 +5,11 @@ allowBuilds:
   "@prisma/engines": true
   prisma: true
   tesseract.js: true
-  # Not needed: @sentry/cli only downloads the sentry-cli binary for source-map
-  # upload via the vite plugin (we don't use it); node-cpu-profiler is only
-  # needed for nodeProfilingIntegration (we don't enable it).
-  "@sentry/cli": false
+  # @sentry/cli downloads the sentry-cli binary — needed by the
+  # sentryVitePlugin for source-map upload (see vite.config.ts). The
+  # node-cpu-profiler native build stays off per the Sentry setup decision
+  # (profiling runs without it).
+  "@sentry/cli": true
   "@sentry/node-cpu-profiler": false
 
 onlyBuiltDependencies:
