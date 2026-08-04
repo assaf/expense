@@ -60,15 +60,26 @@ pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
+./scripts/migrate-prod  # prod schema sync only (env pull + preflight + db push) — shared by deploy + CI
 ./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
-# sync (preflight + Step 4c rename + db push, via `vercel env pull`), CLI
-# deploy, and opening the site. `git push origin main` also auto-deploys.
+# sync by calling `./scripts/migrate-prod` (preflight + guarded conversions +
+# db push, env pulled via `vercel env pull`), then CLI-deploys and opens the
+# site. `git push origin main` also auto-deploys: the CI workflow runs the
+# SAME `./scripts/migrate-prod` in its `migrate-db` job (Vercel CLI auth via
+# VERCEL_TOKEN/VERCEL_ORG_ID/VERCEL_PROJECT_ID — no DB creds in GitHub
+# secrets).
+# DEPLOY ORDERING CONTRACT: check & test → migrate prod DB → pdf-ocr-smoke.
+# The smoke check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl)
+# runs the deployed bundle against the prod schema and fails on any schema
+# change if the migration was skipped. Migrations must NEVER run before the
+# test suite: `scripts/deploy` runs `pnpm test` before calling migrate-prod,
+# and the CI `migrate-db` job `needs: check-and-test`.
 # Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
 # (migration history exists since Jul 2026). When Prisma can't express a
-# change as a lossless diff (e.g. column renames), deploy runs an explicit,
+# change as a lossless diff (e.g. column renames), the sync runs an explicit,
 # guarded SQL step before db push — mirror the money-column and username→email
-# conversions there instead of relying on `--accept-data-loss`.
+# conversions in `scripts/migrate-prod` instead of relying on `--accept-data-loss`.
 # Note: `vercel env pull` merges with the existing file, so stale local
 # entries (e.g. leftover `PGHOST`) survive — delete `.env.prod.pull`/
 # `.env.prod` before pulling if they cause trouble.
@@ -357,9 +368,11 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
   runs in the deployed serverless bundle — `scripts/deploy` curls it after
   CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
-  push to `main` (after the `check-and-test` CI job, same workflow — the
-  smoke job fails fast when CI fails, so a broken build never reports a
-  passing smoke check). To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
+  push to `main`. The workflow is three strictly-ordered jobs: `check-and-test`
+  → `migrate-db` (runs `./scripts/migrate-prod` against prod, only after
+  tests pass — never before) → `pdf-ocr-smoke`. The smoke job fails fast when
+  CI or the migration fails, so a broken build or an unmigrated schema never
+  reports a passing smoke check. To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
   Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (that
   single check is enough — it fails when CI fails; requiring `check-and-test`
   too is optional); requires `VERCEL_TOKEN`,

@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Sync the production database schema (Supabase) to prisma/schema.prisma —
+# the "DB migration" step of a deploy. Shared by:
+#
+#   - `scripts/deploy` (Step 3), which runs `pnpm check` + `pnpm test`
+#     BEFORE calling this, and
+#   - the CI workflow's `migrate-db` job
+#     (.github/workflows/deployment-smoke.yml), which `needs: check-and-test`
+#     so this never runs before the test suite there either.
+#
+# ORDERING IS THE POINT: prod must never be migrated for code whose tests
+# haven't passed (a schema change applied for broken code would leave prod
+# ahead of the deployed bundle). And the smoke check (pdf-ocr-smoke in CI,
+# the post-deploy /api/smoke curl in scripts/deploy) runs the deployed code
+# against this schema — without the migration it fails on any schema change.
+# So the deploy sequence is always: check & test → migrate → smoke.
+#
+# Auth: `vercel login` on the dev machine by default (scripts/deploy). In CI
+# the CLI authenticates via VERCEL_TOKEN and locates the project via
+# VERCEL_ORG_ID / VERCEL_PROJECT_ID (set as job env — never pass --token on
+# the command line).
+#
+# Prod secrets come from `vercel env pull` (see AGENTS.md; .env.prod.pull is
+# gitignored). Use DATABASE_URL_UNPOOLED for schema DDL — the pooled URL is
+# for runtime queries. The preflight script is a no-op on an already-
+# baselined database (it only matters if the DB is a restored pre-account
+# dump), and `migrate resolve` re-records the baseline.
+set -eo pipefail
+
+echo "--- Pull production env (Vercel) ---"
+npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+set -a
+source .env.prod.pull
+set +a
+export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+
+echo "--- Preflight (idempotent baseline SQL) ---"
+node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
+rm -f /tmp/preflight-prod.sql
+
+# Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
+# diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
+# conversion runs explicitly before db push. Guarded on the column still being
+# TEXT — idempotent on re-runs.
+echo "--- Convert money columns TEXT → NUMERIC(10,2) ---"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'amount'
+      AND data_type = 'text'
+  ) THEN
+    ALTER TABLE "expenses"
+      ALTER COLUMN "amount" DROP NOT NULL,
+      ALTER COLUMN "amount" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "amount" = '' THEN NULL ELSE "amount"::decimal(10,2) END,
+      ALTER COLUMN "distanceMiles" DROP NOT NULL,
+      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'mileage' AND column_name = 'distanceMiles'
+      AND data_type = 'text'
+  ) THEN
+    ALTER TABLE "mileage"
+      ALTER COLUMN "distanceMiles" DROP NOT NULL,
+      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
+        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
+  END IF;
+END $$;
+SQL
+
+# Login identity: users.username → users.email (rename). Prisma's diff for a
+# String → String rename is DROP COLUMN + ADD COLUMN NOT NULL, which fails on
+# a non-empty users table — so the rename runs explicitly before db push,
+# mirroring the money-column conversion above. Guarded on the column still
+# being named "username" (idempotent on re-runs). The app's initStore then
+# backfills the bootstrap user's email from APP_EMAIL (see database.ts).
+echo "--- Rename users.username → users.email ---"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+  ) THEN
+    ALTER TABLE "users" RENAME COLUMN "username" TO "email";
+    ALTER INDEX IF EXISTS "users_username_key" RENAME TO "users_email_key";
+  END IF;
+END $$;
+SQL
+
+echo "--- prisma db push (schema.prisma → prod) ---"
+pnpm prisma db push --accept-data-loss
+# Record the baseline migrations so future `prisma migrate deploy` has
+# history. Errors when already recorded (P3008) are expected on re-runs.
+pnpm prisma migrate resolve --applied 0_init || true
+pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
+pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
+pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
+pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
+pnpm prisma migrate resolve --applied 20260802120544_drop_user_name || true
+pnpm prisma migrate resolve --applied 20260803131818_username_to_email || true
+
+echo "--- Production schema is in sync ---"

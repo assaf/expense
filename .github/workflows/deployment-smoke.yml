@@ -1,14 +1,22 @@
 name: deployment-checks
 
-# CI + post-deploy smoke checks for every push to main, wired into Vercel
-# Deployment Checks. Both jobs live in ONE workflow on purpose:
+# CI + DB migration + post-deploy smoke checks for every push to main,
+# wired into Vercel Deployment Checks. All jobs live in ONE workflow on
+# purpose:
 #
 #   - Ordering: GitHub has no cross-workflow dependencies, so a separate
 #     smoke workflow could run (and even pass) before the CI checks finished.
-#     Here `pdf-ocr-smoke` needs `check-and-test`, so the smoke check never
+#     Here the jobs are strictly sequential: `migrate-db` needs
+#     `check-and-test`, and `pdf-ocr-smoke` needs both. The smoke check never
 #     starts until CI is done — and when CI fails, the smoke job fails fast
 #     instead of being skipped (GitHub reports a skipped job as success, which
 #     could let Vercel promote a broken build).
+#   - DB migrations run ONLY after the test suite passes — never before.
+#     Migrating prod for code whose tests haven't passed would leave the
+#     schema ahead of the deployed bundle; and without the migration,
+#     `pdf-ocr-smoke` runs the deployed code against an out-of-date schema
+#     and fails on any schema change. So the deploy contract is:
+#         check & test → migrate prod DB → pdf-ocr-smoke
 #   - Emails: GitHub sends one notification email per failed workflow run.
 #     Two workflows meant up to two emails per push; one workflow means at
 #     most one.
@@ -19,6 +27,11 @@ name: deployment-checks
 # the deployed serverless bundle — see app/routes/api.smoke.ts), and fails
 # the job when any pipeline is broken.
 #
+# The migrate-db job reuses the same secrets as the smoke job — it pulls the
+# production env from Vercel (VERCEL_TOKEN + VERCEL_ORG_ID + VERCEL_PROJECT_ID)
+# and runs scripts/migrate-prod, the exact same schema sync scripts/deploy
+# runs. No database credentials live in GitHub secrets.
+#
 # To make this gate production promotion:
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
 #      SMOKE_TEST_SECRET — must equal the SMOKE_TEST_SECRET env var on the
@@ -27,8 +40,9 @@ name: deployment-checks
 #      protected).
 #   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
 #      Add Checks → provider GitHub → require "pdf-ocr-smoke". Because the
-#      smoke job fails when CI fails, that single check is enough to gate
-#      promotion; requiring "Check & Test" too is optional.
+#      smoke job fails when CI or the DB migration fails, that single check is
+#      enough to gate promotion; requiring "Check & Test" or "Migrate prod DB"
+#      too is optional.
 #   3. Vercel then holds each production deployment (never aliases it to
 #      expense.labnotes.org) until the required checks pass.
 #
@@ -98,20 +112,66 @@ jobs:
 
       - run: pnpm test
 
+  # Production schema sync — runs ONLY after the test suite passes (never
+  # before; a migration applied for code that later fails CI would leave prod
+  # ahead of the deployed bundle). Runs concurrently with the Vercel build;
+  # pdf-ocr-smoke needs it, so the smoke check never hits an unmigrated DB.
+  migrate-db:
+    name: Migrate prod DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: check-and-test
+    # `success()` keeps the default skip-on-failure semantics (no migration
+    # when check-and-test failed) on top of the main-only gate.
+    if: success() && github.ref == 'refs/heads/main'
+    env:
+      # scripts/migrate-prod pulls the prod env from Vercel: the CLI reads
+      # VERCEL_TOKEN for auth and VERCEL_ORG_ID/VERCEL_PROJECT_ID to locate
+      # the project without a local `vercel link`. No new secrets — the DB
+      # credentials come from Vercel exactly as scripts/deploy gets them.
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # scripts/migrate-prod pipes the preflight SQL through psql (the money
+      # + username conversions are psql DO blocks too). GitHub's ubuntu
+      # runners don't ship the postgres client by default.
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # The exact schema sync scripts/deploy runs (env pull → preflight →
+      # guarded conversions → prisma db push → migrate resolve).
+      - name: Sync the production database schema
+        run: ./scripts/migrate-prod
+
   pdf-ocr-smoke:
     name: pdf-ocr-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Run the smoke only after CI passes. `if: always()` + an explicit guard
-    # (instead of the default skip-on-failure) so a broken build reports a
-    # failing smoke check to Vercel rather than a skipped/passing one.
-    needs: check-and-test
+    # Run the smoke only after CI passes AND the prod DB is migrated. `if:
+    # always()` + an explicit guard (instead of the default skip-on-failure)
+    # so a broken build or failed migration reports a failing smoke check to
+    # Vercel rather than a skipped/passing one.
+    needs: [check-and-test, migrate-db]
     if: always() && github.ref == 'refs/heads/main'
     steps:
-      - name: Require CI to pass first
-        if: needs.check-and-test.result != 'success'
+      - name: Require CI and the DB migration to pass first
+        if: needs.check-and-test.result != 'success' || needs.migrate-db.result != 'success'
         run: |
-          echo "::error::Not running the PDF/OCR/MCP smoke check: 'check-and-test' ${{ needs.check-and-test.result }}."
+          echo "::error::Not running the PDF/OCR/MCP smoke check: check-and-test=${{ needs.check-and-test.result }}, migrate-db=${{ needs.migrate-db.result }}."
           exit 1
 
       - name: Wait for the Vercel production deployment (this commit)

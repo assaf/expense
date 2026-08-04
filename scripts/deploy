@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Deploy expense to production:
-#   1. sync the production database schema (Supabase; prod env pulled from Vercel)
-#   2. deploy with the Vercel CLI
-#   3. open the production site
+#   1. check + tests (never migrate before the test suite passes)
+#   2. sync the production database schema (scripts/migrate-prod — env pulled
+#      from Vercel, preflight + guarded conversions, prisma db push)
+#   3. deploy with the Vercel CLI
+#   4. post-deploy smoke check (PDF + OCR + MCP, /api/smoke)
+#   5. open the production site
 #
 # Prod secrets come from `vercel env pull` (the Infisical link is stale —
 # see AGENTS.md; .env.prod.pull is gitignored). Use DATABASE_URL_UNPOOLED for
-# schema DDL — the pooled URL is for runtime queries. The preflight script is
-# a no-op on an already-baselined database (it only matters if the DB is a
-# restored pre-account dump), and `migrate resolve` re-records the baseline.
+# schema DDL — the pooled URL is for runtime queries.
 set -eo pipefail
 
 PROD_DOMAIN="expense.labnotes.org"
@@ -23,87 +24,15 @@ else
   pnpm test
 fi
 
-echo -e "\033[0;32m--- Step 3: Pull production env (Vercel) ---\033[0m"
-npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+echo -e "\033[0;32m--- Step 3: Sync production database schema ---\033[0m"
+./scripts/migrate-prod
+# migrate-prod pulls prod env to .env.prod.pull; re-source it so the deploy
+# and smoke steps below see SMOKE_TEST_SECRET / VERCEL_PROTECTION_BYPASS.
 set -a
 source .env.prod.pull
 set +a
-export DATABASE_URL="$DATABASE_URL_UNPOOLED"
 
-echo -e "\033[0;32m--- Step 4: Sync production database schema ---\033[0m"
-node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
-rm -f /tmp/preflight-prod.sql
-
-# Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
-# diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
-# conversion runs explicitly before db push. Guarded on the column still being
-# TEXT — idempotent on re-runs.
-echo -e "\033[0;33m--- Step 4b: Convert money columns TEXT → NUMERIC(10,2) ---\033[0m"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'amount'
-      AND data_type = 'text'
-  ) THEN
-    ALTER TABLE "expenses"
-      ALTER COLUMN "amount" DROP NOT NULL,
-      ALTER COLUMN "amount" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "amount" = '' THEN NULL ELSE "amount"::decimal(10,2) END,
-      ALTER COLUMN "distanceMiles" DROP NOT NULL,
-      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
-  END IF;
-END $$;
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'mileage' AND column_name = 'distanceMiles'
-      AND data_type = 'text'
-  ) THEN
-    ALTER TABLE "mileage"
-      ALTER COLUMN "distanceMiles" DROP NOT NULL,
-      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
-  END IF;
-END $$;
-SQL
-
-# Login identity: users.username → users.email (rename). Prisma's diff for a
-# String → String rename is DROP COLUMN + ADD COLUMN NOT NULL, which fails on
-# a non-empty users table — so the rename runs explicitly before db push,
-# mirroring the money-column conversion above. Guarded on the column still
-# being named "username" (idempotent on re-runs). The app's initStore then
-# backfills the bootstrap user's email from APP_EMAIL (see database.ts).
-echo -e "\033[0;33m--- Step 4c: Rename users.username → users.email ---\033[0m"
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
-  ) THEN
-    ALTER TABLE "users" RENAME COLUMN "username" TO "email";
-    ALTER INDEX IF EXISTS "users_username_key" RENAME TO "users_email_key";
-  END IF;
-END $$;
-SQL
-
-pnpm prisma db push --accept-data-loss
-# Record the baseline migrations so future `prisma migrate deploy` has
-# history. Errors when already recorded (P3008) are expected on re-runs.
-pnpm prisma migrate resolve --applied 0_init || true
-pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
-pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true
-pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
-pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
-pnpm prisma migrate resolve --applied 20260802120544_drop_user_name || true
-pnpm prisma migrate resolve --applied 20260803131818_username_to_email || true
-
-echo -e "\033[0;32m--- Step 5: Deploy to Vercel (production) ---\033[0m"
+echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
 DEPLOY_OUTPUT=$(npx -y vercel@latest deploy --prod --yes 2>&1)
 echo "$DEPLOY_OUTPUT"
 DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -1 || true)
@@ -112,7 +41,7 @@ if [ -z "$DEPLOY_URL" ]; then
   DEPLOY_URL="https://${PROD_DOMAIN}"
 fi
 
-echo -e "\033[0;32m--- Step 5b: Post-deploy smoke check (PDF + OCR + MCP) ---\033[0m"
+echo -e "\033[0;32m--- Step 4b: Post-deploy smoke check (PDF + OCR + MCP) ---\033[0m"
 if [ -z "$SMOKE_TEST_SECRET" ]; then
   echo -e "\033[0;33mSMOKE_TEST_SECRET is not set in the Vercel environment — skipping the PDF/OCR/MCP smoke check.\033[0m"
   echo "Add it in the Vercel dashboard (Settings → Environment Variables, production):"
@@ -147,7 +76,7 @@ else
   fi
 fi
 
-echo -e "\033[0;32m--- Step 6: Open production site ---\033[0m"
+echo -e "\033[0;32m--- Step 5: Open production site ---\033[0m"
 open "https://${PROD_DOMAIN}"
 
 echo -e "\033[0;34m--- Deployed ---\033[0m"
