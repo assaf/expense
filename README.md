@@ -249,7 +249,7 @@ Vercel has no inbound email, so receipt emails are received by **Resend**
    ```bash
    RESEND_API_KEY=re_…                     # receive + send replies
    INBOUND_EMAIL_WEBHOOK_SECRET=whsec_…    # verifies the webhook signature
-   INBOUND_EMAIL_ADDRESS=receipts@labnotes.org  # forwarding address + reply sender
+   INBOUND_EMAIL_ADDRESS=receipts@expense.labnotes.org  # forwarding address + reply sender
    DEEPSEEK_API_KEY=sk-…                   # receipt text/OCR extraction
    DEEPSEEK_MODEL=deepseek-v4-flash        # optional, this is the default
    RECEIPT_OCR_MODE=auto                   # auto|deepseek|tesseract (default auto)

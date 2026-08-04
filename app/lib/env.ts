@@ -25,7 +25,7 @@ export const RESEND_API_KEY = env.RESEND_API_KEY ?? "";
 export const INBOUND_EMAIL_WEBHOOK_SECRET =
   env.INBOUND_EMAIL_WEBHOOK_SECRET ?? "";
 
-/** The address users forward receipts to — shown in Settings (e.g. receipts@labnotes.org). */
+/** The address users forward receipts to — shown in Settings (e.g. receipts@expense.labnotes.org). */
 export const INBOUND_EMAIL_ADDRESS = env.INBOUND_EMAIL_ADDRESS ?? "";
 
 /** DeepSeek API key — parses receipt text and (when supported) OCRs images. */
