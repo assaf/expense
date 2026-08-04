@@ -1,7 +1,9 @@
 import { ulid } from "ulid";
+import { MILEAGE_RATES } from "~/data/mileage-rates";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
+import { isMileageType, type MileageRateEntry } from "~/lib/mileage-rates";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
@@ -14,6 +16,7 @@ import type {
   Expense,
   InboundEmailRecord,
   MileageExpense,
+  MileageType,
   OAuthClientRecord,
   OAuthCodeRecord,
   OAuthTokenRecord,
@@ -51,7 +54,8 @@ interface AccountAdopter {
 
 let ready: Promise<void> | undefined;
 
-/** One-time (per process) data seeding: bootstrap user + adopt legacy rows. */
+/** One-time (per process) data seeding: bootstrap user + adopt legacy rows
+ * + sync the global IRS mileage-rate master table. */
 export async function initStore(): Promise<void> {
   if (!ready) {
     ready = (async () => {
@@ -71,6 +75,7 @@ export async function initStore(): Promise<void> {
         });
       }
       await migrateImageBlobKeys(bootstrap.accountId);
+      await syncMileageRates();
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.
       ready = undefined;
@@ -78,6 +83,71 @@ export async function initStore(): Promise<void> {
     });
   }
   await ready;
+}
+
+/**
+ * The IRS mileage-rate master table (global — the same rates for every
+ * account), synced from app/data/mileage-rates.ts whenever the seed
+ * differs. Update the seed file to change rates; the next process start
+ * applies it. Diff-based, so an unchanged seed is a no-op on every boot.
+ */
+async function syncMileageRates(): Promise<void> {
+  const have = (await prisma.mileageRate.findMany()).map(rateRowToEntry);
+  const want = MILEAGE_RATES.map((r) => ({ ...r })).sort(byTypeThenStart);
+  const same =
+    have.length === want.length &&
+    have.every((h, i) => rateEntryEquals(h, want[i]!));
+  if (same) return;
+  const now = new Date().toISOString();
+  await prisma.$transaction([
+    prisma.mileageRate.deleteMany({}),
+    prisma.mileageRate.createMany({
+      data: want.map((r) => ({ ...r, createdAt: now })),
+    }),
+  ]);
+  console.warn(
+    "[initStore] Synced IRS mileage rates: %d rows (was %d)",
+    want.length,
+    have.length,
+  );
+}
+
+function rateRowToEntry(row: {
+  type: string;
+  startDate: string;
+  endDate: string;
+  rate: Prisma.Decimal;
+}): MileageRateEntry {
+  return {
+    type: row.type as MileageType,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    rate: row.rate.toString(),
+  };
+}
+
+function byTypeThenStart(a: MileageRateEntry, b: MileageRateEntry): number {
+  return a.type === b.type
+    ? a.startDate.localeCompare(b.startDate)
+    : a.type.localeCompare(b.type);
+}
+
+function rateEntryEquals(a: MileageRateEntry, b: MileageRateEntry): boolean {
+  return (
+    a.type === b.type &&
+    a.startDate === b.startDate &&
+    a.endDate === b.endDate &&
+    a.rate === b.rate
+  );
+}
+
+/** All mileage rates in the global master table (newest period first). */
+export async function readMileageRates(): Promise<MileageRateEntry[]> {
+  await initStore();
+  const rows = await prisma.mileageRate.findMany({
+    orderBy: [{ startDate: "desc" }, { type: "asc" }],
+  });
+  return rows.map(rateRowToEntry);
 }
 
 /**
@@ -744,7 +814,7 @@ export async function removeCategory(
 
 export async function readSettings(accountId: string): Promise<Settings> {
   const rows = await prisma.settings.findMany({ where: { accountId } });
-  const settings: Settings = { ...DEFAULT_SETTINGS, mileageRates: {} };
+  const settings: Settings = { ...DEFAULT_SETTINGS };
   const kv: Record<string, string> = {};
   for (const row of rows) {
     if (row.key) kv[row.key] = row.value;
@@ -755,10 +825,6 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.duplicateDismissals = parseDuplicateDismissals(
     kv["duplicateDismissals"] ?? "",
   );
-  for (const [k, v] of Object.entries(kv)) {
-    const m = k.match(/^mileageRate\.(.+)$/);
-    if (m && v) settings.mileageRates[m[1]] = v;
-  }
   return settings;
 }
 
@@ -796,9 +862,6 @@ export async function writeSettings(
       value: JSON.stringify(settings.duplicateDismissals),
     },
   ];
-  for (const [year, rate] of Object.entries(settings.mileageRates)) {
-    rows.push({ accountId, key: `mileageRate.${year}`, value: rate });
-  }
   await prisma.$transaction([
     prisma.settings.deleteMany({ where: { accountId } }),
     prisma.settings.createMany({ data: rows }),
@@ -1231,6 +1294,7 @@ function expenseData(
     description: e.description,
     // "" is the domain's "no amount" sentinel → NULL (nullable Decimal).
     amount: e.amount === "" ? null : e.amount,
+    mileageType: e.type === "mileage" ? e.mileageType : "business",
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
   };
@@ -1271,6 +1335,7 @@ function rowToExpense(row: {
   imageMime: string;
   originalName: string;
   distanceMiles: Prisma.Decimal | null;
+  mileageType: string;
   locations: unknown;
   route: unknown;
   createdAt: string;
@@ -1303,6 +1368,8 @@ function rowToExpense(row: {
   const mileage: MileageExpense = {
     ...base,
     type: "mileage",
+    // Legacy rows predate the type column — they are business trips.
+    mileageType: isMileageType(row.mileageType) ? row.mileageType : "business",
     locations: parseLocations(row.locations),
     distanceMiles: row.distanceMiles?.toFixed(2) ?? "",
     route: parseRoute(row.route),

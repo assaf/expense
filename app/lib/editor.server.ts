@@ -1,17 +1,19 @@
-import { yearOf } from "~/lib/format";
 import { homeLocation, readSettings } from "~/lib/settings.server";
 import {
   readCategories,
+  readMileageRates,
   readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
+import type { MileageRateEntry } from "~/lib/mileage-rates";
 import type { Expense, Location } from "~/lib/types";
 
 /**
  * Editor context shared by the edit loader (/expense/:id) and the create
  * loader (/expense/new): the expense plus the pickers and defaults both
  * editors render — open reports, categories, prior merchants, home location,
- * and the mileage rate for the expense's year. Callers add `mode` and `nav`.
+ * and the IRS mileage-rate master table (the editor resolves the rate from
+ * it by trip date + type, so changing either recomputes the amount).
  */
 export async function loadEditorContext(
   accountId: string,
@@ -22,16 +24,15 @@ export async function loadEditorContext(
   categories: string[];
   merchants: string[];
   home: Location;
-  rate: string;
-  year: string;
+  rates: MileageRateEntry[];
 }> {
-  const [reports, categories, settings, merchants] = await Promise.all([
+  const [reports, categories, settings, merchants, rates] = await Promise.all([
     readReports(accountId),
     readCategories(accountId),
     readSettings(accountId),
     readPriorMerchants(accountId),
+    readMileageRates(),
   ]);
-  const year = yearOf(expense.date);
   return {
     expense,
     // Closed reports can't be selected; the expense's current report is
@@ -40,7 +41,6 @@ export async function loadEditorContext(
     categories: categories.map((c) => c.name),
     merchants,
     home: homeLocation(settings),
-    rate: settings.mileageRates[year] ?? "",
-    year,
+    rates,
   };
 }

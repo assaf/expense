@@ -38,11 +38,11 @@ export const KEY_FACTS = [
   `Name: ${APP_NAME}`,
   `URL: ${SITE_URL}`,
   "Price: free — no subscription, no per-user fees, no ads",
-  "Built for tax season: categories come from the IRS Schedule C lines, expenses group into reports you name, and mileage deducts at that year's IRS rate",
+  "Built for tax season: categories come from the IRS Schedule C lines, expenses group into reports you name, and mileage deducts at the IRS rate for the trip's date and type",
   "Receipt capture: upload, paste, drag-and-drop, or forward from email (images and PDFs)",
   "OCR reads the merchant and amount; an LLM suggests the category; you review and save",
   "Export: a PDF per report with receipts attached, or a ZIP of everything (CSV plus every receipt image)",
-  "Mileage: map-based trips at the per-year IRS mileage rate",
+  "Mileage: map-based trips at the IRS mileage rate for the date and type",
   "AI assistant access: connect any MCP client (Claude, Cursor, …) by signing in with your account (OAuth) — the assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
   "Multi-user accounts: share an account with an invite code",
   "Data stays in your account — no ads, no data resale",
@@ -116,7 +116,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Is Expense good for tax filing?",
     answer:
-      "That's the whole point. Categories are built from the IRS Schedule C lines, expenses group into reports you name (Home, Work, a client, whatever), mileage deducts at that year's IRS rate, and you can export a PDF per report or a ZIP of everything to hand to your accountant. It's expense tracking set up to make tax season boring.",
+      "That's the whole point. Categories are built from the IRS Schedule C lines, expenses group into reports you name (Home, Work, a client, whatever), mileage deducts at the IRS rate for the trip's date and type, and you can export a PDF per report or a ZIP of everything to hand to your accountant. It's expense tracking set up to make tax season boring.",
   },
   {
     question: "How does Expense read and categorize receipts?",
@@ -136,7 +136,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Does Expense track mileage?",
     answer:
-      "Yes. Log a business drive on a map and Expense works out the distance and the deduction at the per-year IRS mileage rate you set in Settings. Mileage rows export right alongside receipts.",
+      "Yes. Log a drive on a map and Expense works out the distance and the deduction at the IRS rate for the trip's date and type (business, charity, medical, or moving) — the rates come from the IRS automatically, no setup. Mileage rows export right alongside receipts.",
   },
   {
     question: "Can I add receipts by email?",

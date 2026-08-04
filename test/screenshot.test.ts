@@ -282,7 +282,6 @@ async function seedScreenshotData() {
       },
       { accountId: ACCOUNT, key: "homeLat", value: "33.985" },
       { accountId: ACCOUNT, key: "homeLng", value: "-118.4695" },
-      { accountId: ACCOUNT, key: "mileageRate.2026", value: "0.70" },
     ],
   });
 
@@ -408,9 +407,9 @@ async function captureHome(page: import("playwright").Page): Promise<void> {
   expect(await page.getByText("Incomplete").count()).toBe(1);
   expect(await page.getByText("July 2026").count()).toBeGreaterThan(0);
   expect(await page.getByText("Q2 Travel").count()).toBeGreaterThan(0);
-  expect(await page.getByText("Current mileage rate: $0.70/mi.").count()).toBe(
-    1,
-  );
+  expect(
+    await page.getByText(/Current mileage rate: \$0\.7\d\/mi\./).count(),
+  ).toBe(1);
 
   await page.screenshot({ path: "public/screenshot-home.png", fullPage: true });
   await shrinkForReadme("public/screenshot-home.png");

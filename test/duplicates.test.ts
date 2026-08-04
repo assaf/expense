@@ -31,6 +31,7 @@ const makeMileage = (
 ): MileageExpense => ({
   id: "m1",
   type: "mileage",
+  mileageType: "business",
   date: "2026-03-10",
   report: "2026 Test",
   category: "Travel",

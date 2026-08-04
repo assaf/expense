@@ -1,5 +1,6 @@
 import { normalizeAmount } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
+import { isMileageType } from "~/lib/mileage-rates";
 import {
   newExpenseShell,
   readReports,
@@ -58,6 +59,12 @@ export async function saveExpenseFromForm(
     ? existing.type === "mileage"
     : formString(form, "type") === "mileage";
   if (isMileage) {
+    // The IRS trip type (business/charity/medical/moving) — invalid or
+    // missing values fall back to the business default.
+    const rawType = formString(form, "mileageType");
+    const mileageType: MileageExpense["mileageType"] = isMileageType(rawType)
+      ? rawType
+      : "business";
     // The form carries the latest computed route geometry (empty when the
     // session never recomputed — keep the stored route then, so a legacy
     // expense saved unchanged doesn't wipe its geometry).
@@ -77,6 +84,7 @@ export async function saveExpenseFromForm(
       category,
       description,
       amount,
+      mileageType,
       // Empty/blank addresses are never persisted — the editor keeps blank
       // rows as placeholders, but a saved trip only stores real stops.
       locations: parseLocations(formString(form, "locations")).filter(

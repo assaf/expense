@@ -8,6 +8,10 @@
 
 type ExpenseType = "receipt" | "mileage";
 
+/** IRS reimbursement type for a mileage expense — determines the rate
+ * (with the trip date) from the global mileage_rates master table. */
+export type MileageType = "business" | "charity" | "medical" | "moving";
+
 /** A single geocoded address used in a mileage route. */
 export interface Location {
   address: string;
@@ -38,6 +42,9 @@ export interface ReceiptExpense extends ExpenseBase {
 
 export interface MileageExpense extends ExpenseBase {
   type: "mileage";
+  /** IRS reimbursement type — the rate is looked up from the global
+   * mileage_rates master table by (date, type). Defaults to "business". */
+  mileageType: MileageType;
   locations: Location[];
   distanceMiles: string; // decimal string "122.13", "" when unset
   /** Driving-route geometry persisted with the expense so every map (the
@@ -159,14 +166,13 @@ export interface User {
   createdAt: string;
 }
 
-/** Settings stored as key/value rows (settings.csv locally, a settings table in Postgres). */
+/** Settings stored as key/value rows (settings.csv locally, a settings table in Postgres).
+ * Mileage rates are NOT here — they live in the global mileage_rates master table. */
 export type Settings = {
   /** Home location used as the first/last stop of every mileage route. */
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
-  /** Mileage reimbursement rate per calendar year, e.g. { "2026": "0.70" }. */
-  mileageRates: Record<string, string>;
   /** Expense pairs the user marked "not a duplicate" (`duplicatePairKey`
    * strings, order-independent) — the warning never shows for them again. */
   duplicateDismissals: string[];
@@ -176,7 +182,6 @@ export const DEFAULT_SETTINGS: Settings = {
   homeAddress: "",
   homeLat: null,
   homeLng: null,
-  mileageRates: {},
   duplicateDismissals: [],
 };
 

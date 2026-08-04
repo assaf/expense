@@ -2,16 +2,15 @@ import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
 import { requireUser } from "~/lib/auth.server";
 import { bareName, readImage } from "~/lib/images.server";
-import { readExpenses } from "~/lib/store.server";
-import { readSettings } from "~/lib/settings.server";
+import { readExpenses, readMileageRates } from "~/lib/store.server";
 import { merchantLabel, sortExpenses } from "~/lib/format";
 import type { Route } from "./+types/export.all[.]zip";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const [expenses, settings] = await Promise.all([
+  const [expenses, rates] = await Promise.all([
     readExpenses(user.accountId),
-    readSettings(user.accountId),
+    readMileageRates(),
   ]);
 
   const sorted = sortExpenses(expenses, false);
@@ -22,7 +21,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   for (const e of sorted) {
     csvRows.push([
       e.date,
-      merchantLabel(e, settings.mileageRates),
+      merchantLabel(e, rates),
       e.amount,
       e.category,
       e.report,

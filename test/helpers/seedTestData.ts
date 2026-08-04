@@ -111,8 +111,6 @@ export async function seedTestData() {
       },
       { accountId: TEST_ACCOUNT_ID, key: "homeLat", value: "34.0522" },
       { accountId: TEST_ACCOUNT_ID, key: "homeLng", value: "-118.2437" },
-      { accountId: TEST_ACCOUNT_ID, key: "mileageRate.2026", value: "0.70" },
-      { accountId: TEST_ACCOUNT_ID, key: "mileageRate.2027", value: "0.72" },
     ],
   });
 

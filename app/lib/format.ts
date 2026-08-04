@@ -2,6 +2,11 @@
 
 import Decimal from "decimal.js";
 
+import {
+  formatRate,
+  mileageRateFor,
+  type MileageRateEntry,
+} from "~/lib/mileage-rates";
 import type { Expense } from "~/lib/types";
 
 /**
@@ -80,13 +85,14 @@ export function yearOf(date: string): string {
 }
 
 /** Build the mileage label, e.g. "32.00 mi @ $0.70 / mi". Without a rate
- * (no rate configured for the year) the distance still shows: "32.00 mi". */
+ * (no IRS period covers the trip's date/type) the distance still shows:
+ * "32.00 mi". Half-cent rates keep their third decimal ("$0.235 / mi"). */
 export function mileageMerchant(distanceMiles: string, rate: string): string {
   const d = parseAmount(distanceMiles);
   if (d === null) return "";
   const r = parseAmount(rate);
   const distance = `${d.toFixed(2)} mi`;
-  return r === null ? distance : `${distance} @ $${r.toFixed(2)} / mi`;
+  return r === null ? distance : `${distance} @ $${formatRate(rate)} / mi`;
 }
 
 /** Mileage distance shown as "(9.45 miles)". "" when unset/unparseable. */
@@ -96,13 +102,14 @@ export function mileageDistanceLabel(distanceMiles: string): string {
 }
 
 /** The "merchant" label for an expense: the receipt merchant, or the mileage
- * label for mileage expenses. "" when there is nothing to show. */
-export function merchantLabel(
-  e: Expense,
-  rates: Record<string, string>,
-): string {
+ * label for mileage expenses. The mileage rate is resolved from the IRS
+ * master table by the trip's date + type. "" when there is nothing to show. */
+export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
   if (e.type === "receipt") return e.merchant;
-  return mileageMerchant(e.distanceMiles, rates[yearOf(e.date)] ?? "");
+  return mileageMerchant(
+    e.distanceMiles,
+    mileageRateFor(rates, e.date, e.mileageType),
+  );
 }
 
 /**

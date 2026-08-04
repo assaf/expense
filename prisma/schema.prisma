@@ -65,6 +65,10 @@ model Expense {
   imageMime    String
   originalName String
   distanceMiles Decimal? @db.Decimal(10, 2)
+  /// IRS reimbursement type for mileage expenses: business | charity |
+  /// medical | moving. Determines the rate (with the date) from the global
+  /// mileage_rates master table. Ignored for receipt rows.
+  mileageType  String @default("business")
   locations    Json
   /// Driving-route geometry ({ coords, returnCoords } as [lat, lng] pairs)
   /// persisted so the map shows the routed trip everywhere — the list
@@ -116,7 +120,25 @@ model Mileage {
   @@map("mileage")
 }
 
-/// Per-account key/value settings (home location, mileage rates).
+/// IRS standard mileage reimbursement rates — the master table. Global
+/// (not per-account): the same IRS rates apply to everyone. One row per
+/// (type, period); the period is an inclusive date range and the rate is
+/// dollars per mile (half-cent rates like 23.5¢ store as 0.235). Synced
+/// from app/data/mileage-rates.ts by initStore — edit the seed file to
+/// update rates, no per-account overrides.
+model MileageRate {
+  id        BigInt  @id @default(autoincrement())
+  type      String // business | charity | medical | moving
+  startDate String // YYYY-MM-DD, inclusive
+  endDate   String // YYYY-MM-DD, inclusive; "" = open-ended
+  rate      Decimal @db.Decimal(5, 3)
+  createdAt String
+
+  @@index([type, startDate])
+  @@map("mileage_rates")
+}
+
+/// Per-account key/value settings (home location).
 model Settings {
   accountId String
   key       String

@@ -33,11 +33,20 @@ import { duplicateLabel, findDuplicates } from "~/lib/duplicates";
 import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
 import { escapeHtml } from "~/lib/escape";
 import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
+import {
+  MILEAGE_TYPE_LABELS,
+  MILEAGE_TYPES,
+  formatRate,
+  mileageAmount,
+  mileageRateFor,
+  type MileageRateEntry,
+} from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
 import type {
   Expense,
   Location,
   MileageExpense,
+  MileageType,
   ReceiptExpense,
   RouteGeometry,
 } from "~/lib/types";
@@ -108,8 +117,9 @@ export type EditorData = {
   categories: string[];
   merchants: string[];
   home: Location;
-  rate: string;
-  year: string;
+  /** The IRS mileage-rate master table — the editor resolves the rate from
+   * it by (date, type), so changing either recomputes the amount. */
+  rates: MileageRateEntry[];
   nav?: { prevId: string | null; nextId: string | null } | null;
 };
 
@@ -636,7 +646,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
 // --- Mileage editor --------------------------------------------------------
 
 function MileageEditor({ data }: { data: EditorData }) {
-  const { reports, categories, home, rate } = data;
+  const { reports, categories, home, rates } = data;
   const expense = data.expense as MileageExpense;
   const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
@@ -654,6 +664,9 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [distanceMiles, setDistanceMiles] = useState(expense.distanceMiles);
   const [amount, setAmount] = useState(expense.amount);
   const [date, setDate] = useState(expense.date);
+  const [mileageType, setMileageType] = useState<MileageType>(
+    expense.mileageType,
+  );
   const [report, setReport] = useState(expense.report);
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
@@ -674,6 +687,33 @@ function MileageEditor({ data }: { data: EditorData }) {
   // the save-time flush) — drives the per-field spinner.
   const [geocodingFields, setGeocodingFields] = useState<number[]>([]);
   const manualAmount = useRef(false);
+  // The IRS rate for the trip's (date, type) — it changes the moment either
+  // does, so the footer rate and the recomputed amount stay in sync.
+  const rate = useMemo(
+    () => mileageRateFor(rates, date, mileageType),
+    [rates, date, mileageType],
+  );
+
+  /** Changing the type picks a new IRS rate: recompute the amount from the
+   * current distance at the new rate (type change → new rate → new amount).
+   * Marks the amount auto-computed again so a later route recompute may
+   * overwrite it. */
+  function changeMileageType(t: MileageType) {
+    setMileageType(t);
+    manualAmount.current = false;
+    setAmount(mileageAmount(distanceMiles, mileageRateFor(rates, date, t)));
+  }
+
+  /** Changing the date can move the trip into a different IRS period with a
+   * different rate — recompute the amount, same as a type change. */
+  function changeDate(d: string) {
+    setDate(d);
+    manualAmount.current = false;
+    setAmount(
+      mileageAmount(distanceMiles, mileageRateFor(rates, d, mileageType)),
+    );
+  }
+
   // Monotonic id for route requests: only the latest request may update
   // shared state, so an out-of-order response can't overwrite newer
   // results. Typing bumps it too — any in-flight geocode is stale the
@@ -923,6 +963,7 @@ function MileageEditor({ data }: { data: EditorData }) {
       form.set("intent", "save");
       if (isNew) form.set("type", "mileage");
       form.set("date", date);
+      form.set("mileageType", mileageType);
       form.set("amount", saveAmount);
       form.set("report", report);
       form.set("category", category);
@@ -1015,14 +1056,22 @@ function MileageEditor({ data }: { data: EditorData }) {
             ) : null}
           </span>
           <span className="text-gray-500">
-            Route: {rate ? `$${rate}/mi` : "no rate set"}
+            {rate ? (
+              <>
+                {MILEAGE_TYPE_LABELS[mileageType]} · ${formatRate(rate)}/mi
+              </>
+            ) : (
+              "No rate for this date/type"
+            )}
           </span>
         </div>
       </div>
 
       <DateAmountFields
         date={date}
-        onDate={setDate}
+        onDate={changeDate}
+        type={mileageType}
+        onType={changeMileageType}
         amount={amount}
         onAmount={setAmount}
         onManualAmount={() => {
@@ -1225,11 +1274,16 @@ function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
   );
 }
 
-/** The Date + Amount field pair shared by both editors (amount normalizes on
- * blur; mileage marks manual edits so route recomputation won't overwrite). */
+/** The Date + Type + Amount field row shared by both editors (amount
+ * normalizes on blur; mileage marks manual edits so route recomputation
+ * won't overwrite them). Mileage renders a Type select between Date and
+ * Amount — changing it (or the date) picks a new IRS rate and recomputes
+ * the amount. Receipts pass no type and keep the two-column layout. */
 function DateAmountFields({
   date,
   onDate,
+  type,
+  onType,
   amount,
   onAmount,
   amountRef,
@@ -1237,6 +1291,9 @@ function DateAmountFields({
 }: {
   date: string;
   onDate: (v: string) => void;
+  /** Mileage: the IRS trip type; the select only renders when present. */
+  type?: MileageType;
+  onType?: (t: MileageType) => void;
   amount: string;
   onAmount: (v: string) => void;
   /** Receipt: the field to autofocus when the editor opens. */
@@ -1244,8 +1301,9 @@ function DateAmountFields({
   /** Mileage: runs before each keystroke (marks the amount as hand-edited). */
   onManualAmount?: () => void;
 }) {
+  const hasType = type !== undefined && onType !== undefined;
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className={`grid gap-4 ${hasType ? "grid-cols-3" : "grid-cols-2"}`}>
       <Field label="Date">
         <Input
           type="date"
@@ -1255,6 +1313,20 @@ function DateAmountFields({
           onChange={(e) => onDate(e.target.value)}
         />
       </Field>
+      {hasType ? (
+        <Field label="Type">
+          <Select
+            value={type}
+            onChange={(e) => onType(e.target.value as MileageType)}
+          >
+            {MILEAGE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {MILEAGE_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
       <Field label="Amount">
         <Input
           type="number"

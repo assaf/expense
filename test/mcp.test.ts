@@ -377,6 +377,24 @@ describe("MCP endpoint", () => {
     expect(payload.logged).toBe(true);
     expect(payload.distanceMiles).not.toBe("");
     expect(payload.amount).not.toBe("");
+    // The IRS rate is resolved from the master table by date + type:
+    // 2026 H1 business is $0.725/mi.
+    expect(payload.type).toBe("business");
+    expect(payload.rate).toBe("0.725");
+
+    // A different type picks a different rate for the same date: charity
+    // is $0.14 every year.
+    const charity = await callTool(accessToken, "log_mileage", {
+      locations: [
+        { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+        { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+      ],
+      date: "2026-05-10",
+      type: "charity",
+    });
+    expect(charity.isError).toBe(false);
+    expect(charity.payload.type).toBe("charity");
+    expect(charity.payload.rate).toBe("0.14");
 
     const row = await testPrisma.expense.findFirst({
       where: { id: payload.expenseId as string, accountId: TEST_ACCOUNT_ID },

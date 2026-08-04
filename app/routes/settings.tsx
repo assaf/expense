@@ -39,9 +39,17 @@ import {
   renameCategory,
   renameReport,
   setReportClosed,
+  readMileageRates,
 } from "~/lib/store.server";
-import { countLabel, normalizeAmount } from "~/lib/format";
-import { entryString, formString, unknownIntent } from "~/lib/validation";
+import { countLabel } from "~/lib/format";
+import {
+  MILEAGE_TYPE_LABELS,
+  MILEAGE_TYPES,
+  formatRate,
+  type MileageRateEntry,
+} from "~/lib/mileage-rates";
+import type { MileageType } from "~/lib/types";
+import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -55,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     reportCounts,
     categoryCounts,
     oauthSessions,
+    rates,
   ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
@@ -63,8 +72,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     readReportCounts(user.accountId),
     readCategoryCounts(user.accountId),
     listUserOAuthSessions(user.id),
+    readMileageRates(),
   ]);
-  const years = Object.keys(settings.mileageRates).sort();
   return {
     accountName: account?.name ?? "",
     inviteCode: account?.inviteCode ?? "",
@@ -80,7 +89,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     homeAddress: settings.homeAddress,
     inboundSenders,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
-    rates: years.map((y) => ({ year: y, rate: settings.mileageRates[y] })),
+    rates,
     oauthSessions,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
@@ -135,26 +144,6 @@ export async function action({ request }: Route.ActionArgs) {
         formString(form, "newName"),
       );
       return Response.json(result);
-    }
-    case "saveRates": {
-      const settings = await readSettings(user.accountId);
-      const rates: Record<string, string> = {};
-      for (const [key, value] of form.entries()) {
-        const m = key.match(/^rate\.(.+)$/);
-        if (m) {
-          const v = normalizeAmount(entryString(value));
-          if (v) rates[m[1]] = v;
-        }
-      }
-      // New year row.
-      const newYear = formString(form, "newYear").trim();
-      const newRate = normalizeAmount(formString(form, "newRate"));
-      if (newYear && /^\d{4}$/.test(newYear) && newRate) {
-        rates[newYear] = newRate;
-      }
-      settings.mileageRates = rates;
-      await writeSettings(user.accountId, settings);
-      break;
     }
     case "addInboundSender": {
       // The store normalizes the address (trim + lowercase) for storage.
@@ -258,41 +247,20 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Mileage rates</h2>
         <p className="mb-3 text-sm text-gray-500">
-          Reimbursement rate per mile for each calendar year.
+          The IRS standard rates — used automatically for every mileage expense
+          based on the trip's date and type (business, charity, medical, or
+          moving). Updated from the{" "}
+          <a
+            href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            IRS standard mileage rates page
+          </a>{" "}
+          as they change.
         </p>
-        <Form method="post" className="flex flex-col gap-2">
-          <input type="hidden" name="intent" value="saveRates" />
-          {rates.map((r) => (
-            <div key={r.year} className="flex items-center gap-2">
-              <Input
-                type="text"
-                name={`rate.${r.year}`}
-                defaultValue={r.rate}
-                className="w-24 px-2 py-1.5 text-right"
-              />
-              <span className="text-sm text-gray-500">/ mi for {r.year}</span>
-            </div>
-          ))}
-          <div className="mt-2 flex items-center gap-2 border-t border-gray-100 pt-2">
-            <Input
-              type="text"
-              name="newYear"
-              placeholder="YYYY"
-              className="w-24 px-2 py-1.5"
-            />
-            <Input
-              type="text"
-              name="newRate"
-              placeholder="0.70"
-              inputMode="decimal"
-              className="w-24 px-2 py-1.5 text-right"
-            />
-            <span className="text-sm text-gray-500">/ mi (new year)</span>
-          </div>
-          <Button type="submit" size="sm" className="mt-2 self-start">
-            Save rates
-          </Button>
-        </Form>
+        <MileageRatesTable rates={rates} />
       </section>
 
       <section className="mb-8">
@@ -518,6 +486,74 @@ function formatShortDate(iso: string | null): string {
     month: "short",
     day: "numeric",
   });
+}
+
+/** Read-only IRS mileage-rate table (the global master table): one row per
+ * period, one column per type, newest first (the loader sorts desc). */
+function MileageRatesTable({ rates }: { rates: MileageRateEntry[] }) {
+  // Group the flat rows by (startDate, endDate) — each period has one row
+  // per type.
+  const byPeriod = new Map<string, Map<MileageType, string>>();
+  for (const r of rates) {
+    const key = `${r.startDate}|${r.endDate}`;
+    const row = byPeriod.get(key) ?? new Map<MileageType, string>();
+    row.set(r.type, r.rate);
+    byPeriod.set(key, row);
+  }
+  if (byPeriod.size === 0) {
+    return <p className="text-sm text-gray-400">No rates loaded yet.</p>;
+  }
+  return (
+    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
+            <th className="px-3 py-2 font-medium">Period</th>
+            {MILEAGE_TYPES.map((t) => (
+              <th key={t} className="px-3 py-2 text-right font-medium">
+                {MILEAGE_TYPE_LABELS[t]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[...byPeriod.entries()].map(([key, row]) => {
+            const [start, end] = key.split("|");
+            return (
+              <tr key={key} className="border-b border-gray-100 last:border-0">
+                <td className="px-3 py-2 text-gray-700">
+                  {periodLabel(start!, end!)}
+                </td>
+                {MILEAGE_TYPES.map((t) => {
+                  const v = row.get(t);
+                  return (
+                    <td
+                      key={t}
+                      className="px-3 py-2 text-right tabular-nums text-gray-700"
+                    >
+                      {v ? `$${formatRate(v)}` : "—"}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** "2026" for a full calendar year; "2026-07-01 – 2026-12-31" otherwise. */
+function periodLabel(start: string, end: string): string {
+  if (start.length === 10 && end.length === 10) {
+    const sy = start.slice(0, 4);
+    const ey = end.slice(0, 4);
+    if (sy === ey && start === `${sy}-01-01` && end === `${ey}-12-31`) {
+      return sy;
+    }
+  }
+  return `${start} – ${end}`;
 }
 
 function NameList<T extends { name: string }>({

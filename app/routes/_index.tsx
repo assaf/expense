@@ -24,9 +24,11 @@ import {
   formatDate,
   sortExpenses,
   summarizeByReport,
+  todayDate,
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
+import { formatRate, latestRate, mileageRateFor } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -34,6 +36,7 @@ import {
   deleteExpense,
   dismissDuplicatePair,
   readExpenses,
+  readMileageRates,
   readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
@@ -47,11 +50,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { mode: "landing" as const };
   }
   const user = await requireUser(request);
-  const [expenses, settings, merchants, allReports] = await Promise.all([
+  const [expenses, settings, merchants, allReports, rates] = await Promise.all([
     readExpenses(user.accountId),
     readSettings(user.accountId),
     readPriorMerchants(user.accountId),
     readReports(user.accountId),
+    readMileageRates(),
   ]);
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
@@ -62,7 +66,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   // receipt still warns when the original was already filed.
   const dismissed = new Set(settings.duplicateDismissals);
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
-  const currentYear = String(new Date().getFullYear());
+  // The "current rate" tip: today's business rate, falling back to the
+  // most recent known rate until the IRS publishes the next period.
+  const mileageRate =
+    mileageRateFor(rates, todayDate(), "business") ||
+    latestRate(rates, "business");
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
     .sort((a, b) =>
@@ -75,7 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     mode: "app" as const,
     expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
-    mileageRate: settings.mileageRates[currentYear] ?? "",
+    mileageRate: formatRate(mileageRate),
     merchants,
     reports,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
@@ -460,7 +468,7 @@ function ExpenseList({
           category are filled in automatically.
           {mileageRate
             ? ` Current mileage rate: $${mileageRate}/mi.`
-            : " Set a mileage rate in Settings."}
+            : " No IRS mileage rate published yet — rates load automatically from the IRS table."}
         </p>
       </div>
 

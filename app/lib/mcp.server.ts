@@ -21,6 +21,7 @@ import {
   readReportCounts,
   readCategories,
   readSettings,
+  readMileageRates,
   readExtractionContext,
   readPriorMerchants,
   addReport,
@@ -36,11 +37,11 @@ import {
   parseAmount,
   sortExpenses,
   todayDate,
-  yearOf,
   summarizeByReport,
 } from "~/lib/format";
 import { saveImage, renameImageToConvention } from "~/lib/images.server";
 import { recomputeMileage } from "~/lib/maps.server";
+import { mileageRateFor } from "~/lib/mileage-rates";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
@@ -49,6 +50,7 @@ import type {
   Expense,
   Location,
   MileageExpense,
+  MileageType,
   ReceiptExpense,
 } from "~/lib/types";
 
@@ -522,7 +524,7 @@ function createMcpServer(accountId: string): McpServer {
     "log_mileage",
     {
       description:
-        "Log a driving trip: geocode the stops, compute the route distance with the account's mileage rate for the year, and create the mileage expense (and the derived mileage row).",
+        "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense (and the derived mileage row).",
       inputSchema: z.object({
         locations: z
           .array(
@@ -549,6 +551,12 @@ function createMcpServer(accountId: string): McpServer {
           .string()
           .optional()
           .describe("Trip date YYYY-MM-DD (defaults to today)."),
+        type: z
+          .enum(["business", "charity", "medical", "moving"])
+          .optional()
+          .describe(
+            "IRS trip type — picks the rate for the trip's date (defaults to business).",
+          ),
         report: z
           .string()
           .optional()
@@ -831,13 +839,16 @@ function createMcpServer(accountId: string): McpServer {
     "get_settings",
     {
       description:
-        "Account settings: per-year mileage reimbursement rates and the home address.",
+        "Account settings: the home address and the IRS mileage-rate master table (period + type).",
       inputSchema: z.object({}),
     },
     async () => {
-      const settings = await readSettings(accountId);
+      const [settings, rates] = await Promise.all([
+        readSettings(accountId),
+        readMileageRates(),
+      ]);
       return ok({
-        mileageRates: settings.mileageRates,
+        mileageRates: rates,
         homeAddress: settings.homeAddress,
       });
     },
@@ -908,6 +919,7 @@ function serializeExpense(e: Expense) {
     ...(e.type === "receipt"
       ? { merchant: e.merchant || null }
       : {
+          mileageType: e.mileageType,
           distanceMiles: e.distanceMiles || null,
           stops: e.locations.map((l) => l.address).filter(Boolean),
         }),
@@ -1072,6 +1084,7 @@ async function logMileage(
   args: {
     locations: (string | { address: string; lat?: number; lng?: number })[];
     date?: string;
+    type?: MileageType;
     report?: string;
     category?: string;
     description?: string;
@@ -1101,8 +1114,13 @@ async function logMileage(
     return fail("A trip needs at least two stops.");
   }
 
-  const settings = await readSettings(accountId);
-  const rate = settings.mileageRates[yearOf(date)] ?? "";
+  // The IRS rate for the trip's (date, type) — no rate in the master table
+  // for the period means no amount (never $0.00).
+  const rate = mileageRateFor(
+    await readMileageRates(),
+    date,
+    args.type ?? "business",
+  );
   const {
     locations,
     distanceMiles,
@@ -1118,6 +1136,7 @@ async function logMileage(
     report,
     category: args.category?.trim() ?? "",
     description: args.description ?? "",
+    mileageType: args.type ?? "business",
     amount,
     locations,
     distanceMiles,
@@ -1131,6 +1150,8 @@ async function logMileage(
     stops: locations.map((l) => l.address),
     distanceMiles,
     amount,
+    type: expense.mileageType,
+    rate: rate || null,
     approximate,
     ...(approximate
       ? {

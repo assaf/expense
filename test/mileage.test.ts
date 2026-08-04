@@ -72,6 +72,78 @@ describe("Mileage expense", () => {
     await expect(page.getByRole("link", { name: /22\.40/ })).toBeVisible();
   });
 
+  it("recomputes the amount when the type or date changes the rate", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+
+    // A new mileage expense defaults to the business type and today's date.
+    await expect(page.getByLabel("Type")).toHaveValue("business");
+
+    // Mock the route API: 10.00 mi regardless of the stops.
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) =>
+            l.address.trim()
+              ? { address: l.address, lat: 34.05, lng: -118.24 }
+              : { address: l.address, lat: null, lng: null },
+          ),
+          distanceMiles: "10.00",
+          amount: "7.60", // 10 × $0.76 — whatever the route returns, the
+          // type/date changes below recompute from the IRS rate.
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.23],
+          ],
+          returnCoords: [],
+          approximate: false,
+        }),
+      });
+    });
+
+    const inputs = page.locator("input[placeholder='Address']");
+    await inputs.first().fill("");
+    await inputs.nth(1).fill("");
+    await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
+      delay: 10,
+    });
+    await inputs.nth(1).pressSequentially("456 Dev Ave", { delay: 10 });
+    await inputs.nth(1).blur();
+    await expect(page.locator("input[type='number']")).toHaveValue("7.60");
+
+    // Changing the type picks the new IRS rate and recomputes the amount
+    // from the distance: 10.00 mi × $0.14 (charity, every year) = $1.40.
+    await page.getByLabel("Type").selectOption("charity");
+    await expect(page.locator("input[type='number']")).toHaveValue("1.40");
+    await expect(page.getByText("Charity · $0.14/mi")).toBeVisible();
+
+    // Medical: 10.00 × $0.235 (2026 H2) = $2.35.
+    await page.getByLabel("Type").selectOption("medical");
+    await expect(page.locator("input[type='number']")).toHaveValue("2.35");
+    await expect(page.getByText("Medical · $0.235/mi")).toBeVisible();
+
+    // Changing the date can move the trip into a different IRS period:
+    // business was $0.725/mi in 2026 H1 → 10.00 × 0.725 = $7.25.
+    await page.getByLabel("Type").selectOption("business");
+    await page.locator("input[type='date']").fill("2026-03-15");
+    await expect(page.locator("input[type='number']")).toHaveValue("7.25");
+    await expect(page.getByText("Business · $0.725/mi")).toBeVisible();
+
+    // A date with no published rate clears the amount (never $0.00) and
+    // the footer says why.
+    await page.locator("input[type='date']").fill("2010-06-01");
+    await expect(page.locator("input[type='number']")).toHaveValue("");
+    await expect(page.getByText("No rate for this date/type")).toBeVisible();
+    await page.unroute("**/api/route");
+  });
+
   it("only geocodes and updates the map when an address field loses focus", async () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByText("Add mileage").click();
@@ -136,7 +208,7 @@ describe("Mileage expense", () => {
         timeout: 10_000,
       });
       // Report + Category selects; the category is the second one.
-      await expect(page.locator("select").nth(1)).toHaveValue("Travel");
+      await expect(page.getByLabel("Category")).toHaveValue("Travel");
     } finally {
       await testPrisma.category.deleteMany({
         where: { name: "Travel", accountId: TEST_ACCOUNT_ID },
@@ -151,7 +223,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    await expect(page.locator("select").nth(1)).toHaveValue("");
+    await expect(page.getByLabel("Category")).toHaveValue("");
   });
 
   it("always keeps a start and a first stop; extra stops can be removed", async () => {

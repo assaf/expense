@@ -54,6 +54,7 @@ export {
   renameCategory,
   readSettings,
   writeSettings,
+  readMileageRates,
   dismissDuplicatePair,
   readInboundEmail,
   upsertInboundEmail,
@@ -103,6 +104,7 @@ export function newExpenseShell(type: Expense["type"]): Expense {
   const mileage: MileageExpense = {
     ...base,
     type: "mileage",
+    mileageType: "business",
     locations: [],
     distanceMiles: "",
     route: EMPTY_ROUTE,

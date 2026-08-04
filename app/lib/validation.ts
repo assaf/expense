@@ -16,11 +16,6 @@ export function formString(form: FormData, key: string): string {
   return v instanceof File ? "" : (v ?? "");
 }
 
-/** Coerce a FormDataEntryValue to a string (files become ""). */
-export function entryString(v: FormDataEntryValue): string {
-  return v instanceof File ? "" : v;
-}
-
 /** Standard 400 response for an unrecognized form action intent. */
 export function unknownIntent(): Response {
   return Response.json({ error: "Unknown intent." }, { status: 400 });
