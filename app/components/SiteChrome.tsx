@@ -1,0 +1,92 @@
+import { ArrowUpRight, ReceiptText } from "lucide-react";
+import { Link } from "react-router";
+import { cn } from "~/lib/cn";
+import { Button } from "~/components/ui/Button";
+
+/**
+ * Site header + footer for the public marketing/SEO pages (the landing page
+ * and the /about, /faq, /alternatives SitePage). Both pages render the same
+ * chrome — the wordmark header with a "Sign in" button and the
+ * brand + copyright footer — differing only in the nav links, so the chrome
+ * lives here and each page passes its own nav.
+ */
+
+/** One entry in a site header/footer nav. External links render as real
+ * `<a>` (target=_blank) with a small arrow affordance. */
+export interface SiteNavItem {
+  label: string;
+  to: string;
+  external?: boolean;
+  /** Hide on small screens (header nav only — it is already crowded). */
+  hideOnMobile?: boolean;
+}
+
+/** The wordmark link every public page's header starts with. */
+function SiteLogo() {
+  return (
+    <Link to="/" className="flex items-center gap-2 rounded-lg font-semibold">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
+        <ReceiptText className="h-4 w-4 text-white" />
+      </span>
+      Expense
+    </Link>
+  );
+}
+
+/** One nav link: an internal <Link>, or an external <a> with an arrow. */
+function SiteNavLink({ item }: { item: SiteNavItem }) {
+  const classes = cn(
+    "rounded-md text-gray-500 transition-colors hover:text-ink",
+    item.external && "inline-flex items-center gap-1",
+    item.hideOnMobile && "hidden sm:inline-flex",
+  );
+  if (item.external) {
+    return (
+      <a href={item.to} target="_blank" rel="noreferrer" className={classes}>
+        {item.label}
+        <ArrowUpRight className="h-3.5 w-3.5" />
+      </a>
+    );
+  }
+  return (
+    <Link to={item.to} className={classes}>
+      {item.label}
+    </Link>
+  );
+}
+
+export function SiteHeader({ nav }: { nav: SiteNavItem[] }) {
+  return (
+    <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
+      <SiteLogo />
+      <nav className="flex items-center gap-1 text-sm">
+        {nav.map((item) => (
+          <SiteNavLink key={item.label} item={item} />
+        ))}
+        <Button asChild variant="ghost" size="sm" className="ml-2">
+          <Link to="/login">Sign in</Link>
+        </Button>
+      </nav>
+    </header>
+  );
+}
+
+export function SiteFooter({ nav }: { nav: SiteNavItem[] }) {
+  return (
+    <footer className="border-t border-gray-100">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink">
+            <ReceiptText className="h-3 w-3 text-white" />
+          </span>
+          Expense · © {new Date().getFullYear()} · Built by Assaf Arkin
+        </div>
+        <nav className="flex items-center gap-4 text-sm">
+          {nav.map((item) => (
+            <SiteNavLink key={item.label} item={item} />
+          ))}
+        </nav>
+      </div>
+    </footer>
+  );
+}

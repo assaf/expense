@@ -5,15 +5,17 @@ import {
   ReceiptText,
   Sparkles,
   Tags,
+  type LucideIcon,
 } from "lucide-react";
-import { cn } from "~/lib/cn";
-import { SITE_URL } from "~/lib/seo-content";
-import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
+import {
+  SiteFooter,
+  SiteHeader,
+  type SiteNavItem,
+} from "~/components/SiteChrome";
+import { BENEFITS, BLOG_URL, GITHUB_URL, SITE_URL } from "~/lib/seo-content";
 
-const GITHUB = "https://github.com/assaf/expense";
-const BLOG = "https://labnotes.org";
 const MASTODON = "https://mas.to/@assaf";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -35,31 +37,50 @@ const SOFTWARE_SCHEMA = {
   author: {
     "@type": "Person",
     name: "Assaf Arkin",
-    url: BLOG,
+    url: BLOG_URL,
   },
 };
 
-const FEATURES = [
-  {
-    icon: ReceiptText,
-    title: "Receipts in, no typing",
-    body: "Snap a photo, paste a screenshot, or forward a receipt email. OCR pulls out the amount and merchant, and AI suggests the category.",
-  },
-  {
-    icon: FolderOpen,
-    title: "Reports for every bucket",
-    body: "Group expenses into reports — Home, Work, Travel, whatever you call them — and keep each project's totals separate.",
-  },
-  {
-    icon: Tags,
-    title: "Categories that match the IRS",
-    body: "New accounts start with a category list built from the IRS Schedule C lines, so year-end totals line up with your return.",
-  },
-  {
-    icon: MapPinned,
-    title: "Mileage, mapped",
-    body: "Log business drives on a map and deduct them at the per-year IRS mileage rate.",
-  },
+/** The icons for the four landing-page features, keyed by the BENEFITS
+ * title so the copy itself stays in seo-content.ts (the single source of
+ * the site's public copy). Order here is the card order. */
+const FEATURE_ICONS: Record<string, LucideIcon> = {
+  "Receipts in, no typing": ReceiptText,
+  "Reports for every bucket": FolderOpen,
+  "Categories that match the IRS": Tags,
+  "Mileage, mapped": MapPinned,
+};
+
+const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
+  Object.keys(FEATURE_ICONS).map((title) => {
+    const benefit = BENEFITS.find((b) => b.title === title);
+    // A missing title breaks at module load instead of silently dropping a
+    // card — the two lists can't drift apart without a loud error.
+    if (!benefit) {
+      throw new Error(
+        `LandingPage feature "${title}" is missing from BENEFITS in seo-content.ts`,
+      );
+    }
+    return {
+      icon: FEATURE_ICONS[title]!,
+      title: benefit.title,
+      body: benefit.body,
+    };
+  });
+
+const HEADER_NAV: SiteNavItem[] = [
+  { label: "GitHub", to: GITHUB_URL, external: true, hideOnMobile: true },
+  { label: "Blog", to: BLOG_URL, external: true, hideOnMobile: true },
+  { label: "Mastodon", to: MASTODON, external: true, hideOnMobile: true },
+];
+
+const FOOTER_NAV: SiteNavItem[] = [
+  { label: "GitHub", to: GITHUB_URL, external: true },
+  { label: "Blog", to: BLOG_URL, external: true },
+  { label: "Mastodon", to: MASTODON, external: true },
+  { label: "About", to: "/about" },
+  { label: "FAQ", to: "/faq" },
+  { label: "Compare", to: "/alternatives" },
 ];
 
 const STEPS = [
@@ -83,31 +104,7 @@ export default function LandingPage() {
       <script type="application/ld+json">
         {JSON.stringify(SOFTWARE_SCHEMA)}
       </script>
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
-        <Link
-          to="/"
-          className="flex items-center gap-2 rounded-lg font-semibold"
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
-            <ReceiptText className="h-4 w-4 text-white" />
-          </span>
-          Expense
-        </Link>
-        <nav className="flex items-center gap-1 text-sm">
-          <FooterLink href={GITHUB} className="hidden sm:inline-flex">
-            GitHub
-          </FooterLink>
-          <FooterLink href={BLOG} className="hidden sm:inline-flex">
-            Blog
-          </FooterLink>
-          <FooterLink href={MASTODON} className="hidden sm:inline-flex">
-            Mastodon
-          </FooterLink>
-          <Button asChild variant="ghost" size="sm" className="ml-2">
-            <Link to="/login">Sign in</Link>
-          </Button>
-        </nav>
-      </header>
+      <SiteHeader nav={HEADER_NAV} />
 
       <main>
         {/* Hero */}
@@ -134,7 +131,7 @@ export default function LandingPage() {
               variant="secondary"
               className="w-full sm:w-auto"
             >
-              <a href={GITHUB} target="_blank" rel="noreferrer">
+              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
                 See the code <ArrowUpRight className="h-4 w-4" />
               </a>
             </Button>
@@ -272,64 +269,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-gray-100">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink">
-              <ReceiptText className="h-3 w-3 text-white" />
-            </span>
-            Expense · © {new Date().getFullYear()} · Built by Assaf Arkin
-          </div>
-          <nav className="flex items-center gap-4 text-sm">
-            <FooterLink href={GITHUB}>GitHub</FooterLink>
-            <FooterLink href={BLOG}>Blog</FooterLink>
-            <FooterLink href={MASTODON}>Mastodon</FooterLink>
-            <Link
-              to="/about"
-              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
-            >
-              About
-            </Link>
-            <Link
-              to="/faq"
-              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
-            >
-              FAQ
-            </Link>
-            <Link
-              to="/alternatives"
-              className="inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink"
-            >
-              Compare
-            </Link>
-          </nav>
-        </div>
-      </footer>
+      <SiteFooter nav={FOOTER_NAV} />
     </div>
-  );
-}
-
-function FooterLink({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md text-gray-500 transition-colors hover:text-ink",
-        className,
-      )}
-    >
-      {children}
-      <ArrowUpRight className="h-3.5 w-3.5" />
-    </a>
   );
 }
