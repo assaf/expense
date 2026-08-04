@@ -56,7 +56,9 @@ describe("Expense search", () => {
   it("matches mileage route addresses", async () => {
     await search("coding");
     await expect(page.locator("main ul li")).toHaveCount(1);
-    await expect(page.locator("main ul li").getByText("Mileage")).toBeVisible();
+    await expect(
+      page.locator("main ul li").getByText("Business · 32.00 mi"),
+    ).toBeVisible();
   });
 
   it("shows a count of matching expenses", async () => {

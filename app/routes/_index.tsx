@@ -28,7 +28,11 @@ import {
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
-import { currentMileageRates, formatRate } from "~/lib/mileage-rates";
+import {
+  MILEAGE_TYPE_LABELS,
+  currentMileageRates,
+  formatRate,
+} from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -121,6 +125,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
   return {
     id: e.id,
     type: e.type,
+    mileageType: e.type === "mileage" ? e.mileageType : "business",
     date: e.date,
     amount: e.amount,
     category: e.category,
@@ -144,7 +149,9 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
  * amount formatted as "$x.xx" so a query like "$7" matches "$7.50". */
 function searchableText(e: ReturnType<typeof toListItem>): string {
   const parts = [
-    e.type === "receipt" ? e.merchant : "mileage",
+    e.type === "receipt"
+      ? e.merchant
+      : `${MILEAGE_TYPE_LABELS[e.mileageType]} mileage`,
     e.type === "mileage" ? e.locations.map((l) => l.address).join(" ") : "",
     e.description,
     e.category,
@@ -627,7 +634,11 @@ function ExpenseRow({
               <span className="truncate font-medium">
                 {expense.type === "receipt"
                   ? expense.merchant || "Untitled receipt"
-                  : "Mileage"}
+                  : `${MILEAGE_TYPE_LABELS[expense.mileageType]}${
+                      expense.distanceMiles
+                        ? ` · ${expense.distanceMiles} mi`
+                        : ""
+                    }`}
               </span>
               <span className="shrink-0 font-semibold tabular-nums">
                 {formatAmount(expense.amount)}
