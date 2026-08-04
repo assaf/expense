@@ -190,15 +190,19 @@ export async function buildReportPdf(
       }
     }
     // Mileage route maps: the real map with the date, mileage, and amount
-    // listed beside it.
+    // listed beside it, and the trip's stops listed below.
     for (const { e, map } of routes) {
       pageForNext();
       const mapW = 380;
       const mapH = 182;
       const textX = 50 + mapW + 16;
       const textW = 512 - textX;
-      doc.image(map, 50, doc.y, { fit: [mapW, mapH] });
-      let ty = doc.y;
+      // doc.image with an explicit y does NOT advance doc.y, and the field
+      // text calls reset it too — position the stops below the map
+      // explicitly so they land under it, not on top of it.
+      const mapTop = doc.y;
+      doc.image(map, 50, mapTop, { fit: [mapW, mapH] });
+      let ty = mapTop;
       const fields: [string, string][] = [
         ["Date", formatDate(e.date)],
         ["Mileage", e.distanceMiles ? `${e.distanceMiles} miles` : "—"],
@@ -216,6 +220,35 @@ export async function buildReportPdf(
         ty += 28;
       }
       doc.fillColor("#111827");
+      doc.y = mapTop + mapH;
+
+      // The trip's stops, in route order, under the map (no header — the
+      // placement makes it obvious they belong to the trip).
+      const locations = e.locations
+        .map((l) => l.address.trim())
+        .filter(Boolean);
+      if (locations.length > 0) {
+        doc.moveDown(0.5);
+        const locH = locations.length * 13;
+        // Don't run past the page bottom: a long list moves to its own
+        // page rather than clipping.
+        if (doc.y + locH > doc.page.maxY()) doc.addPage();
+        for (const [i, address] of locations.entries()) {
+          const label = i === 0 ? "Start/end" : `Stop ${i}`;
+          const ly = doc.y;
+          doc
+            .fontSize(9)
+            .fillColor("#6b7280")
+            .text(label, 50, ly, { width: 70, lineBreak: false });
+          doc
+            .fillColor("#111827")
+            .text(fitText(doc, address, 512 - 130), 130, ly, {
+              width: 512 - 130,
+              lineBreak: false,
+            });
+          doc.moveDown(0.3);
+        }
+      }
     }
   }
 

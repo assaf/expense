@@ -171,12 +171,16 @@ describe("Export", () => {
 
     // The route map lives in the appendix, with the date, mileage, and
     // amount listed beside it ("Mileage" + "32.00 miles" — no parens —
-    // are the appendix's field label and value).
+    // are the appendix's field label and value), and the trip's stops
+    // listed below it ("Start/end", "Stop 1" — no header).
     expect(text).toContain("Receipts & routes");
     expect(text).toContain("Mileage");
     expect(text).toContain("32.00 miles");
     expect(text).toContain("Mar 10, 2026");
     expect(text).toContain("$22.40");
+    expect(text).toContain("Start/end");
+    expect(text).toContain("Stop 1");
+    expect(text).not.toContain("Locations");
 
     // The trip's route map is embedded as an image (the fallback straight-
     // line render — the seeded expense predates saved route geometry).
