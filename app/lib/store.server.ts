@@ -67,6 +67,17 @@ export {
   revokeApiToken,
   touchApiToken,
   readBootstrapAccountId,
+  registerOAuthClient,
+  findOAuthClient,
+  saveOAuthConsent,
+  hasOAuthConsent,
+  createOAuthCode,
+  consumeOAuthCode,
+  createOAuthToken,
+  findOAuthToken,
+  revokeOAuthToken,
+  listUserOAuthClients,
+  disconnectOAuthClient,
 } from "~/lib/database";
 
 /** Build a new expense shell with sensible defaults. */

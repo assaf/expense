@@ -1,9 +1,10 @@
 # Expense MCP server
 
 The expense tracker speaks the [Model Context Protocol](https://modelcontextprotocol.io)
-over HTTP at `POST /mcp` — the same endpoint any MCP client (Claude Code,
-Claude Desktop, Cursor, Windsurf, …) can connect to. An agent connected to
-your account can do what the web app does, without the form:
+over HTTP at `POST /mcp`. Any MCP client (Claude Code, Claude Desktop,
+Cursor, Windsurf, …) can connect — and with OAuth, connecting is just
+**signing in with your account**. An agent connected to your account can do
+what the web app does, without the form:
 
 - **Capture a receipt** — drop a photo or PDF into the chat; it runs the same
   OCR + extraction pipeline as the web app (DeepSeek, falling back to
@@ -20,14 +21,38 @@ your account can do what the web app does, without the form:
 
 ## Setup
 
-1. Open **Settings → Agents & API (MCP)**.
-2. **Create a token** — give it a name (e.g. "Claude Desktop") and optionally
-   mark it **read-only** (query-only; write tools refuse).
-   The token is shown **once** — copy it immediately; only its hash is stored.
-3. Point your client at `https://<your-host>/mcp` with the token as a bearer
-   token.
+The simplest way to connect is **signing in with your account** — no token
+management at all. OAuth-capable MCP clients do this automatically:
 
-The endpoint URL is shown in Settings.
+1. Point the client at `https://<your-host>/mcp`.
+2. The client fetches `/.well-known/oauth-authorization-server`, registers
+   itself, and opens your browser.
+3. You sign in with your normal account (or you're already signed in) and
+   click **Allow** on the consent page.
+4. The client gets tokens and connects. Consent is remembered, so
+   reconnecting is a one-click approval.
+
+You can see and revoke connected apps anytime in **Settings → Agents & API
+(MCP) → Connected apps** — disconnecting revokes every token for that app.
+
+### API tokens (power users)
+
+Prefer a static credential for scripts or clients without OAuth support?
+Create a token in **Settings → Agents & API (MCP)** — optionally read-only.
+The token is shown **once**; only its hash is stored. Use it as a bearer
+token:
+
+```json
+{
+  "mcpServers": {
+    "expense": {
+      "type": "http",
+      "url": "https://expense.example.com/mcp",
+      "headers": { "Authorization": "Bearer exp_your-token-here" }
+    }
+  }
+}
+```
 
 ### Claude Code
 
@@ -39,43 +64,33 @@ user-level config):
   "mcpServers": {
     "expense": {
       "type": "http",
-      "url": "https://expense.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer exp_your-token-here"
-      }
+      "url": "https://expense.example.com/mcp"
     }
   }
 }
 ```
+
+Claude Code performs OAuth discovery automatically — it registers itself and
+opens your browser for the sign-in flow. (You can also add a static
+`headers` block with an API token if you prefer.)
 
 ### Claude Desktop
 
-`claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "expense": {
-      "type": "http",
-      "url": "https://expense.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer exp_your-token-here"
-      }
-    }
-  }
-}
-```
+Add the server in the Claude Desktop settings. It registers itself and opens
+your browser for the sign-in flow — no configuration file needed.
 
 ### Cursor
 
-Settings → Integrations → MCP servers → add server with the same URL +
-Authorization header.
+Settings → Integrations → MCP servers → add the server. Cursor performs
+OAuth discovery automatically; approve the connection in your browser.
 
 ### Anything else
 
-Any MCP client that supports **Streamable HTTP** works. The handshake is
-standard: `initialize` → `notifications/initialized` → `tools/list` /
-`tools/call`.
+Any MCP client that supports **Streamable HTTP + OAuth** works. The handshake
+is standard: discovery → register → authorize → token exchange →
+`initialize` → `notifications/initialized` → `tools/list` / `tools/call`.
+Clients that only support bearer tokens can use an API token instead (see
+above).
 
 ## Tools
 
@@ -110,17 +125,26 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
 
 ## Auth & security
 
-- Tokens look like `exp_…`; only their SHA-256 hash is stored, so a leaked
-  database never exposes usable tokens.
+- **OAuth (recommended)** — authorization-code flow with PKCE (S256), per the
+  MCP authorization spec. Access tokens (`oat_…`) live 1 hour; refresh tokens
+  (`ort_…`) live 30 days and rotate on every grant, so a leaked token only
+  works briefly. Only the SHA-256 hashes are stored.
+- **API tokens** — `exp_…` credentials from Settings; only their SHA-256 hash
+  is stored, so a leaked database never exposes usable tokens.
 - Every request must present `Authorization: Bearer <token>`. A token only
   ever reaches **its own account** — other accounts are fully isolated.
-- **Read-only tokens** can call every query tool but every write tool
-  returns an error.
-- Revoke a token in Settings → Agents & API; the next request gets `401`.
+  OAuth tokens bind to the signing-in user; users in the same account share
+  the connection, other accounts never see it.
+- **Read-only API tokens** can call every query tool but every write tool
+  returns an error. (OAuth tokens are full-access — that's what the consent
+  screen approves.)
+- **Revocation**: revoke a token or disconnect an app in Settings → Agents
+  & API; the next request gets `401`. Revoking an access token doesn't kill
+  the refresh token (RFC 7009); disconnecting an app revokes both.
 - Sessions are bound to the token's account + capabilities: reusing a
   session id with a different token is rejected.
 - `capture_receipt` accepts URLs — the server fetches them (like the
-  existing Nominatim/OSRM/DeepSeek calls); treat the token as a secret that
+  existing Nominatim/OSRM/DeepSeek calls); treat credentials as secrets that
   can read your expenses.
 
 ## Operational notes
@@ -132,11 +156,15 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
   automatically. A fresh initialize is also how you'd test connectivity.
 - `tools/call` responses are JSON (the transport runs with
   `enableJsonResponse`) — no SSE stream to babysit.
+- OAuth authorization codes are single-use, 10-minute TTL, and bound to the
+  client, redirect URI, and PKCE challenge. Refresh tokens rotate; the old
+  token dies on every grant.
 - The post-deploy smoke check (`GET /api/smoke`, gated by
   `SMOKE_TEST_SECRET`) runs a real MCP initialize → tools/list → tools/call
   round trip inside the deployed serverless bundle (`runMcpSmoke` in
-  `app/lib/mcp.server.ts`) using a one-off token that is revoked right after
-  — it catches the SDK or zod being dropped by Vercel's dependency tracer.
+  `app/lib/mcp.server.ts`) using a one-off API token that is revoked right
+  after — it catches the SDK or zod being dropped by Vercel's dependency
+  tracer.
 
 ### Smoke-testing from a terminal
 
@@ -160,12 +188,23 @@ curl -s https://expense.example.com/mcp \
 ## How it's built
 
 - `app/routes/mcp.ts` — the HTTP endpoint (loader + action → `handleMcpRequest`).
-- `app/lib/mcp.server.ts` — the MCP server: session registry, bearer auth,
-  the 13 tools, and the reconciliation matcher.
-- `app/lib/api-tokens.server.ts` — token generation + SHA-256 hashing.
-- `prisma/schema.prisma` → `ApiToken` — tokens are account-scoped rows
-  (`api_tokens` table).
-- `app/routes/settings.tsx` → **Agents & API (MCP)** — create/revoke tokens,
-  shown-once token, endpoint URL.
+- `app/lib/mcp.server.ts` — the MCP server: session registry, bearer auth
+  (API tokens + OAuth access tokens), the 13 tools, and the reconciliation
+  matcher.
+- `app/lib/oauth.server.ts` — the OAuth authorization server: PKCE (S256),
+  token/code generation + hashing, RFC 8414 metadata, refresh rotation, and
+  client authentication.
+- `app/routes/[.]well-known.oauth-authorization-server.ts` (+ openid-
+  configuration, oauth-protected-resource) — discovery metadata.
+- `app/routes/oauth.{register,authorize,token,revoke}.ts(x)` — the OAuth
+  endpoints; `oauth.authorize` renders the consent page.
+- `app/lib/api-tokens.server.ts` — API token generation + SHA-256 hashing.
+- `prisma/schema.prisma` — `ApiToken` and the OAuth models (`OAuthClient`,
+  `OAuthConsent`, `OAuthCode`, `OAuthToken`).
+- `app/routes/settings.tsx` → **Agents & API (MCP)** — connected apps
+  (disconnect/revoke), create/revoke API tokens, endpoint URL.
 - `app/lib/report-pdf.server.ts` — the report PDF builder shared by the web
   export and `export_report`.
+- Tests: `test/mcp.test.ts` (API tokens + smoke round trip) and
+  `test/oauth.test.ts` (discovery, registration, the full PKCE flow through
+  the real consent page, refresh rotation, revocation, user isolation).

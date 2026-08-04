@@ -25,8 +25,10 @@ import {
   addInboundSender,
   addReport,
   createApiToken,
+  disconnectOAuthClient,
   listApiTokens,
   listInboundSenders,
+  listUserOAuthClients,
   readAccount,
   readCategories,
   readCategoryCounts,
@@ -56,6 +58,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     reportCounts,
     categoryCounts,
     tokens,
+    oauthClients,
   ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
@@ -64,6 +67,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     readReportCounts(user.accountId),
     readCategoryCounts(user.accountId),
     listApiTokens(user.accountId),
+    listUserOAuthClients(user.id),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
@@ -83,6 +87,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     rates: years.map((y) => ({ year: y, rate: settings.mileageRates[y] })),
     tokens,
+    oauthClients,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
@@ -179,6 +184,11 @@ export async function action({ request }: Route.ActionArgs) {
       await revokeApiToken(user.accountId, formString(form, "id"));
       return Response.json({ ok: true });
     }
+    case "disconnectOAuthClient": {
+      const clientId = formString(form, "clientId");
+      if (clientId) await disconnectOAuthClient(user.id, clientId);
+      return Response.json({ ok: true });
+    }
     case "saveHome": {
       const settings = await readSettings(user.accountId);
       const address = formString(form, "homeAddress").trim();
@@ -211,6 +221,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     inboundSenders,
     inboundAddress,
     tokens,
+    oauthClients,
     mcpUrl,
   } = loaderData;
   return (
@@ -397,7 +408,11 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      <AgentsSection tokens={tokens} mcpUrl={mcpUrl} />
+      <AgentsSection
+        tokens={tokens}
+        oauthClients={oauthClients}
+        mcpUrl={mcpUrl}
+      />
 
       <section className="border-t border-gray-100 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
@@ -416,12 +431,13 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 }
 
 /**
- * Agents & API (MCP): create/revoke bearer tokens for the /mcp endpoint and
- * show the endpoint URL. The raw token is returned by the action exactly
- * once and shown here until the next create — it is never retrievable again.
+ * Agents & API (MCP): OAuth sign-in (connected apps) + bearer tokens for the
+ * /mcp endpoint. The raw API token is returned by the action exactly once
+ * and shown here until the next create — it is never retrievable again.
  */
 function AgentsSection({
   tokens,
+  oauthClients,
   mcpUrl,
 }: {
   tokens: {
@@ -430,6 +446,10 @@ function AgentsSection({
     readOnly: boolean;
     createdAt: string;
     lastUsedAt: string | null;
+  }[];
+  oauthClients: {
+    client: { id: string; name: string };
+    hasRefreshToken: boolean;
   }[];
   mcpUrl: string;
 }) {
@@ -440,6 +460,7 @@ function AgentsSection({
     error?: string;
   }>();
   const revokeFetcher = useFetcher<{ ok: boolean }>();
+  const disconnectFetcher = useFetcher<{ ok: boolean }>();
   const [copied, setCopied] = useState(false);
   const created = createFetcher.data?.ok ? createFetcher.data : null;
 
@@ -468,18 +489,77 @@ function AgentsSection({
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
       <p className="mb-3 text-sm text-gray-500">
         Connect your AI assistant — Claude, Cursor, or any MCP client — to this
-        account. Agents can capture receipts, log mileage, answer “how much did
-        I spend on …?”, build and export reports, and reconcile bank statements
-        against logged expenses. Read-only tokens can query but never change
-        anything.
+        account. The simplest way is signing in: point the client at the
+        endpoint below and approve the connection in your browser. Agents can
+        capture receipts, log mileage, answer “how much did I spend on …?”,
+        build and export reports, and reconcile bank statements against logged
+        expenses. Read-only tokens can query but never change anything.
       </p>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="mb-4">
           <div className="mb-1 text-sm font-medium text-gray-700">Endpoint</div>
           <div className="font-mono text-sm text-gray-600">{mcpUrl}</div>
           <p className="mt-1 text-xs text-gray-400">
-            Point your MCP client here with a token below as the bearer token.
+            Point your MCP client here — it discovers the sign-in flow
+            automatically.
           </p>
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-1 text-sm font-medium text-gray-700">
+            Connected apps
+          </div>
+          {oauthClients.length === 0 ? (
+            <p className="text-sm text-gray-400">
+              None yet. The first time an assistant connects, you approve it
+              here by signing in.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {oauthClients.map(({ client, hasRefreshToken }) => (
+                <li
+                  key={client.id}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 shrink-0 text-gray-400" />
+                      <span className="truncate text-sm font-medium">
+                        {client.name}
+                      </span>
+                      {hasRefreshToken ? (
+                        <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
+                          connected
+                        </span>
+                      ) : (
+                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
+                          tokens revoked
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-xs text-gray-400">
+                      {client.id}
+                    </div>
+                  </div>
+                  <disconnectFetcher.Form method="post" className="contents">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="disconnectOAuthClient"
+                    />
+                    <input type="hidden" name="clientId" value={client.id} />
+                    <button
+                      type="submit"
+                      className="shrink-0 text-gray-400 hover:text-red-600"
+                      aria-label={`Disconnect ${client.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </disconnectFetcher.Form>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {created ? (

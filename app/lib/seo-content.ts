@@ -43,7 +43,7 @@ export const KEY_FACTS = [
   "OCR reads the merchant and amount; an LLM suggests the category; you review and save",
   "Export: a PDF per report with receipts attached, or a ZIP of everything (CSV plus every receipt image)",
   "Mileage: map-based trips at the per-year IRS mileage rate",
-  "AI assistant access: connect any MCP client (Claude, Cursor, …) at /mcp with an API token — the assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
+  "AI assistant access: connect any MCP client (Claude, Cursor, …) by signing in with your account (OAuth) — the assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
   "Multi-user accounts: share an account with an invite code",
   "Data stays in your account — no ads, no data resale",
   `Code is public on GitHub: ${GITHUB_URL}`,
@@ -89,7 +89,7 @@ export const BENEFITS = [
   },
   {
     title: "Bring your own AI assistant",
-    body: "Connect your own MCP client — Claude, Cursor, any assistant that speaks MCP — with an API token from Settings. Drop a receipt into the chat and it's captured and categorized from your own history, ask how much you spent on flights and get the exact total, or have the assistant build and export a report. Read-only tokens can ask without ever writing.",
+    body: "Connect your own MCP client — Claude, Cursor, any assistant that speaks MCP — by signing in with your account, no tokens to manage. Drop a receipt into the chat and it's captured and categorized from your own history, ask how much you spent on flights and get the exact total, or have the assistant build and export a report. Disconnect any app with one click in Settings.",
   },
   {
     title: "Your data stays yours",
@@ -176,7 +176,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I use Expense with an AI assistant?",
     answer:
-      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: create an API token in Settings and point any MCP client — Claude, Cursor, or another assistant — at the endpoint. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. Read-only tokens can query without ever writing.",
+      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: point any MCP client — Claude, Cursor, or another assistant — at the endpoint and approve the connection by signing in with your account; no API token to manage. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. You can disconnect any connected app from Settings at any time.",
   },
   {
     question: "Who makes Expense?",
@@ -341,7 +341,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison for people choosing an expense tracker.
-- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) with an API token from Settings — the assistant can capture receipts, log mileage, answer spending questions, and export reports.
+- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) — approve the connection by signing in with your account, or use an API token from Settings. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
 
 ## Optional
 

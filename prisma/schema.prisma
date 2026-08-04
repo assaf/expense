@@ -193,3 +193,70 @@ model ApiToken {
   @@index([accountId])
   @@map("api_tokens")
 }
+
+/// An OAuth 2.1 client registered by an MCP client via dynamic registration
+/// (RFC 7591). Global across accounts — each user approves it for themselves.
+model OAuthClient {
+  id          String   @id // client_id
+  secretHash  String?  @unique // client_secret, confidential clients only
+  name        String
+  redirectUris String  // JSON array of allowed redirect URIs
+  authMethod  String // "none" | "client_secret_basic"
+  createdAt   String
+
+  codes    OAuthCode[]
+  tokens   OAuthToken[]
+  consents OAuthConsent[]
+
+  @@map("oauth_clients")
+}
+
+/// Per-user approval of an OAuth client ("allow this app to access my
+/// expenses"). Presence = consent was granted; deleting it revokes.
+model OAuthConsent {
+  userId    String
+  clientId  String
+  grantedAt String
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@id([userId, clientId])
+  @@map("oauth_consents")
+}
+
+/// One-time authorization codes: PKCE challenge bound, 10-minute TTL,
+/// single use. `used` is claimed atomically so a code can't be replayed.
+model OAuthCode {
+  id          String   @id // sha256 of the raw code
+  userId      String
+  clientId    String
+  challenge   String // S256 PKCE challenge (base64url of sha256(verifier))
+  redirectUri String
+  expiresAt   String
+  used        Boolean  @default(false)
+  createdAt   String
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("oauth_codes")
+}
+
+/// Opaque access + refresh tokens for OAuth-authenticated MCP clients,
+/// hashed at rest. Access: 1h TTL; refresh: 30d, rotated on every grant.
+model OAuthToken {
+  tokenHash String   @id // sha256 of the raw token
+  userId    String
+  clientId  String
+  type      String // "access" | "refresh"
+  scope     String // "" — no scopes defined yet
+  expiresAt String
+  revokedAt String?
+  createdAt String
+
+  client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_tokens")
+}

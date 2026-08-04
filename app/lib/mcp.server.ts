@@ -4,9 +4,11 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { z } from "zod";
 import Decimal from "decimal.js";
 import { hashApiToken, isApiToken } from "~/lib/api-tokens.server";
+import { isOAuthToken, verifyAccessToken } from "~/lib/oauth.server";
 import {
   findApiTokenByHash,
   touchApiToken,
+  findUserById,
   readExpenses,
   readExpense,
   readReports,
@@ -95,12 +97,12 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 
   if (method === "DELETE") {
     const session = sessionId ? sessions.get(sessionId) : undefined;
-    if (!session) return jsonError(404, "No such session.");
+    if (!session) return jsonError(request, 404, "No such session.");
     if (
       session.accountId !== auth.accountId ||
       session.readOnly !== auth.readOnly
     ) {
-      return jsonError(401, "Token does not match the session.");
+      return jsonError(request, 401, "Token does not match the session.");
     }
     const response = await session.transport.handleRequest(request);
     if (sessionId) sessions.delete(sessionId);
@@ -113,16 +115,17 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     // server-generated; there is no anonymous standalone stream).
     if (!sessionId)
       return jsonError(
+        request,
         400,
         "A session is required — POST an initialize request first.",
       );
     const session = sessions.get(sessionId);
-    if (!session) return jsonError(404, "No such session.");
+    if (!session) return jsonError(request, 404, "No such session.");
     if (
       session.accountId !== auth.accountId ||
       session.readOnly !== auth.readOnly
     ) {
-      return jsonError(401, "Token does not match the session.");
+      return jsonError(request, 401, "Token does not match the session.");
     }
     return session.transport.handleRequest(request);
   }
@@ -131,37 +134,93 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
     if (!sessionId) return createSession(auth, request);
     const session = sessions.get(sessionId);
     if (!session)
-      return jsonError(404, "Session expired or unknown — initialize again.");
+      return jsonError(
+        request,
+        404,
+        "Session expired or unknown — initialize again.",
+      );
     if (
       session.accountId !== auth.accountId ||
       session.readOnly !== auth.readOnly
     ) {
-      return jsonError(401, "Token does not match the session.");
+      return jsonError(request, 401, "Token does not match the session.");
     }
     return session.transport.handleRequest(request);
   }
 
-  return jsonError(405, "Method not allowed.");
+  return jsonError(request, 405, "Method not allowed.");
 }
 
-/** Validate `Authorization: Bearer exp_…` and resolve the account + caps. */
+/**
+ * Validate `Authorization: Bearer …` and resolve the account + capabilities.
+ * Two token kinds are accepted:
+ *  - `exp_…` API tokens from Settings → Agents & API (account-scoped, may be
+ *    read-only);
+ *  - `oat_…` OAuth access tokens from the authorization-code flow, which
+ *    authenticate the user who signed in (their account, full access).
+ * Unauthenticated requests get a 401 carrying the RFC 9728 protected-resource
+ * hint so OAuth-capable clients can start discovery.
+ */
 async function authenticateRequest(
   request: Request,
 ): Promise<{ accountId: string; readOnly: boolean } | Response> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token || !isApiToken(token)) {
-    return jsonError(
-      401,
-      "Missing or invalid bearer token — create one in Settings → Agents & API.",
-    );
+  if (!token) return jsonError(request, 401, MISSING_TOKEN_MESSAGE);
+
+  if (isApiToken(token)) {
+    const found = await findApiTokenByHash(hashApiToken(token));
+    if (!found)
+      return jsonError(
+        request,
+        401,
+        "Unknown token — it may have been revoked.",
+      );
+    // Last-used stamping is best-effort bookkeeping, never awaited.
+    void touchApiToken(found.id);
+    return { accountId: found.accountId, readOnly: found.readOnly };
   }
-  const found = await findApiTokenByHash(hashApiToken(token));
-  if (!found)
-    return jsonError(401, "Unknown token — it may have been revoked.");
-  // Last-used stamping is best-effort bookkeeping, never awaited.
-  void touchApiToken(found.id);
-  return { accountId: found.accountId, readOnly: found.readOnly };
+
+  if (isOAuthToken(token)) {
+    const verified = await verifyAccessToken(token);
+    if (!verified)
+      return jsonError(
+        request,
+        401,
+        "Unknown or expired access token — sign in again.",
+      );
+    const user = await findUserById(verified.userId);
+    if (!user)
+      return jsonError(request, 401, "Unknown account — sign in again.");
+    return { accountId: user.accountId, readOnly: false };
+  }
+
+  return jsonError(request, 401, MISSING_TOKEN_MESSAGE);
+}
+
+/** Shown when no bearer token is present or it isn't one of ours. */
+const MISSING_TOKEN_MESSAGE =
+  "Missing bearer token — connect with OAuth (sign in) or create an API token in Settings → Agents & API.";
+
+/**
+ * A 401 with the OAuth protected-resource metadata hint (RFC 9728), so
+ * clients that perform discovery can find the authorization server.
+ */
+function jsonError(
+  request: Request,
+  status: number,
+  message: string,
+): Response {
+  const origin = new URL(request.url).origin;
+  return Response.json(
+    { error: message },
+    {
+      status,
+      headers: {
+        "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+      },
+    },
+  );
 }
 
 /** Initialize a fresh session bound to this token's account + capabilities. */
@@ -188,10 +247,6 @@ async function createSession(
   const server = createMcpServer(auth.accountId, auth.readOnly);
   await server.connect(transport);
   return transport.handleRequest(request);
-}
-
-function jsonError(status: number, message: string): Response {
-  return Response.json({ error: message }, { status });
 }
 
 // --- Tool results ----------------------------------------------------------

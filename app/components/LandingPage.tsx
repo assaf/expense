@@ -276,9 +276,10 @@ export default function LandingPage() {
               Bring your own AI assistant.
             </h2>
             <p className="mt-3 max-w-2xl text-gray-600">
-              Expense speaks the Model Context Protocol (MCP). Create an API
-              token in Settings, point Claude, Cursor, or any MCP client at your
-              account, and let the assistant do the boring parts:
+              Expense speaks the Model Context Protocol (MCP). Point Claude,
+              Cursor, or any MCP client at your account, approve the connection
+              by signing in — no tokens to manage — and let the assistant do the
+              boring parts:
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {AGENT_EXAMPLES.map((example) => (
@@ -299,8 +300,9 @@ export default function LandingPage() {
               ))}
             </ul>
             <p className="mt-6 text-sm text-gray-500">
-              Read-only tokens let an assistant ask questions without ever
-              writing. Your data stays in your account either way.
+              Connecting is signing in: the assistant opens your browser, you
+              click Allow, and it's connected — with one-click revocation in
+              Settings whenever you want it gone.
             </p>
           </div>
         </section>

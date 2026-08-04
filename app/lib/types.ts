@@ -199,3 +199,35 @@ export interface ApiTokenInfo {
   createdAt: string;
   lastUsedAt: string | null;
 }
+
+/** An OAuth client registered by an MCP client (RFC 7591 dynamic registration). */
+export interface OAuthClientRecord {
+  id: string;
+  secretHash: string | null;
+  name: string;
+  redirectUris: string[];
+  authMethod: "none" | "client_secret_basic";
+  createdAt: string;
+}
+
+/** A claimed (single-use) authorization code, returned by consumeOAuthCode. */
+export interface OAuthCodeRecord {
+  id: string;
+  userId: string;
+  clientId: string;
+  challenge: string;
+  redirectUri: string;
+  expiresAt: string;
+}
+
+/** A stored access or refresh token (hashed at rest, opaque on the wire). */
+export interface OAuthTokenRecord {
+  tokenHash: string;
+  userId: string;
+  clientId: string;
+  type: "access" | "refresh";
+  scope: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+}
