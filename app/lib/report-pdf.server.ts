@@ -8,12 +8,8 @@ import {
   mileageRateFor,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
-import {
-  ROUTE_MAP_HEIGHT,
-  ROUTE_MAP_WIDTH,
-  renderRouteMap,
-} from "~/lib/route-map.server";
-import type { Expense, Report } from "~/lib/types";
+import { renderRouteMap } from "~/lib/route-map.server";
+import type { Expense, MileageExpense, Report } from "~/lib/types";
 
 /**
  * Build the PDF for one report — the same layout the /export/report/:name
@@ -83,10 +79,10 @@ export async function buildReportPdf(
       const isMileage = e.type === "mileage";
       let merchant: string;
       let route = "";
-      let map: Buffer | null = null;
       if (isMileage) {
         // The IRS type and the rate for the trip's (date, type); the actual
         // mileage and amount are the distance line and the amount column.
+        // The route map lives in the appendix (Receipts & routes).
         const rate = mileageRateFor(rates, e.date, e.mileageType);
         merchant = rate
           ? `${MILEAGE_TYPE_LABELS[e.mileageType]} · $${formatRate(rate)}/mi`
@@ -99,13 +95,6 @@ export async function buildReportPdf(
         route = [mileageDistanceLabel(e.distanceMiles), addresses.join(" › ")]
           .filter(Boolean)
           .join(" — ");
-        // The map shows the route the mileage was calculated from; a render
-        // failure must never break the export.
-        try {
-          map = await renderRouteMap(e);
-        } catch {
-          map = null;
-        }
       } else {
         merchant = e.merchant || "—";
       }
@@ -113,10 +102,9 @@ export async function buildReportPdf(
       const amount = e.amount ? `$${e.amount}` : "—";
       const desc = e.description ?? "";
 
-      // Keep the whole row (including the route line and map) on one page.
+      // Keep the whole row (including the route line) on one page.
       const lineH = doc.fontSize(10).currentLineHeight();
-      const mapH = map ? ROUTE_MAP_HEIGHT + 12 : 0;
-      const rowH = lineH + (route ? lineH + 4 : 0) + mapH;
+      const rowH = lineH + (route ? lineH + 4 : 0);
       if (doc.y + rowH > doc.page.maxY()) {
         doc.addPage();
       }
@@ -149,33 +137,40 @@ export async function buildReportPdf(
           });
         doc.fillColor("#111827");
       }
-      if (map) {
-        doc.moveDown(0.15);
-        try {
-          doc.image(map, { fit: [ROUTE_MAP_WIDTH, ROUTE_MAP_HEIGHT] });
-        } catch {
-          // Skip the map rather than fail the whole export.
-        }
-        doc.moveDown(0.2);
-      }
       doc.moveDown(0.3);
     }
     // Extra breathing room before the next category.
     doc.moveDown(0.75);
   }
 
-  // Receipt images appendix.
+  // Receipt images + mileage route maps appendix.
   const receipts = inReport.filter(
     (e): e is Extract<Expense, { type: "receipt" }> =>
       e.type === "receipt" && Boolean(e.imageFile),
   );
-  if (receipts.length > 0) {
+  const routes: { e: MileageExpense; map: Buffer }[] = [];
+  for (const e of inReport) {
+    if (e.type !== "mileage") continue;
+    // A render failure must never break the export.
+    try {
+      const map = await renderRouteMap(e);
+      if (map) routes.push({ e, map });
+    } catch {
+      // Skip the map for this trip.
+    }
+  }
+  if (receipts.length > 0 || routes.length > 0) {
     doc.addPage();
-    doc.fontSize(13).font("Helvetica-Bold").text("Receipts");
+    doc.fontSize(13).font("Helvetica-Bold").text("Receipts & routes");
     doc.moveDown(0.5);
-    for (const [i, e] of receipts.entries()) {
-      // One page per receipt — but no trailing blank page after the last.
-      if (i > 0) doc.addPage();
+    let firstItem = true;
+    const pageForNext = () => {
+      // One item per page — but no trailing blank page after the last.
+      if (!firstItem) doc.addPage();
+      firstItem = false;
+    };
+    for (const e of receipts) {
+      pageForNext();
       const image = await readImage(accountId, e.imageFile);
       if (!image) continue;
       doc
@@ -193,6 +188,34 @@ export async function buildReportPdf(
           .text("(image could not be embedded)");
         doc.fillColor("#111827");
       }
+    }
+    // Mileage route maps: the real map with the date, mileage, and amount
+    // listed beside it.
+    for (const { e, map } of routes) {
+      pageForNext();
+      const mapW = 380;
+      const mapH = 182;
+      const textX = 50 + mapW + 16;
+      const textW = 512 - textX;
+      doc.image(map, 50, doc.y, { fit: [mapW, mapH] });
+      let ty = doc.y;
+      const fields: [string, string][] = [
+        ["Date", formatDate(e.date)],
+        ["Mileage", e.distanceMiles ? `${e.distanceMiles} miles` : "—"],
+        ["Amount", e.amount ? `$${e.amount}` : "—"],
+      ];
+      for (const [label, value] of fields) {
+        doc
+          .fontSize(8)
+          .fillColor("#6b7280")
+          .text(label, textX, ty, { width: textW, lineBreak: false });
+        doc
+          .fontSize(11)
+          .fillColor("#111827")
+          .text(value, textX, ty + 10, { width: textW, lineBreak: false });
+        ty += 28;
+      }
+      doc.fillColor("#111827");
     }
   }
 

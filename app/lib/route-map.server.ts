@@ -20,9 +20,8 @@ import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono
  * (no geometry, fewer than two geocoded stops).
  */
 
-export const ROUTE_MAP_WIDTH = 460;
-export const ROUTE_MAP_HEIGHT = 220;
-
+const WIDTH = 460;
+const HEIGHT = 220;
 const TILE = 256;
 const PAD = 28;
 const FONT = "JetBrains Mono";
@@ -96,7 +95,7 @@ function pickZoom(
   for (let z = 19; z >= 2; z--) {
     const w = worldX(maxLon, z) - worldX(minLon, z);
     const h = worldY(minLat, z) - worldY(maxLat, z);
-    if (w <= ROUTE_MAP_WIDTH - 2 * PAD && h <= ROUTE_MAP_HEIGHT - 2 * PAD) {
+    if (w <= WIDTH - 2 * PAD && h <= HEIGHT - 2 * PAD) {
       return z;
     }
   }
@@ -167,13 +166,13 @@ async function renderTiled(
   const z = pickZoom(minLon, maxLon, minLat, maxLat);
   const midLon = (minLon + maxLon) / 2;
   const midLat = (minLat + maxLat) / 2;
-  const ox = worldX(midLon, z) - ROUTE_MAP_WIDTH / 2;
-  const oy = worldY(midLat, z) - ROUTE_MAP_HEIGHT / 2;
+  const ox = worldX(midLon, z) - WIDTH / 2;
+  const oy = worldY(midLat, z) - HEIGHT / 2;
 
   const minTx = Math.floor(ox / TILE);
-  const maxTx = Math.floor((ox + ROUTE_MAP_WIDTH) / TILE);
+  const maxTx = Math.floor((ox + WIDTH) / TILE);
   const minTy = Math.floor(oy / TILE);
-  const maxTy = Math.floor((oy + ROUTE_MAP_HEIGHT) / TILE);
+  const maxTy = Math.floor((oy + HEIGHT) / TILE);
 
   const tiles: { tx: number; ty: number; href: string }[] = [];
   for (let ty = minTy; ty <= maxTy; ty++) {
@@ -234,13 +233,10 @@ function renderSchematic(
   const cos = Math.cos((midLat * Math.PI) / 180) || 1e-9;
   const spanX = Math.max(maxLon - minLon, 1e-9) * cos;
   const spanY = Math.max(maxLat - minLat, 1e-9);
-  const scale = Math.min(
-    (ROUTE_MAP_WIDTH - 2 * PAD) / spanX,
-    (ROUTE_MAP_HEIGHT - 2 * PAD) / spanY,
-  );
+  const scale = Math.min((WIDTH - 2 * PAD) / spanX, (HEIGHT - 2 * PAD) / spanY);
   const px = (lon: number, lat: number) => ({
-    x: ROUTE_MAP_WIDTH / 2 + (lon - midLon) * cos * scale,
-    y: ROUTE_MAP_HEIGHT / 2 - (lat - midLat) * scale,
+    x: WIDTH / 2 + (lon - midLon) * cos * scale,
+    y: HEIGHT / 2 - (lat - midLat) * scale,
   });
   const pts = (line: [number, number][]) =>
     line
@@ -290,11 +286,11 @@ function wrapSvg(
   opts: { background?: string; border?: boolean } = {},
 ): string {
   const background = opts.background ?? "#f8fafc";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${ROUTE_MAP_WIDTH}" height="${ROUTE_MAP_HEIGHT}" viewBox="0 0 ${ROUTE_MAP_WIDTH} ${ROUTE_MAP_HEIGHT}">
-  <rect width="${ROUTE_MAP_WIDTH}" height="${ROUTE_MAP_HEIGHT}" fill="${background}"/>
-  ${opts.border ? `<rect x="0.5" y="0.5" width="${ROUTE_MAP_WIDTH - 1}" height="${ROUTE_MAP_HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>` : ""}
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="${background}"/>
+  ${opts.border ? `<rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>` : ""}
   ${inner}
-  <text x="8" y="${ROUTE_MAP_HEIGHT - 8}" font-family="${FONT}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
+  <text x="8" y="${HEIGHT - 8}" font-family="${FONT}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
 </svg>`;
 }
 

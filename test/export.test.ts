@@ -161,13 +161,22 @@ describe("Export", () => {
     expect(res.status()).toBe(200);
     const buf = Buffer.from(await res.body());
 
-    // The mileage row shows the IRS type and rate in the merchant column,
-    // and the distance + route addresses as the row's second line.
+    // The category row shows the IRS type and rate in the merchant column
+    // and the distance + route addresses as its second line.
     const text = await extractPdfText(buf);
     expect(text).toContain("Business · $0.725/mi");
     expect(text).toContain("(32.00 miles)");
     expect(text).toContain("123 Test St, Testing, CA");
     expect(text).toContain("456 Dev Ave, Coding, CA");
+
+    // The route map lives in the appendix, with the date, mileage, and
+    // amount listed beside it ("Mileage" + "32.00 miles" — no parens —
+    // are the appendix's field label and value).
+    expect(text).toContain("Receipts & routes");
+    expect(text).toContain("Mileage");
+    expect(text).toContain("32.00 miles");
+    expect(text).toContain("Mar 10, 2026");
+    expect(text).toContain("$22.40");
 
     // The trip's route map is embedded as an image (the fallback straight-
     // line render — the seeded expense predates saved route geometry).

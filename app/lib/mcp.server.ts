@@ -785,7 +785,7 @@ function createMcpServer(accountId: string): McpServer {
     "export_report",
     {
       description:
-        "Render a report as a PDF (the same layout as the web export: grouped by category, mileage rows with type/rate/distance and an embedded route map, receipt images appendix) and return it base64-encoded. Decode and save as a .pdf file.",
+        "Render a report as a PDF (the same layout as the web export: grouped by category, mileage rows with type/rate/distance, and a 'Receipts & routes' appendix — receipt images plus a real route map per mileage trip with its date, mileage, and amount listed beside it) and return it base64-encoded. Decode and save as a .pdf file.",
       inputSchema: z.object({
         name: z.string().min(1).describe("Report name."),
       }),
