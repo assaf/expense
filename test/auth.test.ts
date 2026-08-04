@@ -169,6 +169,30 @@ describe("Access control", () => {
     expect(testAccountNames).not.toContain(DEFAULT_CATEGORIES[0]);
   });
 
+  it("defaults the signup email as an allowed receipts-by-email sender", async () => {
+    const page = await openPage();
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    await page.getByRole("button", { name: "Create a new account" }).click();
+    await page.fill('input[name="accountName"]', "Sender Fresh");
+    await page.fill('input[name="email"]', "senderfresh@example.com");
+    await page.fill('input[name="password"]', "sender-fresh-password");
+    await page.click('button[type="submit"]');
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
+    await page.close();
+
+    const user = await testPrisma.user.findUnique({
+      where: { email: "senderfresh@example.com" },
+    });
+    if (!user) throw new Error("No senderfresh row after signup");
+    const senders = await testPrisma.inboundSender.findMany({
+      where: { accountId: user.accountId },
+      select: { address: true },
+    });
+    expect(senders.map((s) => s.address)).toEqual(["senderfresh@example.com"]);
+  });
+
   it("joins an account with its invite code and shares its data", async () => {
     const page = await openPage();
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });

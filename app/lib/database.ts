@@ -191,6 +191,11 @@ async function ensureBootstrapUser(): Promise<User> {
         createdAt: now,
       },
     }),
+    // The bootstrap email is also an allowed "receipts by email" sender.
+    prisma.inboundSender.createMany({
+      data: [{ accountId, address: email, createdAt: now }],
+      skipDuplicates: true,
+    }),
     seedDefaultCategories(accountId),
   ]);
   return { id: userId, accountId, email, createdAt: now };
@@ -282,9 +287,23 @@ export async function createUser(input: {
     email,
     createdAt: new Date().toISOString(),
   };
-  await prisma.user.create({
-    data: { ...user, passwordHash: input.passwordHash },
-  });
+  // The registering email becomes an allowed "receipts by email" sender by
+  // default — the account can remove it or add more addresses in Settings.
+  await prisma.$transaction([
+    prisma.user.create({
+      data: { ...user, passwordHash: input.passwordHash },
+    }),
+    prisma.inboundSender.createMany({
+      data: [
+        {
+          accountId: input.accountId,
+          address: email,
+          createdAt: user.createdAt,
+        },
+      ],
+      skipDuplicates: true,
+    }),
+  ]);
   return user;
 }
 
