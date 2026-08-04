@@ -1,14 +1,17 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { SESSION_SECRET } from "./env";
 import { hashPassword, normalizeInviteCode, verifyPassword } from "./passwords";
+import { sendVerificationEmail } from "./sender-verification.server";
 import {
   createAccount,
   createUser,
+  ensureInboundSenderForUser,
   findAccountByInviteCode,
   findUserByEmail,
   findUserById,
   getPasswordHash,
   initStore,
+  readAccount,
 } from "./store.server";
 import { isEmail } from "./validation";
 import type { User } from "./types";
@@ -87,14 +90,23 @@ async function commitUserSession(userId: string): Promise<string> {
  * Validate credentials and, on success, return the Set-Cookie header value
  * for the session. Throws on invalid credentials. Pass the result to
  * `redirect(…, { headers: { "Set-Cookie": value } })`.
+ *
+ * The login email is the account's default receipts-by-email sender: it is
+ * ensured to exist and a verification email is sent when owed (see
+ * ensureDefaultSender). `origin` builds the absolute verification link.
  */
-export async function login(email: string, password: string): Promise<string> {
+export async function login(
+  email: string,
+  password: string,
+  origin?: string,
+): Promise<string> {
   await initStore();
   const user = await findUserByEmail(email);
   const stored = user ? await getPasswordHash(user.id) : "";
   if (!user || !stored || !(await verifyPassword(password, stored))) {
     throw new Error("Invalid email or password");
   }
+  await ensureDefaultSender(user, origin);
   return commitUserSession(user.id);
 }
 
@@ -102,11 +114,14 @@ export async function login(email: string, password: string): Promise<string> {
  * Create a new account with its first user and return the session cookie.
  * Throws with a user-facing message on invalid input or duplicates.
  */
-export async function createAccountWithUser(input: {
-  accountName: string;
-  email: string;
-  password: string;
-}): Promise<string> {
+export async function createAccountWithUser(
+  input: {
+    accountName: string;
+    email: string;
+    password: string;
+  },
+  origin?: string,
+): Promise<string> {
   await initStore();
   validateSignup(input.email, input.password);
   const account = await createAccount(input.accountName);
@@ -115,6 +130,7 @@ export async function createAccountWithUser(input: {
     email: input.email,
     passwordHash: await hashPassword(input.password),
   });
+  await ensureDefaultSender(user, origin);
   return commitUserSession(user.id);
 }
 
@@ -122,11 +138,14 @@ export async function createAccountWithUser(input: {
  * Join an existing account via its invite code and return the session cookie.
  * Throws with a user-facing message on a bad code or duplicate email.
  */
-export async function joinAccountWithInviteCode(input: {
-  inviteCode: string;
-  email: string;
-  password: string;
-}): Promise<string> {
+export async function joinAccountWithInviteCode(
+  input: {
+    inviteCode: string;
+    email: string;
+    password: string;
+  },
+  origin?: string,
+): Promise<string> {
   await initStore();
   validateSignup(input.email, input.password);
   const account = await findAccountByInviteCode(
@@ -138,7 +157,45 @@ export async function joinAccountWithInviteCode(input: {
     email: input.email,
     passwordHash: await hashPassword(input.password),
   });
+  await ensureDefaultSender(user, origin);
   return commitUserSession(user.id);
+}
+
+/**
+ * The user's login email is their default receipts-by-email sender. Make
+ * sure the sender row exists and email a verification link when one is owed
+ * (freshly added, or the last one is stale). Receipts only start flowing
+ * after the link is clicked. Failures never break sign-in: a skipped email
+ * just means the address waits to be verified from Settings.
+ */
+async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
+  try {
+    const { token, claimedByOther } = await ensureInboundSenderForUser(
+      user.accountId,
+      user.email,
+    );
+    if (claimedByOther) {
+      console.warn(
+        "[auth] login email %s is already verified for another account — not added as a sender",
+        user.email,
+      );
+      return;
+    }
+    if (!token) return;
+    const account = await readAccount(user.accountId);
+    await sendVerificationEmail({
+      to: user.email,
+      token,
+      origin,
+      accountName: account?.name ?? user.email,
+    });
+  } catch (err) {
+    console.warn(
+      "[auth] failed to ensure default receipts-by-email sender for %s:",
+      user.email,
+      err,
+    );
+  }
 }
 
 function validateSignup(email: string, password: string): void {

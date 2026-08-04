@@ -33,6 +33,7 @@ model Account {
   imageBlobs    ImageBlob[]
   inboundEmails InboundEmail[]
   inboundSenders InboundSender[]
+  inboundSenderVerifications InboundSenderVerification[]
 
   @@map("accounts")
 }
@@ -182,19 +183,41 @@ model InboundEmail {
   @@map("inbound_emails")
 }
 
-/// One allowed receipt-forwarding sender per account. When the same address
-/// is allowed by several accounts, the row with the earliest createdAt wins
-/// ("first added takes precedence"); removing it falls through to the next.
+/// One receipt-forwarding sender per account. Anyone may add an address
+/// ("pending"), but it only accepts receipts once verified by clicking a
+/// link emailed to that address — see InboundSenderVerification, the
+/// single source of verified status. A pending row carries the token for
+/// the one outstanding verification email (single-use, replaced on resend).
+/// The account's login emails are auto-added as senders (see
+/// ensureInboundSenderForUser) — a sign-in email is always a sender.
 model InboundSender {
-  accountId String
-  address   String // normalized lowercase
-  createdAt String
+  accountId            String
+  address              String // normalized lowercase
+  verificationTokenHash String? // sha256 of the token in the emailed link
+  verificationSentAt   String?
+  createdAt            String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@id([accountId, address])
   @@index([address])
   @@map("inbound_senders")
+}
+
+/// Exclusivity authority for verified receipt-forwarding addresses: at most
+/// one account can verify a given address (address is the primary key, so
+/// the database rejects a second verified claim). The row is created when
+/// the mailbox owner clicks the emailed verification link; creating it also
+/// deletes every other account's pending rows for that address. Removing the
+/// sender (Settings) deletes this row and frees the address again.
+model InboundSenderVerification {
+  address    String @id // normalized lowercase
+  accountId  String
+  verifiedAt String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("inbound_sender_verifications")
 }
 
 /// An OAuth 2.1 client registered by an MCP client via dynamic registration

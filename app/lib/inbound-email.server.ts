@@ -27,7 +27,8 @@ import { escapeHtml } from "~/lib/escape";
 import { sendReplyEmail } from "~/lib/reply.server";
 import type { ReplyInput } from "~/lib/reply.server";
 import {
-  findAccountByInboundSender,
+  findPendingSenderRow,
+  findVerifiedSenderAccount,
   readExtractionContext,
   readInboundEmail,
   upsertExpense,
@@ -46,7 +47,8 @@ import type { ReceiptExpense } from "~/lib/types";
  * the expense date, picks the receipt (attachment or email body), extracts
  * merchant/amount/category via DeepSeek (with tesseract OCR fallback), stores
  * the receipt image, and creates the expense — scoped to the account whose
- * "inbound sender" setting matches the From address.
+ * VERIFIED inbound sender matches the From address (an added-but-unverified
+ * address gets a "verify first" reply and no import).
  *
  * When anything fails or the result is incomplete, a reply email explains
  * what happened. Successful imports don't email (the expense appears in the
@@ -115,7 +117,8 @@ export type ProcessResult =
   | { status: "partial"; expenseId: string; missing: string[] }
   | { status: "error"; error: string }
   | { status: "duplicate" }
-  | { status: "unknown-sender" };
+  | { status: "unknown-sender" }
+  | { status: "unverified-sender" };
 
 /** Injectable collaborators (fakes in tests, real implementations by default). */
 export interface InboundDeps {
@@ -490,8 +493,26 @@ export async function processInboundEvent(
 ): Promise<ProcessResult> {
   const subject = data.subject ?? "";
   const fromEmail = extractEmailAddress(data.from);
-  const account = await findAccountByInboundSender(fromEmail);
-  if (!account) {
+
+  // Only VERIFIED sender addresses accept receipts. A sender row that was
+  // added but never verified gets a "verify first" reply instead of an
+  // import; an address with no row at all is the unknown-sender case.
+  const verified = await findVerifiedSenderAccount(fromEmail);
+  if (!verified) {
+    const pending = await findPendingSenderRow(fromEmail);
+    if (pending) {
+      await deps.sendReply({
+        to: data.from,
+        subject: "Receipt not imported — sender not verified yet",
+        html: replyHtml("Receipt not imported — verify this address first", [
+          `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} from <b>${escapeHtml(data.from)}</b>, but this address hasn't been verified yet, so receipts from it are not imported.`,
+          "Check the inbox of that address for the verification email we sent, or open the app and go to <b>Settings → Receipts by email</b> to resend it. Then forward the receipt again.",
+        ]),
+        inReplyTo: data.message_id,
+        idempotencyKey: data.email_id,
+      });
+      return { status: "unverified-sender" };
+    }
     await deps.sendReply({
       to: data.from,
       subject: "Receipt not imported — sender not recognized",
@@ -504,6 +525,7 @@ export async function processInboundEvent(
     });
     return { status: "unknown-sender" };
   }
+  const account = verified.account;
 
   const existing = await readInboundEmail(data.email_id);
   if (existing?.status === "created" || existing?.status === "partial") {

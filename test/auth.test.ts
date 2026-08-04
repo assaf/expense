@@ -191,6 +191,12 @@ describe("Access control", () => {
       select: { address: true },
     });
     expect(senders.map((s) => s.address)).toEqual(["senderfresh@example.com"]);
+    // The signup email starts PENDING — receipts are only accepted after it
+    // is verified by clicking the emailed link.
+    const verifications = await testPrisma.inboundSenderVerification.findMany({
+      where: { accountId: user.accountId },
+    });
+    expect(verifications).toHaveLength(0);
   });
 
   it("joins an account with its invite code and shares its data", async () => {

@@ -51,23 +51,31 @@ export async function action({ request }: Route.ActionArgs) {
   const next = safeNext(url.searchParams.get("next"));
   const email = formString(form, "email").trim().toLowerCase();
   const password = formString(form, "password");
+  // Absolute origin for the receipts-by-email verification link.
+  const origin = new URL(request.url).origin;
 
   try {
     let cookie: string;
     if (mode === "create") {
-      cookie = await createAccountWithUser({
-        accountName: formString(form, "accountName"),
-        email,
-        password,
-      });
+      cookie = await createAccountWithUser(
+        {
+          accountName: formString(form, "accountName"),
+          email,
+          password,
+        },
+        origin,
+      );
     } else if (mode === "join") {
-      cookie = await joinAccountWithInviteCode({
-        inviteCode: formString(form, "inviteCode"),
-        email,
-        password,
-      });
+      cookie = await joinAccountWithInviteCode(
+        {
+          inviteCode: formString(form, "inviteCode"),
+          email,
+          password,
+        },
+        origin,
+      );
     } else {
-      cookie = await login(email, password);
+      cookie = await login(email, password, origin);
     }
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {

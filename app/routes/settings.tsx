@@ -1,4 +1,5 @@
 import {
+  Check,
   Plus,
   Trash2,
   Pencil,
@@ -6,7 +7,6 @@ import {
   LogOut,
   RefreshCw,
   KeyRound,
-  Copy,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -19,6 +19,7 @@ import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
+import { sendVerificationEmail } from "~/lib/sender-verification.server";
 import { readSettings, writeSettings } from "~/lib/settings.server";
 import {
   addCategory,
@@ -38,10 +39,12 @@ import {
   removeReport,
   renameCategory,
   renameReport,
+  resendInboundSenderVerification,
   setReportClosed,
   readMileageRates,
 } from "~/lib/store.server";
 import { countLabel, todayDate } from "~/lib/format";
+import type { InboundSenderRecord } from "~/lib/types";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
@@ -90,6 +93,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     })),
     homeAddress: settings.homeAddress,
     inboundSenders,
+    userEmail: user.email,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     currentRates,
     oauthSessions,
@@ -148,9 +152,39 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json(result);
     }
     case "addInboundSender": {
-      // The store normalizes the address (trim + lowercase) for storage.
-      await addInboundSender(user.accountId, formString(form, "address"));
-      break;
+      const result = await addInboundSender(
+        user.accountId,
+        formString(form, "address"),
+      );
+      if (!result.ok) return Response.json(result);
+      // New/updated sender → email its verification link so receipts start
+      // flowing once the mailbox owner clicks it. `token: null` means the
+      // address was already verified for this account — nothing to send.
+      if (result.token) {
+        const account = await readAccount(user.accountId);
+        await sendVerificationEmail({
+          to: result.address,
+          token: result.token,
+          origin: new URL(request.url).origin,
+          accountName: account?.name ?? "",
+        });
+      }
+      return Response.json({ ok: true, address: result.address });
+    }
+    case "resendInboundSenderVerification": {
+      const result = await resendInboundSenderVerification(
+        user.accountId,
+        formString(form, "address"),
+      );
+      if (!result.ok) return Response.json(result);
+      const account = await readAccount(user.accountId);
+      await sendVerificationEmail({
+        to: result.address,
+        token: result.token,
+        origin: new URL(request.url).origin,
+        accountName: account?.name ?? "",
+      });
+      return Response.json({ ok: true, address: result.address });
     }
     case "removeInboundSender": {
       await removeInboundSender(user.accountId, formString(form, "address"));
@@ -191,6 +225,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     accountName,
     inviteCode,
     inboundSenders,
+    userEmail,
     inboundAddress,
     oauthSessions,
     mcpUrl,
@@ -320,55 +355,29 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           )}
           <div className="mb-3">
             <div className="mb-1 text-sm font-medium text-gray-700">
-              Allowed sender address(es)
+              Sender addresses
             </div>
             <p className="mb-2 text-xs text-gray-500">
-              The addresses you forward receipts from — you can add several.
-              Only emails from these addresses are imported.
+              Receipts are imported only from <b>verified</b> addresses. When
+              you add an address (or sign in with a new one) we email it a
+              verification link — click it and the address is yours: no other
+              account can use it, and receipts from it start importing.
             </p>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (
                 <li className="text-sm text-gray-400">None yet.</li>
               ) : (
-                inboundSenders.map((address) => (
-                  <li
-                    key={address}
-                    className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5"
-                  >
-                    <span className="font-mono text-sm">{address}</span>
-                    <Form method="post" className="contents">
-                      <input
-                        type="hidden"
-                        name="intent"
-                        value="removeInboundSender"
-                      />
-                      <input type="hidden" name="address" value={address} />
-                      <button
-                        type="submit"
-                        className="text-gray-400 hover:text-red-600"
-                        aria-label={`Remove ${address}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </Form>
-                  </li>
+                inboundSenders.map((sender) => (
+                  <SenderRow
+                    key={sender.address}
+                    sender={sender}
+                    isDefault={sender.address === userEmail}
+                  />
                 ))
               )}
             </ul>
           </div>
-          <Form method="post" className="flex items-center gap-2">
-            <input type="hidden" name="intent" value="addInboundSender" />
-            <Input
-              type="email"
-              name="address"
-              placeholder="you@example.com"
-              required
-              className="flex-1"
-            />
-            <Button type="submit" size="sm" variant="secondary">
-              <Plus className="h-4 w-4" /> Add address
-            </Button>
-          </Form>
+          <AddSenderForm />
         </div>
       </section>
 
@@ -389,6 +398,163 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
     </PageShell>
+  );
+}
+
+/**
+ * One receipts-by-email sender: the address, its verified status, and
+ * actions. The account's login email (the default sender) is locked — it
+ * can't be removed, only verified. Unverified addresses get a Resend button
+ * that emails a fresh verification link.
+ */
+function SenderRow({
+  sender,
+  isDefault,
+}: {
+  sender: InboundSenderRecord;
+  isDefault: boolean;
+}) {
+  const resendFetcher = useFetcher<{ ok: boolean; error?: string }>();
+  const removeFetcher = useFetcher();
+  return (
+    <li className="flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-mono text-sm">{sender.address}</span>
+          {isDefault ? (
+            <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+              Your sign-in email
+            </span>
+          ) : null}
+          {sender.verified ? (
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              <Check className="h-3 w-3" /> Verified
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              Awaiting verification
+            </span>
+          )}
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {!sender.verified ? (
+            <resendFetcher.Form method="post" className="contents">
+              <input
+                type="hidden"
+                name="intent"
+                value="resendInboundSenderVerification"
+              />
+              <input type="hidden" name="address" value={sender.address} />
+              <button
+                type="submit"
+                className="text-xs font-medium text-blue-600 hover:underline"
+                aria-label={`Resend verification email to ${sender.address}`}
+              >
+                Resend email
+              </button>
+            </resendFetcher.Form>
+          ) : null}
+          {!isDefault ? (
+            <removeFetcher.Form method="post" className="contents">
+              <input type="hidden" name="intent" value="removeInboundSender" />
+              <input type="hidden" name="address" value={sender.address} />
+              <button
+                type="submit"
+                className="text-gray-400 hover:text-red-600"
+                aria-label={`Remove ${sender.address}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </removeFetcher.Form>
+          ) : null}
+        </div>
+      </div>
+      {resendFetcher.state !== "idle" ? (
+        <p className="text-xs text-gray-500">Sending verification email…</p>
+      ) : resendFetcher.data?.ok ? (
+        <p className="text-xs text-green-700">
+          Verification email sent — check that inbox and click the link.
+        </p>
+      ) : resendFetcher.data?.error ? (
+        <p className="text-xs text-red-600">{resendFetcher.data.error}</p>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * Add a new receipts-by-email sender. Adding an address only accepts
+ * receipts after its mailbox owner clicks the emailed verification link, so
+ * the form reports whether the verification email went out (or why not).
+ */
+function AddSenderForm() {
+  const fetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    address?: string;
+  }>();
+  const [address, setAddress] = useState("");
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+  const busy = fetcher.state !== "idle";
+
+  // A successful add leaves the row in the list with its own status — clear
+  // the input; the notice carries the "email sent" confirmation.
+  useEffect(() => {
+    const data = fetcher.data;
+    if (!data) return;
+    if (data.ok && data.address) {
+      setAddress("");
+      setNotice({
+        ok: true,
+        text: `Verification email sent to ${data.address} — click the link in it and receipts from this address will start importing.`,
+      });
+    } else if (data.error) {
+      setNotice({ ok: false, text: data.error });
+    }
+  }, [fetcher.data]);
+
+  return (
+    <div>
+      <fetcher.Form method="post" className="flex items-center gap-2">
+        <input type="hidden" name="intent" value="addInboundSender" />
+        <Input
+          type="email"
+          name="address"
+          value={address}
+          onChange={(e) => {
+            setAddress(e.target.value);
+            setNotice(null);
+          }}
+          placeholder="you@example.com"
+          required
+          aria-invalid={notice && !notice.ok ? true : undefined}
+          invalid={!!notice && !notice.ok}
+          className="flex-1"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          variant="secondary"
+          disabled={busy || !address.trim()}
+        >
+          <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add address"}
+        </Button>
+      </fetcher.Form>
+      {notice ? (
+        <p
+          className={`mt-1 text-xs ${notice.ok ? "text-green-700" : "text-red-600"}`}
+        >
+          {notice.text}
+        </p>
+      ) : (
+        <p className="mt-1 text-xs text-gray-400">
+          A verification email is sent to the address before receipts are
+          accepted.
+        </p>
+      )}
+    </div>
   );
 }
 

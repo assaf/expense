@@ -196,6 +196,17 @@ export interface InboundEmailRecord {
   updatedAt: string;
 }
 
+/** One receipt-forwarding sender row with its verified status. */
+export interface InboundSenderRecord {
+  accountId: string;
+  address: string;
+  /** Verified by clicking the emailed link (see inbound_sender_verifications). */
+  verified: boolean;
+  verifiedAt: string | null;
+  verificationSentAt: string | null;
+  createdAt: string;
+}
+
 /** An OAuth client registered by an MCP client (RFC 7591 dynamic registration). */
 export interface OAuthClientRecord {
   id: string;

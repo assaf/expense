@@ -26,15 +26,17 @@ const PUBLIC_PAGES = new Set([
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   // The home page (landing for anonymous visitors), the login route, the
-  // inbound email webhook, and the public marketing pages are open;
-  // everything else requires a session (the webhook verifies its own
-  // Resend signature).
+  // inbound email webhook, the sender-verification page, and the public
+  // marketing pages are open; everything else requires a session (the
+  // webhook and the verify link carry their own credentials — the Resend
+  // signature and the single-use emailed token).
   let path = url.pathname;
   if (path.endsWith(".md")) path = path.slice(0, -3);
   const isPublic =
     path === "/" ||
     path.startsWith("/login") ||
     path.startsWith("/api/inbound-email") ||
+    path.startsWith("/receipts-email-verify") ||
     PUBLIC_PAGES.has(path);
   let user = null;
   if (isPublic) {

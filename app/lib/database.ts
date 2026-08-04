@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { ulid } from "ulid";
 import { MILEAGE_RATES } from "~/data/mileage-rates";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
@@ -16,6 +17,7 @@ import type {
   Category,
   Expense,
   InboundEmailRecord,
+  InboundSenderRecord,
   MileageExpense,
   MileageType,
   OAuthClientRecord,
@@ -1237,8 +1239,12 @@ function oauthTokenFromRow(row: {
 // --- Inbound email ----------------------------------------------------------
 
 /** Normalize a sender address for storage/lookup (trim + lowercase). */
+/** Trim, strip "Name <addr>" display-name wrapping, lowercase. */
 function normalizeSender(address: string): string {
-  return address.trim().toLowerCase();
+  const trimmed = address.trim();
+  const m = trimmed.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  const candidate = m ? m[1]! : trimmed;
+  return candidate.toLowerCase();
 }
 
 /** The stored row for a received email, or undefined when first seen. */
@@ -1272,63 +1278,339 @@ export async function upsertInboundEmail(input: {
 }
 
 /**
- * The account that claims this sender address, by "first added" precedence: * when the same address is allowed by several accounts, the row with the
- * earliest createdAt wins; removing that row falls through to the next one.
+ * The account that verified this sender address — the exclusivity owner.
+ * Only verified addresses accept receipts; see InboundSenderVerification.
+ * Undefined when no account has verified the address.
  */
-export async function findAccountByInboundSender(
+export async function findVerifiedSenderAccount(
   senderEmail: string,
-): Promise<Account | undefined> {
-  const target = normalizeSender(senderEmail);
-  if (!target) return undefined;
-  const rows = await prisma.inboundSender.findMany({
-    where: { address: target },
-    orderBy: [{ createdAt: "asc" }, { accountId: "asc" }],
-    select: { accountId: true },
+): Promise<{ account: Account; verifiedAt: string } | undefined> {
+  const address = normalizeSender(senderEmail);
+  if (!address) return undefined;
+  const verification = await prisma.inboundSenderVerification.findUnique({
+    where: { address },
   });
-  for (const row of rows) {
-    const account = await prisma.account.findUnique({
-      where: { id: row.accountId },
-    });
-    if (account) return account;
-  }
-  return undefined;
+  if (!verification) return undefined;
+  const account = await prisma.account.findUnique({
+    where: { id: verification.accountId },
+  });
+  if (!account) return undefined;
+  return { account, verifiedAt: verification.verifiedAt };
 }
 
-/** All allowed sender addresses for an account, in the order they were added. */ export async function listInboundSenders(
+/**
+ * A pending (added-but-unverified) sender row for an address, if any. Used
+ * by the inbound pipeline to tell "verify first" from "not recognized".
+ */
+export async function findPendingSenderRow(
+  senderEmail: string,
+): Promise<{ accountId: string; address: string } | undefined> {
+  const address = normalizeSender(senderEmail);
+  if (!address) return undefined;
+  const row = await prisma.inboundSender.findFirst({
+    where: { address },
+    orderBy: [{ createdAt: "asc" }, { accountId: "asc" }],
+    select: { accountId: true, address: true },
+  });
+  return row ?? undefined;
+}
+
+/**
+ * All sender addresses for an account, in the order they were added, with
+ * their verified status (a sender is verified when an
+ * inbound_sender_verifications row exists for the address).
+ */
+export async function listInboundSenders(
   accountId: string,
-): Promise<string[]> {
+): Promise<InboundSenderRecord[]> {
   const rows = await prisma.inboundSender.findMany({
     where: { accountId },
     orderBy: [{ createdAt: "asc" }, { address: "asc" }],
-    select: { address: true },
   });
-  return rows.map((r) => r.address);
+  const verifications = await prisma.inboundSenderVerification.findMany({
+    where: { accountId },
+  });
+  const byAddress = new Map(verifications.map((v) => [v.address, v]));
+  return rows.map((r) => ({
+    accountId: r.accountId,
+    address: r.address,
+    verified: byAddress.has(r.address),
+    verifiedAt: byAddress.get(r.address)?.verifiedAt ?? null,
+    verificationSentAt: r.verificationSentAt,
+    createdAt: r.createdAt,
+  }));
 }
 
-/** Allow a sender address for an account (idempotent, normalized). */
+/**
+ * Add a sender address for an account (normalized, idempotent) and mint a
+ * fresh verification token for it. The address is only usable once verified
+ * — and only one account can verify it. Returns the token so the caller
+ * emails the verification link; `token: null` means the address was already
+ * verified for this account (nothing to send). Fails when the address is
+ * already verified for a different account.
+ */
 export async function addInboundSender(
   accountId: string,
   address: string,
-): Promise<void> {
+): Promise<
+  | { ok: true; address: string; token: string | null }
+  | { ok: false; error: string }
+> {
   const normalized = normalizeSender(address);
-  if (!normalized) return;
-  await prisma.inboundSender.createMany({
-    data: [
-      { accountId, address: normalized, createdAt: new Date().toISOString() },
-    ],
-    skipDuplicates: true,
+  if (!normalized || !isEmail(normalized)) {
+    return { ok: false, error: "Enter a valid email address" };
+  }
+  const verification = await prisma.inboundSenderVerification.findUnique({
+    where: { address: normalized },
   });
+  if (verification && verification.accountId !== accountId) {
+    return {
+      ok: false,
+      error: "That email address is already verified for another account",
+    };
+  }
+  if (verification) return { ok: true, address: normalized, token: null };
+  const token = generateVerificationToken();
+  const now = new Date().toISOString();
+  await prisma.inboundSender.upsert({
+    where: { accountId_address: { accountId, address: normalized } },
+    update: {
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+    },
+    create: {
+      accountId,
+      address: normalized,
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+      createdAt: now,
+    },
+  });
+  return { ok: true, address: normalized, token };
 }
 
-/** Remove a sender address from an account. */
+/**
+ * Mint a fresh verification token for an already-added sender (the "Resend
+ * verification email" action). Fails when the address is already verified
+ * or claimed by another account.
+ */
+export async function resendInboundSenderVerification(
+  accountId: string,
+  address: string,
+): Promise<
+  { ok: true; address: string; token: string } | { ok: false; error: string }
+> {
+  const normalized = normalizeSender(address);
+  if (!normalized) return { ok: false, error: "Enter a valid email address" };
+  const verification = await prisma.inboundSenderVerification.findUnique({
+    where: { address: normalized },
+  });
+  if (verification) {
+    return {
+      ok: false,
+      error:
+        verification.accountId === accountId
+          ? "That address is already verified"
+          : "That email address is already verified for another account",
+    };
+  }
+  const token = generateVerificationToken();
+  const now = new Date().toISOString();
+  await prisma.inboundSender.upsert({
+    where: { accountId_address: { accountId, address: normalized } },
+    update: {
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+    },
+    create: {
+      accountId,
+      address: normalized,
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+      createdAt: now,
+    },
+  });
+  return { ok: true, address: normalized, token };
+}
+
+/** Remove a sender address (and its verification) from an account. */
 export async function removeInboundSender(
   accountId: string,
   address: string,
 ): Promise<void> {
-  await prisma.inboundSender.deleteMany({
-    where: { accountId, address: normalizeSender(address) },
-  });
+  const normalized = normalizeSender(address);
+  await prisma.$transaction([
+    prisma.inboundSender.deleteMany({
+      where: { accountId, address: normalized },
+    }),
+    prisma.inboundSenderVerification.deleteMany({
+      where: { accountId, address: normalized },
+    }),
+  ]);
 }
+
+/** The outcome of clicking a verification link (see verifyInboundSenderAddress). */
+export type VerifySenderOutcome =
+  | {
+      status: "verified";
+      address: string;
+      accountId: string;
+      accountName: string;
+    }
+  | {
+      status: "already-verified";
+      address: string;
+      accountId: string;
+      accountName: string;
+    }
+  | { status: "expired"; address: string }
+  | { status: "invalid" };
+
+/**
+ * Verify a sender address from its emailed token. Single-use, 7-day expiry,
+ * and exclusive: verifying claims the address for this account (the
+ * verification row's primary key rejects a second claim) and deletes every
+ * other account's pending rows for it. The token is consumed regardless, so
+ * a stale link can't be replayed.
+ */
+export async function verifyInboundSenderAddress(
+  rawToken: string,
+): Promise<VerifySenderOutcome> {
+  if (!rawToken) return { status: "invalid" };
+  const row = await prisma.inboundSender.findFirst({
+    where: { verificationTokenHash: hashVerificationToken(rawToken) },
+  });
+  if (!row) return { status: "invalid" };
+  const sentAt = row.verificationSentAt
+    ? Date.parse(row.verificationSentAt)
+    : 0;
+  if (!Number.isFinite(sentAt) || Date.now() - sentAt > VERIFICATION_TTL_MS) {
+    return { status: "expired", address: row.address };
+  }
+  const account = await prisma.account.findUnique({
+    where: { id: row.accountId },
+  });
+  const accountName = account?.name ?? "";
+  try {
+    await prisma.$transaction([
+      // The primary key on address makes a second verified claim impossible.
+      prisma.inboundSenderVerification.create({
+        data: {
+          address: row.address,
+          accountId: row.accountId,
+          verifiedAt: new Date().toISOString(),
+        },
+      }),
+      // The address is now exclusively this account's — drop rivals' pending rows.
+      prisma.inboundSender.deleteMany({
+        where: { address: row.address, accountId: { not: row.accountId } },
+      }),
+      // Consume the token.
+      prisma.inboundSender.update({
+        where: {
+          accountId_address: { accountId: row.accountId, address: row.address },
+        },
+        data: { verificationTokenHash: null },
+      }),
+    ]);
+  } catch (err) {
+    // P2002 — another account verified the address first (race).
+    if ((err as { code?: string } | null)?.code === "P2002") {
+      return {
+        status: "already-verified",
+        address: row.address,
+        accountId: row.accountId,
+        accountName,
+      };
+    }
+    throw err;
+  }
+  return {
+    status: "verified",
+    address: row.address,
+    accountId: row.accountId,
+    accountName,
+  };
+}
+
+/**
+ * Guarantee the account's login email is a sender row (the "default"
+ * receipts-by-email address). Creates it pending when missing and mints a
+ * verification token; called on signup, join, and every sign-in. A token is
+ * returned (send the verification email now) when the row was just created
+ * or the last verification email is stale (>24h). `verified` reports an
+ * already-verified own row; `claimedByOther` means the address is verified
+ * for a different account (the login email can't be claimed — the mailbox
+ * owner verified it elsewhere first).
+ */
+export async function ensureInboundSenderForUser(
+  accountId: string,
+  email: string,
+): Promise<{
+  token: string | null;
+  verified: boolean;
+  claimedByOther: boolean;
+}> {
+  const address = normalizeSender(email);
+  if (!address) return { token: null, verified: false, claimedByOther: false };
+  const verification = await prisma.inboundSenderVerification.findUnique({
+    where: { address },
+  });
+  if (verification) {
+    return {
+      token: null,
+      verified: verification.accountId === accountId,
+      claimedByOther: verification.accountId !== accountId,
+    };
+  }
+  const existing = await prisma.inboundSender.findUnique({
+    where: { accountId_address: { accountId, address } },
+  });
+  if (existing?.verificationTokenHash) {
+    const sentAt = existing.verificationSentAt
+      ? Date.parse(existing.verificationSentAt)
+      : 0;
+    if (
+      Number.isFinite(sentAt) &&
+      Date.now() - sentAt < VERIFICATION_RESEND_MS
+    ) {
+      // A fresh verification email is already in flight — don't re-send.
+      return { token: null, verified: false, claimedByOther: false };
+    }
+  }
+  const token = generateVerificationToken();
+  const now = new Date().toISOString();
+  await prisma.inboundSender.upsert({
+    where: { accountId_address: { accountId, address } },
+    update: {
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+    },
+    create: {
+      accountId,
+      address,
+      verificationTokenHash: hashVerificationToken(token),
+      verificationSentAt: now,
+      createdAt: now,
+    },
+  });
+  return { token, verified: false, claimedByOther: false };
+}
+
+/** A fresh single-use verification token (base64url) and its sha256 hash. */
+function generateVerificationToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+function hashVerificationToken(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
+
+/** Verification links expire 7 days after the email is sent. */
+const VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Don't auto-re-send a verification email for one address more than once a day. */
+const VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
 
 // --- Helpers ---------------------------------------------------------------
 

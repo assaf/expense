@@ -174,17 +174,29 @@ const usedEmailIds: string[] = [];
 const usedExpenseIds: string[] = [];
 const usedSenders: { accountId: string; address: string }[] = [];
 
-/** Allow a sender for the test account and remember it for cleanup. */
+/**
+ * Allow a sender for an account and remember it for cleanup. By default the
+ * sender is VERIFIED (a verification row exists) so the pipeline accepts it;
+ * pass `verified: false` for added-but-unverified senders.
+ */
 async function allowSender(
   accountId: string,
   address: string,
   createdAt = new Date().toISOString(),
+  verified = true,
 ): Promise<void> {
+  const normalized = address.toLowerCase();
   await testPrisma.inboundSender.createMany({
-    data: [{ accountId, address: address.toLowerCase(), createdAt }],
+    data: [{ accountId, address: normalized, createdAt }],
     skipDuplicates: true,
   });
-  usedSenders.push({ accountId, address: address.toLowerCase() });
+  if (verified) {
+    await testPrisma.inboundSenderVerification.createMany({
+      data: [{ address: normalized, accountId, verifiedAt: createdAt }],
+      skipDuplicates: true,
+    });
+  }
+  usedSenders.push({ accountId, address: normalized });
 }
 
 beforeEach(async () => {
@@ -205,6 +217,9 @@ afterEach(async () => {
   }
   for (const s of usedSenders) {
     await testPrisma.inboundSender
+      .deleteMany({ where: { accountId: s.accountId, address: s.address } })
+      .catch(() => {});
+    await testPrisma.inboundSenderVerification
       .deleteMany({ where: { accountId: s.accountId, address: s.address } })
       .catch(() => {});
   }
@@ -949,10 +964,30 @@ describe("processInboundEvent (body receipt)", () => {
       expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
     ).toBe(false);
   });
+
+  it("rejects an added-but-unverified sender with a verify-first reply", async () => {
+    await allowSender(TEST_ACCOUNT_ID, "pending@example.com", undefined, false);
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-pending-sender",
+        from: "Pending <pending@example.com>",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "unverified-sender" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toContain("not verified");
+    expect(deps.sent[0]!.html).toContain("Settings");
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
 });
 
-describe("processInboundEvent (multiple senders)", () => {
-  it("accepts any address in the allowed sender list", async () => {
+describe("processInboundEvent (verified sender exclusivity)", () => {
+  it("accepts any verified address in the sender list", async () => {
     await allowSender(TEST_ACCOUNT_ID, "home@example.com");
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () =>
@@ -969,41 +1004,54 @@ describe("processInboundEvent (multiple senders)", () => {
     expect(result).toMatchObject({ status: "created" });
   });
 
-  it("rejects an address that is not on the list", async () => {
-    await allowSender(TEST_ACCOUNT_ID, "home@example.com");
-    const deps = fakeDeps();
-    const result = await processInboundEvent(
-      eventData({
-        email_id: "email-not-allowed",
-        from: "Other <other@example.com>",
-      }),
-      deps,
-    );
-    expect(result).toMatchObject({ status: "unknown-sender" });
-    expect(deps.sent).toHaveLength(1);
-    const expenses = await readExpenses(TEST_ACCOUNT_ID);
-    expect(
-      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
-    ).toBe(false);
-  });
-
-  it("first-added account wins, and falls through after removal", async () => {
-    // Same sender allowed by two accounts; Other Account added it first.
+  it("only the verified account receives, regardless of who added first", async () => {
+    // Both accounts added the same address; only Test Account verified it.
     await allowSender(
       OTHER_ACCOUNT_ID,
       "shared@example.com",
       "2026-01-01T00:00:00.000Z",
+      false,
     );
     await allowSender(
       TEST_ACCOUNT_ID,
       "shared@example.com",
       "2026-02-01T00:00:00.000Z",
+      true,
     );
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () =>
       receivedEmail({ from: "Shared <shared@example.com>" });
 
-    // 1. The first-added account claims the sender.
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-shared-1",
+        from: "Shared <shared@example.com>",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-shared-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result.status === "created" || result.status === "partial").toBe(
+      true,
+    );
+    const inTest = await readExpenses(TEST_ACCOUNT_ID);
+    expect(inTest.some((e) => e.id === expenseIdOf(result))).toBe(true);
+    const inOther = await readExpenses(OTHER_ACCOUNT_ID);
+    expect(inOther.some((e) => e.id === expenseIdOf(result))).toBe(false);
+  });
+
+  it("falls through to a new verifier after the owner removes the sender", async () => {
+    // Other Account verified the shared address and receives for it.
+    await allowSender(
+      OTHER_ACCOUNT_ID,
+      "shared@example.com",
+      "2026-01-01T00:00:00.000Z",
+      true,
+    );
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ from: "Shared <shared@example.com>" });
+
     const first = await processInboundEvent(
       eventData({
         email_id: "email-shared-1",
@@ -1013,23 +1061,26 @@ describe("processInboundEvent (multiple senders)", () => {
     );
     usedEmailIds.push("email-shared-1");
     usedExpenseIds.push(expenseIdOf(first));
-    // Lands in the first-added account (partial only because that account
-    // has no matching category — placement is what this test checks).
-    expect(first.status === "created" || first.status === "partial").toBe(true);
     const inOther1 = await readExpenses(OTHER_ACCOUNT_ID);
     expect(
       inOther1.some((e) => e.id === expenseIdOf(first) && e.type === "receipt"),
     ).toBe(true);
-    const inTest1 = await readExpenses(TEST_ACCOUNT_ID);
-    expect(inTest1.some((e) => e.id === expenseIdOf(first))).toBe(false);
 
-    // 2. Removing it from the first account falls through to the second.
+    // The owner removes the sender: the address is freed again.
     await testPrisma.inboundSender.deleteMany({
-      where: {
-        accountId: OTHER_ACCOUNT_ID,
-        address: "shared@example.com",
-      },
+      where: { accountId: OTHER_ACCOUNT_ID, address: "shared@example.com" },
     });
+    await testPrisma.inboundSenderVerification.deleteMany({
+      where: { accountId: OTHER_ACCOUNT_ID, address: "shared@example.com" },
+    });
+
+    // Test Account adds and verifies it, then receives for it.
+    await allowSender(
+      TEST_ACCOUNT_ID,
+      "shared@example.com",
+      "2026-03-01T00:00:00.000Z",
+      true,
+    );
     const second = await processInboundEvent(
       eventData({
         email_id: "email-shared-2",
