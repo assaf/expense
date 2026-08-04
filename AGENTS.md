@@ -10,7 +10,26 @@ and local both; no separate storage service). There is **no runtime DDL** —
 schema changes go through
 Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
 Dev/tests run on local Postgres (`expense_dev`/`expense_test`) only.
-Deployed to **Vercel** (Neon Postgres; GitHub push to `main` auto-deploys).
+Deployed to **Vercel** with a **Supabase** Postgres database (project ref
+`ldtqjzfftjbzcvgktgbt`, region us-west-2; GitHub push to `main` auto-deploys).
+
+## Database connections (Supabase)
+
+Supabase direct connections (`db.<ref>.supabase.co:5432`) are **IPv6-only** for
+new projects — this network has no working IPv6 route, and Vercel functions
+should not rely on it either. Use the **Supavisor session-mode pooler**
+(`aws-1-us-west-2.pooler.supabase.com:5432`) for everything: it is IPv4,
+behaves like a direct connection, and — unlike transaction mode (port 6543) —
+supports prepared statements, which the node-postgres driver adapter needs.
+Both `DATABASE_URL` (runtime) and `DATABASE_URL_UNPOOLED` (psql/prisma DDL in
+`scripts/deploy`/`scripts/clone`) are set to the same session-pooler URL.
+
+When setting these in Vercel, add them with `vercel env add … --no-sensitive`:
+a _Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which
+silently breaks `scripts/deploy` (psql then falls back to stale `PG*` env
+vars). The old Vercel Neon integration (which set `DATABASE_URL`, `PGHOST`,
+`POSTGRES_URL`, `NEON_*`, …) was disconnected in Aug 2026 — don't re-add it.
+The abandoned Neon database still exists as a rollback fallback.
 
 ## Commands
 
@@ -24,8 +43,8 @@ pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
-./scripts/clone              # clone the prod (Neon) DB into the local dev DB (prisma/backup.sql)
-# NOTE: prod runs on Vercel (Neon Postgres) — `./scripts/deploy` handles schema
+./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
+# NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
 # sync (preflight + Step 4c rename + db push, via `vercel env pull`), CLI
 # deploy, and opening the site. `git push origin main` also auto-deploys.
 # Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
@@ -33,6 +52,9 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 # change as a lossless diff (e.g. column renames), deploy runs an explicit,
 # guarded SQL step before db push — mirror the money-column and username→email
 # conversions there instead of relying on `--accept-data-loss`.
+# Note: `vercel env pull` merges with the existing file, so stale local
+# entries (e.g. leftover `PGHOST`) survive — delete `.env.prod.pull`/
+# `.env.prod` before pulling if they cause trouble.
 ```
 
 Run `pnpm check` before committing.
@@ -45,8 +67,9 @@ Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 `APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
 (`DATABASE_URL`, plus the same three auth vars). Pull
 prod env with `npx vercel env pull --environment=production .env.prod` (use
-`DATABASE_URL_UNPOOLED` for psql/prisma DDL). Tests hardcode local services
-(`expense_test`, image blobs in Postgres), not `.env`.
+`DATABASE_URL_UNPOOLED` for psql/prisma DDL; both point at the Supabase
+session pooler — see “Database connections (Supabase)” above). Tests hardcode
+local services (`expense_test`, image blobs in Postgres), not `.env`.
 
 Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_SECRET`,
 `INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
@@ -218,7 +241,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                                                                                                                                                                                                         |
 | `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                                                                                                                                              |
 | `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                                                                                                                                                                                                     |
-| `scripts/clone`                    | Clone prod (Neon) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                                                                                                                                         |
+| `scripts/clone`                    | Clone prod (Supabase) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                                                                                                                                     |
 | `scripts/import-expensify.ts`      | API-driven Expensify import: effective SmartScan fields + receipt images (needs `EXPENSIFY_PARTNER_USER_ID`/`_SECRET`; receipts are login-gated — `--cookie` or `--receipts-dir`).                                                                                                                |
 | `app/lib/store.server.ts`          | Storage entry point (Postgres only).                                                                                                                                                                                                                                                              |
 | `app/lib/database.ts`              | Postgres backend (accounts/users + scoped rows).                                                                                                                                                                                                                                                  |

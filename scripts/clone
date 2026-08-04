@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clone the Vercel production database (Neon) to the local development database.
+# Clone the Vercel production database (Supabase) to the local development database.
 #
 # Prod env comes from `vercel env pull` (see AGENTS.md); DATABASE_URL_UNPOOLED
 # is used for the dump — the pooled URL is for runtime queries. The backup is
