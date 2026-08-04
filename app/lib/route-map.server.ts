@@ -4,40 +4,114 @@ import { geocodedLocations, type MileageExpense } from "~/lib/types";
 import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
 
 /**
- * Render a schematic route map for a mileage trip, embedded in the report
- * PDF (and the MCP export) so the export shows the route the mileage was
- * calculated from.
+ * Render a real map of a mileage trip for the report PDF — the same look
+ * as the mileage editor's Leaflet map: Carto Positron light tiles with the
+ * measured route drawn on top (white-cased blue outbound line, dashed gray
+ * return leg, numbered stop bubbles).
  *
- * Draws the saved driving geometry — the outbound polyline solid, the
- * return leg dashed — with numbered stop markers, onto a small canvas.
- * Trips saved before route geometry was persisted (or computed while OSRM
- * was down) have no geometry: fall back to straight lines between the
- * geocoded stops. Rasterized with resvg + the bundled JetBrains Mono so it
- * works on serverless runtimes with no system fonts.
+ * The tiles are fetched server-side (with a descriptive User-Agent and a
+ * small in-process cache so trips in the same city share tiles), stitched
+ * into an SVG as data URIs, and rasterized with resvg + the bundled
+ * JetBrains Mono — no system fonts needed on serverless runtimes.
  *
- * Returns null when there is nothing drawable (no geometry, fewer than two
- * geocoded stops) — callers skip the map then. Never throws on degenerate
- * input.
+ * If the tile server is unreachable (offline/blocked), the map falls back
+ * to a schematic rendering (route drawn on a plain background) so an export
+ * never fails over a map. Returns null only when there is nothing drawable
+ * (no geometry, fewer than two geocoded stops).
  */
 
-const WIDTH = 460;
-const HEIGHT = 220;
-const PAD = 26;
-const FONT = "JetBrains Mono";
-const MARKER_R = 9;
+export const ROUTE_MAP_WIDTH = 460;
+export const ROUTE_MAP_HEIGHT = 220;
 
-/** The rendered map size in points — the PDF embeds it at this size. */
-export const ROUTE_MAP_WIDTH = WIDTH;
-export const ROUTE_MAP_HEIGHT = HEIGHT;
+const TILE = 256;
+const PAD = 28;
+const FONT = "JetBrains Mono";
+const USER_AGENT = "expense-personal/1.0 (assaf@labnotes.org)";
+const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
+const TILE_CACHE_MAX = 200;
 
 const fontBytes = decodeInlineAsset(fontInline);
 
-export async function renderRouteMap(
-  e: MileageExpense,
-): Promise<Buffer | null> {
+/** The tile fetcher signature — injectable so tests stay offline. */
+export type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
+
+/** In-memory tile cache (a promise per key): trips in the same city share
+ * tiles and concurrent renders dedupe. Evicts the oldest past the cap. */
+const tileCache = new Map<string, Promise<Buffer>>();
+
+/** Fetch one Carto Positron light tile — the same basemap the editor's
+ * Leaflet map uses (attribution is drawn on every rendered map). */
+async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
+  const key = `${z}/${x}/${y}`;
+  const cached = tileCache.get(key);
+  if (cached) return cached;
+  const promise = (async () => {
+    const sub = TILE_SUBDOMAINS[(x + y) % TILE_SUBDOMAINS.length];
+    const res = await fetch(
+      `https://${sub}.basemaps.cartocdn.com/light_all/${key}.png`,
+      {
+        headers: { "User-Agent": USER_AGENT, Accept: "image/png" },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (!res.ok) throw new Error(`tile ${key}: HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  })();
+  tileCache.set(key, promise);
+  if (tileCache.size > TILE_CACHE_MAX) {
+    const oldest = tileCache.keys().next().value;
+    if (oldest !== undefined) tileCache.delete(oldest);
+  }
+  try {
+    return await promise;
+  } catch (err) {
+    tileCache.delete(key);
+    throw err;
+  }
+}
+
+/** Web-Mercator world pixel position at zoom z (256px tiles) — the same
+ * projection Leaflet uses, so the route lands exactly where the editor's
+ * map draws it. */
+function worldX(lon: number, z: number): number {
+  return ((lon + 180) / 360) * TILE * 2 ** z;
+}
+
+function worldY(lat: number, z: number): number {
+  const rad = (lat * Math.PI) / 180;
+  return (
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) *
+    TILE *
+    2 ** z
+  );
+}
+
+/** The highest zoom at which the route bounds fit the canvas with padding. */
+function pickZoom(
+  minLon: number,
+  maxLon: number,
+  minLat: number,
+  maxLat: number,
+): number {
+  for (let z = 19; z >= 2; z--) {
+    const w = worldX(maxLon, z) - worldX(minLon, z);
+    const h = worldY(minLat, z) - worldY(maxLat, z);
+    if (w <= ROUTE_MAP_WIDTH - 2 * PAD && h <= ROUTE_MAP_HEIGHT - 2 * PAD) {
+      return z;
+    }
+  }
+  return 2;
+}
+
+/** The trip's drawable geometry: outbound + return polylines ([lat, lng])
+ * and the geocoded stops, or null when there is nothing to draw. Trips
+ * without saved route geometry fall back to straight lines between stops. */
+function tripGeometry(e: MileageExpense): {
+  outbound: [number, number][];
+  ret: [number, number][];
+  stops: { lat: number; lng: number }[];
+} | null {
   const stops = geocodedLocations(e.locations);
-  // Outbound: saved geometry when present, else straight lines between the
-  // stops (in trip order).
   const outbound: [number, number][] =
     e.route.coords.length >= 2 ? e.route.coords : [];
   let ret: [number, number][] =
@@ -51,68 +125,190 @@ export async function renderRouteMap(
       [first.lat, first.lng],
     ];
   }
-  const all = [...outbound, ...ret];
-  if (all.length === 0) return null;
+  if (outbound.length === 0 && ret.length === 0) return null;
+  return { outbound, ret, stops };
+}
 
-  // Equirectangular projection centered on the trip's bounding box; the
-  // longitude span is scaled by cos(lat) so the shape isn't stretched.
-  const lats = all.map((p) => p[0]);
-  const lngs = all.map((p) => p[1]);
+/**
+ * Render the trip map: real tiles when reachable, schematic otherwise.
+ * Never throws — a tile failure falls back to the plain drawing.
+ */
+export async function renderRouteMap(
+  e: MileageExpense,
+  opts: { tileFetcher?: TileFetcher } = {},
+): Promise<Buffer | null> {
+  const geo = tripGeometry(e);
+  if (!geo) return null;
+  const fetcher = opts.tileFetcher ?? fetchTile;
+  try {
+    return await renderTiled(geo, fetcher);
+  } catch (err) {
+    console.warn(
+      "[route-map] tile render failed, falling back to schematic: %s",
+      err instanceof Error ? err.message : String(err),
+    );
+    return renderSchematic(geo);
+  }
+}
+
+/** The real map: Carto light tiles with the route and markers on top. */
+async function renderTiled(
+  geo: NonNullable<ReturnType<typeof tripGeometry>>,
+  fetcher: TileFetcher,
+): Promise<Buffer> {
+  const { outbound, ret } = geo;
+  const lons = [...outbound, ...ret].map((p) => p[1]);
+  const lats = [...outbound, ...ret].map((p) => p[0]);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
+
+  const z = pickZoom(minLon, maxLon, minLat, maxLat);
+  const midLon = (minLon + maxLon) / 2;
   const midLat = (minLat + maxLat) / 2;
-  const midLng = (minLng + maxLng) / 2;
+  const ox = worldX(midLon, z) - ROUTE_MAP_WIDTH / 2;
+  const oy = worldY(midLat, z) - ROUTE_MAP_HEIGHT / 2;
+
+  const minTx = Math.floor(ox / TILE);
+  const maxTx = Math.floor((ox + ROUTE_MAP_WIDTH) / TILE);
+  const minTy = Math.floor(oy / TILE);
+  const maxTy = Math.floor((oy + ROUTE_MAP_HEIGHT) / TILE);
+
+  const tiles: { tx: number; ty: number; href: string }[] = [];
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      const buf = await fetcher(z, tx, ty);
+      const href = `data:image/png;base64,${buf.toString("base64")}`;
+      tiles.push({ tx, ty, href });
+    }
+  }
+
+  const px = (lon: number, lat: number) => ({
+    x: worldX(lon, z) - ox,
+    y: worldY(lat, z) - oy,
+  });
+  const pts = (line: [number, number][]) =>
+    line
+      .map(([la, ln]) => {
+        const p = px(ln, la);
+        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      })
+      .join(" ");
+
+  // Same visual language as the editor: gray dashed return under a
+  // white-cased blue outbound line, numbered 20px bubbles on top.
+  const routeSvg = `
+  ${tiles
+    .map(
+      (t) =>
+        `<image href="${t.href}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
+    )
+    .join("")}
+  ${
+    ret.length >= 2
+      ? `<polyline points="${pts(ret)}" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="6,6" stroke-linecap="round" stroke-linejoin="round"/>`
+      : ""
+  }
+  <polyline points="${pts(outbound)}" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="${pts(outbound)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  ${markersSvg(geo.stops, px)}`;
+
+  return renderSvg(wrapSvg(routeSvg));
+}
+
+/** The schematic fallback: the same route over a plain background. */
+function renderSchematic(
+  geo: NonNullable<ReturnType<typeof tripGeometry>>,
+): Buffer {
+  const { outbound, ret, stops } = geo;
+  const all = [...outbound, ...ret];
+  const lons = all.map((p) => p[1]);
+  const lats = all.map((p) => p[0]);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const midLat = (minLat + maxLat) / 2;
+  const midLon = (minLon + maxLon) / 2;
   const cos = Math.cos((midLat * Math.PI) / 180) || 1e-9;
-  const spanX = Math.max(maxLng - minLng, 1e-9) * cos;
+  const spanX = Math.max(maxLon - minLon, 1e-9) * cos;
   const spanY = Math.max(maxLat - minLat, 1e-9);
-  const scale = Math.min((WIDTH - 2 * PAD) / spanX, (HEIGHT - 2 * PAD) / spanY);
-  const x = (lng: number) => WIDTH / 2 + (lng - midLng) * cos * scale;
-  const y = (lat: number) => HEIGHT / 2 - (lat - midLat) * scale;
+  const scale = Math.min(
+    (ROUTE_MAP_WIDTH - 2 * PAD) / spanX,
+    (ROUTE_MAP_HEIGHT - 2 * PAD) / spanY,
+  );
+  const px = (lon: number, lat: number) => ({
+    x: ROUTE_MAP_WIDTH / 2 + (lon - midLon) * cos * scale,
+    y: ROUTE_MAP_HEIGHT / 2 - (lat - midLat) * scale,
+  });
+  const pts = (line: [number, number][]) =>
+    line
+      .map(([la, ln]) => {
+        const p = px(ln, la);
+        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      })
+      .join(" ");
 
-  const points = (line: [number, number][]) =>
-    line.map(([la, ln]) => `${x(ln).toFixed(1)},${y(la).toFixed(1)}`).join(" ");
+  const routeSvg = `
+  ${
+    ret.length >= 2
+      ? `<polyline points="${pts(ret)}" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="6,6" stroke-linecap="round" stroke-linejoin="round"/>`
+      : ""
+  }
+  <polyline points="${pts(outbound)}" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="${pts(outbound)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  ${markersSvg(stops, px)}`;
 
-  const markers = stops
+  return renderSvg(wrapSvg(routeSvg, { background: "#f8fafc", border: true }));
+}
+
+/** Numbered stop bubbles matching the editor's .map-stop-bubble style. */
+function markersSvg(
+  stops: { lat: number; lng: number }[],
+  px: (lon: number, lat: number) => { x: number; y: number },
+): string {
+  return stops
     .map((s, i) => {
-      const cx = x(s.lng).toFixed(1);
-      const cy = y(s.lat).toFixed(1);
+      const p = px(s.lng, s.lat);
+      const cx = p.x.toFixed(1);
+      const cy = p.y.toFixed(1);
       const label = i === 0 ? "S" : String(i);
-      // Baseline offset (~half the 11px cap height) centers the label.
+      // Baseline offset (~half the 10px cap height) centers the label.
       return `<g>
-        <circle cx="${cx}" cy="${cy}" r="${MARKER_R}" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
-        <text x="${cx}" y="${Number(cy) + 4}" font-family="${FONT}" font-size="11" font-weight="700" text-anchor="middle" fill="#1d4ed8">${label}</text>
+        <circle cx="${cx}" cy="${cy}" r="10" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+        <text x="${cx}" y="${(p.y + 3.5).toFixed(1)}" font-family="${FONT}" font-size="10" font-weight="700" text-anchor="middle" fill="#2563eb">${label}</text>
       </g>`;
     })
     .join("");
+}
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="#f8fafc"/>
-  <rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>
-  <polyline points="${points(outbound)}" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  ${
-    ret.length >= 2
-      ? `<polyline points="${points(ret)}" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="6,5" stroke-linecap="round" stroke-linejoin="round"/>`
-      : ""
-  }
-  ${markers}
+/** The SVG shell: light background, optional border, and the required
+ * basemap attribution (Carto's tile terms). */
+function wrapSvg(
+  inner: string,
+  opts: { background?: string; border?: boolean } = {},
+): string {
+  const background = opts.background ?? "#f8fafc";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${ROUTE_MAP_WIDTH}" height="${ROUTE_MAP_HEIGHT}" viewBox="0 0 ${ROUTE_MAP_WIDTH} ${ROUTE_MAP_HEIGHT}">
+  <rect width="${ROUTE_MAP_WIDTH}" height="${ROUTE_MAP_HEIGHT}" fill="${background}"/>
+  ${opts.border ? `<rect x="0.5" y="0.5" width="${ROUTE_MAP_WIDTH - 1}" height="${ROUTE_MAP_HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>` : ""}
+  ${inner}
+  <text x="8" y="${ROUTE_MAP_HEIGHT - 8}" font-family="${FONT}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
 </svg>`;
+}
 
-  try {
-    type FontOptions = ResvgRenderOptions["font"] & {
-      fontBuffers?: Buffer[];
-    };
-    const options: ResvgRenderOptions & { font?: FontOptions } = {
-      fitTo: { mode: "original" },
-      font: {
-        loadSystemFonts: true,
-        fontBuffers: [fontBytes],
-        defaultFontFamily: FONT,
-      },
-    };
-    return Buffer.from(new Resvg(svg, options).render().asPng());
-  } catch {
-    return null;
-  }
+function renderSvg(svg: string): Buffer {
+  type FontOptions = ResvgRenderOptions["font"] & {
+    fontBuffers?: Buffer[];
+  };
+  const options: ResvgRenderOptions & { font?: FontOptions } = {
+    fitTo: { mode: "original" },
+    font: {
+      loadSystemFonts: true,
+      fontBuffers: [fontBytes],
+      defaultFontFamily: FONT,
+    },
+  };
+  return Buffer.from(new Resvg(svg, options).render().asPng());
 }
