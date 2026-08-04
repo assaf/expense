@@ -189,15 +189,22 @@ async function bootstrapUser(): Promise<User> {
         createdAt: now,
       },
     }),
-    prisma.category.createMany({
-      data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
-      skipDuplicates: true,
-    }),
+    seedDefaultCategories(accountId),
   ]);
   return { id: userId, accountId, email, createdAt: now };
 }
 
 // --- Accounts & Users ------------------------------------------------------
+
+/** Seed a new account with the IRS Schedule C default categories. */
+function seedDefaultCategories(
+  accountId: string,
+): Prisma.PrismaPromise<{ count: number }> {
+  return prisma.category.createMany({
+    data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
+    skipDuplicates: true,
+  });
+}
 
 export async function readAccount(id: string): Promise<Account | undefined> {
   const row = await prisma.account.findUnique({ where: { id } });
@@ -221,10 +228,7 @@ export async function createAccount(name: string): Promise<Account> {
   // receipts can be categorized immediately.
   await prisma.$transaction([
     prisma.account.create({ data: account }),
-    prisma.category.createMany({
-      data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId: account.id })),
-      skipDuplicates: true,
-    }),
+    seedDefaultCategories(account.id),
   ]);
   return account;
 }
@@ -407,6 +411,22 @@ export async function readMerchantCategories(
   const byMerchant = new Map<string, string>();
   for (const [key, value] of latest) byMerchant.set(key, value.category);
   return byMerchant;
+}
+
+/**
+ * Category names + prior merchant categories — the extraction context shared
+ * by the draft-image and inbound-email pipelines. Loading both up front is
+ * one round-trip; the merchant's previous category (normalized name match)
+ * is reused instead of re-guessed.
+ */
+export async function readExtractionContext(
+  accountId: string,
+): Promise<{ categories: string[]; merchantCategories: Map<string, string> }> {
+  const [categories, merchantCategories] = await Promise.all([
+    readCategories(accountId).then((cs) => cs.map((c) => c.name)),
+    readMerchantCategories(accountId),
+  ]);
+  return { categories, merchantCategories };
 }
 
 // --- Reports & Categories --------------------------------------------------

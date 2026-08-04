@@ -1,14 +1,13 @@
+import { isPdf } from "~/lib/file-types";
 import {
   deleteImage,
-  isPdfUpload,
-  pdfImageName,
   readImage,
   readUploadedFile,
   renameImageToConvention,
   saveImage,
 } from "~/lib/images.server";
 import { resizeToJpeg, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
-import { renderPdfToPng } from "~/lib/receipt-ocr.server";
+import { rasterizePdfUpload } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -96,9 +95,12 @@ export async function action({ request, params }: Route.ActionArgs) {
     let saveBuffer = buffer;
     let saveMime = mime;
     let saveName = originalName;
-    if (isPdfUpload(uploaded)) {
+    if (isPdf(uploaded)) {
       try {
-        saveBuffer = await renderPdfToPng(buffer);
+        const pdf = await rasterizePdfUpload(uploaded);
+        saveBuffer = pdf.buffer;
+        saveMime = pdf.mime;
+        saveName = pdf.originalName;
       } catch (err) {
         console.warn("[image-upload] PDF render failed:", err);
         return Response.json(
@@ -106,8 +108,6 @@ export async function action({ request, params }: Route.ActionArgs) {
           { status: 400 },
         );
       }
-      saveMime = "image/png";
-      saveName = pdfImageName(originalName);
     }
     const { filename, mime: storedMime } = await saveImage(
       user.accountId,

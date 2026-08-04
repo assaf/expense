@@ -68,7 +68,7 @@ describe.skipIf(!process.env.RUN_OCR_TESTS)(
     it("OCRs a pdfjs-rasterized receipt PDF with tesseract", async () => {
       const pdf = await makePdf("SMOKE RECEIPT TOTAL $12.34", 40);
       const png = await renderPdfToPng(pdf);
-      const text = (await ocrImage(png, "image/png")).toUpperCase();
+      const text = (await ocrImage(png)).toUpperCase();
       const norm = text.replace(/[^A-Z0-9]/g, "");
       expect(norm).toContain("SMOKE");
       expect(norm).toContain("RECEIPT");

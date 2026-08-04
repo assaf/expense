@@ -27,6 +27,7 @@ import {
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
+import { SITE_URL } from "~/lib/seo-content";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
 import {
@@ -155,7 +156,6 @@ function matchesSearch(e: ReturnType<typeof toListItem>, query: string) {
   return words.every((word) => haystack.includes(word));
 }
 
-const SITE_URL = "https://expense.labnotes.org";
 const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 
 export function meta({ loaderData }: Route.MetaArgs) {

@@ -1,14 +1,13 @@
+import { isPdf } from "~/lib/file-types";
 import {
   deleteImage,
-  isPdfUpload,
-  pdfImageName,
   readImage,
   readUploadedFile,
   saveImage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import { readCategories, readMerchantCategories } from "~/lib/store.server";
-import { extractFromImage, renderPdfToPng } from "~/lib/receipt-ocr.server";
+import { readExtractionContext } from "~/lib/store.server";
+import { extractFromImage, rasterizePdfUpload } from "~/lib/receipt-ocr.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
@@ -58,10 +57,10 @@ export async function action({ request }: Route.ActionArgs) {
     // rendering — OCR never blocks it, so a slow scan or OCR timeout can't
     // prevent the upload (the editor runs a separate draft-ocr request for
     // the fields). Only an unreadable PDF fails the upload.
-    if (isPdfUpload(uploaded)) {
-      let png: Buffer;
+    if (isPdf(uploaded)) {
+      let pdf: { buffer: Buffer; mime: "image/png"; originalName: string };
       try {
-        png = await renderPdfToPng(buffer);
+        pdf = await rasterizePdfUpload(uploaded);
       } catch (err) {
         console.warn("[draft-upload] PDF render failed:", err);
         return Response.json(
@@ -69,18 +68,17 @@ export async function action({ request }: Route.ActionArgs) {
           { status: 400 },
         );
       }
-      const storedName = pdfImageName(originalName);
       const saved = await saveImage(
         user.accountId,
-        png,
-        "image/png",
-        storedName,
+        pdf.buffer,
+        pdf.mime,
+        pdf.originalName,
       );
       return Response.json({
         ok: true,
         draftKey: saved.filename,
         mime: saved.mime,
-        originalName: storedName,
+        originalName: pdf.originalName,
       });
     }
 
@@ -156,10 +154,8 @@ async function extractFromUploadedImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ merchant: string; amount: string; category: string }> {
-  const [categories, merchantCategories] = await Promise.all([
-    readCategories(accountId).then((cs) => cs.map((c) => c.name)),
-    readMerchantCategories(accountId),
-  ]);
+  const { categories, merchantCategories } =
+    await readExtractionContext(accountId);
   const { result } = await extractFromImage({ buffer, mime, categories });
   return {
     merchant: result.merchant,

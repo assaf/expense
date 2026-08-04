@@ -4,7 +4,9 @@ import sharp from "sharp";
 import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
+import { isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
+import { pdfImageName } from "~/lib/images.server";
 import { RECEIPT_OCR_MODE } from "~/lib/env";
 import { extractReceipt, isVisionUnsupportedError } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
@@ -36,7 +38,7 @@ globalThis.pdfjsWorker = pdfjsWorker;
  */
 
 /** Normalize an image for OCR: decode, flatten alpha, cap width at 3000px. */
-async function normalizeImage(buffer: Buffer, _mime: string): Promise<Buffer> {
+async function normalizeImage(buffer: Buffer): Promise<Buffer> {
   const resized = await resizeIfWider(buffer, 3000);
   if (resized === null) return buffer; // not decodable by sharp — pass through
   return sharp(resized)
@@ -106,8 +108,8 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
  * OCR an image with tesseract.js. The wasm core comes from the local
  * tesseract.js-core package; traineddata downloads from a CDN at runtime.
  */
-export async function ocrImage(buffer: Buffer, mime: string): Promise<string> {
-  const png = await normalizeImage(buffer, mime);
+export async function ocrImage(buffer: Buffer): Promise<string> {
+  const png = await normalizeImage(buffer);
   const worker = await createWorker(["eng"], 1, {
     workerPath: TESSERACT_NODE_WORKER,
     langPath: "https://tessdata.projectnaptha.com/4.0.0",
@@ -152,10 +154,7 @@ const pdfParams = {
 
 /** Detect a PDF by mime or magic bytes — covers mislabeled uploads. */
 function isPdfInput(buffer: Buffer, mime: string): boolean {
-  return (
-    mime === "application/pdf" ||
-    (buffer.length >= 5 && buffer.subarray(0, 5).toString("latin1") === "%PDF-")
-  );
+  return isPdf({ buffer, mime });
 }
 
 /** Extract the text layer of a PDF (up to the first 4 pages). */
@@ -234,6 +233,24 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Rasterize an uploaded PDF to a PNG for storage and rename it to *.png
+ * (`receipt.pdf` → `receipt.png`). Throws when the PDF can't be rendered —
+ * callers turn that into their own "couldn't read the PDF" response (the
+ * draft and editor routes differ only in their log tag).
+ */
+export async function rasterizePdfUpload(uploaded: {
+  buffer: Buffer;
+  originalName: string;
+}): Promise<{ buffer: Buffer; mime: "image/png"; originalName: string }> {
+  const buffer = await renderPdfToPng(uploaded.buffer);
+  return {
+    buffer,
+    mime: "image/png",
+    originalName: pdfImageName(uploaded.originalName),
+  };
+}
+
+/**
  * Extract structured receipt data from an image attachment. Tries DeepSeek
  * vision first (RECEIPT_OCR_MODE !== "tesseract"); on a vision-unsupported
  * error (or when forced to tesseract) falls back to local OCR + text parsing.
@@ -295,7 +312,7 @@ export async function extractFromImage(input: {
     }
   }
   if (!result) {
-    text = await ocrImage(stored.buffer, stored.mime);
+    text = await ocrImage(stored.buffer);
     result = await extractReceipt({
       text,
       categories: input.categories,

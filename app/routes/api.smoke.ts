@@ -70,7 +70,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       return fail(`PDF rasterization produced a bad PNG (${png.length} bytes)`);
     }
 
-    const ocrText = (await ocrImage(png, "image/png")).toUpperCase();
+    const ocrText = (await ocrImage(png)).toUpperCase();
     const norm = ocrText.replace(/[^A-Z0-9]/g, "");
     if (
       !norm.includes("SMOKE") ||

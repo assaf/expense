@@ -12,10 +12,10 @@ import {
   extractEmailAddress,
   scoreAttachment,
   pickReceiptAttachment,
-  matchCategory,
   isPrivateHost,
   fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
+import { matchCategory } from "~/lib/receipt-ai.server";
 import type { WebhookHeaders } from "~/lib/inbound-email.server";
 import type {
   InboundDeps,
@@ -144,9 +144,6 @@ function fakeDeps(): InboundDeps & {
       text: "MERCHANT: Photo Shop\nTOTAL: 5.00\nCATEGORY: office supplies",
       stored: { buffer: TINY_PNG, mime: "image/png" },
     }),
-    extractPdfText: async () =>
-      "MERCHANT: Amazon\nTOTAL: 9.99\nCATEGORY: office supplies",
-    renderPdfToPng: async () => TINY_PNG,
     renderReceiptImage,
     renderEmailImage: async () => TINY_PNG,
     renderTextEmail: async () => TINY_PNG,
@@ -1073,6 +1070,16 @@ describe("processInboundEvent (attachments)", () => {
         content_disposition: "inline",
       }),
     ];
+    // The pipeline delegates PDF handling to extractFromImage (which
+    // rasterizes the PDF and prefers its text layer); the fake mirrors
+    // that: a PDF input yields the text-layer extraction + a PNG to store.
+    deps.extractFromImage = async () => ({
+      result: fakeExtract(
+        "MERCHANT: Amazon\nTOTAL: 9.99\nCATEGORY: office supplies",
+      ),
+      text: "MERCHANT: Amazon\nTOTAL: 9.99\nCATEGORY: office supplies",
+      stored: { buffer: TINY_PNG, mime: "image/png" },
+    });
     const result = await processInboundEvent(
       eventData({ email_id: "email-pdf", subject: "Fwd: Invoice" }),
       deps,

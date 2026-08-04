@@ -40,6 +40,7 @@ export {
   deleteExpense,
   readPriorMerchants,
   readMerchantCategories,
+  readExtractionContext,
   readReports,
   readReportCounts,
   readCategoryCounts,

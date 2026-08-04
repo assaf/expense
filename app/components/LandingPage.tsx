@@ -7,6 +7,7 @@ import {
   Tags,
 } from "lucide-react";
 import { cn } from "~/lib/cn";
+import { SITE_URL } from "~/lib/seo-content";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
@@ -14,7 +15,6 @@ import { Button } from "~/components/ui/Button";
 const GITHUB = "https://github.com/assaf/expense";
 const BLOG = "https://labnotes.org";
 const MASTODON = "https://mas.to/@assaf";
-const SITE_URL = "https://expense.labnotes.org";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
 const SOFTWARE_SCHEMA = {

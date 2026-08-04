@@ -12,28 +12,23 @@ import {
   type RenderTextEmailOptions,
 } from "~/lib/email-render.server";
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
+import { isImage, isPdf } from "~/lib/file-types";
 import {
   classifyReceiptAttachment,
   extractReceipt,
-  matchCategory,
   resolveCategory,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
   ExtractionResult,
 } from "~/lib/receipt-ai.server";
-import {
-  extractFromImage,
-  extractPdfText,
-  renderPdfToPng,
-} from "~/lib/receipt-ocr.server";
+import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { escapeHtml } from "~/lib/escape";
 import { sendReplyEmail } from "~/lib/reply.server";
 import type { ReplyInput } from "~/lib/reply.server";
 import {
   findAccountByInboundSender,
-  readCategories,
-  readMerchantCategories,
+  readExtractionContext,
   readInboundEmail,
   upsertExpense,
   upsertInboundEmail,
@@ -142,8 +137,6 @@ export interface InboundDeps {
     text: string;
     stored: { buffer: Buffer; mime: string };
   }>;
-  extractPdfText(buffer: Buffer): Promise<string>;
-  renderPdfToPng(buffer: Buffer): Promise<Buffer>;
   renderReceiptImage(
     text: string,
     opts?: { subject?: string },
@@ -323,36 +316,23 @@ export function extractEmailAddress(addr: string): string {
 
 // --- Attachment selection ----------------------------------------------------
 
-/** Content-type/filename matchers shared by the scoring and the pipeline.
- * The pipeline also operates on raw (contentType, filename) pairs, so the
- * checks live on strings and the AttachmentMeta variants are thin wrappers. */
-function isPdfType(contentType: string, filename: string): boolean {
-  return contentType.toLowerCase().includes("pdf") || /\\.pdf$/i.test(filename);
+/** AttachmentMeta-level wrappers over the shared file-type checks. */
+function isPdfMeta(meta: AttachmentMeta): boolean {
+  return isPdf({ mime: meta.content_type ?? "", originalName: meta.filename });
 }
 
-function isImageType(contentType: string, filename: string): boolean {
+function isImageMeta(meta: AttachmentMeta): boolean {
+  return isImage({
+    mime: meta.content_type ?? "",
+    originalName: meta.filename,
+  });
+}
+
+function isEmlMeta(meta: AttachmentMeta): boolean {
   return (
-    contentType.toLowerCase().startsWith("image/") ||
-    /\\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?|avif)$/i.test(filename)
+    (meta.content_type ?? "").toLowerCase() === "message/rfc822" ||
+    /\.eml$/i.test(meta.filename)
   );
-}
-
-function isEmlType(contentType: string, filename: string): boolean {
-  return (
-    contentType.toLowerCase() === "message/rfc822" || /\\.eml$/i.test(filename)
-  );
-}
-
-function isPdf(meta: AttachmentMeta): boolean {
-  return isPdfType(meta.content_type ?? "", meta.filename);
-}
-
-function isImage(meta: AttachmentMeta): boolean {
-  return isImageType(meta.content_type ?? "", meta.filename);
-}
-
-function isEml(meta: AttachmentMeta): boolean {
-  return isEmlType(meta.content_type ?? "", meta.filename);
 }
 
 /**
@@ -362,8 +342,8 @@ function isEml(meta: AttachmentMeta): boolean {
  */
 export function scoreAttachment(meta: AttachmentMeta, html: string): number {
   let score = 0;
-  if (isPdf(meta)) score += 2;
-  else if (isImage(meta)) score += 1;
+  if (isPdfMeta(meta)) score += 2;
+  else if (isImageMeta(meta)) score += 1;
   else return -Infinity;
 
   if (meta.content_disposition?.toLowerCase() === "attachment") score += 1;
@@ -384,7 +364,7 @@ export function scoreAttachment(meta: AttachmentMeta, html: string): number {
   }
 
   const size = meta.size ?? 0;
-  if (isImage(meta) && size > 0) {
+  if (isImageMeta(meta) && size > 0) {
     if (size < 20_000)
       score -= 3; // logo / signature territory
     else if (size < 50_000) score -= 1;
@@ -474,8 +454,6 @@ const defaultDeps: InboundDeps = {
   classifyAttachment: classifyReceiptAttachment,
   extractReceipt,
   extractFromImage,
-  extractPdfText,
-  renderPdfToPng,
   renderReceiptImage,
   renderEmailImage,
   renderTextEmail,
@@ -573,7 +551,7 @@ export async function processInboundEvent(
     ]);
 
     // Original email date: forwarded-quote → .eml → received header.
-    const eml = attachments.find(isEml);
+    const eml = attachments.find(isEmlMeta);
     let emlText: string | undefined;
     if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
       emlText = (await deps.downloadAttachment(eml))
@@ -608,8 +586,8 @@ export async function processInboundEvent(
         }))
         .filter(
           (c) =>
-            isPdfType(c.contentType, c.filename) ||
-            isImageType(c.contentType, c.filename),
+            isPdf({ mime: c.contentType, originalName: c.filename }) ||
+            isImage({ mime: c.contentType, originalName: c.filename }),
         );
       const chosen = await deps.classifyAttachment(candidates);
       if (chosen !== null && attachments[chosen]) {
@@ -635,10 +613,9 @@ export async function processInboundEvent(
     }
 
     // Extract receipt data.
-    const [categories, merchantCategories] = await Promise.all([
-      readCategories(account.id).then((cs) => cs.map((c) => c.name)),
-      readMerchantCategories(account.id),
-    ]);
+    const { categories, merchantCategories } = await readExtractionContext(
+      account.id,
+    );
     let extraction: ExtractionResult;
     let receiptImage: Buffer | null = null;
     let imageMime: string;
@@ -647,37 +624,25 @@ export async function processInboundEvent(
 
     if (source.kind === "attachment") {
       const { buffer, contentType, filename } = source;
-      if (isPdfType(contentType, filename)) {
-        const pdfText = await deps.extractPdfText(buffer);
-        const png = await deps.renderPdfToPng(buffer);
-        receiptImage = png;
-        imageMime = "image/png";
-        originalName = filename.replace(/\.pdf$/i, ".png");
-        extraction =
-          pdfText.trim().length >= 20
-            ? await deps.extractReceipt({ text: pdfText, categories })
-            : (
-                await deps.extractFromImage({
-                  buffer: png,
-                  mime: "image/png",
-                  categories,
-                })
-              ).result;
-      } else {
-        const ocr = await deps.extractFromImage({
-          buffer,
-          mime: contentType || "application/octet-stream",
-          categories,
-        });
-        extraction = ocr.result;
-        receiptImage = ocr.stored.buffer;
-        imageMime = ocr.stored.mime;
-        originalName =
-          imageMime === "image/png" &&
-          /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
-            ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
-            : filename;
-      }
+      // extractFromImage handles PDFs (rasterizes to PNG and prefers the
+      // text layer) and normalizes other images to a browser-displayable
+      // form; `stored` is the bytes saved as the receipt image.
+      const ocr = await deps.extractFromImage({
+        buffer,
+        mime: contentType || "application/octet-stream",
+        categories,
+      });
+      extraction = ocr.result;
+      receiptImage = ocr.stored.buffer;
+      imageMime = ocr.stored.mime;
+      // The stored bytes are always displayable: PDFs and HEIC/BMP/TIFF
+      // inputs come back as PNG, so the stored name gets a .png extension.
+      originalName = /\.pdf$/i.test(filename)
+        ? filename.replace(/\.pdf$/i, ".png")
+        : imageMime === "image/png" &&
+            /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
+          ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
+          : filename;
     } else {
       const bodyText = stripForwardedText(source.text).slice(0, 20_000);
       // Render the actual email with headless Chromium — the HTML part when
@@ -953,6 +918,3 @@ export async function fetchRemoteImageImpl(
   }
   return null;
 }
-
-/** Best-matching existing category name, or "" when nothing matches. */
-export { matchCategory };

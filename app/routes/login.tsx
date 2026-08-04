@@ -10,6 +10,7 @@ import {
   joinAccountWithInviteCode,
   login,
 } from "~/lib/auth.server";
+import { SITE_URL } from "~/lib/seo-content";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/login";
 
@@ -22,8 +23,6 @@ function safeNext(raw: string | null): string {
   if (raw.startsWith("/login") || raw.includes(".data")) return "/";
   return raw;
 }
-
-const SITE_URL = "https://expense.labnotes.org";
 
 export function meta(): Route.MetaDescriptors {
   return [
