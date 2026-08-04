@@ -286,9 +286,11 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   every DB call 500s with `(EMAXCONNSESSION) max clients reached in session
 mode`. `app/lib/prisma.server.ts` keeps the per-instance pool small
   (`max: 2`, 4s idle release) and `findUserById` caches lookups for 30s to
-  cut auth query churn — if 500s reappear under load, raise the pooler's
-  pool_size in the Supabase dashboard (Database → Connection pooling) and/or
-  loosen `max`.
+  cut auth query churn. The pooler's pool_size is capped at **80% of the
+  database's max_connections** (48 on the current 60-connection compute —
+  the dashboard warns if you exceed it); the recommended setting is 40
+  (Database → Connection pooling → session pooler). Scaling compute raises
+  max_connections and the ceiling with it.
 
 - **Auth & accounts**: multi-user access control with account-level sharing.
   Users live in Postgres (`users`, `accounts`); every expense, report,
