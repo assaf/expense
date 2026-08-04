@@ -2,6 +2,7 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { ulid } from "ulid";
 import { extractPdfText } from "~/lib/receipt-ocr.server";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
@@ -198,6 +199,43 @@ describe("Export", () => {
       expect(imageOps).toBeGreaterThan(0);
     } finally {
       await task.destroy();
+    }
+  });
+
+  it("includes uncategorized expenses under 'No category'", async () => {
+    // Seed a receipt in the "2026 Test" report with no category — the PDF
+    // must include it rather than drop it, under a "No category" heading.
+    const id = ulid();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-05-20",
+        report: "2026 Test",
+        category: "",
+        description: "Uncategorized lunch",
+        amount: "13.37",
+        merchant: "Random Diner",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-05-20T00:00:00.000Z",
+        updatedAt: "2026-05-20T00:00:00.000Z",
+      },
+    });
+    try {
+      const res = await page
+        .context()
+        .request.get("/export/report/2026%20Test.pdf");
+      expect(res.status()).toBe(200);
+      const text = await extractPdfText(Buffer.from(await res.body()));
+      expect(text).toContain("No category");
+      expect(text).toContain("Random Diner");
+      expect(text).toContain("$13.37");
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
     }
   });
 

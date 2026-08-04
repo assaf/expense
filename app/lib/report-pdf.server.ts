@@ -48,10 +48,11 @@ export async function buildReportPdf(
   doc.moveDown(1);
   doc.fillColor("#111827");
 
-  // Group by category, chronological within each group.
-  const categories = uniqueSorted(
-    inReport.map((e) => e.category).filter(Boolean),
-  );
+  // Group by category (expenses with no category under "No category"),
+  // chronological within each group — every expense in the report appears.
+  const NO_CATEGORY = "No category";
+  const categoryOf = (e: Expense) => e.category || NO_CATEGORY;
+  const categories = uniqueSorted(inReport.map(categoryOf));
 
   // Fixed table columns: Date | Amount | Merchant | Description, with gutters.
   const dateX = 50,
@@ -74,7 +75,7 @@ export async function buildReportPdf(
       .font("Helvetica-Bold")
       .text(category, 50, doc.y, { width: 512, align: "center" });
     doc.moveDown(0.25);
-    const inCat = inReport.filter((e) => e.category === category);
+    const inCat = inReport.filter((e) => categoryOf(e) === category);
     for (const e of inCat) {
       const isMileage = e.type === "mileage";
       let merchant: string;
