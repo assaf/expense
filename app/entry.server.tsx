@@ -5,20 +5,9 @@ import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
 import { captureError } from "~/lib/errors.server";
 
-// Sentry SDK init for the server — production builds only, and only when
-// SENTRY_DSN is configured (so tests and unconfigured deploys skip it).
-if (import.meta.env.PROD && process.env.SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.SENTRY_DSN,
-    environment: "production",
-    enableLogs: true,
-    integrations: [
-      // console.error/warn/info also land in Sentry (alongside Vercel logs).
-      Sentry.consoleLoggingIntegration({ levels: ["error", "warn", "info"] }),
-    ],
-    tracesSampleRate: 1.0,
-  });
-}
+// Sentry SDK init lives in instrument.server.mjs (loaded via NODE_OPTIONS
+// --import in the start script, so it runs before this module). This entry
+// only wires the request wrapper + error capture.
 
 export default Sentry.wrapSentryHandleRequest(
   async (
