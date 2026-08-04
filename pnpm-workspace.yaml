@@ -5,8 +5,11 @@ allowBuilds:
   "@prisma/engines": true
   prisma: true
   tesseract.js: true
-  "@sentry/cli": set this to true or false
-  "@sentry/node-cpu-profiler": set this to true or false
+  # Not needed: @sentry/cli only downloads the sentry-cli binary for source-map
+  # upload via the vite plugin (we don't use it); node-cpu-profiler is only
+  # needed for nodeProfilingIntegration (we don't enable it).
+  "@sentry/cli": false
+  "@sentry/node-cpu-profiler": false
 
 onlyBuiltDependencies:
   - "@tailwindcss/oxide"
