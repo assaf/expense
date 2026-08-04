@@ -61,6 +61,11 @@ export {
   listInboundSenders,
   addInboundSender,
   removeInboundSender,
+  createApiToken,
+  findApiTokenByHash,
+  listApiTokens,
+  revokeApiToken,
+  touchApiToken,
 } from "~/lib/database";
 
 /** Build a new expense shell with sensible defaults. */

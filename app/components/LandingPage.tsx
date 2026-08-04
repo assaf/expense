@@ -1,5 +1,6 @@
 import {
   ArrowUpRight,
+  Bot,
   FolderOpen,
   MapPinned,
   ReceiptText,
@@ -95,6 +96,30 @@ const STEPS = [
   {
     title: "Export at tax time",
     body: "Get a PDF per report with the receipts attached, or a ZIP of everything, and hand it to your accountant.",
+  },
+];
+
+/** The four "bring your own assistant" examples on the landing page. */
+const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
+  {
+    icon: ReceiptText,
+    title: "Capture a receipt from the chat",
+    body: "Drop a receipt photo or PDF into the conversation — it's OCR'd, categorized from your own history, and filed. No app to open.",
+  },
+  {
+    icon: Tags,
+    title: "Ask about your spending",
+    body: "\u201CHow much did I spend on flights last quarter?\u201D — the exact total, straight from your data, not a guess.",
+  },
+  {
+    icon: FolderOpen,
+    title: "Build reports on command",
+    body: "\u201CMove all unreported June expenses into the Q2 report and export the PDF.\u201D One sentence, done.",
+  },
+  {
+    icon: MapPinned,
+    title: "Log a drive in plain English",
+    body: "\u201CLog the drive home from the office on Tuesday.\u201D Geocoded, routed, and priced at the year's IRS rate.",
   },
 ];
 
@@ -235,6 +260,48 @@ export default function LandingPage() {
                 category.
               </figcaption>
             </figure>
+          </div>
+        </section>
+
+        {/* AI assistants */}
+        <section
+          id="ai-assistants"
+          className="mx-auto max-w-6xl px-4 pb-20 sm:px-6"
+        >
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-12">
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
+              <Bot className="h-4 w-4" /> AI-native
+            </div>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">
+              Bring your own AI assistant.
+            </h2>
+            <p className="mt-3 max-w-2xl text-gray-600">
+              Expense speaks the Model Context Protocol (MCP). Create an API
+              token in Settings, point Claude, Cursor, or any MCP client at your
+              account, and let the assistant do the boring parts:
+            </p>
+            <ul className="mt-6 grid gap-4 sm:grid-cols-2">
+              {AGENT_EXAMPLES.map((example) => (
+                <li
+                  key={example.title}
+                  className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4"
+                >
+                  <example.icon className="h-5 w-5 shrink-0 text-blue-600" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-ink">
+                      {example.title}
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                      {example.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-6 text-sm text-gray-500">
+              Read-only tokens let an assistant ask questions without ever
+              writing. Your data stays in your account either way.
+            </p>
           </div>
         </section>
 

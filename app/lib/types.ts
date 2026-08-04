@@ -190,3 +190,12 @@ export interface InboundEmailRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A machine token for the MCP/API endpoint (the hash is stored, never the token). */
+export interface ApiTokenInfo {
+  id: string;
+  name: string;
+  readOnly: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+}

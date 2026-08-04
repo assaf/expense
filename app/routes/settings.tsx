@@ -1,4 +1,13 @@
-import { Plus, Trash2, Pencil, MapPin, LogOut, RefreshCw } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  MapPin,
+  LogOut,
+  RefreshCw,
+  KeyRound,
+  Copy,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Form, useFetcher } from "react-router";
@@ -15,6 +24,8 @@ import {
   addCategory,
   addInboundSender,
   addReport,
+  createApiToken,
+  listApiTokens,
   listInboundSenders,
   readAccount,
   readCategories,
@@ -27,6 +38,7 @@ import {
   removeReport,
   renameCategory,
   renameReport,
+  revokeApiToken,
   setReportClosed,
 } from "~/lib/store.server";
 import { countLabel, normalizeAmount } from "~/lib/format";
@@ -43,6 +55,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     reportCounts,
     categoryCounts,
+    tokens,
   ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
@@ -50,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     listInboundSenders(user.accountId),
     readReportCounts(user.accountId),
     readCategoryCounts(user.accountId),
+    listApiTokens(user.accountId),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
@@ -68,6 +82,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     rates: years.map((y) => ({ year: y, rate: settings.mileageRates[y] })),
+    tokens,
+    mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
 
@@ -150,6 +166,19 @@ export async function action({ request }: Route.ActionArgs) {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;
     }
+    case "createToken": {
+      const result = await createApiToken({
+        accountId: user.accountId,
+        name: formString(form, "name"),
+        readOnly: formString(form, "readOnly") === "on",
+      });
+      // The raw token is only returned here — the UI shows it once.
+      return Response.json({ ok: true, ...result });
+    }
+    case "revokeToken": {
+      await revokeApiToken(user.accountId, formString(form, "id"));
+      return Response.json({ ok: true });
+    }
     case "saveHome": {
       const settings = await readSettings(user.accountId);
       const address = formString(form, "homeAddress").trim();
@@ -181,6 +210,8 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     inviteCode,
     inboundSenders,
     inboundAddress,
+    tokens,
+    mcpUrl,
   } = loaderData;
   return (
     <PageShell title="Settings">
@@ -366,6 +397,8 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
+      <AgentsSection tokens={tokens} mcpUrl={mcpUrl} />
+
       <section className="border-t border-gray-100 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
         <p className="mb-3 text-sm text-gray-500">
@@ -379,6 +412,175 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </Form>
       </section>
     </PageShell>
+  );
+}
+
+/**
+ * Agents & API (MCP): create/revoke bearer tokens for the /mcp endpoint and
+ * show the endpoint URL. The raw token is returned by the action exactly
+ * once and shown here until the next create — it is never retrievable again.
+ */
+function AgentsSection({
+  tokens,
+  mcpUrl,
+}: {
+  tokens: {
+    id: string;
+    name: string;
+    readOnly: boolean;
+    createdAt: string;
+    lastUsedAt: string | null;
+  }[];
+  mcpUrl: string;
+}) {
+  const createFetcher = useFetcher<{
+    ok: boolean;
+    token?: string;
+    name?: string;
+    error?: string;
+  }>();
+  const revokeFetcher = useFetcher<{ ok: boolean }>();
+  const [copied, setCopied] = useState(false);
+  const created = createFetcher.data?.ok ? createFetcher.data : null;
+
+  async function copyToken() {
+    if (!created?.token) return;
+    try {
+      await navigator.clipboard.writeText(created.token);
+    } catch {
+      // Clipboard API unavailable (insecure context) — select the text
+      // so the user can copy manually.
+      const el = document.getElementById("fresh-token");
+      const selection = window.getSelection();
+      const range = document.createRange();
+      if (el && selection) {
+        range.selectNodeContents(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
+      <p className="mb-3 text-sm text-gray-500">
+        Connect your AI assistant — Claude, Cursor, or any MCP client — to this
+        account. Agents can capture receipts, log mileage, answer “how much did
+        I spend on …?”, build and export reports, and reconcile bank statements
+        against logged expenses. Read-only tokens can query but never change
+        anything.
+      </p>
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mb-4">
+          <div className="mb-1 text-sm font-medium text-gray-700">Endpoint</div>
+          <div className="font-mono text-sm text-gray-600">{mcpUrl}</div>
+          <p className="mt-1 text-xs text-gray-400">
+            Point your MCP client here with a token below as the bearer token.
+          </p>
+        </div>
+
+        {created ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <div className="mb-1 text-sm font-semibold text-amber-800">
+              Token created — shown once, copy it now.
+            </div>
+            <div className="flex items-center gap-2">
+              <code
+                id="fresh-token"
+                className="flex-1 break-all rounded border border-amber-200 bg-white px-2 py-1 text-sm"
+              >
+                {created.token}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={copyToken}
+              >
+                <Copy className="h-4 w-4" /> {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mb-3">
+          <div className="mb-1 text-sm font-medium text-gray-700">Tokens</div>
+          <ul className="flex flex-col gap-1">
+            {tokens.length === 0 ? (
+              <li className="text-sm text-gray-400">None yet.</li>
+            ) : (
+              tokens.map((token) => (
+                <li
+                  key={token.id}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <KeyRound className="h-4 w-4 shrink-0 text-gray-400" />
+                      <span className="truncate text-sm font-medium">
+                        {token.name}
+                      </span>
+                      {token.readOnly ? (
+                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
+                          read-only
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      created{" "}
+                      {new Date(token.createdAt).toLocaleDateString("en-US")}
+                      {token.lastUsedAt
+                        ? ` · last used ${new Date(token.lastUsedAt).toLocaleDateString("en-US")}`
+                        : " · never used"}
+                    </div>
+                  </div>
+                  <revokeFetcher.Form method="post" className="contents">
+                    <input type="hidden" name="intent" value="revokeToken" />
+                    <input type="hidden" name="id" value={token.id} />
+                    <button
+                      type="submit"
+                      className="shrink-0 text-gray-400 hover:text-red-600"
+                      aria-label={`Revoke ${token.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </revokeFetcher.Form>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+
+        <createFetcher.Form
+          method="post"
+          className="flex flex-wrap items-end gap-2"
+        >
+          <input type="hidden" name="intent" value="createToken" />
+          <div className="min-w-40 flex-1">
+            <Input
+              type="text"
+              name="name"
+              placeholder="e.g. Claude Desktop"
+              required
+            />
+          </div>
+          <label className="mb-1 flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              name="readOnly"
+              className="rounded border-gray-300"
+            />
+            Read-only
+          </label>
+          <Button type="submit" size="sm" variant="secondary">
+            <Plus className="h-4 w-4" /> New token
+          </Button>
+        </createFetcher.Form>
+      </div>
+    </section>
   );
 }
 

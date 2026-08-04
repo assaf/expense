@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { generateApiToken, hashApiToken } from "~/lib/api-tokens.server";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
@@ -10,6 +11,7 @@ import { DEFAULT_SETTINGS, parseLocations, parseRoute } from "~/lib/types";
 import { isEmail } from "~/lib/validation";
 import type {
   Account,
+  ApiTokenInfo,
   Category,
   Expense,
   InboundEmailRecord,
@@ -769,6 +771,87 @@ export async function dismissDuplicatePair(
   });
 }
 
+// --- API tokens (MCP endpoint) -------------------------------------------
+
+/**
+ * Create a machine token for the MCP/API endpoint. Returns the raw token
+ * exactly once — callers show it to the user immediately; only the SHA-256
+ * hash is persisted. Read-only tokens can query but never write.
+ */
+export async function createApiToken(input: {
+  accountId: string;
+  name: string;
+  readOnly: boolean;
+}): Promise<{ id: string; token: string }> {
+  const token = generateApiToken();
+  const id = ulid();
+  await prisma.apiToken.create({
+    data: {
+      id,
+      accountId: input.accountId,
+      name: input.name.trim() || "Agent token",
+      tokenHash: hashApiToken(token),
+      readOnly: input.readOnly,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: null,
+    },
+  });
+  return { id, token };
+}
+
+/** The account + capabilities a token grants, or undefined when unknown. */
+export async function findApiTokenByHash(
+  hash: string,
+): Promise<{ id: string; accountId: string; readOnly: boolean } | undefined> {
+  const row = await prisma.apiToken.findUnique({
+    where: { tokenHash: hash },
+    select: { id: true, accountId: true, readOnly: true },
+  });
+  return row ?? undefined;
+}
+
+/** All tokens for an account, newest first — for the Settings list. */
+export async function listApiTokens(
+  accountId: string,
+): Promise<ApiTokenInfo[]> {
+  const rows = await prisma.apiToken.findMany({
+    where: { accountId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      readOnly: true,
+      createdAt: true,
+      lastUsedAt: true,
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    readOnly: r.readOnly,
+    createdAt: r.createdAt,
+    lastUsedAt: r.lastUsedAt,
+  }));
+}
+
+/** Revoke a token — the client's next request is rejected (401). */
+export async function revokeApiToken(
+  accountId: string,
+  id: string,
+): Promise<void> {
+  await prisma.apiToken.deleteMany({ where: { accountId, id } });
+}
+
+/** Record a token's last successful use (best-effort, never awaited). */
+export async function touchApiToken(id: string): Promise<void> {
+  await prisma.apiToken
+    .update({
+      where: { id },
+      data: { lastUsedAt: new Date().toISOString() },
+    })
+    .catch(() => {});
+}
+
 // --- Inbound email ----------------------------------------------------------
 
 /** Normalize a sender address for storage/lookup (trim + lowercase). */
@@ -807,8 +890,7 @@ export async function upsertInboundEmail(input: {
 }
 
 /**
- * The account that claims this sender address, by "first added" precedence:
- * when the same address is allowed by several accounts, the row with the
+ * The account that claims this sender address, by "first added" precedence: * when the same address is allowed by several accounts, the row with the
  * earliest createdAt wins; removing that row falls through to the next one.
  */
 export async function findAccountByInboundSender(
@@ -830,8 +912,9 @@ export async function findAccountByInboundSender(
   return undefined;
 }
 
-/** All allowed sender addresses for an account, in the order they were added. */
-export async function listInboundSenders(accountId: string): Promise<string[]> {
+/** All allowed sender addresses for an account, in the order they were added. */ export async function listInboundSenders(
+  accountId: string,
+): Promise<string[]> {
   const rows = await prisma.inboundSender.findMany({
     where: { accountId },
     orderBy: [{ createdAt: "asc" }, { address: "asc" }],

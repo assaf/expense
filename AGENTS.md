@@ -96,11 +96,19 @@ production env var (for the deploy script) and as a GitHub Actions secret.
   wires an index + `flatRoutes()`. Loaders/actions are server-only.
 - **Types**: import route types from `./+types/<name>`. Path alias `~/*` → `app/*`.
 - **State**: Postgres via Prisma (schema.prisma) — accounts, users, expenses,
-  reports, categories, settings, mileage, image_blobs. Required, everywhere.
+  reports, categories, settings, mileage, image_blobs, api_tokens. Required,
+  everywhere.
   Never read state on the client; all reads/writes go through
   `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
   by `accountId`). `prisma/generated` is the generated client (gitignored,
   produced by `pnpm build:prisma`).
+- **MCP (agents)**: `/mcp` (Streamable HTTP, bearer tokens from Settings →
+  Agents & API) exposes the store to any MCP client. Tokens are
+  account-scoped, hashed at rest (`api_tokens`), optionally read-only.
+  Tools: capture_receipt (reuses the OCR/DeepSeek pipeline + merchant
+  history), log_mileage, list_expenses/expense_summary, report create/close/
+  add/export PDF, list_categories/merchants, get_settings, reconcile
+  (read-only statement CSV matching). See `docs/mcp.md`.
 - **Images**: Postgres BYTEA (`image_blobs` table) — all images live in
   the database; no external storage, no separate service.
   See `app/lib/images.server.ts`.
@@ -222,7 +230,11 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/routes/expense.$id.image.ts`  | Serve / replace / delete receipt image.                                                                                                                                                                                                                                                           |
 | `app/routes/api.route.ts`          | Recompute mileage distance + amount.                                                                                                                                                                                                                                                              |
 | `app/routes/export.*`              | PDF per report + ZIP of everything.                                                                                                                                                                                                                                                               |
-| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender.                                                                                                                                                                                                                      |
+| `app/routes/mcp.ts`                | MCP endpoint (Streamable HTTP). Bearer token → account + read-only flag; sessions bound to the token that created them. `maxDuration: 60`.                                                                                                                                                        |
+| `app/lib/mcp.server.ts`            | MCP server: 13 tools + session registry + statement reconciliation matcher. `capture_receipt` runs the app's own extraction pipeline.                                                                                                                                                             |
+| `app/lib/api-tokens.server.ts`     | API token generation (`exp_…`) + SHA-256 hashing (only the hash is stored).                                                                                                                                                                                                                       |
+| `app/lib/report-pdf.server.ts`     | Report PDF builder — shared by the web export and the MCP `export_report` tool.                                                                                                                                                                                                                   |
+| `app/routes/settings.tsx`          | Reports, categories, mileage rates, home location, receipts-by-email sender, Agents & API (MCP) tokens.                                                                                                                                                                                           |
 | `app/routes/api.inbound-email.ts`  | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                                                                                                                                                                                           |
 | `app/routes/api.smoke.ts`          | Post-deploy PDF+OCR health check (secret-gated GET `/api/smoke`; `maxDuration: 60`). `scripts/deploy` curls it after every deploy and fails the deploy if the pipeline breaks in the serverless bundle.                                                                                           |
 | `app/routes/login.tsx`             | Sign in / create account / join by invite code.                                                                                                                                                                                                                                                   |
@@ -238,7 +250,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/lib/email-render.server.ts`   | Render email bodies → PNG with real headless Chromium (HTML + plain-text column; puppeteer-core + @sparticuz/chromium on Vercel, Playwright Chromium locally; RENDER_BROWSER=local/sparticuz/none overrides).                                                                                     |
 | `app/lib/reply.server.ts`          | Failure/partial reply emails via Resend.                                                                                                                                                                                                                                                          |
 | `app/data/default-categories.csv`  | Default categories seeded for every new account (IRS Schedule C, Part II lines 8–27a; `name` header, one per row, comma-containing names quoted). Loaded at build time by `app/lib/default-categories.server.ts` (Vite `?raw` import) — edit the CSV to change what new accounts get seeded with. |
-| `prisma/schema.prisma`             | Single schema source of truth (9 models).                                                                                                                                                                                                                                                         |
+| `prisma/schema.prisma`             | Single schema source of truth (10 models).                                                                                                                                                                                                                                                        |
 | `prisma/migrations/0_init`         | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                                                                                                                                              |
 | `scripts/preflight-prod.mjs`       | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                                                                                                                                                                                                     |
 | `scripts/clone`                    | Clone prod (Supabase) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                                                                                                                                     |
