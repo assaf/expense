@@ -59,7 +59,7 @@ export function SiteHeader({ nav }: { nav: SiteNavItem[] }) {
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
       <SiteLogo />
-      <nav className="flex items-center gap-1 text-sm">
+      <nav className="flex items-center gap-4 text-sm">
         {nav.map((item) => (
           <SiteNavLink key={item.label} item={item} />
         ))}
