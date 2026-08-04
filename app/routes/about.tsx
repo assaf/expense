@@ -28,11 +28,13 @@ const ABOUT_SCHEMA = {
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: `About ${APP_NAME} — free receipt OCR and mileage tracker` },
+    {
+      title: `About ${APP_NAME} — a free expense tracker built for tax season`,
+    },
     {
       name: "description",
       content:
-        "Expense is a free personal expense tracker: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF/ZIP export is ready at tax time.",
+        "Expense is a free expense tracker built for tax season: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF or ZIP export is ready when you are.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/about` },
   ];

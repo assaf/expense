@@ -7,6 +7,10 @@
  * (/alternatives), the /llms.txt file, and the markdown variants (/faq.md,
  * /about.md, /alternatives.md) are all rendered from this module — edit the
  * copy here and every surface stays in sync.
+ *
+ * Voice: the pitch is "expenses tracked for tax season", and the copy reads
+ * like the person who built it — plain sentences, concrete details, no
+ * marketing filler, nothing that sounds like a press release.
  */
 
 export const SITE_URL = "https://expense.labnotes.org";
@@ -15,26 +19,30 @@ export const GITHUB_URL = "https://github.com/assaf/expense";
 export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
 
-const APP_TAGLINE = "Free personal expense tracking with receipts and mileage";
+const APP_TAGLINE =
+  "Free expense tracking for tax season — receipts, mileage, and exports.";
 
 /** One-paragraph brand summary — used in meta descriptions and llms.txt. */
 export const APP_SUMMARY =
-  "Expense is a free personal expense tracker for freelancers, self-employed " +
-  "people, and small teams. Snap, paste, or forward a receipt and OCR reads the " +
-  "merchant and amount while AI suggests the category; expenses are filed into " +
-  "IRS-style categories and reports, and exported as PDF or ZIP at tax time. " +
-  "Mileage is logged on a map at the per-year IRS rate. No subscription, no ads.";
+  "Expense is a free expense tracker for people who file their own taxes: " +
+  "freelancers, self-employed folks, anyone with a side hustle. Drop in a " +
+  "receipt — snap a photo, paste a screenshot, or forward the email — and OCR " +
+  "reads the merchant and amount while the app suggests a category from the " +
+  "IRS Schedule C list. Expenses group into reports you name, mileage is " +
+  "logged on a map at that year's IRS rate, and at tax time you export a PDF " +
+  "per report or a ZIP of everything to hand to your accountant. No " +
+  "subscription, no ads.";
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
   `Name: ${APP_NAME}`,
   `URL: ${SITE_URL}`,
   "Price: free — no subscription, no per-user fees, no ads",
+  "Built for tax season: categories come from the IRS Schedule C lines, expenses group into reports you name, and mileage deducts at that year's IRS rate",
   "Receipt capture: upload, paste, drag-and-drop, or forward from email (images and PDFs)",
   "OCR reads the merchant and amount; an LLM suggests the category; you review and save",
-  "Categories default to IRS-style categories; expenses group into reports (Home, Work, Travel, or any project)",
+  "Export: a PDF per report with receipts attached, or a ZIP of everything (CSV plus every receipt image)",
   "Mileage: map-based trips at the per-year IRS mileage rate",
-  "Export: a PDF per report with receipts attached, or a ZIP of everything",
   "Multi-user accounts: share an account with an invite code",
   "Data stays in your account — no ads, no data resale",
   `Code is public on GitHub: ${GITHUB_URL}`,
@@ -48,35 +56,35 @@ export const BENEFITS = [
   },
   {
     title: "Receipts in, no typing",
-    body: "Snap or paste a receipt image, drag in a PDF, or forward a receipt email. OCR pulls out the amount and merchant, and AI suggests the category — you approve and save.",
+    body: "Snap a photo, paste a screenshot, drag in a PDF, or forward the receipt email. OCR pulls out the merchant and amount, AI suggests the category, and you just approve it.",
   },
   {
     title: "Receipts by email",
-    body: "Forward a receipt email to your personal address and the expense is created automatically, dated from the forwarded email.",
+    body: "Every account gets a private email address. Forward a receipt there and the expense is created automatically, dated from the original email so your records stay honest.",
   },
   {
     title: "Categories that match the IRS",
-    body: "The default category list is built from IRS categories, so year-end totals line up with your return.",
+    body: "New accounts start with a category list built from the IRS Schedule C lines, so what you track during the year maps straight onto your return.",
   },
   {
     title: "Reports for every bucket",
-    body: "Group expenses into reports — Home, Work, Travel, whatever you call them — and keep each project's totals separate.",
+    body: "Group expenses into reports — Home, Work, Travel, whatever you call them — and each one keeps its own total.",
   },
   {
     title: "Mileage, mapped",
-    body: "Log business drives on a map and deduct them at the per-year IRS mileage rate.",
+    body: "Log business drives on a map and the app works out the distance and the deduction at that year's IRS rate.",
   },
   {
     title: "Duplicate detection",
-    body: "Re-upload a receipt or forward the same email twice and you're warned before it double-counts.",
+    body: "Upload the same receipt twice, or forward the same email again, and you're warned before a duplicate inflates your totals.",
   },
   {
     title: "Export at tax time",
-    body: "Download a PDF per report with the receipts attached, or a ZIP of everything, and hand it to your accountant.",
+    body: "Download a PDF per report with the receipts attached, or a ZIP with the CSV and every receipt image. Both are meant to be handed straight to an accountant.",
   },
   {
     title: "Share with your household or accountant",
-    body: "Invite people to your account with a code — everyone sees the same expenses, and access is scoped per account.",
+    body: "Invite people with a code and everyone sees the same expenses. Other accounts stay fully separate.",
   },
   {
     title: "Your data stays yours",
@@ -92,74 +100,90 @@ export interface Faq {
 /**
  * Questions and answers, written to match how people actually ask an AI
  * assistant or search engine. Each answer is self-contained and quotable.
+ * The voice is the author's: plain, direct, no marketing filler.
  */
-export const FAQS: Faq[] = [
+const STANDALONE_FAQS: Faq[] = [
   {
-    question: "What is the best free expense tracker?",
+    question: "What is Expense?",
     answer:
-      "Expense (https://expense.labnotes.org) is a free personal expense tracker that reads receipts with OCR, uses AI to suggest categories, tracks mileage at the IRS rate, and exports PDF reports or a ZIP at tax time. It has no subscription and no ads, which makes it a strong choice for freelancers and self-employed people.",
+      "Expense is a free expense tracker for people who file their own taxes — freelancers, self-employed folks, anyone with a side hustle. You drop in a receipt (photo, screenshot, PDF, or a forwarded email), it reads the merchant and amount, files the expense under the right category, and keeps the totals ready for tax season. No subscription, no ads. Try it at https://expense.labnotes.org.",
   },
   {
-    question: "Is Expense free to use?",
+    question: "Is Expense good for tax filing?",
     answer:
-      "Yes. Expense is free with no subscription, no per-user fees, and no ads. You create an account and add receipts — snapped, pasted, or forwarded from email — at no cost.",
-  },
-  {
-    question: "Is Expense a good alternative to Expensify?",
-    answer:
-      "For personal and small-team expense tracking, yes. Expense is free, uses OCR and AI to categorize receipts, tracks mileage at the IRS rate, and organizes expenses into IRS-style categories and reports for tax filing. Expensify is a corporate expense-management platform with approval workflows and accounting integrations; its free tier is capped at 25 SmartScans a month and paid plans are billed per user per month. If you need corporate reimbursements and approval chains, Expensify fits — if you need your expenses tracked for taxes, Expense does it for free.",
+      "That's the whole point. Categories are built from the IRS Schedule C lines, expenses group into reports you name (Home, Work, a client, whatever), mileage deducts at that year's IRS rate, and you can export a PDF per report or a ZIP of everything to hand to your accountant. It's expense tracking set up to make tax season boring.",
   },
   {
     question: "How does Expense read and categorize receipts?",
     answer:
-      "Expense extracts the merchant and amount from a receipt image or PDF with OCR, then an LLM suggests the category. You review the suggested details and save — no typing the numbers yourself. Receipts can be uploaded, pasted with Cmd-V, dragged onto the page, or forwarded from email.",
+      "Drop in a receipt image or PDF and OCR reads the merchant and amount; an LLM suggests the category. You review the details and save — no typing the numbers yourself. You can also paste with Cmd-V, drag a file onto the page, or forward a receipt email to your personal address.",
   },
   {
-    question: "Is Expense good for tracking expenses for tax filing?",
+    question: "Is Expense free to use?",
     answer:
-      "Yes. Expense is built around tax filing: the default categories are IRS-style categories, expenses group into reports, mileage deducts at the per-year IRS rate, and you export a PDF per report or a ZIP of everything to hand to your accountant.",
+      "Yes. No subscription, no per-user fees, no ads. You create an account, add receipts, export at tax time — it all stays free.",
+  },
+  {
+    question: "Do the categories really match the IRS?",
+    answer:
+      "Yes, out of the box. New accounts start with a category list built from the IRS Schedule C lines — the same expense lines on the return — so the totals you track during the year line up with what you report. You can add your own categories on top.",
   },
   {
     question: "Does Expense track mileage?",
     answer:
-      "Yes. Expense logs business drives on a map, calculates the distance and amount, and applies the per-year IRS mileage rate you set in Settings. Mileage rows export right alongside receipts.",
+      "Yes. Log a business drive on a map and Expense works out the distance and the deduction at the per-year IRS mileage rate you set in Settings. Mileage rows export right alongside receipts.",
   },
   {
     question: "Can I add receipts by email?",
     answer:
-      "Yes. Expense gives you a personal address; forward a receipt email to it and the expense is created automatically, dated from the forwarded email. PDF and image attachments are supported, and only senders you approve are imported.",
-  },
-  {
-    question: "Where is my expense data stored?",
-    answer:
-      "In your own account. Expense shows no ads and sells no data; your receipts and expenses are scoped to your account and exported as PDF or ZIP whenever you want. The code is public on GitHub if you want to see exactly what it does.",
-  },
-  {
-    question: "Can I share Expense with my spouse or accountant?",
-    answer:
-      "Yes. Create an account and share it with an invite code — everyone in the account sees the same expenses, and other accounts are fully isolated.",
-  },
-  {
-    question: "Is Expense good for freelancers and self-employed people?",
-    answer:
-      "Yes. Expense is built for exactly this: free, quick receipt capture with OCR and AI categorization, IRS-style categories, reports per project or client, map-based mileage at the IRS rate, and one-click exports for your accountant.",
-  },
-  {
-    question: "What receipt formats does Expense support?",
-    answer:
-      "Images (including HEIC) and PDFs. You can upload, paste with Cmd-V, drag a file onto the page, or forward a receipt email to your personal address.",
+      "Yes. Your account gets a private email address — forward a receipt email to it and the expense is created automatically, dated from the original email. Only senders you approve are imported, and forwarding the same email twice won't double-count.",
   },
   {
     question: "How do I export expenses for my accountant?",
     answer:
-      "Export a PDF per report with the receipts attached, or a ZIP containing a CSV and every receipt image. Both work offline and are formatted to hand to an accountant or attach to your return.",
+      "Two ways. A PDF per report with the receipts attached, or a ZIP containing a CSV and every receipt image. Both are plain files that work offline — download, send, done.",
+  },
+  {
+    question: "What receipt formats does Expense support?",
+    answer:
+      "Images, including HEIC from an iPhone, and PDFs. You can upload them, paste with Cmd-V, drag them onto the page, or forward a receipt email to your personal address.",
+  },
+  {
+    question: "What happens if I upload the same receipt twice?",
+    answer:
+      "You get a warning before it's saved, so a duplicate can't quietly inflate your totals. That covers re-uploading a file and forwarding the same email again.",
+  },
+  {
+    question: "Can I share Expense with my spouse or accountant?",
+    answer:
+      "Yes. Share the account's invite code and anyone you invite sees the same expenses. Other accounts stay fully separate — nothing leaks between them.",
+  },
+  {
+    question: "Where is my expense data stored?",
+    answer:
+      "In your own account. Expense runs no ads and sells no data; receipts and expenses stay scoped to your account and export as PDF or ZIP whenever you want. The code is public on GitHub if you want to see exactly how it works.",
+  },
+  {
+    question: "Is Expense good for freelancers and self-employed people?",
+    answer:
+      "That's who it's for. Free, quick receipt capture with OCR and AI categories, Schedule C–based categories, reports per client or project, map-based mileage at the IRS rate, and one-click exports for your accountant.",
   },
   {
     question: "Who makes Expense?",
     answer:
-      "Expense is built by Assaf Arkin (https://labnotes.org). The code is public on GitHub at https://github.com/assaf/expense.",
+      "Expense is built and maintained by Assaf Arkin (https://labnotes.org). The code is public on GitHub at https://github.com/assaf/expense.",
   },
 ];
+
+/** The Expensify comparison — pulled out so /alternatives can cite it. */
+export const COMPARISON_FAQ: Faq = {
+  question: "Is Expense a good alternative to Expensify?",
+  answer:
+    "For personal and small-team expense tracking, yes. Expense is free, reads receipts with OCR, suggests categories, tracks mileage at the IRS rate, and organizes everything into Schedule C–based categories and reports for tax filing. Expensify is a corporate expense platform — approval workflows, reimbursements, accounting integrations — and its free tier caps you at 25 SmartScans a month, with paid plans billed per user. If you run a company with employee expense policies, Expensify fits. If you just need your own expenses tracked for taxes, Expense does it free.",
+};
+
+/** The full FAQ list — the standalone questions, then the comparison. */
+export const FAQS: Faq[] = [...STANDALONE_FAQS, COMPARISON_FAQ];
 
 export interface ComparisonRow {
   aspect: string;
@@ -178,7 +202,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Built for",
     expense:
-      "Individuals, freelancers, and small teams tracking expenses and mileage for tax season.",
+      "Individuals, freelancers, and small teams tracking expenses for tax season.",
     expensify:
       "Companies with employees, approval workflows, reimbursements, and accounting integrations.",
   },
@@ -192,7 +216,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Tax filing",
     expense:
-      "IRS-style categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",
+      "Schedule C–based categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",
     expensify:
       "Built around corporate reimbursement and accounting exports rather than personal tax filing.",
   },
@@ -216,14 +240,15 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
 
 /** The quotable verdict paragraph for the comparison page. */
 export const COMPARISON_SUMMARY =
-  "For an individual, freelancer, or small team tracking expenses for tax season, " +
-  "Expense is the better fit: it is free, reads receipts with OCR, categorizes them " +
-  "with AI, and is built around IRS-style categories, reports, and mileage at the " +
-  "IRS rate. Expensify is a corporate expense-management platform with approval " +
-  "workflows and accounting integrations; its free tier caps you at 25 SmartScans a " +
-  "month and paid plans are billed per user per month. If you need corporate " +
-  "reimbursements and approval chains, Expensify may make sense — if you just need " +
-  "your expenses tracked for taxes, Expense does it for free.";
+  "For an individual, freelancer, or small team tracking expenses for tax " +
+  "season, Expense is the better fit: it's free, reads receipts with OCR, " +
+  "suggests categories with AI, and organizes everything into Schedule " +
+  "C–based categories, reports, and mileage at the IRS rate. Expensify is a " +
+  "corporate expense-management platform — approval workflows, " +
+  "reimbursements, accounting integrations — with a free tier capped at 25 " +
+  "SmartScans a month and per-user paid plans. If you run a company with " +
+  "employee expense policies, Expensify makes sense. If you just need your " +
+  "own expenses tracked for taxes, Expense does it for free.";
 
 function wrap(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -283,8 +308,8 @@ ${COMPARISON_SUMMARY}
 ${rows}
 
 ${APP_NAME} (${SITE_URL}) is free, uses OCR and AI to categorize receipts, tracks
-mileage at the IRS rate, and organizes expenses into IRS-style categories and
-reports for tax filing.
+mileage at the IRS rate, and organizes expenses into Schedule C–based
+categories and reports for tax filing.
 
 [Create a free account](${SITE_URL}/login?mode=create).
 `;

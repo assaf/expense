@@ -21,12 +21,12 @@ const FAQ_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return [
     {
-      title: `${APP_NAME} FAQ — free receipt OCR, AI categories, mileage, tax export`,
+      title: `${APP_NAME} FAQ — expense tracking for tax season: receipt OCR, AI categories, mileage`,
     },
     {
       name: "description",
       content:
-        "Answers to common questions about Expense: is it free, how does receipt OCR and AI categorization work, does it track mileage, and is it good for tax filing?",
+        "Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/faq` },
   ];

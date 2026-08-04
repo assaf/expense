@@ -43,11 +43,11 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: "Expense — personal expense tracking" },
+    { title: "Expense — free expense tracking for tax season" },
     {
       name: "description",
       content:
-        "Expense collects your receipts — snapped, pasted, or forwarded from email — and organizes them into IRS-style categories and reports for tax season.",
+        "Expense reads your receipts — snap a photo, paste a screenshot, or forward the email — and organizes them into IRS Schedule C categories and reports for tax season.",
     },
     // Social sharing defaults (og:site_name, og:locale, og:type,
     // twitter:card, theme-color) live as static tags in the root <head> —

@@ -3,9 +3,9 @@ import { SitePage } from "~/components/SitePage";
 import { Button } from "~/components/ui/Button";
 import {
   APP_NAME,
+  COMPARISON_FAQ,
   COMPARISON_ROWS,
   COMPARISON_SUMMARY,
-  FAQS,
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/alternatives";
@@ -18,7 +18,7 @@ const COMPARISON_SCHEMA = {
   description: COMPARISON_SUMMARY,
 };
 
-const VERDICT_QUESTION = FAQS[2];
+const VERDICT_QUESTION = COMPARISON_FAQ;
 
 const VERDICT_SCHEMA = {
   "@context": "https://schema.org",
@@ -43,7 +43,7 @@ export function meta(): Route.MetaDescriptors {
     {
       name: "description",
       content:
-        "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categorization, IRS-style categories, mileage at the IRS rate, and tax-time export.",
+        "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categories, Schedule C–based categories, mileage at the IRS rate, and tax-time exports.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/alternatives` },
   ];
@@ -114,9 +114,9 @@ export default function AlternativesPage() {
                 Choose {APP_NAME} if…
               </h3>
               <p className="mt-1.5 text-sm leading-relaxed text-blue-900/80">
-                You're an individual, freelancer, or small team that wants
-                receipts tracked without data entry — free — and organized into
-                IRS-style categories and reports for tax filing.
+                You track your own expenses — for yourself, a side hustle, or a
+                small team — and want them ready for tax season without typing
+                in receipts.
               </p>
             </div>
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">

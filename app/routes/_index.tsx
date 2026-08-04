@@ -165,7 +165,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         name: "description",
         content:
-          "Expense collects your receipts — snapped, pasted, or forwarded from email — reads the amount and merchant with OCR, and files each expense into IRS-style categories and reports for tax season.",
+          "Expense reads your receipts — snap a photo, paste a screenshot, or forward the email — and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
       },
       { tagName: "link", rel: "canonical", href: `${SITE_URL}/` },
       { property: "og:url", content: `${SITE_URL}/` },
@@ -176,7 +176,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         property: "og:description",
         content:
-          "Snap or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into reports and IRS-style categories, export-ready at tax time.",
+          "Snap a photo or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into Schedule C categories and reports, ready to hand your accountant at tax time.",
       },
       { property: "og:image", content: OG_IMAGE },
       { property: "og:image:width", content: "1200" },
@@ -193,7 +193,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         name: "twitter:description",
         content:
-          "Snap or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into reports and IRS-style categories, export-ready at tax time.",
+          "Snap a photo or forward a receipt and the merchant, amount, and category are filled in automatically. Organized into Schedule C categories and reports, ready to hand your accountant at tax time.",
       },
       { name: "twitter:image", content: OG_IMAGE },
       {

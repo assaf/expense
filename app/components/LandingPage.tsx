@@ -24,7 +24,7 @@ const SOFTWARE_SCHEMA = {
   url: SITE_URL,
   image: `${SITE_URL}/screenshot-og.png`,
   description:
-    "Expense collects your receipts — snapped, pasted, or forwarded from email — reads the amount and merchant with OCR, and files each expense into IRS-style categories and reports for tax season.",
+    "Expense reads your receipts — snapped, pasted, or forwarded from email — and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web",
   offers: {
@@ -43,7 +43,7 @@ const FEATURES = [
   {
     icon: ReceiptText,
     title: "Receipts in, no typing",
-    body: "Snap or paste a receipt image, or forward a receipt email straight to the app. OCR pulls out the amount and merchant, and AI suggests the category.",
+    body: "Snap a photo, paste a screenshot, or forward a receipt email. OCR pulls out the amount and merchant, and AI suggests the category.",
   },
   {
     icon: FolderOpen,
@@ -53,7 +53,7 @@ const FEATURES = [
   {
     icon: Tags,
     title: "Categories that match the IRS",
-    body: "Split expenses by category out of the box. The default list is built from the IRS categories, so year-end totals line up with your return.",
+    body: "New accounts start with a category list built from the IRS Schedule C lines, so year-end totals line up with your return.",
   },
   {
     icon: MapPinned,
@@ -113,16 +113,16 @@ export default function LandingPage() {
         {/* Hero */}
         <section className="mx-auto max-w-4xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pt-16">
           <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600">
-            Personal expense tracking
+            Expense tracking for tax season
           </p>
           <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl lg:text-6xl">
             Every receipt, ready for tax season.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
-            Expense collects your receipts — snapped, pasted, or forwarded from
-            your inbox — reads the amount and merchant with OCR, and files each
-            expense into IRS-style categories and reports. When tax season
-            comes, the totals are already there.
+            Expense collects your receipts — snap a photo, paste a screenshot,
+            or forward the email. OCR reads the amount and merchant, and each
+            expense lands in a Schedule C category and a report you name. When
+            tax season comes, the totals are already there.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="w-full sm:w-auto">

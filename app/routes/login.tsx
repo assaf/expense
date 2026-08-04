@@ -30,7 +30,7 @@ export function meta(): Route.MetaDescriptors {
     {
       name: "description",
       content:
-        "Sign in to Expense — personal expense tracking with receipts and mileage.",
+        "Sign in to Expense — free expense tracking for tax season, with receipt OCR, mileage, and PDF/ZIP export.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/login` },
   ];
@@ -92,7 +92,7 @@ export default function LoginPage() {
   const titles: Record<Mode, { title: string; blurb: string }> = {
     signin: {
       title: "Sign in to Expense",
-      blurb: "Personal expense tracking — receipts and mileage.",
+      blurb: "Expense tracking for tax season — receipts, mileage, exports.",
     },
     create: {
       title: "Create your account",
