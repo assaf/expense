@@ -27,17 +27,23 @@ name: deployment-checks
 # the deployed serverless bundle — see app/routes/api.smoke.ts), and fails
 # the job when any pipeline is broken.
 #
-# The migrate-db job reuses the same secrets as the smoke job — it pulls the
-# production env from Vercel (VERCEL_TOKEN + VERCEL_ORG_ID + VERCEL_PROJECT_ID)
-# and runs scripts/migrate-prod, the exact same schema sync scripts/deploy
-# runs. No database credentials live in GitHub secrets.
+# The migrate-db job does NOT pull env from Vercel: the CI VERCEL_TOKEN is
+# denied on the project-settings/team endpoints `vercel env pull` needs (it
+# can list deployments — which is all the smoke job uses it for — but 403s
+# on project settings, error PROJECT_UNAUTHORIZED). So the job passes the
+# prod DDL URL directly via the DATABASE_URL_UNPOOLED GitHub secret (the
+# same session-pooler URL scripts/deploy uses for schema DDL) and runs
+# `scripts/migrate-prod --ci` (skips the env pull + preflight baseline, keeps
+# the guarded conversions + db push + migrate resolve).
 #
 # To make this gate production promotion:
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
 #      SMOKE_TEST_SECRET — must equal the SMOKE_TEST_SECRET env var on the
-#      Vercel project — and VERCEL_PROTECTION_BYPASS, the project's Protection
+#      Vercel project — VERCEL_PROTECTION_BYPASS, the project's Protection
 #      Bypass for Automation secret, needed because deployment URLs are SSO-
-#      protected).
+#      protected, and DATABASE_URL_UNPOOLED, the prod DDL URL — the migrate-db
+#      job uses it directly because the VERCEL_TOKEN can't read project
+#      settings).
 #   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
 #      Add Checks → provider GitHub → require "pdf-ocr-smoke". Because the
 #      smoke job fails when CI or the DB migration fails, that single check is
@@ -125,13 +131,10 @@ jobs:
     # when check-and-test failed) on top of the main-only gate.
     if: success() && github.ref == 'refs/heads/main'
     env:
-      # scripts/migrate-prod pulls the prod env from Vercel: the CLI reads
-      # VERCEL_TOKEN for auth and VERCEL_ORG_ID/VERCEL_PROJECT_ID to locate
-      # the project without a local `vercel link`. No new secrets — the DB
-      # credentials come from Vercel exactly as scripts/deploy gets them.
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # Prod DDL URL (Supabase session pooler) — the same value scripts/deploy
+      # pulls from Vercel as DATABASE_URL_UNPOOLED. Required; the job fails
+      # fast if the secret is missing.
+      DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
     steps:
       - uses: actions/checkout@v7
 
@@ -144,18 +147,19 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # scripts/migrate-prod pipes the preflight SQL through psql (the money
-      # + username conversions are psql DO blocks too). GitHub's ubuntu
-      # runners don't ship the postgres client by default.
+      # scripts/migrate-prod pipes the guarded conversion SQL through psql
+      # (the money + username conversions are psql DO blocks). GitHub's
+      # ubuntu runners don't ship the postgres client by default.
       - name: Install postgresql-client
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client
 
-      # The exact schema sync scripts/deploy runs (env pull → preflight →
-      # guarded conversions → prisma db push → migrate resolve).
+      # The same schema sync scripts/deploy runs, minus the Vercel env pull
+      # and the preflight baseline (a no-op on the baselined prod DB):
+      # guarded conversions → prisma db push → migrate resolve.
       - name: Sync the production database schema
-        run: ./scripts/migrate-prod
+        run: ./scripts/migrate-prod --ci
 
   pdf-ocr-smoke:
     name: pdf-ocr-smoke

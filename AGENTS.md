@@ -29,10 +29,13 @@ should not rely on it either. Use the **Supavisor pooler** on
   slots. Supavisor's transaction mode handles the extended protocol /
   prepared statements and Prisma's batch + interactive transactions (verified
   against prod with the PrismaPg adapter).
-- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy` and
+- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`, `scripts/migrate-prod` and
   `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL
   want stable sessions; the session pooler behaves like a direct connection.
-  Keep it here, not on the transaction pooler.
+  Keep it here, not on the transaction pooler. Also mirrored as the
+  `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI `migrate-db` job
+  (the CI `VERCEL_TOKEN` can't read project settings, so the DDL URL is
+  passed directly rather than pulled via the Vercel CLI).
 
 Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
 pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for
@@ -60,15 +63,17 @@ pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
-./scripts/migrate-prod  # prod schema sync only (env pull + preflight + db push) — shared by deploy + CI
+./scripts/migrate-prod [--ci]  # prod schema sync only — default pulls env from Vercel; --ci uses the DATABASE_URL_UNPOOLED GitHub secret (no Vercel CLI)
 ./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
-# sync by calling `./scripts/migrate-prod` (preflight + guarded conversions +
-# db push, env pulled via `vercel env pull`), then CLI-deploys and opens the
-# site. `git push origin main` also auto-deploys: the CI workflow runs the
-# SAME `./scripts/migrate-prod` in its `migrate-db` job (Vercel CLI auth via
-# VERCEL_TOKEN/VERCEL_ORG_ID/VERCEL_PROJECT_ID — no DB creds in GitHub
-# secrets).
+# sync by calling `./scripts/migrate-prod` (env pulled via `vercel env pull`,
+# preflight + guarded conversions + db push), then CLI-deploys and opens the
+# site. `git push origin main` also auto-deploys: the CI workflow runs
+# `./scripts/migrate-prod --ci` in its `migrate-db` job, passing the prod DDL
+# URL via the `DATABASE_URL_UNPOOLED` GitHub secret. It does NOT use the
+# Vercel CLI: the `VERCEL_TOKEN` secret can list deployments (smoke job) but
+# is denied on the project-settings/team endpoints `vercel env pull` needs
+# (403 PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead.
 # DEPLOY ORDERING CONTRACT: check & test → migrate prod DB → pdf-ocr-smoke.
 # The smoke check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl)
 # runs the deployed bundle against the prod schema and fails on any schema
@@ -369,8 +374,9 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   runs in the deployed serverless bundle — `scripts/deploy` curls it after
   CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
   push to `main`. The workflow is three strictly-ordered jobs: `check-and-test`
-  → `migrate-db` (runs `./scripts/migrate-prod` against prod, only after
-  tests pass — never before) → `pdf-ocr-smoke`. The smoke job fails fast when
+  → `migrate-db` (runs `./scripts/migrate-prod --ci` against prod via the
+  `DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass — never
+  before) → `pdf-ocr-smoke`. The smoke job fails fast when
   CI or the migration fails, so a broken build or an unmigrated schema never
   reports a passing smoke check. To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
   Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (that

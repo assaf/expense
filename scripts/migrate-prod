@@ -15,29 +15,49 @@
 # against this schema — without the migration it fails on any schema change.
 # So the deploy sequence is always: check & test → migrate → smoke.
 #
-# Auth: `vercel login` on the dev machine by default (scripts/deploy). In CI
-# the CLI authenticates via VERCEL_TOKEN and locates the project via
-# VERCEL_ORG_ID / VERCEL_PROJECT_ID (set as job env — never pass --token on
-# the command line).
+# Two modes:
+#   default — local (scripts/deploy): pulls prod env from Vercel via the CLI
+#     (`vercel login` auth; in CI-with-CLI it would use VERCEL_TOKEN, but that
+#     token is denied on project-settings endpoints — see below), runs the
+#     preflight baseline (only matters for restored pre-account dumps), the
+#     guarded conversions, db push, and migrate resolve.
+#   --ci    — GitHub Actions migrate-db job: no Vercel CLI at all.
+#     DATABASE_URL_UNPOOLED comes from the workflow's GitHub secret (the
+#     Vercel CLI's `env pull` 403s with the CI VERCEL_TOKEN — it can list
+#     deployments but not read project settings/teams — so the DDL URL is
+#     passed directly instead). Preflight is skipped (no-op on the baselined
+#     prod DB; it only matters if the DB is a restored pre-account dump).
 #
 # Prod secrets come from `vercel env pull` (see AGENTS.md; .env.prod.pull is
 # gitignored). Use DATABASE_URL_UNPOOLED for schema DDL — the pooled URL is
-# for runtime queries. The preflight script is a no-op on an already-
-# baselined database (it only matters if the DB is a restored pre-account
-# dump), and `migrate resolve` re-records the baseline.
+# for runtime queries.
 set -eo pipefail
 
-echo "--- Pull production env (Vercel) ---"
-npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
-set -a
-source .env.prod.pull
-set +a
-export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+CI_MODE=0
+if [ "$1" = "--ci" ]; then
+  CI_MODE=1
+fi
 
-echo "--- Preflight (idempotent baseline SQL) ---"
-node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
-rm -f /tmp/preflight-prod.sql
+if [ "$CI_MODE" = "1" ]; then
+  if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
+    echo "migrate-prod --ci: DATABASE_URL_UNPOOLED is not set (missing GitHub secret?)" >&2
+    exit 1
+  fi
+  export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+  echo "--- CI mode: using DATABASE_URL_UNPOOLED from the environment ---"
+else
+  echo "--- Pull production env (Vercel) ---"
+  npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+  set -a
+  source .env.prod.pull
+  set +a
+  export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+
+  echo "--- Preflight (idempotent baseline SQL) ---"
+  node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
+  rm -f /tmp/preflight-prod.sql
+fi
 
 # Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
 # diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
