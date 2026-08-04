@@ -19,9 +19,12 @@ name: deployment-checks
 #         check & test → migrate prod DB → pdf-ocr-smoke
 #   - Time budget: there is no workflow-level timeout in GitHub Actions, so
 #     the whole run is bounded by the job timeouts on the critical path —
-#     max(check 2m, test 3m) + migrate 1m + smoke 2m = a ~6m ceiling (typical
-#     runs finish in ~4m). These are fail-fast guards, not targets: a hung
-#     job dies here instead of running for the default 6h.
+#     max(check 2m, test 4m) + migrate 1m + smoke 2m = a ~7m ceiling
+#     (typical runs finish in ~4.5m; PR-only runs are just check + test,
+#     ~3m). These are fail-fast guards, not targets: a hung job dies here
+#     instead of running for the default 6h. A literal 5-minute ceiling
+#     isn't possible without flaky failures — the test suite alone floors at
+#     ~3m and the smoke function can take up to a minute on a cold start.
 #   - Emails: GitHub sends one notification email per failed workflow run.
 #     Two workflows meant up to two emails per push; one workflow means at
 #     most one.
@@ -97,13 +100,14 @@ jobs:
 
       - run: pnpm check
 
-  # Full test suite against a throwaway Postgres. This is the long pole
-  # (~2.5-3m) — the timeout is the tightest that fits the suite, so keep the
-  # job lean (no pnpm check here; browsers cached).
+  # Full test suite against a throwaway Postgres. This is the long pole:
+  # pnpm test alone is ~2m and the suite floor with install + browsers is
+  # ~3m, so 4m is the tightest timeout that doesn't flake on cold-cache
+  # runs. Keep the job lean (no pnpm check here; browsers cached).
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     services:
       # Matches the hardcoded test URL in vite.config.ts:
       # postgres://assaf@localhost/expense_test (passwordless)
