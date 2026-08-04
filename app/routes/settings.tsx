@@ -41,14 +41,13 @@ import {
   setReportClosed,
   readMileageRates,
 } from "~/lib/store.server";
-import { countLabel } from "~/lib/format";
+import { countLabel, todayDate } from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
+  currentMileageRates,
   formatRate,
-  type MileageRateEntry,
 } from "~/lib/mileage-rates";
-import type { MileageType } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
@@ -74,6 +73,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     listUserOAuthSessions(user.id),
     readMileageRates(),
   ]);
+  // A compact "current rate" line for Settings — the editor itself resolves
+  // the exact rate per trip (date + type), so the page only needs today's.
+  const currentRates = currentMileageRates(rates, todayDate());
   return {
     accountName: account?.name ?? "",
     inviteCode: account?.inviteCode ?? "",
@@ -89,7 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     homeAddress: settings.homeAddress,
     inboundSenders,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
-    rates,
+    currentRates,
     oauthSessions,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
@@ -185,7 +187,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     reports,
     categories,
     homeAddress,
-    rates,
+    currentRates,
     accountName,
     inviteCode,
     inboundSenders,
@@ -246,10 +248,24 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Mileage rates</h2>
-        <p className="mb-3 text-sm text-gray-500">
-          The IRS standard rates — used automatically for every mileage expense
-          based on the trip's date and type (business, charity, medical, or
-          moving). Updated from the{" "}
+        <p className="text-sm text-gray-500">
+          The IRS rate for a trip is picked automatically from its date and type
+          (business, charity, medical, moving).{" "}
+          {currentRates ? (
+            <>
+              <span className="font-medium text-gray-700">
+                {currentRates.isCurrent ? "Current" : "Latest published"}:{" "}
+                {MILEAGE_TYPES.map(
+                  (t) =>
+                    `${MILEAGE_TYPE_LABELS[t]} $${formatRate(currentRates.byType[t] ?? "")}`,
+                ).join(" · ")}{" "}
+                / mi
+              </span>{" "}
+              ({periodLabel(currentRates.startDate, currentRates.endDate)}
+              ).{" "}
+            </>
+          ) : null}
+          Updated from the{" "}
           <a
             href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
             target="_blank"
@@ -257,10 +273,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             className="text-blue-600 hover:underline"
           >
             IRS standard mileage rates page
-          </a>{" "}
-          as they change.
+          </a>
+          .
         </p>
-        <MileageRatesTable rates={rates} />
       </section>
 
       <section className="mb-8">
@@ -488,63 +503,8 @@ function formatShortDate(iso: string | null): string {
   });
 }
 
-/** Read-only IRS mileage-rate table (the global master table): one row per
- * period, one column per type, newest first (the loader sorts desc). */
-function MileageRatesTable({ rates }: { rates: MileageRateEntry[] }) {
-  // Group the flat rows by (startDate, endDate) — each period has one row
-  // per type.
-  const byPeriod = new Map<string, Map<MileageType, string>>();
-  for (const r of rates) {
-    const key = `${r.startDate}|${r.endDate}`;
-    const row = byPeriod.get(key) ?? new Map<MileageType, string>();
-    row.set(r.type, r.rate);
-    byPeriod.set(key, row);
-  }
-  if (byPeriod.size === 0) {
-    return <p className="text-sm text-gray-400">No rates loaded yet.</p>;
-  }
-  return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
-            <th className="px-3 py-2 font-medium">Period</th>
-            {MILEAGE_TYPES.map((t) => (
-              <th key={t} className="px-3 py-2 text-right font-medium">
-                {MILEAGE_TYPE_LABELS[t]}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[...byPeriod.entries()].map(([key, row]) => {
-            const [start, end] = key.split("|");
-            return (
-              <tr key={key} className="border-b border-gray-100 last:border-0">
-                <td className="px-3 py-2 text-gray-700">
-                  {periodLabel(start!, end!)}
-                </td>
-                {MILEAGE_TYPES.map((t) => {
-                  const v = row.get(t);
-                  return (
-                    <td
-                      key={t}
-                      className="px-3 py-2 text-right tabular-nums text-gray-700"
-                    >
-                      {v ? `$${formatRate(v)}` : "—"}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/** "2026" for a full calendar year; "2026-07-01 – 2026-12-31" otherwise. */
+/** "2026" for a full calendar year; "Jul 1 – Dec 31, 2026" for a split
+ * period (or "Jul 1, 2025 – Jan 15, 2026" across years). */
 function periodLabel(start: string, end: string): string {
   if (start.length === 10 && end.length === 10) {
     const sy = start.slice(0, 4);
@@ -553,7 +513,16 @@ function periodLabel(start: string, end: string): string {
       return sy;
     }
   }
-  return `${start} – ${end}`;
+  const fmt = (d: string, withYear: boolean) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" as const } : {}),
+      timeZone: "UTC",
+    });
+  return start.slice(0, 4) === end.slice(0, 4)
+    ? `${fmt(start, false)} – ${fmt(end, true)}`
+    : `${fmt(start, true)} – ${fmt(end, true)}`;
 }
 
 function NameList<T extends { name: string }>({

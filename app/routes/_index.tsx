@@ -28,7 +28,7 @@ import {
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
-import { formatRate, latestRate, mileageRateFor } from "~/lib/mileage-rates";
+import { currentMileageRates, formatRate } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -66,11 +66,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   // receipt still warns when the original was already filed.
   const dismissed = new Set(settings.duplicateDismissals);
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
-  // The "current rate" tip: today's business rate, falling back to the
-  // most recent known rate until the IRS publishes the next period.
+  // The "current rate" tip: today's business rate (falls back to the most
+  // recent known period until the IRS publishes the next one).
   const mileageRate =
-    mileageRateFor(rates, todayDate(), "business") ||
-    latestRate(rates, "business");
+    currentMileageRates(rates, todayDate())?.byType.business ?? "";
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
     .sort((a, b) =>

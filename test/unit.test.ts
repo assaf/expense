@@ -15,8 +15,8 @@ import {
 } from "~/lib/format";
 import { recomputeMileage, geocode } from "~/lib/maps.server";
 import {
+  currentMileageRates,
   formatRate,
-  latestRate,
   mileageAmount,
   mileageRateFor,
 } from "~/lib/mileage-rates";
@@ -717,9 +717,25 @@ describe("mileage rates (master table helpers)", () => {
     expect(mileageRateFor(rates, "2026-06-30", "business")).toBe("0.725");
   });
 
-  it("latestRate returns the most recent known rate for a type", () => {
-    expect(latestRate(rates, "business")).toBe("0.76");
-    expect(latestRate(rates, "medical")).toBe("0.235");
+  it("currentMileageRates returns the covering period and all four types", () => {
+    const current = currentMileageRates(rates, "2026-08-15")!;
+    expect(current.isCurrent).toBe(true);
+    expect(current.startDate).toBe("2026-07-01");
+    expect(current.endDate).toBe("2026-12-31");
+    expect(current.byType).toEqual({
+      business: "0.76",
+      charity: "0.14",
+      medical: "0.235",
+      moving: "0.235",
+    });
+  });
+
+  it("currentMileageRates falls back to the latest period when none covers", () => {
+    const fallback = currentMileageRates(rates, "2027-01-01")!;
+    expect(fallback.isCurrent).toBe(false);
+    expect(fallback.startDate).toBe("2026-07-01");
+    expect(fallback.byType.business).toBe("0.76");
+    expect(currentMileageRates([], "2026-08-15")).toBeNull();
   });
 
   it("multiplies distance × rate with exact half-up rounding", () => {

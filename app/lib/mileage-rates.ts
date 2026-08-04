@@ -63,23 +63,51 @@ export function mileageRateFor(
   return best;
 }
 
-/** The most recent known rate for a type (its latest period) — a fallback
- * for "current rate" displays when today's period isn't in the table yet
- * (e.g. the IRS hasn't published next year's rate). */
-export function latestRate(
+/** The period covering `date` — its inclusive dates and the four type
+ * rates, for a compact "current rate" display. When no published period
+ * covers the date (e.g. before the IRS announces next year's rate), falls
+ * back to the most recent known period and marks itself not current.
+ * null only when the table is empty. */
+export function currentMileageRates(
   rates: MileageRateEntry[],
-  type: MileageType,
-): string {
-  let best = "";
-  let bestStart = "";
+  date: string,
+): {
+  isCurrent: boolean;
+  startDate: string;
+  endDate: string;
+  byType: Record<MileageType, string>;
+} | null {
+  // Group the flat rows by period; each period has one row per type.
+  const periods = new Map<string, Map<MileageType, string>>();
   for (const r of rates) {
-    if (r.type !== type) continue;
-    if (r.startDate >= bestStart) {
-      bestStart = r.startDate;
-      best = r.rate;
-    }
+    const key = `${r.startDate}|${r.endDate}`;
+    const row = periods.get(key) ?? new Map<MileageType, string>();
+    row.set(r.type, r.rate);
+    periods.set(key, row);
   }
-  return best;
+  if (periods.size === 0) return null;
+  const keys = [...periods.keys()];
+  const covers = keys.find((key) => {
+    const [start, end] = key.split("|");
+    return start! <= date && (end === "" || date <= end!);
+  });
+  // The fallback is the latest published period by start date (then end
+  // date) — independent of the input order.
+  const latest = [...periods.keys()].sort((a, b) => {
+    const [as, ae] = a.split("|");
+    const [bs, be] = b.split("|");
+    return bs!.localeCompare(as!) || (be ?? "").localeCompare(ae ?? "");
+  })[0]!;
+  const key = covers ?? latest;
+  const [startDate, endDate] = key.split("|");
+  const byType = {} as Record<MileageType, string>;
+  for (const [t, rate] of periods.get(key)!) byType[t] = rate;
+  return {
+    isCurrent: covers !== undefined,
+    startDate: startDate!,
+    endDate: endDate!,
+    byType,
+  };
 }
 
 /**
