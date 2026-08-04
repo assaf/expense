@@ -61,12 +61,7 @@ export {
   listInboundSenders,
   addInboundSender,
   removeInboundSender,
-  createApiToken,
-  findApiTokenByHash,
-  listApiTokens,
-  revokeApiToken,
-  touchApiToken,
-  readBootstrapAccountId,
+  readBootstrapUser,
   registerOAuthClient,
   findOAuthClient,
   saveOAuthConsent,
@@ -76,8 +71,10 @@ export {
   createOAuthToken,
   findOAuthToken,
   revokeOAuthToken,
-  listUserOAuthClients,
+  listUserOAuthSessions,
+  revokeUserOAuthToken,
   disconnectOAuthClient,
+  deleteOAuthClient,
 } from "~/lib/database";
 
 /** Build a new expense shell with sensible defaults. */

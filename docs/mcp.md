@@ -21,8 +21,8 @@ what the web app does, without the form:
 
 ## Setup
 
-The simplest way to connect is **signing in with your account** — no token
-management at all. OAuth-capable MCP clients do this automatically:
+Connecting is **signing in with your account** — there are no API keys. OAuth
+clients (Claude Code, Claude Desktop, Cursor, …) do this automatically:
 
 1. Point the client at `https://<your-host>/mcp`.
 2. The client fetches `/.well-known/oauth-authorization-server`, registers
@@ -32,27 +32,9 @@ management at all. OAuth-capable MCP clients do this automatically:
 4. The client gets tokens and connects. Consent is remembered, so
    reconnecting is a one-click approval.
 
-You can see and revoke connected apps anytime in **Settings → Agents & API
-(MCP) → Connected apps** — disconnecting revokes every token for that app.
-
-### API tokens (power users)
-
-Prefer a static credential for scripts or clients without OAuth support?
-Create a token in **Settings → Agents & API (MCP)** — optionally read-only.
-The token is shown **once**; only its hash is stored. Use it as a bearer
-token:
-
-```json
-{
-  "mcpServers": {
-    "expense": {
-      "type": "http",
-      "url": "https://expense.example.com/mcp",
-      "headers": { "Authorization": "Bearer exp_your-token-here" }
-    }
-  }
-}
-```
+Manage connected apps in **Settings → Agents & API (MCP)**: delete individual
+access or refresh tokens (kills a session now, or stops the app getting new
+sessions), or disconnect an app entirely to revoke everything.
 
 ### Claude Code
 
@@ -71,8 +53,7 @@ user-level config):
 ```
 
 Claude Code performs OAuth discovery automatically — it registers itself and
-opens your browser for the sign-in flow. (You can also add a static
-`headers` block with an API token if you prefer.)
+opens your browser for the sign-in flow.
 
 ### Claude Desktop
 
@@ -89,8 +70,6 @@ OAuth discovery automatically; approve the connection in your browser.
 Any MCP client that supports **Streamable HTTP + OAuth** works. The handshake
 is standard: discovery → register → authorize → token exchange →
 `initialize` → `notifications/initialized` → `tools/list` / `tools/call`.
-Clients that only support bearer tokens can use an API token instead (see
-above).
 
 ## Tools
 
@@ -110,8 +89,8 @@ above).
 | `get_settings`    |        | Per-year mileage rates and home address.                                                                                                                                                                                                     |
 | `reconcile`       |        | Match a bank statement CSV against logged expenses: matched pairs (with confidence), unmatched statement lines, and logged receipts with no statement line. Pure analysis — nothing is written.                                              |
 
-Write tools return `isError` with a clear message when the token is
-read-only, a report is closed, or a report doesn't exist.
+Write tools return `isError` with a clear message when a report is closed
+or doesn't exist.
 
 ## Reconciling a statement
 
@@ -125,24 +104,20 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
 
 ## Auth & security
 
-- **OAuth (recommended)** — authorization-code flow with PKCE (S256), per the
-  MCP authorization spec. Access tokens (`oat_…`) live 1 hour; refresh tokens
-  (`ort_…`) live 30 days and rotate on every grant, so a leaked token only
-  works briefly. Only the SHA-256 hashes are stored.
-- **API tokens** — `exp_…` credentials from Settings; only their SHA-256 hash
-  is stored, so a leaked database never exposes usable tokens.
-- Every request must present `Authorization: Bearer <token>`. A token only
-  ever reaches **its own account** — other accounts are fully isolated.
-  OAuth tokens bind to the signing-in user; users in the same account share
-  the connection, other accounts never see it.
-- **Read-only API tokens** can call every query tool but every write tool
-  returns an error. (OAuth tokens are full-access — that's what the consent
-  screen approves.)
-- **Revocation**: revoke a token or disconnect an app in Settings → Agents
-  & API; the next request gets `401`. Revoking an access token doesn't kill
-  the refresh token (RFC 7009); disconnecting an app revokes both.
-- Sessions are bound to the token's account + capabilities: reusing a
-  session id with a different token is rejected.
+- **OAuth only** — authorization-code flow with PKCE (S256), per the MCP
+  authorization spec. There are no API keys; every `/mcp` request carries an
+  OAuth access token (`oat_…`, 1-hour TTL) obtained by signing in. Refresh
+  tokens (`ort_…`) live 30 days and rotate on every grant, so a leaked token
+  only works briefly. Only the SHA-256 hashes are stored.
+- A token only ever reaches **its own account** — other accounts are fully
+  isolated. Tokens bind to the signing-in user; users in the same account
+  share the connection, other accounts never see it.
+- **Revocation**: Settings → Agents & API lets you delete individual access
+  or refresh tokens (revoking an access token doesn't kill the refresh token,
+  per RFC 7009) or disconnect an app, which revokes everything. The next
+  request gets `401`.
+- Sessions are bound to the token's account: reusing a session id with a
+  different account's token is rejected.
 - `capture_receipt` accepts URLs — the server fetches them (like the
   existing Nominatim/OSRM/DeepSeek calls); treat credentials as secrets that
   can read your expenses.
@@ -162,23 +137,23 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
 - The post-deploy smoke check (`GET /api/smoke`, gated by
   `SMOKE_TEST_SECRET`) runs a real MCP initialize → tools/list → tools/call
   round trip inside the deployed serverless bundle (`runMcpSmoke` in
-  `app/lib/mcp.server.ts`) using a one-off API token that is revoked right
-  after — it catches the SDK or zod being dropped by Vercel's dependency
-  tracer.
+  `app/lib/mcp.server.ts`) using an OAuth access token issued straight to
+  the store for a throwaway client that is deleted right after — it catches
+  the SDK or zod being dropped by Vercel's dependency tracer.
 
 ### Smoke-testing from a terminal
 
 ```bash
 # initialize (a session id comes back in the Mcp-Session-Id header)
 curl -s -D - https://expense.example.com/mcp \
-  -H "Authorization: Bearer exp_…" \
+  -H "Authorization: Bearer oat_…" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
 
 # list tools (repeat with the session id header)
 curl -s https://expense.example.com/mcp \
-  -H "Authorization: Bearer exp_…" \
+  -H "Authorization: Bearer oat_…" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Mcp-Session-Id: <session-id>" \
@@ -188,9 +163,8 @@ curl -s https://expense.example.com/mcp \
 ## How it's built
 
 - `app/routes/mcp.ts` — the HTTP endpoint (loader + action → `handleMcpRequest`).
-- `app/lib/mcp.server.ts` — the MCP server: session registry, bearer auth
-  (API tokens + OAuth access tokens), the 13 tools, and the reconciliation
-  matcher.
+- `app/lib/mcp.server.ts` — the MCP server: session registry, OAuth bearer
+  auth, the 13 tools, and the reconciliation matcher.
 - `app/lib/oauth.server.ts` — the OAuth authorization server: PKCE (S256),
   token/code generation + hashing, RFC 8414 metadata, refresh rotation, and
   client authentication.
@@ -198,13 +172,12 @@ curl -s https://expense.example.com/mcp \
   configuration, oauth-protected-resource) — discovery metadata.
 - `app/routes/oauth.{register,authorize,token,revoke}.ts(x)` — the OAuth
   endpoints; `oauth.authorize` renders the consent page.
-- `app/lib/api-tokens.server.ts` — API token generation + SHA-256 hashing.
 - `prisma/schema.prisma` — `ApiToken` and the OAuth models (`OAuthClient`,
   `OAuthConsent`, `OAuthCode`, `OAuthToken`).
-- `app/routes/settings.tsx` → **Agents & API (MCP)** — connected apps
-  (disconnect/revoke), create/revoke API tokens, endpoint URL.
+- `app/routes/settings.tsx` → **Agents & API (MCP)** — connected apps with
+  per-token delete and full disconnect, endpoint URL.
 - `app/lib/report-pdf.server.ts` — the report PDF builder shared by the web
   export and `export_report`.
-- Tests: `test/mcp.test.ts` (API tokens + smoke round trip) and
+- Tests: `test/mcp.test.ts` (OAuth access tokens + smoke round trip) and
   `test/oauth.test.ts` (discovery, registration, the full PKCE flow through
   the real consent page, refresh rotation, revocation, user isolation).

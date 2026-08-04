@@ -191,15 +191,6 @@ export interface InboundEmailRecord {
   updatedAt: string;
 }
 
-/** A machine token for the MCP/API endpoint (the hash is stored, never the token). */
-export interface ApiTokenInfo {
-  id: string;
-  name: string;
-  readOnly: boolean;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
 /** An OAuth client registered by an MCP client (RFC 7591 dynamic registration). */
 export interface OAuthClientRecord {
   id: string;

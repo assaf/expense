@@ -24,11 +24,9 @@ import {
   addCategory,
   addInboundSender,
   addReport,
-  createApiToken,
   disconnectOAuthClient,
-  listApiTokens,
   listInboundSenders,
-  listUserOAuthClients,
+  listUserOAuthSessions,
   readAccount,
   readCategories,
   readCategoryCounts,
@@ -40,7 +38,7 @@ import {
   removeReport,
   renameCategory,
   renameReport,
-  revokeApiToken,
+  revokeUserOAuthToken,
   setReportClosed,
 } from "~/lib/store.server";
 import { countLabel, normalizeAmount } from "~/lib/format";
@@ -57,8 +55,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     reportCounts,
     categoryCounts,
-    tokens,
-    oauthClients,
+    oauthSessions,
   ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
@@ -66,8 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     listInboundSenders(user.accountId),
     readReportCounts(user.accountId),
     readCategoryCounts(user.accountId),
-    listApiTokens(user.accountId),
-    listUserOAuthClients(user.id),
+    listUserOAuthSessions(user.id),
   ]);
   const years = Object.keys(settings.mileageRates).sort();
   return {
@@ -86,8 +82,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     rates: years.map((y) => ({ year: y, rate: settings.mileageRates[y] })),
-    tokens,
-    oauthClients,
+    oauthSessions,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
@@ -171,22 +166,14 @@ export async function action({ request }: Route.ActionArgs) {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;
     }
-    case "createToken": {
-      const result = await createApiToken({
-        accountId: user.accountId,
-        name: formString(form, "name"),
-        readOnly: formString(form, "readOnly") === "on",
-      });
-      // The raw token is only returned here — the UI shows it once.
-      return Response.json({ ok: true, ...result });
-    }
-    case "revokeToken": {
-      await revokeApiToken(user.accountId, formString(form, "id"));
-      return Response.json({ ok: true });
-    }
     case "disconnectOAuthClient": {
       const clientId = formString(form, "clientId");
       if (clientId) await disconnectOAuthClient(user.id, clientId);
+      return Response.json({ ok: true });
+    }
+    case "deleteOAuthToken": {
+      const tokenHash = formString(form, "tokenHash");
+      if (tokenHash) await revokeUserOAuthToken(user.id, tokenHash);
       return Response.json({ ok: true });
     }
     case "saveHome": {
@@ -220,8 +207,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     inviteCode,
     inboundSenders,
     inboundAddress,
-    tokens,
-    oauthClients,
+    oauthSessions,
     mcpUrl,
   } = loaderData;
   return (
@@ -408,11 +394,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      <AgentsSection
-        tokens={tokens}
-        oauthClients={oauthClients}
-        mcpUrl={mcpUrl}
-      />
+      <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
 
       <section className="border-t border-gray-100 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
@@ -431,69 +413,37 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 }
 
 /**
- * Agents & API (MCP): OAuth sign-in (connected apps) + bearer tokens for the
- * /mcp endpoint. The raw API token is returned by the action exactly once
- * and shown here until the next create — it is never retrievable again.
+ * Agents & API (MCP): the OAuth-connected apps for this account, each with
+ * its active tokens. Tokens can be deleted individually (kills that session
+ * or stops future refreshes) or the whole app can be disconnected.
  */
 function AgentsSection({
-  tokens,
-  oauthClients,
+  oauthSessions,
   mcpUrl,
 }: {
-  tokens: {
-    id: string;
-    name: string;
-    readOnly: boolean;
-    createdAt: string;
-    lastUsedAt: string | null;
-  }[];
-  oauthClients: {
+  oauthSessions: {
     client: { id: string; name: string };
-    hasRefreshToken: boolean;
+    tokens: {
+      tokenHash: string;
+      type: "access" | "refresh";
+      createdAt: string;
+      expiresAt: string;
+    }[];
   }[];
   mcpUrl: string;
 }) {
-  const createFetcher = useFetcher<{
-    ok: boolean;
-    token?: string;
-    name?: string;
-    error?: string;
-  }>();
-  const revokeFetcher = useFetcher<{ ok: boolean }>();
   const disconnectFetcher = useFetcher<{ ok: boolean }>();
-  const [copied, setCopied] = useState(false);
-  const created = createFetcher.data?.ok ? createFetcher.data : null;
-
-  async function copyToken() {
-    if (!created?.token) return;
-    try {
-      await navigator.clipboard.writeText(created.token);
-    } catch {
-      // Clipboard API unavailable (insecure context) — select the text
-      // so the user can copy manually.
-      const el = document.getElementById("fresh-token");
-      const selection = window.getSelection();
-      const range = document.createRange();
-      if (el && selection) {
-        range.selectNodeContents(el);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
+  const deleteTokenFetcher = useFetcher<{ ok: boolean }>();
 
   return (
     <section className="mb-8">
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
       <p className="mb-3 text-sm text-gray-500">
         Connect your AI assistant — Claude, Cursor, or any MCP client — to this
-        account. The simplest way is signing in: point the client at the
-        endpoint below and approve the connection in your browser. Agents can
-        capture receipts, log mileage, answer “how much did I spend on …?”,
-        build and export reports, and reconcile bank statements against logged
-        expenses. Read-only tokens can query but never change anything.
+        account. Point the client at the endpoint below and approve the
+        connection in your browser by signing in. Agents can capture receipts,
+        log mileage, answer “how much did I spend on …?”, build and export
+        reports, and reconcile bank statements against logged expenses.
       </p>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="mb-4">
@@ -505,163 +455,123 @@ function AgentsSection({
           </p>
         </div>
 
-        <div className="mb-4">
+        <div>
           <div className="mb-1 text-sm font-medium text-gray-700">
             Connected apps
           </div>
-          {oauthClients.length === 0 ? (
+          {oauthSessions.length === 0 ? (
             <p className="text-sm text-gray-400">
               None yet. The first time an assistant connects, you approve it
               here by signing in.
             </p>
           ) : (
-            <ul className="flex flex-col gap-1">
-              {oauthClients.map(({ client, hasRefreshToken }) => (
-                <li
-                  key={client.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+            <ul className="flex flex-col gap-2">
+              {oauthSessions.map(({ client, tokens }) => (
+                <li key={client.id} className="rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <KeyRound className="h-4 w-4 shrink-0 text-gray-400" />
-                      <span className="truncate text-sm font-medium">
-                        {client.name}
-                      </span>
-                      {hasRefreshToken ? (
-                        <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                          connected
-                        </span>
-                      ) : (
-                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
-                          tokens revoked
-                        </span>
-                      )}
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {client.name}
+                        </div>
+                        <div className="truncate text-xs text-gray-400">
+                          {client.id}
+                        </div>
+                      </div>
                     </div>
-                    <div className="truncate text-xs text-gray-400">
-                      {client.id}
-                    </div>
+                    <disconnectFetcher.Form method="post" className="contents">
+                      <input
+                        type="hidden"
+                        name="intent"
+                        value="disconnectOAuthClient"
+                      />
+                      <input type="hidden" name="clientId" value={client.id} />
+                      <button
+                        type="submit"
+                        className="shrink-0 text-gray-400 hover:text-red-600"
+                        aria-label={`Disconnect ${client.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </disconnectFetcher.Form>
                   </div>
-                  <disconnectFetcher.Form method="post" className="contents">
-                    <input
-                      type="hidden"
-                      name="intent"
-                      value="disconnectOAuthClient"
-                    />
-                    <input type="hidden" name="clientId" value={client.id} />
-                    <button
-                      type="submit"
-                      className="shrink-0 text-gray-400 hover:text-red-600"
-                      aria-label={`Disconnect ${client.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </disconnectFetcher.Form>
+                  {tokens.length > 0 ? (
+                    <ul className="mt-1.5 flex flex-col gap-1 border-t border-gray-200 pt-1.5">
+                      {tokens.map((token) => (
+                        <li
+                          key={token.tokenHash}
+                          className="flex items-center justify-between gap-2 pl-6"
+                        >
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span
+                              className={
+                                token.type === "refresh"
+                                  ? "rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-700"
+                                  : "rounded bg-gray-200 px-1.5 py-0.5 font-medium text-gray-600"
+                              }
+                            >
+                              {token.type}
+                            </span>
+                            <span>
+                              created {formatShortDate(token.createdAt)} ·
+                              expires {formatShortDate(token.expiresAt)}
+                            </span>
+                          </div>
+                          <deleteTokenFetcher.Form
+                            method="post"
+                            className="contents"
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="deleteOAuthToken"
+                            />
+                            <input
+                              type="hidden"
+                              name="tokenHash"
+                              value={token.tokenHash}
+                            />
+                            <button
+                              type="submit"
+                              className="shrink-0 text-gray-400 hover:text-red-600"
+                              aria-label="Delete this token"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </deleteTokenFetcher.Form>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1.5 border-t border-gray-200 pl-6 pt-1.5 text-xs text-gray-400">
+                      No active tokens — the connection is revoked.
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
           )}
+          <p className="mt-3 text-xs text-gray-400">
+            Deleting an access token ends that session immediately; deleting a
+            refresh token stops the app from getting new sessions. Disconnect
+            revokes everything for the app.
+          </p>
         </div>
-
-        {created ? (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <div className="mb-1 text-sm font-semibold text-amber-800">
-              Token created — shown once, copy it now.
-            </div>
-            <div className="flex items-center gap-2">
-              <code
-                id="fresh-token"
-                className="flex-1 break-all rounded border border-amber-200 bg-white px-2 py-1 text-sm"
-              >
-                {created.token}
-              </code>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={copyToken}
-              >
-                <Copy className="h-4 w-4" /> {copied ? "Copied" : "Copy"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mb-3">
-          <div className="mb-1 text-sm font-medium text-gray-700">Tokens</div>
-          <ul className="flex flex-col gap-1">
-            {tokens.length === 0 ? (
-              <li className="text-sm text-gray-400">None yet.</li>
-            ) : (
-              tokens.map((token) => (
-                <li
-                  key={token.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <KeyRound className="h-4 w-4 shrink-0 text-gray-400" />
-                      <span className="truncate text-sm font-medium">
-                        {token.name}
-                      </span>
-                      {token.readOnly ? (
-                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-600">
-                          read-only
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      created{" "}
-                      {new Date(token.createdAt).toLocaleDateString("en-US")}
-                      {token.lastUsedAt
-                        ? ` · last used ${new Date(token.lastUsedAt).toLocaleDateString("en-US")}`
-                        : " · never used"}
-                    </div>
-                  </div>
-                  <revokeFetcher.Form method="post" className="contents">
-                    <input type="hidden" name="intent" value="revokeToken" />
-                    <input type="hidden" name="id" value={token.id} />
-                    <button
-                      type="submit"
-                      className="shrink-0 text-gray-400 hover:text-red-600"
-                      aria-label={`Revoke ${token.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </revokeFetcher.Form>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-
-        <createFetcher.Form
-          method="post"
-          className="flex flex-wrap items-end gap-2"
-        >
-          <input type="hidden" name="intent" value="createToken" />
-          <div className="min-w-40 flex-1">
-            <Input
-              type="text"
-              name="name"
-              placeholder="e.g. Claude Desktop"
-              required
-            />
-          </div>
-          <label className="mb-1 flex items-center gap-1.5 text-sm text-gray-600">
-            <input
-              type="checkbox"
-              name="readOnly"
-              className="rounded border-gray-300"
-            />
-            Read-only
-          </label>
-          <Button type="submit" size="sm" variant="secondary">
-            <Plus className="h-4 w-4" /> New token
-          </Button>
-        </createFetcher.Form>
       </div>
     </section>
   );
+}
+
+/** Short "Aug 4, 2026" label for a token timestamp. */
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function NameList<T extends { name: string }>({

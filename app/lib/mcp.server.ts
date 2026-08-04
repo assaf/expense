@@ -1,13 +1,14 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 import Decimal from "decimal.js";
-import { hashApiToken, isApiToken } from "~/lib/api-tokens.server";
-import { isOAuthToken, verifyAccessToken } from "~/lib/oauth.server";
 import {
-  findApiTokenByHash,
-  touchApiToken,
+  isOAuthToken,
+  issueTokenPair,
+  verifyAccessToken,
+} from "~/lib/oauth.server";
+import {
   findUserById,
   readExpenses,
   readExpense,
@@ -21,9 +22,9 @@ import {
   setReportClosed,
   upsertExpense,
   newExpenseShell,
-  createApiToken,
-  revokeApiToken,
-  readBootstrapAccountId,
+  readBootstrapUser,
+  registerOAuthClient,
+  deleteOAuthClient,
 } from "~/lib/store.server";
 import {
   normalizeAmount,
@@ -57,17 +58,14 @@ import type {
  * does, without a form.
  *
  * Transport: MCP Streamable HTTP (WebStandardStreamableHTTPServerTransport).
- * Each initialized session gets a transport + server instance bound to the
- * account and capabilities (readOnly) of the bearer token that created it;
- * subsequent requests must present a token for the same account with the
- * same capabilities. Sessions live in a module-level map — on serverless
- * cold starts sessions are lost and clients re-initialize (spec-compliant
+ * Auth is OAuth-only: every request carries an OAuth access token
+ * (authorization-code flow, see oauth.server.ts) and each initialized
+ * session gets a transport + server instance bound to the account of the
+ * token that created it; subsequent requests must present a token for the
+ * same account. Sessions live in a module-level map — on serverless cold
+ * starts sessions are lost and clients re-initialize (spec-compliant
  * 404 → re-init).
  */
-
-/** Read-only tokens may call query tools but every write tool refuses. */
-const READ_ONLY_MESSAGE =
-  "This token is read-only — it can query expenses but cannot create or change them.";
 
 /** The largest receipt bytes a capture tool accepts (matches a phone photo). */
 const MAX_CAPTURE_BYTES = 15_000_000;
@@ -75,7 +73,6 @@ const MAX_CAPTURE_BYTES = 15_000_000;
 /** One authenticated MCP session, bound to a transport + server instance. */
 interface McpSession {
   accountId: string;
-  readOnly: boolean;
   transport: WebStandardStreamableHTTPServerTransport;
 }
 
@@ -98,10 +95,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   if (method === "DELETE") {
     const session = sessionId ? sessions.get(sessionId) : undefined;
     if (!session) return jsonError(request, 404, "No such session.");
-    if (
-      session.accountId !== auth.accountId ||
-      session.readOnly !== auth.readOnly
-    ) {
+    if (session.accountId !== auth.accountId) {
       return jsonError(request, 401, "Token does not match the session.");
     }
     const response = await session.transport.handleRequest(request);
@@ -121,10 +115,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
       );
     const session = sessions.get(sessionId);
     if (!session) return jsonError(request, 404, "No such session.");
-    if (
-      session.accountId !== auth.accountId ||
-      session.readOnly !== auth.readOnly
-    ) {
+    if (session.accountId !== auth.accountId) {
       return jsonError(request, 401, "Token does not match the session.");
     }
     return session.transport.handleRequest(request);
@@ -139,10 +130,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
         404,
         "Session expired or unknown — initialize again.",
       );
-    if (
-      session.accountId !== auth.accountId ||
-      session.readOnly !== auth.readOnly
-    ) {
+    if (session.accountId !== auth.accountId) {
       return jsonError(request, 401, "Token does not match the session.");
     }
     return session.transport.handleRequest(request);
@@ -152,55 +140,35 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 }
 
 /**
- * Validate `Authorization: Bearer …` and resolve the account + capabilities.
- * Two token kinds are accepted:
- *  - `exp_…` API tokens from Settings → Agents & API (account-scoped, may be
- *    read-only);
- *  - `oat_…` OAuth access tokens from the authorization-code flow, which
- *    authenticate the user who signed in (their account, full access).
- * Unauthenticated requests get a 401 carrying the RFC 9728 protected-resource
- * hint so OAuth-capable clients can start discovery.
+ * Validate `Authorization: Bearer …` and resolve the account. The only
+ * accepted tokens are `oat_…` OAuth access tokens from the authorization-
+ * code flow, which authenticate the user who signed in (their account,
+ * full access). Unauthenticated requests get a 401 carrying the RFC 9728
+ * protected-resource hint so OAuth-capable clients can start discovery.
  */
 async function authenticateRequest(
   request: Request,
-): Promise<{ accountId: string; readOnly: boolean } | Response> {
+): Promise<{ accountId: string } | Response> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return jsonError(request, 401, MISSING_TOKEN_MESSAGE);
-
-  if (isApiToken(token)) {
-    const found = await findApiTokenByHash(hashApiToken(token));
-    if (!found)
-      return jsonError(
-        request,
-        401,
-        "Unknown token — it may have been revoked.",
-      );
-    // Last-used stamping is best-effort bookkeeping, never awaited.
-    void touchApiToken(found.id);
-    return { accountId: found.accountId, readOnly: found.readOnly };
+  if (!token || !isOAuthToken(token)) {
+    return jsonError(request, 401, MISSING_TOKEN_MESSAGE);
   }
-
-  if (isOAuthToken(token)) {
-    const verified = await verifyAccessToken(token);
-    if (!verified)
-      return jsonError(
-        request,
-        401,
-        "Unknown or expired access token — sign in again.",
-      );
-    const user = await findUserById(verified.userId);
-    if (!user)
-      return jsonError(request, 401, "Unknown account — sign in again.");
-    return { accountId: user.accountId, readOnly: false };
-  }
-
-  return jsonError(request, 401, MISSING_TOKEN_MESSAGE);
+  const verified = await verifyAccessToken(token);
+  if (!verified)
+    return jsonError(
+      request,
+      401,
+      "Unknown or expired access token — sign in again.",
+    );
+  const user = await findUserById(verified.userId);
+  if (!user) return jsonError(request, 401, "Unknown account — sign in again.");
+  return { accountId: user.accountId };
 }
 
-/** Shown when no bearer token is present or it isn't one of ours. */
+/** Shown when no bearer token is present or it isn't an OAuth access token. */
 const MISSING_TOKEN_MESSAGE =
-  "Missing bearer token — connect with OAuth (sign in) or create an API token in Settings → Agents & API.";
+  "Missing bearer token — connect by signing in: point your MCP client at this endpoint and approve the connection.";
 
 /**
  * A 401 with the OAuth protected-resource metadata hint (RFC 9728), so
@@ -225,7 +193,7 @@ function jsonError(
 
 /** Initialize a fresh session bound to this token's account + capabilities. */
 async function createSession(
-  auth: { accountId: string; readOnly: boolean },
+  auth: { accountId: string },
   request: Request,
 ): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -234,17 +202,13 @@ async function createSession(
     // tests, and keeps serverless functions from holding a stream open.
     enableJsonResponse: true,
     onsessioninitialized: (id) => {
-      sessions.set(id, {
-        accountId: auth.accountId,
-        readOnly: auth.readOnly,
-        transport,
-      });
+      sessions.set(id, { accountId: auth.accountId, transport });
     },
     onsessionclosed: (id) => {
       sessions.delete(id);
     },
   });
-  const server = createMcpServer(auth.accountId, auth.readOnly);
+  const server = createMcpServer(auth.accountId);
   await server.connect(transport);
   return transport.handleRequest(request);
 }
@@ -295,24 +259,31 @@ const SMOKE_TOOL_NAMES = [
 /**
  * Post-deploy MCP smoke check (called from GET /api/smoke): a real
  * initialize → tools/list → tools/call round trip through `handleMcpRequest`
- * — the exact code /mcp serves — authenticated with a one-off token that is
- * revoked afterwards. Proves the MCP SDK + zod survived Vercel's dependency
- * tracer in the serverless bundle and that the endpoint can serve a client
- * against the real database. Throws with a message on any failure.
+ * — the exact code /mcp serves — authenticated with an OAuth access token
+ * issued straight to the store (no browser needed). Proves the MCP SDK + zod
+ * survived Vercel's dependency tracer in the serverless bundle and that the
+ * endpoint can serve a client against the real database. Throws with a
+ * message on any failure.
  */
 export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
-  const accountId = await readBootstrapAccountId();
-  if (!accountId) {
+  const user = await readBootstrapUser();
+  if (!user) {
     throw new Error(
       "no account to exercise the MCP endpoint against (empty database?)",
     );
   }
   const started = Date.now();
-  const { id, token } = await createApiToken({
-    accountId,
+  // A throwaway OAuth client + token pair, removed in `finally` below.
+  const clientId = `smoke_${randomBytes(8).toString("hex")}`;
+  await registerOAuthClient({
+    id: clientId,
+    secretHash: null,
     name: "smoke check",
-    readOnly: false,
+    redirectUris: ["https://smoke.invalid/callback"],
+    authMethod: "none",
   });
+  const { accessToken } = await issueTokenPair(user.id, clientId);
+  const token = accessToken;
   let sessionId: string | null = null;
   try {
     const request = (body: unknown, sid?: string): Request => {
@@ -406,8 +377,8 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
 
     return { tools: names.length, ms: Date.now() - started };
   } finally {
-    // Always clean up: the one-off token and its session.
-    await revokeApiToken(accountId, id);
+    // Always clean up: the throwaway client (cascades its tokens) and session.
+    await deleteOAuthClient(clientId);
     if (sessionId) {
       await handleMcpRequest(
         new Request("http://smoke.local/mcp", {
@@ -422,7 +393,7 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
   }
 }
 
-function createMcpServer(accountId: string, readOnly: boolean): McpServer {
+function createMcpServer(accountId: string): McpServer {
   const server = new McpServer({ name: "expense", version: "0.1.0" });
 
   // --- capture_receipt -----------------------------------------------------
@@ -480,8 +451,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
       description: z.string().optional().describe("Description or memo."),
     },
     async (args) => {
-      const blocked = writeGuard(readOnly);
-      if (blocked) return fail(blocked);
       return captureReceipt(accountId, args);
     },
   );
@@ -525,8 +494,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
       description: z.string().optional().describe("Description or memo."),
     },
     async (args) => {
-      const blocked = writeGuard(readOnly);
-      if (blocked) return fail(blocked);
       return logMileage(accountId, args);
     },
   );
@@ -656,8 +623,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
     'Create a report (e.g. "Q3 2026") to group expenses. Fails if the name already exists.',
     { name: z.string().min(1).describe("Report name.") },
     async ({ name }) => {
-      const blocked = writeGuard(readOnly);
-      if (blocked) return fail(blocked);
       const result = await addReport(accountId, name);
       return result.ok ? ok({ name }) : fail(result.error);
     },
@@ -671,8 +636,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
       closed: z.boolean().optional().describe("Default true."),
     },
     async ({ name, closed }) => {
-      const blocked = writeGuard(readOnly);
-      if (blocked) return fail(blocked);
       await setReportClosed(accountId, name, closed ?? true);
       return ok({ name, closed: closed ?? true });
     },
@@ -686,8 +649,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
       report: z.string().min(1).describe("Existing, open report name."),
     },
     async ({ expenseId, report }) => {
-      const blocked = writeGuard(readOnly);
-      if (blocked) return fail(blocked);
       const expense = await readExpense(expenseId, accountId);
       if (!expense) return fail(`No expense with id "${expenseId}".`);
       const reports = await readReports(accountId);
@@ -797,10 +758,6 @@ function createMcpServer(accountId: string, readOnly: boolean): McpServer {
 }
 
 // --- Tool implementations --------------------------------------------------
-
-function writeGuard(readOnly: boolean): string | null {
-  return readOnly ? READ_ONLY_MESSAGE : null;
-}
 
 /** Shared filters for list_expenses and expense_summary. */
 interface ExpenseFilters {

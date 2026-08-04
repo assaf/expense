@@ -1,5 +1,4 @@
 import { ulid } from "ulid";
-import { generateApiToken, hashApiToken } from "~/lib/api-tokens.server";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { deleteImage } from "~/lib/images.server";
@@ -11,7 +10,6 @@ import { DEFAULT_SETTINGS, parseLocations, parseRoute } from "~/lib/types";
 import { isEmail } from "~/lib/validation";
 import type {
   Account,
-  ApiTokenInfo,
   Category,
   Expense,
   InboundEmailRecord,
@@ -216,14 +214,16 @@ export async function readAccount(id: string): Promise<Account | undefined> {
 }
 
 /**
- * The account the app bootstrapped (the oldest user's account) — used by
- * the post-deploy smoke check to exercise the MCP endpoint without a
- * browser session. Undefined only when the database has no users yet.
+ * The bootstrap user (oldest user) — the MCP smoke check issues an OAuth
+ * token for them directly. Undefined only when the database has no users.
  */
-export async function readBootstrapAccountId(): Promise<string | undefined> {
+export async function readBootstrapUser(): Promise<User | undefined> {
   await initStore();
-  const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-  return first?.accountId;
+  const first = await prisma.user.findFirst({
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, accountId: true, email: true, createdAt: true },
+  });
+  return first ?? undefined;
 }
 
 /** Create a new account. Throws if the name is already taken. */
@@ -784,87 +784,6 @@ export async function dismissDuplicatePair(
   });
 }
 
-// --- API tokens (MCP endpoint) -------------------------------------------
-
-/**
- * Create a machine token for the MCP/API endpoint. Returns the raw token
- * exactly once — callers show it to the user immediately; only the SHA-256
- * hash is persisted. Read-only tokens can query but never write.
- */
-export async function createApiToken(input: {
-  accountId: string;
-  name: string;
-  readOnly: boolean;
-}): Promise<{ id: string; token: string }> {
-  const token = generateApiToken();
-  const id = ulid();
-  await prisma.apiToken.create({
-    data: {
-      id,
-      accountId: input.accountId,
-      name: input.name.trim() || "Agent token",
-      tokenHash: hashApiToken(token),
-      readOnly: input.readOnly,
-      createdAt: new Date().toISOString(),
-      lastUsedAt: null,
-    },
-  });
-  return { id, token };
-}
-
-/** The account + capabilities a token grants, or undefined when unknown. */
-export async function findApiTokenByHash(
-  hash: string,
-): Promise<{ id: string; accountId: string; readOnly: boolean } | undefined> {
-  const row = await prisma.apiToken.findUnique({
-    where: { tokenHash: hash },
-    select: { id: true, accountId: true, readOnly: true },
-  });
-  return row ?? undefined;
-}
-
-/** All tokens for an account, newest first — for the Settings list. */
-export async function listApiTokens(
-  accountId: string,
-): Promise<ApiTokenInfo[]> {
-  const rows = await prisma.apiToken.findMany({
-    where: { accountId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      readOnly: true,
-      createdAt: true,
-      lastUsedAt: true,
-    },
-  });
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    readOnly: r.readOnly,
-    createdAt: r.createdAt,
-    lastUsedAt: r.lastUsedAt,
-  }));
-}
-
-/** Revoke a token — the client's next request is rejected (401). */
-export async function revokeApiToken(
-  accountId: string,
-  id: string,
-): Promise<void> {
-  await prisma.apiToken.deleteMany({ where: { accountId, id } });
-}
-
-/** Record a token's last successful use (best-effort, never awaited). */
-export async function touchApiToken(id: string): Promise<void> {
-  await prisma.apiToken
-    .update({
-      where: { id },
-      data: { lastUsedAt: new Date().toISOString() },
-    })
-    .catch(() => {});
-}
-
 // --- OAuth (MCP authorization server) -------------------------------------
 
 /**
@@ -1025,42 +944,65 @@ export async function revokeOAuthToken(tokenHash: string): Promise<void> {
 }
 
 /**
- * The OAuth clients this user has connected, with whether they hold a live
- * refresh token — the Settings → Agents & API "connected apps" list.
+ * The OAuth clients this user has connected, each with its active tokens
+ * (not revoked, not expired) — the Settings → Agents & API "connected
+ * apps" list. Token hashes are exposed as opaque row ids (they're one-way
+ * hashes of 256-bit secrets — safe to show).
  */
-export async function listUserOAuthClients(
+export async function listUserOAuthSessions(
   userId: string,
-): Promise<{ client: OAuthClientRecord; hasRefreshToken: boolean }[]> {
+): Promise<{ client: OAuthClientRecord; tokens: OAuthTokenRecord[] }[]> {
   const consents = await prisma.oAuthConsent.findMany({
     where: { userId },
     orderBy: { grantedAt: "desc" },
-    select: { clientId: true, grantedAt: true },
-  });
-  if (consents.length === 0) return [];
-  const clients = await prisma.oAuthClient.findMany({
-    where: { id: { in: consents.map((c) => c.clientId) } },
-  });
-  const clientById = new Map(clients.map((c) => [c.id, c]));
-  const refreshHashes = await prisma.oAuthToken.findMany({
-    where: {
-      userId,
-      type: "refresh",
-      revokedAt: null,
-      expiresAt: { gt: new Date().toISOString() },
-    },
     select: { clientId: true },
   });
-  const live = new Set(refreshHashes.map((t) => t.clientId));
-  const out: { client: OAuthClientRecord; hasRefreshToken: boolean }[] = [];
+  if (consents.length === 0) return [];
+  const [clients, tokens] = await Promise.all([
+    prisma.oAuthClient.findMany({
+      where: { id: { in: consents.map((c) => c.clientId) } },
+    }),
+    prisma.oAuthToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date().toISOString() },
+      },
+    }),
+  ]);
+  const clientById = new Map(clients.map((c) => [c.id, c]));
+  const out: { client: OAuthClientRecord; tokens: OAuthTokenRecord[] }[] = [];
   for (const consent of consents) {
     const row = clientById.get(consent.clientId);
     if (!row) continue;
     out.push({
       client: oauthClientFromRow(row),
-      hasRefreshToken: live.has(consent.clientId),
+      tokens: tokens
+        .filter((t) => t.clientId === consent.clientId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map(oauthTokenFromRow),
     });
   }
   return out;
+}
+
+/**
+ * Revoke one of the user's own OAuth tokens (Settings per-token delete).
+ * Scoped by userId so a user can only kill their own tokens.
+ */
+export async function revokeUserOAuthToken(
+  userId: string,
+  tokenHash: string,
+): Promise<void> {
+  await prisma.oAuthToken.updateMany({
+    where: { userId, tokenHash, revokedAt: null },
+    data: { revokedAt: new Date().toISOString() },
+  });
+}
+
+/** Delete a registered OAuth client entirely (cascades codes/tokens/consents). */
+export async function deleteOAuthClient(clientId: string): Promise<void> {
+  await prisma.oAuthClient.deleteMany({ where: { id: clientId } });
 }
 
 /**

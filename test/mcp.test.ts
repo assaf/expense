@@ -1,8 +1,13 @@
 import { expect } from "playwright/test";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import sharp from "sharp";
+import { hashToken, issueTokenPair } from "~/lib/oauth.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
-import { createApiToken, revokeApiToken } from "~/lib/store.server";
+import {
+  deleteOAuthClient,
+  registerOAuthClient,
+  revokeOAuthToken,
+} from "~/lib/store.server";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
@@ -12,45 +17,37 @@ import {
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 
 /**
- * End-to-end tests for the MCP endpoint (/mcp, Streamable HTTP + bearer
- * tokens). Tokens are created directly against the test database (which the
- * launched server shares), then exercised over real JSON-RPC HTTP calls.
+ * End-to-end tests for the MCP endpoint (/mcp, Streamable HTTP). Auth is
+ * OAuth-only: tokens are OAuth access tokens issued directly to the store
+ * (the browser consent flow is covered separately in oauth.test.ts), then
+ * exercised over real JSON-RPC HTTP calls.
  */
 describe("MCP endpoint", () => {
-  let fullToken = "";
-  let readOnlyToken = "";
-  let otherToken = "";
+  /** One OAuth client shared by the suite; its tokens cascade on delete. */
+  let clientId = "";
+  let accessToken = "";
+  let otherAccessToken = "";
 
   beforeAll(async () => {
-    const [full, readOnly, other] = await Promise.all([
-      createApiToken({
-        accountId: TEST_ACCOUNT_ID,
-        name: "test full",
-        readOnly: false,
-      }),
-      createApiToken({
-        accountId: TEST_ACCOUNT_ID,
-        name: "test read-only",
-        readOnly: true,
-      }),
-      createApiToken({
-        accountId: OTHER_ACCOUNT_ID,
-        name: "test other",
-        readOnly: false,
-      }),
+    const client = await registerOAuthClient({
+      id: "mcp_test_client",
+      secretHash: null,
+      name: "mcp test",
+      redirectUris: ["https://test.invalid/callback"],
+      authMethod: "none",
+    });
+    clientId = client.id;
+    // user_test1 → Test Account, user_test2 → Other Account (seed data).
+    const [mine, other] = await Promise.all([
+      issueTokenPair("user_test1", clientId),
+      issueTokenPair("user_test2", clientId),
     ]);
-    fullToken = full.token;
-    readOnlyToken = readOnly.token;
-    otherToken = other.token;
+    accessToken = mine.accessToken;
+    otherAccessToken = other.accessToken;
   });
 
   afterAll(async () => {
-    await testPrisma.apiToken.deleteMany({
-      where: {
-        accountId: { in: [TEST_ACCOUNT_ID, OTHER_ACCOUNT_ID] },
-        name: { startsWith: "test " },
-      },
-    });
+    await deleteOAuthClient(clientId);
   });
 
   /** One POST to /mcp with the bearer token; returns status, session id, JSON. */
@@ -126,7 +123,9 @@ describe("MCP endpoint", () => {
     );
     expect(res.status).toBe(200);
     const result = (
-      res.json as { result: { content: { text: string }[]; isError?: boolean } }
+      res.json as {
+        result: { content: { text: string }[]; isError?: boolean };
+      }
     ).result;
     const text = result.content?.[0]?.text ?? "";
     return {
@@ -135,7 +134,7 @@ describe("MCP endpoint", () => {
     };
   }
 
-  it("rejects requests without a valid token", async () => {
+  it("rejects requests without a valid OAuth token", async () => {
     const noAuth = await mcpPost("", {
       jsonrpc: "2.0",
       id: 1,
@@ -147,8 +146,8 @@ describe("MCP endpoint", () => {
       },
     });
     expect(noAuth.status).toBe(401);
-
-    const badToken = await mcpPost("exp_this-is-not-a-real-token", {
+    // A non-OAuth bearer (e.g. a former API-key style token) is rejected too.
+    const badToken = await mcpPost("exp_this-is-not-an-oauth-token", {
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
@@ -162,9 +161,9 @@ describe("MCP endpoint", () => {
   });
 
   it("exposes the full tool surface over tools/list", async () => {
-    const session = await initialize(fullToken);
+    const session = await initialize(accessToken);
     const res = await mcpPost(
-      fullToken,
+      accessToken,
       { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
       session,
     );
@@ -192,7 +191,7 @@ describe("MCP endpoint", () => {
   });
 
   it("captures a receipt image into a real expense", async () => {
-    const session = await initialize(fullToken);
+    const session = await initialize(accessToken);
     const png = await sharp({
       create: {
         width: 40,
@@ -203,7 +202,7 @@ describe("MCP endpoint", () => {
     })
       .png()
       .toBuffer();
-    const result = await callTool(fullToken, session, "capture_receipt", {
+    const result = await callTool(accessToken, session, "capture_receipt", {
       imageData: png.toString("base64"),
       mime: "image/png",
       filename: "test-receipt.png",
@@ -230,8 +229,8 @@ describe("MCP endpoint", () => {
   });
 
   it("logs mileage with pre-geocoded stops and computes distance + amount", async () => {
-    const session = await initialize(fullToken);
-    const result = await callTool(fullToken, session, "log_mileage", {
+    const session = await initialize(accessToken);
+    const result = await callTool(accessToken, session, "log_mileage", {
       locations: [
         { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
         { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
@@ -261,8 +260,8 @@ describe("MCP endpoint", () => {
   });
 
   it("queries expenses and summarizes them (scoped to the account)", async () => {
-    const session = await initialize(fullToken);
-    const summary = await callTool(fullToken, session, "expense_summary", {
+    const session = await initialize(accessToken);
+    const summary = await callTool(accessToken, session, "expense_summary", {
       report: "2026 Test",
       dateFrom: "2026-01-01",
       dateTo: "2026-03-31",
@@ -272,7 +271,7 @@ describe("MCP endpoint", () => {
     expect(summary.payload.count).toBe(4);
     expect(summary.payload.total).toBe("80.89");
 
-    const listed = await callTool(fullToken, session, "list_expenses", {
+    const listed = await callTool(accessToken, session, "list_expenses", {
       merchant: "office",
       dateFrom: "2026-01-01",
       dateTo: "2026-03-31",
@@ -283,24 +282,26 @@ describe("MCP endpoint", () => {
     expect(expenses[0]!.merchant).toBe("OfficeMax");
 
     // A token for another account only ever sees that account's rows.
-    const otherSession = await initialize(otherToken);
+    const otherSession = await initialize(otherAccessToken);
     const otherList = await callTool(
-      otherToken,
+      otherAccessToken,
       otherSession,
       "list_expenses",
       {},
     );
     const otherExpenses = (
-      otherList.payload as { expenses: { merchant: string }[] }
+      otherList.payload as {
+        expenses: { merchant: string }[];
+      }
     ).expenses;
     expect(otherExpenses.length).toBe(1);
     expect(otherExpenses[0]!.merchant).toBe("Secret Corp");
   });
 
   it("builds reports: create, close (rejects new expenses), add, export PDF", async () => {
-    const session = await initialize(fullToken);
+    const session = await initialize(accessToken);
 
-    const created = await callTool(fullToken, session, "create_report", {
+    const created = await callTool(accessToken, session, "create_report", {
       name: "MCP Report",
     });
     expect(created.isError).toBe(false);
@@ -309,7 +310,7 @@ describe("MCP endpoint", () => {
     const receipt = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, date: "2026-04-28" },
     });
-    const added = await callTool(fullToken, session, "add_to_report", {
+    const added = await callTool(accessToken, session, "add_to_report", {
       expenseId: receipt!.id,
       report: "MCP Report",
     });
@@ -320,17 +321,17 @@ describe("MCP endpoint", () => {
     expect(moved!.report).toBe("MCP Report");
 
     // Closing a report freezes it.
-    await callTool(fullToken, session, "close_report", {
+    await callTool(accessToken, session, "close_report", {
       name: "2027 Test",
     });
-    const rejected = await callTool(fullToken, session, "add_to_report", {
+    const rejected = await callTool(accessToken, session, "add_to_report", {
       expenseId: receipt!.id,
       report: "2027 Test",
     });
     expect(rejected.isError).toBe(true);
     expect(JSON.stringify(rejected.payload)).toContain("closed");
 
-    const pdf = await callTool(fullToken, session, "export_report", {
+    const pdf = await callTool(accessToken, session, "export_report", {
       name: "MCP Report",
     });
     expect(pdf.isError).toBe(false);
@@ -339,8 +340,8 @@ describe("MCP endpoint", () => {
   });
 
   it("reconciles a statement CSV against logged expenses (read-only)", async () => {
-    const session = await initialize(fullToken);
-    const result = await callTool(fullToken, session, "reconcile", {
+    const session = await initialize(accessToken);
+    const result = await callTool(accessToken, session, "reconcile", {
       statementCsv: [
         "date,description,amount",
         "2026-01-15,TEST STORE PURCHASE,42.50",
@@ -361,57 +362,23 @@ describe("MCP endpoint", () => {
     expect(payload.unmatchedExpenses.length).toBeGreaterThan(1);
   });
 
-  it("enforces read-only tokens on write tools", async () => {
-    const session = await initialize(readOnlyToken);
-
-    const listed = await callTool(readOnlyToken, session, "list_expenses", {});
-    expect(listed.isError).toBe(false);
-
-    const png = await sharp({
-      create: { width: 10, height: 10, channels: 3, background: "white" },
-    })
-      .png()
-      .toBuffer();
-    const blocked = await callTool(readOnlyToken, session, "capture_receipt", {
-      imageData: png.toString("base64"),
-      mime: "image/png",
-    });
-    expect(blocked.isError).toBe(true);
-    expect(JSON.stringify(blocked.payload)).toContain("read-only");
-
-    const blockedReport = await callTool(
-      readOnlyToken,
-      session,
-      "create_report",
-      {
-        name: "Nope",
-      },
-    );
-    expect(blockedReport.isError).toBe(true);
-  });
-
-  it("runs the post-deploy smoke MCP round trip and cleans up its token", async () => {
+  it("runs the post-deploy smoke MCP round trip and cleans up its client", async () => {
     const result = await runMcpSmoke();
     expect(result.tools).toBe(13);
     expect(result.ms).toBeGreaterThan(0);
-    // The one-off token and its session are always revoked/closed.
-    const leftover = await testPrisma.apiToken.findFirst({
-      where: { accountId: TEST_ACCOUNT_ID, name: "smoke check" },
+    // The throwaway OAuth client (and its tokens) are always removed.
+    const leftover = await testPrisma.oAuthClient.findFirst({
+      where: { name: "smoke check" },
     });
     expect(leftover).toBeNull();
   });
 
-  it("rejects a revoked token", async () => {
-    const { id, token } = await createApiToken({
-      accountId: TEST_ACCOUNT_ID,
-      name: "test revoke-me",
-      readOnly: false,
-    });
-    const session = await initialize(token);
+  it("rejects a revoked access token", async () => {
+    const session = await initialize(accessToken);
     expect(session).toBeTruthy();
 
-    await revokeApiToken(TEST_ACCOUNT_ID, id);
-    const res = await mcpPost(token, {
+    await revokeOAuthToken(hashToken(accessToken));
+    const res = await mcpPost(accessToken, {
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",

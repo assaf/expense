@@ -33,7 +33,6 @@ model Account {
   imageBlobs    ImageBlob[]
   inboundEmails InboundEmail[]
   inboundSenders InboundSender[]
-  apiTokens     ApiToken[]
 
   @@map("accounts")
 }
@@ -174,24 +173,6 @@ model InboundSender {
   @@id([accountId, address])
   @@index([address])
   @@map("inbound_senders")
-}
-
-/// A machine token for the MCP/API endpoint (bearer auth). The raw token is
-/// shown once at creation — only its SHA-256 hash is stored. Read-only
-/// tokens can query expenses but never create or change anything.
-model ApiToken {
-  id         String   @id
-  accountId  String
-  name       String
-  tokenHash  String   @unique
-  readOnly   Boolean  @default(false)
-  createdAt  String
-  lastUsedAt String?
-
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
-  @@index([accountId])
-  @@map("api_tokens")
 }
 
 /// An OAuth 2.1 client registered by an MCP client via dynamic registration

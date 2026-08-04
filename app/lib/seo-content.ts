@@ -176,7 +176,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I use Expense with an AI assistant?",
     answer:
-      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: point any MCP client — Claude, Cursor, or another assistant — at the endpoint and approve the connection by signing in with your account; no API token to manage. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. You can disconnect any connected app from Settings at any time.",
+      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: point any MCP client — Claude, Cursor, or another assistant — at the endpoint and approve the connection by signing in with your account; nothing to configure. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. You can disconnect any connected app — or delete its tokens — from Settings at any time.",
   },
   {
     question: "Who makes Expense?",
@@ -341,7 +341,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison for people choosing an expense tracker.
-- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) — approve the connection by signing in with your account, or use an API token from Settings. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
+- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) — approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
 
 ## Optional
 
