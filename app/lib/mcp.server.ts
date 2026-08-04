@@ -1,6 +1,10 @@
-import { randomBytes, randomUUID } from "node:crypto";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { randomBytes } from "node:crypto";
+import {
+  createMcpHandler,
+  isLegacyRequest,
+  McpServer,
+  WebStandardStreamableHTTPServerTransport,
+} from "@modelcontextprotocol/server";
 import { z } from "zod";
 import Decimal from "decimal.js";
 import {
@@ -58,86 +62,110 @@ import type {
  * a receipt photo/PDF and get a filed expense — the same work the web UI
  * does, without a form.
  *
- * Transport: MCP Streamable HTTP (WebStandardStreamableHTTPServerTransport).
+ * Transport: MCP Streamable HTTP via the v2 SDK's `createMcpHandler` — one
+ * endpoint, both protocol eras. 2025-era clients (the `initialize`
+ * handshake) are served per request without sessions (the default
+ * `legacy: 'stateless'` posture), and 2026-07-28 stateless clients (a
+ * per-request `_meta` envelope) are served natively. Responses are
+ * JSON-only (`responseMode: 'json'`) — no long-lived SSE streams, which
+ * keeps serverless functions from holding a connection open.
+ *
  * Auth is OAuth-only: every request carries an OAuth access token
- * (authorization-code flow, see oauth.server.ts) and each initialized
- * session gets a transport + server instance bound to the account of the
- * token that created it; subsequent requests must present a token for the
- * same account. Sessions live in a module-level map — on serverless cold
- * starts sessions are lost and clients re-initialize (spec-compliant
- * 404 → re-init).
+ * (authorization-code flow, see oauth.server.ts). The token resolves to an
+ * account before the handler runs, and each request gets a fresh server
+ * instance bound to that account — the endpoint is fully stateless, holds
+ * nothing between requests, and cold starts cost nothing.
  */
 
 /** The largest receipt bytes a capture tool accepts (matches a phone photo). */
 const MAX_CAPTURE_BYTES = 15_000_000;
 
-/** One authenticated MCP session, bound to a transport + server instance. */
-interface McpSession {
-  accountId: string;
-  transport: WebStandardStreamableHTTPServerTransport;
-}
-
-const sessions = new Map<string, McpSession>();
-
 // --- HTTP handling ---------------------------------------------------------
 
+/** Build the per-request server instance for the authenticated account. */
+function buildServer(accountId: string): McpServer {
+  return createMcpServer(accountId);
+}
+
 /**
- * Handle any request to /mcp: authenticate the bearer token, route to the
- * session's transport (creating one for a fresh initialize), and translate
- * the SDK's Response back to the caller. Loaders and actions both land here.
+ * The 2026-07-28 leg: `createMcpHandler` builds a fresh server per request
+ * and holds nothing between requests. `legacy: 'reject'` — 2025-era traffic
+ * is routed to `serveLegacy` below, never here.
+ */
+const modernHandler = createMcpHandler(
+  (ctx) => {
+    const accountId = ctx.authInfo?.extra?.accountId;
+    if (typeof accountId !== "string") {
+      // Unreachable: authenticateRequest runs before every handler.fetch.
+      throw new Error("[mcp] Missing account in authInfo");
+    }
+    return buildServer(accountId);
+  },
+  {
+    legacy: "reject",
+    responseMode: "json",
+    onerror: (error) => console.error("[mcp] %s", error.message),
+  },
+);
+
+/**
+ * The 2025-era leg: one stateless transport per request (no session id
+ * generator), with `enableJsonResponse` so responses are plain JSON instead
+ * of SSE — simpler for CLI agents and tests, and keeps serverless functions
+ * from holding a stream open. The built-in `legacy: 'stateless'` fallback
+ * does not expose that option, so the leg is wired by hand with the SDK's
+ * own `isLegacyRequest` classification — the documented pattern for keeping
+ * a legacy deployment next to a strict modern handler.
+ */
+async function serveLegacy(
+  request: Request,
+  auth: { accountId: string; userId: string; token: string },
+): Promise<Response> {
+  if (request.method.toUpperCase() !== "POST") {
+    // No sessions, so legacy GET (SSE stream) and DELETE are meaningless.
+    return Response.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Method not allowed." },
+        id: null,
+      },
+      { status: 405 },
+    );
+  }
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  const server = buildServer(auth.accountId);
+  await server.connect(transport);
+  return transport.handleRequest(request, {
+    authInfo: {
+      token: auth.token,
+      clientId: auth.userId,
+      scopes: [],
+      extra: { accountId: auth.accountId },
+    },
+  });
+}
+
+/**
+ * Handle any request to /mcp: authenticate the bearer token, then route by
+ * protocol era — 2025-era (no `_meta` envelope claim) to the stateless
+ * legacy leg, everything else to the strict 2026-07-28 handler. Loaders and
+ * actions both land here.
  */
 export async function handleMcpRequest(request: Request): Promise<Response> {
   const auth = await authenticateRequest(request);
   if (auth instanceof Response) return auth;
-
-  const sessionId = request.headers.get("mcp-session-id");
-  const method = request.method.toUpperCase();
-
-  if (method === "DELETE") {
-    const session = sessionId ? sessions.get(sessionId) : undefined;
-    if (!session) return jsonError(request, 404, "No such session.");
-    if (session.accountId !== auth.accountId) {
-      return jsonError(request, 401, "Token does not match the session.");
-    }
-    const response = await session.transport.handleRequest(request);
-    if (sessionId) sessions.delete(sessionId);
-    await session.transport.close().catch(() => {});
-    return response;
-  }
-
-  if (method === "GET") {
-    // SSE resumption requires an established session (sessions are
-    // server-generated; there is no anonymous standalone stream).
-    if (!sessionId)
-      return jsonError(
-        request,
-        400,
-        "A session is required — POST an initialize request first.",
-      );
-    const session = sessions.get(sessionId);
-    if (!session) return jsonError(request, 404, "No such session.");
-    if (session.accountId !== auth.accountId) {
-      return jsonError(request, 401, "Token does not match the session.");
-    }
-    return session.transport.handleRequest(request);
-  }
-
-  if (method === "POST") {
-    if (!sessionId) return createSession(auth, request);
-    const session = sessions.get(sessionId);
-    if (!session)
-      return jsonError(
-        request,
-        404,
-        "Session expired or unknown — initialize again.",
-      );
-    if (session.accountId !== auth.accountId) {
-      return jsonError(request, 401, "Token does not match the session.");
-    }
-    return session.transport.handleRequest(request);
-  }
-
-  return jsonError(request, 405, "Method not allowed.");
+  if (await isLegacyRequest(request)) return serveLegacy(request, auth);
+  return modernHandler.fetch(request, {
+    authInfo: {
+      token: auth.token,
+      clientId: auth.userId,
+      scopes: [],
+      extra: { accountId: auth.accountId },
+    },
+  });
 }
 
 /**
@@ -149,7 +177,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
  */
 async function authenticateRequest(
   request: Request,
-): Promise<{ accountId: string } | Response> {
+): Promise<{ accountId: string; userId: string; token: string } | Response> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !isOAuthToken(token)) {
@@ -164,7 +192,7 @@ async function authenticateRequest(
     );
   const user = await findUserById(verified.userId);
   if (!user) return jsonError(request, 401, "Unknown account — sign in again.");
-  return { accountId: user.accountId };
+  return { accountId: user.accountId, userId: user.id, token };
 }
 
 /** Shown when no bearer token is present or it isn't an OAuth access token. */
@@ -190,28 +218,6 @@ function jsonError(
       },
     },
   );
-}
-
-/** Initialize a fresh session bound to this token's account + capabilities. */
-async function createSession(
-  auth: { accountId: string },
-  request: Request,
-): Promise<Response> {
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    // JSON responses instead of SSE streams — simpler for CLI agents and
-    // tests, and keeps serverless functions from holding a stream open.
-    enableJsonResponse: true,
-    onsessioninitialized: (id) => {
-      sessions.set(id, { accountId: auth.accountId, transport });
-    },
-    onsessionclosed: (id) => {
-      sessions.delete(id);
-    },
-  });
-  const server = createMcpServer(auth.accountId);
-  await server.connect(transport);
-  return transport.handleRequest(request);
 }
 
 // --- Tool results ----------------------------------------------------------
@@ -258,13 +264,16 @@ const SMOKE_TOOL_NAMES = [
 ] as const;
 
 /**
- * Post-deploy MCP smoke check (called from GET /api/smoke): a real
- * initialize → tools/list → tools/call round trip through `handleMcpRequest`
- * — the exact code /mcp serves — authenticated with an OAuth access token
- * issued straight to the store (no browser needed). Proves the MCP SDK + zod
- * survived Vercel's dependency tracer in the serverless bundle and that the
- * endpoint can serve a client against the real database. Throws with a
- * message on any failure.
+ * Post-deploy MCP smoke check (called from GET /api/smoke): real round
+ * trips through `handleMcpRequest` — the exact code /mcp serves — in BOTH
+ * protocol eras: a 2025-era initialize → tools/list → tools/call flow
+ * (served statelessly) and a 2026-07-28 server/discover → tools/list →
+ * tools/call flow carrying the per-request `_meta` envelope and the
+ * standard `Mcp-Method`/`Mcp-Name` headers. Authenticated with an OAuth
+ * access token issued straight to the store (no browser needed). Proves the
+ * MCP SDK + zod survived Vercel's dependency tracer in the serverless
+ * bundle and that the endpoint can serve both generations of clients
+ * against the real database. Throws with a message on any failure.
  */
 export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
   const user = await readBootstrapUser();
@@ -285,25 +294,83 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
   });
   const { accessToken } = await issueTokenPair(user.id, clientId);
   const token = accessToken;
-  let sessionId: string | null = null;
   try {
-    const request = (body: unknown, sid?: string): Request => {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        // The transport answers 406 without the spec's Accept header.
-        Accept: "application/json, text/event-stream",
-        Authorization: `Bearer ${token}`,
+    const post = (body: unknown, headers: Record<string, string> = {}) =>
+      handleMcpRequest(
+        new Request("http://smoke.local/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            // The transport answers 406 without the spec's Accept header.
+            Accept: "application/json, text/event-stream",
+            Authorization: `Bearer ${token}`,
+            ...headers,
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+
+    /** Assert a JSON-RPC success result and return its `result`. */
+    const assertResult = async (
+      res: Response,
+      label: string,
+    ): Promise<Record<string, unknown>> => {
+      if (res.status !== 200) {
+        throw new Error(`MCP ${label} failed: HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as {
+        result?: Record<string, unknown>;
+        error?: { message?: string };
       };
-      if (sid) headers["mcp-session-id"] = sid;
-      return new Request("http://smoke.local/mcp", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
+      if (!json.result) {
+        throw new Error(
+          `MCP ${label} returned no result: ${json.error?.message ?? JSON.stringify(json)}`,
+        );
+      }
+      return json.result;
     };
 
-    const init = await handleMcpRequest(
-      request({
+    /** Verify every expected tool is advertised; returns the names. */
+    const assertTools = (
+      result: Record<string, unknown>,
+      label: string,
+    ): string[] => {
+      const names = (
+        (result.tools as { name?: string }[] | undefined) ?? []
+      ).map((t) => t.name ?? "");
+      for (const expected of SMOKE_TOOL_NAMES) {
+        if (!names.includes(expected)) {
+          throw new Error(
+            `MCP tool missing from the bundle (${label}): ${expected}`,
+          );
+        }
+      }
+      return names;
+    };
+
+    /** tools/call get_settings must answer with a non-error result. */
+    const callSettings = async (
+      body: Record<string, unknown>,
+      label: string,
+    ): Promise<void> => {
+      const result = await assertResult(
+        await post(body, {
+          "Mcp-Method": "tools/call",
+          "Mcp-Name": "get_settings",
+        }),
+        `${label} tools/call`,
+      );
+      if (result.isError) {
+        const content = (result as { content?: { text?: string }[] }).content;
+        throw new Error(
+          `${label} get_settings errored: ${content?.[0]?.text ?? "no content"}`,
+        );
+      }
+    };
+
+    // --- 2025-era (legacy): initialize → tools/list → tools/call -----------
+    await assertResult(
+      await post({
         jsonrpc: "2.0",
         id: 1,
         method: "initialize",
@@ -313,84 +380,72 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
           clientInfo: { name: "smoke", version: "1.0.0" },
         },
       }),
+      "legacy initialize",
     );
-    if (init.status !== 200) {
-      throw new Error(`MCP initialize failed: HTTP ${init.status}`);
-    }
-    sessionId = init.headers.get("mcp-session-id");
-    if (!sessionId) {
-      throw new Error("MCP initialize returned no session id");
-    }
-
-    const notified = await handleMcpRequest(
-      request(
-        { jsonrpc: "2.0", method: "notifications/initialized" },
-        sessionId,
+    assertTools(
+      await assertResult(
+        await post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+        "legacy tools/list",
       ),
+      "legacy",
     );
-    if (notified.status !== 202) {
-      throw new Error(
-        `MCP initialized notification failed: HTTP ${notified.status}`,
-      );
-    }
+    await callSettings(
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "get_settings", arguments: {} },
+      },
+      "legacy",
+    );
 
-    const list = await handleMcpRequest(
-      request(
-        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
-        sessionId,
-      ),
-    );
-    if (list.status !== 200) {
-      throw new Error(`MCP tools/list failed: HTTP ${list.status}`);
-    }
-    const listJson = (await list.json()) as {
-      result?: { tools?: { name: string }[] };
+    // --- 2026-07-28 era (modern): discover → tools/list → tools/call -------
+    const envelope = {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientInfo": { name: "smoke", version: "1.0.0" },
+      "io.modelcontextprotocol/clientCapabilities": {},
     };
-    const names = (listJson.result?.tools ?? []).map((t) => t.name);
-    for (const expected of SMOKE_TOOL_NAMES) {
-      if (!names.includes(expected)) {
-        throw new Error(`MCP tool missing from the bundle: ${expected}`);
-      }
-    }
-
-    const call = await handleMcpRequest(
-      request(
+    await assertResult(
+      await post(
         {
           jsonrpc: "2.0",
-          id: 3,
-          method: "tools/call",
-          params: { name: "get_settings", arguments: {} },
+          id: 1,
+          method: "server/discover",
+          params: { _meta: envelope },
         },
-        sessionId,
+        { "Mcp-Method": "server/discover" },
       ),
+      "modern server/discover",
     );
-    if (call.status !== 200) {
-      throw new Error(`MCP tools/call failed: HTTP ${call.status}`);
-    }
-    const callJson = (await call.json()) as {
-      result?: { isError?: boolean; content?: { text: string }[] };
-    };
-    if (callJson.result?.isError) {
-      throw new Error(
-        `MCP tools/call get_settings errored: ${callJson.result.content?.[0]?.text ?? "no content"}`,
-      );
-    }
-
-    return { tools: names.length, ms: Date.now() - started };
-  } finally {
-    // Always clean up: the throwaway client (cascades its tokens) and session.
-    await deleteOAuthClient(clientId);
-    if (sessionId) {
-      await handleMcpRequest(
-        new Request("http://smoke.local/mcp", {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "mcp-session-id": sessionId,
+    const modernNames = assertTools(
+      await assertResult(
+        await post(
+          {
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/list",
+            params: { _meta: envelope },
           },
-        }),
-      ).catch(() => {});
-    }
+          { "Mcp-Method": "tools/list" },
+        ),
+        "modern tools/list",
+      ),
+      "modern",
+    );
+    await callSettings(
+      {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { _meta: envelope, name: "get_settings", arguments: {} },
+      },
+      "modern",
+    );
+
+    return { tools: modernNames.length, ms: Date.now() - started };
+  } finally {
+    // Always clean up: the throwaway client (cascades its tokens).
+    await deleteOAuthClient(clientId);
   }
 }
 
@@ -399,57 +454,62 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- capture_receipt -----------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "capture_receipt",
-    "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. Returns the extracted fields and the new expense id.",
     {
-      imageData: z
-        .string()
-        .optional()
-        .describe(
-          "Base64-encoded receipt image (PNG/JPEG/HEIC/WebP) or PDF bytes.",
-        ),
-      mime: z
-        .string()
-        .optional()
-        .describe(
-          "MIME type of imageData, e.g. image/png or application/pdf. Guessed from filename when omitted.",
-        ),
-      filename: z
-        .string()
-        .optional()
-        .describe("Original filename; used for the stored image name."),
-      url: z
-        .string()
-        .optional()
-        .describe(
-          "URL of a receipt image or PDF to fetch instead of imageData.",
-        ),
-      merchant: z
-        .string()
-        .optional()
-        .describe("Merchant override (otherwise extracted)."),
-      amount: z
-        .string()
-        .optional()
-        .describe(
-          'Amount override as a decimal string, e.g. "42.50" (otherwise extracted).',
-        ),
-      category: z
-        .string()
-        .optional()
-        .describe(
-          "Category override (otherwise resolved from the merchant's history, then the extraction suggestion).",
-        ),
-      date: z
-        .string()
-        .optional()
-        .describe("Expense date YYYY-MM-DD (defaults to today)."),
-      report: z
-        .string()
-        .optional()
-        .describe("Report name to file under; must already exist and be open."),
-      description: z.string().optional().describe("Description or memo."),
+      description:
+        "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. Returns the extracted fields and the new expense id.",
+      inputSchema: z.object({
+        imageData: z
+          .string()
+          .optional()
+          .describe(
+            "Base64-encoded receipt image (PNG/JPEG/HEIC/WebP) or PDF bytes.",
+          ),
+        mime: z
+          .string()
+          .optional()
+          .describe(
+            "MIME type of imageData, e.g. image/png or application/pdf. Guessed from filename when omitted.",
+          ),
+        filename: z
+          .string()
+          .optional()
+          .describe("Original filename; used for the stored image name."),
+        url: z
+          .string()
+          .optional()
+          .describe(
+            "URL of a receipt image or PDF to fetch instead of imageData.",
+          ),
+        merchant: z
+          .string()
+          .optional()
+          .describe("Merchant override (otherwise extracted)."),
+        amount: z
+          .string()
+          .optional()
+          .describe(
+            'Amount override as a decimal string, e.g. "42.50" (otherwise extracted).',
+          ),
+        category: z
+          .string()
+          .optional()
+          .describe(
+            "Category override (otherwise resolved from the merchant's history, then the extraction suggestion).",
+          ),
+        date: z
+          .string()
+          .optional()
+          .describe("Expense date YYYY-MM-DD (defaults to today)."),
+        report: z
+          .string()
+          .optional()
+          .describe(
+            "Report name to file under; must already exist and be open.",
+          ),
+        description: z.string().optional().describe("Description or memo."),
+      }),
     },
     async (args) => {
       return captureReceipt(accountId, args);
@@ -458,41 +518,46 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- log_mileage ---------------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "log_mileage",
-    "Log a driving trip: geocode the stops, compute the route distance with the account's mileage rate for the year, and create the mileage expense (and the derived mileage row).",
     {
-      locations: z
-        .array(
-          z.union([
-            z.string().describe("Address to geocode."),
-            z.object({
-              address: z.string(),
-              lat: z
-                .number()
-                .optional()
-                .describe("Pre-known latitude — skips geocoding."),
-              lng: z
-                .number()
-                .optional()
-                .describe("Pre-known longitude — skips geocoding."),
-            }),
-          ]),
-        )
-        .min(2)
-        .describe(
-          "Ordered trip stops: start, intermediate stops, end. Each is an address string or a pre-geocoded { address, lat, lng }.",
-        ),
-      date: z
-        .string()
-        .optional()
-        .describe("Trip date YYYY-MM-DD (defaults to today)."),
-      report: z
-        .string()
-        .optional()
-        .describe("Report name to file under; must already exist and be open."),
-      category: z.string().optional().describe("Category name."),
-      description: z.string().optional().describe("Description or memo."),
+      description:
+        "Log a driving trip: geocode the stops, compute the route distance with the account's mileage rate for the year, and create the mileage expense (and the derived mileage row).",
+      inputSchema: z.object({
+        locations: z
+          .array(
+            z.union([
+              z.string().describe("Address to geocode."),
+              z.object({
+                address: z.string(),
+                lat: z
+                  .number()
+                  .optional()
+                  .describe("Pre-known latitude — skips geocoding."),
+                lng: z
+                  .number()
+                  .optional()
+                  .describe("Pre-known longitude — skips geocoding."),
+              }),
+            ]),
+          )
+          .min(2)
+          .describe(
+            "Ordered trip stops: start, intermediate stops, end. Each is an address string or a pre-geocoded { address, lat, lng }.",
+          ),
+        date: z
+          .string()
+          .optional()
+          .describe("Trip date YYYY-MM-DD (defaults to today)."),
+        report: z
+          .string()
+          .optional()
+          .describe(
+            "Report name to file under; must already exist and be open.",
+          ),
+        category: z.string().optional().describe("Category name."),
+        description: z.string().optional().describe("Description or memo."),
+      }),
     },
     async (args) => {
       return logMileage(accountId, args);
@@ -501,38 +566,44 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- list_expenses -------------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "list_expenses",
-    "Query expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first. Amounts are decimal strings.",
     {
-      dateFrom: z
-        .string()
-        .optional()
-        .describe("Inclusive start date YYYY-MM-DD."),
-      dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
-      category: z
-        .string()
-        .optional()
-        .describe("Exact category name (case-insensitive)."),
-      merchant: z
-        .string()
-        .optional()
-        .describe(
-          "Substring match on merchant (receipts) or stop addresses (mileage).",
-        ),
-      report: z.string().optional().describe("Exact report name."),
-      unreported: z
-        .boolean()
-        .optional()
-        .describe("Only expenses not in any report."),
-      type: z.enum(["receipt", "mileage"]).optional(),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(500)
-        .optional()
-        .describe("Max rows (default 100)."),
+      description:
+        "Query expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first. Amounts are decimal strings.",
+      inputSchema: z.object({
+        dateFrom: z
+          .string()
+          .optional()
+          .describe("Inclusive start date YYYY-MM-DD."),
+        dateTo: z
+          .string()
+          .optional()
+          .describe("Inclusive end date YYYY-MM-DD."),
+        category: z
+          .string()
+          .optional()
+          .describe("Exact category name (case-insensitive)."),
+        merchant: z
+          .string()
+          .optional()
+          .describe(
+            "Substring match on merchant (receipts) or stop addresses (mileage).",
+          ),
+        report: z.string().optional().describe("Exact report name."),
+        unreported: z
+          .boolean()
+          .optional()
+          .describe("Only expenses not in any report."),
+        type: z.enum(["receipt", "mileage"]).optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("Max rows (default 100)."),
+      }),
     },
     async (args) => {
       const expenses = await readExpenses(accountId);
@@ -548,17 +619,20 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- expense_summary -----------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "expense_summary",
-    'Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to "how much did I spend on X?".',
     {
-      dateFrom: z.string().optional(),
-      dateTo: z.string().optional(),
-      category: z.string().optional(),
-      merchant: z.string().optional(),
-      report: z.string().optional(),
-      unreported: z.boolean().optional(),
-      type: z.enum(["receipt", "mileage"]).optional(),
+      description:
+        'Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to "how much did I spend on X?".',
+      inputSchema: z.object({
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        category: z.string().optional(),
+        merchant: z.string().optional(),
+        report: z.string().optional(),
+        unreported: z.boolean().optional(),
+        type: z.enum(["receipt", "mileage"]).optional(),
+      }),
     },
     async (args) => {
       const expenses = filterExpenses(await readExpenses(accountId), args);
@@ -595,10 +669,12 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- list_reports --------------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "list_reports",
-    "All reports with their expense counts and exact totals.",
-    {},
+    {
+      description: "All reports with their expense counts and exact totals.",
+      inputSchema: z.object({}),
+    },
     async () => {
       const [reports, reportCounts, expenses] = await Promise.all([
         readReports(accountId),
@@ -619,22 +695,30 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- create_report / close_report / add_to_report ------------------------
 
-  server.tool(
+  server.registerTool(
     "create_report",
-    'Create a report (e.g. "Q3 2026") to group expenses. Fails if the name already exists.',
-    { name: z.string().min(1).describe("Report name.") },
+    {
+      description:
+        'Create a report (e.g. "Q3 2026") to group expenses. Fails if the name already exists.',
+      inputSchema: z.object({
+        name: z.string().min(1).describe("Report name."),
+      }),
+    },
     async ({ name }) => {
       const result = await addReport(accountId, name);
       return result.ok ? ok({ name }) : fail(result.error);
     },
   );
 
-  server.tool(
+  server.registerTool(
     "close_report",
-    "Close (or reopen) a report. Closed reports refuse new expenses.",
     {
-      name: z.string().min(1),
-      closed: z.boolean().optional().describe("Default true."),
+      description:
+        "Close (or reopen) a report. Closed reports refuse new expenses.",
+      inputSchema: z.object({
+        name: z.string().min(1),
+        closed: z.boolean().optional().describe("Default true."),
+      }),
     },
     async ({ name, closed }) => {
       await setReportClosed(accountId, name, closed ?? true);
@@ -642,12 +726,15 @@ function createMcpServer(accountId: string): McpServer {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "add_to_report",
-    "Move an expense into a report (must exist and be open). Also renames the stored receipt image to the dated convention name when the expense has a date and original filename.",
     {
-      expenseId: z.string().min(1),
-      report: z.string().min(1).describe("Existing, open report name."),
+      description:
+        "Move an expense into a report (must exist and be open). Also renames the stored receipt image to the dated convention name when the expense has a date and original filename.",
+      inputSchema: z.object({
+        expenseId: z.string().min(1),
+        report: z.string().min(1).describe("Existing, open report name."),
+      }),
     },
     async ({ expenseId, report }) => {
       const expense = await readExpense(expenseId, accountId);
@@ -686,10 +773,15 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- export_report -------------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "export_report",
-    "Render a report as a PDF (the same layout as the web export: grouped by category, with a receipt images appendix) and return it base64-encoded. Decode and save as a .pdf file.",
-    { name: z.string().min(1).describe("Report name.") },
+    {
+      description:
+        "Render a report as a PDF (the same layout as the web export: grouped by category, with a receipt images appendix) and return it base64-encoded. Decode and save as a .pdf file.",
+      inputSchema: z.object({
+        name: z.string().min(1).describe("Report name."),
+      }),
+    },
     async ({ name }) => {
       const reports = await readReports(accountId);
       if (!reports.some((r) => r.name === name)) {
@@ -713,27 +805,35 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- list_categories / list_merchants / get_settings ---------------------
 
-  server.tool(
+  server.registerTool(
     "list_categories",
-    "The account's category names (alphabetical) — use these when categorizing expenses.",
-    {},
+    {
+      description:
+        "The account's category names (alphabetical) — use these when categorizing expenses.",
+      inputSchema: z.object({}),
+    },
     async () => {
       const categories = await readCategories(accountId);
       return ok(categories.map((c) => c.name));
     },
   );
 
-  server.tool(
+  server.registerTool(
     "list_merchants",
-    "Merchant names previously used, most recent first.",
-    {},
+    {
+      description: "Merchant names previously used, most recent first.",
+      inputSchema: z.object({}),
+    },
     async () => ok(await readPriorMerchants(accountId)),
   );
 
-  server.tool(
+  server.registerTool(
     "get_settings",
-    "Account settings: per-year mileage reimbursement rates and the home address.",
-    {},
+    {
+      description:
+        "Account settings: per-year mileage reimbursement rates and the home address.",
+      inputSchema: z.object({}),
+    },
     async () => {
       const settings = await readSettings(accountId);
       return ok({
@@ -745,10 +845,13 @@ function createMcpServer(accountId: string): McpServer {
 
   // --- reconcile -----------------------------------------------------------
 
-  server.tool(
+  server.registerTool(
     "reconcile",
-    "Match a bank statement against logged expenses. Pass the statement as CSV (header row optional; date, description and amount columns — amounts may include $ and parentheses for negatives). Returns matched pairs, statement lines with no matching receipt, and logged receipts with no statement line.",
-    { statementCsv: z.string().min(1) },
+    {
+      description:
+        "Match a bank statement against logged expenses. Pass the statement as CSV (header row optional; date, description and amount columns — amounts may include $ and parentheses for negatives). Returns matched pairs, statement lines with no matching receipt, and logged receipts with no statement line.",
+      inputSchema: z.object({ statementCsv: z.string().min(1) }),
+    },
     async ({ statementCsv }) => {
       const expenses = await readExpenses(accountId);
       return ok(reconcileStatement(statementCsv, expenses));

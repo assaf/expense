@@ -1,6 +1,10 @@
 import { expect } from "playwright/test";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import sharp from "sharp";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
 import { hashToken, issueTokenPair } from "~/lib/oauth.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
 import {
@@ -50,26 +54,24 @@ describe("MCP endpoint", () => {
     await deleteOAuthClient(clientId);
   });
 
-  /** One POST to /mcp with the bearer token; returns status, session id, JSON. */
+  /** One POST to /mcp with the bearer token; returns status + parsed JSON. */
   async function mcpPost(
     token: string,
     body: unknown,
-    sessionId?: string,
-  ): Promise<{ status: number; sessionId: string | null; json: unknown }> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      // The MCP streamable HTTP spec requires this; the transport answers
-      // 406 otherwise (real clients always send it).
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${token}`,
-    };
-    if (sessionId) headers["mcp-session-id"] = sessionId;
+    headers: Record<string, string> = {},
+  ): Promise<{ status: number; json: unknown }> {
     const res = await fetch(`${baseURL}/mcp`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        // The MCP streamable HTTP spec requires this; the transport answers
+        // 406 otherwise (real clients always send it).
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${token}`,
+        ...headers,
+      },
       body: JSON.stringify(body),
     });
-    const sid = res.headers.get("mcp-session-id");
     const text = await res.text();
     let json: unknown = null;
     try {
@@ -77,12 +79,11 @@ describe("MCP endpoint", () => {
     } catch {
       json = text;
     }
-    return { status: res.status, sessionId: sid, json };
+    return { status: res.status, json };
   }
 
-  /** Initialize a session (returns the session id) and send the initialized
-   * notification, mirroring what an MCP client does. */
-  async function initialize(token: string): Promise<string> {
+  /** 2025-era handshake (served statelessly — no session id is issued). */
+  async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
       id: 1,
@@ -94,20 +95,49 @@ describe("MCP endpoint", () => {
       },
     });
     expect(init.status).toBe(200);
-    expect(init.sessionId).toBeTruthy();
-    const notified = await mcpPost(
-      token,
-      { jsonrpc: "2.0", method: "notifications/initialized" },
-      init.sessionId!,
-    );
-    expect(notified.status).toBe(202);
-    return init.sessionId!;
   }
 
-  /** Call a tool and parse the tool result payload (JSON text content). */
+  /** Call a tool (2025-era) and parse the tool result payload (JSON text). */
   async function callTool(
     token: string,
-    sessionId: string,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<{ isError: boolean; payload: Record<string, unknown> }> {
+    const res = await mcpPost(token, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name, arguments: args },
+    });
+    expect(res.status).toBe(200);
+    const result = (
+      res.json as {
+        result: { content: { text: string }[]; isError?: boolean };
+      }
+    ).result;
+    const text = result.content?.[0]?.text ?? "";
+    return {
+      isError: Boolean(result.isError),
+      payload: JSON.parse(text) as Record<string, unknown>,
+    };
+  }
+
+  /** The 2026-07-28 per-request `_meta` envelope. */
+  const MODERN_META = {
+    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+    "io.modelcontextprotocol/clientInfo": {
+      name: "mcp-test",
+      version: "1.0.0",
+    },
+    "io.modelcontextprotocol/clientCapabilities": {},
+  };
+
+  /**
+   * 2026-07-28 era: tools/call carrying the `_meta` envelope and the
+   * standard `Mcp-Method` / `Mcp-Name` headers (no initialize, no session).
+   */
+  async function modernCallTool(
+    token: string,
     name: string,
     args: Record<string, unknown>,
   ): Promise<{ isError: boolean; payload: Record<string, unknown> }> {
@@ -117,9 +147,9 @@ describe("MCP endpoint", () => {
         jsonrpc: "2.0",
         id: 2,
         method: "tools/call",
-        params: { name, arguments: args },
+        params: { _meta: MODERN_META, name, arguments: args },
       },
-      sessionId,
+      { "Mcp-Method": "tools/call", "Mcp-Name": name },
     );
     expect(res.status).toBe(200);
     const result = (
@@ -161,12 +191,13 @@ describe("MCP endpoint", () => {
   });
 
   it("exposes the full tool surface over tools/list", async () => {
-    const session = await initialize(accessToken);
-    const res = await mcpPost(
-      accessToken,
-      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
-      session,
-    );
+    await initialize(accessToken);
+    const res = await mcpPost(accessToken, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/list",
+      params: {},
+    });
     expect(res.status).toBe(200);
     const tools = (res.json as { result: { tools: { name: string }[] } }).result
       .tools;
@@ -190,8 +221,64 @@ describe("MCP endpoint", () => {
     );
   });
 
-  it("captures a receipt image into a real expense", async () => {
-    const session = await initialize(accessToken);
+  it("serves 2026-07-28 stateless clients (discover + _meta envelope)", async () => {
+    // No initialize, no session: every request carries its own envelope and
+    // the standard headers. The probe answers with the server's identity.
+    const discover = await mcpPost(
+      accessToken,
+      {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "server/discover",
+        params: { _meta: MODERN_META },
+      },
+      { "Mcp-Method": "server/discover" },
+    );
+    expect(discover.status).toBe(200);
+    const discoverResult = (discover.json as { result: unknown }).result;
+    expect(discoverResult).toBeTruthy();
+
+    const list = await mcpPost(
+      accessToken,
+      {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/list",
+        params: { _meta: MODERN_META },
+      },
+      { "Mcp-Method": "tools/list" },
+    );
+    expect(list.status).toBe(200);
+    const tools = (list.json as { result: { tools: { name: string }[] } })
+      .result.tools;
+    const names = tools.map((t) => t.name).sort();
+    expect(names).toEqual(
+      [
+        "add_to_report",
+        "capture_receipt",
+        "close_report",
+        "create_report",
+        "expense_summary",
+        "export_report",
+        "get_settings",
+        "list_categories",
+        "list_expenses",
+        "list_merchants",
+        "list_reports",
+        "log_mileage",
+        "reconcile",
+      ].sort(),
+    );
+
+    // Tools execute end-to-end in the modern era and stay account-scoped.
+    const settings = await modernCallTool(accessToken, "get_settings", {});
+    expect(settings.isError).toBe(false);
+    expect(settings.payload).toHaveProperty("mileageRates");
+
+    const other = await modernCallTool(otherAccessToken, "get_settings", {});
+    expect(other.isError).toBe(false);
+
+    // A modern-era capture writes a real expense with the image.
     const png = await sharp({
       create: {
         width: 40,
@@ -202,7 +289,52 @@ describe("MCP endpoint", () => {
     })
       .png()
       .toBuffer();
-    const result = await callTool(accessToken, session, "capture_receipt", {
+    const captured = await modernCallTool(accessToken, "capture_receipt", {
+      imageData: png.toString("base64"),
+      mime: "image/png",
+      filename: "modern-receipt.png",
+      date: "2026-04-29",
+      report: "2026 Test",
+    });
+    expect(captured.isError).toBe(false);
+    expect(captured.payload.captured).toBe(true);
+    const expenseId = captured.payload.expenseId as string;
+    const row = await testPrisma.expense.findFirst({
+      where: { id: expenseId, accountId: TEST_ACCOUNT_ID },
+    });
+    expect(row).not.toBeNull();
+    expect(row!.type).toBe("receipt");
+    expect(row!.imageFile).not.toBe("");
+  });
+
+  it("rejects header/body mismatch on modern requests", async () => {
+    // The Mcp-Name header must mirror params.name on tools/call.
+    const res = await mcpPost(
+      accessToken,
+      {
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { _meta: MODERN_META, name: "get_settings", arguments: {} },
+      },
+      { "Mcp-Method": "tools/call", "Mcp-Name": "list_expenses" },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("captures a receipt image into a real expense", async () => {
+    await initialize(accessToken);
+    const png = await sharp({
+      create: {
+        width: 40,
+        height: 20,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const result = await callTool(accessToken, "capture_receipt", {
       imageData: png.toString("base64"),
       mime: "image/png",
       filename: "test-receipt.png",
@@ -229,8 +361,8 @@ describe("MCP endpoint", () => {
   });
 
   it("logs mileage with pre-geocoded stops and computes distance + amount", async () => {
-    const session = await initialize(accessToken);
-    const result = await callTool(accessToken, session, "log_mileage", {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "log_mileage", {
       locations: [
         { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
         { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
@@ -260,8 +392,8 @@ describe("MCP endpoint", () => {
   });
 
   it("queries expenses and summarizes them (scoped to the account)", async () => {
-    const session = await initialize(accessToken);
-    const summary = await callTool(accessToken, session, "expense_summary", {
+    await initialize(accessToken);
+    const summary = await callTool(accessToken, "expense_summary", {
       report: "2026 Test",
       dateFrom: "2026-01-01",
       dateTo: "2026-03-31",
@@ -271,7 +403,7 @@ describe("MCP endpoint", () => {
     expect(summary.payload.count).toBe(4);
     expect(summary.payload.total).toBe("80.89");
 
-    const listed = await callTool(accessToken, session, "list_expenses", {
+    const listed = await callTool(accessToken, "list_expenses", {
       merchant: "office",
       dateFrom: "2026-01-01",
       dateTo: "2026-03-31",
@@ -282,13 +414,8 @@ describe("MCP endpoint", () => {
     expect(expenses[0]!.merchant).toBe("OfficeMax");
 
     // A token for another account only ever sees that account's rows.
-    const otherSession = await initialize(otherAccessToken);
-    const otherList = await callTool(
-      otherAccessToken,
-      otherSession,
-      "list_expenses",
-      {},
-    );
+    await initialize(otherAccessToken);
+    const otherList = await callTool(otherAccessToken, "list_expenses", {});
     const otherExpenses = (
       otherList.payload as {
         expenses: { merchant: string }[];
@@ -299,9 +426,9 @@ describe("MCP endpoint", () => {
   });
 
   it("builds reports: create, close (rejects new expenses), add, export PDF", async () => {
-    const session = await initialize(accessToken);
+    await initialize(accessToken);
 
-    const created = await callTool(accessToken, session, "create_report", {
+    const created = await callTool(accessToken, "create_report", {
       name: "MCP Report",
     });
     expect(created.isError).toBe(false);
@@ -310,7 +437,7 @@ describe("MCP endpoint", () => {
     const receipt = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, date: "2026-04-28" },
     });
-    const added = await callTool(accessToken, session, "add_to_report", {
+    const added = await callTool(accessToken, "add_to_report", {
       expenseId: receipt!.id,
       report: "MCP Report",
     });
@@ -321,17 +448,17 @@ describe("MCP endpoint", () => {
     expect(moved!.report).toBe("MCP Report");
 
     // Closing a report freezes it.
-    await callTool(accessToken, session, "close_report", {
+    await callTool(accessToken, "close_report", {
       name: "2027 Test",
     });
-    const rejected = await callTool(accessToken, session, "add_to_report", {
+    const rejected = await callTool(accessToken, "add_to_report", {
       expenseId: receipt!.id,
       report: "2027 Test",
     });
     expect(rejected.isError).toBe(true);
     expect(JSON.stringify(rejected.payload)).toContain("closed");
 
-    const pdf = await callTool(accessToken, session, "export_report", {
+    const pdf = await callTool(accessToken, "export_report", {
       name: "MCP Report",
     });
     expect(pdf.isError).toBe(false);
@@ -340,8 +467,8 @@ describe("MCP endpoint", () => {
   });
 
   it("reconciles a statement CSV against logged expenses (read-only)", async () => {
-    const session = await initialize(accessToken);
-    const result = await callTool(accessToken, session, "reconcile", {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "reconcile", {
       statementCsv: [
         "date,description,amount",
         "2026-01-15,TEST STORE PURCHASE,42.50",
@@ -362,6 +489,41 @@ describe("MCP endpoint", () => {
     expect(payload.unmatchedExpenses.length).toBeGreaterThan(1);
   });
 
+  it("connects with the real v2 client in both protocol eras", async () => {
+    const authHeader = { Authorization: `Bearer ${accessToken}` };
+
+    // Default client mode = the 2025 initialize handshake, no probe.
+    const legacy = new Client({ name: "v2-test", version: "1.0.0" });
+    await legacy.connect(
+      new StreamableHTTPClientTransport(new URL(`${baseURL}/mcp`), {
+        requestInit: { headers: authHeader },
+      }),
+    );
+    expect(legacy.getProtocolEra()).toBe("legacy");
+    const legacyTools = await legacy.listTools();
+    expect(legacyTools.tools.length).toBe(13);
+    await legacy.close();
+
+    // mode: 'auto' probes server/discover and lands on the 2026-07-28 era.
+    const modern = new Client(
+      { name: "v2-test", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await modern.connect(
+      new StreamableHTTPClientTransport(new URL(`${baseURL}/mcp`), {
+        requestInit: { headers: authHeader },
+      }),
+    );
+    expect(modern.getProtocolEra()).toBe("modern");
+    const settings = await modern.callTool({
+      name: "get_settings",
+      arguments: {},
+    });
+    const text = (settings.content as { text: string }[])[0]!.text;
+    expect(JSON.parse(text)).toHaveProperty("mileageRates");
+    await modern.close();
+  });
+
   it("runs the post-deploy smoke MCP round trip and cleans up its client", async () => {
     const result = await runMcpSmoke();
     expect(result.tools).toBe(13);
@@ -374,8 +536,7 @@ describe("MCP endpoint", () => {
   });
 
   it("rejects a revoked access token", async () => {
-    const session = await initialize(accessToken);
-    expect(session).toBeTruthy();
+    await initialize(accessToken);
 
     await revokeOAuthToken(hashToken(accessToken));
     const res = await mcpPost(accessToken, {

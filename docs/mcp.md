@@ -67,9 +67,12 @@ OAuth discovery automatically; approve the connection in your browser.
 
 ### Anything else
 
-Any MCP client that supports **Streamable HTTP + OAuth** works. The handshake
-is standard: discovery → register → authorize → token exchange →
-`initialize` → `notifications/initialized` → `tools/list` / `tools/call`.
+Any MCP client that supports **Streamable HTTP + OAuth** works. The endpoint
+serves **both protocol generations** from one URL: 2025-era clients (the
+`initialize` handshake, served statelessly) and 2026-07-28 stateless clients
+(per-request `_meta` envelope, `server/discover` probe). Clients that
+negotiate (e.g. the v2 SDK with `versionNegotiation: { mode: 'auto' }`)
+succeed either way.
 
 ## Tools
 
@@ -116,8 +119,10 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
   or refresh tokens (revoking an access token doesn't kill the refresh token,
   per RFC 7009) or disconnect an app, which revokes everything. The next
   request gets `401`.
-- Sessions are bound to the token's account: reusing a session id with a
-  different account's token is rejected.
+- The endpoint is fully **stateless**: every request carries its own OAuth
+  token and is served by a fresh server instance bound to that token's
+  account — there are no sessions, nothing is held between requests, and
+  cold starts cost nothing.
 - `capture_receipt` accepts URLs — the server fetches them (like the
   existing Nominatim/OSRM/DeepSeek calls); treat credentials as secrets that
   can read your expenses.
@@ -134,45 +139,58 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
   endpoints, protected-resource metadata) uses it. Without one of these, a
   proxied client sees the proxy-internal `http://` origin and fails with
   "Protected resource … does not match expected".
-- Sessions live in memory. On a serverless cold start a session is lost and
-  the client gets `404 No such session` — spec-compliant clients re-initialize
-  automatically. A fresh initialize is also how you'd test connectivity.
-- `tools/call` responses are JSON (the transport runs with
-  `enableJsonResponse`) — no SSE stream to babysit.
+- **Stateless by design**: the v2 SDK's `createMcpHandler` builds a fresh
+  server instance per request and holds nothing between them. 2025-era
+  clients are served per request without sessions (`legacy: 'stateless'`),
+  and 2026-07-28 clients natively. There is no session map, no cold-start
+  session loss, and the endpoint scales horizontally as-is.
+- `tools/call` responses are JSON (`responseMode: 'json'` on the handler) —
+  no SSE stream to babysit.
 - OAuth authorization codes are single-use, 10-minute TTL, and bound to the
   client, redirect URI, and PKCE challenge. Refresh tokens rotate; the old
   token dies on every grant.
 - The post-deploy smoke check (`GET /api/smoke`, gated by
-  `SMOKE_TEST_SECRET`) runs a real MCP initialize → tools/list → tools/call
-  round trip inside the deployed serverless bundle (`runMcpSmoke` in
+  `SMOKE_TEST_SECRET`) runs real MCP round trips in **both protocol eras**
+  inside the deployed serverless bundle (`runMcpSmoke` in
   `app/lib/mcp.server.ts`) using an OAuth access token issued straight to
   the store for a throwaway client that is deleted right after — it catches
-  the SDK or zod being dropped by Vercel's dependency tracer.
+  the SDK or zod being dropped by Vercel's dependency tracer and proves
+  both generations of clients can be served.
 
 ### Smoke-testing from a terminal
 
 ```bash
-# initialize (a session id comes back in the Mcp-Session-Id header)
-curl -s -D - https://expense.example.com/mcp \
+# 2025-era handshake (stateless — no session id is issued)
+curl -s https://expense.example.com/mcp \
   -H "Authorization: Bearer oat_…" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
 
-# list tools (repeat with the session id header)
+# list tools (2025-era, no session id needed)
 curl -s https://expense.example.com/mcp \
   -H "Authorization: Bearer oat_…" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -H "Mcp-Session-Id: <session-id>" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+
+# 2026-07-28 stateless: every request carries the _meta envelope and the
+# standard Mcp-Method / Mcp-Name headers
+curl -s https://expense.example.com/mcp \
+  -H "Authorization: Bearer oat_…" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: get_settings" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}},"name":"get_settings","arguments":{}}}'
 ```
 
 ## How it's built
 
 - `app/routes/mcp.ts` — the HTTP endpoint (loader + action → `handleMcpRequest`).
-- `app/lib/mcp.server.ts` — the MCP server: session registry, OAuth bearer
-  auth, the 13 tools, and the reconciliation matcher.
+- `app/lib/mcp.server.ts` — the MCP server: dual-era stateless handler
+  (`createMcpHandler`), OAuth bearer auth, the 13 tools, and the
+  reconciliation matcher.
 - `app/lib/oauth.server.ts` — the OAuth authorization server: PKCE (S256),
   token/code generation + hashing, RFC 8414 metadata, refresh rotation, and
   client authentication.

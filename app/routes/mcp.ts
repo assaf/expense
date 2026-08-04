@@ -13,9 +13,10 @@ import type { Route } from "./+types/mcp";
  *       "url": "https://<host>/mcp"
  *     } } }
  *
- * Auth is per-request (OAuth access token → account). Sessions are created
- * on the initialize handshake and bound to the token's account; every
- * subsequent request must present a token for the same account.
+ * Auth is per-request (OAuth access token → account). The endpoint serves
+ * both protocol eras statelessly from one entry: 2025-era clients (the
+ * `initialize` handshake) and 2026-07-28 stateless clients (a per-request
+ * `_meta` envelope). Nothing is held between requests — no sessions.
  */
 export const config = { maxDuration: 60 };
 

@@ -118,20 +118,16 @@ describe("MCP OAuth", () => {
   async function mcpPost(
     token: string,
     body: unknown,
-    sessionId?: string,
-  ): Promise<{ status: number; sessionId: string | null; json: unknown }> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
-      Authorization: `Bearer ${token}`,
-    };
-    if (sessionId) headers["mcp-session-id"] = sessionId;
+  ): Promise<{ status: number; json: unknown }> {
     const res = await fetch(`${baseURL}/mcp`, {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify(body),
     });
-    const sid = res.headers.get("mcp-session-id");
     const text = await res.text();
     let json: unknown = null;
     try {
@@ -139,10 +135,11 @@ describe("MCP OAuth", () => {
     } catch {
       json = text;
     }
-    return { status: res.status, sessionId: sid, json };
+    return { status: res.status, json };
   }
 
-  async function initialize(token: string): Promise<string> {
+  /** 2025-era handshake (served statelessly — no session id is issued). */
+  async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
       id: 1,
@@ -154,31 +151,19 @@ describe("MCP OAuth", () => {
       },
     });
     expect(init.status).toBe(200);
-    expect(init.sessionId).toBeTruthy();
-    await mcpPost(
-      token,
-      { jsonrpc: "2.0", method: "notifications/initialized" },
-      init.sessionId!,
-    );
-    return init.sessionId!;
   }
 
   async function callTool(
     token: string,
-    sessionId: string,
     name: string,
     args: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
-    const res = await mcpPost(
-      token,
-      {
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/call",
-        params: { name, arguments: args },
-      },
-      sessionId,
-    );
+    const res = await mcpPost(token, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name, arguments: args },
+    });
     expect(res.status).toBe(200);
     const result = (res.json as { result: { content: { text: string }[] } })
       .result;
@@ -240,8 +225,7 @@ describe("MCP OAuth", () => {
     expect(accessToken).toMatch(/^oat_/);
     expect(refreshToken).toMatch(/^ort_/);
 
-    const session = await initialize(accessToken);
-    const expenses = await callTool(accessToken, session, "list_expenses", {});
+    const expenses = await callTool(accessToken, "list_expenses", {});
     // Scoped to the signing-in user's account (Test Account), not the other.
     const list = expenses as { expenses: { merchant: string }[] };
     expect(list.expenses.length).toBeGreaterThan(0);
@@ -348,8 +332,7 @@ describe("MCP OAuth", () => {
     expect(newRefresh).not.toBe(oldRefresh);
 
     // The rotated refresh token works on /mcp.
-    const session = await initialize(newAccess);
-    expect(session).toBeTruthy();
+    await initialize(newAccess);
 
     // The old refresh token is dead.
     const replay = await exchangeCode({
@@ -382,8 +365,7 @@ describe("MCP OAuth", () => {
     const refreshToken = exchanged.json.refresh_token as string;
 
     // Access token works before revocation.
-    const session = await initialize(accessToken);
-    expect(session).toBeTruthy();
+    await initialize(accessToken);
 
     const revoke = await fetch(`${baseURL}/oauth/revoke`, {
       method: "POST",
@@ -447,8 +429,7 @@ describe("MCP OAuth", () => {
     });
     const accessToken = exchanged.json.access_token as string;
 
-    const session = await initialize(accessToken);
-    const expenses = await callTool(accessToken, session, "list_expenses", {});
+    const expenses = await callTool(accessToken, "list_expenses", {});
     const list = expenses as { expenses: { merchant: string }[] };
     expect(list.expenses.length).toBe(1);
     expect(list.expenses[0]!.merchant).toBe("Secret Corp");
