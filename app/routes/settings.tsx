@@ -38,7 +38,6 @@ import {
   removeReport,
   renameCategory,
   renameReport,
-  revokeUserOAuthToken,
   setReportClosed,
 } from "~/lib/store.server";
 import { countLabel, normalizeAmount } from "~/lib/format";
@@ -169,11 +168,6 @@ export async function action({ request }: Route.ActionArgs) {
     case "disconnectOAuthClient": {
       const clientId = formString(form, "clientId");
       if (clientId) await disconnectOAuthClient(user.id, clientId);
-      return Response.json({ ok: true });
-    }
-    case "deleteOAuthToken": {
-      const tokenHash = formString(form, "tokenHash");
-      if (tokenHash) await revokeUserOAuthToken(user.id, tokenHash);
       return Response.json({ ok: true });
     }
     case "saveHome": {
@@ -413,9 +407,10 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 }
 
 /**
- * Agents & API (MCP): the OAuth-connected apps for this account, each with
- * its active tokens. Tokens can be deleted individually (kills that session
- * or stops future refreshes) or the whole app can be disconnected.
+ * Agents & API (MCP): the OAuth-connected apps for this account. Each app
+ * shows its name, client id, when it was last used, and when its access
+ * expires; the remove button revokes every token for the app and drops the
+ * consent. (Tokens are managed as a whole per app — no individual rows.)
  */
 function AgentsSection({
   oauthSessions,
@@ -423,17 +418,12 @@ function AgentsSection({
 }: {
   oauthSessions: {
     client: { id: string; name: string };
-    tokens: {
-      tokenHash: string;
-      type: "access" | "refresh";
-      createdAt: string;
-      expiresAt: string;
-    }[];
+    lastUsedAt: string | null;
+    expiresAt: string | null;
   }[];
   mcpUrl: string;
 }) {
-  const disconnectFetcher = useFetcher<{ ok: boolean }>();
-  const deleteTokenFetcher = useFetcher<{ ok: boolean }>();
+  const removeFetcher = useFetcher<{ ok: boolean }>();
 
   return (
     <section className="mb-8">
@@ -466,7 +456,7 @@ function AgentsSection({
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {oauthSessions.map(({ client, tokens }) => (
+              {oauthSessions.map(({ client, lastUsedAt, expiresAt }) => (
                 <li key={client.id} className="rounded-lg bg-gray-50 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
@@ -475,12 +465,12 @@ function AgentsSection({
                         <div className="truncate text-sm font-medium">
                           {client.name}
                         </div>
-                        <div className="truncate text-xs text-gray-400">
+                        <div className="truncate font-mono text-xs text-gray-400">
                           {client.id}
                         </div>
                       </div>
                     </div>
-                    <disconnectFetcher.Form method="post" className="contents">
+                    <removeFetcher.Form method="post" className="contents">
                       <input
                         type="hidden"
                         name="intent"
@@ -490,72 +480,25 @@ function AgentsSection({
                       <button
                         type="submit"
                         className="shrink-0 text-gray-400 hover:text-red-600"
-                        aria-label={`Disconnect ${client.name}`}
+                        aria-label={`Remove ${client.name}`}
+                        title={`Remove ${client.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
-                    </disconnectFetcher.Form>
+                    </removeFetcher.Form>
                   </div>
-                  {tokens.length > 0 ? (
-                    <ul className="mt-1.5 flex flex-col gap-1 border-t border-gray-200 pt-1.5">
-                      {tokens.map((token) => (
-                        <li
-                          key={token.tokenHash}
-                          className="flex items-center justify-between gap-2 pl-6"
-                        >
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span
-                              className={
-                                token.type === "refresh"
-                                  ? "rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-700"
-                                  : "rounded bg-gray-200 px-1.5 py-0.5 font-medium text-gray-600"
-                              }
-                            >
-                              {token.type}
-                            </span>
-                            <span>
-                              created {formatShortDate(token.createdAt)} ·
-                              expires {formatShortDate(token.expiresAt)}
-                            </span>
-                          </div>
-                          <deleteTokenFetcher.Form
-                            method="post"
-                            className="contents"
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="deleteOAuthToken"
-                            />
-                            <input
-                              type="hidden"
-                              name="tokenHash"
-                              value={token.tokenHash}
-                            />
-                            <button
-                              type="submit"
-                              className="shrink-0 text-gray-400 hover:text-red-600"
-                              aria-label="Delete this token"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </deleteTokenFetcher.Form>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-1.5 border-t border-gray-200 pl-6 pt-1.5 text-xs text-gray-400">
-                      No active tokens — the connection is revoked.
-                    </p>
-                  )}
+                  <p className="mt-1 border-t border-gray-200 pl-8 pt-1.5 text-xs text-gray-500">
+                    {expiresAt
+                      ? `Last used ${formatShortDate(lastUsedAt)} · expires ${formatShortDate(expiresAt)}`
+                      : `Last used ${formatShortDate(lastUsedAt)} · no active tokens`}
+                  </p>
                 </li>
               ))}
             </ul>
           )}
           <p className="mt-3 text-xs text-gray-400">
-            Deleting an access token ends that session immediately; deleting a
-            refresh token stops the app from getting new sessions. Disconnect
-            revokes everything for the app.
+            Removing an app revokes its access tokens immediately and stops it
+            from connecting again; it can reconnect by signing in anew.
           </p>
         </div>
       </div>
@@ -563,8 +506,9 @@ function AgentsSection({
   );
 }
 
-/** Short "Aug 4, 2026" label for a token timestamp. */
-function formatShortDate(iso: string): string {
+/** Short "Aug 4, 2026" label for a timestamp; "—" when unset. */
+function formatShortDate(iso: string | null): string {
+  if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", {

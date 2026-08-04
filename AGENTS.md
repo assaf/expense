@@ -138,8 +138,9 @@ production env var (for the deploy script) and as a GitHub Actions secret.
 - **MCP (agents)**: `/mcp` (Streamable HTTP) exposes the store to any MCP
   client. Auth is OAuth 2.1 only (authorization-code + PKCE — clients sign
   in with their normal account and approve a consent page; no API keys).
-  Settings → Agents & API lists connected apps with per-token delete and
-  full disconnect. Tools: capture_receipt (reuses the OCR/DeepSeek pipeline
+  Settings → Agents & API lists connected apps (name, client id, last used,
+  expires) with a per-app remove that revokes all its tokens. Tools:
+  capture_receipt (reuses the OCR/DeepSeek pipeline
   - merchant history), log_mileage, list_expenses/expense_summary, report
     create/close/add/export PDF, list_categories/merchants, get_settings,
     reconcile (read-only statement CSV matching). See `docs/mcp.md`.

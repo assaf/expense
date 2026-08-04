@@ -72,7 +72,6 @@ export {
   findOAuthToken,
   revokeOAuthToken,
   listUserOAuthSessions,
-  revokeUserOAuthToken,
   disconnectOAuthClient,
   deleteOAuthClient,
 } from "~/lib/database";

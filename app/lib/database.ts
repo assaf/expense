@@ -965,14 +965,20 @@ export async function revokeOAuthToken(tokenHash: string): Promise<void> {
 }
 
 /**
- * The OAuth clients this user has connected, each with its active tokens
- * (not revoked, not expired) — the Settings → Agents & API "connected
- * apps" list. Token hashes are exposed as opaque row ids (they're one-way
- * hashes of 256-bit secrets — safe to show).
+ * The OAuth clients this user has connected, with activity summary — the
+ * Settings → Agents & API "connected apps" list. Individual tokens are not
+ * exposed here: the UI shows the app, when it was last used (the most recent
+ * token issuance for this client — access tokens are minted on every
+ * session/refresh), and when its access expires (the furthest expiry among
+ * still-active tokens; null when the connection has no live tokens).
  */
-export async function listUserOAuthSessions(
-  userId: string,
-): Promise<{ client: OAuthClientRecord; tokens: OAuthTokenRecord[] }[]> {
+export async function listUserOAuthSessions(userId: string): Promise<
+  {
+    client: OAuthClientRecord;
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+  }[]
+> {
   const consents = await prisma.oAuthConsent.findMany({
     where: { userId },
     orderBy: { grantedAt: "desc" },
@@ -983,42 +989,31 @@ export async function listUserOAuthSessions(
     prisma.oAuthClient.findMany({
       where: { id: { in: consents.map((c) => c.clientId) } },
     }),
-    prisma.oAuthToken.findMany({
-      where: {
-        userId,
-        revokedAt: null,
-        expiresAt: { gt: new Date().toISOString() },
-      },
-    }),
+    prisma.oAuthToken.findMany({ where: { userId } }),
   ]);
   const clientById = new Map(clients.map((c) => [c.id, c]));
-  const out: { client: OAuthClientRecord; tokens: OAuthTokenRecord[] }[] = [];
+  const now = new Date().toISOString();
+  const out: {
+    client: OAuthClientRecord;
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+  }[] = [];
   for (const consent of consents) {
     const row = clientById.get(consent.clientId);
     if (!row) continue;
-    out.push({
-      client: oauthClientFromRow(row),
-      tokens: tokens
-        .filter((t) => t.clientId === consent.clientId)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .map(oauthTokenFromRow),
-    });
+    const own = tokens.filter((t) => t.clientId === consent.clientId);
+    const lastUsedAt = own.reduce<string | null>(
+      (latest, t) => (t.createdAt > (latest ?? "") ? t.createdAt : latest),
+      null,
+    );
+    const active = own.filter((t) => t.revokedAt === null && t.expiresAt > now);
+    const expiresAt = active.reduce<string | null>(
+      (latest, t) => (t.expiresAt > (latest ?? "") ? t.expiresAt : latest),
+      null,
+    );
+    out.push({ client: oauthClientFromRow(row), lastUsedAt, expiresAt });
   }
   return out;
-}
-
-/**
- * Revoke one of the user's own OAuth tokens (Settings per-token delete).
- * Scoped by userId so a user can only kill their own tokens.
- */
-export async function revokeUserOAuthToken(
-  userId: string,
-  tokenHash: string,
-): Promise<void> {
-  await prisma.oAuthToken.updateMany({
-    where: { userId, tokenHash, revokedAt: null },
-    data: { revokedAt: new Date().toISOString() },
-  });
 }
 
 /** Delete a registered OAuth client entirely (cascades codes/tokens/consents). */
