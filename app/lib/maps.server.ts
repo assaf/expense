@@ -246,7 +246,7 @@ async function geocodeWithLocality(
 /** Geocode a free-text address to coordinates via Nominatim (no API key).
  * Returns the canonical (geocoded) address form; on no match or a network
  * failure the coordinates are null and the address stays as typed. Used for
- * single-address lookups (e.g. the start location in Settings); trip
+ * single-address lookups (e.g. the start/end location in Settings); trip
  * geocoding goes through recomputeMileage, which threads the locality hint. */
 export async function geocode(address: string): Promise<Location> {
   return (await geocodeMatch(address)).location;
