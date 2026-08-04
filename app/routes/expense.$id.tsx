@@ -1003,12 +1003,12 @@ function MileageEditor({ data }: { data: EditorData }) {
   // role + its street-and-city form (no state/country), escaped because
   // Leaflet renders tooltip content as HTML.
   const stops = geocodedLocations(resolved).map((l, i) => {
-    const label = i === 0 ? "Start" : `Stop ${i}`;
+    const label = i === 0 ? "Start / end" : `Stop ${i}`;
     return {
       lat: l.lat,
       lng: l.lng,
       label,
-      // Bubble label on the map: S for the start, 1/2/… for the stops.
+      // Bubble label on the map: S for the start/end, 1/2/… for the stops.
       number: i === 0 ? "S" : String(i),
       tooltip: `${escapeHtml(label)} — ${escapeHtml(shortAddress(l.address))}`,
     };
@@ -1089,8 +1089,8 @@ function MileageEditor({ data }: { data: EditorData }) {
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
             <li key={i} className="flex items-start gap-2">
-              <span className="w-16 shrink-0 pt-2 text-xs font-medium text-gray-500">
-                {i === 0 ? "Start" : `Stop ${i}`}
+              <span className="w-20 shrink-0 pt-2 text-xs font-medium text-gray-500">
+                {i === 0 ? "Start / end" : `Stop ${i}`}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="relative">
@@ -1118,7 +1118,7 @@ function MileageEditor({ data }: { data: EditorData }) {
                   </p>
                 ) : null}
               </div>
-              {/* The start and the first stop are required — only extra
+              {/* The start/end and the first stop are required — only extra
                   stops can be removed. */}
               {i >= 2 ? (
                 <button
@@ -1134,8 +1134,8 @@ function MileageEditor({ data }: { data: EditorData }) {
           ))}
         </ol>
         <p className="mt-1 text-xs text-gray-400">
-          The route runs Start → stops → back to Start. Distance updates
-          automatically.
+          The route runs Start / end → stops → back to Start / end. Distance
+          updates automatically.
         </p>
       </div>
 
@@ -1173,8 +1173,9 @@ function MileageEditor({ data }: { data: EditorData }) {
 
 function initLocations(expense: MileageExpense, home: Location): Location[] {
   const saved = expense.locations.map((l) => ({ ...l }));
-  // A mileage expense always has a start and a first stop — pad trips that
-  // predate that rule (or start fresh from the account's start location).
+  // A mileage expense always has a start/end and a first stop — pad trips
+  // that predate that rule (or start fresh from the account's start
+  // location).
   if (saved.length === 1) {
     return [...saved, { address: "", lat: null, lng: null }];
   }

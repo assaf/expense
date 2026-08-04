@@ -233,10 +233,10 @@ describe("Mileage expense", () => {
       timeout: 10_000,
     });
 
-    // A new mileage starts with Start + Stop 1 and no remove buttons.
+    // A new mileage starts with Start/end + Stop 1 and no remove buttons.
     const inputs = page.locator("input[placeholder='Address']");
     await expect(inputs).toHaveCount(2);
-    await expect(page.getByText("Start", { exact: true })).toBeVisible();
+    await expect(page.getByText("Start / end", { exact: true })).toBeVisible();
     await expect(page.getByText("Stop 1", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Remove stop" })).toHaveCount(
       0,
@@ -379,7 +379,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    // The Start is prefilled with the seeded home address; Stop 1 is left
+    // The Start/end is prefilled with the seeded home address; Stop 1 is left
     // blank. Saving must persist only the real address.
     const inputs = page.locator("input[placeholder='Address']");
     await expect(inputs).toHaveCount(2);
@@ -505,7 +505,7 @@ describe("Mileage expense", () => {
     const tooltip = page.locator(".leaflet-tooltip");
     await expect(tooltip).toBeVisible();
     // Street + city only — the state is left off the tooltip.
-    await expect(tooltip).toContainText("Start — 1600");
+    await expect(tooltip).toContainText("Start / end — 1600");
     await expect(tooltip).not.toContainText("Mountain View, CA");
     // The address's HTML-like text is escaped — it shows literally as text,
     // never as a real <b> element.
