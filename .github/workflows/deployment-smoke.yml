@@ -153,7 +153,7 @@ jobs:
       # launch headless Chromium, so download it (with OS deps) first — and
       # cache the browsers so the ~20-40s install only happens once per lockfile.
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
