@@ -153,8 +153,7 @@ async function ensureBootstrapUser(): Promise<User> {
   return first;
 }
 
-/** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */
-async function bootstrapUser(): Promise<User> {
+/** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */ async function bootstrapUser(): Promise<User> {
   if (!APP_EMAIL || !APP_PASSWORD) {
     throw new Error(
       "No users exist and APP_EMAIL/APP_PASSWORD are not configured — " +
@@ -211,6 +210,17 @@ function seedDefaultCategories(
 export async function readAccount(id: string): Promise<Account | undefined> {
   const row = await prisma.account.findUnique({ where: { id } });
   return row ?? undefined;
+}
+
+/**
+ * The account the app bootstrapped (the oldest user's account) — used by
+ * the post-deploy smoke check to exercise the MCP endpoint without a
+ * browser session. Undefined only when the database has no users yet.
+ */
+export async function readBootstrapAccountId(): Promise<string | undefined> {
+  await initStore();
+  const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  return first?.accountId;
 }
 
 /** Create a new account. Throws if the name is already taken. */

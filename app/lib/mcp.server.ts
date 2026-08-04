@@ -19,6 +19,9 @@ import {
   setReportClosed,
   upsertExpense,
   newExpenseShell,
+  createApiToken,
+  revokeApiToken,
+  readBootstrapAccountId,
 } from "~/lib/store.server";
 import {
   normalizeAmount,
@@ -216,6 +219,153 @@ function fail(message: string): ToolResult {
 }
 
 // --- Server + tools --------------------------------------------------------
+
+/** The tools a healthy server must expose — the deployed-bundle check. */
+const SMOKE_TOOL_NAMES = [
+  "add_to_report",
+  "capture_receipt",
+  "close_report",
+  "create_report",
+  "expense_summary",
+  "export_report",
+  "get_settings",
+  "list_categories",
+  "list_expenses",
+  "list_merchants",
+  "list_reports",
+  "log_mileage",
+  "reconcile",
+] as const;
+
+/**
+ * Post-deploy MCP smoke check (called from GET /api/smoke): a real
+ * initialize → tools/list → tools/call round trip through `handleMcpRequest`
+ * — the exact code /mcp serves — authenticated with a one-off token that is
+ * revoked afterwards. Proves the MCP SDK + zod survived Vercel's dependency
+ * tracer in the serverless bundle and that the endpoint can serve a client
+ * against the real database. Throws with a message on any failure.
+ */
+export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
+  const accountId = await readBootstrapAccountId();
+  if (!accountId) {
+    throw new Error(
+      "no account to exercise the MCP endpoint against (empty database?)",
+    );
+  }
+  const started = Date.now();
+  const { id, token } = await createApiToken({
+    accountId,
+    name: "smoke check",
+    readOnly: false,
+  });
+  let sessionId: string | null = null;
+  try {
+    const request = (body: unknown, sid?: string): Request => {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        // The transport answers 406 without the spec's Accept header.
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${token}`,
+      };
+      if (sid) headers["mcp-session-id"] = sid;
+      return new Request("http://smoke.local/mcp", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+    };
+
+    const init = await handleMcpRequest(
+      request({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "smoke", version: "1.0.0" },
+        },
+      }),
+    );
+    if (init.status !== 200) {
+      throw new Error(`MCP initialize failed: HTTP ${init.status}`);
+    }
+    sessionId = init.headers.get("mcp-session-id");
+    if (!sessionId) {
+      throw new Error("MCP initialize returned no session id");
+    }
+
+    const notified = await handleMcpRequest(
+      request(
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        sessionId,
+      ),
+    );
+    if (notified.status !== 202) {
+      throw new Error(
+        `MCP initialized notification failed: HTTP ${notified.status}`,
+      );
+    }
+
+    const list = await handleMcpRequest(
+      request(
+        { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+        sessionId,
+      ),
+    );
+    if (list.status !== 200) {
+      throw new Error(`MCP tools/list failed: HTTP ${list.status}`);
+    }
+    const listJson = (await list.json()) as {
+      result?: { tools?: { name: string }[] };
+    };
+    const names = (listJson.result?.tools ?? []).map((t) => t.name);
+    for (const expected of SMOKE_TOOL_NAMES) {
+      if (!names.includes(expected)) {
+        throw new Error(`MCP tool missing from the bundle: ${expected}`);
+      }
+    }
+
+    const call = await handleMcpRequest(
+      request(
+        {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "get_settings", arguments: {} },
+        },
+        sessionId,
+      ),
+    );
+    if (call.status !== 200) {
+      throw new Error(`MCP tools/call failed: HTTP ${call.status}`);
+    }
+    const callJson = (await call.json()) as {
+      result?: { isError?: boolean; content?: { text: string }[] };
+    };
+    if (callJson.result?.isError) {
+      throw new Error(
+        `MCP tools/call get_settings errored: ${callJson.result.content?.[0]?.text ?? "no content"}`,
+      );
+    }
+
+    return { tools: names.length, ms: Date.now() - started };
+  } finally {
+    // Always clean up: the one-off token and its session.
+    await revokeApiToken(accountId, id);
+    if (sessionId) {
+      await handleMcpRequest(
+        new Request("http://smoke.local/mcp", {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "mcp-session-id": sessionId,
+          },
+        }),
+      ).catch(() => {});
+    }
+  }
+}
 
 function createMcpServer(accountId: string, readOnly: boolean): McpServer {
   const server = new McpServer({ name: "expense", version: "0.1.0" });

@@ -15,8 +15,9 @@ name: deployment-checks
 #
 # The smoke check locates the Vercel production deployment for this commit,
 # curls its /api/smoke endpoint (which runs the real pdfkit → pdfjs →
-# tesseract pipeline inside the deployed serverless bundle — see
-# app/routes/api.smoke.ts), and fails the job when the pipeline is broken.
+# tesseract pipeline plus a full MCP initialize → tools/list → tools/call
+# round trip inside the deployed serverless bundle — see
+# app/routes/api.smoke.ts), and fails the job when any pipeline is broken.
 #
 # To make this gate production promotion:
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
@@ -108,7 +109,7 @@ jobs:
       - name: Require CI to pass first
         if: needs.check-and-test.result != 'success'
         run: |
-          echo "::error::Not running the PDF/OCR smoke check: 'check-and-test' ${{ needs.check-and-test.result }}."
+          echo "::error::Not running the PDF/OCR/MCP smoke check: 'check-and-test' ${{ needs.check-and-test.result }}."
           exit 1
 
       - name: Wait for the Vercel production deployment (this commit)
@@ -165,7 +166,7 @@ jobs:
           echo "::error::Timed out waiting for the Vercel production deployment of $EXPECTED_SHA (check the Vercel dashboard)."
           exit 1
 
-      - name: Run the PDF/OCR smoke check
+      - name: Run the PDF/OCR/MCP smoke check
         env:
           DEPLOY_URL: ${{ steps.deployment.outputs.url }}
           SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
@@ -193,6 +194,6 @@ jobs:
                 console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
                 process.exit(1);
               }
-              console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, `(${r.ms}ms)`);
+              console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "| MCP:", r.mcp ? r.mcp.tools + " tools" : "skipped", `(${r.ms}ms)`);
             });
           '

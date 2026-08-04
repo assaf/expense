@@ -66,6 +66,7 @@ export {
   listApiTokens,
   revokeApiToken,
   touchApiToken,
+  readBootstrapAccountId,
 } from "~/lib/database";
 
 /** Build a new expense shell with sensible defaults. */

@@ -112,9 +112,9 @@ if [ -z "$DEPLOY_URL" ]; then
   DEPLOY_URL="https://${PROD_DOMAIN}"
 fi
 
-echo -e "\033[0;32m--- Step 5b: Post-deploy smoke check (PDF + OCR) ---\033[0m"
+echo -e "\033[0;32m--- Step 5b: Post-deploy smoke check (PDF + OCR + MCP) ---\033[0m"
 if [ -z "$SMOKE_TEST_SECRET" ]; then
-  echo -e "\033[0;33mSMOKE_TEST_SECRET is not set in the Vercel environment — skipping the PDF/OCR smoke check.\033[0m"
+  echo -e "\033[0;33mSMOKE_TEST_SECRET is not set in the Vercel environment — skipping the PDF/OCR/MCP smoke check.\033[0m"
   echo "Add it in the Vercel dashboard (Settings → Environment Variables, production):"
   echo "it gates GET /api/smoke via the x-smoke-secret header, which this script curls after each deploy."
 else
@@ -138,10 +138,10 @@ else
           console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
           process.exit(1);
         }
-        console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "(" + r.ms + "ms)");
+        console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "| MCP:", r.mcp ? r.mcp.tools + " tools" : "skipped", "(" + r.ms + "ms)");
       });
     ' || {
-      echo -e "\033[0;31mSmoke check failed: PDF/OCR pipeline did not pass on ${DEPLOY_URL}.\033[0m"
+      echo -e "\033[0;31mSmoke check failed: PDF/OCR/MCP pipeline did not pass on ${DEPLOY_URL}.\033[0m"
       exit 1
     }
   fi

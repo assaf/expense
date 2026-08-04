@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
+import { runMcpSmoke } from "~/lib/mcp.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import {
   extractPdfText,
@@ -10,16 +11,18 @@ import {
 import type { Route } from "./+types/api.smoke";
 
 /**
- * Post-deploy smoke test for the PDF + OCR pipeline (GET /api/smoke).
+ * Post-deploy smoke test for the PDF + OCR + MCP pipelines (GET /api/smoke).
  *
- * Runs the exact code path the receipt pipeline uses — pdfkit → pdfjs text
- * extraction → pdfjs rasterization → tesseract OCR — inside the deployed
- * serverless bundle. Local/CI tests run against node_modules, where every
- * file is present; this is the only place the real Vercel bundle is
- * exercised, and Vercel's dependency tracer is exactly what drops files
- * (pdf.worker.mjs, tesseract wasm) and breaks PDF/OCR in production (see
- * receipt-ocr.server.ts). `scripts/deploy` curls this after every
- * production deployment and fails the deploy if it doesn't pass.
+ * Runs the exact code paths the receipt pipeline uses — pdfkit → pdfjs text
+ * extraction → pdfjs rasterization → tesseract OCR — plus a real MCP
+ * initialize → tools/list → tools/call round trip (see runMcpSmoke) inside
+ * the deployed serverless bundle. Local/CI tests run against node_modules,
+ * where every file is present; this is the only place the real Vercel bundle
+ * is exercised, and Vercel's dependency tracer is exactly what drops files
+ * (pdf.worker.mjs, tesseract wasm, MCP SDK modules) and breaks these
+ * pipelines in production (see receipt-ocr.server.ts / mcp.server.ts).
+ * `scripts/deploy` curls this after every production deployment and fails
+ * the deploy if it doesn't pass.
  *
  * Disabled unless SMOKE_TEST_SECRET is configured; requests must send it in
  * the `x-smoke-secret` header so the route isn't a public CPU/bandwidth
@@ -80,16 +83,21 @@ export async function loader({ request }: Route.LoaderArgs) {
       return fail(`tesseract OCR did not recover the smoke text: "${ocrText}"`);
     }
 
+    // MCP round trip — a fresh token (revoked immediately after) exercises
+    // the endpoint the same way a client would, inside this bundle.
+    const mcp = await runMcpSmoke();
+
     return Response.json({
       ok: true,
       pdfText,
       ocrText,
       pngBytes: png.length,
+      mcp,
       ms: Date.now() - started,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[smoke] PDF/OCR check threw:", err);
+    console.error("[smoke] smoke check threw:", err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
 }

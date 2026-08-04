@@ -1,6 +1,7 @@
 import { expect } from "playwright/test";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import sharp from "sharp";
+import { runMcpSmoke } from "~/lib/mcp.server";
 import { createApiToken, revokeApiToken } from "~/lib/store.server";
 import {
   OTHER_ACCOUNT_ID,
@@ -387,6 +388,17 @@ describe("MCP endpoint", () => {
       },
     );
     expect(blockedReport.isError).toBe(true);
+  });
+
+  it("runs the post-deploy smoke MCP round trip and cleans up its token", async () => {
+    const result = await runMcpSmoke();
+    expect(result.tools).toBe(13);
+    expect(result.ms).toBeGreaterThan(0);
+    // The one-off token and its session are always revoked/closed.
+    const leftover = await testPrisma.apiToken.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, name: "smoke check" },
+    });
+    expect(leftover).toBeNull();
   });
 
   it("rejects a revoked token", async () => {

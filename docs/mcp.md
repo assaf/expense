@@ -132,6 +132,11 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
   automatically. A fresh initialize is also how you'd test connectivity.
 - `tools/call` responses are JSON (the transport runs with
   `enableJsonResponse`) — no SSE stream to babysit.
+- The post-deploy smoke check (`GET /api/smoke`, gated by
+  `SMOKE_TEST_SECRET`) runs a real MCP initialize → tools/list → tools/call
+  round trip inside the deployed serverless bundle (`runMcpSmoke` in
+  `app/lib/mcp.server.ts`) using a one-off token that is revoked right after
+  — it catches the SDK or zod being dropped by Vercel's dependency tracer.
 
 ### Smoke-testing from a terminal
 
