@@ -264,6 +264,100 @@ function wrap(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+// --- AI assistants page (/ai) ---------------------------------------------
+
+/** One-paragraph summary of the MCP integration — quoted by /ai, /ai.md, llms.txt. */
+export const AI_SUMMARY =
+  "Expense speaks the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp: connect any MCP client — Claude Code, Claude Desktop, Cursor, or another assistant — and approve the connection by signing in with your account (OAuth; no API keys to manage). The assistant can capture receipts from photos and PDFs through the same OCR pipeline as the web app, log mileage at the IRS rate, answer spending questions from your actual data, build and export reports, and reconcile bank statements against logged expenses.";
+
+/** The five things an assistant can do — the /ai capability cards. */
+export const AI_CAPABILITIES = [
+  {
+    title: "Capture receipts",
+    body: "Drop a receipt photo or PDF into the chat and it's OCR'd and categorized from your own merchant history — the same pipeline as the web app, no typing.",
+  },
+  {
+    title: "Log drives in plain English",
+    body: "\u201CLog the drive home from the office on Tuesday.\u201D The assistant geocodes, routes, and prices the trip at the year's IRS mileage rate.",
+  },
+  {
+    title: "Answer spending questions",
+    body: "\u201CHow much did I spend on flights last quarter?\u201D gets the exact total, straight from your data — not a guess.",
+  },
+  {
+    title: "Build and export reports",
+    body: "Create or close reports, move expenses into them, and export a report PDF — one sentence instead of a form.",
+  },
+  {
+    title: "Reconcile statements",
+    body: "Paste a bank statement CSV and it finds every charge with no matching receipt. Read-only — nothing is written or dismissed.",
+  },
+  {
+    title: "Tax-season answers",
+    body: "Categories come from the IRS Schedule C lines, so \u201Cwhat's my meals and entertainment total?\u201D maps straight onto your return.",
+  },
+];
+
+/** Example prompts shown on /ai. */
+export const AI_PROMPTS = [
+  "\u201CHere's my receipt — log it under Q3.\u201D",
+  "\u201CHow much did I spend on meals and entertainment last quarter?\u201D",
+  "\u201CMove all unreported June expenses into the Q2 report and export the PDF.\u201D",
+  "\u201CReconcile this statement.\u201D (paste the CSV)",
+];
+
+/** How to connect — the numbered steps on /ai. */
+export const AI_STEPS = [
+  {
+    title: "Point your assistant at the endpoint",
+    body: "Tell it to connect to https://expense.labnotes.org/mcp (or add it to your MCP config).",
+  },
+  {
+    title: "Sign in and approve",
+    body: "Your browser opens, you sign in with your normal account, and click Allow on the consent page.",
+  },
+  {
+    title: "Done — manage it anytime",
+    body: "Settings → Agents & API (MCP) shows every connected app; delete individual tokens or disconnect entirely.",
+  },
+];
+
+/** The /ai page's quotable security paragraph. */
+export const AI_SECURITY =
+  "Connecting is OAuth 2.1 with PKCE: the assistant never sees your password, access tokens live one hour, refresh tokens rotate, and only hashes are stored. A connection only ever reaches your own account. Revoke it anytime in Settings → Agents & API (MCP) — delete a single token or disconnect the whole app.";
+
+/** Full markdown for /ai.md — mirrors the /ai page content. */
+export function aiMarkdown(): string {
+  const caps = AI_CAPABILITIES.map(
+    (c) => `- **${c.title}** — ${wrap(c.body)}`,
+  ).join("\n");
+  const steps = AI_STEPS.map(
+    (s, i) => `${i + 1}. **${s.title}** — ${wrap(s.body)}`,
+  ).join("\n");
+  return `# ${APP_NAME} — connect your AI assistant
+
+${AI_SUMMARY}
+
+## What your assistant can do
+
+${caps}
+
+## How to connect
+
+${steps}
+
+## Example prompts
+
+${AI_PROMPTS.map((p) => `- ${p}`).join("\n")}
+
+## Security
+
+${AI_SECURITY}
+
+[Create a free account](${SITE_URL}/login?mode=create) — no subscription, no ads.
+`;
+}
+
 /** Full markdown for /about.md — mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = BENEFITS.map(
@@ -342,6 +436,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison for people choosing an expense tracker.
 - [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) — approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
+- [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect — capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
 ## Optional
 

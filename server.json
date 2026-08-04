@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.assaf/expense",
+  "title": "Expense",
+  "description": "Personal expense tracking for tax season, driven by your AI assistant: capture receipts from photos and PDFs (OCR + categorization from your own history), log map-based mileage at the IRS rate, answer \"how much did I spend on X?\" from your actual data, build and export expense reports, and reconcile bank statements. OAuth sign-in with your account — no API keys.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/assaf/expense",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://expense.labnotes.org/mcp"
+    }
+  ]
+}

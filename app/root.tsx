@@ -15,7 +15,13 @@ import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/root";
 
 /** Public marketing/SEO pages (plus their markdown mirrors like /faq.md). */
-const PUBLIC_PAGES = new Set(["/about", "/faq", "/alternatives", "/llms.txt"]);
+const PUBLIC_PAGES = new Set([
+  "/about",
+  "/ai",
+  "/faq",
+  "/alternatives",
+  "/llms.txt",
+]);
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

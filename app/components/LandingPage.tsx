@@ -80,6 +80,7 @@ const FOOTER_NAV: SiteNavItem[] = [
   { label: "Blog", to: BLOG_URL, external: true },
   { label: "Mastodon", to: MASTODON, external: true },
   { label: "About", to: "/about" },
+  { label: "AI", to: "/ai" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
 ];

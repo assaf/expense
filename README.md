@@ -88,6 +88,48 @@ else still requires a session.
 - Paste (⌘V) or upload an image anywhere to start a new receipt.
 - **Export**: each report as a PDF (grouped by category, with all receipt
   images), or everything as a ZIP (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
+- **AI assistants (MCP)**: any MCP client — Claude Code, Claude Desktop,
+  Cursor — connects by signing in with your account (OAuth; no API keys).
+  See [AI assistants](#ai-assistants-mcp) below.
+
+## AI assistants (MCP)
+
+The app speaks the Model Context Protocol at `https://expense.labnotes.org/mcp`
+(auth: OAuth 2.1 authorization-code + PKCE — sign in with your account and
+approve the connection; no API keys). An assistant connected to your account
+can:
+
+- **Capture a receipt** — a photo or PDF in the chat runs the same OCR +
+  extraction pipeline as the web app and is categorized from your own
+  merchant history.
+- **Log a drive** — give it stops in plain English; it geocodes, routes, and
+  prices the trip at the year's IRS rate.
+- **Answer spending questions** — "how much did I spend on flights last
+  quarter?" gets the exact total from your data.
+- **Build reports** — create/close reports, move expenses into them, export
+  a report PDF.
+- **Reconcile** — paste a bank statement CSV; it finds every charge with no
+  matching receipt (read-only).
+
+Connect any MCP client:
+
+```json
+// Claude Code — .mcp.json (no headers needed: the client discovers OAuth)
+{
+  "mcpServers": {
+    "expense": {
+      "type": "http",
+      "url": "https://expense.labnotes.org/mcp"
+    }
+  }
+}
+```
+
+The client opens your browser; you sign in and click Allow. Manage
+connections (per-token delete, full disconnect) in **Settings → Agents &
+API (MCP)**. See [`docs/mcp.md`](docs/mcp.md) for the full reference and
+[`docs/mcp-directories.md`](docs/mcp-directories.md) for the directory
+listings.
 
 ## State
 

@@ -8,6 +8,7 @@ import { BLOG_URL, GITHUB_URL } from "~/lib/seo-content";
 
 const HEADER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
+  { label: "AI", to: "/ai" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
   { label: "GitHub", to: GITHUB_URL, external: true, hideOnMobile: true },
@@ -15,6 +16,7 @@ const HEADER_NAV: SiteNavItem[] = [
 
 const FOOTER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
+  { label: "AI", to: "/ai" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
   { label: "GitHub", to: GITHUB_URL, external: true },
