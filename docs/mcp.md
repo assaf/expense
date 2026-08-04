@@ -126,6 +126,14 @@ only date + amount agree). It never writes, dismisses, or deletes anything.
 
 - The endpoint is `maxDuration: 60` (same as the draft-image route) because
   receipt extraction can be slow.
+- **Public origin / proxies**: the OAuth metadata derives its issuer from
+  the request origin, honoring `x-forwarded-proto`/`x-forwarded-host` when
+  the app sits behind a TLS-terminating proxy (e.g. a local
+  `https://expense.localhost` Caddy setup). If that isn't enough, set
+  `PUBLIC_URL` to the public base URL and every advertised URL (issuer,
+  endpoints, protected-resource metadata) uses it. Without one of these, a
+  proxied client sees the proxy-internal `http://` origin and fails with
+  "Protected resource … does not match expected".
 - Sessions live in memory. On a serverless cold start a session is lost and
   the client gets `404 No such session` — spec-compliant clients re-initialize
   automatically. A fresh initialize is also how you'd test connectivity.

@@ -454,6 +454,60 @@ describe("MCP OAuth", () => {
     expect(list.expenses[0]!.merchant).toBe("Secret Corp");
   });
 
+  it("advertises the public origin behind a TLS-terminating proxy", async () => {
+    // A proxy terminates TLS: the app sees http + x-forwarded-proto: https.
+    const headers = {
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "expense.localhost",
+    };
+    const metaRes = await fetch(
+      `${baseURL}/.well-known/oauth-authorization-server`,
+      { headers },
+    );
+    const meta = (await metaRes.json()) as Record<string, string>;
+    expect(meta.issuer).toBe("https://expense.localhost");
+    expect(meta.authorization_endpoint).toBe(
+      "https://expense.localhost/oauth/authorize",
+    );
+
+    const resourceRes = await fetch(
+      `${baseURL}/.well-known/oauth-protected-resource`,
+      { headers },
+    );
+    const resource = (await resourceRes.json()) as {
+      resource: string;
+      authorization_servers: string[];
+    };
+    expect(resource.resource).toBe("https://expense.localhost/mcp");
+    expect(resource.authorization_servers).toEqual([
+      "https://expense.localhost",
+    ]);
+
+    // And the /mcp 401 WWW-Authenticate hint carries the public origin too.
+    const mcpRes = await fetch(`${baseURL}/mcp`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "t", version: "1" },
+        },
+      }),
+    });
+    expect(mcpRes.status).toBe(401);
+    expect(mcpRes.headers.get("www-authenticate")).toContain(
+      "https://expense.localhost/.well-known/oauth-protected-resource",
+    );
+  });
+
   it("advertises the protected resource on unauthenticated /mcp 401s", async () => {
     const res = await fetch(`${baseURL}/mcp`, {
       method: "POST",

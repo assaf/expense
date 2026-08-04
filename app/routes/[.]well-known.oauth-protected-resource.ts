@@ -1,3 +1,4 @@
+import { publicOrigin } from "~/lib/oauth.server";
 import type { Route } from "./+types/[.]well-known.oauth-protected-resource";
 
 /**
@@ -6,7 +7,7 @@ import type { Route } from "./+types/[.]well-known.oauth-protected-resource";
  * clients can discover the authorization server (same origin here).
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const origin = new URL(request.url).origin;
+  const origin = publicOrigin(request);
   return Response.json(
     {
       resource: `${origin}/mcp`,

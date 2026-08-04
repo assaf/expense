@@ -5,14 +5,34 @@ run live against a real account. Record at 1080p, screen + webcam optional,
 no cuts. The point of the demo: **an assistant does the work the app's forms
 used to, and the user just signs in.**
 
-## Setup (before recording)
+## Running it (scripted, reproducible)
 
-- A fresh test account with a few seeded expenses (so "how much did I spend"
-  has a real answer).
-- Claude Code (or any MCP client) connected via
-  `https://expense.labnotes.org/mcp` — sign in, Allow. Have a receipt PDF
-  handy (e.g. an emailed invoice) and a bank statement CSV.
-- Pre-warm: run one tools/call so the first response isn't slow.
+Two scripts make the demo repeatable — no manual data prep:
+
+```bash
+pnpm demo:seed   # seed (or reset) the "Demo Account" with realistic data
+pnpm demo:run    # drive the four moves over the MCP endpoint, print a
+                 # transcript, and save the exported PDF to demo-output/
+```
+
+Prereqs: local Postgres up, a running server (`pnpm dev` or `pnpm start`),
+and `.env` with `DATABASE_URL`. Point the driver elsewhere with
+`DEMO_URL=http://localhost:3000 pnpm demo:run`.
+
+`demo:run` authenticates with an OAuth access token issued straight to the
+store for the demo user — the same token type a browser sign-in produces.
+`capture_receipt` passes merchant/amount/date overrides so the move is
+deterministic without a DeepSeek key; with `DEEPSEEK_API_KEY` set, the real
+OCR extraction runs instead.
+
+The seeded account makes each move land:
+
+- **Blue Bottle Coffee history** (3 receipts) — so `capture_receipt` reuses
+  the merchant's previous category instead of guessing.
+- **Q2 Travel: $391.30** across two United flights — the spending question's
+  exact answer.
+- **Four unreported June expenses** — work for the report move.
+- **A mileage trip + 2026 rate** — mileage is priced at the IRS rate.
 
 ## The four moves
 

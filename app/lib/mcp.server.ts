@@ -6,6 +6,7 @@ import Decimal from "decimal.js";
 import {
   isOAuthToken,
   issueTokenPair,
+  publicOrigin,
   verifyAccessToken,
 } from "~/lib/oauth.server";
 import {
@@ -179,7 +180,7 @@ function jsonError(
   status: number,
   message: string,
 ): Response {
-  const origin = new URL(request.url).origin;
+  const origin = publicOrigin(request);
   return Response.json(
     { error: message },
     {

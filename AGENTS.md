@@ -82,6 +82,14 @@ check at GET `/api/smoke` (send it in the `x-smoke-secret` header); when
 unset the route is disabled (404) and `scripts/deploy` skips the check with
 a warning. It must also be set as a **GitHub Actions secret** (same value)
 for `.github/workflows/deployment-smoke.yml`.
+
+`PUBLIC_URL` (optional) is the public base URL the OAuth metadata advertises
+as its issuer + endpoint origin. Set it when the app sits behind a
+TLS-terminating proxy (e.g. a local `https://expense.localhost` setup) so
+MCP clients see the public origin instead of the proxy-internal `http://`
+one — otherwise they refuse to authenticate ("Protected resource … does not
+match expected"). Without it, the request origin is used, honoring
+`x-forwarded-proto`/`x-forwarded-host` for http requests.
 `.github/workflows/deployment-smoke.yml`.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for

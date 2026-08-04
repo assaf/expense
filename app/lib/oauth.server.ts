@@ -1,4 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { PUBLIC_URL } from "~/lib/env";
 import {
   createOAuthCode,
   createOAuthToken,
@@ -96,8 +97,31 @@ function buildOAuthMetadata(origin: string): Record<string, unknown> {
  * variants (`/.well-known/oauth-authorization-server/mcp`) that newer SDK
  * clients probe first when the MCP server URL has a path.
  */
+/**
+ * The origin this server advertises publicly — the issuer of the OAuth
+ * metadata and the base of every endpoint URL. Resolution order:
+ *  1. PUBLIC_URL, when configured (the explicit answer for any proxy setup);
+ *  2. the request's own origin when it arrived over https;
+ *  3. behind a TLS-terminating proxy (request over http + `x-forwarded-proto:
+ *     https`, e.g. a local https://expense.localhost Caddy setup) the
+ *     forwarded proto/host — otherwise clients see the proxy-internal http
+ *     origin and refuse to authenticate ("Protected resource … does not
+ *     match expected …").
+ */
+export function publicOrigin(request: Request): string {
+  if (PUBLIC_URL) return new URL(PUBLIC_URL).origin;
+  const url = new URL(request.url);
+  if (url.protocol === "https:") return url.origin;
+  const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  if (proto === "https") {
+    const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    return `https://${host ?? url.host}`;
+  }
+  return url.origin;
+}
+
 export function oauthMetadataResponse(request: Request): Response {
-  return Response.json(buildOAuthMetadata(new URL(request.url).origin), {
+  return Response.json(buildOAuthMetadata(publicOrigin(request)), {
     headers: { "Cache-Control": "no-store" },
   });
 }

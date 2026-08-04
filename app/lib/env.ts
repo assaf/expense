@@ -56,3 +56,11 @@ export function hasDatabase(): boolean {
  * disabled (404). `scripts/deploy` uses it after every production deploy.
  */
 export const SMOKE_TEST_SECRET = env.SMOKE_TEST_SECRET ?? "";
+
+/**
+ * Public base URL the OAuth metadata advertises (issuer + endpoints) instead
+ * of deriving it from each request. Set it when the app sits behind a
+ * TLS-terminating proxy (e.g. a local https://expense.localhost setup) so
+ * clients see the public origin, not the proxy-internal one. Optional.
+ */
+export const PUBLIC_URL = env.PUBLIC_URL ?? "";
