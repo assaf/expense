@@ -1,4 +1,4 @@
-import { buildOAuthMetadata } from "~/lib/oauth.server";
+import { oauthMetadataResponse } from "~/lib/oauth.server";
 import type { Route } from "./+types/[.]well-known.openid-configuration";
 
 /**
@@ -7,7 +7,5 @@ import type { Route } from "./+types/[.]well-known.openid-configuration";
  * at the RFC 8414 endpoint.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  return Response.json(buildOAuthMetadata(new URL(request.url).origin), {
-    headers: { "Cache-Control": "no-store" },
-  });
+  return oauthMetadataResponse(request);
 }

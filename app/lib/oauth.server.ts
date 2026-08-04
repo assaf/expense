@@ -74,7 +74,7 @@ export function generateCodeVerifier(): string {
  * `/.well-known/oauth-authorization-server` (and mirrored at
  * `/.well-known/openid-configuration` for clients that look there first).
  */
-export function buildOAuthMetadata(origin: string): Record<string, unknown> {
+function buildOAuthMetadata(origin: string): Record<string, unknown> {
   return {
     issuer: origin,
     authorization_endpoint: `${origin}/oauth/authorize`,
@@ -88,6 +88,18 @@ export function buildOAuthMetadata(origin: string): Record<string, unknown> {
     code_challenge_methods_supported: [PKCE_METHOD],
     scopes_supported: [],
   };
+}
+
+/**
+ * The authorization-server metadata Response for a request. Served at every
+ * discovery URL: the RFC 8414 root, its OpenID mirror, and the path-aware
+ * variants (`/.well-known/oauth-authorization-server/mcp`) that newer SDK
+ * clients probe first when the MCP server URL has a path.
+ */
+export function oauthMetadataResponse(request: Request): Response {
+  return Response.json(buildOAuthMetadata(new URL(request.url).origin), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 // --- Client registration ---------------------------------------------------
