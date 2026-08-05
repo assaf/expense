@@ -10,15 +10,15 @@ import {
 /**
  * Storage entry point. Postgres is required — every read/write goes through
  * database.ts and the app refuses to start without DATABASE_URL (there is no
- * file fallback anymore). Image storage is selected separately in
- * images.server.ts (Vercel Blob vs Postgres BYTEA, no local fallback).
+ * file fallback anymore). Receipt images live in Postgres BYTEA
+ * (images.server.ts) — no separate storage service.
  *
  * Every function is scoped by accountId — the caller passes the logged-in
  * user's account and only that account's rows are touched.
  */
 if (!hasDatabase()) {
   throw new Error(
-    "DATABASE_URL is required — set it in .env for local dev, or in the Vercel/Coolify dashboard for production.",
+    "DATABASE_URL is required — set it in .env for local dev, or in the Vercel dashboard for production.",
   );
 }
 

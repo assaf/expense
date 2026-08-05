@@ -2,8 +2,8 @@
  * Domain model for the expense tracker.
  *
  * State is persisted in Postgres (see database.ts) with receipt images in
- * Vercel Blob or Postgres BYTEA (see images.server.ts). These types describe
- * the in-memory shape after parsing.
+ * Postgres BYTEA (see images.server.ts). These types describe the
+ * in-memory shape after parsing.
  */
 
 type ExpenseType = "receipt" | "mileage";
@@ -166,7 +166,7 @@ export interface User {
   createdAt: string;
 }
 
-/** Settings stored as key/value rows (settings.csv locally, a settings table in Postgres).
+/** Settings stored as key/value rows in Postgres (a settings table).
  * Mileage rates are NOT here — they live in the global mileage_rates master table. */
 export type Settings = {
   /** Home location used as the first/last stop of every mileage route. */

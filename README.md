@@ -1,6 +1,6 @@
 # Expense
 
-Personal expense tracking with receipts and mileage.
+> Expense is a receipt tracker with no friction: receipts arrive by email and file themselves, mileage prices itself from IRS rates, and an AI assistant does the data entry you'd rather skip — capture, log, and ask, all through MCP.
 
 ## Screenshots
 

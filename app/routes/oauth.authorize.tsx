@@ -1,6 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { requireUser } from "~/lib/auth.server";
+import { escapeHtml } from "~/lib/escape";
 import {
   findOAuthClient,
   hasOAuthConsent,
@@ -215,13 +216,4 @@ function errorPage(message: string): Response {
     `<!doctype html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb"><div style="max-width:420px;padding:2rem;background:#fff;border:1px solid #e5e7eb;border-radius:12px;color:#374151"><h1 style="font-size:1.25rem;color:#111827">Can't connect</h1><p>${escapeHtml(message)}</p><p style="color:#9ca3af;font-size:0.875rem">Return to the app you were connecting and try again.</p></div></body></html>`,
     { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
-}
-
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
