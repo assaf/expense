@@ -210,6 +210,11 @@ jobs:
     needs: [check, test, migrate-db]
     if: always() && github.ref == 'refs/heads/main'
     steps:
+      # The smoke check runs scripts/smoke-check from the repo — this job
+      # needs the checkout (the other jobs do their own; a missing checkout
+      # fails with exit 127 "No such file or directory").
+      - uses: actions/checkout@v7
+
       - name: Require CI and the DB migration to pass first
         if: needs.check.result != 'success' || needs.test.result != 'success' || needs.migrate-db.result != 'success'
         run: |
