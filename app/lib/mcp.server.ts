@@ -35,10 +35,11 @@ import {
 } from "~/lib/store.server";
 import {
   normalizeAmount,
-  parseAmount,
   sortExpenses,
+  summarizeBy,
   todayDate,
 } from "~/lib/format";
+import { parseAmount } from "~/lib/money";
 import {
   mimeForFile,
   renameImageToConvention,
@@ -648,22 +649,16 @@ function createMcpServer(accountId: string): McpServer {
     },
     async (args) => {
       const expenses = filterExpenses(await readExpenses(accountId), args);
-      const total = expenses.reduce((sum, e) => {
-        const amt = parseAmount(e.amount);
-        return amt === null ? sum : sum.add(amt);
-      }, new Decimal(0));
-      const byCategory = new Map<string, { count: number; total: Decimal }>();
-      for (const e of expenses) {
-        const key = e.category || "Uncategorized";
-        const bucket = byCategory.get(key) ?? {
-          count: 0,
-          total: new Decimal(0),
-        };
-        bucket.count++;
-        const amt = parseAmount(e.amount);
-        if (amt !== null) bucket.total = bucket.total.add(amt);
-        byCategory.set(key, bucket);
-      }
+      const byCategory = summarizeBy(
+        expenses,
+        (e) => e.category || "Uncategorized",
+      );
+      // The grand total is the exact sum of the category buckets — every
+      // amount-bearing expense lands in exactly one bucket.
+      const total = [...byCategory.values()].reduce(
+        (sum, b) => sum.add(b.total),
+        new Decimal(0),
+      );
       const breakdown = [...byCategory.entries()]
         .map(([category, b]) => ({
           category,

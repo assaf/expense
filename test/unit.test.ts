@@ -17,7 +17,6 @@ import {
 import { captureErrorOnce } from "~/lib/errors.server";
 import {
   formatAmount,
-  parseAmount,
   normalizeAmount,
   formatDate,
   mileageMerchant,
@@ -25,6 +24,7 @@ import {
   yearOf,
   summarizeByReport,
 } from "~/lib/format";
+import { parseAmount } from "~/lib/money";
 import { recomputeMileage, geocode } from "~/lib/maps.server";
 import {
   currentMileageRates,

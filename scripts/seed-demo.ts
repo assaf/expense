@@ -11,18 +11,10 @@
  * Run against the local dev DB (server running):  pnpm demo:seed
  */
 import "dotenv/config";
-import { promisify } from "node:util";
-import { randomBytes, scrypt as scryptCb } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "../prisma/generated/client.ts";
 import { ulid } from "ulid";
-
-const scrypt = promisify(scryptCb) as (
-  password: string,
-  salt: string,
-  keylen: number,
-) => Promise<Buffer>;
-
+import { hashPassword } from "../app/lib/passwords.ts";
 const DEMO_ACCOUNT_NAME = "Demo Account";
 const DEMO_EMAIL = "demo@example.com";
 const DEMO_PASSWORD = "demo-password";
@@ -38,13 +30,6 @@ const prisma = new PrismaClient({
 });
 
 const now = new Date().toISOString();
-
-/** scrypt hash in the app's `salt:hash` format (see app/lib/passwords.ts). */
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const hash = await scrypt(password, salt, 64);
-  return `${salt}:${hash.toString("hex")}`;
-}
 
 /** A receipt expense row (see prisma/schema.prisma → Expense). */
 function receipt(input: {

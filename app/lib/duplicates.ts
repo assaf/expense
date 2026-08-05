@@ -1,4 +1,5 @@
-import { formatAmount, formatDate, parseAmount } from "~/lib/format";
+import { formatAmount, formatDate } from "~/lib/format";
+import { parseAmount } from "~/lib/money";
 import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
 
 /**

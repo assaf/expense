@@ -2,6 +2,7 @@
 
 import Decimal from "decimal.js";
 
+import { parseAmount } from "~/lib/money";
 import {
   MILEAGE_TYPE_LABELS,
   formatRate,
@@ -30,21 +31,6 @@ export function formatAmount(amount: string | Decimal): string {
   const d = typeof amount === "string" ? parseAmount(amount) : amount;
   if (d === null) return "—";
   return usd.format(d.toNumber());
-}
-
-/**
- * Strictly parse a decimal string into an exact Decimal, or null if
- * invalid/empty. Never returns an IEEE float — arithmetic on the result is
- * exact (see `summarizeByReport`).
- */
-export function parseAmount(amount: string): Decimal | null {
-  const trimmed = amount.trim();
-  if (trimmed === "") return null;
-  try {
-    return new Decimal(trimmed);
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -152,23 +138,36 @@ export function countLabel(count: number): string {
 }
 
 /**
- * Per-report expense counts + exact totals. Amounts are parsed as Decimals
- * and accumulated with exact decimal addition — no float drift, so a report
- * total is the exact sum of its line items.
+ * Per-group expense counts + exact totals, grouped by the key `keyOf`
+ * returns (empty keys are skipped). Amounts are parsed as Decimals and
+ * accumulated with exact decimal addition — no float drift, so a total is
+ * the exact sum of its line items. Shared by the report summary (web +
+ * MCP `list_reports`) and the MCP `expense_summary` category breakdown.
  */
+export function summarizeBy(
+  expenses: Expense[],
+  keyOf: (e: Expense) => string,
+): Map<string, { count: number; total: Decimal }> {
+  const summary = new Map<string, { count: number; total: Decimal }>();
+  for (const e of expenses) {
+    const key = keyOf(e);
+    if (!key) continue;
+    const s = summary.get(key) ?? { count: 0, total: new Decimal(0) };
+    s.count++;
+    const amt = parseAmount(e.amount);
+    if (amt !== null) s.total = s.total.add(amt);
+    summary.set(key, s);
+  }
+  return summary;
+}
+
+/** Per-report expense counts + exact totals, "Unassigned" bucket opt-in. */
 export function summarizeByReport(
   expenses: Expense[],
   opts: { includeUnassigned?: boolean } = {},
 ): Map<string, { count: number; total: Decimal }> {
-  const summary = new Map<string, { count: number; total: Decimal }>();
-  for (const e of expenses) {
-    const name = e.report || (opts.includeUnassigned ? "Unassigned" : "");
-    if (!name) continue;
-    const s = summary.get(name) ?? { count: 0, total: new Decimal(0) };
-    s.count++;
-    const amt = parseAmount(e.amount);
-    if (amt !== null) s.total = s.total.add(amt);
-    summary.set(name, s);
-  }
-  return summary;
+  return summarizeBy(
+    expenses,
+    (e) => e.report || (opts.includeUnassigned ? "Unassigned" : ""),
+  );
 }

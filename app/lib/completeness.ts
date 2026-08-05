@@ -1,5 +1,5 @@
 import type { Expense } from "~/lib/types";
-import { parseAmount } from "~/lib/format";
+import { parseAmount } from "~/lib/money";
 
 /** A non-zero monetary amount is required for completeness (0 / empty = incomplete). */
 function hasAmount(amount: string): boolean {
