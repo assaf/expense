@@ -23,7 +23,7 @@ const FOOTER_NAV: SiteNavItem[] = [
 
 /** One entry in a site header/footer nav. External links render as real
  * `<a>` (target=_blank) with a small arrow affordance. */
-export interface SiteNavItem {
+interface SiteNavItem {
   label: string;
   to: string;
   external?: boolean;

@@ -59,10 +59,15 @@ export async function requireUser(request: Request): Promise<User> {
     typeof userId === "string" ? await findUserById(userId) : undefined;
   if (!user) {
     const url = new URL(request.url);
+    // Loader fetches arrive as /path.data — redirect back to the real page
+    // so the post-login bounce (safeNext) lands on the route, not its data.
+    const pathname = url.pathname.endsWith(".data")
+      ? url.pathname.slice(0, -5)
+      : url.pathname;
     const next =
-      url.pathname === "/"
+      pathname === "/"
         ? ""
-        : `?next=${encodeURIComponent(url.pathname + url.search)}`;
+        : `?next=${encodeURIComponent(pathname + url.search)}`;
     throw redirect(`/login${next}`);
   }
   return user;

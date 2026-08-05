@@ -57,6 +57,35 @@ describe("Access control", () => {
     await page.close();
   });
 
+  it("navigates from the landing footer to public pages without a login redirect", async () => {
+    // Client-side Link clicks fetch /<page>.data — the root loader must
+    // recognize those as the public page, or every footer link bounces
+    // anonymous visitors to /login?next=... (regression: root loader only
+    // matched the bare path).
+    const page = await openPage();
+    await page.goto("/", { waitUntil: "load", timeout: 15_000 });
+    for (const [label, path] of [
+      ["About", "/about"],
+      ["AI", "/ai"],
+      ["FAQ", "/faq"],
+      ["Compare", "/alternatives"],
+    ] as const) {
+      await page
+        .getByRole("link", { name: label, exact: true })
+        .first()
+        .click();
+      await page.waitForURL((url) => url.pathname === path, {
+        timeout: 15_000,
+      });
+      // The page actually rendered — not a redirect to /login.
+      await expect(
+        page.getByRole("heading", { level: 1 }).first(),
+      ).toBeVisible();
+      await page.goto("/", { waitUntil: "load", timeout: 15_000 });
+    }
+    await page.close();
+  });
+
   it("deep-links the landing CTA straight to the signup form", async () => {
     const page = await openPage();
     await page.goto("/login?mode=create", {

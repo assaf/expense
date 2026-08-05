@@ -32,6 +32,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   // signature and the single-use emailed token).
   let path = url.pathname;
   if (path.endsWith(".md")) path = path.slice(0, -3);
+  // React Router appends .data to loader fetches during client-side
+  // navigation (e.g. /about.data for a Link click on /about) — match the
+  // page path, not the fetch path, so public pages stay public.
+  if (path.endsWith(".data")) path = path.slice(0, -5);
   const isPublic =
     path === "/" ||
     path.startsWith("/login") ||
