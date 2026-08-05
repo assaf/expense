@@ -7,7 +7,7 @@ import categoriesCsv from "~/data/default-categories.csv?raw";
  * Users can rename, add, or remove categories later in Settings.
  *
  * The list lives in `app/data/default-categories.csv` (one name per row,
- * `name` header; fields containing commas are wrapped in double quotes) so
+ * no header; fields containing commas are wrapped in double quotes) so
  * it can be edited without touching code. Loaded at build time via Vite's
  * `?raw` import, so the file is bundled into the server output.
  */
@@ -16,8 +16,9 @@ export const DEFAULT_CATEGORIES: string[] = parseCategoryCsv(categoriesCsv);
 const CSV_PATH = "app/data/default-categories.csv";
 
 /**
- * Parse the single-column default-categories CSV. Blank rows are skipped and
- * the `name` header row is ignored. Throws on malformed rows (an unquoted
+ * Parse the single-column default-categories CSV. Blank rows are skipped;
+ * a literal first-row `name` (the legacy header) is tolerated but not
+ * required. Throws on malformed rows (an unquoted
  * comma, a quote inside a name, an unterminated quoted field) and on
  * duplicate names so a bad edit fails loudly instead of silently changing
  * what every new account gets seeded with.
