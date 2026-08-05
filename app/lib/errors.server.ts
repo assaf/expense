@@ -2,10 +2,12 @@ import * as Sentry from "@sentry/react-router";
 
 /**
  * Log an error to the console and capture it in Sentry. Sentry is a no-op
- * until the server initializes it (instrument.server.mjs, loaded via
- * NODE_OPTIONS --import on Vercel production — the DSN is hardcoded there,
- * not in env), so this is safe to call unconditionally from route error
- * handlers: `isInitialized()` is false in dev/tests and capture is skipped.
+ * until the server initializes it (app/entry.server.tsx — the bundled
+ * module Vercel boots as the function handler; init runs only when
+ * VERCEL_ENV=production, with the DSN from SENTRY_DSN or a hardcoded
+ * fallback), so this is safe to call unconditionally from route error
+ * handlers: `isInitialized()` is false in dev/tests/previews and capture is
+ * skipped.
  */
 export function captureError(
   error: unknown,

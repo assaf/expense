@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import * as Sentry from "@sentry/react-router";
 import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
@@ -94,6 +95,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       ocrText,
       pngBytes: png.length,
       mcp,
+      // Server Sentry init lives in the bundle (entry.server.tsx) — this is
+      // the one place the real deployed function is exercised, so report
+      // whether it actually initialized. False here means server errors are
+      // console-only again (see scripts/smoke-check).
+      sentryInitialized: Sentry.isInitialized(),
       ms: Date.now() - started,
     });
   } catch (err) {

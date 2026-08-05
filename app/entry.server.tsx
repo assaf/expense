@@ -1,13 +1,59 @@
 import * as Sentry from "@sentry/react-router";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import type { EntryContext } from "react-router";
 import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
 import { captureErrorOnce } from "~/lib/errors.server";
 
-// Sentry SDK init lives in instrument.server.mjs (loaded via NODE_OPTIONS
-// --import in the start script, so it runs before this module). This entry
-// only wires the request wrapper + error capture.
+// Sentry SDK init for the server runtime. This module is bundled into
+// build/server/index.js — the exact file Vercel boots as the serverless
+// function handler (the @vercel/remix-builder SSR template), so init runs
+// in the deployed bundle. It must NOT live in a separate instrument file
+// loaded via NODE_OPTIONS --import: Vercel never runs the `start` script
+// (the function config has an empty environment), so that code never
+// executed in production — server errors only ever reached Sentry locally.
+// Gate on VERCEL_ENV=production so local dev/test and preview deployments
+// don't emit to the production project. try/catch: if the profiling native
+// module fails to load in some runtime, the app must still boot.
+if (process.env.VERCEL_ENV === "production") {
+  try {
+    Sentry.init({
+      dsn:
+        process.env.SENTRY_DSN ??
+        "https://c5f9e74db2e043db855cecb9eba20fcb@o510761.ingest.us.sentry.io/4511850854940672",
+
+      dataCollection: {
+        // To disable sending user data and HTTP bodies, uncomment the lines below:
+        // userInfo: false,
+        // httpBodies: [],
+      },
+
+      // Enable logs to be sent to Sentry
+      enableLogs: true,
+
+      integrations: [nodeProfilingIntegration()],
+      tracesSampleRate: 1.0, // Capture 100% of the transactions
+      profilesSampleRate: 1.0, // profile every transaction
+
+      // Filter out 404s from error reporting
+      beforeSend(event) {
+        if (event.exception) {
+          const error = event.exception.values?.[0];
+          if (
+            error?.type === "NotFoundException" ||
+            error?.value?.includes("404")
+          ) {
+            return null;
+          }
+        }
+        return event;
+      },
+    });
+  } catch (error) {
+    console.error("[sentry] init failed:", error);
+  }
+}
 
 export default Sentry.wrapSentryHandleRequest(
   async (

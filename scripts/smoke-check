@@ -35,7 +35,24 @@ echo "$RESPONSE" | node -e '
       console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
       process.exit(1);
     }
-    console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "| MCP:", r.mcp ? r.mcp.tools + " tools" : "skipped", "(" + r.ms + "ms)");
+    if (r.sentryInitialized === false) {
+      // Server Sentry init is bundled into entry.server.tsx and should run
+      // on Vercel production functions. A false here means server errors
+      // are reaching Vercel logs but not Sentry — warn loudly, don't fail
+      // the deploy (Sentry is observability, not the app's core function).
+      console.error("WARNING: Sentry server SDK not initialized in this deployment — server errors won't reach Sentry.");
+    }
+    console.log(
+      "PDF + OCR OK —",
+      r.pdfText,
+      "| OCR:",
+      r.ocrText,
+      "| MCP:",
+      r.mcp ? r.mcp.tools + " tools" : "skipped",
+      "| Sentry:",
+      r.sentryInitialized === true ? "initialized" : "NOT initialized",
+      "(" + r.ms + "ms)",
+    );
   });
 ' || {
   echo "Smoke check failed: PDF/OCR/MCP pipeline did not pass on ${URL}." >&2

@@ -129,10 +129,18 @@ match expected"). Without it, the request origin is used, honoring
 `SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable
 Sentry error monitoring (server runtime + browser build-time respectively;
 see `app/entry.server.tsx` / `app/entry.client.tsx` and
-`app/lib/errors.server.ts`). Unset → Sentry is fully disabled. Both must be
-set in Vercel; `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is
-read at runtime.
-`.github/workflows/deployment-smoke.yml`.
+`app/lib/errors.server.ts`). Unset `SENTRY_DSN` → the server falls back to
+its hardcoded DSN; unset `VITE_SENTRY_DSN` → no browser Sentry. The server
+SDK inits INSIDE the bundle (`app/entry.server.tsx` — the module Vercel
+boots as the function handler), gated on `VERCEL_ENV=production`, so
+dev/test/preview never emit to the production project. Do NOT move server
+init back into a `NODE_OPTIONS --import` instrument file: Vercel never runs
+the `start` script, so that code never executes in the deployed function
+(the function config's `environment` is empty; server errors only ever
+reached Sentry locally this way). The post-deploy smoke check reports
+`Sentry.isInitialized()` and `scripts/smoke-check` warns when a production
+deployment boots with it false. Both vars must be set in Vercel;
+`VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
 Automation secret (Vercel → Settings → Security). Deployment URLs are behind
