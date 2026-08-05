@@ -2,13 +2,14 @@ import { ArrowUpRight, ReceiptText } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import { Button } from "~/components/ui/Button";
-import { BLOG_URL } from "~/lib/seo-content";
+import { BLOG_URL, GITHUB_URL } from "~/lib/seo-content";
 
 const FOOTER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
   { label: "AI", to: "/ai" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
+  { label: "GitHub", to: GITHUB_URL, external: true },
   { label: "Blog", to: BLOG_URL, external: true },
 ];
 
