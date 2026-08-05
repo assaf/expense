@@ -182,7 +182,6 @@ async function main(): Promise<void> {
       { accountId, key: "homeAddress", value: "123 Main St, Los Angeles, CA" },
       { accountId, key: "homeLat", value: "34.0522" },
       { accountId, key: "homeLng", value: "-118.2437" },
-      { accountId, key: "mileageRate.2026", value: "0.70" },
     ],
   });
 
