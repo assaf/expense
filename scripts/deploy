@@ -7,9 +7,8 @@
 #   4. post-deploy smoke check (PDF + OCR + MCP, /api/smoke)
 #   5. open the production site
 #
-# Prod secrets come from `vercel env pull` (the Infisical link is stale —
-# see AGENTS.md; .env.prod.pull is gitignored). Use DATABASE_URL_UNPOOLED for
-# schema DDL — the pooled URL is for runtime queries.
+# Prod secrets come from `vercel env pull`. Use DATABASE_URL_UNPOOLED for schema
+# DDL — the pooled URL is for runtime queries.
 set -eo pipefail
 
 PROD_DOMAIN="expense.labnotes.org"
