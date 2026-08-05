@@ -161,7 +161,7 @@ async function moveCapture(token: string): Promise<void> {
   });
   const resolved = payload.resolved as Record<string, unknown>;
   console.info(
-    `  \u2713 captured ${resolved.amount} at ${resolved.merchant} \u2192 ${resolved.category}`,
+    `  \u2713 captured ${String(resolved.amount)} at ${String(resolved.merchant)} \u2192 ${String(resolved.category)}`,
   );
   console.info(
     `  \u2713 category reused from the merchant\u2019s own history (Blue Bottle Coffee), expense ${String(payload.expenseId).slice(-6)}\u2026`,

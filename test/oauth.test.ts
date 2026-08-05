@@ -3,13 +3,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { generateCodeVerifier, pkceChallenge } from "~/lib/oauth.server";
 import { signIn } from "./helpers/launchBrowser";
-import {
-  OTHER_ACCOUNT_ID,
-  TEST_ACCOUNT_ID,
-  TEST_EMAIL,
-  TEST_PASSWORD,
-  testPrisma,
-} from "./helpers/seedTestData";
+import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 const CALLBACK = "http://127.0.0.1:5199/callback";

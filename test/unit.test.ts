@@ -390,7 +390,12 @@ describe("recomputeMileage locality hint", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(async (url: string | URL | Request) => {
-        const href = String(url);
+        const href =
+          url instanceof URL
+            ? url.href
+            : url instanceof Request
+              ? url.url
+              : url;
         if (href.includes("/route/v1/driving")) {
           return {
             ok: true,
@@ -516,7 +521,12 @@ describe("recomputeMileage locality hint", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(async (url: string | URL | Request) => {
-        const href = String(url);
+        const href =
+          url instanceof URL
+            ? url.href
+            : url instanceof Request
+              ? url.url
+              : url;
         if (href.includes("/route/v1/driving")) {
           return {
             ok: true,

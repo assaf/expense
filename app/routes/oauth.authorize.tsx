@@ -7,6 +7,7 @@ import {
   saveOAuthConsent,
 } from "~/lib/store.server";
 import { issueAuthorizationCode, PKCE_METHOD } from "~/lib/oauth.server";
+import { formString } from "~/lib/validation";
 import type { Route } from "./+types/oauth.authorize";
 
 /**
@@ -53,12 +54,12 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
-  const decision = String(form.get("decision") ?? "");
+  const decision = formString(form, "decision");
   const params = {
-    clientId: String(form.get("client_id") ?? ""),
-    redirectUri: String(form.get("redirect_uri") ?? ""),
-    codeChallenge: String(form.get("code_challenge") ?? ""),
-    state: String(form.get("state") ?? ""),
+    clientId: formString(form, "client_id"),
+    redirectUri: formString(form, "redirect_uri"),
+    codeChallenge: formString(form, "code_challenge"),
+    state: formString(form, "state"),
   };
   if (
     !params.clientId ||
