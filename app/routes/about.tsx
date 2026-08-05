@@ -27,7 +27,7 @@ const ABOUT_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return [
     {
-      title: `About ${APP_NAME} — a free expense tracker built for tax season`,
+      title: `About ${APP_NAME}: a free expense tracker built for tax season`,
     },
     {
       name: "description",

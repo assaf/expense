@@ -175,17 +175,17 @@ const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 export function meta({ loaderData }: Route.MetaArgs) {
   if (loaderData?.mode === "landing") {
     return [
-      { title: "Expense — every receipt, ready for tax season" },
+      { title: "Expense: every receipt, ready for tax season" },
       {
         name: "description",
         content:
-          "Expense reads your receipts — snap a photo, paste a screenshot, or forward the email — and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
+          "Snap a photo, paste a screenshot, or forward the email. Expense reads the merchant and amount and files each one into IRS Schedule C categories and reports, ready to export for tax season.",
       },
       { tagName: "link", rel: "canonical", href: `${SITE_URL}/` },
       { property: "og:url", content: `${SITE_URL}/` },
       {
         property: "og:title",
-        content: "Expense — every receipt, ready for tax season",
+        content: "Expense: every receipt, ready for tax season",
       },
       {
         property: "og:description",
@@ -198,11 +198,11 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         property: "og:image:alt",
         content:
-          "The Expense home page — report totals, receipts with thumbnails, and a mileage entry",
+          "The Expense home page: report totals, receipts with thumbnails, and a mileage entry",
       },
       {
         name: "twitter:title",
-        content: "Expense — every receipt, ready for tax season",
+        content: "Expense: every receipt, ready for tax season",
       },
       {
         name: "twitter:description",
@@ -213,7 +213,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         name: "twitter:image:alt",
         content:
-          "The Expense home page — report totals, receipts with thumbnails, and a mileage entry",
+          "The Expense home page: report totals, receipts with thumbnails, and a mileage entry",
       },
     ];
   }

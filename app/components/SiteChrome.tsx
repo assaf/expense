@@ -2,6 +2,16 @@ import { ArrowUpRight, ReceiptText } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import { Button } from "~/components/ui/Button";
+import { BLOG_URL, GITHUB_URL } from "~/lib/seo-content";
+
+const FOOTER_NAV: SiteNavItem[] = [
+  { label: "About", to: "/about" },
+  { label: "AI", to: "/ai" },
+  { label: "FAQ", to: "/faq" },
+  { label: "Compare", to: "/alternatives" },
+  { label: "GitHub", to: GITHUB_URL, external: true },
+  { label: "Blog", to: BLOG_URL, external: true },
+];
 
 /**
  * Site header + footer for the public marketing/SEO pages (the landing page
@@ -55,14 +65,11 @@ function SiteNavLink({ item }: { item: SiteNavItem }) {
   );
 }
 
-export function SiteHeader({ nav }: { nav: SiteNavItem[] }) {
+export function SiteHeader() {
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
       <SiteLogo />
       <nav className="flex items-center gap-4 text-sm">
-        {nav.map((item) => (
-          <SiteNavLink key={item.label} item={item} />
-        ))}
         <Button asChild variant="ghost" size="sm" className="ml-2">
           <Link to="/login">Sign in</Link>
         </Button>
@@ -71,7 +78,7 @@ export function SiteHeader({ nav }: { nav: SiteNavItem[] }) {
   );
 }
 
-export function SiteFooter({ nav }: { nav: SiteNavItem[] }) {
+export function SiteFooter() {
   return (
     <footer className="border-t border-gray-100">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
@@ -79,10 +86,11 @@ export function SiteFooter({ nav }: { nav: SiteNavItem[] }) {
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink">
             <ReceiptText className="h-3 w-3 text-white" />
           </span>
-          Expense · © {new Date().getFullYear()} · Built by Assaf Arkin
+          Expense · © {new Date().getFullYear()} · Built by{" "}
+          <a href="https://labnotes.org">Assaf Arkin</a>
         </div>
         <nav className="flex items-center gap-4 text-sm">
-          {nav.map((item) => (
+          {FOOTER_NAV.map((item) => (
             <SiteNavLink key={item.label} item={item} />
           ))}
         </nav>

@@ -10,14 +10,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
-import {
-  SiteFooter,
-  SiteHeader,
-  type SiteNavItem,
-} from "~/components/SiteChrome";
+import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
 import { BENEFITS, BLOG_URL, GITHUB_URL, SITE_URL } from "~/lib/seo-content";
-
-const MASTODON = "https://mas.to/@assaf";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
 const SOFTWARE_SCHEMA = {
@@ -27,7 +21,7 @@ const SOFTWARE_SCHEMA = {
   url: SITE_URL,
   image: `${SITE_URL}/screenshot-og.png`,
   description:
-    "Expense reads your receipts — snapped, pasted, or forwarded from email — and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
+    "Expense reads your receipts, snapped, pasted, or forwarded from email, and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web",
   offers: {
@@ -69,26 +63,10 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
     };
   });
 
-const HEADER_NAV: SiteNavItem[] = [
-  { label: "GitHub", to: GITHUB_URL, external: true, hideOnMobile: true },
-  { label: "Blog", to: BLOG_URL, external: true, hideOnMobile: true },
-  { label: "Mastodon", to: MASTODON, external: true, hideOnMobile: true },
-];
-
-const FOOTER_NAV: SiteNavItem[] = [
-  { label: "GitHub", to: GITHUB_URL, external: true },
-  { label: "Blog", to: BLOG_URL, external: true },
-  { label: "Mastodon", to: MASTODON, external: true },
-  { label: "About", to: "/about" },
-  { label: "AI", to: "/ai" },
-  { label: "FAQ", to: "/faq" },
-  { label: "Compare", to: "/alternatives" },
-];
-
 const STEPS = [
   {
     title: "Add a receipt",
-    body: "Upload or paste a receipt image, or forward the email to your personal address — the expense is created automatically.",
+    body: "Upload or paste a receipt image, or forward the email to your personal address. The expense is created automatically.",
   },
   {
     title: "Check the details",
@@ -105,12 +83,12 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ReceiptText,
     title: "Capture a receipt from the chat",
-    body: "Drop a receipt photo or PDF into the conversation — it's OCR'd, categorized from your own history, and filed. No app to open.",
+    body: "Drop a receipt photo or PDF into the conversation, and it's OCR'd, categorized from your own history, and filed. No app to open.",
   },
   {
     icon: Tags,
     title: "Ask about your spending",
-    body: "\u201CHow much did I spend on flights last quarter?\u201D — the exact total, straight from your data, not a guess.",
+    body: "\u201CHow much did I spend on flights last quarter?\u201D — the exact total, straight from your data.",
   },
   {
     icon: FolderOpen,
@@ -130,7 +108,7 @@ export default function LandingPage() {
       <script type="application/ld+json">
         {JSON.stringify(SOFTWARE_SCHEMA)}
       </script>
-      <SiteHeader nav={HEADER_NAV} />
+      <SiteHeader />
 
       <main>
         {/* Hero */}
@@ -142,8 +120,8 @@ export default function LandingPage() {
             Every receipt, ready for tax season.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
-            Expense collects your receipts — snap a photo, paste a screenshot,
-            or forward the email. OCR reads the amount and merchant, and each
+            Expense collects your receipts: snap a photo, paste a screenshot, or
+            forward the email. OCR reads the amount and merchant, and each
             expense lands in a Schedule C category and a report you name. When
             tax season comes, the totals are already there.
           </p>
@@ -257,7 +235,7 @@ export default function LandingPage() {
               />
               <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
                 <Sparkles className="h-4 w-4 text-blue-600" />
-                The receipt editor — OCR and AI filled in merchant, amount, and
+                The receipt editor: OCR and AI filled in merchant, amount, and
                 category.
               </figcaption>
             </figure>
@@ -279,7 +257,7 @@ export default function LandingPage() {
             <p className="mt-3 max-w-2xl text-gray-600">
               Expense speaks the Model Context Protocol (MCP). Point Claude,
               Cursor, or any MCP client at your account, approve the connection
-              by signing in — no tokens to manage — and let the assistant do the
+              by signing in (no tokens to manage), and let the assistant do the
               boring parts:
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -302,8 +280,8 @@ export default function LandingPage() {
             </ul>
             <p className="mt-6 text-sm text-gray-500">
               Connecting is signing in: the assistant opens your browser, you
-              click Allow, and it's connected — with one-click revocation in
-              Settings whenever you want it gone.
+              click Allow, and it's connected. Revoke it anytime with one click
+              in Settings.
             </p>
           </div>
         </section>
@@ -339,7 +317,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <SiteFooter nav={FOOTER_NAV} />
+      <SiteFooter />
     </div>
   );
 }

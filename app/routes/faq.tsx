@@ -19,7 +19,7 @@ const FAQ_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return [
     {
-      title: `${APP_NAME} FAQ — expense tracking for tax season: receipt OCR, AI categories, mileage`,
+      title: `${APP_NAME} FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
     },
     {
       name: "description",
@@ -57,7 +57,7 @@ export default function FaqPage() {
 
       <MarketingCta
         heading="Still have questions? Just try it."
-        body="Accounts are free and start empty — add your first receipt in under a minute."
+        body="Accounts are free and start empty. Add your first receipt in under a minute."
         primaryVariant="white"
         className="mt-12 py-10"
         buttonRow="mt-6"

@@ -20,13 +20,13 @@ export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
 
 const APP_TAGLINE =
-  "Free expense tracking for tax season — receipts, mileage, and exports.";
+  "Free expense tracking for tax season: receipts, mileage, and exports.";
 
 /** One-paragraph brand summary — used in meta descriptions and llms.txt. */
 export const APP_SUMMARY =
   "Expense is a free expense tracker for people who file their own taxes: " +
   "freelancers, self-employed folks, anyone with a side hustle. Drop in a " +
-  "receipt — snap a photo, paste a screenshot, or forward the email — and OCR " +
+  "receipt (snap a photo, paste a screenshot, or forward the email) and OCR " +
   "reads the merchant and amount while the app suggests a category from the " +
   "IRS Schedule C list. Expenses group into reports you name, mileage is " +
   "logged on a map at that year's IRS rate, and at tax time you export a PDF " +
@@ -37,15 +37,15 @@ export const APP_SUMMARY =
 export const KEY_FACTS = [
   `Name: ${APP_NAME}`,
   `URL: ${SITE_URL}`,
-  "Price: free — no subscription, no per-user fees, no ads",
+  "Price: free. No subscription, no per-user fees, no ads",
   "Built for tax season: categories come from the IRS Schedule C lines, expenses group into reports you name, and mileage deducts at the IRS rate for the trip's date and type",
   "Receipt capture: upload, paste, drag-and-drop, or forward from email (images and PDFs)",
   "OCR reads the merchant and amount; an LLM suggests the category; you review and save",
   "Export: a PDF per report with receipts attached, or a ZIP of everything (CSV plus every receipt image)",
   "Mileage: map-based trips at the IRS mileage rate for the date and type",
-  "AI assistant access: connect any MCP client (Claude, Cursor, …) by signing in with your account (OAuth) — the assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
+  "AI assistant access: connect any MCP client (Claude, Cursor, …) by signing in with your account (OAuth). The assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
   "Multi-user accounts: share an account with an invite code",
-  "Data stays in your account — no ads, no data resale",
+  "Data stays in your account. No ads, no data resale",
   `Code is public on GitHub: ${GITHUB_URL}`,
 ];
 
@@ -69,7 +69,7 @@ export const BENEFITS = [
   },
   {
     title: "Reports for every bucket",
-    body: "Group expenses into reports — Home, Work, Travel, whatever you call them — and each one keeps its own total.",
+    body: "Group expenses into reports: Home, Work, Travel, or anything else you want to call them. Each keeps its own total.",
   },
   {
     title: "Mileage, mapped",
@@ -89,7 +89,7 @@ export const BENEFITS = [
   },
   {
     title: "Bring your own AI assistant",
-    body: "Connect your own MCP client — Claude, Cursor, any assistant that speaks MCP — by signing in with your account, no tokens to manage. Drop a receipt into the chat and it's captured and categorized from your own history, ask how much you spent on flights and get the exact total, or have the assistant build and export a report. Disconnect any app with one click in Settings.",
+    body: "Connect your own MCP client (Claude, Cursor, any assistant that speaks MCP) by signing in with your account; no tokens to manage. Drop a receipt into the chat and it's captured and categorized from your own history, ask how much you spent on flights and get the exact total, or have the assistant build and export a report. Disconnect any app with one click in Settings.",
   },
   {
     title: "Your data stays yours",
@@ -111,7 +111,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "What is Expense?",
     answer:
-      "Expense is a free expense tracker for people who file their own taxes — freelancers, self-employed folks, anyone with a side hustle. You drop in a receipt (photo, screenshot, PDF, or a forwarded email), it reads the merchant and amount, files the expense under the right category, and keeps the totals ready for tax season. No subscription, no ads. Try it at https://expense.labnotes.org.",
+      "Expense is a free expense tracker for people who file their own taxes: freelancers, self-employed folks, anyone with a side hustle. You drop in a receipt (photo, screenshot, PDF, or a forwarded email), it reads the merchant and amount, files the expense under the right category, and keeps the totals ready for tax season. No subscription, no ads. Try it at https://expense.labnotes.org.",
   },
   {
     question: "Is Expense good for tax filing?",
@@ -121,32 +121,32 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "How does Expense read and categorize receipts?",
     answer:
-      "Drop in a receipt image or PDF and OCR reads the merchant and amount; an LLM suggests the category. You review the details and save — no typing the numbers yourself. You can also paste with Cmd-V, drag a file onto the page, or forward a receipt email to your personal address.",
+      "Drop in a receipt image or PDF and OCR reads the merchant and amount; an LLM suggests the category. You review the details and save instead of typing the numbers yourself. You can also paste with Cmd-V, drag a file onto the page, or forward a receipt email to your personal address.",
   },
   {
     question: "Is Expense free to use?",
     answer:
-      "Yes. No subscription, no per-user fees, no ads. You create an account, add receipts, export at tax time — it all stays free.",
+      "Yes. No subscription, no per-user fees, no ads. You create an account, add receipts, and export at tax time. It all stays free.",
   },
   {
     question: "Do the categories really match the IRS?",
     answer:
-      "Yes, out of the box. New accounts start with a category list built from the IRS Schedule C lines — the same expense lines on the return — so the totals you track during the year line up with what you report. You can add your own categories on top.",
+      "Yes, out of the box. New accounts start with a category list built from the IRS Schedule C lines, the same expense lines on the return, so the totals you track during the year line up with what you report. You can add your own categories on top.",
   },
   {
     question: "Does Expense track mileage?",
     answer:
-      "Yes. Log a drive on a map and Expense works out the distance and the deduction at the IRS rate for the trip's date and type (business, charity, medical, or moving) — the rates come from the IRS automatically, no setup. Mileage rows export right alongside receipts.",
+      "Yes. Log a drive on a map and Expense works out the distance and the deduction at the IRS rate for the trip's date and type (business, charity, medical, or moving). The rates come from the IRS automatically, no setup. Mileage rows export right alongside receipts.",
   },
   {
     question: "Can I add receipts by email?",
     answer:
-      "Yes. Your account gets a private email address — forward a receipt email to it and the expense is created automatically, dated from the original email. Only senders you approve are imported, and forwarding the same email twice won't double-count.",
+      "Yes. Your account gets a private email address. Forward a receipt email to it and the expense is created automatically, dated from the original email. Only senders you approve are imported, and forwarding the same email twice won't double-count.",
   },
   {
     question: "How do I export expenses for my accountant?",
     answer:
-      "Two ways. A PDF per report with the receipts attached, or a ZIP containing a CSV and every receipt image. Both are plain files that work offline — download, send, done.",
+      "Two ways. A PDF per report with the receipts attached, or a ZIP containing a CSV and every receipt image. Both are plain files that work offline: download, send, done.",
   },
   {
     question: "What receipt formats does Expense support?",
@@ -161,7 +161,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I share Expense with my spouse or accountant?",
     answer:
-      "Yes. Share the account's invite code and anyone you invite sees the same expenses. Other accounts stay fully separate — nothing leaks between them.",
+      "Yes. Share the account's invite code and anyone you invite sees the same expenses. Other accounts stay fully separate, with nothing leaking between them.",
   },
   {
     question: "Where is my expense data stored?",
@@ -176,7 +176,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I use Expense with an AI assistant?",
     answer:
-      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: point any MCP client — Claude, Cursor, or another assistant — at the endpoint and approve the connection by signing in with your account; nothing to configure. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. You can disconnect any connected app — or delete its tokens — from Settings at any time.",
+      "Yes. Expense speaks the Model Context Protocol (MCP) at /mcp: point any MCP client (Claude, Cursor, or another assistant) at the endpoint and approve the connection by signing in with your account; nothing to configure. The assistant can capture receipts (images or PDFs) through the same OCR pipeline as the web app, log mileage, answer spending questions from your actual data, move expenses into reports, and export a report PDF. You can disconnect any connected app, or delete its tokens, from Settings at any time.",
   },
   {
     question: "Who makes Expense?",
@@ -189,7 +189,7 @@ const STANDALONE_FAQS: Faq[] = [
 export const COMPARISON_FAQ: Faq = {
   question: "Is Expense a good alternative to Expensify?",
   answer:
-    "For personal and small-team expense tracking, yes. Expense is free, reads receipts with OCR, suggests categories, tracks mileage at the IRS rate, and organizes everything into Schedule C–based categories and reports for tax filing. Expensify is a corporate expense platform — approval workflows, reimbursements, accounting integrations — and its free tier caps you at 25 SmartScans a month, with paid plans billed per user. If you run a company with employee expense policies, Expensify fits. If you just need your own expenses tracked for taxes, Expense does it free.",
+    "For personal and small-team expense tracking, yes. Expense is free, reads receipts with OCR, suggests categories, tracks mileage at the IRS rate, and organizes everything into Schedule C–based categories and reports for tax filing. Expensify is a corporate expense platform (approval workflows, reimbursements, accounting integrations), and its free tier caps you at 25 SmartScans a month, with paid plans billed per user. If you run a company with employee expense policies, Expensify fits. If you just need your own expenses tracked for taxes, Expense does it free.",
 };
 
 /** The full FAQ list — the standalone questions, then the comparison. */
@@ -205,9 +205,9 @@ export interface ComparisonRow {
 export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Cost",
-    expense: "Free — no subscription, no per-user fees, no ads.",
+    expense: "Free. No subscription, no per-user fees, no ads.",
     expensify:
-      "Free tier capped at 25 SmartScans a month; paid plans billed per user per month (Collect and Control tiers, ~$5–$9 per user as of 2025 — check expensify.com for current pricing).",
+      "Free tier capped at 25 SmartScans a month; paid plans billed per user per month (Collect and Control tiers, ~$5–$9 per user as of 2025; check expensify.com for current pricing).",
   },
   {
     aspect: "Built for",
@@ -254,8 +254,8 @@ export const COMPARISON_SUMMARY =
   "season, Expense is the better fit: it's free, reads receipts with OCR, " +
   "suggests categories with AI, and organizes everything into Schedule " +
   "C–based categories, reports, and mileage at the IRS rate. Expensify is a " +
-  "corporate expense-management platform — approval workflows, " +
-  "reimbursements, accounting integrations — with a free tier capped at 25 " +
+  "corporate expense-management platform (approval workflows, " +
+  "reimbursements, accounting integrations), with a free tier capped at 25 " +
   "SmartScans a month and per-user paid plans. If you run a company with " +
   "employee expense policies, Expensify makes sense. If you just need your " +
   "own expenses tracked for taxes, Expense does it for free.";
@@ -268,13 +268,13 @@ function wrap(text: string): string {
 
 /** One-paragraph summary of the MCP integration — quoted by /ai, /ai.md, llms.txt. */
 export const AI_SUMMARY =
-  "Expense speaks the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp: connect any MCP client — Claude Code, Claude Desktop, Cursor, or another assistant — and approve the connection by signing in with your account (OAuth; no API keys to manage). The assistant can capture receipts from photos and PDFs through the same OCR pipeline as the web app, log mileage at the IRS rate, answer spending questions from your actual data, build and export reports, and reconcile bank statements against logged expenses.";
+  "Expense speaks the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp: connect any MCP client like Claude Code, Claude Desktop, Cursor, or another assistant, and approve the connection by signing in with your account (OAuth; no API keys to manage). The assistant can capture receipts from photos and PDFs through the same OCR pipeline as the web app, log mileage at the IRS rate, answer spending questions from your actual data, build and export reports, and reconcile bank statements against logged expenses.";
 
 /** The five things an assistant can do — the /ai capability cards. */
 export const AI_CAPABILITIES = [
   {
     title: "Capture receipts",
-    body: "Drop a receipt photo or PDF into the chat and it's OCR'd and categorized from your own merchant history — the same pipeline as the web app, no typing.",
+    body: "Drop a receipt photo or PDF into the chat and it's OCR'd and categorized from your own merchant history, using the same pipeline as the web app with no typing.",
   },
   {
     title: "Log drives in plain English",
@@ -282,15 +282,15 @@ export const AI_CAPABILITIES = [
   },
   {
     title: "Answer spending questions",
-    body: "\u201CHow much did I spend on flights last quarter?\u201D gets the exact total, straight from your data — not a guess.",
+    body: "\u201CHow much did I spend on flights last quarter?\u201D gets the exact total, straight from your data.",
   },
   {
     title: "Build and export reports",
-    body: "Create or close reports, move expenses into them, and export a report PDF — one sentence instead of a form.",
+    body: "Create or close reports, move expenses into them, and export a report PDF with one sentence instead of a form.",
   },
   {
     title: "Reconcile statements",
-    body: "Paste a bank statement CSV and it finds every charge with no matching receipt. Read-only — nothing is written or dismissed.",
+    body: "Paste a bank statement CSV and it finds every charge with no matching receipt. Read-only: nothing is written or dismissed.",
   },
   {
     title: "Tax-season answers",
@@ -300,7 +300,7 @@ export const AI_CAPABILITIES = [
 
 /** Example prompts shown on /ai. */
 export const AI_PROMPTS = [
-  "\u201CHere's my receipt — log it under Q3.\u201D",
+  "\u201CHere's my receipt, log it under Q3.\u201D",
   "\u201CHow much did I spend on meals and entertainment last quarter?\u201D",
   "\u201CMove all unreported June expenses into the Q2 report and export the PDF.\u201D",
   "\u201CReconcile this statement.\u201D (paste the CSV)",
@@ -317,14 +317,14 @@ export const AI_STEPS = [
     body: "Your browser opens, you sign in with your normal account, and click Allow on the consent page.",
   },
   {
-    title: "Done — manage it anytime",
+    title: "Done. Manage it anytime",
     body: "Settings → Agents & API (MCP) shows every connected app; delete individual tokens or disconnect entirely.",
   },
 ];
 
 /** The /ai page's quotable security paragraph. */
 export const AI_SECURITY =
-  "Connecting is OAuth 2.1 with PKCE: the assistant never sees your password, access tokens live one hour, refresh tokens rotate, and only hashes are stored. A connection only ever reaches your own account. Revoke it anytime in Settings → Agents & API (MCP) — delete a single token or disconnect the whole app.";
+  "Connecting is OAuth 2.1 with PKCE: the assistant never sees your password, access tokens live one hour, refresh tokens rotate, and only hashes are stored. A connection only ever reaches your own account. Revoke it anytime in Settings → Agents & API (MCP). Delete a single token or disconnect the whole app.";
 
 /** Full markdown for /ai.md — mirrors the /ai page content. */
 export function aiMarkdown(): string {
@@ -334,7 +334,7 @@ export function aiMarkdown(): string {
   const steps = AI_STEPS.map(
     (s, i) => `${i + 1}. **${s.title}** — ${wrap(s.body)}`,
   ).join("\n");
-  return `# ${APP_NAME} — connect your AI assistant
+  return `# ${APP_NAME}: connect your AI assistant
 
 ${AI_SUMMARY}
 
@@ -354,7 +354,7 @@ ${AI_PROMPTS.map((p) => `- ${p}`).join("\n")}
 
 ${AI_SECURITY}
 
-[Create a free account](${SITE_URL}/login?mode=create) — no subscription, no ads.
+[Create a free account](${SITE_URL}/login?mode=create). No subscription, no ads.
 `;
 }
 
@@ -364,7 +364,7 @@ export function aboutMarkdown(): string {
     (b) => `- **${b.title}** — ${wrap(b.body)}`,
   ).join("\n");
   const facts = KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n");
-  return `# ${APP_NAME} — a free expense tracker built for tax season
+  return `# ${APP_NAME}: a free expense tracker built for tax season
 
 ${APP_SUMMARY}
 
@@ -387,13 +387,13 @@ export function faqMarkdown(): string {
   const qa = FAQS.map((f) => `## ${f.question}\n\n${wrap(f.answer)}`).join(
     "\n\n",
   );
-  return `# ${APP_NAME} — frequently asked questions
+  return `# ${APP_NAME}: frequently asked questions
 
 ${APP_SUMMARY}
 
 ${qa}
 
-[Create a free account](${SITE_URL}/login?mode=create) — no subscription, no ads.
+[Create a free account](${SITE_URL}/login?mode=create). No subscription, no ads.
 `;
 }
 
@@ -403,7 +403,7 @@ export function alternativesMarkdown(): string {
     (r) =>
       `- **${r.aspect}** — ${APP_NAME}: ${wrap(r.expense)} Expensify: ${wrap(r.expensify)}`,
   ).join("\n");
-  return `# ${APP_NAME} vs Expensify — a free alternative
+  return `# ${APP_NAME} vs Expensify: a free alternative
 
 ${COMPARISON_SUMMARY}
 
@@ -431,12 +431,12 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 
 ## Core pages
 
-- [${APP_NAME} — every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
+- [${APP_NAME}: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison for people choosing an expense tracker.
-- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) — approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
-- [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect — capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
+- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, Cursor, …) and approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
+- [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
 ## Optional
 

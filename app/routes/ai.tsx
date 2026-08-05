@@ -16,7 +16,7 @@ import type { Route } from "./+types/ai";
 const AI_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: `Connect your AI assistant — ${APP_NAME}`,
+  name: `Connect your AI assistant: ${APP_NAME}`,
   url: `${SITE_URL}/ai`,
   description: AI_SUMMARY,
   author: {
@@ -28,11 +28,11 @@ const AI_SCHEMA = {
 
 export function meta(): Route.MetaDescriptors {
   return [
-    { title: `${APP_NAME} — connect your AI assistant` },
+    { title: `${APP_NAME}: connect your AI assistant` },
     {
       name: "description",
       content:
-        "Connect Claude, Cursor, or any MCP client to Expense by signing in — capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
+        "Connect Claude, Cursor, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/ai` },
   ];
@@ -88,7 +88,7 @@ export default function AiPage() {
         </ol>
         <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
           <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-500">
-            <Link2 className="h-3.5 w-3.5" /> Claude Code — .mcp.json
+            <Link2 className="h-3.5 w-3.5" /> Claude Code: .mcp.json
           </div>
           <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700">
             {`{
@@ -102,7 +102,7 @@ export default function AiPage() {
           </pre>
         </div>
         <p className="mt-3 text-sm text-gray-500">
-          No headers or keys — the client discovers the sign-in flow itself.
+          No headers or keys. The client discovers the sign-in flow itself.
           Claude Desktop and Cursor connect the same way.
         </p>
       </section>

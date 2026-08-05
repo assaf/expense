@@ -11,7 +11,7 @@ import type { Route } from "./+types/alternatives";
 const COMPARISON_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: `${APP_NAME} vs Expensify — a free alternative`,
+  name: `${APP_NAME} vs Expensify: a free alternative`,
   url: `${SITE_URL}/alternatives`,
   description: COMPARISON_SUMMARY,
 };
@@ -36,7 +36,7 @@ const VERDICT_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return [
     {
-      title: `${APP_NAME} vs Expensify — a free alternative for expense tracking`,
+      title: `${APP_NAME} vs Expensify: a free alternative for expense tracking`,
     },
     {
       name: "description",
@@ -51,7 +51,7 @@ export default function AlternativesPage() {
   return (
     <MarketingPage
       eyebrow="Compare"
-      title={`${APP_NAME} vs Expensify — a free alternative.`}
+      title={`${APP_NAME} vs Expensify: a free alternative.`}
       summary={COMPARISON_SUMMARY}
       schema={
         <>
@@ -109,8 +109,8 @@ export default function AlternativesPage() {
               Choose {APP_NAME} if…
             </h3>
             <p className="mt-1.5 text-sm leading-relaxed text-blue-900/80">
-              You track your own expenses — for yourself, a side hustle, or a
-              small team — and want them ready for tax season without typing in
+              You track your own expenses, for yourself, a side hustle, or a
+              small team, and want them ready for tax season without typing in
               receipts.
             </p>
           </div>
@@ -120,7 +120,7 @@ export default function AlternativesPage() {
             </h3>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
               You run a company that needs employee expense policies, approval
-              workflows, reimbursements, and accounting-software integrations —
+              workflows, reimbursements, and accounting-software integrations,
               and a budget for per-user subscriptions.
             </p>
           </div>
