@@ -45,7 +45,7 @@ name: deployment-checks
 # skipped — all no-ops on the baselined prod DB — just prisma db push +
 # migrate resolve, so the job needs no psql).
 #
-# To make this gate production promotion:
+# To make this gate production promotion (REMOVED Aug 2026 — see AGENTS.md):
 #   1. Add the secrets below (VERCEL_TOKEN, VERCEL_PROJECT_ID, VERCEL_ORG_ID,
 #      SMOKE_TEST_SECRET — must equal the SMOKE_TEST_SECRET env var on the
 #      Vercel project — VERCEL_PROTECTION_BYPASS, the project's Protection
@@ -54,12 +54,15 @@ name: deployment-checks
 #      job uses it directly because the VERCEL_TOKEN can't read project
 #      settings).
 #   2. Vercel → project → Settings → Build & Deployment → Deployment Checks →
-#      Add Checks → provider GitHub → require "pdf-ocr-smoke". Because the
-#      smoke job fails when CI or the DB migration fails, that single check is
-#      enough to gate promotion; requiring "Check", "Test" or "Migrate prod
-#      DB" too is optional.
-#   3. Vercel then holds each production deployment (never aliases it to
-#      expense.labnotes.org) until the required checks pass.
+#      Add Checks → provider GitHub → require "pdf-ocr-smoke".
+#   The gate was removed: a stale required check ("Check & Test", split into
+#   separate "Check" + "Test" jobs in 6037bcb) left Vercel waiting on a
+#   check-run that never existed, freezing the production alias on a
+#   pre-migration build for ~23h and then blocking all promotions. The smoke
+#   check still runs and fails CI loudly (and now verifies the server Sentry
+#   SDK initialized in the deployed bundle); it just doesn't gate the alias.
+#   To inspect/re-add checks: `vercel project checks` / `vercel project
+#   checks remove <id>`.
 #
 # NOTE: the job names ARE the check names Vercel matches — keep them stable.
 # Renaming either requires updating the Deployment Checks settings to match.

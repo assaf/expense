@@ -389,10 +389,21 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   before) → `pdf-ocr-smoke`. The smoke job fails fast when
   CI or the migration fails, so a broken build or an unmigrated schema never
   reports a passing smoke check. Job timeouts (2/4/1/2 minutes) bound the
-  whole run to a ~7m ceiling; typical runs are ~4.5m. To gate production promotion on it: Vercel → project → Settings → Build & Deployment →
-  Deployment Checks → Add Checks → GitHub → require `pdf-ocr-smoke` (that
-  single check is enough — it fails when CI fails; requiring `check`/`test`
-  too is optional); requires `VERCEL_TOKEN`,
+  whole run to a ~7m ceiling; typical runs are ~4.5m.
+  **Deployment Checks gate: REMOVED (Aug 2026).** Production promotion is no
+  longer gated on a Vercel Deployment Check — the alias follows the latest
+  READY production deployment automatically. The gate broke twice: a stale
+  required check name ("Check & Test" — split into separate "Check" +
+  "Test" jobs in 6037bcb, leaving Vercel waiting on a check-run that never
+  existed, so every deployment's `deployment-alias` check stayed pending
+  forever) kept the alias frozen on a pre-migration build for ~23h (P2021
+  500s), then kept newer deployments un-promoted entirely. The smoke check
+  still runs and fails loudly in CI (now also reporting whether the server
+  Sentry SDK initialized in the deployed bundle); it just doesn't block the
+  alias. To inspect/re-add checks: `vercel project checks` /
+  `vercel project checks remove <id>` (API: GET/POST/DELETE
+  `/v2/projects/…/checks`); the Vercel dashboard path is Settings → Build &
+  Deployment → Deployment Checks. Requires `VERCEL_TOKEN`,
   `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
   `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
   it stable.
