@@ -38,7 +38,7 @@ export function MarketingPage({
       {schema}
       <main
         className={cn(
-          "mx-auto px-4 pb-16 pt-12 sm:px-6",
+          "mx-auto px-4 pb-16 pt-12 sm:px-6 flex flex-col gap-4",
           className ?? "max-w-4xl",
         )}
       >
@@ -69,7 +69,6 @@ export function MarketingCta({
   body,
   icon,
   primaryLabel = "Create your account",
-  primaryVariant = "blue",
   secondaryLabel,
   secondaryHref,
   className,
@@ -80,8 +79,6 @@ export function MarketingCta({
   /** Optional icon shown above the heading (e.g. the AI page's bot). */
   icon?: ReactNode;
   primaryLabel?: string;
-  /** "white" = white button on the dark panel (FAQ/Compare). */
-  primaryVariant?: "blue" | "white";
   /** Optional ghost secondary button next to the primary. */
   secondaryLabel?: string;
   secondaryHref?: string;
@@ -120,11 +117,7 @@ export function MarketingCta({
         <Button
           asChild
           size="lg"
-          className={
-            primaryVariant === "white"
-              ? "w-full bg-white text-ink hover:bg-gray-100 sm:w-auto"
-              : "w-full sm:w-auto"
-          }
+          className="w-full bg-white text-ink hover:bg-gray-100 sm:w-auto"
         >
           <Link to="/login?mode=create">{primaryLabel}</Link>
         </Button>
@@ -133,7 +126,7 @@ export function MarketingCta({
             asChild
             size="lg"
             variant="ghost"
-            className="w-full text-white hover:bg-white/10 hover:text-white sm:w-auto"
+            className="w-full text-white hover:bg-white/10 hover:text-white sm:w-auto bg-blue-600"
           >
             <Link to={secondaryHref}>{secondaryLabel}</Link>
           </Button>

@@ -58,7 +58,6 @@ export default function FaqPage() {
       <MarketingCta
         heading="Still have questions? Just try it."
         body="Accounts are free and start empty. Add your first receipt in under a minute."
-        primaryVariant="white"
         className="mt-12 py-10"
         buttonRow="mt-6"
       />

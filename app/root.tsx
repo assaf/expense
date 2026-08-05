@@ -59,7 +59,7 @@ export function meta(): Route.MetaDescriptors {
     {
       name: "description",
       content:
-        "Expense reads your receipts — snap a photo, paste a screenshot, or forward the email — and organizes them into IRS Schedule C categories and reports for tax season.",
+        "Expense reads your receipts — snap a photo, paste a screenshot, or forward a receipt email — and organizes them into IRS Schedule C categories and reports for tax season.",
     },
     // Social sharing defaults (og:site_name, og:locale, og:type,
     // twitter:card, theme-color) live as static tags in the root <head> —

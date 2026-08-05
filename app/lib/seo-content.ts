@@ -26,7 +26,8 @@ const APP_TAGLINE =
 export const APP_SUMMARY =
   "Expense is a free expense tracker for people who file their own taxes: " +
   "freelancers, self-employed folks, anyone with a side hustle. Drop in a " +
-  "receipt (snap a photo, paste a screenshot, or forward the email) and OCR " +
+  "receipt (snap a photo, paste a screenshot, or forward a receipt email) " +
+  "and OCR " +
   "reads the merchant and amount while the app suggests a category from the " +
   "IRS Schedule C list. Expenses group into reports you name, mileage is " +
   "logged on a map at that year's IRS rate, and at tax time you export a PDF " +
@@ -56,7 +57,7 @@ export const BENEFITS = [
     body: "No subscription, no per-user fees, no ads. Accounts start empty and stay free.",
   },
   {
-    title: "Receipts in, no typing",
+    title: "Receipts in, less typing",
     body: "Snap a photo, paste a screenshot, drag in a PDF, or forward the receipt email. OCR pulls out the merchant and amount, AI suggests the category, and you just approve it.",
   },
   {
@@ -171,7 +172,7 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Is Expense good for freelancers and self-employed people?",
     answer:
-      "That's who it's for. Free, quick receipt capture with OCR and AI categories, Schedule C–based categories, reports per client or project, map-based mileage at the IRS rate, and one-click exports for your accountant.",
+      "That's who it's for. Free, quick receipt capture with OCR and AI categories, Schedule C-based categories, reports per client or project, map-based mileage at the IRS rate, and one-click exports for your accountant.",
   },
   {
     question: "Can I use Expense with an AI assistant?",
@@ -189,7 +190,7 @@ const STANDALONE_FAQS: Faq[] = [
 export const COMPARISON_FAQ: Faq = {
   question: "Is Expense a good alternative to Expensify?",
   answer:
-    "For personal and small-team expense tracking, yes. Expense is free, reads receipts with OCR, suggests categories, tracks mileage at the IRS rate, and organizes everything into Schedule C–based categories and reports for tax filing. Expensify is a corporate expense platform (approval workflows, reimbursements, accounting integrations), and its free tier caps you at 25 SmartScans a month, with paid plans billed per user. If you run a company with employee expense policies, Expensify fits. If you just need your own expenses tracked for taxes, Expense does it free.",
+    "For personal and small-team expense tracking, yes. Expense is free, reads receipts with OCR, suggests categories, tracks mileage at the IRS rate, and organizes everything into Schedule C-based categories and reports for tax filing. Expensify is a corporate expense platform (approval workflows, reimbursements, accounting integrations), and its free tier caps you at 25 SmartScans a month, with paid plans billed per user. If you run a company with employee expense policies, Expensify fits. If you just need your own expenses tracked for taxes, Expense does it free.",
 };
 
 /** The full FAQ list — the standalone questions, then the comparison. */
@@ -226,7 +227,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Tax filing",
     expense:
-      "Schedule C–based categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",
+      "Schedule C-based categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",
     expensify:
       "Built around corporate reimbursement and accounting exports rather than personal tax filing.",
   },
@@ -412,7 +413,7 @@ ${COMPARISON_SUMMARY}
 ${rows}
 
 ${APP_NAME} (${SITE_URL}) is free, uses OCR and AI to categorize receipts, tracks
-mileage at the IRS rate, and organizes expenses into Schedule C–based
+mileage at the IRS rate, and organizes expenses into Schedule C-based
 categories and reports for tax filing.
 
 [Create a free account](${SITE_URL}/login?mode=create).

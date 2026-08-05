@@ -179,7 +179,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
       {
         name: "description",
         content:
-          "Snap a photo, paste a screenshot, or forward the email. Expense reads the merchant and amount and files each one into IRS Schedule C categories and reports, ready to export for tax season.",
+          "Snap a photo, paste a screenshot, or forward a receipt email. Expense reads the merchant and amount and files each one into IRS Schedule C categories and reports, ready to export for tax season.",
       },
       { tagName: "link", rel: "canonical", href: `${SITE_URL}/` },
       { property: "og:url", content: `${SITE_URL}/` },
@@ -420,7 +420,7 @@ function ExpenseList({
             variant="secondary"
             onClick={() => fileRef.current?.click()}
           >
-            <Upload className="h-4 w-4" /> Upload image
+            <Upload className="h-4 w-4" /> Upload file
           </Button>
           <input
             ref={fileRef}
@@ -468,14 +468,18 @@ function ExpenseList({
             </button>
           ) : null}
         </div>
-        <p className="basis-full text-xs text-gray-400">
-          Tip: upload an image or PDF, paste an image (⌘V), or drag a file
-          anywhere on this page to create a receipt — the amount, merchant, and
-          category are filled in automatically.
-          {mileageRate
-            ? ` Current mileage rate: $${mileageRate}/mi.`
-            : " No IRS mileage rate published yet — rates load automatically from the IRS table."}
-        </p>
+        <div className="flex basis-full flex-wrap items-center gap-2 text-xs text-gray-400">
+          <p>
+            Tip: upload or paste (⌘V) a receipt image or PDF, or drag one
+            anywhere on this page — merchant, amount, and category fill in
+            automatically.
+          </p>
+          {mileageRate ? (
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
+              {`Mileage $${mileageRate}/mi`}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {inboundAddress && showEmailHelp ? (
@@ -633,7 +637,7 @@ function ExpenseRow({
             <div className="flex items-baseline justify-between gap-2">
               <span className="truncate font-medium">
                 {expense.type === "receipt"
-                  ? expense.merchant || "Untitled receipt"
+                  ? expense.merchant || "No merchant"
                   : `${MILEAGE_TYPE_LABELS[expense.mileageType]}${
                       expense.distanceMiles
                         ? ` · ${expense.distanceMiles} mi`
@@ -752,7 +756,8 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
 function EmptyState() {
   return (
     <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center text-gray-500">
-      No expenses yet. Add a receipt or mileage expense to get started.
+      Nothing here yet. Add your first receipt or log a drive — it takes under a
+      minute.
     </div>
   );
 }

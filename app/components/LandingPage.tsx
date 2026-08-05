@@ -1,5 +1,4 @@
 import {
-  ArrowUpRight,
   Bot,
   FolderOpen,
   MapPinned,
@@ -11,7 +10,7 @@ import {
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
-import { BENEFITS, BLOG_URL, GITHUB_URL, SITE_URL } from "~/lib/seo-content";
+import { BENEFITS, BLOG_URL, SITE_URL } from "~/lib/seo-content";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
 const SOFTWARE_SCHEMA = {
@@ -40,7 +39,7 @@ const SOFTWARE_SCHEMA = {
  * title so the copy itself stays in seo-content.ts (the single source of
  * the site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
-  "Receipts in, no typing": ReceiptText,
+  "Receipts in, less typing": ReceiptText,
   "Reports for every bucket": FolderOpen,
   "Categories that match the IRS": Tags,
   "Mileage, mapped": MapPinned,
@@ -66,7 +65,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
 const STEPS = [
   {
     title: "Add a receipt",
-    body: "Upload or paste a receipt image, or forward the email to your personal address. The expense is created automatically.",
+    body: "Upload or paste a receipt image, or forward a receipt email to your personal address. The expense is created automatically.",
   },
   {
     title: "Check the details",
@@ -121,23 +120,13 @@ export default function LandingPage() {
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
             Expense collects your receipts: snap a photo, paste a screenshot, or
-            forward the email. OCR reads the amount and merchant, and each
+            forward a receipt email. OCR reads the merchant and amount, and each
             expense lands in a Schedule C category and a report you name. When
             tax season comes, the totals are already there.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="w-full sm:w-auto">
               <Link to="/login?mode=create">Create your account</Link>
-            </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="secondary"
-              className="w-full sm:w-auto"
-            >
-              <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-                See the code <ArrowUpRight className="h-4 w-4" />
-              </a>
             </Button>
           </div>
           <p className="mt-5 text-sm text-gray-500">

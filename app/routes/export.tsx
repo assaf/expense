@@ -83,9 +83,9 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
       <section>
         <h2 className="mb-2 text-lg font-semibold">Everything (ZIP)</h2>
         <p className="mb-3 text-sm text-gray-500">
-          A ZIP with a CSV of all expenses (date, merchant, amount, category,
-          report, description) and every receipt image, named by date and
-          report.
+          A ZIP containing every receipt image (named by date and report) plus a
+          CSV of all expenses (date, merchant, amount, category, report,
+          description).
         </p>
         <Button asChild>
           <a

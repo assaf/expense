@@ -57,7 +57,7 @@ export default function VerifySenderPage({ loaderData }: Route.ComponentProps) {
             <b className="font-mono">{outcome.forwardTo}</b> will be added to
             the <b>{outcome.accountName}</b> account on Expense.
           </p>
-          <p>This link has been used up; no further action is needed.</p>
+          <p>This link has already been used. No further action is needed.</p>
         </>
       );
       break;

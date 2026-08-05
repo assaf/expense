@@ -358,10 +358,10 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               Sender addresses
             </div>
             <p className="mb-2 text-xs text-gray-500">
-              Receipts are imported only from <b>verified</b> addresses. When
-              you add an address (or sign in with a new one) we email it a
-              verification link — click it and the address is yours: no other
-              account can use it, and receipts from it start importing.
+              Receipts are imported only from <b>verified</b> addresses. Adding
+              an address sends a verification link to that inbox. Once the link
+              is clicked, the address is locked to your account — no one else
+              can claim it — and receipts start importing.
             </p>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (
@@ -650,7 +650,7 @@ function AgentsSection({
           )}
           <p className="mt-3 text-xs text-gray-400">
             Removing an app revokes its access tokens immediately and stops it
-            from connecting again; it can reconnect by signing in anew.
+            from connecting again; it can reconnect by signing in again.
           </p>
         </div>
       </div>

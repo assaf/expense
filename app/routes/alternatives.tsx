@@ -41,7 +41,7 @@ export function meta(): Route.MetaDescriptors {
     {
       name: "description",
       content:
-        "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categories, Schedule C–based categories, mileage at the IRS rate, and tax-time exports.",
+        "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categories, Schedule C-based categories, mileage at the IRS rate, and tax-time exports.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/alternatives` },
   ];
@@ -139,7 +139,6 @@ export default function AlternativesPage() {
       <MarketingCta
         heading={`Try ${APP_NAME} free.`}
         body="No subscription, no 25-scan monthly cap, no ads."
-        primaryVariant="white"
         className="mt-12 py-10"
         buttonRow="mt-6"
       />
