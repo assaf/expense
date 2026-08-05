@@ -13,7 +13,7 @@ const inputVariants = cva(
   },
 );
 
-export interface InputProps extends ComponentProps<"input"> {
+interface InputProps extends ComponentProps<"input"> {
   /** Red border + red focus ring — pair with an inline error message. */
   invalid?: boolean;
 }

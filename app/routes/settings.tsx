@@ -852,10 +852,51 @@ function RenameButton({
   );
 }
 
+/**
+ * The trash button for a named row (category/report): hidden intent/name
+ * inputs inside the row's own fetcher form, with an optional confirm
+ * prompt before submitting.
+ */
+function RemoveButton({
+  fetcher,
+  intent,
+  name,
+  confirm,
+}: {
+  fetcher: ReturnType<typeof useFetcher>;
+  intent: string;
+  name: string;
+  /** When set, asks for confirmation with this message before deleting. */
+  confirm?: string;
+}) {
+  return (
+    <fetcher.Form
+      method="post"
+      className="contents"
+      onSubmit={(e) => {
+        if (confirm && !window.confirm(confirm)) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="intent" value={intent} />
+      <input type="hidden" name="name" value={name} />
+      <button
+        type="submit"
+        className="text-gray-400 hover:text-red-600"
+        aria-label={`Remove ${name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </fetcher.Form>
+  );
+}
+
 function CategoryRow({ category }: { category: CategoryItem }) {
-  const needsConfirm = category.count > 1;
   const [editing, setEditing] = useState(false);
   const removeFetcher = useFetcher();
+  const confirmRemove =
+    category.count > 1
+      ? `This category contains ${category.count} expenses in open reports. Delete it anyway?`
+      : undefined;
   if (editing) {
     return (
       <RenameForm
@@ -876,31 +917,29 @@ function CategoryRow({ category }: { category: CategoryItem }) {
           {category.count === 0 ? "No expenses" : countLabel(category.count)}
         </span>
         <RenameButton onClick={() => setEditing(true)} name={category.name} />
-        <removeFetcher.Form
-          method="post"
-          className="contents"
-          onSubmit={(e) => {
-            if (needsConfirm) {
-              const ok = window.confirm(
-                `This category contains ${category.count} expenses in open reports. Delete it anyway?`,
-              );
-              if (!ok) e.preventDefault();
-            }
-          }}
-        >
-          <input type="hidden" name="intent" value="removeCategory" />
-          <input type="hidden" name="name" value={category.name} />
-          <button
-            type="submit"
-            className="text-gray-400 hover:text-red-600"
-            aria-label={`Remove ${category.name}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </removeFetcher.Form>
+        <RemoveButton
+          fetcher={removeFetcher}
+          intent="removeCategory"
+          name={category.name}
+          confirm={confirmRemove}
+        />
       </div>
     </>
   );
+}
+
+/** Confirm text for deleting a report, or undefined when the delete is safe
+ * (open + at most one expense) and needs no prompt. */
+function reportDeleteConfirm(report: ReportItem): string | undefined {
+  if (!report.closed && report.count <= 1) return undefined;
+  const flags: string[] = [];
+  if (report.closed) flags.push("is closed");
+  if (report.count > 1) flags.push(`contains ${report.count} expenses`);
+  const loss =
+    report.count > 0
+      ? ` Deleting it also deletes the expense${report.count === 1 ? "" : "s"} and any receipt images.`
+      : "";
+  return `This report ${flags.join(" and ")}.${loss} Delete it anyway?`;
 }
 
 /**
@@ -909,10 +948,10 @@ function CategoryRow({ category }: { category: CategoryItem }) {
  * with several expenses asks for confirmation first.
  */
 function ReportRow({ report }: { report: ReportItem }) {
-  const needsConfirm = report.closed || report.count > 1;
   const [editing, setEditing] = useState(false);
   const toggleFetcher = useFetcher();
   const removeFetcher = useFetcher();
+  const confirmRemove = reportDeleteConfirm(report);
   if (editing) {
     return (
       <RenameForm
@@ -960,38 +999,12 @@ function ReportRow({ report }: { report: ReportItem }) {
           </button>
         </toggleFetcher.Form>
         <RenameButton onClick={() => setEditing(true)} name={report.name} />
-        <removeFetcher.Form
-          method="post"
-          className="contents"
-          onSubmit={(e) => {
-            if (needsConfirm) {
-              const flags: string[] = [];
-              if (report.closed) flags.push("is closed");
-              if (report.count > 1)
-                flags.push(`contains ${report.count} expenses`);
-              const loss =
-                report.count > 0
-                  ? ` Deleting it also deletes the expense${
-                      report.count === 1 ? "" : "s"
-                    } and any receipt images.`
-                  : "";
-              const ok = window.confirm(
-                `This report ${flags.join(" and ")}.${loss} Delete it anyway?`,
-              );
-              if (!ok) e.preventDefault();
-            }
-          }}
-        >
-          <input type="hidden" name="intent" value="removeReport" />
-          <input type="hidden" name="name" value={report.name} />
-          <button
-            type="submit"
-            className="text-gray-400 hover:text-red-600"
-            aria-label={`Remove ${report.name}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </removeFetcher.Form>
+        <RemoveButton
+          fetcher={removeFetcher}
+          intent="removeReport"
+          name={report.name}
+          confirm={confirmRemove}
+        />
       </div>
     </>
   );

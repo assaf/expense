@@ -32,7 +32,7 @@ const TILE_CACHE_MAX = 200;
 const fontBytes = decodeInlineAsset(fontInline);
 
 /** The tile fetcher signature — injectable so tests stay offline. */
-export type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
+type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
 
 /** In-memory tile cache (a promise per key): trips in the same city share
  * tiles and concurrent renders dedupe. Evicts the oldest past the cap. */
@@ -103,13 +103,17 @@ function pickZoom(
 }
 
 /** The trip's drawable geometry: outbound + return polylines ([lat, lng])
- * and the geocoded stops, or null when there is nothing to draw. Trips
- * without saved route geometry fall back to straight lines between stops. */
-function tripGeometry(e: MileageExpense): {
+ * and the geocoded stops. */
+interface TripGeometry {
   outbound: [number, number][];
   ret: [number, number][];
   stops: { lat: number; lng: number }[];
-} | null {
+}
+
+/** The trip's drawable geometry for the current expense, or null when there
+ * is nothing to draw. Trips without saved route geometry fall back to
+ * straight lines between stops. */
+function tripGeometry(e: MileageExpense): TripGeometry | null {
   const stops = geocodedLocations(e.locations);
   const outbound: [number, number][] =
     e.route.coords.length >= 2 ? e.route.coords : [];
@@ -126,6 +130,57 @@ function tripGeometry(e: MileageExpense): {
   }
   if (outbound.length === 0 && ret.length === 0) return null;
   return { outbound, ret, stops };
+}
+
+/** The route's bounding box (and midpoint) on the canvas. */
+function routeBounds(geo: TripGeometry): {
+  minLon: number;
+  maxLon: number;
+  minLat: number;
+  maxLat: number;
+  midLon: number;
+  midLat: number;
+} {
+  const all = [...geo.outbound, ...geo.ret];
+  const lons = all.map((p) => p[1]);
+  const lats = all.map((p) => p[0]);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  return {
+    minLon,
+    maxLon,
+    minLat,
+    maxLat,
+    midLon: (minLon + maxLon) / 2,
+    midLat: (minLat + maxLat) / 2,
+  };
+}
+
+/** The route drawing shared by the tiled map and the schematic fallback —
+ * dashed gray return under a white-cased blue outbound line with numbered
+ * stop bubbles, the same visual language as the editor's map. */
+function routeSvg(
+  geo: TripGeometry,
+  px: (lon: number, lat: number) => { x: number; y: number },
+): string {
+  const pts = (line: [number, number][]) =>
+    line
+      .map(([la, ln]) => {
+        const p = px(ln, la);
+        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+      })
+      .join(" ");
+  return `
+  ${
+    geo.ret.length >= 2
+      ? `<polyline points="${pts(geo.ret)}" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="6,6" stroke-linecap="round" stroke-linejoin="round"/>`
+      : ""
+  }
+  <polyline points="${pts(geo.outbound)}" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="${pts(geo.outbound)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  ${markersSvg(geo.stops, px)}`;
 }
 
 /**
@@ -152,20 +207,11 @@ export async function renderRouteMap(
 
 /** The real map: Carto light tiles with the route and markers on top. */
 async function renderTiled(
-  geo: NonNullable<ReturnType<typeof tripGeometry>>,
+  geo: TripGeometry,
   fetcher: TileFetcher,
 ): Promise<Buffer> {
-  const { outbound, ret } = geo;
-  const lons = [...outbound, ...ret].map((p) => p[1]);
-  const lats = [...outbound, ...ret].map((p) => p[0]);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-
+  const { minLon, maxLon, minLat, maxLat, midLon, midLat } = routeBounds(geo);
   const z = pickZoom(minLon, maxLon, minLat, maxLat);
-  const midLon = (minLon + maxLon) / 2;
-  const midLat = (minLat + maxLat) / 2;
   const ox = worldX(midLon, z) - WIDTH / 2;
   const oy = worldY(midLat, z) - HEIGHT / 2;
 
@@ -187,49 +233,22 @@ async function renderTiled(
     x: worldX(lon, z) - ox,
     y: worldY(lat, z) - oy,
   });
-  const pts = (line: [number, number][]) =>
-    line
-      .map(([la, ln]) => {
-        const p = px(ln, la);
-        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-      })
-      .join(" ");
 
-  // Same visual language as the editor: gray dashed return under a
-  // white-cased blue outbound line, numbered 20px bubbles on top.
-  const routeSvg = `
-  ${tiles
-    .map(
-      (t) =>
-        `<image href="${t.href}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
-    )
-    .join("")}
-  ${
-    ret.length >= 2
-      ? `<polyline points="${pts(ret)}" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="6,6" stroke-linecap="round" stroke-linejoin="round"/>`
-      : ""
-  }
-  <polyline points="${pts(outbound)}" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="${pts(outbound)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  ${markersSvg(geo.stops, px)}`;
-
-  return renderSvg(wrapSvg(routeSvg));
+  return renderSvg(
+    wrapSvg(
+      `${tiles
+        .map(
+          (t) =>
+            `<image href="${t.href}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
+        )
+        .join("")}${routeSvg(geo, px)}`,
+    ),
+  );
 }
 
 /** The schematic fallback: the same route over a plain background. */
-function renderSchematic(
-  geo: NonNullable<ReturnType<typeof tripGeometry>>,
-): Buffer {
-  const { outbound, ret, stops } = geo;
-  const all = [...outbound, ...ret];
-  const lons = all.map((p) => p[1]);
-  const lats = all.map((p) => p[0]);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const midLat = (minLat + maxLat) / 2;
-  const midLon = (minLon + maxLon) / 2;
+function renderSchematic(geo: TripGeometry): Buffer {
+  const { midLon, midLat, minLon, maxLon, minLat, maxLat } = routeBounds(geo);
   const cos = Math.cos((midLat * Math.PI) / 180) || 1e-9;
   const spanX = Math.max(maxLon - minLon, 1e-9) * cos;
   const spanY = Math.max(maxLat - minLat, 1e-9);
@@ -238,25 +257,9 @@ function renderSchematic(
     x: WIDTH / 2 + (lon - midLon) * cos * scale,
     y: HEIGHT / 2 - (lat - midLat) * scale,
   });
-  const pts = (line: [number, number][]) =>
-    line
-      .map(([la, ln]) => {
-        const p = px(ln, la);
-        return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
-      })
-      .join(" ");
-
-  const routeSvg = `
-  ${
-    ret.length >= 2
-      ? `<polyline points="${pts(ret)}" fill="none" stroke="#6b7280" stroke-width="3" stroke-dasharray="6,6" stroke-linecap="round" stroke-linejoin="round"/>`
-      : ""
-  }
-  <polyline points="${pts(outbound)}" fill="none" stroke="#ffffff" stroke-width="8" opacity="0.95" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="${pts(outbound)}" fill="none" stroke="#2563eb" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  ${markersSvg(stops, px)}`;
-
-  return renderSvg(wrapSvg(routeSvg, { background: "#f8fafc", border: true }));
+  return renderSvg(
+    wrapSvg(routeSvg(geo, px), { background: "#f8fafc", border: true }),
+  );
 }
 
 /** Numbered stop bubbles matching the editor's .map-stop-bubble style. */

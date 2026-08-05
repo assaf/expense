@@ -17,7 +17,7 @@ import { normalizeAmount } from "~/lib/format";
  * mode is disabled so extraction stays fast and cheap.
  */
 
-export interface ExtractionInput {
+interface ExtractionInput {
   text?: string;
   image?: { buffer: Buffer; mime: string };
   /** Existing category names — the model picks the closest one or "". */

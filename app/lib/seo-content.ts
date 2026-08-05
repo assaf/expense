@@ -98,7 +98,7 @@ export const BENEFITS = [
   },
 ];
 
-export interface Faq {
+interface Faq {
   question: string;
   answer: string;
 }
@@ -196,7 +196,7 @@ export const COMPARISON_FAQ: Faq = {
 /** The full FAQ list — the standalone questions, then the comparison. */
 export const FAQS: Faq[] = [...STANDALONE_FAQS, COMPARISON_FAQ];
 
-export interface ComparisonRow {
+interface ComparisonRow {
   aspect: string;
   expense: string;
   expensify: string;

@@ -13,7 +13,7 @@ const textareaVariants = cva(
   },
 );
 
-export interface TextareaProps extends ComponentProps<"textarea"> {
+interface TextareaProps extends ComponentProps<"textarea"> {
   invalid?: boolean;
 }
 

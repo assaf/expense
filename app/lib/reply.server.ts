@@ -11,7 +11,7 @@ import { INBOUND_EMAIL_ADDRESS, RESEND_API_KEY } from "~/lib/env";
  * this must never break the caller.
  */
 
-export interface ResendEmailInput {
+interface ResendEmailInput {
   to: string;
   subject: string;
   html: string;

@@ -1384,7 +1384,7 @@ export async function removeInboundSender(
 }
 
 /** The outcome of clicking a verification link (see verifyInboundSenderAddress). */
-export type VerifySenderOutcome =
+type VerifySenderOutcome =
   | {
       status: "verified";
       address: string;

@@ -374,7 +374,7 @@ export function scoreAttachment(meta: AttachmentMeta, html: string): number {
   return score;
 }
 
-export interface AttachmentPick {
+interface AttachmentPick {
   index: number;
   score: number;
   ambiguous: boolean;
