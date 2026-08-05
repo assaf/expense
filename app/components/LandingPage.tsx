@@ -39,10 +39,10 @@ const SOFTWARE_SCHEMA = {
  * title so the copy itself stays in seo-content.ts (the single source of
  * the site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
-  "Receipts in, less typing": ReceiptText,
-  "Reports for every bucket": FolderOpen,
-  "Categories that match the IRS": Tags,
-  "Mileage, mapped": MapPinned,
+  "Stop losing receipts in your camera roll": ReceiptText,
+  "One PDF per client, ready for your accountant": FolderOpen,
+  "Know your deductions before tax day": Tags,
+  "Log a drive without a spreadsheet": MapPinned,
 };
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
@@ -68,8 +68,8 @@ const STEPS = [
     body: "Upload or paste a receipt image, or forward a receipt email to your personal address. The expense is created automatically.",
   },
   {
-    title: "Check the details",
-    body: "OCR reads the merchant and amount; AI suggests the category. You review, tweak if needed, and save.",
+    title: "Confirm and save",
+    body: "The merchant, amount, and category fill in automatically. Most receipts take one click to save.",
   },
   {
     title: "Export at tax time",
@@ -124,13 +124,17 @@ export default function LandingPage() {
             expense lands in a Schedule C category and a report you name. When
             tax season comes, the totals are already there.
           </p>
+          <p className="mt-4 text-sm text-gray-400">
+            Built by a freelancer. Free, open source, no investors.
+          </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="w-full sm:w-auto">
               <Link to="/login?mode=create">Create your account</Link>
             </Button>
           </div>
           <p className="mt-5 text-sm text-gray-500">
-            Your data stays in your account. Export a PDF or ZIP anytime.
+            No credit card required. Your data stays in your account. Export and
+            leave anytime.
           </p>
         </section>
 
@@ -282,8 +286,8 @@ export default function LandingPage() {
               Start collecting this year's expenses.
             </h2>
             <p className="mx-auto mt-3 max-w-md text-gray-300">
-              Accounts are free and start empty. Add your first receipt in under
-              a minute.
+              No credit card, no subscription. Accounts start empty and stay
+              free.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button

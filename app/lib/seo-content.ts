@@ -57,7 +57,7 @@ export const BENEFITS = [
     body: "No subscription, no per-user fees, no ads. Accounts start empty and stay free.",
   },
   {
-    title: "Receipts in, less typing",
+    title: "Stop losing receipts in your camera roll",
     body: "Snap a photo, paste a screenshot, drag in a PDF, or forward the receipt email. OCR pulls out the merchant and amount, AI suggests the category, and you just approve it.",
   },
   {
@@ -65,15 +65,15 @@ export const BENEFITS = [
     body: "Every account gets a private email address. Forward a receipt there and the expense is created automatically, dated from the original email so your records stay honest.",
   },
   {
-    title: "Categories that match the IRS",
+    title: "Know your deductions before tax day",
     body: "New accounts start with a category list built from the IRS Schedule C lines, so what you track during the year maps straight onto your return.",
   },
   {
-    title: "Reports for every bucket",
+    title: "One PDF per client, ready for your accountant",
     body: "Group expenses into reports: Home, Work, Travel, or anything else you want to call them. Each keeps its own total.",
   },
   {
-    title: "Mileage, mapped",
+    title: "Log a drive without a spreadsheet",
     body: "Log business drives on a map and the app works out the distance and the deduction at that year's IRS rate.",
   },
   {
