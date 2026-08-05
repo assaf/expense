@@ -139,6 +139,32 @@ function parseScaled(s: string, scale: number): number | null {
 }
 
 /**
+ * "2026" for a full calendar year; "Jul 1 – Dec 31, 2026" for a split
+ * period (or "Jul 1, 2025 – Jan 15, 2026" across years). Used by the
+ * Settings mileage-rate display and anywhere a rate period needs a compact
+ * label.
+ */
+export function periodLabel(start: string, end: string): string {
+  if (start.length === 10 && end.length === 10) {
+    const sy = start.slice(0, 4);
+    const ey = end.slice(0, 4);
+    if (sy === ey && start === `${sy}-01-01` && end === `${ey}-12-31`) {
+      return sy;
+    }
+  }
+  const fmt = (d: string, withYear: boolean) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(withYear ? { year: "numeric" as const } : {}),
+      timeZone: "UTC",
+    });
+  return start.slice(0, 4) === end.slice(0, 4)
+    ? `${fmt(start, false)} – ${fmt(end, true)}`
+    : `${fmt(start, true)} – ${fmt(end, true)}`;
+}
+
+/**
  * "$0.76"-style display for a rate string: always two decimals, and a
  * half-cent rate keeps its third digit (0.235 → "0.235", 0.70 → "0.70") —
  * never rounded to a wrong value.

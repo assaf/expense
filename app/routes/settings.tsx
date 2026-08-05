@@ -43,13 +43,14 @@ import {
   setReportClosed,
   readMileageRates,
 } from "~/lib/store.server";
-import { countLabel, todayDate } from "~/lib/format";
+import { countLabel, formatShortDate, todayDate } from "~/lib/format";
 import type { InboundSenderRecord } from "~/lib/types";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
   currentMileageRates,
   formatRate,
+  periodLabel,
 } from "~/lib/mileage-rates";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/settings";
@@ -656,40 +657,6 @@ function AgentsSection({
       </div>
     </section>
   );
-}
-
-/** Short "Aug 4, 2026" label for a timestamp; "—" when unset. */
-function formatShortDate(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-/** "2026" for a full calendar year; "Jul 1 – Dec 31, 2026" for a split
- * period (or "Jul 1, 2025 – Jan 15, 2026" across years). */
-function periodLabel(start: string, end: string): string {
-  if (start.length === 10 && end.length === 10) {
-    const sy = start.slice(0, 4);
-    const ey = end.slice(0, 4);
-    if (sy === ey && start === `${sy}-01-01` && end === `${ey}-12-31`) {
-      return sy;
-    }
-  }
-  const fmt = (d: string, withYear: boolean) =>
-    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(withYear ? { year: "numeric" as const } : {}),
-      timeZone: "UTC",
-    });
-  return start.slice(0, 4) === end.slice(0, 4)
-    ? `${fmt(start, false)} – ${fmt(end, true)}`
-    : `${fmt(start, true)} – ${fmt(end, true)}`;
 }
 
 function NameList<T extends { name: string }>({

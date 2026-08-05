@@ -72,6 +72,18 @@ export function formatDate(date: string): string {
   });
 }
 
+/** Short "Aug 4, 2026" label for an ISO timestamp; "—" when unset. */
+export function formatShortDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 /** Today's date in the local timezone as YYYY-MM-DD. */
 export function todayDate(): string {
   const now = new Date();
