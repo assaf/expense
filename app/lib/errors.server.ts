@@ -16,3 +16,26 @@ export function captureError(
     Sentry.captureException(error, extra ? { extra } : undefined);
   }
 }
+
+// Errors that are fatal during the initial SSR render surface twice: the
+// render stream's onError fires, then renderToReadableStream rejects with
+// the same error object and React Router forwards that rejection to
+// handleError. Remember what was already reported so each error is captured
+// exactly once, from whichever path sees it first.
+const reportedErrors = new WeakSet<object>();
+
+/**
+ * Like captureError, but deduped by error identity: reporting the same error
+ * object again (e.g. the stream onError and handleError for one fatal render
+ * error) is a no-op. Use this from the SSR error paths.
+ */
+export function captureErrorOnce(
+  error: unknown,
+  extra?: Record<string, unknown>,
+): void {
+  if (typeof error === "object" && error !== null) {
+    if (reportedErrors.has(error)) return;
+    reportedErrors.add(error);
+  }
+  captureError(error, extra);
+}

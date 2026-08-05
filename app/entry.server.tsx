@@ -3,7 +3,7 @@ import type { EntryContext } from "react-router";
 import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
-import { captureError } from "~/lib/errors.server";
+import { captureErrorOnce } from "~/lib/errors.server";
 
 // Sentry SDK init lives in instrument.server.mjs (loaded via NODE_OPTIONS
 // --import in the start script, so it runs before this module). This entry
@@ -16,7 +16,6 @@ export default Sentry.wrapSentryHandleRequest(
     responseHeaders: Headers,
     routerContext: EntryContext,
   ) => {
-    let shellRendered = false;
     const userAgent = request.headers.get("user-agent");
 
     const body = await renderToReadableStream(
@@ -25,11 +24,18 @@ export default Sentry.wrapSentryHandleRequest(
         signal: AbortSignal.timeout(10_000),
         onError(error: unknown) {
           responseStatusCode = 500;
-          if (shellRendered) captureError(error, { url: request.url });
+          // Client disconnect — nothing meaningful to report (handleError
+          // skips aborted requests for the same reason).
+          if (request.signal.aborted) return;
+          // Report every render error — including ones thrown before the
+          // shell completes. The old shellRendered guard dropped those:
+          // the response was a 500 but neither Vercel logs nor Sentry saw
+          // the error. captureErrorOnce dedupes the fatal ones, which also
+          // reject the stream and surface again via handleError.
+          captureErrorOnce(error, { url: request.url });
         },
       },
     );
-    shellRendered = true;
 
     if ((userAgent && isbot(userAgent)) || routerContext.isSpaMode) {
       await body.allReady;
@@ -45,15 +51,14 @@ export default Sentry.wrapSentryHandleRequest(
 
 /**
  * Called by React Router for errors thrown in loaders and actions (server
- * and .data requests). Capture in Sentry with the request context — this is
- * how production errors reach the dashboard; the console line keeps Vercel
- * logs readable too.
+ * and .data requests) and for render errors that rejected the stream (fatal
+ * shell failures). Capture in Sentry with the request context — this is how
+ * production errors reach the dashboard; the console line keeps Vercel logs
+ * readable too. captureErrorOnce dedupes the render errors already reported
+ * via the stream's onError.
  */
 export function handleError(error: unknown, { request }: { request: Request }) {
-  if (!request.signal.aborted) {
-    Sentry.captureException(error);
-  }
   if (request.signal.aborted) return;
-  captureError(error, { url: request.url, method: request.method });
+  captureErrorOnce(error, { url: request.url, method: request.method });
 }
 export const instrumentations = [Sentry.createSentryServerInstrumentation()];
