@@ -60,6 +60,7 @@ export {
   writeSettings,
   readMileageRates,
   dismissDuplicatePair,
+  readDuplicateDismissals,
   readInboundEmail,
   upsertInboundEmail,
   findVerifiedSenderAccount,

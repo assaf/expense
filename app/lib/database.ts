@@ -43,8 +43,9 @@ import type {
  * `pnpm db:push`. `initStore` only performs one-time data seeding: it
  * bootstraps the first account/user from APP_EMAIL/APP_PASSWORD, backfills
  * the bootstrap user's email from APP_EMAIL (legacy pre-email accounts
- * logged in with a plain username), and adopts single-user era rows
- * (accountId '') into that account.
+ * logged in with a plain username), adopts single-user era rows
+ * (accountId '') into that account, and moves legacy duplicate-pair
+ * dismissals out of the settings blob into duplicate_dismissals.
  */
 
 /** The subset of Prisma delegates that carry legacy accountId "" rows. */
@@ -77,6 +78,7 @@ export async function initStore(): Promise<void> {
         });
       }
       await migrateImageBlobKeys(bootstrap.accountId);
+      await migrateDuplicateDismissals();
       await syncMileageRates();
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.
@@ -85,6 +87,74 @@ export async function initStore(): Promise<void> {
     });
   }
   await ready;
+}
+
+/**
+ * Legacy dismissal migration: pairs dismissed before the join table
+ * (settings.duplicateDismissals, a JSON array of pair keys) move into
+ * duplicate_dismissals, then the settings row is dropped. Idempotent —
+ * createMany skips pairs that already made it, and the settings row goes
+ * whether or not anything moved. Stale keys (one expense already deleted)
+ * are dropped: the FK constraints only accept pairs of live expenses.
+ */
+async function migrateDuplicateDismissals(): Promise<void> {
+  const legacy = await prisma.settings.findMany({
+    where: { key: "duplicateDismissals" },
+    select: { accountId: true, value: true },
+  });
+  if (legacy.length === 0) return;
+  const pairs: Array<{ accountId: string; idA: string; idB: string }> = [];
+  for (const row of legacy) {
+    for (const key of parseLegacyDismissalKeys(row.value)) {
+      const [idA, idB] = key.split("|");
+      if (idA && idB) pairs.push({ accountId: row.accountId, idA, idB });
+    }
+  }
+  let migrated = 0;
+  if (pairs.length > 0) {
+    const ids = [...new Set(pairs.flatMap((p) => [p.idA, p.idB]))];
+    const existing = new Set(
+      (
+        await prisma.expense.findMany({
+          where: { id: { in: ids } },
+          select: { id: true },
+        })
+      ).map((e) => e.id),
+    );
+    const rows: Prisma.DuplicateDismissalCreateManyInput[] = [];
+    for (const p of pairs) {
+      if (!existing.has(p.idA) || !existing.has(p.idB)) continue;
+      const [expenseAId, expenseBId] =
+        p.idA < p.idB ? [p.idA, p.idB] : [p.idB, p.idA];
+      rows.push({ id: ulid(), accountId: p.accountId, expenseAId, expenseBId });
+    }
+    if (rows.length > 0) {
+      const created = await prisma.duplicateDismissal.createMany({
+        data: rows,
+        skipDuplicates: true,
+      });
+      migrated = created.count;
+    }
+  }
+  await prisma.settings.deleteMany({ where: { key: "duplicateDismissals" } });
+  if (migrated > 0) {
+    console.warn(
+      "[initStore] Migrated %d dismissed duplicate pairs to duplicate_dismissals",
+      migrated,
+    );
+  }
+}
+
+/** Parse the legacy settings blob (a JSON array of pair keys). */
+function parseLegacyDismissalKeys(raw: string): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((v): v is string => typeof v === "string");
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -855,22 +925,7 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.homeAddress = kv["homeAddress"] ?? "";
   settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
   settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
-  settings.duplicateDismissals = parseDuplicateDismissals(
-    kv["duplicateDismissals"] ?? "",
-  );
   return settings;
-}
-
-/** Parse the stored dismissal list (a JSON array of pair keys). */
-function parseDuplicateDismissals(raw: string): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === "string");
-  } catch {
-    return [];
-  }
 }
 
 export async function writeSettings(
@@ -889,11 +944,6 @@ export async function writeSettings(
       key: "homeLng",
       value: settings.homeLng === null ? "" : String(settings.homeLng),
     },
-    {
-      accountId,
-      key: "duplicateDismissals",
-      value: JSON.stringify(settings.duplicateDismissals),
-    },
   ];
   await prisma.$transaction([
     prisma.settings.deleteMany({ where: { accountId } }),
@@ -902,22 +952,52 @@ export async function writeSettings(
 }
 
 /**
+ * All expense pairs this account marked "not a duplicate", as the
+ * order-independent pair keys duplicate matching filters on.
+ */
+export async function readDuplicateDismissals(
+  accountId: string,
+): Promise<Set<string>> {
+  const rows = await prisma.duplicateDismissal.findMany({
+    where: { accountId },
+    select: { expenseAId: true, expenseBId: true },
+  });
+  return new Set(rows.map((r) => duplicatePairKey(r.expenseAId, r.expenseBId)));
+}
+
+/**
  * Mark an expense pair as "not a duplicate" so the warning never shows for
- * it again. The key is order-independent, so dismissing works no matter
- * which side of the pair the user acted on. Idempotent.
+ * it again. Stored ordered (expenseAId < expenseBId) so dismissing works no
+ * matter which side of the pair the user acted on; the unique constraint
+ * makes it idempotent, and cascade deletes retire the row with either
+ * expense. If one of the expenses is already gone there is nothing to
+ * dismiss — the write is skipped.
  */
 export async function dismissDuplicatePair(
   accountId: string,
   idA: string,
   idB: string,
 ): Promise<void> {
-  const settings = await readSettings(accountId);
-  const key = duplicatePairKey(idA, idB);
-  if (settings.duplicateDismissals.includes(key)) return;
-  await writeSettings(accountId, {
-    ...settings,
-    duplicateDismissals: [...settings.duplicateDismissals, key],
-  });
+  const [expenseAId, expenseBId] = idA < idB ? [idA, idB] : [idB, idA];
+  try {
+    await prisma.duplicateDismissal.createMany({
+      data: [{ id: ulid(), accountId, expenseAId, expenseBId }],
+      skipDuplicates: true,
+    });
+  } catch (error) {
+    if (isForeignKeyError(error)) return;
+    throw error;
+  }
+}
+
+/** Prisma error code for a foreign-key constraint violation (P2003). */
+function isForeignKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2003"
+  );
 }
 
 // --- OAuth (MCP authorization server) -------------------------------------

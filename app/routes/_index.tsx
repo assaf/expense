@@ -34,11 +34,11 @@ import {
   formatRate,
 } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
-import { readSettings } from "~/lib/settings.server";
 import { usePasteImage } from "~/lib/use-paste-image";
 import {
   deleteExpense,
   dismissDuplicatePair,
+  readDuplicateDismissals,
   readExpenses,
   readMileageRates,
   readPriorMerchants,
@@ -54,13 +54,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { mode: "landing" as const };
   }
   const user = await requireUser(request);
-  const [expenses, settings, merchants, allReports, rates] = await Promise.all([
-    readExpenses(user.accountId),
-    readSettings(user.accountId),
-    readPriorMerchants(user.accountId),
-    readReports(user.accountId),
-    readMileageRates(),
-  ]);
+  const [expenses, dismissed, merchants, allReports, rates] = await Promise.all(
+    [
+      readExpenses(user.accountId),
+      readDuplicateDismissals(user.accountId),
+      readPriorMerchants(user.accountId),
+      readReports(user.accountId),
+      readMileageRates(),
+    ],
+  );
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
@@ -68,7 +70,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Which rows look like each other (both sides of a pair). Matched against
   // ALL expenses — including rows in closed reports — so a re-uploaded
   // receipt still warns when the original was already filed.
-  const dismissed = new Set(settings.duplicateDismissals);
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
   // The "current rate" tip: today's business rate (falls back to the most
   // recent known period until the IRS publishes the next one).

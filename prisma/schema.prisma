@@ -30,6 +30,7 @@ model Account {
   categories    Category[]
   settings      Settings[]
   imageBlobs    ImageBlob[]
+  duplicateDismissals DuplicateDismissal[]
   inboundEmails InboundEmail[]
   inboundSenders InboundSender[]
   inboundSenderVerifications InboundSenderVerification[]
@@ -80,7 +81,30 @@ model Expense {
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  // Dismissed duplicate pairs this expense participates in (either side).
+  dismissedAsA DuplicateDismissal[] @relation("duplicateDismissalsA")
+  dismissedAsB DuplicateDismissal[] @relation("duplicateDismissalsB")
+
   @@map("expenses")
+}
+
+/// Expense pairs the user marked "not a duplicate" — one row per pair,
+/// stored ordered (expenseAId < expenseBId) so a dismissal matches either
+/// direction. The duplicate warning never shows for a dismissed pair again.
+/// Cascade deletes keep the table tidy: a row dies with either expense or
+/// with the account, so dismissals never linger for deleted rows.
+model DuplicateDismissal {
+  id         String @id
+  expenseAId String
+  expenseBId String
+  accountId  String
+
+  expenseA Expense @relation("duplicateDismissalsA", fields: [expenseAId], references: [id], onDelete: Cascade)
+  expenseB Expense @relation("duplicateDismissalsB", fields: [expenseBId], references: [id], onDelete: Cascade)
+  account  Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, expenseAId, expenseBId])
+  @@map("duplicate_dismissals")
 }
 
 model Report {

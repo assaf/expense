@@ -65,7 +65,7 @@ export default function AlternativesPage() {
       }
     >
       <section className="mt-10 overflow-x-auto rounded-xl border border-gray-200">
-        <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+        <table className="w-full min-w-140 border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="w-32 px-4 py-3 font-semibold text-gray-500">

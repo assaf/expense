@@ -173,16 +173,12 @@ export type Settings = {
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
-  /** Expense pairs the user marked "not a duplicate" (`duplicatePairKey`
-   * strings, order-independent) — the warning never shows for them again. */
-  duplicateDismissals: string[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   homeAddress: "",
   homeLat: null,
   homeLng: null,
-  duplicateDismissals: [],
 };
 
 /** One processed inbound email (idempotency + audit). */

@@ -119,15 +119,13 @@ describe("Duplicate detection", () => {
     await expect(page.getByText(/Possible duplicate of DupCorp A/)).toHaveCount(
       0,
     );
-    // The dismissal is persisted in settings (order-independent key).
-    const row = await testPrisma.settings.findFirst({
-      where: {
-        accountId: TEST_ACCOUNT_ID,
-        key: "duplicateDismissals",
-      },
+    // The dismissal is persisted in the duplicate_dismissals join table,
+    // stored ordered so the key matches either direction.
+    const row = await testPrisma.duplicateDismissal.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID },
     });
     expect(row).not.toBeNull();
-    expect(JSON.parse(row!.value)).toContain(
+    expect(duplicatePairKey(row!.expenseAId, row!.expenseBId)).toBe(
       duplicatePairKey(PAIR_A[0]!, PAIR_A[1]!),
     );
     // Survives a reload — the warning never nags again.
@@ -231,8 +229,8 @@ describe("Duplicate detection", () => {
         id: { in: [...PAIR_A, ...PAIR_B, BANNER_CO, MILEAGE_DEL] },
       },
     });
-    await testPrisma.settings.deleteMany({
-      where: { accountId: TEST_ACCOUNT_ID, key: "duplicateDismissals" },
+    await testPrisma.duplicateDismissal.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID },
     });
     await page?.close();
   });

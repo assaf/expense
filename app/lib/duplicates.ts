@@ -16,9 +16,10 @@ import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
  * route, or distance) can't match anything.
  *
  * Matching is a pure function over the expense rows the loaders already
- * fetch — no extra queries, no stored state. The only persisted thing is the
- * dismissal of a pair the user has marked "not a duplicate"
- * (settings.duplicateDismissals, `duplicatePairKey` strings).
+ * fetch — no extra queries, no stored state. The only persisted thing is
+ * the dismissal of a pair the user has marked "not a duplicate", one row
+ * in the `duplicate_dismissals` table per pair (read as a `Set` of
+ * `duplicatePairKey` strings by `readDuplicateDismissals`).
  */
 
 /** Why two expenses look like the same entry. */
