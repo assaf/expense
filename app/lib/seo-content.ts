@@ -15,7 +15,6 @@
 
 export const SITE_URL = "https://expense.labnotes.org";
 export const APP_NAME = "Expense";
-export const GITHUB_URL = "https://github.com/assaf/expense";
 export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
 
@@ -47,7 +46,6 @@ export const KEY_FACTS = [
   "AI assistant access: connect any MCP client (Claude, Cursor, …) by signing in with your account (OAuth). The assistant can capture receipts, log mileage, answer spending questions, and build and export reports",
   "Multi-user accounts: share an account with an invite code",
   "Data stays in your account. No ads, no data resale",
-  `Code is public on GitHub: ${GITHUB_URL}`,
 ];
 
 /** The feature list shown on /about (and quoted by AIs). */
@@ -379,7 +377,7 @@ ${benefits}
 
 ${facts}
 
-Built by ${AUTHOR_NAME} (${BLOG_URL}). Code: ${GITHUB_URL}.
+Built by ${AUTHOR_NAME} (${BLOG_URL}).
 `;
 }
 
@@ -441,7 +439,6 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 
 ## Optional
 
-- [GitHub repository](${GITHUB_URL}): The source code.
 - [Blog](${BLOG_URL}): Posts by the author.
 `;
 }
