@@ -375,17 +375,6 @@ describe("Settings", () => {
         },
       ],
     });
-    await testPrisma.mileage.createMany({
-      data: [
-        {
-          date: "2026-02-02",
-          report: "Draft Q3",
-          locations: "A",
-          distanceMiles: "5.00",
-          accountId: TEST_ACCOUNT_ID,
-        },
-      ],
-    });
 
     const page = await goto("/settings");
     const reports = page.locator("section").filter({
@@ -414,11 +403,6 @@ describe("Settings", () => {
         where: { accountId: TEST_ACCOUNT_ID, report: "Draft Q3" },
       }),
     ).toBe(0);
-    expect(
-      await testPrisma.mileage.count({
-        where: { accountId: TEST_ACCOUNT_ID, report: "Final Q3" },
-      }),
-    ).toBe(1);
     await page.close();
   });
 
@@ -506,14 +490,9 @@ describe("Settings", () => {
     await row.getByRole("button", { name: /remove 2026 test/i }).click();
     expect(message).toContain("4 expenses");
     await expect(row).toHaveCount(0);
-    // Cascade: every expense (and derived mileage row) of the report is gone.
+    // Cascade: every expense of the report is gone.
     expect(
       await testPrisma.expense.count({
-        where: { accountId: TEST_ACCOUNT_ID, report: "2026 Test" },
-      }),
-    ).toBe(0);
-    expect(
-      await testPrisma.mileage.count({
         where: { accountId: TEST_ACCOUNT_ID, report: "2026 Test" },
       }),
     ).toBe(0);

@@ -344,15 +344,6 @@ async function seedScreenshotData() {
       updatedAt: NOW,
     },
   });
-  await testPrisma.mileage.create({
-    data: {
-      date: MILEAGE.date,
-      report: MILEAGE.report,
-      locations: MILEAGE.locations.map((l) => l.address).join(" → "),
-      distanceMiles: MILEAGE.distanceMiles,
-      accountId: ACCOUNT,
-    },
-  });
 
   // Incomplete receipt (amber highlight demo).
   await testPrisma.expense.create({

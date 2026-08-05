@@ -244,19 +244,6 @@ export async function seedTestData() {
     })),
   });
 
-  // Mileage table (derived artifact, mirrors the app's rebuild)
-  await testPrisma.mileage.createMany({
-    data: expenses
-      .filter((e) => e.type === "mileage")
-      .map((e) => ({
-        date: e.date,
-        report: e.report,
-        locations: e.locations
-          .map((l) => l.address)
-          .filter(Boolean)
-          .join(" → "),
-        distanceMiles: e.distanceMiles,
-        accountId: TEST_ACCOUNT_ID,
-      })),
-  });
+  // Mileage expenses live entirely in the expenses table — the derived
+  // mileage table was dropped.
 }

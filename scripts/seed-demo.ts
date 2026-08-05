@@ -76,7 +76,7 @@ function receipt(input: {
   };
 }
 
-/** A mileage expense row + its derived mileage-table row. */
+/** A mileage expense row. */
 function mileage(input: {
   id: string;
   date: string;
@@ -112,13 +112,6 @@ function mileage(input: {
       route: { coords: [], returnCoords: [] },
       createdAt: now,
       updatedAt: now,
-    },
-    mileageRow: {
-      date: input.date,
-      report: input.report ?? "",
-      locations: locations.map((l) => l.address).join(" → "),
-      distanceMiles: input.distanceMiles,
-      accountId: "",
     },
   };
 }
@@ -289,10 +282,6 @@ async function main(): Promise<void> {
     ...q3,
   ].map((e) => ({ ...e, accountId }) as Prisma.ExpenseCreateManyInput);
   await prisma.expense.createMany({ data: expenses });
-
-  await prisma.mileage.createMany({
-    data: [{ ...demoMileage.mileageRow, accountId }],
-  });
 
   console.info("Seeded Demo Account:");
   console.info("  account:", DEMO_ACCOUNT_NAME, `(${accountId})`);

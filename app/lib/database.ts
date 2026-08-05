@@ -68,7 +68,6 @@ export async function initStore(): Promise<void> {
         prisma.expense,
         prisma.report,
         prisma.category,
-        prisma.mileage,
         prisma.settings,
       ];
       for (const model of adopters) {
@@ -441,55 +440,35 @@ export async function readExpense(
   return row ? rowToExpense(row) : undefined;
 }
 
-async function writeExpenses(
-  accountId: string,
-  expenses: Expense[],
-): Promise<void> {
-  await prisma.$transaction([
-    prisma.expense.deleteMany({ where: { accountId } }),
-    prisma.expense.createMany({
-      data: expenses.map((e) => ({ ...expenseData(e), accountId })),
-    }),
-    prisma.mileage.deleteMany({ where: { accountId } }),
-    prisma.mileage.createMany({
-      data: expenses
-        .filter((e): e is MileageExpense => e.type === "mileage")
-        .map((e) => ({
-          date: e.date,
-          report: e.report,
-          locations: e.locations
-            .map((l) => l.address)
-            .filter(Boolean)
-            .join(" → "),
-          distanceMiles: e.distanceMiles === "" ? null : e.distanceMiles,
-          accountId,
-        })),
-    }),
-  ]);
-}
-
 export async function upsertExpense(
   expense: Expense,
   accountId: string,
 ): Promise<void> {
-  const all = await readExpenses(accountId);
-  const i = all.findIndex((e) => e.id === expense.id);
-  if (i >= 0) all[i] = expense;
-  else all.push(expense);
-  await writeExpenses(accountId, all);
+  // Targeted row write: one UPDATE when the expense already exists, one
+  // INSERT when it doesn't. The row's id is a client-generated ulid, so an
+  // account-scoped update that hits nothing means “new expense” — never a
+  // takeover of another account's row (that would be a unique-id conflict
+  // on create, exactly like the old whole-table rewrite).
+  const data = { ...expenseData(expense), accountId };
+  const updated = await prisma.expense.updateMany({
+    where: { id: expense.id, accountId },
+    data: expenseData(expense),
+  });
+  if (updated.count === 0) {
+    await prisma.expense.create({ data });
+  }
 }
 
 export async function deleteExpense(
   id: string,
   accountId: string,
 ): Promise<void> {
-  const all = await readExpenses(accountId);
-  const target = all.find((e) => e.id === id);
+  const target = await prisma.expense.findFirst({
+    where: { id, accountId },
+    select: { type: true, imageFile: true },
+  });
   if (target) await deleteReceiptImages(accountId, [target]);
-  await writeExpenses(
-    accountId,
-    all.filter((e) => e.id !== id),
-  );
+  await prisma.expense.deleteMany({ where: { id, accountId } });
 }
 
 /** Distinct merchant names previously used, most-recent first. */
@@ -717,7 +696,7 @@ async function addNamedRow(
 /**
  * Rename a named row (report/category) and every expense that references it
  * by name. `expenseField` selects the expense column to rewrite
- * ("report" or "category"); reports also rename their derived mileage rows.
+ * ("report" or "category").
  */
 async function renameNamedRow(
   model: NamedModel,
@@ -739,18 +718,8 @@ async function renameNamedRow(
       where: { accountId, [expenseField]: name },
       data: { [expenseField]: clean },
     }),
-  ];
-  if (expenseField === "report") {
-    operations.push(
-      prisma.mileage.updateMany({
-        where: { accountId, report: name },
-        data: { report: clean },
-      }),
-    );
-  }
-  operations.push(
     model.updateMany({ where: { accountId, name }, data: { name: clean } }),
-  );
+  ];
   const results = await prisma.$transaction(operations);
   if (results[results.length - 1]!.count === 0) {
     return { ok: false, error: `That ${noun} no longer exists.` };
@@ -771,10 +740,9 @@ export function addReport(
 
 /**
  * Delete a report together with every expense in it — including their
- * receipt images and the derived mileage rows. Expenses reference reports
- * by name, so the cascade is a same-account name match, executed in one
- * transaction. An empty name is a no-op: it must never touch the
- * "unassigned" expenses (report: "").
+ * receipt images. Expenses reference reports by name, so the cascade is a
+ * same-account name match, executed in one transaction. An empty name is a
+ * no-op: it must never touch the "unassigned" expenses (report: "").
  */
 export async function removeReport(
   accountId: string,
@@ -788,16 +756,15 @@ export async function removeReport(
   await deleteReceiptImages(accountId, removed);
   await prisma.$transaction([
     prisma.expense.deleteMany({ where: { accountId, report: name } }),
-    prisma.mileage.deleteMany({ where: { accountId, report: name } }),
     prisma.report.deleteMany({ where: { accountId, name } }),
   ]);
 }
 
 /**
- * Rename a report and every reference to it: the report row, its expenses,
- * and the derived mileage rows. Receipt image keys keep their old
- * convention name — re-saving a receipt rewrites them. Returns an error
- * message when the rename can't happen (empty, unchanged, duplicate).
+ * Rename a report and every reference to it: the report row and its
+ * expenses. Receipt image keys keep their old convention name — re-saving a
+ * receipt rewrites them. Returns an error message when the rename can't
+ * happen (empty, unchanged, duplicate).
  */
 export function renameReport(
   accountId: string,

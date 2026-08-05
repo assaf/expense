@@ -85,19 +85,6 @@ BEGIN
         USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
   END IF;
 END $$;
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'mileage' AND column_name = 'distanceMiles'
-      AND data_type = 'text'
-  ) THEN
-    ALTER TABLE "mileage"
-      ALTER COLUMN "distanceMiles" DROP NOT NULL,
-      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
-  END IF;
-END $$;
 SQL
 
 # Login identity: users.username → users.email (rename). Prisma's diff for a

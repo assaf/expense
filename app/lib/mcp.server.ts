@@ -528,7 +528,7 @@ function createMcpServer(accountId: string): McpServer {
     "log_mileage",
     {
       description:
-        "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense (and the derived mileage row).",
+        "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense.",
       inputSchema: z.object({
         locations: z
           .array(

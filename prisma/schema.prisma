@@ -28,7 +28,6 @@ model Account {
   expenses      Expense[]
   reports       Report[]
   categories    Category[]
-  mileage       Mileage[]
   settings      Settings[]
   imageBlobs    ImageBlob[]
   inboundEmails InboundEmail[]
@@ -105,20 +104,6 @@ model Category {
 
   @@unique([accountId, name])
   @@map("categories")
-}
-
-/// Derived artifact rebuilt on every expense write (mirrors the old mileage.csv).
-model Mileage {
-  id           BigInt @id @default(autoincrement())
-  date         String
-  report       String
-  locations    String
-  distanceMiles Decimal? @db.Decimal(10, 2)
-  accountId    String
-
-  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
-  @@map("mileage")
 }
 
 /// IRS standard mileage reimbursement rates — the master table. Global

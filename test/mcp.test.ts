@@ -399,10 +399,6 @@ describe("MCP endpoint", () => {
     expect(row!.type).toBe("mileage");
     expect(row!.distanceMiles).not.toBeNull();
     expect(row!.amount).not.toBeNull();
-    const mileage = await testPrisma.mileage.findFirst({
-      where: { accountId: TEST_ACCOUNT_ID, date: "2026-05-10" },
-    });
-    expect(mileage).not.toBeNull();
   });
 
   it("queries expenses and summarizes them (scoped to the account)", async () => {
