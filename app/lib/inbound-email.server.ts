@@ -23,7 +23,13 @@ import type {
   ExtractionResult,
 } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
+import {
+  emailShell,
+  paragraph,
+  SIMPLE_FOOTER,
+} from "~/lib/email-layout.server";
 import { escapeHtml } from "~/lib/escape";
+import { extractEmailAddress } from "~/lib/validation";
 import { sendReplyEmail } from "~/lib/reply.server";
 import type { ReplyInput } from "~/lib/reply.server";
 import {
@@ -310,13 +316,6 @@ export function extractExpenseDate(
   return fromArrival ?? "";
 }
 
-/** "Name <a@b.com>" → "a@b.com" (lowercased). */
-export function extractEmailAddress(addr: string): string {
-  const m = addr.match(/<([^<>@\s]+@[^<>@\s]+)>/);
-  const candidate = m ? m[1]! : addr;
-  return candidate.trim().toLowerCase();
-}
-
 // --- Attachment selection ----------------------------------------------------
 
 /** AttachmentMeta-level wrappers over the shared file-type checks. */
@@ -466,11 +465,11 @@ const defaultDeps: InboundDeps = {
 // --- Reply email builders ----------------------------------------------------
 
 function replyHtml(title: string, paragraphs: string[]): string {
-  return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
-<h2 style="font-size:18px;margin:0 0 12px">${title}</h2>
-${paragraphs.map((p) => `<p style="margin:8px 0">${p}</p>`).join("")}
-<p style="margin-top:20px;color:#6b7280;font-size:12px">Expense — receipts by email</p>
-</div>`;
+  return emailShell({
+    title,
+    body: paragraphs.map(paragraph).join(""),
+    footer: SIMPLE_FOOTER,
+  });
 }
 
 function summaryLine(r: ExtractionResult, date: string): string {

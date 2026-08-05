@@ -1,17 +1,17 @@
 import { INBOUND_EMAIL_ADDRESS, RESEND_API_KEY } from "~/lib/env";
 
 /**
- * Send a reply email back to the person who forwarded a receipt (via the
- * Resend Email API). Only used for failures and partial results — successful
- * imports land in the app without an email.
+ * Send email via the Resend Email API from the Expense mailbox — the same
+ * mailbox receipts are forwarded to (INBOUND_EMAIL_ADDRESS), so one env var
+ * covers routing and From for every email the app sends: inbound failure
+ * replies (sendReplyEmail) and sender-verification emails
+ * (sendVerificationEmail in sender-verification.server.ts).
  *
- * The From address is derived from INBOUND_EMAIL_ADDRESS (same verified
- * domain the receipts are forwarded to), so one env var covers both routing
- * and replies. If it isn't configured the reply is skipped (the error is
- * logged); this must never break webhook processing.
+ * If Resend isn't configured the send is skipped (the error is logged) —
+ * this must never break the caller.
  */
 
-export interface ReplyInput {
+export interface ResendEmailInput {
   to: string;
   subject: string;
   html: string;
@@ -22,14 +22,19 @@ export interface ReplyInput {
   idempotencyKey?: string;
 }
 
-export async function sendReplyEmail(input: ReplyInput): Promise<void> {
-  // Replies come from the same mailbox receipts are forwarded to.
-  const from = `Expense <${INBOUND_EMAIL_ADDRESS}>`;
+/** The From address for every app email. */
+const EXPENSE_FROM = `Expense <${INBOUND_EMAIL_ADDRESS}>`;
+
+/** POST an email via the Resend API. Returns false after logging when it
+ * can't be sent — callers must never fail because email did. */
+export async function sendResendEmail(
+  input: ResendEmailInput,
+): Promise<boolean> {
   if (!RESEND_API_KEY || !INBOUND_EMAIL_ADDRESS) {
     console.warn(
-      `[inbound] reply skipped (RESEND_API_KEY/INBOUND_EMAIL_ADDRESS unset): ${input.subject}`,
+      `[email] send skipped (RESEND_API_KEY/INBOUND_EMAIL_ADDRESS unset): ${input.subject}`,
     );
-    return;
+    return false;
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -41,7 +46,7 @@ export async function sendReplyEmail(input: ReplyInput): Promise<void> {
         : {}),
     },
     body: JSON.stringify({
-      from: from,
+      from: EXPENSE_FROM,
       to: [input.to],
       subject: input.subject,
       html: input.html,
@@ -58,8 +63,17 @@ export async function sendReplyEmail(input: ReplyInput): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.warn(
-      `[inbound] reply send failed ${res.status}: ${body.slice(0, 300)}`,
-    );
+    console.warn(`[email] send failed ${res.status}: ${body.slice(0, 300)}`);
+    return false;
   }
+  return true;
+}
+
+/** Send a reply email back to the person who forwarded a receipt. Only used
+ * for failures and partial results — successful imports land in the app
+ * without an email. */
+export interface ReplyInput extends ResendEmailInput {}
+
+export async function sendReplyEmail(input: ReplyInput): Promise<void> {
+  await sendResendEmail(input);
 }

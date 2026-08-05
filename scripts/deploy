@@ -51,28 +51,8 @@ else
     echo -e "\033[0;33mVERCEL_PROTECTION_BYPASS is not set — the smoke check cannot reach the protected deployment URL; skipping.\033[0m"
     echo "Create it in Vercel (Settings → Security → Protection Bypass for Automation) and add it as a production env var."
   else
-    RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
-      -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
-      -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "${DEPLOY_URL}/api/smoke") \
-      || {
-        echo -e "\033[0;31mSmoke check failed (network/HTTP). Check ${DEPLOY_URL}/api/smoke manually.\033[0m"
-        exit 1
-      }
-    echo "$RESPONSE" | node -e '
-      let body = "";
-      process.stdin.on("data", (c) => (body += c));
-      process.stdin.on("end", () => {
-        const r = JSON.parse(body);
-        if (r.ok !== true) {
-          console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
-          process.exit(1);
-        }
-        console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "| MCP:", r.mcp ? r.mcp.tools + " tools" : "skipped", "(" + r.ms + "ms)");
-      });
-    ' || {
-      echo -e "\033[0;31mSmoke check failed: PDF/OCR/MCP pipeline did not pass on ${DEPLOY_URL}.\033[0m"
-      exit 1
-    }
+    # Shared with the CI workflow's pdf-ocr-smoke job — see scripts/smoke-check.
+    ./scripts/smoke-check "$DEPLOY_URL"
   fi
 fi
 

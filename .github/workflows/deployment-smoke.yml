@@ -286,18 +286,5 @@ jobs:
           # x-vercel-protection-bypass: deployment URLs are behind Vercel SSO
           # protection; the bypass lets the check reach the fresh deployment
           # even while Deployment Checks hold it from the production alias.
-          BODY=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
-            -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
-            -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "https://${DEPLOY_URL}/api/smoke")
-          echo "$BODY" | node -e '
-            let body = "";
-            process.stdin.on("data", (c) => (body += c));
-            process.stdin.on("end", () => {
-              const r = JSON.parse(body);
-              if (r.ok !== true) {
-                console.error("Smoke check failed:", r.error ?? JSON.stringify(r));
-                process.exit(1);
-              }
-              console.log("PDF + OCR OK —", r.pdfText, "| OCR:", r.ocrText, "| MCP:", r.mcp ? r.mcp.tools + " tools" : "skipped", `(${r.ms}ms)`);
-            });
-          '
+          # Same script scripts/deploy uses after CLI deploys.
+          ./scripts/smoke-check "${DEPLOY_URL}"

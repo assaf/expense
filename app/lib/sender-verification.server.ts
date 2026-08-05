@@ -1,5 +1,11 @@
 import { escapeHtml } from "~/lib/escape";
-import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
+import {
+  emailShell,
+  paragraph,
+  valuePropFooter,
+} from "~/lib/email-layout.server";
+import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL } from "~/lib/env";
+import { sendResendEmail } from "~/lib/reply.server";
 
 /**
  * Verification emails for receipts-by-email sender addresses.
@@ -30,20 +36,13 @@ function appBase(origin: string | undefined): string {
   return (origin || PUBLIC_URL || "").replace(/\/$/, "");
 }
 
-/** Resend POST /emails request body, returning true when it was sent. */
+/** Send the verification email, returning true when Resend accepted it. */
 export async function sendVerificationEmail(input: {
   to: string;
   token: string;
   origin?: string;
   accountName: string;
 }): Promise<boolean> {
-  if (!RESEND_API_KEY || !INBOUND_EMAIL_ADDRESS) {
-    console.warn(
-      "[sender-verification] email skipped (RESEND_API_KEY/INBOUND_EMAIL_ADDRESS unset) for " +
-        input.to,
-    );
-    return false;
-  }
   const link = verificationLink(input.origin, input.token);
   if (!link.startsWith("http")) {
     console.warn(
@@ -54,35 +53,21 @@ export async function sendVerificationEmail(input: {
   }
   const home = appBase(input.origin);
   const subject = "Verify your email to receive receipts by email";
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
-<h2 style="font-size:18px;margin:0 0 12px">Verify your email</h2>
-<p style="margin:8px 0">Receipts forwarded from <b>${escapeHtml(input.to)}</b> to <b>${escapeHtml(INBOUND_EMAIL_ADDRESS)}</b> will be added to the <b>${escapeHtml(input.accountName)}</b> account on Expense.</p>
-<p style="margin:8px 0">Until you verify, receipts from this address are <b>not</b> imported. Click below to confirm this address is yours:</p>
-<p style="margin:16px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f2937;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify ${escapeHtml(input.to)}</a></p>
-<p style="margin:8px 0">This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.</p>
-<p style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:12px;color:#6b7280;font-size:12px;line-height:1.5">
-  <a href="${escapeHtml(home)}/" style="color:#2563eb;text-decoration:none;font-weight:600">Expense</a> — free expense tracking for tax season. Snap a photo, forward a receipt, or log mileage, and Expense sorts it into IRS Schedule C categories and ready-to-file reports.
-</p>
-</div>`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: `Expense <${INBOUND_EMAIL_ADDRESS}>`,
-      to: [input.to],
-      subject,
-      html,
-    }),
+  const html = emailShell({
+    title: "Verify your email",
+    body: [
+      paragraph(
+        `Receipts forwarded from <b>${escapeHtml(input.to)}</b> to <b>${escapeHtml(INBOUND_EMAIL_ADDRESS)}</b> will be added to the <b>${escapeHtml(input.accountName)}</b> account on Expense.`,
+      ),
+      paragraph(
+        "Until you verify, receipts from this address are <b>not</b> imported. Click below to confirm this address is yours:",
+      ),
+      `<p style="margin:16px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f2937;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify ${escapeHtml(input.to)}</a></p>`,
+      paragraph(
+        "This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.",
+      ),
+    ].join("\n"),
+    footer: valuePropFooter(home),
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.warn(
-      `[sender-verification] send failed ${res.status}: ${body.slice(0, 300)}`,
-    );
-    return false;
-  }
-  return true;
+  return sendResendEmail({ to: input.to, subject, html });
 }

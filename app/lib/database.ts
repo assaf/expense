@@ -11,7 +11,7 @@ import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { DEFAULT_SETTINGS, parseLocations, parseRoute } from "~/lib/types";
-import { isEmail } from "~/lib/validation";
+import { extractEmailAddress, isEmail } from "~/lib/validation";
 import type {
   Account,
   Category,
@@ -1238,13 +1238,10 @@ function oauthTokenFromRow(row: {
 
 // --- Inbound email ----------------------------------------------------------
 
-/** Normalize a sender address for storage/lookup (trim + lowercase). */
-/** Trim, strip "Name <addr>" display-name wrapping, lowercase. */
+/** Normalize a sender address for storage/lookup: strip "Name <addr>"
+ * display-name wrapping, trim, lowercase. */
 function normalizeSender(address: string): string {
-  const trimmed = address.trim();
-  const m = trimmed.match(/<([^<>@\s]+@[^<>@\s]+)>/);
-  const candidate = m ? m[1]! : trimmed;
-  return candidate.toLowerCase();
+  return extractEmailAddress(address);
 }
 
 /** The stored row for a received email, or undefined when first seen. */
@@ -1370,22 +1367,7 @@ export async function addInboundSender(
     };
   }
   if (verification) return { ok: true, address: normalized, token: null };
-  const token = generateVerificationToken();
-  const now = new Date().toISOString();
-  await prisma.inboundSender.upsert({
-    where: { accountId_address: { accountId, address: normalized } },
-    update: {
-      verificationTokenHash: hashVerificationToken(token),
-      verificationSentAt: now,
-    },
-    create: {
-      accountId,
-      address: normalized,
-      verificationTokenHash: hashVerificationToken(token),
-      verificationSentAt: now,
-      createdAt: now,
-    },
-  });
+  const token = await mintSenderToken(accountId, normalized);
   return { ok: true, address: normalized, token };
 }
 
@@ -1414,22 +1396,7 @@ export async function resendInboundSenderVerification(
           : "That email address is already verified for another account",
     };
   }
-  const token = generateVerificationToken();
-  const now = new Date().toISOString();
-  await prisma.inboundSender.upsert({
-    where: { accountId_address: { accountId, address: normalized } },
-    update: {
-      verificationTokenHash: hashVerificationToken(token),
-      verificationSentAt: now,
-    },
-    create: {
-      accountId,
-      address: normalized,
-      verificationTokenHash: hashVerificationToken(token),
-      verificationSentAt: now,
-      createdAt: now,
-    },
-  });
+  const token = await mintSenderToken(accountId, normalized);
   return { ok: true, address: normalized, token };
 }
 
@@ -1578,6 +1545,20 @@ export async function ensureInboundSenderForUser(
       return { token: null, verified: false, claimedByOther: false };
     }
   }
+  const token = await mintSenderToken(accountId, address);
+  return { token, verified: false, claimedByOther: false };
+}
+
+/**
+ * Create (or refresh) the pending sender row with a fresh single-use
+ * verification token, hashed at rest. Returns the raw token for the email
+ * link. Shared by addInboundSender, resendInboundSenderVerification, and
+ * ensureInboundSenderForUser.
+ */
+async function mintSenderToken(
+  accountId: string,
+  address: string,
+): Promise<string> {
   const token = generateVerificationToken();
   const now = new Date().toISOString();
   await prisma.inboundSender.upsert({
@@ -1594,7 +1575,7 @@ export async function ensureInboundSenderForUser(
       createdAt: now,
     },
   });
-  return { token, verified: false, claimedByOther: false };
+  return token;
 }
 
 /** A fresh single-use verification token (base64url) and its sha256 hash. */

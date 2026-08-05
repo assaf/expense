@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import sharp from "sharp";
 import { normalizeAmount } from "~/lib/format";
+import { extractEmailAddress } from "~/lib/validation";
 import {
   processInboundEvent,
   verifyWebhookSignature,
@@ -9,7 +10,6 @@ import {
   extractDateFromForwardedText,
   extractDateFromEml,
   extractExpenseDate,
-  extractEmailAddress,
   scoreAttachment,
   pickReceiptAttachment,
   isPrivateHost,
