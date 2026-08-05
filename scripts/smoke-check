@@ -38,9 +38,9 @@ echo "$RESPONSE" | node -e '
     if (r.sentryInitialized === false) {
       // Server Sentry init is bundled into entry.server.tsx and should run
       // on Vercel production functions. A false here means server errors
-      // are reaching Vercel logs but not Sentry — warn loudly, don't fail
-      // the deploy (Sentry is observability, not the app's core function).
-      console.error("WARNING: Sentry server SDK not initialized in this deployment — server errors won't reach Sentry.");
+      // reach Vercel logs but not Sentry — warn loudly (does not fail the
+      // deploy: Sentry is observability, not the app core function).
+      console.error("WARNING: Sentry server SDK not initialized in this deployment — server errors will not reach Sentry.");
     }
     console.log(
       "PDF + OCR OK —",
