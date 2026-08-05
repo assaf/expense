@@ -26,7 +26,7 @@ Stack:
 - Postgres via Prisma — accounts, users, expenses, reports, categories,
   settings, mileage, image blobs
 - Images: Postgres BYTEA (prod and dev/test) — no external store
-- Deployed on Vercel + Neon (git push to main auto-deploys)
+- Deployed on Vercel + Supabase Postgres (git push to main auto-deploys)
 
 Auth & accounts (the recent work):
 
@@ -200,7 +200,7 @@ ignore the local database, and reset the schema from Prisma on each run
 (`pnpm test:db:push` in the test setup).
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
-Environment Variables): `DATABASE_URL` (Vercel Postgres / Neon pooled URL),
+Environment Variables): `DATABASE_URL` (Supabase Supavisor pooled URL),
 `SESSION_SECRET`,
 and (only until the first user exists) `APP_EMAIL` / `APP_PASSWORD`.
 Vercel injects them at runtime; `.env` never exists there.
@@ -315,8 +315,9 @@ zero-config path builds one SSR function that serves every route.)
 2. In Vercel: **Add New → Project → Import `assaf/expense`**. Framework is
    auto-detected as React Router; `vercel.json` pins the build command.
 3. Set env vars in the project (Settings → Environment Variables):
-   - `DATABASE_URL` — Vercel Postgres / Neon pooled URL. Tables are created
-     automatically on first request.
+   - `DATABASE_URL` — Supabase pooled URL (Supavisor transaction-mode
+     pooler). Schema is managed by Prisma migrations — apply prod schema
+     changes with `./scripts/migrate-prod` (never runtime DDL).
    - Node 24+ (`engines`; the project runs on Node 26); pick Node 26 in
      project settings if Vercel doesn't match automatically.
 4. One-time data import is done — the CSV source under `data/` was deleted

@@ -15,8 +15,8 @@ if (!DATABASE_URL) {
 }
 
 /**
- * node-postgres reads `sslmode` from the connection string (Neon/Vercel
- * prod URLs carry `?sslmode=require`); local dev/test URLs omit it → no TLS.
+ * node-postgres reads `sslmode` from the connection string (Supabase
+ * pooler URLs carry `?sslmode=require`); local dev/test URLs omit it → no TLS.
  *
  * Pool sizing matters here: prod connects through Supabase's session-mode
  * pooler, which caps total sessions (default pool_size 15). Every Vercel
