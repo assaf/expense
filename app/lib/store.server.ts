@@ -34,6 +34,7 @@ export {
   findUserByEmail,
   findUserById,
   getPasswordHash,
+  updateUserPasswordHash,
   readExpenses,
   readExpense,
   upsertExpense,

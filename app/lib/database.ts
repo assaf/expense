@@ -497,6 +497,19 @@ export async function getPasswordHash(userId: string): Promise<string> {
   return row?.passwordHash ?? "";
 }
 
+/** Replace a user's stored password hash — the login path rehashes with
+ * the current scrypt cost when the stored hash used older parameters (see
+ * `needsRehash` in passwords.ts). */
+export async function updateUserPasswordHash(
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+}
+
 // --- Expenses --------------------------------------------------------------
 
 export async function readExpenses(accountId: string): Promise<Expense[]> {

@@ -1,6 +1,11 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { SESSION_SECRET } from "./env";
-import { hashPassword, normalizeInviteCode, verifyPassword } from "./passwords";
+import {
+  hashPassword,
+  needsRehash,
+  normalizeInviteCode,
+  verifyPassword,
+} from "./passwords";
 import { sendVerificationEmail } from "./sender-verification.server";
 import {
   createAccount,
@@ -12,6 +17,7 @@ import {
   getPasswordHash,
   initStore,
   readAccount,
+  updateUserPasswordHash,
 } from "./store.server";
 import { isEmail } from "./validation";
 import type { User } from "./types";
@@ -110,6 +116,12 @@ export async function login(
   const stored = user ? await getPasswordHash(user.id) : "";
   if (!user || !stored || !(await verifyPassword(password, stored))) {
     throw new Error("Invalid email or password");
+  }
+  // Re-derive with the current scrypt cost when the stored hash used older
+  // parameters (legacy `salt:hash` rows or an older cost factor) — a
+  // one-time cost on the next successful sign-in.
+  if (needsRehash(stored)) {
+    await updateUserPasswordHash(user.id, await hashPassword(password));
   }
   await ensureDefaultSender(user, origin);
   return commitUserSession(user.id);

@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync } from "node:crypto";
 import { expect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
@@ -11,6 +12,7 @@ import {
   testPrisma,
 } from "./helpers/seedTestData";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
+import { verifyPassword } from "~/lib/passwords";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 
@@ -117,6 +119,32 @@ describe("Access control", () => {
     await expect(page.locator("h1")).toContainText("Expense");
     await expect(page.getByText("Test Store")).toBeVisible();
     await page.close();
+  });
+
+  it("rehashes a legacy password hash to the current scrypt cost on login", async () => {
+    // Rewrite the seeded user's stored hash to the pre-format-change shape
+    // (hex `salt:hash` derived with Node's default scrypt cost), then sign
+    // in — the login path must upgrade the row to the self-describing
+    // format while still accepting the same password.
+    const salt = randomBytes(16).toString("hex");
+    const legacyHash = `${salt}:${scryptSync(TEST_PASSWORD, salt, 64).toString("hex")}`;
+    await testPrisma.user.update({
+      where: { id: "user_test1" },
+      data: { passwordHash: legacyHash },
+    });
+
+    const page = await openPage();
+    await signIn(page, TEST_EMAIL, TEST_PASSWORD);
+    await page.close();
+
+    const row = await testPrisma.user.findUnique({
+      where: { id: "user_test1" },
+      select: { passwordHash: true },
+    });
+    expect(row?.passwordHash).toMatch(/^\$scrypt\$N=65536,r=8,p=1\$/);
+    await expect(
+      verifyPassword(TEST_PASSWORD, row?.passwordHash ?? ""),
+    ).resolves.toBe(true);
   });
 
   it("signs out from settings and locks the app again", async () => {
