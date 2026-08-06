@@ -42,8 +42,7 @@ export default function AboutPage() {
   return (
     <MarketingPage
       eyebrow="About"
-      title=
-      "Expense – The Free Receipt Tracker for Tax Season."
+      title="Expense – The Free Receipt Tracker for Tax Season."
 
       summary={APP_SUMMARY}
       schema={
