@@ -683,6 +683,9 @@ function MileageEditor({ data }: { data: EditorData }) {
   const [computing, setComputing] = useState(false);
   // Per-field geocoding errors, aligned with `locations` (null = no error).
   const [addressErrors, setAddressErrors] = useState<(string | null)[]>([]);
+  // Route-level error: set when the /api/route call itself fails (HTTP
+  // error, network down) — cleared on the next successful geocode.
+  const [routeError, setRouteError] = useState<string | null>(null);
   // Indexes of fields currently being geocoded (in-flight blur geocodes and
   // the save-time flush) — drives the per-field spinner.
   const [geocodingFields, setGeocodingFields] = useState<number[]>([]);
@@ -836,7 +839,18 @@ function MileageEditor({ data }: { data: EditorData }) {
     try {
       const seq = ++requestSeq.current;
       const result = await computeRoute(locations, rate);
-      if (!result || requestSeq.current !== seq) return;
+      // A stale result (seq already advanced by a newer blur/edit) is
+      // silently dropped — a newer request is in flight.
+      if (requestSeq.current !== seq) return;
+      if (!result) {
+        setRouteError(
+          "Route unavailable. Check your connection and try again.",
+        );
+        setDistanceMiles("");
+        setAmount("");
+        return;
+      }
+      setRouteError(null);
       const r = result.locations[i];
       // A non-empty field that failed to geocode is an error — tell the
       // user, never guess an address. An emptied field is expected to come
@@ -1043,28 +1057,35 @@ function MileageEditor({ data }: { data: EditorData }) {
             </span>
           </div>
         ) : null}
-        <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
-          <span className="flex items-center gap-2 text-gray-600">
-            {computing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <MapPinned className="h-4 w-4" />
-            )}
-            {distanceMiles ? `${distanceMiles} mi` : "—"}
-            {approximate ? (
-              <span className="text-xs text-amber-600">(approx.)</span>
-            ) : null}
-          </span>
-          <span className="text-gray-500">
-            {rate ? (
-              <>
-                {MILEAGE_TYPE_LABELS[mileageType]} · ${formatRate(rate)}/mi
-              </>
-            ) : (
-              "No rate for this date/type"
-            )}
-          </span>
-        </div>
+        {routeError ? (
+          <div className="flex items-center gap-2 border-t border-gray-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+            {routeError}
+          </div>
+        ) : (
+          <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
+            <span className="flex items-center gap-2 text-gray-600">
+              {computing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <MapPinned className="h-4 w-4" />
+              )}
+              {distanceMiles ? `${distanceMiles} mi` : "—"}
+              {approximate ? (
+                <span className="text-xs text-amber-600">(approx.)</span>
+              ) : null}
+            </span>
+            <span className="text-gray-500">
+              {rate ? (
+                <>
+                  {MILEAGE_TYPE_LABELS[mileageType]} · ${formatRate(rate)}/mi
+                </>
+              ) : (
+                "No rate for this date/type"
+              )}
+            </span>
+          </div>
+        )}
       </div>
 
       <DateAmountFields

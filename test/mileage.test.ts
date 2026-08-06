@@ -615,11 +615,11 @@ describe("Mileage expense", () => {
     });
     await inputs.first().blur();
 
-    // The error is surfaced under the geocoded field.
+    // The error is surfaced in the map footer.
     await expect(page.getByText(/route unavailable/i)).toBeVisible({
       timeout: 15_000,
     });
-    // The amount stays empty — no stale value from a previous geocode.
+    // The amount stays empty — no stale value from a failed geocode.
     await expect(page.locator("input[type='number']")).toHaveValue("");
     // The "Calculating route…" pill disappears (doesn't spin forever).
     await expect(page.getByText("Calculating route…")).toHaveCount(0);
