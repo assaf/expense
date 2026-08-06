@@ -199,7 +199,10 @@ jobs:
       # baselined prod DB): just prisma db push → migrate resolve. No psql
       # needed, which keeps the job under its 1-minute timeout.
       - name: Sync the production database schema
-        run: ./scripts/migrate-prod --ci
+        run: |
+          pnpm prisma db push --accept-data-loss
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
 
   pdf-ocr-smoke:
     name: pdf-ocr-smoke

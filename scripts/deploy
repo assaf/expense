@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Deploy expense to production:
 #   1. check + tests (never migrate before the test suite passes)
-#   2. sync the production database schema (scripts/migrate-prod — env pulled
-#      from Vercel, prisma db push, migrate history)
+#   2. sync the production database schema (prisma db push)
 #   3. deploy with the Vercel CLI
 #   4. post-deploy smoke check (PDF + OCR + MCP, /api/smoke)
 #   5. open the production site
@@ -24,12 +23,12 @@ else
 fi
 
 echo -e "\033[0;32m--- Step 3: Sync production database schema ---\033[0m"
-./scripts/migrate-prod
-# migrate-prod pulls prod env to .env.prod.pull; re-source it so the deploy
-# and smoke steps below see SMOKE_TEST_SECRET / VERCEL_PROTECTION_BYPASS.
+npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
 set -a
 source .env.prod.pull
 set +a
+export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+pnpm prisma db push --accept-data-loss
 
 echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
 DEPLOY_OUTPUT=$(npx -y vercel@latest deploy --prod --yes 2>&1)

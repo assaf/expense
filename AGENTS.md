@@ -63,17 +63,15 @@ pnpm db:push         # sync the dev database to schema.prisma
 pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
-./scripts/migrate-prod [--ci]  # prod schema sync only — default pulls env from Vercel; --ci uses the DATABASE_URL_UNPOOLED GitHub secret (no Vercel CLI)
 ./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
-# sync by calling `./scripts/migrate-prod` (env pulled via `vercel env pull`,
-# prisma db push + migrate history), then CLI-deploys and opens the
-# site. `git push origin main` also auto-deploys: the CI workflow runs
-# `./scripts/migrate-prod --ci` in its `migrate-db` job, passing the prod DDL
-# URL via the `DATABASE_URL_UNPOOLED` GitHub secret. It does NOT use the
-# Vercel CLI: the `VERCEL_TOKEN` secret can list deployments (smoke job) but
-# is denied on the project-settings/team endpoints `vercel env pull` needs
-# (403 PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead.
+# sync via `vercel env pull` + `prisma db push`, then CLI-deploys and opens the
+# site. `git push origin main` also auto-deploys: the CI workflow's
+# `migrate-db` job passes the prod DDL URL via the `DATABASE_URL_UNPOOLED`
+# GitHub secret and runs `prisma db push`. It does NOT use the Vercel CLI: the
+# `VERCEL_TOKEN` secret can list deployments (smoke job) but is denied on the
+# project-settings/team endpoints `vercel env pull` needs (403
+# PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead.
 # DEPLOY ORDERING CONTRACT: check & test → migrate prod DB → pdf-ocr-smoke.
 # The smoke check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl)
 # runs the deployed bundle against the prod schema and fails on any schema
