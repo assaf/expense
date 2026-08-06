@@ -15,7 +15,6 @@
     "prepare": "vp config",
     "build:prisma": "prisma generate",
     "test:ocr": "RUN_OCR_TESTS=1 vp test run test/pdf-ocr.test.ts",
-    "compress:images": "node scripts/compress-images.ts",
     "demo:seed": "node scripts/seed-demo.ts",
     "demo:run": "node scripts/run-demo.ts",
     "db:push": "prisma db push",
