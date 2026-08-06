@@ -93,9 +93,31 @@ describe("MCP endpoint", () => {
     expect(init.status).toBe(200);
   }
 
-  /** Call a tool (2025-era) and parse the tool result payload (JSON text).
-   * Non-JSON responses (e.g. zod validation errors) are wrapped as
-   * { error: text }. */
+  /** Parse the content from a MCP tools/call response into { isError, payload }. */
+  function parseResult(json: unknown): {
+    isError: boolean;
+    payload: Record<string, unknown>;
+  } {
+    const result = (
+      json as {
+        result: { content: { text: string }[]; isError?: boolean };
+      }
+    ).result;
+    const text = result.content?.[0]?.text ?? "";
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      // Non-JSON text (e.g. zod validation errors) — wrap it.
+      payload = { error: text };
+    }
+    return {
+      isError: Boolean(result.isError),
+      payload,
+    };
+  }
+
+  /** Call a tool (2025-era) and parse the result. */
   async function callTool(
     token: string,
     name: string,
@@ -108,22 +130,7 @@ describe("MCP endpoint", () => {
       params: { name, arguments: args },
     });
     expect(res.status).toBe(200);
-    const result = (
-      res.json as {
-        result: { content: { text: string }[]; isError?: boolean };
-      }
-    ).result;
-    const text = result.content?.[0]?.text ?? "";
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      payload = { error: text };
-    }
-    return {
-      isError: Boolean(result.isError),
-      payload,
-    };
+    return parseResult(res.json);
   }
 
   /** The 2026-07-28 per-request `_meta` envelope. */
@@ -136,10 +143,7 @@ describe("MCP endpoint", () => {
     "io.modelcontextprotocol/clientCapabilities": {},
   };
 
-  /**
-   * 2026-07-28 era: tools/call carrying the `_meta` envelope and the
-   * standard `Mcp-Method` / `Mcp-Name` headers (no initialize, no session).
-   */
+  /** 2026-07-28 era: tools/call carrying `_meta` + standard headers. */
   async function modernCallTool(
     token: string,
     name: string,
@@ -156,22 +160,7 @@ describe("MCP endpoint", () => {
       { "Mcp-Method": "tools/call", "Mcp-Name": name },
     );
     expect(res.status).toBe(200);
-    const result = (
-      res.json as {
-        result: { content: { text: string }[]; isError?: boolean };
-      }
-    ).result;
-    const text = result.content?.[0]?.text ?? "";
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      payload = { error: text };
-    }
-    return {
-      isError: Boolean(result.isError),
-      payload,
-    };
+    return parseResult(res.json);
   }
 
   // --- Tests ---
