@@ -114,16 +114,19 @@ export function currentMileageRates(
 
 /**
  * Distance × rate, rounded half-up to cents with exact decimal math:
- * 122.15 mi × $0.70 → $85.51, 122.15 × $0.235 → $28.71. The same Decimal
- * expression `recomputeMileage` uses (maps.server.ts), so the editor and
- * the server produce identical amounts. Returns "" when the distance is
- * missing/unparseable or ≤ 0 — a missing rate means "no amount", never
- * $0.00.
+ * 122.15 mi × $0.70 → $85.51, 122.15 × $0.235 → $28.71. The single money
+ * expression for every caller — the editor, the server route recompute
+ * (`recomputeMileage` in maps.server.ts), the MCP tools, and exports all
+ * produce identical amounts. Returns "" when the distance is
+ * missing/unparseable/≤ 0 or the rate is missing/unparseable/non-finite —
+ * a missing rate means "no amount", never $0.00.
  */
 export function mileageAmount(distanceMiles: string, rate: string): string {
   const d = parseAmount(distanceMiles);
   const r = parseAmount(rate);
-  if (d === null || r === null || d.lte(0)) return "";
+  if (d === null || r === null || !d.isFinite() || !r.isFinite() || d.lte(0)) {
+    return "";
+  }
   return d.times(r).toFixed(2);
 }
 

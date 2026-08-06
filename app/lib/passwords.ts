@@ -1,9 +1,17 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  scrypt as scryptCb,
+  timingSafeEqual,
+} from "node:crypto";
 import { promisify } from "node:util";
 
 /**
- * Password hashing (scrypt) and invite-code generation. Shared by the auth
- * module, the signup flow, the test seed, and the CSV migration script.
+ * Auth crypto primitives: password hashing (scrypt), invite-code
+ * generation, and the opaque-token + SHA-256 pair every stored secret
+ * uses. Shared by the auth module, the signup flow, the OAuth server, the
+ * inbound-sender verification tokens, the test seed, and the CSV migration
+ * script.
  */
 
 const SCRYPT_KEYLEN = 64;
@@ -48,4 +56,18 @@ export function generateInviteCode(): string {
 /** Normalize a user-supplied invite code for lookup/compare. */
 export function normalizeInviteCode(code: string): string {
   return code.trim().toUpperCase();
+}
+
+/** A fresh opaque token (base64url, 256 bits) — OAuth codes/tokens and the
+ * inbound-sender verification links all start here. */
+export function generateOpaqueToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/** The stored form of any token/code — SHA-256 hex, for indexed lookups.
+ * One hashing primitive backs every stored secret (OAuth token/code tables
+ * and sender-verification tokens), so a leaked database never exposes
+ * usable tokens. */
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }

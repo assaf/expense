@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 
+import { mileageAmount } from "~/lib/mileage-rates";
 import { geocodedLocations, type Location } from "~/lib/types";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
@@ -383,10 +384,11 @@ function haversine(
  * state) is retried with the previous stop's city/state appended and the
  * closer result is kept. City-only queries geocode on their own.
  *
- * Money is computed with decimal.js: `distance × rate` is exact and rounded
- * once to cents with ROUND_HALF_UP (a half cent rounds up, e.g. 122.15 mi ×
- * $0.70 → $85.51). The route distance is a float measurement (meters / mile),
- * but multiplying by the rate and rounding on a Decimal keeps the money side
+ * The amount is the shared `mileageAmount` expression (mileage-rates.ts):
+ * `distance × rate` with exact decimal math, rounded once to cents with
+ * ROUND_HALF_UP (a half cent rounds up, e.g. 122.15 mi × $0.70 → $85.51).
+ * The route distance is a float measurement (meters / mile), but
+ * multiplying by the rate and rounding on a Decimal keeps the money side
  * exact.
  */
 export async function recomputeMileage(
@@ -400,16 +402,6 @@ export async function recomputeMileage(
   coords: [number, number][];
   returnCoords: [number, number][];
 }> {
-  // No rate configured for the year (or an unparseable one) → no amount,
-  // not $0.00.
-  let rateDec: Decimal | null = null;
-  if (rate.trim() !== "") {
-    try {
-      rateDec = new Decimal(rate);
-    } catch {
-      rateDec = null;
-    }
-  }
   // Geocode addresses missing coordinates, threading the previous stop's
   // locality so a partial street address doesn't default to a faraway city.
   const geocoded: Location[] = [];
@@ -435,13 +427,9 @@ export async function recomputeMileage(
   const route = await computeRouteDistance(geocoded);
   const distance = new Decimal(route.distanceMiles);
   const distanceStr = distance.gt(0) ? distance.toFixed(2) : "";
-  const amount =
-    distance.gt(0) && rateDec !== null && rateDec.isFinite()
-      ? distance
-          .times(rateDec)
-          .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
-          .toString()
-      : "";
+  // No rate configured for the year (or an unparseable one) → no amount,
+  // not $0.00 — mileageAmount returns "" for a missing/non-finite rate.
+  const amount = mileageAmount(distanceStr, rate);
   return {
     locations: geocoded,
     distanceMiles: distanceStr,

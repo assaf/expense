@@ -1,9 +1,12 @@
 import sharp from "sharp";
-import { Resvg, type ResvgRenderOptions } from "@resvg/resvg-js";
+import { Resvg } from "@resvg/resvg-js";
 import { load } from "cheerio";
 import { escapeHtml } from "~/lib/escape";
-import { decodeInlineAsset } from "~/lib/inline-asset";
-import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
+import {
+  JETBRAINS_MONO,
+  jetbrainsMonoBytes,
+  resvgFontOptions,
+} from "~/lib/resvg-font.server";
 
 /**
  * Turn an email body into a receipt image (no headless browser needed):
@@ -19,15 +22,12 @@ import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono
  * broken (previously these silently produced blank white receipt images).
  */
 
-const FONT_FAMILY = "JetBrains Mono";
 const FONT_SIZE = 14;
 const LINE_HEIGHT = 22;
 const PADDING = 28;
 const SVG_WIDTH = 820;
 // Monospace advance ≈ 0.6em → ~90 chars fit per line at 14px in 764px.
 const CHARS_PER_LINE = 90;
-
-const fontBytes = decodeInlineAsset(fontInline);
 
 /** Split text into lines of at most maxChars characters (hard wrap). */
 function wrapLines(text: string, maxChars: number): string[] {
@@ -71,7 +71,7 @@ export function buildReceiptSvg(
   const parts: string[] = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_WIDTH}" height="${height}">`,
     `<rect width="${SVG_WIDTH}" height="${height}" fill="#ffffff"/>`,
-    `<g font-family="${FONT_FAMILY}" font-size="${FONT_SIZE}" fill="#111111">`,
+    `<g font-family="${JETBRAINS_MONO}" font-size="${FONT_SIZE}" fill="#111111">`,
   ];
   let y = PADDING + FONT_SIZE;
   for (const [i, line] of lines.entries()) {
@@ -89,7 +89,7 @@ export function buildReceiptSvg(
 
 /** The SVG with the bundled font embedded as a data-URI @font-face. */
 function embedFontFace(svg: string): string {
-  const style = `<style>@font-face{font-family:'${FONT_FAMILY}';src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format('woff2')}</style>`;
+  const style = `<style>@font-face{font-family:'${JETBRAINS_MONO}';src:url(data:font/woff2;base64,${jetbrainsMonoBytes.toString("base64")}) format('woff2')}</style>`;
   return svg.replace(/(<svg[^>]*>)/, `$1<defs>${style}</defs>`);
 }
 
@@ -137,29 +137,17 @@ export async function renderReceiptImage(
     );
   }
 
-  // fontBuffers is supported at runtime (resvg fontdb) but not yet in the
-  // published type defs — extend the options shape via an intersection.
-  type ResvgFontOptions = ResvgRenderOptions["font"] & {
-    fontBuffers?: Buffer[];
-  };
-  const resvgFont = (
-    overrides: ResvgFontOptions,
-  ): ResvgRenderOptions & { font?: ResvgFontOptions } => ({
-    fitTo: { mode: "original" },
-    font: { loadSystemFonts: true, ...overrides },
-  });
-
   const resvgAttempts = [
     {
       label: "resvg with bundled font",
-      options: resvgFont({
-        fontBuffers: [fontBytes],
-        defaultFontFamily: FONT_FAMILY,
+      options: resvgFontOptions({
+        fontBuffers: [jetbrainsMonoBytes],
+        defaultFontFamily: JETBRAINS_MONO,
       }),
     },
     {
       label: "resvg with system fonts",
-      options: resvgFont({}),
+      options: resvgFontOptions({}),
     },
   ];
   for (const attempt of resvgAttempts) {

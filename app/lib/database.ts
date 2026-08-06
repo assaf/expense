@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
 import { ulid } from "ulid";
 import { MILEAGE_RATES } from "~/data/mileage-rates";
 import { duplicatePairKey, normalizeMerchant } from "~/lib/duplicates";
@@ -6,7 +5,12 @@ import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { summarizeByReport } from "~/lib/format";
 import { deleteImage } from "~/lib/images.server";
 import { isMileageType, type MileageRateEntry } from "~/lib/mileage-rates";
-import { generateInviteCode, hashPassword } from "~/lib/passwords";
+import {
+  generateInviteCode,
+  generateOpaqueToken,
+  hashPassword,
+  hashToken,
+} from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
@@ -1492,7 +1496,7 @@ export async function verifyInboundSenderAddress(
 ): Promise<VerifySenderOutcome> {
   if (!rawToken) return { status: "invalid" };
   const row = await prisma.inboundSender.findFirst({
-    where: { verificationTokenHash: hashVerificationToken(rawToken) },
+    where: { verificationTokenHash: hashToken(rawToken) },
   });
   if (!row) return { status: "invalid" };
   const sentAt = row.verificationSentAt
@@ -1606,32 +1610,23 @@ async function mintSenderToken(
   accountId: string,
   address: string,
 ): Promise<string> {
-  const token = generateVerificationToken();
+  const token = generateOpaqueToken();
   const now = new Date().toISOString();
   await prisma.inboundSender.upsert({
     where: { accountId_address: { accountId, address } },
     update: {
-      verificationTokenHash: hashVerificationToken(token),
+      verificationTokenHash: hashToken(token),
       verificationSentAt: now,
     },
     create: {
       accountId,
       address,
-      verificationTokenHash: hashVerificationToken(token),
+      verificationTokenHash: hashToken(token),
       verificationSentAt: now,
       createdAt: now,
     },
   });
   return token;
-}
-
-/** A fresh single-use verification token (base64url) and its sha256 hash. */
-function generateVerificationToken(): string {
-  return randomBytes(32).toString("base64url");
-}
-
-function hashVerificationToken(raw: string): string {
-  return createHash("sha256").update(raw).digest("hex");
 }
 
 /** Verification links expire 7 days after the email is sent. */

@@ -1,7 +1,10 @@
-import { Resvg, type ResvgRenderOptions } from "@resvg/resvg-js";
-import { decodeInlineAsset } from "~/lib/inline-asset";
+import { Resvg } from "@resvg/resvg-js";
+import {
+  JETBRAINS_MONO,
+  jetbrainsMonoBytes,
+  resvgFontOptions,
+} from "~/lib/resvg-font.server";
 import { geocodedLocations, type MileageExpense } from "~/lib/types";
-import fontInline from "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2?inline";
 
 /**
  * Render a real map of a mileage trip for the report PDF — the same look
@@ -24,12 +27,9 @@ const WIDTH = 460;
 const HEIGHT = 220;
 const TILE = 256;
 const PAD = 28;
-const FONT = "JetBrains Mono";
 const USER_AGENT = "expense-personal/1.0 (assaf@expense.labnotes.org)";
 const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
 const TILE_CACHE_MAX = 200;
-
-const fontBytes = decodeInlineAsset(fontInline);
 
 /** The tile fetcher signature — injectable so tests stay offline. */
 type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
@@ -276,7 +276,7 @@ function markersSvg(
       // Baseline offset (~half the 10px cap height) centers the label.
       return `<g>
         <circle cx="${cx}" cy="${cy}" r="10" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
-        <text x="${cx}" y="${(p.y + 3.5).toFixed(1)}" font-family="${FONT}" font-size="10" font-weight="700" text-anchor="middle" fill="#2563eb">${label}</text>
+        <text x="${cx}" y="${(p.y + 3.5).toFixed(1)}" font-family="${JETBRAINS_MONO}" font-size="10" font-weight="700" text-anchor="middle" fill="#2563eb">${label}</text>
       </g>`;
     })
     .join("");
@@ -293,21 +293,14 @@ function wrapSvg(
   <rect width="${WIDTH}" height="${HEIGHT}" fill="${background}"/>
   ${opts.border ? `<rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>` : ""}
   ${inner}
-  <text x="8" y="${HEIGHT - 8}" font-family="${FONT}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
+  <text x="8" y="${HEIGHT - 8}" font-family="${JETBRAINS_MONO}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
 </svg>`;
 }
 
 function renderSvg(svg: string): Buffer {
-  type FontOptions = ResvgRenderOptions["font"] & {
-    fontBuffers?: Buffer[];
-  };
-  const options: ResvgRenderOptions & { font?: FontOptions } = {
-    fitTo: { mode: "original" },
-    font: {
-      loadSystemFonts: true,
-      fontBuffers: [fontBytes],
-      defaultFontFamily: FONT,
-    },
-  };
+  const options = resvgFontOptions({
+    fontBuffers: [jetbrainsMonoBytes],
+    defaultFontFamily: JETBRAINS_MONO,
+  });
   return Buffer.from(new Resvg(svg, options).render().asPng());
 }

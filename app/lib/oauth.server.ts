@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { PUBLIC_URL } from "~/lib/env";
+import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import {
   createOAuthCode,
   createOAuthToken,
@@ -8,6 +9,9 @@ import {
   revokeOAuthToken,
 } from "~/lib/store.server";
 import type { OAuthClientRecord } from "~/lib/types";
+
+/** Re-exported so the token/code routes hash secrets the shared way. */
+export { hashToken };
 
 /**
  * The MCP authorization server (OAuth 2.1 with PKCE) for the /mcp endpoint.
@@ -39,13 +43,8 @@ export const PKCE_METHOD = "S256";
 
 /** A random opaque token with a recognizable prefix. */
 function randomToken(prefix: "oat" | "ort" | "code"): string {
-  const raw = randomBytes(32).toString("base64url");
+  const raw = generateOpaqueToken();
   return prefix === "code" ? raw : `${prefix}_${raw}`;
-}
-
-/** The stored form of any token/code — SHA-256 hex, indexed lookups. */
-export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
 }
 
 /** Constant-time equality for hashes and secrets. */
