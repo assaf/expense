@@ -14,6 +14,9 @@ vp check --fix
 echo -e "\033[0;32m--- Run knip ---\033[0m"
 knip
 
+echo -e "\033[0;32m--- Run secretlint ---\033[0m"
+secretlint "**/*"
+
 echo -e "\033[0;32m--- Verify tesseract.js patch is applied ---\033[0m"
 node --input-type=module -e '
 import { readFileSync } from "node:fs";
