@@ -4,9 +4,9 @@ import type { Route } from "./+types/mcp";
 /**
  * /mcp — the MCP (Model Context Protocol) Streamable HTTP endpoint.
  *
- * Point any MCP client (Claude Code, Claude Desktop, Cursor, …) here — the
- * client discovers the OAuth flow (/.well-known/oauth-authorization-server)
- * and you approve the connection by signing in. No API keys:
+ * Point any MCP client (Claude, OpenAI, etc.) here — the client discovers the
+ * OAuth flow (/.well-known/oauth-authorization-server) and you approve the
+ * connection by signing in. No API keys:
  *
  *   { "mcpServers": { "expense": {
  *       "type": "http",

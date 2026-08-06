@@ -1,10 +1,10 @@
 # Expense MCP server
 
-The expense tracker speaks the [Model Context Protocol](https://modelcontextprotocol.io)
-over HTTP at `POST /mcp`. Any MCP client (Claude Code, Claude Desktop,
-Cursor, Windsurf, …) can connect — and with OAuth, connecting is just
-**signing in with your account**. An agent connected to your account can do
-what the web app does, without the form:
+The expense tracker speaks the [Model Context
+Protocol](https://modelcontextprotocol.io) over HTTP at `POST /mcp`. Any MCP
+client (Claude, OpenAI, etc) can connect — and with OAuth, connecting is just
+**signing in with your account**. An agent connected to your account can do what
+the web app does, without the form:
 
 - **Capture a receipt** — drop a photo or PDF into the chat; it runs the same
   OCR + extraction pipeline as the web app (DeepSeek, falling back to
@@ -22,7 +22,7 @@ what the web app does, without the form:
 ## Setup
 
 Connecting is **signing in with your account** — there are no API keys. OAuth
-clients (Claude Code, Claude Desktop, Cursor, …) do this automatically:
+clients (Claude, OpenAI, etc) do this automatically:
 
 1. Point the client at `https://<your-host>/mcp`.
 2. The client fetches `/.well-known/oauth-authorization-server`, registers
@@ -36,10 +36,10 @@ Manage connected apps in **Settings → Agents & API (MCP)**: delete individual
 access or refresh tokens (kills a session now, or stops the app getting new
 sessions), or disconnect an app entirely to revoke everything.
 
-### Claude Code
+### Claude
 
-Add to your Claude Code MCP config (`.mcp.json` in the project, or the
-user-level config):
+Add to your Claude MCP config (`.mcp.json` in the project, or the user-level
+config):
 
 ```json
 {
@@ -52,18 +52,13 @@ user-level config):
 }
 ```
 
-Claude Code performs OAuth discovery automatically — it registers itself and
+Claude performs OAuth discovery automatically — it registers itself and
 opens your browser for the sign-in flow.
 
 ### Claude Desktop
 
 Add the server in the Claude Desktop settings. It registers itself and opens
 your browser for the sign-in flow — no configuration file needed.
-
-### Cursor
-
-Settings → Integrations → MCP servers → add the server. Cursor performs
-OAuth discovery automatically; approve the connection in your browser.
 
 ### Anything else
 

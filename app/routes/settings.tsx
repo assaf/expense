@@ -582,7 +582,7 @@ function AgentsSection({
     <section className="mb-8">
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
       <p className="mb-3 text-sm text-gray-500">
-        Connect your AI assistant — Claude, Cursor, or any MCP client — to this
+        Connect your AI assistant — Claude, OpenAI, or any MCP client — to this
         account. Point the client at the endpoint below and approve the
         connection in your browser by signing in. Agents can capture receipts,
         log mileage, answer “how much did I spend on …?”, build and export

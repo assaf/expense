@@ -34,7 +34,7 @@ export default function FaqPage() {
   return (
     <MarketingPage
       eyebrow="FAQ"
-      title="Frequently asked questions"
+      title="Frequently Asked Questions"
       summary={APP_SUMMARY}
       className="max-w-3xl"
       schema={

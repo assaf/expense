@@ -32,7 +32,7 @@ export function meta(): Route.MetaDescriptors {
     {
       name: "description",
       content:
-        "Connect Claude, Cursor, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
+        "Connect Claude, OpenAI, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
     },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}/ai` },
   ];
@@ -42,7 +42,7 @@ export default function AiPage() {
   return (
     <MarketingPage
       eyebrow="AI assistants"
-      title="Connect your AI assistant."
+      title="Connect your AI helper to Expense."
       summary={AI_SUMMARY}
       schema={
         <script type="application/ld+json">{JSON.stringify(AI_SCHEMA)}</script>
@@ -86,9 +86,12 @@ export default function AiPage() {
             </li>
           ))}
         </ol>
-        <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
+        <div
+          className="mt-6 overflow-hidden rounded-xl border border-gray-200
+        bg-gray-50"
+        >
           <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-500">
-            <Link2 className="h-3.5 w-3.5" /> Claude Code: .mcp.json
+            <Link2 className="h-3.5 w-3.5" /> Claude: .mcp.json
           </div>
           <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700">
             {`{
@@ -103,7 +106,7 @@ export default function AiPage() {
         </div>
         <p className="mt-3 text-sm text-gray-500">
           No headers or keys. The client discovers the sign-in flow itself.
-          Claude Desktop and Cursor connect the same way.
+          Claude and OpenAI connect the same way.
         </p>
       </section>
 

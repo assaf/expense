@@ -109,9 +109,9 @@ export default function AlternativesPage() {
               Choose {APP_NAME} if…
             </h3>
             <p className="mt-1.5 text-sm leading-relaxed text-blue-900/80">
-              You track your own expenses, for yourself, a side hustle, or a
-              small team, and want them ready for tax season without typing in
-              receipts.
+              You track your own expenses for yourself, your side projects, or
+              small team, and you need these expenses prepared for tax season
+              without any typing of receipts.
             </p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
@@ -119,9 +119,9 @@ export default function AlternativesPage() {
               Choose Expensify if…
             </h3>
             <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
-              You run a company that needs employee expense policies, approval
-              workflows, reimbursements, and accounting-software integrations,
-              and a budget for per-user subscriptions.
+              You manage a company which requires employee expense policies,
+              workflows, reimbursement, and integration with accounting
+              software, and you have budget for per-user subscriptions.
             </p>
           </div>
         </div>

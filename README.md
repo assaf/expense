@@ -88,9 +88,9 @@ else still requires a session.
 - Paste (⌘V) or upload an image anywhere to start a new receipt.
 - **Export**: each report as a PDF (grouped by category, with all receipt
   images), or everything as a ZIP (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
-- **AI assistants (MCP)**: any MCP client — Claude Code, Claude Desktop,
-  Cursor — connects by signing in with your account (OAuth; no API keys).
-  See [AI assistants](#ai-assistants-mcp) below.
+- **AI assistants (MCP)**: any MCP client — Claude, OpenAI — connects by signing
+  in with your account (OAuth; no API keys). See [AI
+  assistants](#ai-assistants-mcp) below.
 
 ## AI assistants (MCP)
 
@@ -114,7 +114,7 @@ can:
 Connect any MCP client:
 
 ```json
-// Claude Code — .mcp.json (no headers needed: the client discovers OAuth)
+// Claude — .mcp.json (no headers needed: the client discovers OAuth)
 {
   "mcpServers": {
     "expense": {

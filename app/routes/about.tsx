@@ -42,7 +42,9 @@ export default function AboutPage() {
   return (
     <MarketingPage
       eyebrow="About"
-      title="A free expense tracker built for tax season."
+      title=
+      "Expense – The Free Receipt Tracker for Tax Season."
+
       summary={APP_SUMMARY}
       schema={
         <script type="application/ld+json">
@@ -52,7 +54,7 @@ export default function AboutPage() {
     >
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">
-          What you get
+          What do you get
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {BENEFITS.map((b) => (

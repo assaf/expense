@@ -39,10 +39,10 @@ const SOFTWARE_SCHEMA = {
  * title so the copy itself stays in seo-content.ts (the single source of
  * the site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
-  "Stop losing receipts in your camera roll": ReceiptText,
-  "One PDF per client, ready for your accountant": FolderOpen,
-  "Know your deductions before tax day": Tags,
-  "Log a drive without a spreadsheet": MapPinned,
+  "Stop losing receipts in your gallery": ReceiptText,
+  "PDF reports to show your accountant": FolderOpen,
+  "Get ready with your deductions on time": Tags,
+  "Log drives without Excel": MapPinned,
 };
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
@@ -64,16 +64,16 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
 
 const STEPS = [
   {
-    title: "Add a receipt",
-    body: "Upload or paste a receipt image, or forward a receipt email to your personal address. The expense is created automatically.",
+    title: "Attach a receipt",
+    body: "Simply upload the image, copy and paste the image, or even forward your receipt email to yourself. Receipt is automatically created.",
   },
   {
-    title: "Confirm and save",
-    body: "The merchant, amount, and category fill in automatically. Most receipts take one click to save.",
+    title: "Save and confirm",
+    body: "Merchant name, amount, and category are all automatically entered. Receipts just require a single click to save.",
   },
   {
-    title: "Export at tax time",
-    body: "Get a PDF per report with the receipts attached, or a ZIP of everything, and hand it to your accountant.",
+    title: "Export when it's tax time",
+    body: "Receive your report in PDF format with receipt attached, or ZIP of all receipts.",
   },
 ];
 
@@ -81,23 +81,24 @@ const STEPS = [
 const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ReceiptText,
-    title: "Capture a receipt from the chat",
+    title: "Extract a receipt from chat",
     body: "Drop a receipt photo or PDF into the conversation, and it's OCR'd, categorized from your own history, and filed. No app to open.",
   },
   {
     icon: Tags,
-    title: "Ask about your spending",
-    body: "\u201CHow much did I spend on flights last quarter?\u201D — the exact total, straight from your data.",
+    title: "Inquire about your expenditures",
+    body: `“How much have I spent on plane tickets this quarter?”—the precise amount, straight from the source.`,
   },
   {
     icon: FolderOpen,
-    title: "Build reports on command",
-    body: "\u201CMove all unreported June expenses into the Q2 report and export the PDF.\u201D One sentence, done.",
+    title: "Generate reports on demand",
+    body: `“Insert all unreconciled June expenses into the Q2 report and save it as a PDF file.” One line of text, and it's done.`,
   },
   {
     icon: MapPinned,
-    title: "Log a drive in plain English",
-    body: "\u201CLog the drive home from the office on Tuesday.\u201D Geocoded, routed, and priced at the year's IRS rate.",
+    title: "Register a journey in natural language",
+    body: `“Log the drive from the office back home on Tuesday.” Geocoded, routed, and costed at the IRS rates for the year.
+`,
   },
 ];
 
@@ -119,13 +120,14 @@ export default function LandingPage() {
             Every receipt, ready for tax season.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
-            Expense collects your receipts: snap a photo, paste a screenshot, or
-            forward a receipt email. OCR reads the merchant and amount, and each
-            expense lands in a Schedule C category and a report you name. When
-            tax season comes, the totals are already there.
+            Your receipts, all collected to prepare for tax season. Expense does
+            that for you: take a picture of it, drop a screenshot or a receipt
+            email. OCR recognizes the merchant and amount and puts the spend
+            into the correct category of a Schedule C form and a report of your
+            choice. And when tax season comes, all is ready.
           </p>
           <p className="mt-4 text-sm text-gray-400">
-            Built by a freelancer. Free, open source, no investors.
+            By a freelancer. Open-source, no funding.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="w-full sm:w-auto">
@@ -164,8 +166,9 @@ export default function LandingPage() {
               What you get
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-center text-gray-600">
-              Built for one job: getting your expenses collected quickly, so
-              year-end is a download, not a marathon.
+              Tailored for one purpose: to get your expense data as quickly as
+              possible, so year-end is not a grueling process but just a
+              download.
             </p>
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {FEATURES.map((f) => (
@@ -197,7 +200,7 @@ export default function LandingPage() {
                 From receipt to export
               </h2>
               <p className="mt-3 max-w-md text-gray-600">
-                Three steps, none of them data entry.
+                Just three fast moves, no data input required.
               </p>
               <ol className="mt-8 flex flex-col gap-6">
                 {STEPS.map((step, i) => (
@@ -245,13 +248,13 @@ export default function LandingPage() {
               <Bot className="h-4 w-4" /> AI-native
             </div>
             <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">
-              Bring your own AI assistant.
+              Your Own Personal AI Assistant
             </h2>
             <p className="mt-3 max-w-2xl text-gray-600">
-              Expense speaks the Model Context Protocol (MCP). Point Claude,
-              Cursor, or any MCP client at your account, approve the connection
-              by signing in (no tokens to manage), and let the assistant do the
-              boring parts:
+              Expense uses the Model Context Protocol (MCP). Simply point
+              Claude, OpenAI, or any other MCP client to your account, log in
+              for authentication (no tokens to deal with), and let the assistant
+              do the mundane work:
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {AGENT_EXAMPLES.map((example) => (
@@ -272,9 +275,9 @@ export default function LandingPage() {
               ))}
             </ul>
             <p className="mt-6 text-sm text-gray-500">
-              Connecting is signing in: the assistant opens your browser, you
-              click Allow, and it's connected. Revoke it anytime with one click
-              in Settings.
+              Connection is authorization: the assistant opens the browser, you
+              allow access, and it is connected. Disconnect any time with one
+              click in the Settings menu.
             </p>
           </div>
         </section>
