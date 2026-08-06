@@ -34,6 +34,7 @@ import {
   formatRate,
   mileageAmount,
   mileageRateFor,
+  isMileageType,
 } from "~/lib/mileage-rates";
 import { renderRouteMap } from "~/lib/route-map.server";
 import sharp from "sharp";
@@ -927,6 +928,18 @@ describe("mileage rates (master table helpers)", () => {
     expect(formatRate("0.235")).toBe("0.235");
     expect(formatRate("0.760")).toBe("0.76");
     expect(formatRate("0.7")).toBe("0.70");
+  });
+
+  it("isMileageType accepts the four IRS types and rejects everything else", () => {
+    expect(isMileageType("business")).toBe(true);
+    expect(isMileageType("charity")).toBe(true);
+    expect(isMileageType("medical")).toBe(true);
+    expect(isMileageType("moving")).toBe(true);
+    expect(isMileageType("personal")).toBe(false);
+    expect(isMileageType("")).toBe(false);
+    expect(isMileageType(42)).toBe(false);
+    expect(isMileageType(null)).toBe(false);
+    expect(isMileageType(undefined)).toBe(false);
   });
 });
 
