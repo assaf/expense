@@ -1,55 +1,18 @@
 #!/usr/bin/env bash
 # Sync the production database schema (Supabase) to prisma/schema.prisma —
-# the "DB migration" step of a deploy. Shared by:
+# the "DB migration" step of a deploy. Shared by scripts/deploy and the
+# CI workflow's migrate-db job. Both guarantee check + test ran first.
 #
-#   - `scripts/deploy` (Step 3), which runs `pnpm check` + `pnpm test`
-#     BEFORE calling this, and
-#   - the CI workflow's `migrate-db` job
-#     (.github/workflows/deployment-smoke.yml), which `needs: check-and-test`
-#     so this never runs before the test suite there either.
-#
-# ORDERING IS THE POINT: prod must never be migrated for code whose tests
-# haven't passed (a schema change applied for broken code would leave prod
-# ahead of the deployed bundle). And the smoke check (pdf-ocr-smoke in CI,
-# the post-deploy /api/smoke curl in scripts/deploy) runs the deployed code
-# against this schema — without the migration it fails on any schema change.
-# So the deploy sequence is always: check & test → migrate → smoke.
-#
-# Two modes:
-#   default — local (scripts/deploy): pulls prod env from Vercel via the CLI
-#     (`vercel login` auth; in CI-with-CLI it would use VERCEL_TOKEN, but that
-#     token is denied on project-settings endpoints — see below), runs the
-#     preflight baseline (only matters for restored pre-account dumps), the
-#     guarded conversions, db push, and migrate resolve.
-#   --ci    — GitHub Actions migrate-db job: no Vercel CLI at all.
-#     DATABASE_URL_UNPOOLED comes from the workflow's GitHub secret (the
-#     Vercel CLI's `env pull` 403s with the CI VERCEL_TOKEN — it can list
-#     deployments but not read project settings/teams — so the DDL URL is
-#     passed directly instead). Preflight is skipped (no-op on the baselined
-#     prod DB; it only matters if the DB is a restored pre-account dump).
-#
-# Prod secrets come from `vercel env pull` (see AGENTS.md; .env.prod.pull is
-# gitignored). Use DATABASE_URL_UNPOOLED for schema DDL — the pooled URL is
-# for runtime queries.
+#   scripts/deploy → pulls prod env from Vercel and runs this
+#   CI migrate-db  → DATABASE_URL_UNPOOLED comes from a GitHub secret
 set -eo pipefail
 
-CI_MODE=0
 if [ "$1" = "--ci" ]; then
-  CI_MODE=1
-fi
-
-if [ "$CI_MODE" = "1" ]; then
   if [ -z "${DATABASE_URL_UNPOOLED:-}" ]; then
-    echo "migrate-prod --ci: DATABASE_URL_UNPOOLED is not set (missing GitHub secret?)" >&2
+    echo "migrate-prod --ci: DATABASE_URL_UNPOOLED is not set" >&2
     exit 1
   fi
   export DATABASE_URL="$DATABASE_URL_UNPOOLED"
-  echo "--- CI mode: using DATABASE_URL_UNPOOLED from the environment ---"
-  # CI also skips the guarded one-time conversions below: they are no-ops on
-  # the baselined prod DB (guarded on the old TEXT/username shapes, which
-  # were migrated long ago), and skipping them lets the CI job drop psql
-  # entirely. scripts/deploy (non-CI) still runs them for restored
-  # pre-account dumps.
 else
   echo "--- Pull production env (Vercel) ---"
   npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
@@ -57,73 +20,20 @@ else
   source .env.prod.pull
   set +a
   export DATABASE_URL="$DATABASE_URL_UNPOOLED"
-
-  echo "--- Preflight (idempotent baseline SQL) ---"
-  node scripts/preflight-prod.mjs > /tmp/preflight-prod.sql
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f /tmp/preflight-prod.sql
-  rm -f /tmp/preflight-prod.sql
-
-  # Money columns: TEXT → NUMERIC(10,2) nullable, preserving data. Prisma's own
-  # diff for String → Decimal? is DROP COLUMN + ADD COLUMN (data loss), so the
-  # conversion runs explicitly before db push. Guarded on the column still being
-  # TEXT — idempotent on re-runs.
-  echo "--- Convert money columns TEXT → NUMERIC(10,2) ---"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'expenses' AND column_name = 'amount'
-      AND data_type = 'text'
-  ) THEN
-    ALTER TABLE "expenses"
-      ALTER COLUMN "amount" DROP NOT NULL,
-      ALTER COLUMN "amount" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "amount" = '' THEN NULL ELSE "amount"::decimal(10,2) END,
-      ALTER COLUMN "distanceMiles" DROP NOT NULL,
-      ALTER COLUMN "distanceMiles" SET DATA TYPE DECIMAL(10,2)
-        USING CASE WHEN "distanceMiles" = '' THEN NULL ELSE "distanceMiles"::decimal(10,2) END;
-  END IF;
-END $$;
-SQL
-
-# Login identity: users.username → users.email (rename). Prisma's diff for a
-# String → String rename is DROP COLUMN + ADD COLUMN NOT NULL, which fails on
-# a non-empty users table — so the rename runs explicitly before db push,
-# mirroring the money-column conversion above. Guarded on the column still
-# being named "username" (idempotent on re-runs). The app's initStore then
-# backfills the bootstrap user's email from APP_EMAIL (see database.ts).
-  # Skipped in CI mode like the other one-time conversions (no-op on the
-  # baselined prod DB).
-  echo "--- Rename users.username → users.email ---"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
-  ) THEN
-    ALTER TABLE "users" RENAME COLUMN "username" TO "email";
-    ALTER INDEX IF EXISTS "users_username_key" RENAME TO "users_email_key";
-  END IF;
-END $$;
-SQL
 fi
 
 echo "--- prisma db push (schema.prisma → prod) ---"
 pnpm prisma db push --accept-data-loss
 
-# User email verification: backfill emailVerifiedAt for every existing row
-# (email verification was not required before this deploy; the new code only
-# creates unverified rows with the app-side signup flow). Guarded — rows are
-# grandfathered exactly once; new signups leave it null and must verify.
+# Grandfather any legacy users who predate email verification. Cheap no-op
+# once every existing row has been backfilled.
 echo "--- Grandfather existing users as email-verified ---"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
 UPDATE "users" SET "emailVerifiedAt" = "createdAt"
 WHERE "emailVerifiedAt" IS NULL;
 SQL
-# Record the baseline migrations so future `prisma migrate deploy` has
-# history. Errors when already recorded (P3008) are expected on re-runs.
+
+echo "--- Record migration history ---"
 pnpm prisma migrate resolve --applied 0_init || true
 pnpm prisma migrate resolve --applied 20260731130000_image_blob_account_scope || true
 pnpm prisma migrate resolve --applied 20260731195449_add_inbound_emails || true

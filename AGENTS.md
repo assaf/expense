@@ -67,7 +67,7 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 ./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
 # NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
 # sync by calling `./scripts/migrate-prod` (env pulled via `vercel env pull`,
-# preflight + guarded conversions + db push), then CLI-deploys and opens the
+# prisma db push + migrate history), then CLI-deploys and opens the
 # site. `git push origin main` also auto-deploys: the CI workflow runs
 # `./scripts/migrate-prod --ci` in its `migrate-db` job, passing the prod DDL
 # URL via the `DATABASE_URL_UNPOOLED` GitHub secret. It does NOT use the
@@ -83,10 +83,7 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 # parallel). The workflow's job timeouts bound the whole run (~7m ceiling —
 # max(check 2m, test 4m) + migrate 1m + smoke 2m — typical ~4.5m).
 # Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
-# (migration history exists since Jul 2026). When Prisma can't express a
-# change as a lossless diff (e.g. column renames), the sync runs an explicit,
-# guarded SQL step before db push — mirror the money-column and username→email
-# conversions in `scripts/migrate-prod` instead of relying on `--accept-data-loss`.
+# (migration history exists since Jul 2026).
 # Note: `vercel env pull` merges with the existing file, so stale local
 # entries (e.g. leftover `PGHOST`) survive — delete `.env.prod.pull`/
 # `.env.prod` before pulling if they cause trouble.
@@ -316,7 +313,6 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/data/default-categories.csv`       | Default categories seeded for every new account (IRS Schedule C, Part II lines 8–27a; one name per row, no header, comma-containing names quoted). Loaded at build time by `app/lib/default-categories.server.ts` (Vite `?raw` import) — edit the CSV to change what new accounts get seeded with.                                                                              |
 | `prisma/schema.prisma`                  | Single schema source of truth (15 models).                                                                                                                                                                                                                                                                                                                                      |
 | `prisma/migrations/0_init`              | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                                                                                                                                                                                                                            |
-| `scripts/preflight-prod.mjs`            | Idempotent pre-account baseline SQL for prod (pre-`db push`).                                                                                                                                                                                                                                                                                                                   |
 | `scripts/clone`                         | Clone prod (Supabase) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore.                                                                                                                                                                                                                                   |
 | `scripts/import-expensify.ts`           | API-driven Expensify import: effective SmartScan fields + receipt images (needs `EXPENSIFY_PARTNER_USER_ID`/`_SECRET`; receipts are login-gated — `--cookie` or `--receipts-dir`).                                                                                                                                                                                              |
 | `app/lib/store.server.ts`               | Storage entry point (Postgres only).                                                                                                                                                                                                                                                                                                                                            |
