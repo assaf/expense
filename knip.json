@@ -2,5 +2,9 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": [],
   "ignoreBinaries": ["cloc"],
-  "ignoreDependencies": ["@prisma/client"]
+  "ignoreDependencies": [
+    "@prisma/client",
+    "@secretlint/secretlint-rule-pattern",
+    "@secretlint/secretlint-rule-preset-recommend"
+  ]
 }
