@@ -26,7 +26,7 @@ import sharp, { type Metadata } from "sharp";
 
 export const STORED_IMAGE_MAX_WIDTH = 1024;
 const STORED_IMAGE_MAX_HEIGHT = 4096;
-export const STORED_IMAGE_QUALITY = 85;
+const STORED_IMAGE_QUALITY = 85;
 
 /** Raster formats we will resize + re-encode. Anything else passes through. */
 const RASTER_FORMATS = new Set([
