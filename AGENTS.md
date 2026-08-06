@@ -78,8 +78,8 @@ pnpm test            # force-resets expense_test schema + 91 tests (incl. image 
 # change if the migration was skipped. Migrations must NEVER run before the
 # test suite: `scripts/deploy` runs `pnpm test` before calling migrate-prod,
 # and the CI `migrate-db` job needs both `check` and `test` (which run in
-# parallel). The workflow's job timeouts bound the whole run (~7m ceiling —
-# max(check 2m, test 4m) + migrate 1m + smoke 2m — typical ~4.5m).
+# parallel). The workflow's job timeouts bound the whole run (~8m ceiling —
+# max(check 2m, test 4m) + migrate 2m + smoke 2m — typical ~4.5m).
 # Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
 # (migration history exists since Jul 2026).
 # Note: `vercel env pull` merges with the existing file, so stale local
@@ -393,7 +393,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   before) → `pdf-ocr-smoke`. The smoke job fails fast when
   CI or the migration fails, so a broken build or an unmigrated schema never
   reports a passing smoke check. Job timeouts (2/4/1/2 minutes) bound the
-  whole run to a ~7m ceiling; typical runs are ~4.5m.
+  whole run to a ~8m ceiling; typical runs are ~4.5m.
   **Deployment Checks gate: REMOVED (Aug 2026).** Production promotion is no
   longer gated on a Vercel Deployment Check — the alias follows the latest
   READY production deployment automatically. The gate broke twice: a stale

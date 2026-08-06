@@ -19,7 +19,7 @@ name: deployment-checks
 #         check & test → migrate prod DB → pdf-ocr-smoke
 #   - Time budget: there is no workflow-level timeout in GitHub Actions, so
 #     the whole run is bounded by the job timeouts on the critical path —
-#     max(check 2m, test 4m) + migrate 1m + smoke 2m = a ~7m ceiling
+#     max(check 2m, test 4m) + migrate 2m + smoke 2m = a ~8m ceiling
 #     (typical runs finish in ~4.5m; PR-only runs are just check + test,
 #     ~3m). These are fail-fast guards, not targets: a hung job dies here
 #     instead of running for the default 6h. A literal 5-minute ceiling
@@ -172,7 +172,11 @@ jobs:
   migrate-db:
     name: Migrate prod DB
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    # 2m, not 1m: the job must fit checkout + pnpm self-installer + node
+    # setup + pnpm install + prisma db push, and a cold runner eats ~55s on
+    # the setup alone (the pnpm/action-setup self-installer alone took 27s
+    # on 2026-08-06, killing a 1m job before db push could start).
+    timeout-minutes: 2
     needs: [check, test]
     # `success()` keeps the default skip-on-failure semantics (no migration
     # when check or test failed) on top of the main-only gate.
@@ -197,7 +201,7 @@ jobs:
       # The same schema sync scripts/deploy runs, minus the Vercel env pull,
       # preflight baseline, and one-time conversions (all no-ops on the
       # baselined prod DB): just prisma db push → migrate resolve. No psql
-      # needed, which keeps the job under its 1-minute timeout.
+      # needed, which keeps the job inside its 2-minute budget.
       - name: Sync the production database schema
         run: |
           pnpm prisma db push --accept-data-loss
