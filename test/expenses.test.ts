@@ -166,7 +166,8 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Edited Merchant" },
     });
     expect(row).not.toBeNull();
-    expect(row!.amount).toBe("99.99");
+    // Prisma returns amount as a Decimal — compare as strings.
+    expect(String(row!.amount)).toBe("99.99");
     expect(row!.report).toBe("2027 Test");
     expect(row!.category).toBe("Development");
 
@@ -393,7 +394,6 @@ describe("Expense CRUD", () => {
         where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
       }),
     ).resolves.toBeNull();
-    await page.close();
   });
 
   it("drags a file onto the home page to create a receipt draft", async () => {
