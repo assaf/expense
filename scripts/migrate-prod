@@ -112,6 +112,16 @@ fi
 
 echo "--- prisma db push (schema.prisma → prod) ---"
 pnpm prisma db push --accept-data-loss
+
+# User email verification: backfill emailVerifiedAt for every existing row
+# (email verification was not required before this deploy; the new code only
+# creates unverified rows with the app-side signup flow). Guarded — rows are
+# grandfathered exactly once; new signups leave it null and must verify.
+echo "--- Grandfather existing users as email-verified ---"
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+UPDATE "users" SET "emailVerifiedAt" = "createdAt"
+WHERE "emailVerifiedAt" IS NULL;
+SQL
 # Record the baseline migrations so future `prisma migrate deploy` has
 # history. Errors when already recorded (P3008) are expected on re-runs.
 pnpm prisma migrate resolve --applied 0_init || true
@@ -121,5 +131,6 @@ pnpm prisma migrate resolve --applied 20260731202612_inbound_senders || true
 pnpm prisma migrate resolve --applied 20260802120000_amounts_as_numeric || true
 pnpm prisma migrate resolve --applied 20260802120544_drop_user_name || true
 pnpm prisma migrate resolve --applied 20260803131818_username_to_email || true
+pnpm prisma migrate resolve --applied 20260806220000_add_user_email_verification || true
 
 echo "--- Production schema is in sync ---"

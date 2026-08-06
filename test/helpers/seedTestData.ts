@@ -68,6 +68,9 @@ export async function seedTestData() {
         accountId: TEST_ACCOUNT_ID,
         email: TEST_EMAIL,
         passwordHash: await hashPassword(TEST_PASSWORD),
+        // Seeded users are pre-verified — the signup flows under test verify
+        // through the emailed-link route instead.
+        emailVerifiedAt: now,
         createdAt: now,
       },
       {
@@ -75,6 +78,7 @@ export async function seedTestData() {
         accountId: OTHER_ACCOUNT_ID,
         email: "otheruser@example.com",
         passwordHash: await hashPassword("other-password"),
+        emailVerifiedAt: now,
         createdAt: now,
       },
     ],

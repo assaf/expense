@@ -41,6 +41,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     path.startsWith("/login") ||
     path.startsWith("/api/inbound-email") ||
     path.startsWith("/receipts-email-verify") ||
+    path.startsWith("/verify-email") ||
     PUBLIC_PAGES.has(path);
   let user = null;
   if (isPublic) {

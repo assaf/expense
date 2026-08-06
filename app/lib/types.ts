@@ -163,6 +163,9 @@ export interface User {
   accountId: string;
   /** Login name — the email address, stored lowercase. */
   email: string;
+  /** When the email was verified (the emailed link was clicked); null means
+   * the account can't sign in until it is. */
+  emailVerifiedAt: string | null;
   createdAt: string;
 }
 

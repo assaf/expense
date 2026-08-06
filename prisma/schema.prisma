@@ -46,7 +46,14 @@ model User {
   accountId    String
   email        String  @unique
   passwordHash String
-  createdAt    String
+  /// When the emailed verification link was clicked — null means the
+  /// account can't sign in until the email is verified. Legacy rows (created
+  /// before email verification was required) were backfilled at migration.
+  emailVerifiedAt       String?
+  /// sha256 of the current verification token in the emailed link.
+  verificationTokenHash String?
+  verificationSentAt    String?
+  createdAt             String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 

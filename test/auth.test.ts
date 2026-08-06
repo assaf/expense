@@ -12,7 +12,7 @@ import {
   testPrisma,
 } from "./helpers/seedTestData";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
-import { verifyPassword } from "~/lib/passwords";
+import { hashToken, verifyPassword } from "~/lib/passwords";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 
@@ -38,6 +38,49 @@ describe("Access control", () => {
     const page = await openPage();
     await signIn(page, TEST_EMAIL, TEST_PASSWORD);
     return page;
+  }
+
+  /** Fill the signup form and submit; expect the pending "check your
+   * email" state — signup never signs the user in anymore. */
+  async function signUp(
+    page: Page,
+    accountName: string,
+    email: string,
+    password: string,
+  ): Promise<void> {
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    await page.getByRole("button", { name: "Create a new account" }).click();
+    await page.fill('input[name="accountName"]', accountName);
+    await page.fill('input[name="email"]', email);
+    await page.fill('input[name="password"]', password);
+    await page.click('button[type="submit"]');
+    await expect(
+      page.getByRole("heading", { name: "Check your email" }),
+    ).toBeVisible();
+  }
+
+  /** Complete email verification for a user: the app mints tokens
+   * internally and never exposes them, so the test pins the row's hash to
+   * a known token, then clicks the real /verify-email route. */
+  async function verifyEmail(
+    page: Page,
+    email: string,
+    rawToken: string,
+  ): Promise<void> {
+    const user = await testPrisma.user.findUnique({ where: { email } });
+    if (!user) throw new Error(`No user row for ${email}`);
+    await testPrisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationTokenHash: hashToken(rawToken),
+        verificationSentAt: new Date().toISOString(),
+      },
+    });
+    await page.goto(`/verify-email?token=${rawToken}`, {
+      waitUntil: "load",
+      timeout: 15_000,
+    });
+    await expect(page.locator("h1")).toContainText("verified");
   }
 
   it("shows the landing page to unauthenticated visitors", async () => {
@@ -175,15 +218,14 @@ describe("Access control", () => {
 
   it("creates a brand-new account at signup with no shared data", async () => {
     const page = await openPage();
-    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
-    await page.getByRole("button", { name: "Create a new account" }).click();
-    await page.fill('input[name="accountName"]', "Fresh Account");
-    await page.fill('input[name="email"]', "freshuser@example.com");
-    await page.fill('input[name="password"]', "fresh-password");
-    await page.click('button[type="submit"]');
-    await page.waitForURL((url) => url.pathname === "/", {
-      timeout: 15_000,
-    });
+    await signUp(
+      page,
+      "Fresh Account",
+      "freshuser@example.com",
+      "fresh-password",
+    );
+    await verifyEmail(page, "freshuser@example.com", "fresh-verify-token");
+    await signIn(page, "freshuser@example.com", "fresh-password");
     await expect(page.locator("h1")).toContainText("Expense");
     // A new account starts empty — none of the seeded data may appear.
     await expect(page.getByText("Test Store")).not.toBeVisible();
@@ -192,15 +234,12 @@ describe("Access control", () => {
 
   it("seeds the IRS Schedule C default categories at signup", async () => {
     const page = await openPage();
-    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
-    await page.getByRole("button", { name: "Create a new account" }).click();
-    await page.fill('input[name="accountName"]', "IRS Fresh");
-    await page.fill('input[name="email"]', "irsfreshuser@example.com");
-    await page.fill('input[name="password"]', "irs-fresh-password");
-    await page.click('button[type="submit"]');
-    await page.waitForURL((url) => url.pathname === "/", {
-      timeout: 15_000,
-    });
+    await signUp(
+      page,
+      "IRS Fresh",
+      "irsfreshuser@example.com",
+      "irs-fresh-password",
+    );
     await page.close();
 
     const user = await testPrisma.user.findUnique({
@@ -228,15 +267,12 @@ describe("Access control", () => {
 
   it("defaults the signup email as an allowed receipts-by-email sender", async () => {
     const page = await openPage();
-    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
-    await page.getByRole("button", { name: "Create a new account" }).click();
-    await page.fill('input[name="accountName"]', "Sender Fresh");
-    await page.fill('input[name="email"]', "senderfresh@example.com");
-    await page.fill('input[name="password"]', "sender-fresh-password");
-    await page.click('button[type="submit"]');
-    await page.waitForURL((url) => url.pathname === "/", {
-      timeout: 15_000,
-    });
+    await signUp(
+      page,
+      "Sender Fresh",
+      "senderfresh@example.com",
+      "sender-fresh-password",
+    );
     await page.close();
 
     const user = await testPrisma.user.findUnique({
@@ -268,11 +304,92 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', "seconduser@example.com");
     await page.fill('input[name="password"]', "second-password");
     await page.click('button[type="submit"]');
-    await page.waitForURL((url) => url.pathname === "/", {
-      timeout: 15_000,
-    });
+    // Joining also requires email verification before the first sign-in.
+    await expect(
+      page.getByRole("heading", { name: "Check your email" }),
+    ).toBeVisible();
+    await verifyEmail(page, "seconduser@example.com", "join-verify-token");
+    await signIn(page, "seconduser@example.com", "second-password");
     // Joining the test account means seeing its expenses.
     await expect(page.getByText("Test Store")).toBeVisible();
+    await page.close();
+  });
+
+  it("blocks sign-in until the email is verified", async () => {
+    const page = await openPage();
+    await signUp(
+      page,
+      "Unverified Co",
+      "unverifieduser@example.com",
+      "unverified-password",
+    );
+    // The pending account can't sign in — the login page says why and
+    // offers a resend button.
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    await page.fill('input[name="email"]', "unverifieduser@example.com");
+    await page.fill('input[name="password"]', "unverified-password");
+    await page.click('button[type="submit"]');
+    await expect(page.getByRole("alert")).toContainText("verify your email");
+    await expect(
+      page.getByRole("button", { name: "Resend verification email" }),
+    ).toBeVisible();
+    // After clicking the emailed link, the same credentials work.
+    await verifyEmail(page, "unverifieduser@example.com", "uv-verify-token");
+    await signIn(page, "unverifieduser@example.com", "unverified-password");
+    await expect(page.locator("h1")).toContainText("Expense");
+    await page.close();
+  });
+
+  it("re-signing up with an unverified email replaces the account and discards the old verification link", async () => {
+    const page = await openPage();
+    await signUp(page, "First Try", "retryuser@example.com", "first-password");
+    const firstUser = await testPrisma.user.findUnique({
+      where: { email: "retryuser@example.com" },
+    });
+    if (!firstUser) throw new Error("No first user row");
+    const firstAccountId = firstUser.accountId;
+    // Pin the first verification link to a known token so we can prove it
+    // stops working after the re-signup.
+    await testPrisma.user.update({
+      where: { id: firstUser.id },
+      data: {
+        verificationTokenHash: hashToken("old-link-token"),
+        verificationSentAt: new Date().toISOString(),
+      },
+    });
+
+    // The user typed the wrong password — back to the signup page with the
+    // same email and a new password. The unverified account is replaced.
+    await signUp(
+      page,
+      "Second Try",
+      "retryuser@example.com",
+      "second-password",
+    );
+    const secondUser = await testPrisma.user.findUnique({
+      where: { email: "retryuser@example.com" },
+    });
+    if (!secondUser) throw new Error("No second user row");
+    expect(secondUser.id).not.toBe(firstUser.id);
+    expect(secondUser.accountId).not.toBe(firstAccountId);
+    expect(secondUser.verificationTokenHash).not.toBe(
+      firstUser.verificationTokenHash,
+    );
+    // The throwaway first account is gone entirely.
+    await expect(
+      testPrisma.account.findUnique({ where: { id: firstAccountId } }),
+    ).resolves.toBeNull();
+
+    // The old verification link is dead — the re-signup discarded it.
+    await page.goto("/verify-email?token=old-link-token", {
+      waitUntil: "load",
+      timeout: 15_000,
+    });
+    await expect(page.locator("h1")).toContainText("not valid");
+    // The new link works, and the new password is the one that signs in.
+    await verifyEmail(page, "retryuser@example.com", "new-link-token");
+    await signIn(page, "retryuser@example.com", "second-password");
+    await expect(page.locator("h1")).toContainText("Expense");
     await page.close();
   });
 

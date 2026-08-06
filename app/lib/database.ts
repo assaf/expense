@@ -334,6 +334,9 @@ async function ensureBootstrapUser(): Promise<User> {
         accountId,
         email,
         passwordHash: await hashPassword(APP_PASSWORD),
+        // The operator's bootstrap account needs no email verification
+        // (it is created from APP_EMAIL/APP_PASSWORD, not a signup form).
+        emailVerifiedAt: now,
         createdAt: now,
       },
     }),
@@ -344,7 +347,7 @@ async function ensureBootstrapUser(): Promise<User> {
     }),
     seedDefaultCategories(accountId),
   ]);
-  return { id: userId, accountId, email, createdAt: now };
+  return { id: userId, accountId, email, emailVerifiedAt: now, createdAt: now };
 }
 
 // --- Accounts & Users ------------------------------------------------------
@@ -372,9 +375,22 @@ export async function readBootstrapUser(): Promise<User | undefined> {
   await initStore();
   const first = await prisma.user.findFirst({
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, accountId: true, email: true, createdAt: true },
+    select: {
+      id: true,
+      accountId: true,
+      email: true,
+      emailVerifiedAt: true,
+      createdAt: true,
+    },
   });
-  return first ?? undefined;
+  if (!first) return undefined;
+  return {
+    id: first.id,
+    accountId: first.accountId,
+    email: first.email,
+    emailVerifiedAt: first.emailVerifiedAt ?? null,
+    createdAt: first.createdAt,
+  };
 }
 
 /** Create a new account. Throws if the name is already taken. */
@@ -416,11 +432,17 @@ export async function regenerateInviteCode(accountId: string): Promise<string> {
   return code;
 }
 
-/** Create a user in an account. Throws if the email is already taken. */
+/** Create a user in an account. Throws if the email is already taken.
+ * `emailVerifiedAt` null (the default) means the new login must verify the
+ * emailed link before it can sign in; the verification columns hold the
+ * current single-use token and when it was sent. */
 export async function createUser(input: {
   accountId: string;
   email: string;
   passwordHash: string;
+  emailVerifiedAt?: string | null;
+  verificationTokenHash?: string | null;
+  verificationSentAt?: string | null;
 }): Promise<User> {
   await initStore();
   const email = input.email.trim().toLowerCase();
@@ -431,13 +453,19 @@ export async function createUser(input: {
     id: ulid(),
     accountId: input.accountId,
     email,
+    emailVerifiedAt: input.emailVerifiedAt ?? null,
     createdAt: new Date().toISOString(),
   };
   // The registering email becomes an allowed "receipts by email" sender by
   // default — the account can remove it or add more addresses in Settings.
   await prisma.$transaction([
     prisma.user.create({
-      data: { ...user, passwordHash: input.passwordHash },
+      data: {
+        ...user,
+        passwordHash: input.passwordHash,
+        verificationTokenHash: input.verificationTokenHash ?? null,
+        verificationSentAt: input.verificationSentAt ?? null,
+      },
     }),
     prisma.inboundSender.createMany({
       data: [
@@ -459,7 +487,14 @@ export async function findUserByEmail(
   const row = await prisma.user.findUnique({
     where: { email: email.trim().toLowerCase() },
   });
-  return row ?? undefined;
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    email: row.email,
+    emailVerifiedAt: row.emailVerifiedAt ?? null,
+    createdAt: row.createdAt,
+  };
 }
 
 /** Short-lived in-process cache for findUserById — every request re-resolves
@@ -480,6 +515,7 @@ export async function findUserById(id: string): Promise<User | undefined> {
         id: row.id,
         accountId: row.accountId,
         email: row.email,
+        emailVerifiedAt: row.emailVerifiedAt ?? null,
         createdAt: row.createdAt,
       }
     : undefined;
@@ -508,6 +544,126 @@ export async function updateUserPasswordHash(
     where: { id: userId },
     data: { passwordHash },
   });
+}
+
+/** Verification links expire 7 days after the email is sent (same as the
+ * receipts-by-email sender links). */
+const USER_VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Don't re-send a verification email for one address more than once a day. */
+const USER_VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
+
+/** Store the current verification token for a user (sha256 at rest) with a
+ * fresh sent-at time. Called by the signup/join flows and the resend path. */
+export async function setUserVerificationToken(
+  userId: string,
+  rawToken: string,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      verificationTokenHash: hashToken(rawToken),
+      verificationSentAt: new Date().toISOString(),
+    },
+  });
+}
+
+/** Outcome of clicking an emailed account-verification link. */
+export type VerifyEmailOutcome =
+  | { status: "verified"; email: string }
+  | { status: "already-verified"; email: string }
+  | { status: "expired"; email: string }
+  | { status: "invalid" };
+
+/** Consume an emailed account-verification token: marks the user's email
+ * verified so they can sign in. The token hash is kept after success, so
+ * refreshing a used link reports "already-verified"; a token from a
+ * replaced account (re-signup) no longer matches any row and reports
+ * "invalid". */
+export async function verifyUserEmailAddress(
+  rawToken: string,
+): Promise<VerifyEmailOutcome> {
+  if (!rawToken) return { status: "invalid" };
+  const row = await prisma.user.findFirst({
+    where: { verificationTokenHash: hashToken(rawToken) },
+  });
+  if (!row) return { status: "invalid" };
+  if (row.emailVerifiedAt) {
+    return { status: "already-verified", email: row.email };
+  }
+  const sentAt = row.verificationSentAt;
+  if (!sentAt || Date.now() - Date.parse(sentAt) > USER_VERIFICATION_TTL_MS) {
+    return { status: "expired", email: row.email };
+  }
+  await prisma.user.update({
+    where: { id: row.id },
+    data: { emailVerifiedAt: new Date().toISOString() },
+  });
+  return { status: "verified", email: row.email };
+}
+
+/** Outcome of a re-signup attempt against an existing email. */
+export type ReplaceUnverifiedOutcome =
+  | { status: "replaced" }
+  /** The email belongs to a verified account — it can't be replaced. */
+  | { status: "verified" }
+  | { status: "no-user" };
+
+/** Discard a user's unverified account so a fresh signup with the same
+ * email can proceed: deletes the user (and its account when it was the
+ * only user) plus its receipts-by-email sender rows, so the old
+ * verification link stops working and the email is free again. */
+export async function deleteUnverifiedUser(
+  email: string,
+): Promise<ReplaceUnverifiedOutcome> {
+  const user = await findUserByEmail(email);
+  if (!user) return { status: "no-user" };
+  if (user.emailVerifiedAt) return { status: "verified" };
+  const accountUserCount = await prisma.user.count({
+    where: { accountId: user.accountId },
+  });
+  if (accountUserCount <= 1) {
+    // The throwaway account holds only this user — drop it (cascades the
+    // user and every account-scoped row).
+    await prisma.account.delete({ where: { id: user.accountId } });
+  } else {
+    // The user joined an existing account — drop just the user and its
+    // receipts-by-email sender rows (the address claim is abandoned too).
+    await prisma.$transaction([
+      prisma.user.delete({ where: { id: user.id } }),
+      prisma.inboundSender.deleteMany({
+        where: { accountId: user.accountId, address: email },
+      }),
+      prisma.inboundSenderVerification.deleteMany({
+        where: { address: email },
+      }),
+    ]);
+  }
+  return { status: "replaced" };
+}
+
+/** Mint a fresh verification token for an already-created user, refusing
+ * to re-send more than once a day (mirrors the receipts-by-email sender
+ * resend guard). Returns the raw token to email, or a refusal. */
+export async function resendUserVerification(
+  userId: string,
+): Promise<
+  { token: string } | { status: "already-verified" | "rate-limited" }
+> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { emailVerifiedAt: true, verificationSentAt: true },
+  });
+  if (!row || row.emailVerifiedAt) return { status: "already-verified" };
+  if (
+    row.verificationSentAt &&
+    Date.now() - Date.parse(row.verificationSentAt) <
+      USER_VERIFICATION_RESEND_MS
+  ) {
+    return { status: "rate-limited" };
+  }
+  const token = generateOpaqueToken();
+  await setUserVerificationToken(userId, token);
+  return { token };
 }
 
 // --- Expenses --------------------------------------------------------------

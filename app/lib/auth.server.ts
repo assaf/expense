@@ -1,15 +1,18 @@
 import { createCookieSessionStorage, redirect } from "react-router";
 import { SESSION_SECRET } from "./env";
 import {
+  generateOpaqueToken,
   hashPassword,
   needsRehash,
   normalizeInviteCode,
   verifyPassword,
 } from "./passwords";
+import { sendAccountVerificationEmail } from "./account-verification.server";
 import { sendVerificationEmail } from "./sender-verification.server";
 import {
   createAccount,
   createUser,
+  deleteUnverifiedUser,
   ensureInboundSenderForUser,
   findAccountByInviteCode,
   findUserByEmail,
@@ -17,6 +20,9 @@ import {
   getPasswordHash,
   initStore,
   readAccount,
+  resendUserVerification,
+  setUserVerificationToken,
+  type ReplaceUnverifiedOutcome,
   updateUserPasswordHash,
 } from "./store.server";
 import { isEmail } from "./validation";
@@ -97,9 +103,24 @@ async function commitUserSession(userId: string): Promise<string> {
   return sessionStorage.commitSession(session);
 }
 
+/** Login failed because the account's email hasn't been verified yet. The
+ * login UI catches this to offer a resend button. */
+export class EmailNotVerifiedError extends Error {
+  readonly email: string;
+
+  constructor(email: string) {
+    super(
+      "Please verify your email address first — check your inbox for the link we sent.",
+    );
+    this.name = "EmailNotVerifiedError";
+    this.email = email;
+  }
+}
+
 /**
  * Validate credentials and, on success, return the Set-Cookie header value
- * for the session. Throws on invalid credentials. Pass the result to
+ * for the session. Throws on invalid credentials or an unverified email
+ * (EmailNotVerifiedError). Pass the result to
  * `redirect(…, { headers: { "Set-Cookie": value } })`.
  *
  * The login email is the account's default receipts-by-email sender: it is
@@ -117,6 +138,10 @@ export async function login(
   if (!user || !stored || !(await verifyPassword(password, stored))) {
     throw new Error("Invalid email or password");
   }
+  // The account can't sign in until the emailed link was clicked.
+  if (!user.emailVerifiedAt) {
+    throw new EmailNotVerifiedError(user.email);
+  }
   // Re-derive with the current scrypt cost when the stored hash used older
   // parameters (legacy `salt:hash` rows or an older cost factor) — a
   // one-time cost on the next successful sign-in.
@@ -128,8 +153,12 @@ export async function login(
 }
 
 /**
- * Create a new account with its first user and return the session cookie.
- * Throws with a user-facing message on invalid input or duplicates.
+ * Create a new account with its first user and return the pending signup
+ * state — the user is NOT logged in until the emailed verification link is
+ * clicked. If an earlier signup with the same email is still unverified it
+ * is discarded (account, old verification link) and replaced by this one.
+ * Throws with a user-facing message on invalid input or a verified email
+ * that is already taken.
  */
 export async function createAccountWithUser(
   input: {
@@ -138,22 +167,46 @@ export async function createAccountWithUser(
     password: string;
   },
   origin?: string,
-): Promise<string> {
+): Promise<{ email: string }> {
   await initStore();
   validateSignup(input.email, input.password);
+  const existing = await findUserByEmail(input.email);
+  if (existing?.emailVerifiedAt) {
+    throw new Error("That email is already in use.");
+  }
+  if (existing) {
+    const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(
+      input.email,
+    );
+    if (outcome.status !== "replaced") {
+      throw new Error("Could not re-create the account — please try again.");
+    }
+  }
   const account = await createAccount(input.accountName);
   const user = await createUser({
     accountId: account.id,
     email: input.email,
     passwordHash: await hashPassword(input.password),
+    emailVerifiedAt: null,
   });
+  const token = generateOpaqueToken();
+  await setUserVerificationToken(user.id, token);
   await ensureDefaultSender(user, origin);
-  return commitUserSession(user.id);
+  await sendAccountVerificationEmail({
+    to: user.email,
+    token,
+    origin,
+    accountName: input.accountName,
+  });
+  return { email: user.email };
 }
 
 /**
- * Join an existing account via its invite code and return the session cookie.
- * Throws with a user-facing message on a bad code or duplicate email.
+ * Join an existing account via its invite code. Like signup, the new user
+ * must verify their email before signing in; an earlier unverified user
+ * with the same email is discarded and replaced. Returns the pending
+ * signup state — never a session. Throws with a user-facing message on a
+ * bad code or duplicate verified email.
  */
 export async function joinAccountWithInviteCode(
   input: {
@@ -162,20 +215,74 @@ export async function joinAccountWithInviteCode(
     password: string;
   },
   origin?: string,
-): Promise<string> {
+): Promise<{ email: string }> {
   await initStore();
   validateSignup(input.email, input.password);
   const account = await findAccountByInviteCode(
     normalizeInviteCode(input.inviteCode),
   );
   if (!account) throw new Error("That invite code is not valid");
+  const existing = await findUserByEmail(input.email);
+  if (existing?.emailVerifiedAt) {
+    throw new Error("That email is already in use.");
+  }
+  if (existing) {
+    const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(
+      input.email,
+    );
+    if (outcome.status !== "replaced") {
+      throw new Error("Could not re-create the account — please try again.");
+    }
+  }
   const user = await createUser({
     accountId: account.id,
     email: input.email,
     passwordHash: await hashPassword(input.password),
+    emailVerifiedAt: null,
   });
+  const token = generateOpaqueToken();
+  await setUserVerificationToken(user.id, token);
   await ensureDefaultSender(user, origin);
-  return commitUserSession(user.id);
+  await sendAccountVerificationEmail({
+    to: user.email,
+    token,
+    origin,
+    accountName: account.name,
+  });
+  return { email: user.email };
+}
+
+/** Re-send the account-verification email for an unverified signup (login
+ * page's resend button). Throws with a user-facing message when there is no
+ * such account, the email is already verified, or the last email was sent
+ * less than a day ago (rate limit). */
+export async function resendAccountVerification(
+  email: string,
+  origin?: string,
+): Promise<{ email: string }> {
+  await initStore();
+  const user = await findUserByEmail(email);
+  if (!user) throw new Error("No account with that email.");
+  if (user.emailVerifiedAt) {
+    throw new Error("That email is already verified — sign in.");
+  }
+  const result = await resendUserVerification(user.id);
+  if (!("token" in result)) {
+    if (result.status === "rate-limited") {
+      throw new Error(
+        "We already sent a verification email recently — check your inbox.",
+      );
+    }
+    throw new Error("That email is already verified — sign in.");
+  }
+  const account = await readAccount(user.accountId);
+  await sendAccountVerificationEmail({
+    to: user.email,
+    token: result.token,
+    origin,
+    accountName: account?.name ?? user.email,
+  });
+  return { email: user.email };
 }
 
 /**

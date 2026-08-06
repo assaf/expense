@@ -32,7 +32,7 @@ function verificationLink(origin: string | undefined, token: string): string {
 }
 
 /** The app's public origin (home page base), for links inside the email. */
-function appBase(origin: string | undefined): string {
+export function appBase(origin: string | undefined): string {
   return (origin || PUBLIC_URL || "").replace(/\/$/, "");
 }
 

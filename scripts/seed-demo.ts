@@ -129,6 +129,8 @@ async function main(): Promise<void> {
         accountId,
         email: DEMO_EMAIL,
         passwordHash: await hashPassword(DEMO_PASSWORD),
+        // The demo account signs in without an email verification round-trip.
+        emailVerifiedAt: now,
         createdAt: now,
       },
     }),

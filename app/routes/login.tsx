@@ -1,4 +1,4 @@
-import { AlertCircle, ReceiptText } from "lucide-react";
+import { AlertCircle, MailCheck, ReceiptText } from "lucide-react";
 import { redirect, useFetcher, useSearchParams } from "react-router";
 import { useState } from "react";
 import { Button } from "~/components/ui/Button";
@@ -6,15 +6,25 @@ import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import {
   createAccountWithUser,
+  EmailNotVerifiedError,
   isAuthenticated,
   joinAccountWithInviteCode,
   login,
+  resendAccountVerification,
 } from "~/lib/auth.server";
 import { SITE_URL } from "~/lib/seo-content";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/login";
 
-type Mode = "signin" | "create" | "join";
+type Mode = "signin" | "create" | "join" | "resend-verification";
+
+/** Success payloads are `{ ok: true, email }` (no session yet — the account
+ * is pending until the emailed link is clicked); failures are `{ error }`
+ * with `unverifiedEmail` set when the only problem is a missing
+ * verification, so the UI can offer a resend button. */
+type ActionData =
+  | { ok: true; email: string }
+  | { error: string; unverifiedEmail?: string };
 
 /** Only allow same-origin relative paths for the post-login destination. */
 function safeNext(raw: string | null): string {
@@ -51,13 +61,12 @@ export async function action({ request }: Route.ActionArgs) {
   const next = safeNext(url.searchParams.get("next"));
   const email = formString(form, "email").trim().toLowerCase();
   const password = formString(form, "password");
-  // Absolute origin for the receipts-by-email verification link.
+  // Absolute origin for the verification link in the emailed message.
   const origin = new URL(request.url).origin;
 
   try {
-    let cookie: string;
     if (mode === "create") {
-      cookie = await createAccountWithUser(
+      const result = await createAccountWithUser(
         {
           accountName: formString(form, "accountName"),
           email,
@@ -65,8 +74,16 @@ export async function action({ request }: Route.ActionArgs) {
         },
         origin,
       );
-    } else if (mode === "join") {
-      cookie = await joinAccountWithInviteCode(
+      // No session yet — the account stays pending until the email is
+      // verified, so the response is a "check your email" state, not a
+      // redirect into the app.
+      return Response.json({
+        ok: true,
+        email: result.email,
+      } satisfies ActionData);
+    }
+    if (mode === "join") {
+      const result = await joinAccountWithInviteCode(
         {
           inviteCode: formString(form, "inviteCode"),
           email,
@@ -74,28 +91,104 @@ export async function action({ request }: Route.ActionArgs) {
         },
         origin,
       );
-    } else {
-      cookie = await login(email, password, origin);
+      return Response.json({
+        ok: true,
+        email: result.email,
+      } satisfies ActionData);
     }
+    if (mode === "resend-verification") {
+      const result = await resendAccountVerification(email, origin);
+      return Response.json({
+        ok: true,
+        email: result.email,
+      } satisfies ActionData);
+    }
+    const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Something went wrong";
     console.warn("Auth failed (%s): %s", mode, message);
-    return Response.json({ error: message }, { status: 401 });
+    const unverifiedEmail =
+      error instanceof EmailNotVerifiedError ? error.email : undefined;
+    return Response.json(
+      {
+        error: message,
+        ...(unverifiedEmail ? { unverifiedEmail } : {}),
+      } satisfies ActionData,
+      { status: 401 },
+    );
   }
 }
 
 export default function LoginPage() {
-  const fetcher = useFetcher<{ error?: string }>();
+  const fetcher = useFetcher<ActionData>();
   // The landing page links straight to the signup form: /login?mode=create.
   const [searchParams] = useSearchParams();
   const urlMode = searchParams.get("mode");
   const [mode, setMode] = useState<Mode>(
     urlMode === "create" ? "create" : urlMode === "join" ? "join" : "signin",
   );
-  const error = fetcher.data?.error;
+  // Tracks the email field so the resend button can re-send to it.
+  const [emailValue, setEmailValue] = useState("");
+  // After a successful create/join/resend the user is NOT signed in — show
+  // the "check your email" screen until they pick a different email.
+  const [dismissed, setDismissed] = useState(false);
+
+  const data = fetcher.data;
+  const error = data && "error" in data ? data.error : null;
+  const unverifiedEmail =
+    data && "unverifiedEmail" in data ? data.unverifiedEmail : null;
+  const pendingEmail = data && "ok" in data ? data.email : null;
   const busy = fetcher.state !== "idle";
+
+  const resend = () => {
+    const formData = new FormData();
+    formData.set("mode", "resend-verification");
+    formData.set("email", emailValue || pendingEmail || "");
+    void fetcher.submit(formData, { method: "post" });
+  };
+
+  // After signup/join/resend, the account exists but can't sign in until
+  // the emailed link is clicked — replace the form with that instruction.
+  if (pendingEmail && !dismissed) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+          <div className="mb-4 flex items-center justify-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
+              <MailCheck className="h-6 w-6 text-white" />
+            </div>
+          </div>
+          <h1 className="text-xl font-bold">Check your email</h1>
+          <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600">
+            <p>
+              We sent a verification link to{" "}
+              <b className="font-mono">{pendingEmail}</b>. Click it to activate
+              your account, then sign in.
+            </p>
+            <p>Can't find it? Check spam, or resend below.</p>
+          </div>
+          <Button
+            type="button"
+            size="lg"
+            className="mt-4 w-full"
+            onClick={resend}
+            disabled={busy}
+          >
+            {busy ? "Sending…" : "Resend verification email"}
+          </Button>
+          <button
+            type="button"
+            className="mt-3 text-sm text-gray-500 hover:underline"
+            onClick={() => setDismissed(true)}
+          >
+            Use a different email
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   const titles: Record<Mode, { title: string; blurb: string }> = {
     signin: {
@@ -104,11 +197,15 @@ export default function LoginPage() {
     },
     create: {
       title: "Create your account",
-      blurb: "New accounts start empty. Share it later with an invite code.",
+      blurb: "We'll email you a verification link to activate it.",
     },
     join: {
       title: "Join an account",
       blurb: "Enter the invite code from the account's Settings page.",
+    },
+    "resend-verification": {
+      title: "Resend verification",
+      blurb: "We'll email you a fresh verification link.",
     },
   };
 
@@ -148,6 +245,7 @@ export default function LoginPage() {
             type="email"
             autoComplete="email"
             placeholder="you@example.com"
+            onChange={setEmailValue}
           />
           <AuthField
             label="Password"
@@ -166,6 +264,17 @@ export default function LoginPage() {
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </p>
+          )}
+          {unverifiedEmail && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={resend}
+              disabled={busy}
+            >
+              Resend verification email
+            </Button>
           )}
 
           <Button
@@ -225,12 +334,14 @@ function AuthField({
   type = "text",
   autoComplete,
   placeholder,
+  onChange,
 }: {
   label: string;
   name: string;
   type?: string;
   autoComplete?: string;
   placeholder?: string;
+  onChange?: (value: string) => void;
 }) {
   return (
     <Field label={label}>
@@ -242,6 +353,7 @@ function AuthField({
         autoComplete={autoComplete}
         placeholder={placeholder}
         inputMode={type === "email" ? "email" : undefined}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
       />
     </Field>
   );

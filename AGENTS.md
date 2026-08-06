@@ -352,6 +352,16 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   - Signup creates a new account; joining uses the account's invite code
     (shown in Settings, regenerable). Session = signed HttpOnly cookie
     (`SESSION_SECRET`, 30-day max age).
+  - **Email verification gates sign-in**: signup/join create a _pending_
+    account and email a single-use verification link (`/verify-email?token=`,
+    sha256 of the token at rest on `users.verificationTokenHash`, 7-day TTL,
+    resend button on the login page, rate-limited to once a day) — the user
+    can't sign in until it's clicked (`login` throws EmailNotVerifiedError).
+    Re-signing up with the same email while the account is still unverified
+    deletes the throwaway account and its old link (`deleteUnverifiedUser`)
+    and starts fresh. Users created before this requirement (and the
+    APP_EMAIL bootstrap user) are grandfathered as verified (`emailVerifiedAt`
+    backfilled by the migration / `scripts/migrate-prod`).
   - **Bootstrap**: on an empty database, the first account + user are
     created from `APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing). On
     existing pre-email databases, `initStore` backfills the bootstrap
