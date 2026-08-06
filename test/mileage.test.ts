@@ -596,6 +596,89 @@ describe("Mileage expense", () => {
     await page.unroute("**/api/route");
   });
 
+  it("shows a route error when the API returns 500 and still allows saving", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const inputs = page.locator("input[placeholder='Address']");
+    await inputs.first().fill("");
+    await inputs.nth(1).fill("");
+
+    await page.route("**/api/route", async (route) => {
+      await route.fulfill({ status: 500, body: "boom" });
+    });
+
+    await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
+      delay: 10,
+    });
+    await inputs.first().blur();
+
+    // The error is surfaced under the geocoded field.
+    await expect(page.getByText(/route unavailable/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    // The amount stays empty — no stale value from a previous geocode.
+    await expect(page.locator("input[type='number']")).toHaveValue("");
+    // The "Calculating route…" pill disappears (doesn't spin forever).
+    await expect(page.getByText("Calculating route…")).toHaveCount(0);
+
+    // Saving still works — the expense is saved without a route or amount.
+    await page.getByText("Save").click();
+    await page.waitForURL((url) => url.pathname === "/", {
+      timeout: 15_000,
+    });
+    const saved = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, type: "mileage" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(saved).not.toBeNull();
+    // No distance, no amount — but the expense still exists.
+    expect(saved!.distanceMiles).toBeFalsy();
+    expect(saved!.amount).toBeFalsy();
+    await page.unroute("**/api/route");
+  });
+
+  it("keeps the typed addresses and shows an error when geocoding fails to match", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const first = page.locator("input[placeholder='Address']").first();
+    await first.fill("");
+
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: addresses.map((l) => ({
+            address: l.address,
+            lat: null,
+            lng: null,
+          })),
+          distanceMiles: "",
+          amount: "",
+          coords: [],
+          approximate: false,
+        }),
+      });
+    });
+
+    await first.pressSequentially("Nowhere Lane ZZ", { delay: 10 });
+    await first.blur();
+    // The typed text is kept — never replaced with a guess.
+    expect(await first.inputValue()).toBe("Nowhere Lane ZZ");
+    await expect(page.getByText(/couldn't find that address/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.unroute("**/api/route");
+  });
+
   afterAll(async () => {
     await page?.close();
   });

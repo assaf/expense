@@ -56,6 +56,47 @@ describe("Settings", () => {
     ).toHaveCount(0);
   });
 
+  it("updates the home (start/end) location and it feeds into new mileage", async () => {
+    const page = await goto("/settings");
+    const section = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Start/end location" }),
+    });
+    const input = section.locator('input[name="address"]');
+    await input.fill("New Home Address, Los Angeles, CA");
+    await section.getByRole("button", { name: "Save" }).click();
+
+    // Navigate away and back — the setting persists.
+    await page.goto("/", { waitUntil: "load" });
+    const back = await goto("/settings");
+    const backSection = back.locator("section").filter({
+      has: back.getByRole("heading", { name: "Start/end location" }),
+    });
+    await expect(backSection.locator('input[name="address"]')).toHaveValue(
+      "New Home Address, Los Angeles, CA",
+    );
+    await back.close();
+
+    // Open a new mileage expense — the start/end field is pre-filled with
+    // the saved home address.
+    await page.getByText("Add mileage").click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const startInput = page.locator("input[placeholder='Address']").first();
+    await expect(startInput).toHaveValue("New Home Address, Los Angeles, CA");
+
+    // Reset the home setting for subsequent tests.
+    const reset = await goto("/settings");
+    const resetSection = reset.locator("section").filter({
+      has: reset.getByRole("heading", { name: "Start/end location" }),
+    });
+    await resetSection
+      .locator('input[name="address"]')
+      .fill("123 Test St, Testing, CA");
+    await resetSection.getByRole("button", { name: "Save" }).click();
+    await reset.close();
+  });
+
   it("adds a sender as pending and reports the verification email", async () => {
     const page = await goto("/settings");
     const section = page.locator("section").filter({

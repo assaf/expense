@@ -476,6 +476,50 @@ describe("MCP endpoint", () => {
     expect(decoded.subarray(0, 4).toString()).toBe("%PDF");
   });
 
+  it("rejects capture_receipt with invalid base64", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "capture_receipt", {
+      imageData: "not-valid-base64!!!",
+      mime: "image/png",
+      filename: "bad.png",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects log_mileage with zero stops", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: [],
+      date: "2026-05-10",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects add_to_report with a non-existent expense id", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "add_to_report", {
+      expenseId: "nonexistent-id",
+      report: "2026 Test",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects create_report with an empty name", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "create_report", {
+      name: "",
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("rejects export_report for a non-existent report", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "export_report", {
+      name: "No Such Report",
+    });
+    expect(result.isError).toBe(true);
+  });
+
   it("reconciles a statement CSV against logged expenses (read-only)", async () => {
     await initialize(accessToken);
     const result = await callTool(accessToken, "reconcile", {

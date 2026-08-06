@@ -132,6 +132,48 @@ describe("Expense CRUD", () => {
     );
   });
 
+  it("edits an existing receipt and saves the changes", async () => {
+    // Create a receipt to edit.
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add receipt").click();
+    await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+    await page.locator("input[list='merchants']").fill("Edit Target");
+    await page.locator("input[type='number']").fill("5.00");
+    await page.locator("select").first().selectOption("2026 Test");
+    const selects = page.locator("select");
+    await selects.nth(1).selectOption("Testing");
+    await page.getByText("Save").click();
+    await page.waitForURL((url) => url.pathname === "/", { timeout: 10_000 });
+
+    // Reopen it and change every field.
+    await page.getByText("Edit Target").click();
+    await page.waitForURL(/\/expense\//, { timeout: 10_000 });
+    const merchantInput = page.locator("input[list='merchants']");
+    await merchantInput.fill("Edited Merchant");
+    await page.locator("input[type='number']").fill("99.99");
+    await page.locator("select").first().selectOption("2027 Test");
+    const editSelects = page.locator("select");
+    await editSelects.nth(1).selectOption("Development");
+    await page.getByText("Save").click();
+    await page.waitForURL((url) => url.pathname === "/", { timeout: 10_000 });
+
+    // The updated values appear in the list; the old ones are gone.
+    await expect(page.getByText("Edited Merchant")).toBeVisible();
+    await expect(page.getByText("Edit Target")).toHaveCount(0);
+
+    // The database reflects the update, not a delete + insert.
+    const row = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Edited Merchant" },
+    });
+    expect(row).not.toBeNull();
+    expect(row!.amount).toBe("99.99");
+    expect(row!.report).toBe("2027 Test");
+    expect(row!.category).toBe("Development");
+
+    // Clean up.
+    await testPrisma.expense.delete({ where: { id: row!.id } });
+  });
+
   it("deletes an expense", async () => {
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },
@@ -330,6 +372,28 @@ describe("Expense CRUD", () => {
         where: { accountId: TEST_ACCOUNT_ID, key: created.imageFile },
       });
     }
+  });
+
+  it("rejects saving with a future date and keeps the editor open", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByText("Add receipt").click();
+    await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+
+    await page.locator("input[list='merchants']").fill("Future Shop");
+    await page.locator("input[type='number']").fill("50.00");
+    await page.locator("input[type='date']").fill("2099-12-31");
+    await page.getByText("Save").click();
+
+    // The save is rejected — we stay on the editor and see the error.
+    await expect(page).toHaveURL(/\/expense\/new/);
+    await expect(page.getByText(/date cannot be in the future/i)).toBeVisible();
+    // No row was written.
+    await expect(
+      testPrisma.expense.findFirst({
+        where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
+      }),
+    ).resolves.toBeNull();
+    await page.close();
   });
 
   it("drags a file onto the home page to create a receipt draft", async () => {

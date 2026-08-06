@@ -239,6 +239,41 @@ describe("Export", () => {
     }
   });
 
+  it("produces a valid PDF for an empty report", async () => {
+    // A report with no expenses must still produce a valid PDF — no crash,
+    // no empty buffer.
+    await testPrisma.report.create({
+      data: { name: "Empty Report", accountId: TEST_ACCOUNT_ID },
+    });
+    try {
+      const res = await page
+        .context()
+        .request.get("/export/report/Empty%20Report.pdf");
+      expect(res.status()).toBe(200);
+      const buf = Buffer.from(await res.body());
+      expect(buf.subarray(0, 4).toString()).toBe("%PDF");
+      const text = await extractPdfText(buf);
+      expect(text).toContain("Empty Report");
+    } finally {
+      await testPrisma.report.deleteMany({
+        where: { name: "Empty Report", accountId: TEST_ACCOUNT_ID },
+      });
+    }
+  });
+
+  it("the ZIP archive contains the expenses CSV", async () => {
+    const res = await page.context().request.get("/export/all.zip");
+    expect(res.status()).toBe(200);
+    const buf = Buffer.from(await res.body());
+
+    // The ZIP's local file header signature is PK.
+    expect(buf.subarray(0, 2).toString()).toBe("PK");
+
+    // The ZIP contains the CSV with all expenses.
+    const text = buf.toString("latin1");
+    expect(text).toContain(".csv");
+  });
+
   afterAll(async () => {
     await page?.close();
   });

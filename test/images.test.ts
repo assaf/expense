@@ -171,6 +171,34 @@ describe("saveImage", () => {
     expect(meta.width).toBe(1024);
     expect(meta.height).toBe(717); // 1400 * 1024/2000
   });
+
+  it("converts a TIFF to JPEG at save time", async () => {
+    const tiff = await sharp({
+      create: {
+        width: 120,
+        height: 80,
+        channels: 3,
+        background: { r: 250, g: 250, b: 250 },
+      },
+    })
+      .tiff()
+      .toBuffer();
+
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      tiff,
+      "image/tiff",
+      "scan.tiff",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("image/jpeg");
+    expect(filename.endsWith(".jpg")).toBe(true);
+
+    const image = await readImage(TEST_ACCOUNT_ID, filename);
+    expect(image).not.toBeNull();
+    const meta = await sharp(image!.buffer).metadata();
+    expect(meta.format).toBe("jpeg");
+  });
 });
 
 describe("renameImageToConvention", () => {

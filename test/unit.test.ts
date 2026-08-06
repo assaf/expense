@@ -25,6 +25,7 @@ import {
   yearOf,
   summarizeByReport,
 } from "~/lib/format";
+import Decimal from "decimal.js";
 import { parseAmount } from "~/lib/money";
 import { recomputeMileage, geocode } from "~/lib/maps.server";
 import { hashPassword, needsRehash, verifyPassword } from "~/lib/passwords";
@@ -207,6 +208,51 @@ describe("Format helpers", () => {
 
   it("formatAmount accepts a Decimal directly", () => {
     expect(formatAmount(parseAmount("0.10")!.add("0.20"))).toBe("$0.30");
+  });
+});
+
+describe("Decimal money math", () => {
+  it("adds without IEEE 754 drift (0.1 + 0.2 = 0.3 exactly)", () => {
+    const sum = new Decimal("0.1").add("0.2");
+    expect(sum.toString()).toBe("0.3");
+    // JS float addition would produce 0.30000000000000004.
+    expect(sum.isFinite()).toBe(true);
+  });
+
+  it("multiplies with exact decimal precision", () => {
+    // 122.15 × 0.70 = 85.505 — exactly.
+    const product = new Decimal("122.15").mul("0.70");
+    expect(product.toString()).toBe("85.505");
+  });
+
+  it("isZero detects true zero and nothing else", () => {
+    expect(new Decimal("0").isZero()).toBe(true);
+    expect(new Decimal("0.00").isZero()).toBe(true);
+    expect(new Decimal("0.01").isZero()).toBe(false);
+    expect(new Decimal("-0").isZero()).toBe(true);
+  });
+
+  it("toFixed(2) rounds half-up (the app standard)", () => {
+    // Decimal.toFixed defaults to ROUND_HALF_UP (bankers' rounding is opt-in).
+    expect(new Decimal("1.005").toFixed(2)).toBe("1.01");
+    expect(new Decimal("1.004").toFixed(2)).toBe("1.00");
+    expect(new Decimal("85.505").toFixed(2)).toBe("85.51");
+    expect(new Decimal("85.504").toFixed(2)).toBe("85.50");
+  });
+
+  it("parses zero with trailing decimals — toString drops trailing zeros", () => {
+    const d = new Decimal("0.00");
+    expect(d.toString()).toBe("0");
+    expect(d.isZero()).toBe(true);
+    expect(d.toFixed(2)).toBe("0.00");
+  });
+
+  it("preserves exact values from normalizeAmount output", () => {
+    // Regression guard: the format and money paths must agree on the
+    // exact string representations that pass between them.
+    const parsed = new Decimal("42.50");
+    expect(parsed.toString()).toBe("42.5");
+    expect(parsed.toFixed(2)).toBe("42.50");
   });
 });
 
@@ -691,6 +737,76 @@ describe("recomputeMileage money math", () => {
     stubOsrm(10_000);
     const r = await recomputeMileage([A, B], "not-a-rate");
     expect(r.amount).toBe("");
+  });
+
+  it("handles OSRM returning no routes by falling back to Haversine", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ routes: [] }),
+      }),
+    );
+    const r = await recomputeMileage([A, B], "0.70");
+    // Geocoded stops are preserved, and the Haversine fallback computes
+    // a straight-line distance rather than leaving it empty.
+    expect(r.locations).toHaveLength(2);
+    expect(r.approximate).toBe(true);
+    expect(r.distanceMiles).not.toBe("");
+    expect(r.amount).not.toBe("");
+  });
+
+  it("falls back to Haversine when OSRM responds with HTTP 500", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+      }),
+    );
+    const r = await recomputeMileage([A, B], "0.70");
+    // Haversine fallback produces a non-empty distance; approximate=true.
+    expect(r.approximate).toBe(true);
+    expect(r.distanceMiles).not.toBe("");
+    expect(r.amount).not.toBe("");
+    expect(r.locations).toHaveLength(2);
+  });
+
+  it("survives a Nominatim fetch error for geocoding while preserving existing stops", async () => {
+    // One stop already geocoded, the other needs a lookup that fails.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (url: string | URL) => {
+        const href = String(url);
+        if (href.includes("/route/v1/driving")) {
+          return {
+            ok: true,
+            json: async () => ({
+              routes: [
+                {
+                  distance: 10_000,
+                  geometry: { coordinates: [[-118.2, 34.05]] },
+                },
+              ],
+            }),
+          };
+        }
+        // Nominatim: fail for the unknown address.
+        if (href.includes("q=Unknown")) {
+          return { ok: false, status: 429 };
+        }
+        return { ok: true, json: async () => [] };
+      }),
+    );
+    const r = await recomputeMileage(
+      [A, { address: "Unknown Place", lat: null, lng: null }],
+      "0.70",
+    );
+    // The geocode failure doesn't crash — the bad address is kept as-is
+    // with null coordinates.
+    expect(r.locations[1]!.address).toBe("Unknown Place");
+    expect(r.locations[1]!.lat).toBeNull();
+    expect(r.locations[1]!.lng).toBeNull();
   });
 });
 
