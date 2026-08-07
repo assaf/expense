@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { parseXlsxSheets } from "~/lib/excel.server";
 import { extractPdfLines } from "~/lib/receipt-ocr.server";
 import { parseAmount } from "~/lib/money";
 import type {
@@ -183,6 +184,25 @@ function directionFor(
   return signed.isNegative() ? "charge" : "refund";
 }
 
+/** Direction for CSV/XLSX amounts, where the charge sign varies by bank
+ * (Chase CSVs list purchases as negatives; Amex exports list them as
+ * positives). `chargeIsPositive` comes from the file's majority sign;
+ * refund keywords still win first. */
+function directionForSign(
+  signed: Decimal,
+  description: string,
+  chargeIsPositive: boolean,
+): "charge" | "refund" {
+  if (REFUND_RE.test(description)) return "refund";
+  const negativeIsCharge = !chargeIsPositive;
+  return signed.isNegative() === negativeIsCharge ? "charge" : "refund";
+}
+
+/** Strong, unambiguous direction words for a Type/Category column. The
+ * full REFUND_RE is too eager here — "Fees & Adjustments" is a category,
+ * not a refund. */
+const TYPE_REFUND_RE = /payment|refund|credit|return|reversal|cash\s?back/i;
+
 // --- CSV -------------------------------------------------------------------
 
 /** Parse CSV text (RFC 4180-ish: quotes, doubled quotes, CRLF). */
@@ -232,7 +252,26 @@ export function parseStatementCsv(text: string): {
   rows: StatementRow[];
   skipped: SkippedLine[];
 } {
-  const raw = parseCsv(text);
+  return parseStatementCells(parseCsv(text), "csv");
+}
+
+/**
+ * Turn a grid of cells (CSV rows or an .xlsx sheet) into statement rows.
+ * Shared by the CSV and Excel parsers: header detection, column mapping,
+ * date/amount normalization, and refund classification are identical
+ * either way. `lineOffset` is the 1-based line of the first cell row in
+ * its source (0 for CSV, the sheet's header row index for Excel) so the
+ * skipped report points at real lines. `refIdx` (an Excel "Reference"
+ * column) is carried as the row's FITID when present.
+ */
+function parseStatementCells(
+  raw: string[][],
+  source: "csv" | "xlsx",
+  lineOffset = 0,
+): {
+  rows: StatementRow[];
+  skipped: SkippedLine[];
+} {
   const rows: StatementRow[] = [];
   const skipped: SkippedLine[] = [];
   if (raw.length === 0) return { rows, skipped };
@@ -247,24 +286,31 @@ export function parseStatementCsv(text: string): {
   const typeIdx = header.findIndex(
     (h) => /^type$/.test(h) || /category/.test(h),
   );
+  const refIdx = header.findIndex((h) => /reference|ref\s*num/.test(h));
   const hasHeader =
     dateIdx >= 0 || amtIdx >= 0 || debitIdx >= 0 || creditIdx >= 0;
   const body = hasHeader ? raw.slice(1) : raw;
 
-  // Does the amount column carry signs anywhere in the file?
-  let hasNegative = false;
+  // Which sign do charges use? Sign conventions vary by bank (Chase CSVs
+  // list purchases as negatives; Amex exports list them as positives), so
+  // it's inferred: rows already classified as refunds by keywords are
+  // excluded, and the majority sign of the rest is the charge sign.
+  let negativeCount = 0;
+  let positiveCount = 0;
   for (const cells of body) {
-    const v =
-      debitIdx >= 0
-        ? (cells[debitIdx] ?? "")
-        : (cells[amtIdx >= 0 ? amtIdx : 2] ?? "");
-    if (parseMoney(v)?.isNegative()) {
-      hasNegative = true;
-      break;
-    }
+    if (debitIdx >= 0 || creditIdx >= 0) continue; // two-column split needs no sign
+    const desc = (
+      hasHeader && descIdx >= 0 ? (cells[descIdx] ?? "") : (cells[1] ?? "")
+    ).trim();
+    const typeText = typeIdx >= 0 ? (cells[typeIdx] ?? "") : "";
+    if (TYPE_REFUND_RE.test(typeText) || REFUND_RE.test(desc)) continue;
+    const d = parseMoney(cells[amtIdx >= 0 ? amtIdx : 2] ?? "");
+    if (d?.isNegative()) negativeCount++;
+    else if (d?.gt(0)) positiveCount++;
   }
+  const chargeIsPositive = positiveCount > negativeCount;
 
-  const startLine = hasHeader ? 2 : 1; // 1-based line of the first body row
+  const startLine = (hasHeader ? 2 : 1) + lineOffset; // 1-based first body row
   for (const [i, cells] of body.entries()) {
     const line = startLine + i;
     const rawRow = cells.join(",");
@@ -296,24 +342,32 @@ export function parseStatementCsv(text: string): {
       if (signed) {
         amount = signed.abs();
         const typeText = typeIdx >= 0 ? (cells[typeIdx] ?? "") : "";
-        direction = directionFor(
-          signed,
-          `${typeText} ${description}`,
-          hasNegative,
-        );
+        // The type/category column is only trusted for unambiguous
+        // direction words — category names like "Fees & Adjustments"
+        // contain refund-ish words without being refunds.
+        if (TYPE_REFUND_RE.test(typeText)) {
+          direction = "refund";
+        } else {
+          direction = directionForSign(signed, description, chargeIsPositive);
+        }
       }
     }
     if (!amount || amount.isZero()) {
       skipped.push({ line, raw: rawRow, reason: "No recognizable amount." });
       continue;
     }
+    const fitId =
+      refIdx >= 0 && (cells[refIdx] ?? "").trim()
+        ? cells[refIdx]!.trim()
+        : undefined;
     rows.push({
       index: rows.length,
       date,
       description,
       amount: amount.toFixed(2),
       direction,
-      source: "csv",
+      ...(fitId ? { fitId } : {}),
+      source,
       raw: rawRow,
     });
   }
@@ -744,21 +798,75 @@ export function parseStatementText(
   return format === "ofx" ? parseOfxStatement(text) : parseStatementCsv(text);
 }
 
-/** Parse an uploaded statement file (CSV / QFX / OFX / PDF), detecting the
- * format from the extension and the bytes. */
+/** Parse an uploaded statement file (CSV / QFX / OFX / QBO / XLSX / PDF),
+ * detecting the format from the extension and the bytes. */
 export async function parseStatementUpload(
   fileName: string,
   buffer: Buffer,
 ): Promise<{
   rows: StatementRow[];
   skipped: SkippedLine[];
-  format: "csv" | "ofx" | "pdf";
+  format: "csv" | "ofx" | "xlsx" | "pdf";
 }> {
   const head = buffer.subarray(0, 8).toString("latin1");
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
   if (head.startsWith("%PDF") || ext === "pdf") {
     const lines = await extractPdfLines(buffer);
     return { ...parsePdfStatementLines(lines), format: "pdf" };
+  }
+  if (ext === "xls" || head.startsWith("\xd0\xcf\x11\xe0")) {
+    // Old binary BIFF workbooks — not supported; point at the trivial fix.
+    return {
+      rows: [],
+      skipped: [
+        {
+          line: 1,
+          raw: fileName,
+          reason:
+            "This is an old .xls workbook — save it as .xlsx (File → Save As) and try again.",
+        },
+      ],
+      format: "xlsx",
+    };
+  }
+  if (ext === "xlsx" || head.startsWith("PK")) {
+    try {
+      const sheets = parseXlsxSheets(buffer);
+      let lastSkipped: SkippedLine[] = [];
+      for (const sheet of sheets) {
+        const headerRow = sheet.findIndex((row) => {
+          const h = row.map((c) => c.trim().toLowerCase());
+          return (
+            h.some((x) => /date/.test(x)) &&
+            (h.some((x) => /amount|debit|credit/.test(x)) ||
+              h.some((x) => /desc|merchant|payee|name/.test(x)))
+          );
+        });
+        const cells = headerRow >= 0 ? sheet.slice(headerRow) : sheet;
+        const parsed = parseStatementCells(
+          cells,
+          "xlsx",
+          headerRow >= 0 ? headerRow : 0,
+        );
+        lastSkipped = parsed.skipped;
+        if (parsed.rows.length > 0) return { ...parsed, format: "xlsx" };
+      }
+      return { rows: [], skipped: lastSkipped, format: "xlsx" };
+    } catch (err) {
+      return {
+        rows: [],
+        skipped: [
+          {
+            line: 1,
+            raw: fileName,
+            reason: `Not a readable .xlsx workbook: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          },
+        ],
+        format: "xlsx",
+      };
+    }
   }
   const text = buffer.toString("utf8");
   const format =

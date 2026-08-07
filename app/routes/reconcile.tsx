@@ -97,7 +97,7 @@ export async function action({ request }: Route.ActionArgs) {
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return Response.json(
-        { error: "Choose a statement file (CSV, QFX/OFX, QBO, or PDF)." },
+        { error: "Choose a statement file (CSV, QFX/OFX, QBO, XLSX, or PDF)." },
         { status: 400 },
       );
     }
@@ -274,9 +274,9 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
         <h2 className="mb-1 font-semibold">Upload a statement</h2>
         <p className="mb-4 text-sm text-gray-500">
           Download this month's transactions from your credit card website and
-          upload them here — CSV, QFX/OFX, QBO, or PDF. Expense matches every
-          charge against your logged receipts; you review the close matches and
-          decide what to keep. Nothing is changed until you finish.
+          upload them here — CSV, QFX/OFX, QBO, XLSX, or PDF. Expense matches
+          every charge against your logged receipts; you review the close
+          matches and decide what to keep. Nothing is changed until you finish.
         </p>
         <fetcher.Form
           method="post"
@@ -291,7 +291,7 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
             <input
               type="file"
               name="file"
-              accept=".csv,.qfx,.ofx,.qbo,.pdf,text/csv,application/pdf"
+              accept=".csv,.qfx,.ofx,.qbo,.xlsx,.pdf,text/csv,application/pdf"
               onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
               className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
             />

@@ -257,7 +257,7 @@ export interface StatementRow {
   direction: "charge" | "refund";
   /** Bank transaction id (QFX/OFX FITID) when the file provides one. */
   fitId?: string;
-  source: "csv" | "ofx" | "pdf";
+  source: "csv" | "ofx" | "xlsx" | "pdf";
   /** Original row/line text, for display in the skipped report. */
   raw: string;
 }

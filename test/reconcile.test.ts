@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import Decimal from "decimal.js";
+import { strToU8, zipSync } from "fflate";
 import {
   DATE_TOLERANCE_DAYS,
   matchStatementRows,
@@ -91,6 +92,70 @@ const CSV = [
 ].join("\n");
 
 // --- Parsing ---------------------------------------------------------------
+
+/** Build a minimal .xlsx workbook from cell rows (fflate zip + minimal
+ * OOXML). Number-like cells are stored as numeric cells, everything else
+ * as shared strings — matching what bank exports produce. */
+function makeXlsx(rows: string[][]): Buffer {
+  const shared: string[] = [];
+  const sharedIdx = new Map<string, number>();
+  const idx = (s: string) => {
+    if (!sharedIdx.has(s)) {
+      sharedIdx.set(s, shared.length);
+      shared.push(s);
+    }
+    return sharedIdx.get(s)!;
+  };
+  const col = (i: number) => {
+    let out = "";
+    i++;
+    while (i > 0) {
+      out = String.fromCharCode(65 + ((i - 1) % 26)) + out;
+      i = Math.floor((i - 1) / 26);
+    }
+    return out;
+  };
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
+${rows
+  .map(
+    (row, r) =>
+      `<row r="${r + 1}">${row
+        .map((val, c) => {
+          const ref = `${col(c)}${r + 1}`;
+          return /^-?\d+(\.\d+)?$/.test(val.trim())
+            ? `<c r="${ref}" t="n"><v>${val.trim()}</v></c>`
+            : `<c r="${ref}" t="s"><v>${idx(val)}</v></c>`;
+        })
+        .join("")}</row>`,
+  )
+  .join("\n")}
+</sheetData></worksheet>`;
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const sharedXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${shared.length}" uniqueCount="${shared.length}">
+${shared.map((s) => `<si><t>${escape(s)}</t></si>`).join("")}
+</sst>`;
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>`;
+  const packageRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  return Buffer.from(
+    zipSync({
+      "[Content_Types].xml": strToU8(contentTypes),
+      "_rels/.rels": strToU8(packageRels),
+      "xl/workbook.xml": strToU8(workbookXml),
+      "xl/_rels/workbook.xml.rels": strToU8(relsXml),
+      "xl/sharedStrings.xml": strToU8(sharedXml),
+      "xl/worksheets/sheet1.xml": strToU8(sheetXml),
+    }),
+  );
+}
 
 describe("statement parsing", () => {
   it("parses RFC-4180-ish CSV cells (quotes, doubled quotes)", () => {
@@ -799,6 +864,98 @@ describe("reconciliation store", () => {
       direction: "charge",
       fitId: "20260705001",
     });
+  });
+
+  it("parses an .xlsx statement with a header, numeric amounts, and a Reference column", async () => {
+    const xlsx = makeXlsx([
+      ["Date", "Description", "Amount", "Reference"],
+      ["07/05/2026", "BLUE BOTTLE COFFEE", "42.50", "REF12345"],
+      ["07/01/2026", "ONLINE PAYMENT - THANK YOU", "-1260.08", "REF54321"],
+    ]);
+    const parsed = await parseStatementUpload("statement.xlsx", xlsx);
+    expect(parsed.format).toBe("xlsx");
+    expect(parsed.skipped).toEqual([]);
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.rows[0]).toMatchObject({
+      date: "2026-07-05",
+      description: "BLUE BOTTLE COFFEE",
+      amount: "42.50",
+      direction: "charge",
+      fitId: "REF12345",
+    });
+    expect(parsed.rows[1]).toMatchObject({
+      direction: "refund",
+      fitId: "REF54321",
+    });
+  });
+
+  it("skips title rows above the .xlsx header (bank export layout)", async () => {
+    const xlsx = makeXlsx([
+      ["Transaction Details"],
+      ["Prepared for"],
+      ["ASSAF ARKIN"],
+      ["Date", "Description", "Card Member", "Account #", "Amount", "Category"],
+      [
+        "07/12/2026",
+        "RENEWAL MEMBERSHIP FEE",
+        "ASSAF ARKIN",
+        "-12004",
+        "95",
+        "Fees & Adjustments",
+      ],
+      [
+        "07/10/2026",
+        "AplPay H MART LA2 CALOS ANGELES",
+        "ASSAF ARKIN",
+        "-12004",
+        "126.5",
+        "Groceries",
+      ],
+    ]);
+    const parsed = await parseStatementUpload("statement.xlsx", xlsx);
+    expect(parsed.format).toBe("xlsx");
+    expect(parsed.rows).toHaveLength(2);
+    // The "Fees & Adjustments" category must not read as a refund.
+    expect(parsed.rows[0]).toMatchObject({
+      amount: "95.00",
+      direction: "charge",
+    });
+    expect(parsed.rows[1]).toMatchObject({
+      amount: "126.50",
+      direction: "charge",
+    });
+  });
+
+  it("infers the charge sign from the file's majority (Amex: positives are charges)", async () => {
+    const xlsx = makeXlsx([
+      ["Date", "Description", "Amount"],
+      ["07/05/2026", "BLUE BOTTLE COFFEE", "42.50"],
+      ["07/06/2026", "H MART", "126.50"],
+      ["07/07/2026", "SOME PLAIN CREDIT", "-50.00"],
+    ]);
+    const parsed = await parseStatementUpload("statement.xlsx", xlsx);
+    // Majority positive → positive is the charge sign; the plain negative
+    // credit (no keyword) classifies as a refund.
+    expect(parsed.rows.map((r) => r.direction)).toEqual([
+      "charge",
+      "charge",
+      "refund",
+    ]);
+  });
+
+  it("still handles Chase-style negative charges in xlsx (negatives are the majority)", async () => {
+    const xlsx = makeXlsx([
+      ["Date", "Description", "Amount"],
+      ["2026-07-05", "TEST STORE PURCHASE", "-42.50"],
+      ["2026-07-06", "OFFICEMAX", "-15.99"],
+      ["2026-07-07", "PLAIN CREDIT", "9.99"],
+    ]);
+    const parsed = await parseStatementUpload("statement.xlsx", xlsx);
+    expect(parsed.rows.map((r) => r.direction)).toEqual([
+      "charge",
+      "charge",
+      "refund",
+    ]);
   });
 
   it("parses a real QFX file end to end through the store", async () => {
