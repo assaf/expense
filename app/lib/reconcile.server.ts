@@ -378,8 +378,8 @@ export function parseOfxStatement(text: string): {
 // --- PDF -------------------------------------------------------------------
 
 /** Match a trailing amount (with optional $, sign, or parens). */
-const PDF_AMOUNT_END =
-  /(-?\$?\d{1,3}(?:,\d{3})*\.\d{2}|\(\$?\d{1,3}(?:,\d{3})*\.\d{2}\))\s*$/;
+/** A single amount token: optional $, sign, or parens, two decimals. */
+const PDF_AMOUNT_TOKEN = /^[-($]?\$?\d[\d,]*(?:\.\d{2})\)?$/;
 /** A line that is nothing but a date. */
 const PDF_DATE_ONLY =
   /^(?:[A-Za-z]{3,}\.?\s+\d{1,2},?(?:\s+\d{4})?|\d{1,2}\s+[A-Za-z]{3,}\.?(?:\s+\d{4})?|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})$/;
@@ -387,33 +387,78 @@ const PDF_DATE_ONLY =
 const PDF_AMOUNT_ONLY =
   /^-?\$?\d{1,3}(?:,\d{3})*\.\d{2}\)?$|^\(\$?\d{1,3}(?:,\d{3})*\.\d{2}\)$/;
 
-/** Try "<date> <description> <amount>" on one line; the date is a prefix
- * (up to 3 tokens), the amount is the trailing token. */
+/**
+ * Try "<description> <date> <amount>" on one line, in any order — bank
+ * PDFs put the date and amount anywhere on the line (Amex:
+ * "AplPay RALPHS GROCERY STUDIO CITY CA 06/14/26 $143.21" and even
+ * "…CA $112.71 06/24/26"). Requires exactly one amount token and one
+ * date token (a 1–3 token window, since named dates are three tokens:
+ * "Aug 3 2026"). Two of either means a summary/table line, not a
+ * transaction — rejected so "Purchases 06/01/2023 17.49% (v) $0.00 $0.00"
+ * never becomes a row.
+ */
 function tryPdfOneLine(line: string): {
   date: string;
   description: string;
   signed: Decimal;
 } | null {
-  const amountM = line.match(PDF_AMOUNT_END);
-  if (!amountM) return null;
-  const before = line.slice(0, amountM.index).trim();
-  const parts = before.split(/\s+/);
-  for (let k = 1; k <= Math.min(3, parts.length); k++) {
-    const date = normalizeDate(parts.slice(0, k).join(" "));
-    if (!date) continue;
-    const description = parts.slice(k).join(" ").trim();
-    const signed = parseMoney(amountM[1]!);
-    if (!description || !signed || signed.isZero()) return null;
-    return { date, description, signed };
+  const tokens = line.trim().split(/\s+/);
+  if (tokens.length < 3) return null;
+
+  let amountIndex = -1;
+  for (let i = 0; i < tokens.length; i++) {
+    if (PDF_AMOUNT_TOKEN.test(tokens[i]!)) {
+      if (amountIndex >= 0) return null; // two amounts — a summary line
+      amountIndex = i;
+    }
   }
-  return null;
+  if (amountIndex < 0) return null;
+  const signed = parseMoney(tokens[amountIndex]!);
+  if (!signed || signed.isZero()) return null;
+
+  // The date can be anywhere among the remaining tokens.
+  let date: string | null = null;
+  let dateStart = -1;
+  let dateLen = 0;
+  for (let i = 0; i < tokens.length && date === null; i++) {
+    for (let len = 1; len <= 3 && i + len <= tokens.length; len++) {
+      if (i <= amountIndex && i + len > amountIndex) break; // crosses the amount
+      const d = normalizeDate(tokens.slice(i, i + len).join(" "));
+      if (d) {
+        date = d;
+        dateStart = i;
+        dateLen = len;
+        break;
+      }
+    }
+  }
+  if (date === null) return null;
+
+  const description = tokens
+    .filter(
+      (t, i) =>
+        i !== amountIndex && (i < dateStart || i >= dateStart + dateLen),
+    )
+    .join(" ")
+    .trim();
+  if (!description) return null;
+  return { date, description, signed };
+}
+
+/** Direction for a PDF row. PDFs have no consistent sign convention across
+ * banks (Amex lists charges positive and payments negative; Chase the
+ * reverse), so the sign is deliberately ignored: credits carry refund-ish
+ * keywords, everything else — including fees — is a charge. */
+function pdfDirection(description: string): "charge" | "refund" {
+  return REFUND_RE.test(description) ? "refund" : "charge";
 }
 
 /** Parse statement text extracted from a PDF (see extractPdfLines) into
- * rows. Handles one-line "<date> <desc> <amount>" rows and the common
- * multi-line layout (a date line, then description lines, then an amount
- * line). Everything else is reported as skipped — the UI shows those lines
- * so the user can judge what the parser missed. */
+ * rows. Handles one-line rows with the date and amount anywhere on the
+ * line ("<desc> <date> <amount>" in any order) and the common multi-line
+ * layout (a date line, then description lines, then an amount line).
+ * Everything else is reported as skipped — the UI shows those lines so
+ * the user can judge what the parser missed. */
 export function parsePdfStatementLines(lines: string[]): {
   rows: StatementRow[];
   skipped: SkippedLine[];
@@ -425,20 +470,6 @@ export function parsePdfStatementLines(lines: string[]): {
     desc: string[];
     line: number;
   } | null = null;
-
-  let hasNegative = false;
-  for (const line of lines) {
-    const one = tryPdfOneLine(line);
-    if (one && one.signed.isNegative()) {
-      hasNegative = true;
-      break;
-    }
-    const amtOnly = line.trim().match(PDF_AMOUNT_ONLY);
-    if (amtOnly && parseMoney(amtOnly[0])?.isNegative()) {
-      hasNegative = true;
-      break;
-    }
-  }
 
   const closePending = (reason: string) => {
     if (pending) {
@@ -464,7 +495,7 @@ export function parsePdfStatementLines(lines: string[]): {
         date: one.date,
         description: one.description.slice(0, 120),
         amount: one.signed.abs().toFixed(2),
-        direction: directionFor(one.signed, one.description, hasNegative),
+        direction: pdfDirection(one.description),
         source: "pdf",
         raw: line.slice(0, 160),
       });
@@ -482,7 +513,7 @@ export function parsePdfStatementLines(lines: string[]): {
           date: pending.date,
           description: desc.slice(0, 120),
           amount: signed.abs().toFixed(2),
-          direction: directionFor(signed, desc, hasNegative),
+          direction: pdfDirection(desc),
           source: "pdf",
           raw: `${pending.date} ${desc} ${signed.toFixed(2)}`.slice(0, 160),
         });

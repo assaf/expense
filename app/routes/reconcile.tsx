@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -17,7 +17,6 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
-import { Textarea } from "~/components/ui/Textarea";
 import { requireUser } from "~/lib/auth.server";
 import { formatAmount, formatDate } from "~/lib/format";
 import {
@@ -37,11 +36,9 @@ import {
   updateReconciliationDecision,
 } from "~/lib/store.server";
 import type {
-  Expense,
   MatchCandidate,
   NewExpenseDraft,
   ReconciliationDecision,
-  ReconciliationRunData,
   ReconciliationRunRecord,
   RowMatch,
   StatementRow,
@@ -115,15 +112,16 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const hash = createHash("sha256").update(buffer).digest("hex");
-    // Idempotency: the same bytes are the same statement.
+    // Idempotency: the same bytes are the same statement. An open draft
+    // resumes where the user left off; a completed run refuses to re-run.
     const existing = await findReconciliationRunByHash(user.accountId, hash);
     if (existing) {
+      if (existing.status === "draft") {
+        return redirect(`/reconcile?run=${existing.id}`);
+      }
       return Response.json(
         {
-          error:
-            existing.status === "completed"
-              ? `This statement was already reconciled on ${formatDate(existing.completedAt ?? existing.createdAt)}.`
-              : "You already have this statement open — keep going from where you left off.",
+          error: `This statement was already reconciled on ${formatDate(existing.completedAt ?? existing.createdAt)}.`,
         },
         { status: 409 },
       );
@@ -314,35 +312,108 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
         </fetcher.Form>
       </section>
 
-      {loaderData.runs.length > 0 ? (
-        <section>
-          <h2 className="mb-2 font-semibold">Previous reconciliations</h2>
-          <ul className="flex flex-col gap-2">
-            {loaderData.runs.map((run) => (
-              <li key={run.id}>
-                <Link
-                  to={`/reconcile?run=${run.id}`}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{run.fileName}</div>
-                    <div className="text-sm text-gray-500">
-                      {formatDate(run.completedAt ?? run.createdAt)}
-                      {run.status === "discarded" ? " · discarded" : ""}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-sm text-gray-500">
-                    {run.status === "completed"
-                      ? `${run.matchedCount} reconciled · ${run.createdCount} added`
-                      : run.rowCount + " rows"}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {(() => {
+        const inProgress = loaderData.runs.filter((r) => r.status === "draft");
+        const previous = loaderData.runs.filter((r) => r.status !== "draft");
+        return (
+          <>
+            {inProgress.length > 0 ? (
+              <section>
+                <h2 className="mb-2 font-semibold">In progress</h2>
+                <ul className="flex flex-col gap-2">
+                  {inProgress.map((run) => (
+                    <li
+                      key={run.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3"
+                    >
+                      <Link
+                        to={`/reconcile?run=${run.id}`}
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 transition-colors hover:text-gray-600"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {run.fileName}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {run.rowCount} transactions · started{" "}
+                            {formatDate(run.createdAt)}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-sm text-blue-600">
+                          Keep going →
+                        </span>
+                      </Link>
+                      <DiscardRunButton runId={run.id} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {previous.length > 0 ? (
+              <section>
+                <h2 className="mb-2 font-semibold">Previous reconciliations</h2>
+                <ul className="flex flex-col gap-2">
+                  {previous.map((run) => (
+                    <li key={run.id}>
+                      <Link
+                        to={`/reconcile?run=${run.id}`}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">
+                            {run.fileName}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {formatDate(run.completedAt ?? run.createdAt)}
+                            {run.status === "discarded" ? " · discarded" : ""}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-sm text-gray-500">
+                          {run.status === "completed"
+                            ? `${run.matchedCount} reconciled · ${run.createdCount} added`
+                            : `${run.rowCount} rows`}
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </>
+        );
+      })()}
     </div>
+  );
+}
+
+/** Discard an in-progress statement (drafts are listed on the landing so a
+ * bad parse or an abandoned upload can be thrown away and re-uploaded). */
+function DiscardRunButton({ runId }: { runId: string }) {
+  const fetcher = useFetcher();
+  const busy = fetcher.state !== "idle";
+  const discard = () => {
+    const f = new FormData();
+    f.set("intent", "discard");
+    f.set("runId", runId);
+    void fetcher.submit(f, { method: "post" });
+  };
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={busy}
+      onClick={discard}
+      className="shrink-0 text-gray-500"
+    >
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <X className="h-4 w-4" />
+      )}
+      Discard
+    </Button>
   );
 }
 
@@ -380,7 +451,6 @@ function RunPage({
 
 function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
   const completed = run.data.completed;
-  const createdExpenses = new Set(completed?.createdExpenseIds ?? []);
   const skipped = run.skipped;
   return (
     <div className="flex flex-col gap-6">

@@ -2041,8 +2041,9 @@ export async function findReconciliationRunByHash(
   return row ? runToRecord(row) : undefined;
 }
 
-/** Finished runs, newest first (the /reconcile landing page). Also garbage
- * collects drafts abandoned more than 30 days ago. */
+/** All runs for the account, newest first (the /reconcile landing page —
+ * drafts show as in-progress with a discard control, finished runs as
+ * history). Also garbage collects drafts abandoned more than 30 days ago. */
 export async function listReconciliationRuns(
   accountId: string,
 ): Promise<ReconciliationRunRecord[]> {
@@ -2051,7 +2052,7 @@ export async function listReconciliationRuns(
     where: { accountId, status: "draft", createdAt: { lt: staleCutoff } },
   });
   const rows = await prisma.reconciliationRun.findMany({
-    where: { accountId, status: { in: ["completed", "discarded"] } },
+    where: { accountId },
     orderBy: { createdAt: "desc" },
     take: 20,
   });

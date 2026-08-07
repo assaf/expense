@@ -82,4 +82,38 @@ describe("Reconcile flow", () => {
     // The created expense is on the list with its statement receipt image.
     await expect(page.getByText("Unknown Coffee Shop")).toBeVisible();
   });
+
+  it("lists an in-progress draft on the landing page and lets it be discarded, then re-uploads fresh", async () => {
+    await page.goto("/reconcile", { waitUntil: "load" });
+    await page.waitForTimeout(500);
+    const csv = [
+      "date,description,amount",
+      "2026-08-01,NEW COFFEE SHOP,8.75",
+    ].join("\n");
+    await page.setInputFiles('input[name="file"]', {
+      name: "draft.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await page.getByRole("button", { name: "Match my expenses" }).click();
+    await page.waitForURL(/\/reconcile\?run=/);
+
+    // Back on the landing, the draft is listed as in progress.
+    await page.goto("/reconcile", { waitUntil: "load" });
+    await page.waitForTimeout(500);
+    await expect(page.getByText("In progress")).toBeVisible();
+    const row = page.locator("li", { hasText: "draft.csv" }).first();
+    await row.getByRole("button", { name: "Discard" }).click();
+    await expect(page.getByText("In progress")).not.toBeVisible();
+
+    // Re-uploading the same file parses fresh — no stale draft blocks it.
+    await page.setInputFiles('input[name="file"]', {
+      name: "draft.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv),
+    });
+    await page.getByRole("button", { name: "Match my expenses" }).click();
+    await page.waitForURL(/\/reconcile\?run=/);
+    await expect(page.getByText("Needs your decision")).toBeVisible();
+  });
 });

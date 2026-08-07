@@ -93,6 +93,16 @@ const CSV = [
 // --- Parsing ---------------------------------------------------------------
 
 describe("statement parsing", () => {
+  it("parses RFC-4180-ish CSV cells (quotes, doubled quotes)", () => {
+    expect(
+      parseCsv('date,desc\n1/1/2026,"paid, in cash"\n2/1/2026,"said ""hi"""'),
+    ).toEqual([
+      ["date", "desc"],
+      ["1/1/2026", "paid, in cash"],
+      ["2/1/2026", 'said "hi"'],
+    ]);
+  });
+
   it("parses a CSV with a header row and normalizes dates/amounts", () => {
     const { rows, skipped } = parseStatementCsv(CSV);
     expect(skipped).toEqual([]);
@@ -267,6 +277,45 @@ describe("statement parsing", () => {
     expect(format).toBe("pdf");
     expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0]!.amount).toBe("12.50");
+  });
+
+  it("parses bank PDF rows with the date and amount anywhere on the line (Amex layout)", () => {
+    const lines = [
+      "AplPay RALPHS GROCERY STUDIO CITY CA 06/14/26 $143.21",
+      "AplPay RALPHS LOS ANGELES CA $112.71 06/24/26",
+      "YOUR CASH REWARD/REFUND IS 07/01/26* ASSAF ARKIN -$93.24",
+      "07/12/26 ASSAF ARKIN ANNUAL FEE $95.00",
+      "07/01/26* ASSAF ARKIN ONLINE PAYMENT - THANK YOU -$1,260.08",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toMatchObject({
+      date: "2026-06-14",
+      description: "AplPay RALPHS GROCERY STUDIO CITY CA",
+      amount: "143.21",
+      direction: "charge",
+    });
+    expect(rows[1]).toMatchObject({ date: "2026-06-24", amount: "112.71" });
+    // Credits carry refund keywords; the fee is a charge; payments are
+    // refunds — PDF signs vary by bank, so keywords decide.
+    expect(rows[2]).toMatchObject({ direction: "refund" });
+    expect(rows[3]).toMatchObject({
+      date: "2026-07-12",
+      description: "ASSAF ARKIN ANNUAL FEE",
+      amount: "95.00",
+      direction: "charge",
+    });
+    expect(rows[4]).toMatchObject({ direction: "refund" });
+  });
+
+  it("rejects summary/table lines with several amounts or dates", () => {
+    const lines = [
+      "Purchases 06/01/2023 17.49% (v) $0.00 $0.00",
+      "New Balance $1,102.92",
+      "Total New Charges $1,007.92",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(0);
   });
 
   it("tokenizes merchant words for overlap scoring", () => {
@@ -537,9 +586,10 @@ describe("reconciliation store", () => {
     expect(after).toBe(before);
   });
 
-  it("lists finished runs and garbage-collects stale drafts", async () => {
+  it("lists runs (drafts included) and garbage-collects stale drafts", async () => {
     const a = await draftRun();
     const b = await draftRun();
+    const draft = await draftRun(); // stays in progress
     await completeReconciliationRun(TEST_ACCOUNT_ID, a.id);
     await discardReconciliationRun(TEST_ACCOUNT_ID, b.id);
     // A stale draft from 40 days ago gets collected on the next list.
@@ -562,8 +612,9 @@ describe("reconciliation store", () => {
     const ids = runs.map((r) => r.id);
     expect(ids).toContain(a.id);
     expect(ids).toContain(b.id);
+    expect(ids).toContain(draft.id); // in-progress drafts are listed
     expect(ids.some((id) => id === "stale")).toBe(false);
-    expect(runs.every((r) => r.status !== "draft")).toBe(true);
+    expect(runs.find((r) => r.id === draft.id)!.status).toBe("draft");
   });
 
   it("parses a real QFX file end to end through the store", async () => {
