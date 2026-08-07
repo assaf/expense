@@ -373,6 +373,37 @@ describe("statement parsing", () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("parses Chase rows: numeric yearless dates from a numeric cycle header", () => {
+    const lines = [
+      "Opening/Closing Date 06/08/26 - 07/07/26",
+      "07/01 Payment Thank You - Web -174.91",
+      "06/08 Kindle Svcs*W62AR8VY3 888-802-3080 WA 4.99",
+      "07/02 A.Z. Pharmacy LLC Amzn.com/bill WA 7.43",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toMatchObject({
+      date: "2026-07-01",
+      description: "Payment Thank You - Web",
+      amount: "174.91",
+      direction: "refund",
+    });
+    expect(rows[1]).toMatchObject({
+      date: "2026-06-08",
+      description: "Kindle Svcs*W62AR8VY3 888-802-3080 WA",
+      amount: "4.99",
+      direction: "charge",
+    });
+    expect(rows[2]).toMatchObject({ date: "2026-07-02", amount: "7.43" });
+  });
+
+  it("rejects impossible dates (month 26, Feb 30) instead of guessing", () => {
+    expect(normalizeDate("26/07/07")).toBeNull();
+    expect(normalizeDate("02/30/2026")).toBeNull();
+    expect(normalizeDate("13/01/2026")).toBeNull();
+    expect(normalizeDate("2026-13-01")).toBeNull();
+  });
+
   it("rejects summary/table lines with several amounts or dates", () => {
     const lines = [
       "Purchases 06/01/2023 17.49% (v) $0.00 $0.00",

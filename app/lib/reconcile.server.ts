@@ -65,29 +65,50 @@ const MONTHS: Record<string, string> = {
 };
 
 /** Normalize a statement date to YYYY-MM-DD: ISO (2026-08-03), US
- * (08/03/2026, 8/3/26), or a month name (Aug 3 2026, Aug 3, 2026, 3 Aug 2026). */
+ * (08/03/2026, 8/3/26), or a month name (Aug 3 2026, Aug 3, 2026, 3 Aug 2026).
+ * Rejects impossible dates (month 26, Feb 30). */
 export function normalizeDate(value: string): string | null {
   const s = value.trim();
   if (!s) return null;
+  const make = (y: number, m: number, d: number): string | null => {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    if (
+      dt.getUTCFullYear() !== y ||
+      dt.getUTCMonth() !== m - 1 ||
+      dt.getUTCDate() !== d
+    ) {
+      return null;
+    }
+    return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  };
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  if (iso) return make(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (us) {
-    const year = us[3]!.length === 2 ? `20${us[3]}` : us[3];
-    return `${year}-${us[1]!.padStart(2, "0")}-${us[2]!.padStart(2, "0")}`;
+    const year = us[3]!.length === 2 ? 2000 + Number(us[3]) : Number(us[3]);
+    return make(year, Number(us[1]), Number(us[2]));
   }
   const namedMonthFirst = s.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})/);
   if (namedMonthFirst) {
     const month = MONTHS[namedMonthFirst[1]!.slice(0, 3).toLowerCase()];
     if (month) {
-      return `${namedMonthFirst[3]}-${month}-${namedMonthFirst[2]!.padStart(2, "0")}`;
+      return make(
+        Number(namedMonthFirst[3]),
+        Number(month),
+        Number(namedMonthFirst[2]),
+      );
     }
   }
   const namedDayFirst = s.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{4})/);
   if (namedDayFirst) {
     const month = MONTHS[namedDayFirst[2]!.slice(0, 3).toLowerCase()];
     if (month) {
-      return `${namedDayFirst[3]}-${month}-${namedDayFirst[1]!.padStart(2, "0")}`;
+      return make(
+        Number(namedDayFirst[3]),
+        Number(month),
+        Number(namedDayFirst[1]),
+      );
     }
   }
   return null;
@@ -416,39 +437,51 @@ function inCycle(date: string, cycle: Cycle): boolean {
   );
 }
 
-/** Find "Jun 12, 2026 - Jul 12, 2026" style cycle headers. */
+/** Find "Jun 12, 2026 - Jul 12, 2026" or "06/08/26 - 07/07/26" cycle
+ * headers (named and numeric — Capital One and Chase print them
+ * differently). */
 function extractCycle(lines: string[]): Cycle | null {
-  const re =
-    /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/;
+  const patterns = [
+    /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})\s*[-–]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+  ];
   for (const line of lines) {
-    const m = line.match(re);
-    if (!m) continue;
-    const start = normalizeDate(m[1]!);
-    const end = normalizeDate(m[2]!);
-    if (start && end && start <= end) return { start, end };
+    for (const re of patterns) {
+      const m = line.match(re);
+      if (!m) continue;
+      const start = normalizeDate(m[1]!);
+      const end = normalizeDate(m[2]!);
+      if (start && end && start <= end) return { start, end };
+    }
   }
   return null;
 }
 
-/** Resolve a yearless "Jun 13" date against the billing cycle — a statement
- * only lists transactions inside its cycle, so the year is unambiguous
- * (and a date far outside the cycle is a description, not a transaction). */
+/** Resolve a yearless date against the billing cycle — a statement only
+ * lists transactions inside its cycle, so the year is unambiguous (and a
+ * date far outside the cycle is a description, not a transaction). Handles
+ * month names ("Jun 13", Capital One) and numeric dates ("07/01", Chase). */
 function resolveYearlessDate(
   monthDay: string,
   cycle: Cycle | null,
 ): string | null {
-  const m = monthDay.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2})$/);
+  const m =
+    monthDay.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2})$/) ??
+    monthDay.match(/^(\d{1,2})\/(\d{1,2})$/);
   if (!m) return null;
-  const month = MONTHS[m[1]!.slice(0, 3).toLowerCase()];
-  const day = m[2]!.padStart(2, "0");
+  const month = m[1]!.match(/^\d/)
+    ? m[1]
+    : MONTHS[m[1]!.slice(0, 3).toLowerCase()];
+  const day = m[2]!;
   if (!month) return null;
   const endYear = cycle
     ? Number(cycle.end.slice(0, 4))
     : new Date().getFullYear();
-  const candidate = `${endYear}-${month}-${day}`;
+  const candidate = `${endYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (!normalizeDate(candidate)) return null; // impossible date (month 13)
   if (cycle && !inCycle(candidate, cycle)) {
     // Year-crossing cycle (Nov 2026 – Jan 2027): try the previous year.
-    const prev = `${endYear - 1}-${month}-${day}`;
+    const prev = `${endYear - 1}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     if (inCycle(prev, cycle)) return prev;
     return null;
   }
@@ -493,13 +526,18 @@ function tryPdfOneLine(
   const dateWindows: { start: number; len: number }[] = [];
   let date = "";
   /** Date at token i: yearful windows first ("Aug 3 2026" must not be
-   * truncated to yearless "Aug 3"), then a yearless "Jun 13" pair
-   * resolved against the billing cycle. */
+   * truncated to yearless "Aug 3"), then a yearless date — "07/01" is
+   * one token (Chase), "Jun 13" is two (Capital One) — resolved against
+   * the billing cycle. */
   const findDate = (i: number): { date: string; len: number } | null => {
     for (let len = 1; len <= 3 && i + len <= tokens.length; len++) {
       if (i <= amountIndex && i + len > amountIndex) break; // crosses the amount
       const d = normalizeDate(tokens.slice(i, i + len).join(" "));
       if (d) return { date: d, len };
+    }
+    if (!(i <= amountIndex && i + 1 > amountIndex)) {
+      const d = resolveYearlessDate(tokens[i]!, cycle);
+      if (d) return { date: d, len: 1 };
     }
     if (i + 2 <= tokens.length && !(i <= amountIndex && i + 2 > amountIndex)) {
       const d = resolveYearlessDate(tokens.slice(i, i + 2).join(" "), cycle);
