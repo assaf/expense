@@ -166,9 +166,9 @@ function merchantOverlap(desc: Set<string>, merchant: Set<string>): boolean {
 /** Refund-ish keywords: a statement line containing any of these is a
  * credit/payment/return — a non-expense — never an auto match. Covers the
  * common abbreviations and labels across banks ("ONLINE PYMT", "CASH
- * BACK", "PURCHASE ADJUSTMENT", "CASH REBATE"). */
+ * BACK", "PURCHASE ADJUSTMENT", "CASH REBATE", "ACH Deposit"). */
 const REFUND_RE =
-  /refund|payment|pymt|credit|cash\s?back|adjustment|rebate|return|reversal/i;
+  /refund|payment|pymt|credit|cash\s?back|adjustment|rebate|deposit|return|reversal/i;
 
 /** Direction for a signed amount: credit-card convention (negative = the
  * purchase, positive = a credit), guarded by whether the file carries signs
@@ -442,16 +442,23 @@ function inCycle(date: string, cycle: Cycle): boolean {
  * differently). */
 function extractCycle(lines: string[]): Cycle | null {
   const patterns = [
-    /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
-    /(\d{1,2}\/\d{1,2}\/\d{2,4})\s*[-–]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+    // "Jun 12, 2026 - Jul 12, 2026" (Capital One)
+    /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–—]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
+    // "06/08/26 - 07/07/26" (Chase)
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})\s*[-–—]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/,
+    // "Jul 1 — Jul 31, 2026" (Apple Card — the first date carries no year)
+    /([A-Za-z]{3,}\.?\s+\d{1,2})\s*[-–—]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
   ];
   for (const line of lines) {
     for (const re of patterns) {
       const m = line.match(re);
       if (!m) continue;
-      const start = normalizeDate(m[1]!);
       const end = normalizeDate(m[2]!);
-      if (start && end && start <= end) return { start, end };
+      if (!end) continue;
+      const start =
+        normalizeDate(m[1]!) ??
+        resolveYearlessDate(m[1]!, { start: "0001-01-01", end });
+      if (start && start <= end) return { start, end };
     }
   }
   return null;
@@ -512,14 +519,22 @@ function tryPdfOneLine(
     .split(/\s+/);
   if (tokens.length < 3) return null;
 
-  let amountIndex = -1;
+  // Amount tokens. Apple Card rows carry the Daily Cash amount before the
+  // transaction amount ("…USA 2% $0.18 $8.83"). Two amounts are normally
+  // a summary/table line — but a percentage token right before the first
+  // amount marks the daily-cash layout, where the LAST amount is the
+  // transaction and both amounts + the percentage are column noise.
+  const amountIndices: number[] = [];
   for (let i = 0; i < tokens.length; i++) {
-    if (PDF_AMOUNT_TOKEN.test(tokens[i]!)) {
-      if (amountIndex >= 0) return null; // two amounts — a summary line
-      amountIndex = i;
-    }
+    if (PDF_AMOUNT_TOKEN.test(tokens[i]!)) amountIndices.push(i);
+    if (amountIndices.length > 2) return null;
   }
-  if (amountIndex < 0) return null;
+  if (amountIndices.length === 0) return null;
+  if (amountIndices.length === 2) {
+    const first = amountIndices[0]!;
+    if (!tokens[first - 1]?.endsWith("%")) return null; // summary line
+  }
+  const amountIndex = amountIndices[amountIndices.length - 1]!;
   const signed = parseMoney(tokens[amountIndex]!);
   if (!signed || signed.isZero()) return null;
 
@@ -557,11 +572,12 @@ function tryPdfOneLine(
   if (dateWindows.length === 0) return null;
 
   const description = tokens
-    .filter(
-      (t, i) =>
-        i !== amountIndex &&
-        !dateWindows.some((w) => i >= w.start && i < w.start + w.len),
-    )
+    .filter((t, i) => {
+      if (amountIndices.includes(i)) return false;
+      // Daily-cash layout: the percentage column is noise too.
+      if (amountIndices.length === 2 && t.endsWith("%")) return false;
+      return !dateWindows.some((w) => i >= w.start && i < w.start + w.len);
+    })
     .join(" ")
     .trim();
   // Column-merge artifacts: a dangling sign or a summary-page label.
@@ -575,12 +591,18 @@ function tryPdfOneLine(
   return { date, description, signed };
 }
 
-/** Direction for a PDF row. PDFs have no consistent sign convention across
- * banks (Amex and Capital One list charges positive and payments negative;
- * Chase the reverse), so the sign is deliberately ignored: credits carry
- * refund-ish keywords, everything else — including fees — is a charge. */
-function pdfDirection(description: string): "charge" | "refund" {
-  return REFUND_RE.test(description) ? "refund" : "charge";
+/** Direction for a PDF row. Every credit-card PDF seen in the wild lists
+ * payments and credits as negative amounts and charges as positive (Amex,
+ * Capital One, Chase, Apple Card all do — the Chase CSV convention of
+ * negative-purchases is a CSV thing). Credits carry refund-ish keywords;
+ * a negative amount with no keyword is still a credit, never an expense;
+ * everything else — including fees — is a charge. */
+function pdfDirection(
+  description: string,
+  signed: Decimal,
+): "charge" | "refund" {
+  if (REFUND_RE.test(description)) return "refund";
+  return signed.isNegative() ? "refund" : "charge";
 }
 
 /** Parse statement text extracted from a PDF (see extractPdfLines) into
@@ -631,7 +653,7 @@ export function parsePdfStatementLines(lines: string[]): {
         date: one.date,
         description: one.description.slice(0, 120),
         amount: one.signed.abs().toFixed(2),
-        direction: pdfDirection(one.description),
+        direction: pdfDirection(one.description, one.signed),
         source: "pdf",
         raw: rawLine.trim().slice(0, 160),
       });
@@ -649,7 +671,7 @@ export function parsePdfStatementLines(lines: string[]): {
           date: pending.date,
           description: desc.slice(0, 120),
           amount: signed.abs().toFixed(2),
-          direction: pdfDirection(desc),
+          direction: pdfDirection(desc, signed),
           source: "pdf",
           raw: `${pending.date} ${desc} ${signed.toFixed(2)}`.slice(0, 160),
         });

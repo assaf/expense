@@ -404,6 +404,45 @@ describe("statement parsing", () => {
     expect(normalizeDate("2026-13-01")).toBeNull();
   });
 
+  it("parses Apple Card rows: Daily Cash column, ACH payment, em-dash cycle", () => {
+    const lines = [
+      "Jennifer Hong, jyzoe.hong@gmail.com Jul 1 — Jul 31, 2026",
+      "06/30/2026 SANDCOUCH CAFE 555 W 7TH ST LOS ANGELES 90014 CA USA 2% $0.18 $8.83",
+      "Jul 5 Jul 6 TEST MERCHANT $10.00",
+      "-$573.70 ACH Deposit Internet transfer from account ending in 0752 07/31/2026",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(3);
+    // The Daily Cash amount is dropped; the last amount is the transaction.
+    expect(rows[0]).toMatchObject({
+      date: "2026-06-30",
+      description: "SANDCOUCH CAFE 555 W 7TH ST LOS ANGELES 90014 CA USA",
+      amount: "8.83",
+      direction: "charge",
+    });
+    // Yearless date resolved against the em-dash cycle header.
+    expect(rows[1]).toMatchObject({
+      date: "2026-07-05",
+      description: "TEST MERCHANT",
+      amount: "10.00",
+      direction: "charge",
+    });
+    // The ACH payment is a credit, never an expense.
+    expect(rows[2]).toMatchObject({
+      date: "2026-07-31",
+      description: "ACH Deposit Internet transfer from account ending in 0752",
+      amount: "573.70",
+      direction: "refund",
+    });
+  });
+
+  it("classifies negative PDF amounts without keywords as credits", () => {
+    const { rows } = parsePdfStatementLines([
+      "Jun 25 Jun 26 VERCEL INC. COVINA CA - $0.07",
+    ]);
+    expect(rows[0]).toMatchObject({ direction: "refund" });
+  });
+
   it("rejects summary/table lines with several amounts or dates", () => {
     const lines = [
       "Purchases 06/01/2023 17.49% (v) $0.00 $0.00",
