@@ -29,8 +29,9 @@ import type {
  * Matching rules (see matchStatementRows): receipt expenses only (mileage
  * is never a card transaction), not already reconciled, same direction,
  * date within ±2 days and amount within $0.50 / 1% of the expense. Exact
- * date + exact amount + shared merchant token → high-confidence match.
- * Anything close but not exact, any ambiguity (several candidates, or two
+ * date + exact amount + shared merchant token — or shared after joining
+ * adjacent words, so "OFFICE MAX" matches merchant "OfficeMax" — →
+ * high-confidence match. Anything close but not exact, any ambiguity (several candidates, or two
  * statement lines claiming the same expense), or a merchant that differs →
  * review, where the user picks.
  */
@@ -170,10 +171,31 @@ function dayDiff(a: string, b: string): number {
 }
 
 /** True when the statement description and the expense merchant share a
- * word token (or are the same normalized string). */
+ * word token, or share one after concatenating adjacent words — the
+ * "OfficeMax" ↔ "OFFICE MAX" case: the two name the same merchant once
+ * spaces are removed but share no single token. Exact string equality
+ * only — no fuzzy thresholds, so genuinely different merchants never
+ * collide ("Star" stays apart from "Starbucks"). */
 function merchantOverlap(desc: Set<string>, merchant: Set<string>): boolean {
   if (merchant.size === 0) return false;
-  return [...desc].some((t) => merchant.has(t));
+  const d = expandedTokens(desc);
+  const m = expandedTokens(merchant);
+  return [...m].some((t) => d.has(t));
+}
+
+/** Expand a token set with the concatenation of adjacent tokens (windows
+ * of 2–3, in text order) — "OFFICE MAX" → {office, max, officemax}.
+ * Word-boundary differences ("Office Max" / "OfficeMax" / "OFFICE-MAX")
+ * collapse to the same string; genuinely different names never do. */
+function expandedTokens(tokens: Set<string>): Set<string> {
+  const list = [...tokens];
+  const out = new Set(list);
+  for (let i = 0; i < list.length; i++) {
+    for (let w = 2; w <= 3 && i + w <= list.length; w++) {
+      out.add(list.slice(i, i + w).join(""));
+    }
+  }
+  return out;
 }
 
 /** Refund-ish keywords: a statement line containing any of these is a
@@ -930,17 +952,26 @@ export function matchStatementRows(
   rows: StatementRow[],
   expenses: Expense[],
 ): RowMatch[] {
-  const pool: { e: ReceiptExpense; abs: Decimal; tokens: Set<string> }[] = [];
+  const pool: {
+    e: ReceiptExpense;
+    abs: Decimal;
+    tokens: Set<string>;
+    expanded: Set<string>;
+  }[] = [];
   for (const e of expenses) {
     if (e.type !== "receipt") continue;
     if (!e.date || e.reconciledAt) continue;
     const abs = parseAmount(e.amount)?.abs();
     if (!abs || abs.isZero()) continue;
-    pool.push({ e, abs, tokens: tokensOf(e.merchant) });
+    const tokens = tokensOf(e.merchant);
+    pool.push({ e, abs, tokens, expanded: expandedTokens(tokens) });
   }
 
   const stmtAbs = rows.map((r) => parseAmount(r.amount));
   const descTokens = rows.map((r) => tokensOf(r.description));
+  // Expanded once per row — the scoring loop below counts shared tokens
+  // and shared adjacent-token concatenations.
+  const descExpanded = descTokens.map((t) => expandedTokens(t));
 
   // Candidate lists per row (date + amount tolerance, any sign direction).
   const candidateLists = rows.map((row, i) => {
@@ -963,11 +994,11 @@ export function matchStatementRows(
     const abs = stmtAbs[i]!;
     const exact = list.find((p) => row.date === p.e.date && abs.eq(p.abs));
     if (exact) return exact;
-    const desc = descTokens[i]!;
+    const desc = descExpanded[i]!;
     let best = list[0]!;
     let bestScore = -1;
     for (const p of list) {
-      const overlap = [...p.tokens].filter((t) => desc.has(t)).length;
+      const overlap = [...p.expanded].filter((t) => desc.has(t)).length;
       const score =
         overlap * 100 +
         (row.date === p.e.date ? 10 : 0) +

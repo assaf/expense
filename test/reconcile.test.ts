@@ -617,6 +617,44 @@ describe("statement matching", () => {
     }
   });
 
+  it("matches compound merchants across word boundaries (OfficeMax ↔ OFFICE MAX)", () => {
+    const cases: [string, string][] = [
+      // Two words split one way, one word the other.
+      ["OFFICE MAX", "OfficeMax"],
+      // Both multi-word, one side concatenated.
+      ["WHOLE FOODS MARKET", "WholeFoodsMarket"],
+      // Hyphenated on the statement, one word on the receipt.
+      ["CAR WASH - EXPRESS", "CarWashExpress"],
+      // Merchant side split, statement side concatenated.
+      ["OFFICEMAX", "Office Max"],
+    ];
+    for (const [desc, merchant] of cases) {
+      const row: StatementRow = { ...stubRows()[0]!, description: desc };
+      const matches = matchStatementRows([row], [makeReceipt({ merchant })]);
+      expect(matches[0]!.status).toBe("matched");
+      if (matches[0]!.status === "matched") {
+        expect(matches[0]!.confidence).toBe("high");
+      }
+    }
+  });
+
+  it("keeps genuinely different merchants apart (no fuzzy substring match)", () => {
+    // "Star" is a prefix of "Starbucks" — a fuzzy metric would wrongly
+    // link them; the exact-token/concatenation match must not.
+    const row: StatementRow = {
+      ...stubRows()[0]!,
+      description: "STARBUCKS STORE #12345",
+    };
+    const matches = matchStatementRows(
+      [row],
+      [makeReceipt({ merchant: "Star Market" })],
+    );
+    expect(matches[0]!.status).toBe("review");
+    if (matches[0]!.status === "review") {
+      expect(matches[0]!.reasons.join(" ")).toMatch(/merchant name differs/);
+    }
+  });
+
   it("sends a same-date same-amount row with a different merchant to review", () => {
     const matches = matchStatementRows(stubRows(), [
       makeReceipt({ merchant: "Something Else" }),
