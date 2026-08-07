@@ -723,9 +723,15 @@ export function parsePdfStatementLines(lines: string[]): {
 // --- Dispatch --------------------------------------------------------------
 
 /** Sniff whether statement text is OFX or CSV. */
+/** Sniff whether statement text is OFX or CSV. Handles the SGML 1.x form
+ * ("OFXHEADER:100…"), the bare form ("<OFX>…"), and the XML 2.x form
+ * QuickBooks WebConnect and newer bank exports use
+ * ("<?xml…?><?OFX OFXHEADER=\"200\"…?><OFX>…"). */
 export function sniffStatementText(text: string): "csv" | "ofx" {
   const head = text.slice(0, 500).trim();
-  return head.startsWith("OFXHEADER") || head.startsWith("<OFX")
+  return head.startsWith("OFXHEADER") ||
+    head.startsWith("<OFX") ||
+    head.includes("OFXHEADER=")
     ? "ofx"
     : "csv";
 }

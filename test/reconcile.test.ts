@@ -754,30 +754,38 @@ describe("reconciliation store", () => {
 
   it("detects QuickBooks .qbo files as OFX and parses them", async () => {
     // QBO is the QuickBooks WebConnect format — an OFX file with a .qbo
-    // extension. Detection is content-based (OFXHEADER), so the extension
-    // isn't even required.
+    // extension, in the XML 2.x form Amex and newer banks export
+    // (<?xml…?><?OFX OFXHEADER="200"…?><OFX>…). Detection is
+    // content-based, so the extension isn't even required.
     const qbo = [
-      "OFXHEADER:100",
-      "DATA:OFXSGML",
-      "VERSION:102",
-      "",
+      '<?xml version="1.0" standalone="no"?>',
+      '<?OFX OFXHEADER="200" VERSION="202" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>',
       "<OFX>",
-      "<BANKMSGSRSV1>",
-      "<STMTTRNRS>",
-      "<STMTRS>",
+      "<SIGNONMSGSRSV1>",
+      "<SONRS>",
+      "<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>",
+      "<DTSERVER>20260807000000.000[-7:MST]</DTSERVER>",
+      "<FI><ORG>AMEX</ORG><FID>3106</FID></FI>",
+      "</SONRS>",
+      "</SIGNONMSGSRSV1>",
+      "<CREDITCARDMSGSRSV1>",
+      "<CCSTMTTRNRS>",
+      "<CCSTMTRS>",
       "<BANKTRANLIST>",
       "<STMTTRN>",
-      "<DTPOSTED>20260705120000[-8:PST]</DTPOSTED>",
+      "<TRNTYPE>DEBIT</TRNTYPE>",
+      "<DTPOSTED>20260705000000.000[-7:MST]</DTPOSTED>",
       "<TRNAMT>-42.50</TRNAMT>",
       "<FITID>20260705001</FITID>",
       "<NAME>BLUE BOTTLE COFFEE</NAME>",
       "</STMTTRN>",
       "</BANKTRANLIST>",
-      "</STMTRS>",
-      "</STMTTRNRS>",
-      "</BANKMSGSRSV1>",
+      "</CCSTMTRS>",
+      "</CCSTMTTRNRS>",
+      "</CREDITCARDMSGSRSV1>",
       "</OFX>",
-    ].join("\n");
+    ].join("");
+    expect(sniffStatementText(qbo)).toBe("ofx");
     const parsed = await parseStatementUpload(
       "statement.qbo",
       Buffer.from(qbo),
