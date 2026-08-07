@@ -98,6 +98,19 @@ export default defineConfig((config) => ({
   },
 
   optimizeDeps: {
-    exclude: ["@sentry/react-router"],
+    // Never pre-bundle Node-only/native packages — the client never imports
+    // them (server code is stripped from route bundles), and rolldown-vite's
+    // optimizer chokes on their .node binaries (UNLOADABLE_DEPENDENCY).
+    exclude: [
+      "@sentry/react-router",
+      "@napi-rs/canvas",
+      "@resvg/resvg-js",
+      "sharp",
+      "tesseract.js",
+      "pdfjs-dist",
+      "@sparticuz/chromium",
+      "puppeteer-core",
+      "@sentry/profiling-node",
+    ],
   },
 }));
