@@ -752,6 +752,47 @@ describe("reconciliation store", () => {
     expect(runs.find((r) => r.id === draft.id)!.status).toBe("draft");
   });
 
+  it("detects QuickBooks .qbo files as OFX and parses them", async () => {
+    // QBO is the QuickBooks WebConnect format — an OFX file with a .qbo
+    // extension. Detection is content-based (OFXHEADER), so the extension
+    // isn't even required.
+    const qbo = [
+      "OFXHEADER:100",
+      "DATA:OFXSGML",
+      "VERSION:102",
+      "",
+      "<OFX>",
+      "<BANKMSGSRSV1>",
+      "<STMTTRNRS>",
+      "<STMTRS>",
+      "<BANKTRANLIST>",
+      "<STMTTRN>",
+      "<DTPOSTED>20260705120000[-8:PST]</DTPOSTED>",
+      "<TRNAMT>-42.50</TRNAMT>",
+      "<FITID>20260705001</FITID>",
+      "<NAME>BLUE BOTTLE COFFEE</NAME>",
+      "</STMTTRN>",
+      "</BANKTRANLIST>",
+      "</STMTRS>",
+      "</STMTTRNRS>",
+      "</BANKMSGSRSV1>",
+      "</OFX>",
+    ].join("\n");
+    const parsed = await parseStatementUpload(
+      "statement.qbo",
+      Buffer.from(qbo),
+    );
+    expect(parsed.format).toBe("ofx");
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0]).toMatchObject({
+      date: "2026-07-05",
+      description: "BLUE BOTTLE COFFEE",
+      amount: "42.50",
+      direction: "charge",
+      fitId: "20260705001",
+    });
+  });
+
   it("parses a real QFX file end to end through the store", async () => {
     // DevShop (99.99 @ 2026-04-05) and Misc (12.00 @ 2026-05-01) — expenses
     // the earlier completion tests haven't touched.
