@@ -36,9 +36,9 @@ import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
-  formatRate,
   mileageAmount,
   mileageRateFor,
+  mileageRateLabel,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
@@ -1077,9 +1077,7 @@ function MileageEditor({ data }: { data: EditorData }) {
             </span>
             <span className="text-gray-500">
               {rate ? (
-                <>
-                  {MILEAGE_TYPE_LABELS[mileageType]} · ${formatRate(rate)}/mi
-                </>
+                <>{mileageRateLabel(mileageType, rate)}</>
               ) : (
                 "No rate for this date/type"
               )}

@@ -39,6 +39,7 @@ import {
   summarizeBy,
   todayDate,
 } from "~/lib/format";
+import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
   mimeForFile,
   renameImageToConvention,
@@ -50,7 +51,6 @@ import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
-import { validateDateNotFuture } from "~/lib/validation";
 import type {
   Expense,
   Location,
@@ -1004,14 +1004,9 @@ async function captureReceipt(
   );
   const amount = normalizeAmount(args.amount ?? extracted?.amount ?? "");
   const date = args.date ?? todayDate();
-  const dateError = validateDateNotFuture(date);
-  if (dateError) return fail(dateError);
-
   const report = args.report?.trim() ?? "";
-  if (report) {
-    const { error } = await findOpenReport(accountId, report);
-    if (error) return fail(error);
-  }
+  const inputError = await validateExpenseInputs(accountId, date, report);
+  if (inputError) return fail(inputError);
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
   const expense: ReceiptExpense = {
@@ -1066,14 +1061,9 @@ async function logMileage(
   },
 ): Promise<ToolResult> {
   const date = args.date ?? todayDate();
-  const dateError = validateDateNotFuture(date);
-  if (dateError) return fail(dateError);
-
   const report = args.report?.trim() ?? "";
-  if (report) {
-    const { error } = await findOpenReport(accountId, report);
-    if (error) return fail(error);
-  }
+  const inputError = await validateExpenseInputs(accountId, date, report);
+  if (inputError) return fail(inputError);
 
   const stops: Location[] = args.locations.map((l) =>
     typeof l === "string"

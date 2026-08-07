@@ -4,8 +4,8 @@ import { pdfToBuffer } from "~/lib/pdf.server";
 import { formatDate, mileageDistanceLabel, sortExpenses } from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
-  formatRate,
   mileageRateFor,
+  mileageRateLabel,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import { renderRouteMap } from "~/lib/route-map.server";
@@ -85,7 +85,7 @@ export async function buildReportPdf(
         // The route map lives in the appendix (Receipts & routes).
         const rate = mileageRateFor(rates, e.date, e.mileageType);
         merchant = rate
-          ? `${MILEAGE_TYPE_LABELS[e.mileageType]} · $${formatRate(rate)}/mi`
+          ? mileageRateLabel(e.mileageType, rate)
           : MILEAGE_TYPE_LABELS[e.mileageType];
         const addresses = e.locations
           .map((l) => l.address.trim())

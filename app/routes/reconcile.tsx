@@ -787,6 +787,73 @@ function RowFacts({ row }: { row: StatementRow }) {
   );
 }
 
+/**
+ * The row-decision plumbing shared by every row card: the fetcher posting
+ * `intent=update` decisions for one statement row, the common FormData
+ * fields (runId, rowIndex, kind + extras), and the open/close state of the
+ * inline "add as new expense" draft form.
+ */
+function useRowDecision(
+  runId: string,
+  rowIndex: number,
+): {
+  fetcher: ReturnType<typeof useFetcher>;
+  busy: boolean;
+  submit: (kind: string, extra?: Record<string, string>) => void;
+  drafting: boolean;
+  toggleDraft: () => void;
+  closeDraft: () => void;
+} {
+  const fetcher = useFetcher();
+  const [drafting, setDrafting] = useState(false);
+  const submit = (kind: string, extra: Record<string, string> = {}) => {
+    const f = new FormData();
+    f.set("intent", "update");
+    f.set("runId", runId);
+    f.set("rowIndex", String(rowIndex));
+    f.set("kind", kind);
+    for (const [k, v] of Object.entries(extra)) f.set(k, v);
+    void fetcher.submit(f, { method: "post" });
+  };
+  return {
+    fetcher,
+    busy: fetcher.state !== "idle",
+    submit,
+    drafting,
+    toggleDraft: () => setDrafting((v) => !v),
+    closeDraft: () => setDrafting(false),
+  };
+}
+
+/** The inline "add as new expense" draft form for a row, shown while the
+ * card's draft is open. The wrapper class differs per card (the matched
+ * card lays the form out inside its flex container). */
+function DraftForm({
+  decision,
+  row,
+  openReports,
+  categories,
+  className,
+}: {
+  decision: ReturnType<typeof useRowDecision>;
+  row: StatementRow;
+  openReports: string[];
+  categories: string[];
+  className: string;
+}) {
+  if (!decision.drafting) return null;
+  return (
+    <div className={className}>
+      <NewExpenseForm
+        decision={decision}
+        row={row}
+        openReports={openReports}
+        categories={categories}
+      />
+    </div>
+  );
+}
+
 /** A row the matcher matched automatically (high confidence). The default is
  * to keep the match; the user can drop it (→ discarded) or turn it into a
  * new expense instead. */
@@ -805,18 +872,8 @@ function MatchedRowCard({
   openReports: string[];
   categories: string[];
 }) {
-  const fetcher = useFetcher();
-  const [drafting, setDrafting] = useState(false);
-  const busy = fetcher.state !== "idle";
-  const submit = (kind: string, extra: Record<string, string> = {}) => {
-    const f = new FormData();
-    f.set("intent", "update");
-    f.set("runId", runId);
-    f.set("rowIndex", String(row.index));
-    f.set("kind", kind);
-    for (const [k, v] of Object.entries(extra)) f.set(k, v);
-    void fetcher.submit(f, { method: "post" });
-  };
+  const decision = useRowDecision(runId, row.index);
+  const { busy, submit } = decision;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl border border-green-200 bg-green-50/50 p-3">
       <RowFacts row={row} />
@@ -837,7 +894,7 @@ function MatchedRowCard({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setDrafting((v) => !v)}
+            onClick={decision.toggleDraft}
             className="font-medium text-blue-700 hover:underline disabled:opacity-50"
           >
             Add as new expense
@@ -855,18 +912,13 @@ function MatchedRowCard({
           </button>
         </div>
       </div>
-      {drafting ? (
-        <div className="basis-full">
-          <NewExpenseForm
-            runId={runId}
-            row={row}
-            fetcher={fetcher}
-            onDone={() => setDrafting(false)}
-            openReports={openReports}
-            categories={categories}
-          />
-        </div>
-      ) : null}
+      <DraftForm
+        decision={decision}
+        row={row}
+        openReports={openReports}
+        categories={categories}
+        className="basis-full"
+      />
     </div>
   );
 }
@@ -886,19 +938,9 @@ function ReviewRowCard({
   openReports: string[];
   categories: string[];
 }) {
-  const fetcher = useFetcher();
-  const [drafting, setDrafting] = useState(false);
-  const busy = fetcher.state !== "idle";
+  const decision = useRowDecision(runId, row.index);
+  const { busy, submit } = decision;
   const candidates = match?.status === "review" ? match.candidates : [];
-  const submit = (kind: string, extra: Record<string, string> = {}) => {
-    const f = new FormData();
-    f.set("intent", "update");
-    f.set("runId", runId);
-    f.set("rowIndex", String(row.index));
-    f.set("kind", kind);
-    for (const [k, v] of Object.entries(extra)) f.set(k, v);
-    void fetcher.submit(f, { method: "post" });
-  };
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
@@ -908,7 +950,7 @@ function ReviewRowCard({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setDrafting((v) => !v)}
+            onClick={decision.toggleDraft}
             className="text-sm font-medium text-blue-700 hover:underline disabled:opacity-50"
           >
             <Plus className="mr-1 inline h-3.5 w-3.5" />
@@ -970,18 +1012,13 @@ function ReviewRowCard({
         </fieldset>
       ) : null}
 
-      {drafting ? (
-        <div className="mt-2">
-          <NewExpenseForm
-            runId={runId}
-            row={row}
-            fetcher={fetcher}
-            onDone={() => setDrafting(false)}
-            openReports={openReports}
-            categories={categories}
-          />
-        </div>
-      ) : null}
+      <DraftForm
+        decision={decision}
+        row={row}
+        openReports={openReports}
+        categories={categories}
+        className="mt-2"
+      />
     </div>
   );
 }
@@ -989,16 +1026,7 @@ function ReviewRowCard({
 /** A row already queued as a new expense — show the pending draft; the
  * user can remove it (and re-add with different fields). */
 function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
-  const fetcher = useFetcher();
-  const busy = fetcher.state !== "idle";
-  const remove = () => {
-    const f = new FormData();
-    f.set("intent", "update");
-    f.set("runId", runId);
-    f.set("rowIndex", String(row.index));
-    f.set("kind", "none");
-    void fetcher.submit(f, { method: "post" });
-  };
+  const { busy, submit } = useRowDecision(runId, row.index);
   return (
     <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
       <div className="flex items-center gap-3">
@@ -1008,7 +1036,7 @@ function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
           <button
             type="button"
             disabled={busy}
-            onClick={remove}
+            onClick={() => submit("none")}
             className="text-gray-500 hover:underline disabled:opacity-50"
           >
             Remove
@@ -1024,17 +1052,13 @@ function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
  * optional. The draft is stored on the run and becomes an expense (with a
  * rendered statement receipt) when the reconciliation completes. */
 function NewExpenseForm({
-  runId,
+  decision,
   row,
-  fetcher,
-  onDone,
   openReports,
   categories,
 }: {
-  runId: string;
+  decision: ReturnType<typeof useRowDecision>;
   row: StatementRow;
-  fetcher: ReturnType<typeof useFetcher>;
-  onDone: () => void;
   openReports: string[];
   categories: string[];
 }) {
@@ -1043,23 +1067,19 @@ function NewExpenseForm({
   const [report, setReport] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const busy = fetcher.state !== "idle";
+  const busy = decision.busy;
 
   const save = () => {
     if (!report || !merchant.trim() || !date) return;
-    const f = new FormData();
-    f.set("intent", "update");
-    f.set("runId", runId);
-    f.set("rowIndex", String(row.index));
-    f.set("kind", "new");
-    f.set("merchant", merchant.trim());
-    f.set("date", date);
-    f.set("amount", row.amount);
-    f.set("report", report);
-    f.set("category", category);
-    f.set("description", description.trim());
-    void fetcher.submit(f, { method: "post" });
-    onDone();
+    decision.submit("new", {
+      merchant: merchant.trim(),
+      date,
+      amount: row.amount,
+      report,
+      category,
+      description: description.trim(),
+    });
+    decision.closeDraft();
   };
 
   return (

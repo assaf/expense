@@ -168,3 +168,12 @@ export function formatRate(rate: string): string {
   if (frac.length > 2) frac = frac.replace(/0+$/, "");
   return `${m[1]}.${frac}`;
 }
+
+/**
+ * "Business · $0.70/mi" — the compact per-type rate label used by the
+ * editor's mileage summary and the report PDF. Callers resolve the rate
+ * for the trip's (date, type) first (`mileageRateFor`), then render this.
+ */
+export function mileageRateLabel(type: MileageType, rate: string): string {
+  return `${MILEAGE_TYPE_LABELS[type]} · $${formatRate(rate)}/mi`;
+}

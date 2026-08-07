@@ -8,7 +8,7 @@ import {
   findOAuthToken,
   revokeOAuthToken,
 } from "~/lib/store.server";
-import type { OAuthClientRecord } from "~/lib/types";
+import type { OAuthClientRecord, OAuthTokenRecord } from "~/lib/types";
 
 /** Re-exported so the token/code routes hash secrets the shared way. */
 export { hashToken };
@@ -224,17 +224,32 @@ export async function issueTokenPair(
 }
 
 /**
+ * The validity guard for a stored token row: it must exist, be of the
+ * expected type (optionally bound to a client), and be neither revoked nor
+ * expired. Returns the row, or undefined when any guard fails.
+ */
+function validToken(
+  row: OAuthTokenRecord | undefined,
+  type: OAuthTokenRecord["type"],
+  clientId?: string,
+): OAuthTokenRecord | undefined {
+  if (!row) return undefined;
+  if (row.type !== type) return undefined;
+  if (clientId !== undefined && row.clientId !== clientId) return undefined;
+  if (row.revokedAt) return undefined;
+  if (row.expiresAt <= new Date().toISOString()) return undefined;
+  return row;
+}
+
+/**
  * Verify an access token and return the user it belongs to. Used by the
  * /mcp endpoint: a valid token authenticates the user → their account.
  */
 export async function verifyAccessToken(
   token: string,
 ): Promise<{ userId: string; clientId: string } | undefined> {
-  const row = await findOAuthToken(hashToken(token));
+  const row = validToken(await findOAuthToken(hashToken(token)), "access");
   if (!row) return undefined;
-  if (row.type !== "access") return undefined;
-  if (row.revokedAt) return undefined;
-  if (row.expiresAt <= new Date().toISOString()) return undefined;
   return { userId: row.userId, clientId: row.clientId };
 }
 
@@ -254,11 +269,12 @@ export async function rotateRefreshToken(
 ): Promise<
   { accessToken: string; refreshToken: string; userId: string } | undefined
 > {
-  const row = await findOAuthToken(hashToken(refreshToken));
+  const row = validToken(
+    await findOAuthToken(hashToken(refreshToken)),
+    "refresh",
+    client.id,
+  );
   if (!row) return undefined;
-  if (row.type !== "refresh" || row.clientId !== client.id) return undefined;
-  if (row.revokedAt) return undefined;
-  if (row.expiresAt <= new Date().toISOString()) return undefined;
   await revokeOAuthToken(row.tokenHash);
   const pair = await issueTokenPair(row.userId, client.id);
   return { ...pair, userId: row.userId };

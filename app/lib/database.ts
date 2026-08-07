@@ -95,8 +95,6 @@ export async function initStore(): Promise<void> {
           data: { accountId: bootstrap.accountId },
         });
       }
-      await migrateImageBlobKeys(bootstrap.accountId);
-      await migrateDuplicateDismissals();
       await syncMileageRates();
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.
@@ -105,74 +103,6 @@ export async function initStore(): Promise<void> {
     });
   }
   await ready;
-}
-
-/**
- * Legacy dismissal migration: pairs dismissed before the join table
- * (settings.duplicateDismissals, a JSON array of pair keys) move into
- * duplicate_dismissals, then the settings row is dropped. Idempotent —
- * createMany skips pairs that already made it, and the settings row goes
- * whether or not anything moved. Stale keys (one expense already deleted)
- * are dropped: the FK constraints only accept pairs of live expenses.
- */
-async function migrateDuplicateDismissals(): Promise<void> {
-  const legacy = await prisma.settings.findMany({
-    where: { key: "duplicateDismissals" },
-    select: { accountId: true, value: true },
-  });
-  if (legacy.length === 0) return;
-  const pairs: Array<{ accountId: string; idA: string; idB: string }> = [];
-  for (const row of legacy) {
-    for (const key of parseLegacyDismissalKeys(row.value)) {
-      const [idA, idB] = key.split("|");
-      if (idA && idB) pairs.push({ accountId: row.accountId, idA, idB });
-    }
-  }
-  let migrated = 0;
-  if (pairs.length > 0) {
-    const ids = [...new Set(pairs.flatMap((p) => [p.idA, p.idB]))];
-    const existing = new Set(
-      (
-        await prisma.expense.findMany({
-          where: { id: { in: ids } },
-          select: { id: true },
-        })
-      ).map((e) => e.id),
-    );
-    const rows: Prisma.DuplicateDismissalCreateManyInput[] = [];
-    for (const p of pairs) {
-      if (!existing.has(p.idA) || !existing.has(p.idB)) continue;
-      const [expenseAId, expenseBId] =
-        p.idA < p.idB ? [p.idA, p.idB] : [p.idB, p.idA];
-      rows.push({ id: ulid(), accountId: p.accountId, expenseAId, expenseBId });
-    }
-    if (rows.length > 0) {
-      const created = await prisma.duplicateDismissal.createMany({
-        data: rows,
-        skipDuplicates: true,
-      });
-      migrated = created.count;
-    }
-  }
-  await prisma.settings.deleteMany({ where: { key: "duplicateDismissals" } });
-  if (migrated > 0) {
-    console.warn(
-      "[initStore] Migrated %d dismissed duplicate pairs to duplicate_dismissals",
-      migrated,
-    );
-  }
-}
-
-/** Parse the legacy settings blob (a JSON array of pair keys). */
-function parseLegacyDismissalKeys(raw: string): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === "string");
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -246,50 +176,6 @@ export async function readMileageRates(): Promise<MileageRateEntry[]> {
  * (`images/{accountId}/{name}`). Backfills the account from the owning
  * expense, adopts orphans into the bootstrap account, and rewrites the keys
  * on image_blobs + expenses.imageFile. No-op once every key is namespaced.
- */
-async function migrateImageBlobKeys(bootstrapAccountId: string): Promise<void> {
-  // Backfill accountId from the expense that references each blob.
-  await prisma.$executeRaw`
-    UPDATE "image_blobs" SET "accountId" = e."accountId"
-    FROM (SELECT DISTINCT "imageFile", "accountId" FROM "expenses" WHERE "imageFile" <> '') e
-    WHERE "image_blobs"."key" = e."imageFile" AND "image_blobs"."accountId" = ''
-  `;
-  // Orphans (no expense references them) go to the bootstrap account.
-  await prisma.$executeRaw`
-    UPDATE "image_blobs" SET "accountId" = ${bootstrapAccountId} WHERE "accountId" = ''
-  `;
-  // Namespace legacy keys: images/X → images/{accountId}/X, and bare names
-  // (CSV-era expenses stored filenames without the prefix) get the full path.
-  await prisma.$executeRaw`
-    UPDATE "image_blobs"
-    SET "key" = CASE
-      WHEN "key" LIKE 'images/%' THEN 'images/' || "accountId" || '/' || substr("key", 8)
-      ELSE 'images/' || "accountId" || '/' || "key"
-    END
-    WHERE "key" <> '' AND "key" NOT LIKE 'images/%/%'
-  `;
-  // Mirror the same rewrite into expenses.imageFile.
-  await prisma.$executeRaw`
-    UPDATE "expenses"
-    SET "imageFile" = CASE
-      WHEN "imageFile" LIKE 'images/%' THEN 'images/' || "accountId" || '/' || substr("imageFile", 8)
-      ELSE 'images/' || "accountId" || '/' || "imageFile"
-    END
-    WHERE "imageFile" <> '' AND "imageFile" NOT LIKE 'images/%/%'
-  `;
-}
-
-/**
- * Guarantee at least one user exists. On an empty database, creates the
- * bootstrap account + user from APP_EMAIL/APP_PASSWORD (fail-closed if
- * missing). Otherwise returns the oldest existing user — used as the target
- * account for adopting legacy (pre-account) rows.
- *
- * One-time legacy fix-up: accounts created before emails were login names
- * stored a plain username (e.g. "assaf") in the email column. When
- * APP_EMAIL is configured, the bootstrap user (the oldest user — the same
- * one the bootstrap flow would have created) gets that address, so the
- * configured credentials keep working after the username→email switch.
  */
 async function ensureBootstrapUser(): Promise<User> {
   const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
@@ -1472,12 +1358,6 @@ function oauthTokenFromRow(row: {
 
 // --- Inbound email ----------------------------------------------------------
 
-/** Normalize a sender address for storage/lookup: strip "Name <addr>"
- * display-name wrapping, trim, lowercase. */
-function normalizeSender(address: string): string {
-  return extractEmailAddress(address);
-}
-
 /** The stored row for a received email, or undefined when first seen. */
 export async function readInboundEmail(
   emailId: string,
@@ -1516,7 +1396,7 @@ export async function upsertInboundEmail(input: {
 export async function findVerifiedSenderAccount(
   senderEmail: string,
 ): Promise<{ account: Account; verifiedAt: string } | undefined> {
-  const address = normalizeSender(senderEmail);
+  const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
   const verification = await prisma.inboundSenderVerification.findUnique({
     where: { address },
@@ -1536,7 +1416,7 @@ export async function findVerifiedSenderAccount(
 export async function findPendingSenderRow(
   senderEmail: string,
 ): Promise<{ accountId: string; address: string } | undefined> {
-  const address = normalizeSender(senderEmail);
+  const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
   const row = await prisma.inboundSender.findFirst({
     where: { address },
@@ -1587,7 +1467,7 @@ export async function addInboundSender(
   | { ok: true; address: string; token: string | null }
   | { ok: false; error: string }
 > {
-  const normalized = normalizeSender(address);
+  const normalized = extractEmailAddress(address);
   if (!normalized || !isEmail(normalized)) {
     return { ok: false, error: "Enter a valid email address" };
   }
@@ -1616,7 +1496,7 @@ export async function resendInboundSenderVerification(
 ): Promise<
   { ok: true; address: string; token: string } | { ok: false; error: string }
 > {
-  const normalized = normalizeSender(address);
+  const normalized = extractEmailAddress(address);
   if (!normalized) return { ok: false, error: "Enter a valid email address" };
   const verification = await prisma.inboundSenderVerification.findUnique({
     where: { address: normalized },
@@ -1639,7 +1519,7 @@ export async function removeInboundSender(
   accountId: string,
   address: string,
 ): Promise<void> {
-  const normalized = normalizeSender(address);
+  const normalized = extractEmailAddress(address);
   await prisma.$transaction([
     prisma.inboundSender.deleteMany({
       where: { accountId, address: normalized },
@@ -1752,7 +1632,7 @@ export async function ensureInboundSenderForUser(
   verified: boolean;
   claimedByOther: boolean;
 }> {
-  const address = normalizeSender(email);
+  const address = extractEmailAddress(email);
   if (!address) return { token: null, verified: false, claimedByOther: false };
   const verification = await prisma.inboundSenderVerification.findUnique({
     where: { address },

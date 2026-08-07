@@ -17,6 +17,29 @@ import {
 import { formString, validateDateNotFuture } from "~/lib/validation";
 
 /**
+ * Validate the inputs every expense write shares — the date (a valid
+ * calendar date, not in the future) and the report (must exist and be
+ * open, when one is assigned). Returns an error message, or null when the
+ * inputs are fine. Callers skip the report check when the expense keeps
+ * its existing report unchanged (an expense already in a closed report
+ * stays there when saved without changes).
+ */
+export async function validateExpenseInputs(
+  accountId: string,
+  date: string,
+  report: string,
+  opts: { checkReport?: boolean } = {},
+): Promise<string | null> {
+  const dateError = validateDateNotFuture(date);
+  if (dateError) return dateError;
+  if (opts.checkReport && report) {
+    const { error } = await findOpenReport(accountId, report);
+    if (error) return error;
+  }
+  return null;
+}
+
+/**
  * Persist an expense from a save form submission. Shared by the edit route
  * (/expense/:id, `existing` = the current row) and the create route
  * (/expense/new, `existing` = null — the expense is a fresh shell, and the
@@ -39,16 +62,13 @@ export async function saveExpenseFromForm(
   existing: Expense | null,
 ): Promise<{ error: string; id: null } | { error: null; id: string }> {
   const date = formString(form, "date");
-  const dateError = validateDateNotFuture(date);
-  if (dateError) return { error: dateError, id: null };
-
   const report = formString(form, "report");
-  if (report && (!existing || report !== existing.report)) {
+  const inputError = await validateExpenseInputs(accountId, date, report, {
     // The report must exist and be open — an expense already in a closed
-    // report keeps it when saved unchanged (the check above skips that case).
-    const { error } = await findOpenReport(accountId, report);
-    if (error) return { error, id: null };
-  }
+    // report keeps it when saved unchanged (the check is skipped then).
+    checkReport: Boolean(report && (!existing || report !== existing.report)),
+  });
+  if (inputError) return { error: inputError, id: null };
 
   const category = formString(form, "category");
   const description = formString(form, "description");

@@ -171,7 +171,10 @@ production env var (for the deploy script) and as a GitHub Actions secret.
   save/read/rename/delete takes the owning `accountId`. Named
   `YYYY-MM-DD_REPORT_FILE.ext` once a receipt has a date + report;
   otherwise a temp id-based name (renamed on save). Legacy (pre-account)
-  keys are rewritten automatically by `initStore` (`migrateImageBlobKeys`).
+  keys were migrated once by `initStore`; the one-shot SQL now lives in
+  `scripts/migrate-legacy` (also migrates the legacy `settings.duplicateDismissals`
+  blob to the `duplicate_dismissals` join table) — run it against any
+  pre-2026 database before serving it.
 - **Maps**: Leaflet is loaded **dynamically, client-only** (it touches `navigator`
   at load and breaks SSR). Geocoding via Nominatim, routing via OSRM — no API
   keys. See `app/lib/maps.server.ts`.
