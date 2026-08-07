@@ -18,9 +18,6 @@ import { load } from "cheerio";
  * for the XML) — no new dependency.
  */
 
-const SPREADSHEET_NS =
-  "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-
 function decode(bytes: Uint8Array | undefined): string {
   if (!bytes) return "";
   return Buffer.from(bytes).toString("utf8");

@@ -34,6 +34,7 @@ Requires: pypdf (pip install pypdf).
 import os
 import re
 import sys
+import zipfile
 
 from pypdf import PdfReader, PdfWriter
 from pypdf._page import ContentStream
@@ -306,27 +307,82 @@ def redact_pdf(src_path: str, dst_path: str) -> dict:
     return stats
 
 
+def redact_text(text: str) -> tuple[str, int]:
+    """Redact personal info from plain text statements (CSV, QBO/OFX, and
+    the XML inside .xlsx files): names, card endings, the QBO account id,
+    and long digit runs. Returns the redacted text and the replacement
+    count."""
+    rules = [
+        # Card-holder names (word boundaries — "arkin" is in "PARKING").
+        (re.compile(r"\b(ASSAF ARKIN|JENNIFER HONG)\b", re.I), "REDACTED"),
+        # Card endings: -12004, -13010, |12004 — but never an amount like
+        # -1260.08 (the lookahead excludes digits followed by a decimal).
+        (re.compile(r"(?<=[-|])\d{4,5}(?![\d.])"), "XXXX"),
+        # QBO account id (<ACCTID>H9ACO0O8N1XWTBJ|12004</ACCTID>).
+        (re.compile(r"(?<=<ACCTID>)[^<]+(?=</ACCTID>)", re.I), "REDACTED"),
+        # Card numbers / long phone digits in MEMO fields.
+        (re.compile(r"\b\d{15,}\b"), "X" * 15),
+    ]
+    out = text
+    total = 0
+    for rx, repl in rules:
+        out, n = rx.subn(repl, out)
+        total += n
+    return out, total
+
+
+def redact_xlsx(src_path: str, dst_path: str) -> int:
+    """Redact the XML inside an .xlsx (shared strings + sheets) and re-zip."""
+    total = 0
+    with zipfile.ZipFile(src_path, "r") as zin, zipfile.ZipFile(
+        dst_path, "w", zipfile.ZIP_DEFLATED
+    ) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.lower().endswith((".xml", ".rels", ".txt")):
+                text = data.decode("utf-8")
+                new, n = redact_text(text)
+                total += n
+                data = new.encode("utf-8")
+            zout.writestr(item, data)
+    return total
+
+
 def main():
     src_dir = sys.argv[1] if len(sys.argv) > 1 else "."
     out_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(src_dir, "Redacted")
     os.makedirs(out_dir, exist_ok=True)
     for name in sorted(os.listdir(src_dir)):
-        if not name.lower().endswith(".pdf"):
+        if name.startswith(".") or name == "Redacted":
             continue
         src = os.path.join(src_dir, name)
         dst = os.path.join(out_dir, name)
-        stats = redact_pdf(src, dst)
-        if stats.get("error"):
-            print(f"SKIP {name}: {stats['error']}")
+        ext = name.lower().rsplit(".", 1)[-1]
+        if ext == "pdf":
+            stats = redact_pdf(src, dst)
+            if stats.get("error"):
+                print(f"SKIP {name}: {stats['error']}")
+                continue
+            line = (
+                f"{name}: {stats['flagged']} flagged runs, "
+                f"{stats['ops_scrubbed']} ops scrubbed, {stats['bars']} bars "
+                f"({stats['runs']} text runs) → {dst}"
+            )
+            for p in stats["problems"]:
+                line += f"  [PROBLEM: {p}]"
+            print(line)
+        elif ext in ("csv", "qbo", "qfx", "ofx"):
+            with open(src, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+            out, n = redact_text(text)
+            with open(dst, "w", encoding="utf-8") as fh:
+                fh.write(out)
+            print(f"{name}: {n} replacements → {dst}")
+        elif ext == "xlsx":
+            n = redact_xlsx(src, dst)
+            print(f"{name}: {n} replacements → {dst}")
+        else:
             continue
-        line = (
-            f"{name}: {stats['flagged']} flagged runs, "
-            f"{stats['ops_scrubbed']} ops scrubbed, {stats['bars']} bars "
-            f"({stats['runs']} text runs) → {dst}"
-        )
-        for p in stats["problems"]:
-            line += f"  [PROBLEM: {p}]"
-        print(line)
 
 
 if __name__ == "__main__":
