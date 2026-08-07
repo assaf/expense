@@ -6,22 +6,24 @@ name: deployment-checks
 #
 #   - Ordering: GitHub has no cross-workflow dependencies, so a separate
 #     smoke workflow could run (and even pass) before the CI checks finished.
-#     Here `check` and `test` run in PARALLEL, `migrate-db` needs both, and
-#     `pdf-ocr-smoke` needs all three. The smoke check never starts until CI
-#     is done — and when CI fails, the smoke job fails fast instead of being
-#     skipped (GitHub reports a skipped job as success, which could let
-#     Vercel promote a broken build).
+#     Here `secretlint` runs FIRST and gates the whole pipeline (a committed
+#     secret must never reach prod), then `check` and `test` run in PARALLEL,
+#     `migrate-db` needs both, and `pdf-ocr-smoke` needs all three. The smoke
+#     check never starts until CI is done — and when CI fails, the smoke job
+#     fails fast instead of being skipped (GitHub reports a skipped job as
+#     success, which could let Vercel promote a broken build).
 #   - DB migrations run ONLY after the test suite passes — never before.
 #     Migrating prod for code whose tests haven't passed would leave the
 #     schema ahead of the deployed bundle; and without the migration,
 #     `pdf-ocr-smoke` runs the deployed code against an out-of-date schema
 #     and fails on any schema change. So the deploy contract is:
-#         check & test → migrate prod DB → pdf-ocr-smoke
+#         secretlint → check & test → migrate prod DB → pdf-ocr-smoke
 #   - Time budget: there is no workflow-level timeout in GitHub Actions, so
 #     the whole run is bounded by the job timeouts on the critical path —
-#     max(check 2m, test 4m) + migrate 2m + smoke 2m = a ~8m ceiling
-#     (typical runs finish in ~4.5m; PR-only runs are just check + test,
-#     ~3m). These are fail-fast guards, not targets: a hung job dies here
+#     secretlint 2m + max(check 2m, test 4m) + migrate 2m + smoke 2m = a
+#     ~10m ceiling (typical runs finish in ~5m; PR-only runs are just
+#     secretlint + check + test, ~3m). These are fail-fast guards, not
+#     targets: a hung job dies here
 #     instead of running for the default 6h. A literal 5-minute ceiling
 #     isn't possible without flaky failures — the test suite alone floors at
 #     ~3m and the smoke function can take up to a minute on a cold start.
@@ -79,12 +81,38 @@ permissions:
   contents: read
 
 jobs:
+  # Whole-repo secret scan (tokens, keys, credentials) — runs FIRST and
+  # gates everything below: check/test/migrate/smoke don't start until it
+  # passes, so a committed secret never reaches prod. Runs on PRs too.
+  # --format github emits inline PR annotations on failures; .gitignore is
+  # respected (secretlint v13+), so gitignored files (.env*, node_modules,
+  # prisma/backup.sql) are never scanned — the scan set is exactly what
+  # could reach the repo. Config: .secretlintrc.json
+  secretlint:
+    name: Secretlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: npx secretlint --format github "**/*"
+
   # Static checks (fmt, lint, types) — no database, no browsers. Runs in
-  # parallel with the test job.
+  # parallel with the test job (after the secretlint gate).
   check:
     name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    needs: [secretlint]
     steps:
       - uses: actions/checkout@v7
 
@@ -111,6 +139,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 4
+    needs: [secretlint]
     services:
       # Matches the hardcoded test URL in vite.config.ts:
       # postgres://assaf@localhost/expense_test (passwordless)
