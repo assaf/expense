@@ -5,13 +5,12 @@ Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
 (schema in `prisma/schema.prisma` — the single source of truth; client in
 `app/lib/prisma.server.ts`). Domain reads/writes go through
 `app/lib/store.server.ts` → `app/lib/database.ts`; receipt images via
-`app/lib/images.server.ts` (Postgres BYTEA — prod
-and local both; no separate storage service). There is **no runtime DDL** —
-schema changes go through
-Prisma (`prisma migrate dev` locally, `pnpm db:push` on deploy).
-Dev/tests run on local Postgres (`expense_dev`/`expense_test`) only.
-Deployed to **Vercel** with a **Supabase** Postgres database (project ref
-`ldtqjzfftjbzcvgktgbt`, region us-west-2; GitHub push to `main` auto-deploys).
+`app/lib/images.server.ts` (Postgres BYTEA — prod and local both; no separate
+storage service). There is **no runtime DDL** — schema changes go through Prisma
+(`prisma migrate dev` locally, `pnpm db:push` on deploy). Dev/tests run on local
+Postgres (`expense_dev`/`expense_test`) only. Deployed to **Vercel** with a
+**Supabase** Postgres database (project ref `ldtqjzfftjbzcvgktgbt`, region
+us-west-2; GitHub push to `main` auto-deploys).
 
 ## Database connections (Supabase)
 
@@ -22,34 +21,33 @@ should not rely on it either. Use the **Supavisor pooler** on
 
 - **`DATABASE_URL` (runtime) — transaction-mode pooler, port 6543.** Every
   Vercel serverless instance opens its own Prisma pool, so session mode (one
-  dedicated backend connection per pooled client) exhausted the pooler cap
-  under the image-heavy list page. Transaction mode shares one small backend
-  pool across all clients — connections are checked out only for the duration
-  of a query/transaction, so serverless instances stop holding dedicated
-  slots. Supavisor's transaction mode handles the extended protocol /
-  prepared statements and Prisma's batch + interactive transactions (verified
-  against prod with the PrismaPg adapter).
-- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`, `scripts/migrate-prod` and
-  `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL
-  want stable sessions; the session pooler behaves like a direct connection.
-  Keep it here, not on the transaction pooler. Also mirrored as the
-  `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI `migrate-db` job
-  (the CI `VERCEL_TOKEN` can't read project settings, so the DDL URL is
-  passed directly rather than pulled via the Vercel CLI).
+  dedicated backend connection per pooled client) exhausted the pooler cap under
+  the image-heavy list page. Transaction mode shares one small backend pool
+  across all clients — connections are checked out only for the duration of a
+  query/transaction, so serverless instances stop holding dedicated slots.
+  Supavisor's transaction mode handles the extended protocol / prepared
+  statements and Prisma's batch + interactive transactions (verified against
+  prod with the PrismaPg adapter).
+- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`,
+  `scripts/migrate-prod` and `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL want stable sessions; the session pooler behaves
+  like a direct connection. Keep it here, not on the transaction pooler. Also
+  mirrored as the `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI
+  `migrate-db` job (the CI `VERCEL_TOKEN` can't read project settings, so the
+  DDL URL is passed directly rather than pulled via the Vercel CLI).
 
 Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
-pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for
-30s (the image-list burst). Pooler `pool_size` is capped at **80% of the
-DB's `max_connections`** (48 on the current 60-connection compute); the
-session pooler is set to 40. Rollback if anything misbehaves: flip
-`DATABASE_URL` back to port 5432.
+pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for 30s
+(the image-list burst). Pooler `pool_size` is capped at **80% of the DB's
+`max_connections`** (48 on the current 60-connection compute); the session
+pooler is set to 40. Rollback if anything misbehaves: flip `DATABASE_URL` back
+to port 5432.
 
-When setting these in Vercel, add them with `vercel env add … --no-sensitive`:
-a _Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which
-silently breaks `scripts/deploy` (psql then falls back to stale `PG*` env
-vars). The old Vercel Neon integration (which set `DATABASE_URL`, `PGHOST`,
-`POSTGRES_URL`, `NEON_*`, …) was disconnected in Aug 2026 — don't re-add it.
-The abandoned Neon database still exists as a rollback fallback.
+When setting these in Vercel, add them with `vercel env add … --no-sensitive`: a
+_Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which silently
+breaks `scripts/deploy` (psql then falls back to stale `PG*` env vars). The old
+Vercel Neon integration (which set `DATABASE_URL`, `PGHOST`, `POSTGRES_URL`,
+`NEON_*`, …) was disconnected in Aug 2026 — don't re-add it. The abandoned Neon
+database still exists as a rollback fallback.
 
 ## Commands
 
@@ -64,25 +62,24 @@ pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
 ./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql), then sync the local schema to the latest (prisma db push) and reconcile the migration history (prod applies schema with db push, which never records migrations — the clone marks the dump's missing migrations as applied)
-# NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles schema
-# sync via `vercel env pull` + `prisma db push`, then CLI-deploys and opens the
-# site. `git push origin main` also auto-deploys: the CI workflow's
+# NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles
+# schema sync via `vercel env pull` + `prisma db push`, then CLI-deploys and
+# opens the site. `git push origin main` also auto-deploys: the CI workflow's
 # `migrate-db` job passes the prod DDL URL via the `DATABASE_URL_UNPOOLED`
 # GitHub secret and runs `prisma db push`. It does NOT use the Vercel CLI: the
 # `VERCEL_TOKEN` secret can list deployments (smoke job) but is denied on the
 # project-settings/team endpoints `vercel env pull` needs (403
-# PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead.
-# DEPLOY ORDERING CONTRACT: check & test → migrate prod DB → pdf-ocr-smoke.
-# The smoke check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl)
-# runs the deployed bundle against the prod schema and fails on any schema
-# change if the migration was skipped. Migrations must NEVER run before the
-# test suite: `scripts/deploy` runs `pnpm test` before calling migrate-prod,
-# and the CI `migrate-db` job needs both `check` and `test` (which run in
-# parallel). The workflow's job timeouts bound the whole run (~8m ceiling —
-# max(check 2m, test 4m) + migrate 2m + smoke 2m — typical ~4.5m).
-# Schema changes: `prisma migrate dev` locally, then run deploy to sync prod
-# (migration history exists since Jul 2026).
-# Note: `vercel env pull` merges with the existing file, so stale local
+# PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead. DEPLOY
+# ORDERING CONTRACT: check & test → migrate prod DB → pdf-ocr-smoke. The smoke
+# check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl) runs the
+# deployed bundle against the prod schema and fails on any schema change if the
+# migration was skipped. Migrations must NEVER run before the test suite:
+# `scripts/deploy` runs `pnpm test` before calling migrate-prod, and the CI
+# `migrate-db` job needs both `check` and `test` (which run in parallel). The
+# workflow's job timeouts bound the whole run (~8m ceiling — max(check 2m, test
+# 4m) + migrate 2m + smoke 2m — typical ~4.5m). Schema changes: `prisma migrate
+# dev` locally, then run deploy to sync prod (migration history exists since Jul
+# 2026). Note: `vercel env pull` merges with the existing file, so stale local
 # entries (e.g. leftover `PGHOST`) survive — delete `.env.prod.pull`/
 # `.env.prod` before pulling if they cause trouble.
 ```
@@ -93,55 +90,54 @@ Run `pnpm check` before committing.
 
 Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback. Dev/test use
-`.env` (`DATABASE_URL`, and auth: `APP_EMAIL`,
-`APP_PASSWORD`, `SESSION_SECRET`); prod uses the Vercel dashboard
-(`DATABASE_URL`, plus the same three auth vars). Pull
-prod env with `npx vercel env pull --environment=production .env.prod` (use
-`DATABASE_URL_UNPOOLED` for psql/prisma DDL; both point at the Supabase
-session pooler — see “Database connections (Supabase)” above). Tests hardcode
-local services (`expense_test`, image blobs in Postgres), not `.env`.
+`.env` (`DATABASE_URL`, and auth: `APP_EMAIL`, `APP_PASSWORD`,
+`SESSION_SECRET`); prod uses the Vercel dashboard (`DATABASE_URL`, plus the same
+three auth vars). Pull prod env with `npx vercel env pull
+--environment=production .env.prod` (use `DATABASE_URL_UNPOOLED` for psql/prisma
+DDL; both point at the Supabase session pooler — see “Database connections
+(Supabase)” above). Tests hardcode local services (`expense_test`, image blobs
+in Postgres), not `.env`.
 
-Receipts-by-email adds optional vars: `RESEND_API_KEY`, `INBOUND_EMAIL_WEBHOOK_SECRET`,
-`INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
-`DEEPSEEK_MODEL` (default `deepseek-v4-flash`), `RECEIPT_OCR_MODE`
-(`auto` default | `deepseek` | `tesseract`). All optional — the webhook route
-returns 503 when unconfigured and everything else still works.
+Receipts-by-email adds optional vars: `RESEND_API_KEY`,
+`INBOUND_EMAIL_WEBHOOK_SECRET`, `INBOUND_EMAIL_ADDRESS`, `DEEPSEEK_API_KEY`,
+`DEEPSEEK_MODEL` (default `deepseek-v4-flash`), `RECEIPT_OCR_MODE` (`auto`
+default | `deepseek` | `tesseract`). All optional — the webhook route returns
+503 when unconfigured and everything else still works.
 
-`SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke
-check at GET `/api/smoke` (send it in the `x-smoke-secret` header); when
-unset the route is disabled (404) and `scripts/deploy` skips the check with
-a warning. It must also be set as a **GitHub Actions secret** (same value)
-for `.github/workflows/deployment-smoke.yml`.
+`SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
+GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
+is disabled (404) and `scripts/deploy` skips the check with a warning. It must
+also be set as a **GitHub Actions secret** (same value) for
+`.github/workflows/deployment-smoke.yml`.
 
-`PUBLIC_URL` (optional) is the public base URL the OAuth metadata advertises
-as its issuer + endpoint origin. Set it when the app sits behind a
-TLS-terminating proxy (e.g. a local `https://expense.localhost` setup) so
-MCP clients see the public origin instead of the proxy-internal `http://`
-one — otherwise they refuse to authenticate ("Protected resource … does not
-match expected"). Without it, the request origin is used, honoring
-`x-forwarded-proto`/`x-forwarded-host` for http requests.
+`PUBLIC_URL` (optional) is the public base URL the OAuth metadata advertises as
+its issuer + endpoint origin. Set it when the app sits behind a TLS-terminating
+proxy (e.g. a local `https://expense.localhost` setup) so MCP clients see the
+public origin instead of the proxy-internal `http://` one — otherwise they
+refuse to authenticate ("Protected resource … does not match expected"). Without
+it, the request origin is used, honoring `x-forwarded-proto`/`x-forwarded-host`
+for http requests.
 
-`SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable
-Sentry error monitoring (server runtime + browser build-time respectively;
-see `app/entry.server.tsx` / `app/entry.client.tsx` and
-`app/lib/errors.server.ts`). Unset `SENTRY_DSN` → the server falls back to
-its hardcoded DSN; unset `VITE_SENTRY_DSN` → no browser Sentry. The server
-SDK inits INSIDE the bundle (`app/entry.server.tsx` — the module Vercel
-boots as the function handler), gated on `VERCEL_ENV=production`, so
-dev/test/preview never emit to the production project. Do NOT move server
-init back into a `NODE_OPTIONS --import` instrument file: Vercel never runs
-the `start` script, so that code never executes in the deployed function
-(the function config's `environment` is empty; server errors only ever
-reached Sentry locally this way). The post-deploy smoke check reports
-`Sentry.isInitialized()` and `scripts/smoke-check` warns when a production
-deployment boots with it false. Both vars must be set in Vercel;
+`SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable Sentry
+error monitoring (server runtime + browser build-time respectively; see
+`app/entry.server.tsx` / `app/entry.client.tsx` and `app/lib/errors.server.ts`).
+Unset `SENTRY_DSN` → the server falls back to its hardcoded DSN; unset
+`VITE_SENTRY_DSN` → no browser Sentry. The server SDK inits INSIDE the bundle
+(`app/entry.server.tsx` — the module Vercel boots as the function handler),
+gated on `VERCEL_ENV=production`, so dev/test/preview never emit to the
+production project. Do NOT move server init back into a `NODE_OPTIONS --import`
+instrument file: Vercel never runs the `start` script, so that code never
+executes in the deployed function (the function config's `environment` is empty;
+server errors only ever reached Sentry locally this way). The post-deploy smoke
+check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
+production deployment boots with it false. Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
 Automation secret (Vercel → Settings → Security). Deployment URLs are behind
-Vercel SSO protection, so both `scripts/deploy` and the smoke workflow send
-it as the `x-vercel-protection-bypass` header to reach the fresh deployment
-while Deployment Checks hold it from the production alias. Set it as a Vercel
+Vercel SSO protection, so both `scripts/deploy` and the smoke workflow send it
+as the `x-vercel-protection-bypass` header to reach the fresh deployment while
+Deployment Checks hold it from the production alias. Set it as a Vercel
 production env var (for the deploy script) and as a GitHub Actions secret.
 
 ## Stack & conventions
