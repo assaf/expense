@@ -143,8 +143,11 @@ function merchantOverlap(desc: Set<string>, merchant: Set<string>): boolean {
 }
 
 /** Refund-ish keywords: a statement line containing any of these is a
- * credit/payment/return — a non-expense — never an auto match. */
-const REFUND_RE = /refund|payment|credit|return|reversal/i;
+ * credit/payment/return — a non-expense — never an auto match. Covers the
+ * common abbreviations and labels across banks ("ONLINE PYMT", "CASH
+ * BACK", "PURCHASE ADJUSTMENT", "CASH REBATE"). */
+const REFUND_RE =
+  /refund|payment|pymt|credit|cash\s?back|adjustment|rebate|return|reversal/i;
 
 /** Direction for a signed amount: credit-card convention (negative = the
  * purchase, positive = a credit), guarded by whether the file carries signs
@@ -377,7 +380,6 @@ export function parseOfxStatement(text: string): {
 
 // --- PDF -------------------------------------------------------------------
 
-/** Match a trailing amount (with optional $, sign, or parens). */
 /** A single amount token: optional $, sign, or parens, two decimals. */
 const PDF_AMOUNT_TOKEN = /^[-($]?\$?\d[\d,]*(?:\.\d{2})\)?$/;
 /** A line that is nothing but a date. */
@@ -386,23 +388,95 @@ const PDF_DATE_ONLY =
 /** A line that is nothing but an amount. */
 const PDF_AMOUNT_ONLY =
   /^-?\$?\d{1,3}(?:,\d{3})*\.\d{2}\)?$|^\(\$?\d{1,3}(?:,\d{3})*\.\d{2}\)$/;
+/** Collapse the sign/space split banks use in amounts ("- $25.00",
+ * "+ $10.00") into one token ("-$25.00"). */
+const PDF_AMOUNT_SPACED = /[-+]\s*\$?\s*\d[\d,]*\.\d{2}/g;
+/** Summary-page column-merge noise that happens to carry a date and an
+ * amount but is not a transaction ("on the statement closing date when
+ * Payments -$2,739.84 Aug 06, 2026"). */
+const PDF_SUMMARY_NOISE =
+  /statement|closing date|available credit|credit limit|previous balance|new balance|minimum payment|payment due|balance as of/i;
+
+/** The statement's billing cycle — used to date yearless transaction dates
+ * (Capital One prints "Jun 13" and lets the cycle header carry the year). */
+interface Cycle {
+  start: string; // YYYY-MM-DD
+  end: string;
+}
+
+/** Cycle-window check with a few days of slack — posting dates can fall a
+ * day or two outside the stated cycle (a transaction on Jun 11 posts Jun
+ * 12, the cycle's first day). */
+function inCycle(date: string, cycle: Cycle): boolean {
+  const SLACK_MS = 3 * 86_400_000;
+  const d = Date.parse(`${date}T00:00:00Z`);
+  return (
+    d >= Date.parse(`${cycle.start}T00:00:00Z`) - SLACK_MS &&
+    d <= Date.parse(`${cycle.end}T00:00:00Z`) + SLACK_MS
+  );
+}
+
+/** Find "Jun 12, 2026 - Jul 12, 2026" style cycle headers. */
+function extractCycle(lines: string[]): Cycle | null {
+  const re =
+    /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/;
+  for (const line of lines) {
+    const m = line.match(re);
+    if (!m) continue;
+    const start = normalizeDate(m[1]!);
+    const end = normalizeDate(m[2]!);
+    if (start && end && start <= end) return { start, end };
+  }
+  return null;
+}
+
+/** Resolve a yearless "Jun 13" date against the billing cycle — a statement
+ * only lists transactions inside its cycle, so the year is unambiguous
+ * (and a date far outside the cycle is a description, not a transaction). */
+function resolveYearlessDate(
+  monthDay: string,
+  cycle: Cycle | null,
+): string | null {
+  const m = monthDay.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2})$/);
+  if (!m) return null;
+  const month = MONTHS[m[1]!.slice(0, 3).toLowerCase()];
+  const day = m[2]!.padStart(2, "0");
+  if (!month) return null;
+  const endYear = cycle
+    ? Number(cycle.end.slice(0, 4))
+    : new Date().getFullYear();
+  const candidate = `${endYear}-${month}-${day}`;
+  if (cycle && !inCycle(candidate, cycle)) {
+    // Year-crossing cycle (Nov 2026 – Jan 2027): try the previous year.
+    const prev = `${endYear - 1}-${month}-${day}`;
+    if (inCycle(prev, cycle)) return prev;
+    return null;
+  }
+  return candidate;
+}
 
 /**
  * Try "<description> <date> <amount>" on one line, in any order — bank
  * PDFs put the date and amount anywhere on the line (Amex:
  * "AplPay RALPHS GROCERY STUDIO CITY CA 06/14/26 $143.21" and even
- * "…CA $112.71 06/24/26"). Requires exactly one amount token and one
- * date token (a 1–3 token window, since named dates are three tokens:
- * "Aug 3 2026"). Two of either means a summary/table line, not a
- * transaction — rejected so "Purchases 06/01/2023 17.49% (v) $0.00 $0.00"
- * never becomes a row.
+ * "…CA $112.71 06/24/26"). Requires exactly one amount token; every
+ * date token (1–3 token windows, since named dates are three tokens:
+ * "Aug 3 2026", and yearless "Jun 13" is two) is stripped from the
+ * description — Capital One rows carry both a transaction and a posting
+ * date. Two amount tokens means a summary/table line, not a transaction.
  */
-function tryPdfOneLine(line: string): {
+function tryPdfOneLine(
+  line: string,
+  cycle: Cycle | null,
+): {
   date: string;
   description: string;
   signed: Decimal;
 } | null {
-  const tokens = line.trim().split(/\s+/);
+  const tokens = line
+    .trim()
+    .replace(PDF_AMOUNT_SPACED, (m) => m.replace(/\s+/g, ""))
+    .split(/\s+/);
   if (tokens.length < 3) return null;
 
   let amountIndex = -1;
@@ -416,55 +490,75 @@ function tryPdfOneLine(line: string): {
   const signed = parseMoney(tokens[amountIndex]!);
   if (!signed || signed.isZero()) return null;
 
-  // The date can be anywhere among the remaining tokens.
-  let date: string | null = null;
-  let dateStart = -1;
-  let dateLen = 0;
-  for (let i = 0; i < tokens.length && date === null; i++) {
+  const dateWindows: { start: number; len: number }[] = [];
+  let date = "";
+  /** Date at token i: yearful windows first ("Aug 3 2026" must not be
+   * truncated to yearless "Aug 3"), then a yearless "Jun 13" pair
+   * resolved against the billing cycle. */
+  const findDate = (i: number): { date: string; len: number } | null => {
     for (let len = 1; len <= 3 && i + len <= tokens.length; len++) {
       if (i <= amountIndex && i + len > amountIndex) break; // crosses the amount
       const d = normalizeDate(tokens.slice(i, i + len).join(" "));
-      if (d) {
-        date = d;
-        dateStart = i;
-        dateLen = len;
-        break;
-      }
+      if (d) return { date: d, len };
     }
+    if (i + 2 <= tokens.length && !(i <= amountIndex && i + 2 > amountIndex)) {
+      const d = resolveYearlessDate(tokens.slice(i, i + 2).join(" "), cycle);
+      if (d) return { date: d, len: 2 };
+    }
+    return null;
+  };
+  for (let i = 0; i < tokens.length; i++) {
+    if (i === amountIndex) continue;
+    if (dateWindows.some((w) => i >= w.start && i < w.start + w.len)) continue;
+    const found = findDate(i);
+    if (!found) continue;
+    if (dateWindows.length === 0) date = found.date;
+    dateWindows.push({ start: i, len: found.len });
+    i += found.len - 1;
   }
-  if (date === null) return null;
+  if (dateWindows.length === 0) return null;
 
   const description = tokens
     .filter(
       (t, i) =>
-        i !== amountIndex && (i < dateStart || i >= dateStart + dateLen),
+        i !== amountIndex &&
+        !dateWindows.some((w) => i >= w.start && i < w.start + w.len),
     )
     .join(" ")
     .trim();
-  if (!description) return null;
+  // Column-merge artifacts: a dangling sign or a summary-page label.
+  if (
+    !description ||
+    description.endsWith("-") ||
+    PDF_SUMMARY_NOISE.test(description)
+  ) {
+    return null;
+  }
   return { date, description, signed };
 }
 
 /** Direction for a PDF row. PDFs have no consistent sign convention across
- * banks (Amex lists charges positive and payments negative; Chase the
- * reverse), so the sign is deliberately ignored: credits carry refund-ish
- * keywords, everything else — including fees — is a charge. */
+ * banks (Amex and Capital One list charges positive and payments negative;
+ * Chase the reverse), so the sign is deliberately ignored: credits carry
+ * refund-ish keywords, everything else — including fees — is a charge. */
 function pdfDirection(description: string): "charge" | "refund" {
   return REFUND_RE.test(description) ? "refund" : "charge";
 }
 
 /** Parse statement text extracted from a PDF (see extractPdfLines) into
  * rows. Handles one-line rows with the date and amount anywhere on the
- * line ("<desc> <date> <amount>" in any order) and the common multi-line
- * layout (a date line, then description lines, then an amount line).
- * Everything else is reported as skipped — the UI shows those lines so
- * the user can judge what the parser missed. */
+ * line ("<desc> <date> <amount>" in any order, with yearless dates like
+ * "Jun 13" resolved against the statement's billing cycle) and the common
+ * multi-line layout (a date line, then description lines, then an amount
+ * line). Everything else is reported as skipped — the UI shows those
+ * lines so the user can judge what the parser missed. */
 export function parsePdfStatementLines(lines: string[]): {
   rows: StatementRow[];
   skipped: SkippedLine[];
 } {
   const rows: StatementRow[] = [];
   const skipped: SkippedLine[] = [];
+  const cycle = extractCycle(lines);
   let pending: {
     date: string;
     desc: string[];
@@ -484,10 +578,14 @@ export function parsePdfStatementLines(lines: string[]): {
 
   for (const [i, rawLine] of lines.entries()) {
     const lineNo = i + 1;
-    const line = rawLine.trim();
+    // Collapse "- $25.00" → "-$25.00" so the amount is one token; keep the
+    // original text for the skipped report.
+    const line = rawLine
+      .trim()
+      .replace(PDF_AMOUNT_SPACED, (m) => m.replace(/\s+/g, ""));
     if (!line) continue;
 
-    const one = tryPdfOneLine(line);
+    const one = tryPdfOneLine(line, cycle);
     if (one) {
       closePending("No amount found before the next row.");
       rows.push({
@@ -497,7 +595,7 @@ export function parsePdfStatementLines(lines: string[]): {
         amount: one.signed.abs().toFixed(2),
         direction: pdfDirection(one.description),
         source: "pdf",
-        raw: line.slice(0, 160),
+        raw: rawLine.trim().slice(0, 160),
       });
       continue;
     }
@@ -530,7 +628,7 @@ export function parsePdfStatementLines(lines: string[]): {
 
     // A date-only line starts a new group.
     if (PDF_DATE_ONLY.test(line)) {
-      const date = normalizeDate(line);
+      const date = normalizeDate(line) ?? resolveYearlessDate(line, cycle);
       if (date) {
         closePending("No amount found before the next row.");
         pending = { date, desc: [], line: lineNo };

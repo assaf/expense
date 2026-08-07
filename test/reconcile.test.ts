@@ -308,6 +308,71 @@ describe("statement parsing", () => {
     expect(rows[4]).toMatchObject({ direction: "refund" });
   });
 
+  it("parses Capital One rows: yearless dates, trans+post dates, sign-spaced amounts", () => {
+    const lines = [
+      "Jun 12, 2026 - Jul 12, 2026 | 31 days in Billing Cycle",
+      "Jun 13 Jun 13 CASH BACK - $25.00",
+      "Jun 25 Jun 27 PURCHASE ADJUSTMENT - $779.88",
+      "Jul 6 Jul 6 CAPITAL ONE ONLINE PYMT - $600.00",
+      "Jun 11 Jun 12 CITY OF LA DWP LOS ANGELES CA $117.00",
+      "Jun 12 Jun 15 PAYPAL *SHENDUQRWEA 4029357733 HKG $10.60",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(5);
+    expect(rows[0]).toMatchObject({
+      date: "2026-06-13",
+      description: "CASH BACK",
+      amount: "25.00",
+      direction: "refund",
+    });
+    expect(rows[1]).toMatchObject({
+      date: "2026-06-25",
+      description: "PURCHASE ADJUSTMENT",
+      amount: "779.88",
+      direction: "refund",
+    });
+    expect(rows[2]).toMatchObject({
+      date: "2026-07-06",
+      description: "CAPITAL ONE ONLINE PYMT",
+      amount: "600.00",
+      direction: "refund",
+    });
+    // The trans date is used; the post date is stripped from the description.
+    expect(rows[3]).toMatchObject({
+      date: "2026-06-11",
+      description: "CITY OF LA DWP LOS ANGELES CA",
+      amount: "117.00",
+      direction: "charge",
+    });
+    expect(rows[4]).toMatchObject({
+      date: "2026-06-12",
+      description: "PAYPAL *SHENDUQRWEA 4029357733 HKG",
+      amount: "10.60",
+      direction: "charge",
+    });
+  });
+
+  it("resolves yearless dates across a year-crossing billing cycle", () => {
+    const lines = [
+      "Nov 25, 2026 - Jan 5, 2027 | 42 days in Billing Cycle",
+      "Dec 20 Dec 21 STRIPE-Z.AI SINGAPORE $10.00",
+      "Jan 3 Jan 4 AMAZON MKTPLACE $42.50",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ date: "2026-12-20" });
+    expect(rows[1]).toMatchObject({ date: "2027-01-03" });
+  });
+
+  it("ignores summary-page column-merge noise that carries a date and amount", () => {
+    const lines = [
+      "on the statement closing date when Payments - $2,739.84 Aug 06, 2026",
+      "Available Credit (as of Jul 12, 2026) $34,667.86",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(0);
+  });
+
   it("rejects summary/table lines with several amounts or dates", () => {
     const lines = [
       "Purchases 06/01/2023 17.49% (v) $0.00 $0.00",
