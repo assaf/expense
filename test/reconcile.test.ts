@@ -207,6 +207,26 @@ describe("statement parsing", () => {
     expect(rows[2]).toMatchObject({ amount: "500.00", direction: "refund" });
   });
 
+  it("uses the earliest date column when a CSV carries trans + posting dates", () => {
+    // Chase-style with Posting Date listed first — the transaction date is
+    // still the row date (posting is a settlement artifact a day later).
+    const { rows, skipped } = parseStatementCsv(
+      [
+        "Posting Date,Transaction Date,Description,Type,Amount",
+        "01/16/2026,01/15/2026,TEST STORE PURCHASE,Sale,-42.50",
+        "01/20/2026,01/20/2026,STARBUCKS REFUND,Refund,12.50",
+      ].join("\n"),
+    );
+    expect(skipped).toEqual([]);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      date: "2026-01-15",
+      description: "TEST STORE PURCHASE",
+      direction: "charge",
+    });
+    expect(rows[1]).toMatchObject({ date: "2026-01-20", direction: "refund" });
+  });
+
   it("handles a Debit/Credit column split (Citi-style)", () => {
     const { rows } = parseStatementCsv(
       [
@@ -284,6 +304,34 @@ describe("statement parsing", () => {
       direction: "refund",
       fitId: "20260805000000",
     });
+  });
+
+  it("uses the earlier of DTUSER / DTPOSTED in OFX", () => {
+    // Chase QFX carries both the user's transaction date and the posting
+    // date — the transaction date is the expense date.
+    const ofx = [
+      "<OFX>",
+      "<CREDITCARDMSGSRSV1>",
+      "<CCSTMTTRNRS>",
+      "<CCSTMTRS>",
+      "<BANKTRANLIST>",
+      "<STMTTRN>",
+      "<TRNTYPE>DEBIT</TRNTYPE>",
+      "<DTUSER>20260707120000.000[-7:MST]</DTUSER>",
+      "<DTPOSTED>20260708120000.000[-7:MST]</DTPOSTED>",
+      "<TRNAMT>-25.00</TRNAMT>",
+      "<FITID>ABC123</FITID>",
+      "<NAME>AMAZON MKTPLACE</NAME>",
+      "</STMTTRN>",
+      "</BANKTRANLIST>",
+      "</CCSTMTRS>",
+      "</CCSTMTTRNRS>",
+      "</CREDITCARDMSGSRSV1>",
+      "</OFX>",
+    ].join("\n");
+    const { rows } = parseOfxStatement(ofx);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ date: "2026-07-07" });
   });
 
   it("parses PDF statement lines: one-line rows and multi-line groups", () => {
@@ -414,6 +462,26 @@ describe("statement parsing", () => {
       description: "PAYPAL *SHENDUQRWEA 4029357733 HKG",
       amount: "10.60",
       direction: "charge",
+    });
+  });
+
+  it("picks the earliest date when a PDF row lists posting before transaction", () => {
+    const lines = [
+      "Jun 12, 2026 - Jul 12, 2026 | 31 days in Billing Cycle",
+      "Jul 8 Jul 7 AMAZON MKTPLACE $42.50",
+      "Jul 12 Jul 12 CAPITAL ONE ONLINE PYMT - $600.00",
+    ];
+    const { rows } = parsePdfStatementLines(lines);
+    expect(rows).toHaveLength(2);
+    // Posting date printed first — the transaction date still wins.
+    expect(rows[0]).toMatchObject({
+      date: "2026-07-07",
+      description: "AMAZON MKTPLACE",
+      direction: "charge",
+    });
+    expect(rows[1]).toMatchObject({
+      date: "2026-07-12",
+      direction: "refund",
     });
   });
 

@@ -115,6 +115,18 @@ export function normalizeDate(value: string): string | null {
   return null;
 }
 
+/** Earliest of the given dates (YYYY-MM-DD strings sort lexicographically),
+ * or null when none parse. Statements carry both a transaction date and a
+ * posting date — the transaction date is the purchase event, posting is a
+ * settlement artifact a day or two later, so the earliest always wins. */
+function earliestDate(dates: (string | null)[]): string | null {
+  let best: string | null = null;
+  for (const d of dates) {
+    if (d && (!best || d < best)) best = d;
+  }
+  return best;
+}
+
 /** Parse a statement amount: $ and commas stripped, (12.34) and -12.34 are
  * negative, plain "12.34" positive. Never returns an IEEE float. */
 export function parseMoney(value: string): Decimal | null {
@@ -278,7 +290,11 @@ function parseStatementCells(
 
   // Column mapping: use a header row when one is recognizable.
   const header = raw[0]!.map((h) => h.trim().toLowerCase());
-  const dateIdx = header.findIndex((h) => /date/.test(h));
+  // Every date column ("Transaction Date", "Posting Date", …), not just the
+  // first: the row's date is the EARLIEST of them — the transaction date.
+  // Posting is a settlement artifact a day or two later, and column order
+  // varies by bank, so the first date column is not trustworthy.
+  const dateIdxs = header.flatMap((h, i) => (/date/.test(h) ? [i] : []));
   const descIdx = header.findIndex((h) => /desc|merchant|payee|name/.test(h));
   const amtIdx = header.findIndex((h) => /amount/.test(h));
   const debitIdx = header.findIndex((h) => /debit/.test(h));
@@ -288,7 +304,7 @@ function parseStatementCells(
   );
   const refIdx = header.findIndex((h) => /reference|ref\s*num/.test(h));
   const hasHeader =
-    dateIdx >= 0 || amtIdx >= 0 || debitIdx >= 0 || creditIdx >= 0;
+    dateIdxs.length > 0 || amtIdx >= 0 || debitIdx >= 0 || creditIdx >= 0;
   const body = hasHeader ? raw.slice(1) : raw;
 
   // Which sign do charges use? Sign conventions vary by bank (Chase CSVs
@@ -314,9 +330,9 @@ function parseStatementCells(
   for (const [i, cells] of body.entries()) {
     const line = startLine + i;
     const rawRow = cells.join(",");
-    const date = normalizeDate(
-      hasHeader ? (cells[dateIdx] ?? "") : (cells[0] ?? ""),
-    );
+    const date = hasHeader
+      ? earliestDate(dateIdxs.map((idx) => normalizeDate(cells[idx] ?? "")))
+      : normalizeDate(cells[0] ?? "");
     if (date === null) {
       skipped.push({ line, raw: rawRow, reason: "No recognizable date." });
       continue;
@@ -422,8 +438,15 @@ export function parseOfxStatement(text: string): {
   }
 
   for (const [i, b] of blocks.entries()) {
+    // The earliest of the block's dates: DTPOSTED is the posting date and
+    // DTUSER — the user's transaction date — is a day or two earlier when
+    // present (Chase QFX carries both). DTAVAIL is rarely populated.
     const posted = ofxField(b, "DTPOSTED");
-    const date = normalizeOfxDate(posted);
+    const date = earliestDate(
+      ["DTPOSTED", "DTUSER", "DTAVAIL"].map((tag) =>
+        normalizeOfxDate(ofxField(b, tag)),
+      ),
+    );
     const signed = parseMoney(ofxField(b, "TRNAMT"));
     const description = (
       ofxField(b, "NAME") ||
@@ -557,7 +580,9 @@ function resolveYearlessDate(
  * date token (1–3 token windows, since named dates are three tokens:
  * "Aug 3 2026", and yearless "Jun 13" is two) is stripped from the
  * description — Capital One rows carry both a transaction and a posting
- * date. Two amount tokens means a summary/table line, not a transaction.
+ * date, and the EARLIEST of them becomes the row date (the transaction
+ * date; posting is a settlement artifact a day or two later). Two amount
+ * tokens means a summary/table line, not a transaction.
  */
 function tryPdfOneLine(
   line: string,
@@ -593,7 +618,7 @@ function tryPdfOneLine(
   if (!signed || signed.isZero()) return null;
 
   const dateWindows: { start: number; len: number }[] = [];
-  let date = "";
+  const dates: string[] = [];
   /** Date at token i: yearful windows first ("Aug 3 2026" must not be
    * truncated to yearless "Aug 3"), then a yearless date — "07/01" is
    * one token (Chase), "Jun 13" is two (Capital One) — resolved against
@@ -619,11 +644,14 @@ function tryPdfOneLine(
     if (dateWindows.some((w) => i >= w.start && i < w.start + w.len)) continue;
     const found = findDate(i);
     if (!found) continue;
-    if (dateWindows.length === 0) date = found.date;
+    dates.push(found.date);
     dateWindows.push({ start: i, len: found.len });
     i += found.len - 1;
   }
   if (dateWindows.length === 0) return null;
+  // Both dates present (Capital One prints trans + posting): take the
+  // earliest — the transaction date.
+  const date = earliestDate(dates)!;
 
   const description = tokens
     .filter((t, i) => {
