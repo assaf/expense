@@ -85,20 +85,25 @@ succeed either way.
 | `list_categories` |        | The account's categories — use these when categorizing.                                                                                                                                                                                                                                   |
 | `list_merchants`  |        | Merchant names previously used, most recent first.                                                                                                                                                                                                                                        |
 | `get_settings`    |        | Home address and the IRS mileage-rate master table (period + type).                                                                                                                                                                                                                       |
-| `reconcile`       |        | Match a bank statement CSV against logged expenses: matched pairs (with confidence), unmatched statement lines, and logged receipts with no statement line. Pure analysis — nothing is written.                                                                                           |
+| `reconcile`       |        | Match a bank statement against logged expenses: matched pairs (high confidence), statement lines needing review (amount+date match but merchant differs, or ambiguous), unmatched statement lines, and logged receipts with no statement line. Pure analysis — nothing is written.        |
 
 Write tools return `isError` with a clear message when a report is closed
 or doesn't exist.
 
 ## Reconciling a statement
 
-`reconcile` accepts CSV with a header row (`date,description,amount` — column
-names containing "date", "desc", "amount" are detected) or plain rows in that
-order. Dates can be `YYYY-MM-DD` or `MM/DD/YYYY`; amounts may include `$`,
-commas, and parentheses for negatives (`(12.34)`). Matching is date +
-absolute amount, scored by merchant-token overlap with the description
-("high" when the merchant name appears in the statement line, "medium" when
-only date + amount agree). It never writes, dismisses, or deletes anything.
+`reconcile` accepts CSV or QFX/OFX text. CSV: header row
+(`date,description,amount` — column names containing "date", "desc",
+"amount" are detected) or plain rows in that order; a Debit/Credit column
+split is also handled. Dates can be `YYYY-MM-DD`, `MM/DD/YYYY`, or a month
+name (`Aug 3 2026`); amounts may include `$`, commas, and parentheses for
+negatives (`(12.34)`). Matching is date + absolute amount within a small
+tolerance (±2 days, $0.50/1%), scored by merchant-token overlap with the
+description: exact date + amount + a shared merchant word is "high"; a
+close match with a different merchant name, several candidates, or two
+statement lines claiming the same expense goes to `needsReview`; refund /
+credit / payment lines and already-reconciled receipts are never
+auto-matched. It never writes, dismisses, or deletes anything.
 
 ## Auth & security
 

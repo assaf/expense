@@ -91,6 +91,13 @@ export {
   listUserOAuthSessions,
   disconnectOAuthClient,
   deleteOAuthClient,
+  createReconciliationRun,
+  readReconciliationRun,
+  findReconciliationRunByHash,
+  listReconciliationRuns,
+  updateReconciliationDecision,
+  discardReconciliationRun,
+  completeReconciliationRun,
 } from "~/lib/database";
 
 /** Build a new expense shell with sensible defaults. */
@@ -103,6 +110,7 @@ export function newExpenseShell(type: Expense["type"]): Expense {
     category: "",
     description: "",
     amount: "",
+    reconciledAt: "",
     createdAt: now,
     updatedAt: now,
   };

@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": [],
+  "ignore": ["vitest.noglobal.config.ts"],
   "ignoreBinaries": ["cloc"],
   "ignoreDependencies": [
     "@prisma/client",

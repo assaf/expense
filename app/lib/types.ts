@@ -28,6 +28,10 @@ interface ExpenseBase {
   category: string; // tax category name, "" when unset
   description: string;
   amount: string; // decimal string "12.34", "" when unset
+  /** When this expense was reconciled against a credit card statement
+   * (see ReconciliationRun) — ISO timestamp, "" when not reconciled.
+   * Set only by the reconciliation flow, never by a normal save. */
+  reconciledAt: string;
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
 }
@@ -184,8 +188,7 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLng: null,
 };
 
-/** One processed inbound email (idempotency + audit). */
-export interface InboundEmailRecord {
+/** One processed inbound email (idempotency + audit). */ export interface InboundEmailRecord {
   emailId: string;
   accountId: string;
   subject: string;
@@ -236,4 +239,106 @@ export interface OAuthTokenRecord {
   expiresAt: string;
   revokedAt: string | null;
   createdAt: string;
+}
+
+// --- Reconciliation --------------------------------------------------------
+
+/** One parsed transaction line from a statement file. The amount is stored
+ * absolute — the sign is carried by `direction` so a Chase-style signed CSV
+ * and a Citi-style Debit/Credit split normalize to the same shape. */
+export interface StatementRow {
+  /** 0-based index within the statement — the run's row key. */
+  index: number;
+  date: string; // YYYY-MM-DD
+  description: string;
+  /** Absolute amount, decimal string "12.34". */
+  amount: string;
+  /** charge = a purchase (matchable); refund = a credit/refund/payment. */
+  direction: "charge" | "refund";
+  /** Bank transaction id (QFX/OFX FITID) when the file provides one. */
+  fitId?: string;
+  source: "csv" | "ofx" | "pdf";
+  /** Original row/line text, for display in the skipped report. */
+  raw: string;
+}
+
+/** A statement line the parser could not turn into a transaction. */
+export interface SkippedLine {
+  line: number;
+  raw: string;
+  reason: string;
+}
+
+/** One candidate expense for a statement row. */
+export interface MatchCandidate {
+  expenseId: string;
+  merchant: string;
+  date: string;
+  amount: string;
+  exactDate: boolean;
+  exactAmount: boolean;
+  merchantOverlap: boolean;
+}
+
+/** The matcher's verdict for one statement row. */
+export type RowMatch =
+  | {
+      status: "matched";
+      expenseId: string;
+      confidence: "high";
+      candidate: MatchCandidate;
+    }
+  | {
+      status: "review";
+      candidates: MatchCandidate[];
+      best: MatchCandidate | null;
+      reasons: string[];
+    }
+  | { status: "unmatched" };
+
+/** The user's decision for one statement row — overrides the auto match.
+ * No decision on a `matched` row means "keep the auto match"; no decision
+ * on any other row means the line is discarded at completion. */
+export type ReconciliationDecision =
+  | { kind: "match"; expenseId: string }
+  | { kind: "new"; draft: NewExpenseDraft };
+
+/** A new expense drafted from a statement row (created at completion). */
+export interface NewExpenseDraft {
+  date: string;
+  merchant: string;
+  amount: string;
+  report: string;
+  category: string;
+  description: string;
+}
+
+/** Working state stored on a reconciliation run (`data` JSON column). */
+export interface ReconciliationRunData {
+  rows: StatementRow[];
+  matches: RowMatch[];
+  decisions: Record<string, ReconciliationDecision>;
+  /** Filled in when the run completes (summary for the done screen). */
+  completed?: {
+    matched: number;
+    created: number;
+    errors: string[];
+    createdExpenseIds: string[];
+  };
+}
+
+/** One uploaded statement (draft | completed | discarded). */
+export interface ReconciliationRunRecord {
+  id: string;
+  accountId: string;
+  fileName: string;
+  fileHash: string;
+  status: "draft" | "completed" | "discarded";
+  rowCount: number;
+  matchedCount: number;
+  createdCount: number;
+  skipped: SkippedLine[];
+  data: ReconciliationRunData;
+  createdAt: string;
+  completedAt: string | null;
 }

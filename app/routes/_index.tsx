@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   Search,
   X,
+  BadgeCheck,
+  ListChecks,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
@@ -133,6 +135,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     report: e.report,
     description: e.description,
     complete: isComplete(e),
+    reconciled: Boolean(e.reconciledAt),
     imageFile: e.type === "receipt" ? e.imageFile : "",
     locations: e.type === "mileage" ? e.locations : [],
     distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
@@ -396,6 +399,11 @@ function ExpenseList({
         <h1 className="text-2xl font-bold">Expense</h1>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
+            <Link to="/reconcile">
+              <ListChecks className="h-4 w-4" /> Reconcile
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
             <Link to="/export">
               <Download className="h-4 w-4" /> Export
             </Link>
@@ -651,6 +659,14 @@ function ExpenseRow({
             </div>
             <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
               <span>{formatDate(expense.date)}</span>
+              {expense.reconciled ? (
+                <span
+                  className="flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700"
+                  title="Matched against a credit card statement"
+                >
+                  <BadgeCheck className="h-3.5 w-3.5" /> Reconciled
+                </span>
+              ) : null}
               {expense.category ? (
                 <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
                   {expense.category}

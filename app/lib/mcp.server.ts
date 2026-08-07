@@ -39,7 +39,6 @@ import {
   summarizeBy,
   todayDate,
 } from "~/lib/format";
-import { parseAmount } from "~/lib/money";
 import {
   mimeForFile,
   renameImageToConvention,
@@ -47,6 +46,7 @@ import {
 } from "~/lib/images.server";
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
+import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
@@ -840,12 +840,12 @@ function createMcpServer(accountId: string): McpServer {
     "reconcile",
     {
       description:
-        "Match a bank statement against logged expenses. Pass the statement as CSV (header row optional; date, description and amount columns — amounts may include $ and parentheses for negatives). Returns matched pairs, statement lines with no matching receipt, and logged receipts with no statement line.",
+        "Match a bank statement against logged expenses. Pass the statement as CSV or QFX/OFX text (CSV: header row optional, date/description/amount columns, signed amounts or Debit/Credit split; QFX/OFX: FITID honored). Returns matched pairs (high confidence), statement lines needing review (amount+date match but merchant differs, or ambiguous), statement lines with no matching receipt, and logged receipts with no statement line. Refund/credit lines and already-reconciled receipts are never auto-matched.",
       inputSchema: z.object({ statementCsv: z.string().min(1) }),
     },
     async ({ statementCsv }) => {
       const expenses = await readExpenses(accountId);
-      return ok(reconcileStatement(statementCsv, expenses));
+      return ok(reconcileForMcp(statementCsv, expenses));
     },
   );
 
@@ -1138,218 +1138,4 @@ function urlFilename(url: string): string {
   } catch {
     return "";
   }
-}
-
-// --- Reconciliation --------------------------------------------------------
-
-/** Parse CSV text (RFC 4180-ish: quotes, doubled quotes, CRLF). */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      row.push(field);
-      field = "";
-    } else if (ch === "\n" || ch === "\r") {
-      if (ch === "\r" && text[i + 1] === "\n") i++;
-      row.push(field);
-      field = "";
-      if (row.some((f) => f.trim() !== "")) rows.push(row);
-      row = [];
-    } else {
-      field += ch;
-    }
-  }
-  row.push(field);
-  if (row.some((f) => f.trim() !== "")) rows.push(row);
-  return rows;
-}
-
-/** Normalize a statement date to YYYY-MM-DD (ISO or US MM/DD/YYYY). */
-function normalizeStatementDate(value: string): string | null {
-  const s = value.trim();
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (us) {
-    return `${us[3]}-${us[1]!.padStart(2, "0")}-${us[2]!.padStart(2, "0")}`;
-  }
-  return null;
-}
-
-/** Parse a statement amount: $ and commas stripped, (12.34) is negative. */
-function parseStatementAmount(value: string): Decimal | null {
-  const s = value.trim();
-  if (!s) return null;
-  let neg = false;
-  let body = s;
-  if (s.startsWith("(") && s.endsWith(")")) {
-    neg = true;
-    body = s.slice(1, -1);
-  }
-  const m = body.replace(/[$,\s]/g, "").match(/-?\d+(\.\d+)?/);
-  if (!m) return null;
-  const d = new Decimal(m[0]);
-  return neg ? d.neg() : d;
-}
-
-/** Word tokens (≥3 chars, lowercased) for merchant/description overlap. */
-function tokensOf(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length >= 3),
-  );
-}
-
-interface StatementRow {
-  date: string | null;
-  description: string;
-  amount: Decimal | null;
-  raw: string[];
-}
-
-/** Split statement rows into (date, description, amount) triples. */
-function parseStatementRows(text: string): {
-  rows: StatementRow[];
-  skipped: string[];
-} {
-  const raw = parseCsv(text);
-  const rows: StatementRow[] = [];
-  const skipped: string[] = [];
-  if (raw.length === 0) return { rows, skipped };
-
-  // Column mapping: use a header row when one is recognizable.
-  const header = raw[0]!.map((h) => h.trim().toLowerCase());
-  const dateIdx = header.findIndex((h) => /date/.test(h));
-  const descIdx = header.findIndex((h) => /desc|merchant|payee|name/.test(h));
-  const amtIdx = header.findIndex((h) => /amount|debit|credit/.test(h));
-  const hasHeader = dateIdx >= 0 || amtIdx >= 0;
-  const body = hasHeader ? raw.slice(1) : raw;
-
-  for (const cells of body) {
-    const date = hasHeader
-      ? normalizeStatementDate(cells[dateIdx] ?? "")
-      : normalizeStatementDate(cells[0] ?? "");
-    const description = hasHeader
-      ? (cells[descIdx] ?? "").trim()
-      : (cells[1] ?? "").trim();
-    const amount = parseStatementAmount(
-      hasHeader ? (cells[amtIdx] ?? "") : (cells[2] ?? ""),
-    );
-    if (date === null || amount === null) {
-      skipped.push(cells.join(","));
-      continue;
-    }
-    rows.push({ date, description, amount, raw: cells });
-  }
-  return { rows, skipped };
-}
-
-/**
- * Match statement lines to receipt expenses on date + absolute amount,
- * scored by merchant-token overlap with the statement description. Purely
- * read-only analysis — nothing is written, dismissed, or deleted.
- */
-function reconcileStatement(
-  statementCsv: string,
-  expenses: Expense[],
-): unknown {
-  const { rows, skipped } = parseStatementRows(statementCsv);
-  const receipts = expenses.filter(
-    (e): e is ReceiptExpense =>
-      e.type === "receipt" && Boolean(e.date) && Boolean(e.amount),
-  );
-
-  const matched: {
-    line: number;
-    date: string;
-    description: string;
-    statementAmount: string;
-    expenseId: string;
-    merchant: string;
-    expenseAmount: string;
-    confidence: "high" | "medium";
-  }[] = [];
-  const unmatchedLines: {
-    line: number;
-    date: string;
-    description: string;
-    amount: string;
-  }[] = [];
-  const matchedExpenseIds = new Set<string>();
-
-  for (const [index, row] of rows.entries()) {
-    const abs = row.amount!.abs();
-    const candidates = receipts.filter(
-      (e) => e.date === row.date && parseAmount(e.amount)?.abs().eq(abs),
-    );
-    if (candidates.length === 0) {
-      unmatchedLines.push({
-        line: index + 1,
-        date: row.date!,
-        description: row.description,
-        amount: row.amount!.toFixed(2),
-      });
-      continue;
-    }
-    // Best candidate = the one with the most description-token overlap.
-    const descTokens = tokensOf(row.description);
-    const scored = candidates
-      .map((e) => {
-        const overlap = [...tokensOf(e.merchant)].filter((t) =>
-          descTokens.has(t),
-        ).length;
-        return { e, overlap };
-      })
-      .sort((a, b) => b.overlap - a.overlap);
-    const best = scored[0]!;
-    matchedExpenseIds.add(best.e.id);
-    matched.push({
-      line: index + 1,
-      date: row.date!,
-      description: row.description,
-      statementAmount: row.amount!.toFixed(2),
-      expenseId: best.e.id,
-      merchant: best.e.merchant || "(no merchant)",
-      expenseAmount: best.e.amount,
-      confidence: best.overlap >= 1 ? "high" : "medium",
-    });
-  }
-
-  const unmatchedExpenses = receipts
-    .filter((e) => !matchedExpenseIds.has(e.id))
-    .map((e) => ({
-      id: e.id,
-      date: e.date,
-      merchant: e.merchant || "(no merchant)",
-      amount: e.amount,
-    }));
-
-  return {
-    statementLines: rows.length,
-    matched: matched.length,
-    matchedPairs: matched,
-    unmatchedLines,
-    unmatchedExpenses,
-    skippedLines: skipped,
-    note: "Reconciliation is read-only — it never writes or dismisses anything.",
-  };
 }

@@ -1,17 +1,25 @@
 import { Button } from "~/components/ui/Button";
 
-/** Destructive-action confirmation overlay. Deletion has no undo, so every
- * delete path (editor and list) confirms here before proceeding. */
+/** Confirmation overlay for actions with real consequences. Deletion has no
+ * undo, so every delete path (editor and list) confirms here; the reconcile
+ * flow uses it for completing / discarding a statement too, with a custom
+ * label and tone. */
 export function ConfirmDialog({
   message,
   onConfirm,
   onCancel,
   deleting,
+  confirmLabel = "Delete",
+  tone = "danger",
 }: {
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
   deleting: boolean;
+  /** Override the confirm button label (default: Delete). */
+  confirmLabel?: string;
+  /** "danger" (red, the delete default) or "primary" (ink). */
+  tone?: "danger" | "primary";
 }) {
   return (
     <div
@@ -27,8 +35,12 @@ export function ConfirmDialog({
           <Button variant="ghost" onClick={onCancel} disabled={deleting}>
             Cancel
           </Button>
-          <Button variant="danger" onClick={onConfirm} disabled={deleting}>
-            {deleting ? "Deleting…" : "Delete"}
+          <Button
+            variant={tone === "primary" ? "primary" : "danger"}
+            onClick={onConfirm}
+            disabled={deleting}
+          >
+            {deleting ? "Working…" : confirmLabel}
           </Button>
         </div>
       </div>

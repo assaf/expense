@@ -766,6 +766,7 @@ export async function processInboundEvent(
       imageFile,
       imageMime,
       originalName,
+      reconciledAt: "",
       createdAt: now,
       updatedAt: now,
     };

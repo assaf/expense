@@ -151,7 +151,8 @@ production env var (for the deploy script) and as a GitHub Actions secret.
 - **Types**: import route types from `./+types/<name>`. Path alias `~/*` → `app/*`.
 - **State**: Postgres via Prisma (schema.prisma) — accounts, users, expenses,
   reports, categories, settings, mileage_rates, image_blobs, inbound_emails,
-  inbound_senders, oauth clients/codes/tokens/consents. Required,
+  inbound_senders, reconciliation_runs, oauth clients/codes/tokens/consents.
+  Required,
   everywhere.
   Never read state on the client; all reads/writes go through
   `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
@@ -293,6 +294,8 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/routes/oauth.authorize.tsx`        | Consent page (GET) + approve/deny (POST). Also `oauth.token.ts`, `oauth.register.ts`, `oauth.revoke.ts`, and the `[.]well-known.*` discovery routes.                                                                                                                                                                                                                            |
 | `app/lib/report-pdf.server.ts`          | Report PDF builder — shared by the web export and the MCP `export_report` tool. Mileage rows show type · rate, distance + route addresses; a "Receipts & routes" appendix embeds a real route map per mileage trip with date/mileage/amount beside it (`app/lib/route-map.server.ts`).                                                                                          |
 | `app/routes/settings.tsx`               | Reports, categories, current IRS mileage rates (one line, from the master table), start/end location, receipts-by-email sender, Agents & API (MCP) tokens.                                                                                                                                                                                                                      |
+| `app/routes/reconcile.tsx`              | Credit-card statement reconciliation (/reconcile): upload → parse+match → three buckets (auto-matched / needs review / not matched) → complete in one transaction. Draft runs persist decisions so the session survives reloads; re-uploading the same file resumes or refuses. See `app/lib/reconcile.server.ts`.                                                              |
+| `app/lib/reconcile.server.ts`           | Shared statement parser + matcher (CSV with signed or Debit/Credit amounts, QFX/OFX with FITID, PDF text lines) and the confidence-tiered matching rules (date ±2d, amount $0.50/1%, merchant-token overlap, refund rows never auto-match). Used by the web flow AND the MCP `reconcile` tool. Pure — never writes.                                                             |
 | `app/routes/api.inbound-email.ts`       | Resend inbound webhook (public, signature-verified; `maxDuration: 60`).                                                                                                                                                                                                                                                                                                         |
 | `app/routes/api.smoke.ts`               | Post-deploy PDF+OCR+MCP health check (secret-gated GET `/api/smoke`; `maxDuration: 60`). Runs the receipt pipeline (pdfkit→pdfjs→tesseract) plus a full MCP round trip (`runMcpSmoke`) in the deployed bundle. `scripts/deploy` curls it after every deploy and fails the deploy if the pipeline breaks in the serverless bundle.                                               |
 | `app/routes/login.tsx`                  | Sign in / create account / join by invite code.                                                                                                                                                                                                                                                                                                                                 |
@@ -411,6 +414,28 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
   `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
   it stable.
+- **Reconciliation**: `/reconcile` matches an uploaded credit-card statement
+  (CSV / QFX/OFX / PDF) against the account's receipt expenses. The matcher
+  (`app/lib/reconcile.server.ts`) only considers receipt expenses with a
+  date + non-zero amount that are **not already reconciled** (mileage is
+  never a card transaction); date tolerance ±2 days, amount within $0.50 /
+  1%, and refund/credit/payment lines never auto-match. Exact date+amount+
+  a shared merchant token = high-confidence auto match; a close match with
+  a different merchant, several candidates, or two lines claiming the same
+  expense goes to review where the user picks (or discards). Completing
+  marks matched expenses `reconciledAt` and creates any “add as new
+  expense” rows (with a rendered statement receipt as the image) in **one
+  transaction**; undecided rows are discarded. **Nothing existing is ever
+  deleted by reconciliation.** Draft runs store rows/matches/decisions in a
+  `reconciliation_runs.data` JSON column (survives reloads); the file sha256
+  (`fileHash`) makes re-uploads idempotent (resume the draft, or refuse when
+  already completed). `Expense.reconciledAt` is only ever written by the
+  reconciliation flow — `expenseData` deliberately omits it so a normal save
+  can't wipe the status. The home page shows a green “Reconciled” badge and
+  a Reconcile entry point. The MCP `reconcile` tool is the same matcher in
+  read-only mode (adds a `needsReview` tier). PDF support is text-layer
+  only — scanned statements can't be parsed; the UI says so and points at
+  the CSV/QFX export.
 - **Receipts by email**: the `/api/inbound-email` route is public (no session) —
   it verifies Resend's webhook (standard Svix/Standard-Webhooks format:
   `svix-id` / `svix-timestamp` / `svix-signature` headers, HMAC-SHA256 of

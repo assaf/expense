@@ -184,6 +184,65 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 }
 
 /**
+ * Extract the text layer of a PDF reconstructed into real lines (up to the
+ * first 4 pages). Unlike `extractPdfText` — which joins every glyph on a
+ * page into one string, fine for short receipts — this groups items by
+ * their vertical position so tabular statements keep their row structure
+ * (date, description, amount on the same line). Reconciliation needs the
+ * lines, not the text.
+ */
+export async function extractPdfLines(buffer: Buffer): Promise<string[]> {
+  const task = getDocument({
+    data: pdfData(buffer),
+    ...pdfParams,
+  });
+  const doc = await task.promise;
+  try {
+    const out: string[] = [];
+    const pages = Math.min(doc.numPages, 4);
+    for (let i = 1; i <= pages; i++) {
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      // Group items by baseline (transform[5]); items within ~3px of the
+      // current baseline belong to the same line, ordered left to right.
+      const items = tc.items
+        .flatMap((it) => {
+          // TextMarkedContent (group markers) has no glyph/position data.
+          if (!("str" in it)) return [];
+          return [
+            {
+              text: it.str,
+              x: it.transform?.[4] ?? 0,
+              y: it.transform?.[5] ?? 0,
+            },
+          ];
+        })
+        .filter((it) => it.text.trim() !== "");
+      items.sort((a, b) => b.y - a.y || a.x - b.x);
+      const lines: string[] = [];
+      let current: { y: number; parts: string[] } | null = null;
+      for (const it of items) {
+        if (current && Math.abs(it.y - current.y) <= 3) {
+          current.parts.push(it.text);
+        } else {
+          if (current) {
+            lines.push(current.parts.join(" ").replace(/\s+/g, " ").trim());
+          }
+          current = { y: it.y, parts: [it.text] };
+        }
+      }
+      if (current) {
+        lines.push(current.parts.join(" ").replace(/\s+/g, " ").trim());
+      }
+      out.push(...lines.filter(Boolean));
+    }
+    return out;
+  } finally {
+    await task.destroy();
+  }
+}
+
+/**
  * Rasterize a PDF to a single stacked PNG (up to 3 pages, scale 2).
  * Used both as the stored receipt image and as the OCR input for scanned PDFs.
  */

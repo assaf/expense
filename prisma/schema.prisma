@@ -34,6 +34,7 @@ model Account {
   inboundEmails InboundEmail[]
   inboundSenders InboundSender[]
   inboundSenderVerifications InboundSenderVerification[]
+  reconciliationRuns ReconciliationRun[]
 
   @@map("accounts")
 }
@@ -82,17 +83,56 @@ model Expense {
   /// persisted so the map shows the routed trip everywhere — the list
   /// thumbnails and the editor on open — not just after a recompute.
   route        Json?
+  /// When this expense was reconciled against a credit card statement
+  /// (see ReconciliationRun). Null until the user completes a
+  /// reconciliation — set only by the reconciliation flow, never by a
+  /// normal save (expenseData deliberately omits it).
+  reconciledAt      String?
+  /// The reconciliation run that marked this expense reconciled. Deleting
+  /// the run keeps reconciledAt but drops the link (SetNull).
+  reconciledInRunId String?
   createdAt    String
   updatedAt    String
   accountId    String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  reconciliationRun ReconciliationRun? @relation("runExpenses", fields: [reconciledInRunId], references: [id], onDelete: SetNull)
 
   // Dismissed duplicate pairs this expense participates in (either side).
   dismissedAsA DuplicateDismissal[] @relation("duplicateDismissalsA")
   dismissedAsB DuplicateDismissal[] @relation("duplicateDismissalsB")
 
   @@map("expenses")
+}
+
+/// One uploaded credit card / bank statement the user reconciled against.
+/// status: draft (in progress) | completed (decisions applied) | discarded.
+/// `data` is the working state — parsed statement rows, per-row match
+/// candidates, and the user's decisions (match an expense / add as a new
+/// expense / leave unmatched) — so a session survives reloads and
+/// navigation. `fileHash` (sha256 of the uploaded bytes) makes re-uploads
+/// idempotent: a completed run with the same hash refuses to re-run and a
+/// stale draft with the same hash is resumed.
+model ReconciliationRun {
+  id           String  @id
+  accountId    String
+  fileName     String
+  fileHash     String
+  status       String // draft | completed | discarded
+  rowCount     Int
+  matchedCount Int
+  createdCount Int
+  skipped      Json // [{ line, raw, reason }] — unparseable lines
+  data         Json // { rows, matches, decisions, completed? }
+  createdAt    String
+  completedAt  String?
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  expenses Expense[] @relation("runExpenses")
+
+  @@index([accountId, status])
+  @@index([accountId, fileHash])
+  @@map("reconciliation_runs")
 }
 
 /// Expense pairs the user marked "not a duplicate" — one row per pair,
