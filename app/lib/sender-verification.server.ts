@@ -1,11 +1,7 @@
 import { escapeHtml } from "~/lib/escape";
-import {
-  emailShell,
-  paragraph,
-  valuePropFooter,
-} from "~/lib/email-layout.server";
-import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL } from "~/lib/env";
-import { sendResendEmail } from "~/lib/reply.server";
+import { paragraph } from "~/lib/email-layout.server";
+import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
+import { sendVerificationEmail as sendVerificationEmailCore } from "~/lib/verification-email.server";
 
 /**
  * Verification emails for receipts-by-email sender addresses.
@@ -20,21 +16,9 @@ import { sendResendEmail } from "~/lib/reply.server";
  * routing, replies, and verification mail. When Resend isn't configured the
  * send is skipped and logged — the sender row stays pending and the owner
  * can retry from Settings (this must never break the rest of the app).
+ * The shell, CTA button, and send live in verification-email.server.ts,
+ * shared with the account-verification email.
  */
-
-/**
- * The absolute verification URL for a token. The origin is passed from the
- * request that triggered the email (login / Settings); PUBLIC_URL overrides
- * it for proxy-terminated TLS setups, matching the OAuth metadata behavior.
- */
-function verificationLink(origin: string | undefined, token: string): string {
-  return `${appBase(origin)}/receipts-email-verify?token=${encodeURIComponent(token)}`;
-}
-
-/** The app's public origin (home page base), for links inside the email. */
-export function appBase(origin: string | undefined): string {
-  return (origin || PUBLIC_URL || "").replace(/\/$/, "");
-}
 
 /** Send the verification email, returning true when Resend accepted it. */
 export async function sendVerificationEmail(input: {
@@ -43,18 +27,13 @@ export async function sendVerificationEmail(input: {
   origin?: string;
   accountName: string;
 }): Promise<boolean> {
-  const link = verificationLink(input.origin, input.token);
-  if (!link.startsWith("http")) {
-    console.warn(
-      "[sender-verification] no public origin (set PUBLIC_URL) — cannot email a verify link for " +
-        input.to,
-    );
-    return false;
-  }
-  const home = appBase(input.origin);
-  const subject = "Verify your email to receive receipts by email";
-  const html = emailShell({
-    title: "Verify your email",
+  return sendVerificationEmailCore({
+    to: input.to,
+    token: input.token,
+    origin: input.origin,
+    subject: "Verify your email to receive receipts by email",
+    verifyPath: "/receipts-email-verify",
+    buttonLabel: `Verify ${input.to}`,
     body: [
       paragraph(
         `Receipts forwarded from <b>${escapeHtml(input.to)}</b> to <b>${escapeHtml(INBOUND_EMAIL_ADDRESS)}</b> will be added to the <b>${escapeHtml(input.accountName)}</b> account on Expense.`,
@@ -62,12 +41,8 @@ export async function sendVerificationEmail(input: {
       paragraph(
         "Until you verify, receipts from this address are <b>not</b> imported. Click below to confirm this address is yours:",
       ),
-      `<p style="margin:16px 0"><a href="${escapeHtml(link)}" style="display:inline-block;background:#1f2937;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify ${escapeHtml(input.to)}</a></p>`,
-      paragraph(
-        "This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.",
-      ),
-    ].join("\n"),
-    footer: valuePropFooter(home),
+    ],
+    closingNote:
+      "This link expires in 7 days. If you didn't add this address, you can ignore this email — nothing will be imported.",
   });
-  return sendResendEmail({ to: input.to, subject, html });
 }

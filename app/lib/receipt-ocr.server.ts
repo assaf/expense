@@ -235,10 +235,10 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
 /**
  * Rasterize an uploaded PDF to a PNG for storage and rename it to *.png
  * (`receipt.pdf` → `receipt.png`). Throws when the PDF can't be rendered —
- * callers turn that into their own "couldn't read the PDF" response (the
- * draft and editor routes differ only in their log tag).
+ * callers turn that into their own "couldn't read the PDF" response (see
+ * prepareUploadedReceipt).
  */
-export async function rasterizePdfUpload(uploaded: {
+async function rasterizePdfUpload(uploaded: {
   buffer: Buffer;
   originalName: string;
 }): Promise<{ buffer: Buffer; mime: "image/png"; originalName: string }> {
@@ -248,6 +248,41 @@ export async function rasterizePdfUpload(uploaded: {
     mime: "image/png",
     originalName: pdfImageName(uploaded.originalName),
   };
+}
+
+/**
+ * Resolve the bytes to store for an uploaded receipt file: PDFs are
+ * rasterized to PNG before storage (receipts are always displayed as
+ * images, and the thumbnail/export pipelines assume sharp-decodable
+ * bytes). Non-PDFs pass through unchanged. Returns null when an unreadable
+ * PDF fails to render — callers turn that into their own "Couldn't read
+ * that PDF" response. Shared by the draft-upload (/api/expense) and the
+ * editor image-replace (/expense/:id/image) routes, which differ only in
+ * their log tag; `wasPdf` lets the draft route skip OCR for PDFs and run
+ * it alongside the save for images.
+ */
+export async function prepareUploadedReceipt(
+  uploaded: { buffer: Buffer; mime: string; originalName: string },
+  logTag: string,
+): Promise<{
+  buffer: Buffer;
+  mime: string;
+  originalName: string;
+  wasPdf: boolean;
+} | null> {
+  if (!isPdf(uploaded)) return { ...uploaded, wasPdf: false };
+  try {
+    const pdf = await rasterizePdfUpload(uploaded);
+    return {
+      buffer: pdf.buffer,
+      mime: pdf.mime,
+      originalName: pdf.originalName,
+      wasPdf: true,
+    };
+  } catch (err) {
+    console.warn(`[${logTag}] PDF render failed:`, err);
+    return null;
+  }
 }
 
 /**

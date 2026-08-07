@@ -1,4 +1,3 @@
-import { isPdf } from "~/lib/file-types";
 import {
   deleteImage,
   readImage,
@@ -7,7 +6,10 @@ import {
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
 import { readExtractionContext } from "~/lib/store.server";
-import { extractFromImage, rasterizePdfUpload } from "~/lib/receipt-ocr.server";
+import {
+  extractFromImage,
+  prepareUploadedReceipt,
+} from "~/lib/receipt-ocr.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
@@ -50,53 +52,57 @@ export async function action({ request }: Route.ActionArgs) {
     if (!uploaded) {
       return Response.json({ error: "No image received." }, { status: 400 });
     }
-    const { buffer, mime, originalName } = uploaded;
-
     // PDFs are rasterized to PNG before they can be displayed or stored (the
     // editor renders receipts as <img>). The draft is saved immediately after
     // rendering — OCR never blocks it, so a slow scan or OCR timeout can't
     // prevent the upload (the editor runs a separate draft-ocr request for
     // the fields). Only an unreadable PDF fails the upload.
-    if (isPdf(uploaded)) {
-      let pdf: { buffer: Buffer; mime: "image/png"; originalName: string };
-      try {
-        pdf = await rasterizePdfUpload(uploaded);
-      } catch (err) {
-        console.warn("[draft-upload] PDF render failed:", err);
-        return Response.json(
-          { error: "Couldn't read that PDF." },
-          { status: 400 },
-        );
-      }
+    const prepared = await prepareUploadedReceipt(uploaded, "draft-upload");
+    if (prepared === null) {
+      return Response.json(
+        { error: "Couldn't read that PDF." },
+        { status: 400 },
+      );
+    }
+    if (prepared.wasPdf) {
       const saved = await saveImage(
         user.accountId,
-        pdf.buffer,
-        pdf.mime,
-        pdf.originalName,
+        prepared.buffer,
+        prepared.mime,
+        prepared.originalName,
       );
       return Response.json({
         ok: true,
         draftKey: saved.filename,
         mime: saved.mime,
-        originalName: pdf.originalName,
+        originalName: prepared.originalName,
       });
     }
 
     // Save the image and OCR it in parallel. No expense row is created —
     // extraction just pre-fills the draft editor when it succeeds.
     const [ocr, saved] = await Promise.all([
-      extractFromUploadedImage(user.accountId, buffer, mime).catch((err) => {
+      extractFromUploadedImage(
+        user.accountId,
+        prepared.buffer,
+        prepared.mime,
+      ).catch((err) => {
         console.warn("[draft-upload] receipt extraction failed:", err);
         return null;
       }),
-      saveImage(user.accountId, buffer, mime, originalName),
+      saveImage(
+        user.accountId,
+        prepared.buffer,
+        prepared.mime,
+        prepared.originalName,
+      ),
     ]);
 
     return Response.json({
       ok: true,
       draftKey: saved.filename,
       mime: saved.mime,
-      originalName,
+      originalName: prepared.originalName,
       merchant: ocr?.merchant ?? "",
       amount: ocr?.amount ?? "",
       category: ocr?.category ?? "",

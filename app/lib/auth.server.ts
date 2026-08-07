@@ -170,35 +170,15 @@ export async function createAccountWithUser(
 ): Promise<{ email: string }> {
   await initStore();
   validateSignup(input.email, input.password);
-  const existing = await findUserByEmail(input.email);
-  if (existing?.emailVerifiedAt) {
-    throw new Error("That email is already in use.");
-  }
-  if (existing) {
-    const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(
-      input.email,
-    );
-    if (outcome.status !== "replaced") {
-      throw new Error("Could not re-create the account — please try again.");
-    }
-  }
+  await replaceUnverifiedSignup(input.email);
   const account = await createAccount(input.accountName);
-  const user = await createUser({
+  return createPendingUser({
     accountId: account.id,
     email: input.email,
-    passwordHash: await hashPassword(input.password),
-    emailVerifiedAt: null,
-  });
-  const token = generateOpaqueToken();
-  await setUserVerificationToken(user.id, token);
-  await ensureDefaultSender(user, origin);
-  await sendAccountVerificationEmail({
-    to: user.email,
-    token,
-    origin,
+    password: input.password,
     accountName: input.accountName,
+    origin,
   });
-  return { email: user.email };
 }
 
 /**
@@ -222,32 +202,63 @@ export async function joinAccountWithInviteCode(
     normalizeInviteCode(input.inviteCode),
   );
   if (!account) throw new Error("That invite code is not valid");
-  const existing = await findUserByEmail(input.email);
+  await replaceUnverifiedSignup(input.email);
+  return createPendingUser({
+    accountId: account.id,
+    email: input.email,
+    password: input.password,
+    accountName: account.name,
+    origin,
+  });
+}
+
+/**
+ * Discard an earlier unverified signup with the same email so a fresh
+ * signup/join can proceed: the old account and its verification link are
+ * deleted and the email is free again. Throws when the email belongs to a
+ * verified account (it can't be replaced) or the replacement fails.
+ */
+async function replaceUnverifiedSignup(email: string): Promise<void> {
+  const existing = await findUserByEmail(email);
   if (existing?.emailVerifiedAt) {
     throw new Error("That email is already in use.");
   }
   if (existing) {
-    const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(
-      input.email,
-    );
+    const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(email);
     if (outcome.status !== "replaced") {
       throw new Error("Could not re-create the account — please try again.");
     }
   }
+}
+
+/**
+ * The pending-signup tail shared by signup and join: create the user, mint
+ * + store the verification token, ensure the default receipts-by-email
+ * sender, and email the verification link. The account must already exist
+ * and the email must be free (see replaceUnverifiedSignup). Returns the
+ * pending signup's email — never a session.
+ */
+async function createPendingUser(input: {
+  accountId: string;
+  email: string;
+  password: string;
+  accountName: string;
+  origin?: string;
+}): Promise<{ email: string }> {
   const user = await createUser({
-    accountId: account.id,
+    accountId: input.accountId,
     email: input.email,
     passwordHash: await hashPassword(input.password),
     emailVerifiedAt: null,
   });
   const token = generateOpaqueToken();
   await setUserVerificationToken(user.id, token);
-  await ensureDefaultSender(user, origin);
+  await ensureDefaultSender(user, input.origin);
   await sendAccountVerificationEmail({
     to: user.email,
     token,
-    origin,
-    accountName: account.name,
+    origin: input.origin,
+    accountName: input.accountName,
   });
   return { email: user.email };
 }

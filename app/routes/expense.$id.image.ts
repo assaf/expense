@@ -1,4 +1,3 @@
-import { isPdf } from "~/lib/file-types";
 import {
   deleteImage,
   readImage,
@@ -7,7 +6,7 @@ import {
   saveImage,
 } from "~/lib/images.server";
 import { resizeToJpeg, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
-import { rasterizePdfUpload } from "~/lib/receipt-ocr.server";
+import { prepareUploadedReceipt } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -88,37 +87,26 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (!uploaded) {
       return Response.json({ error: "No image" }, { status: 400 });
     }
-    const { buffer, mime, originalName } = uploaded;
     // PDFs are rasterized to PNG before storage: receipts are always
     // displayed as images, and the thumbnail/export pipelines assume the
     // stored bytes are decodable by sharp. Only an unreadable PDF fails.
-    let saveBuffer = buffer;
-    let saveMime = mime;
-    let saveName = originalName;
-    if (isPdf(uploaded)) {
-      try {
-        const pdf = await rasterizePdfUpload(uploaded);
-        saveBuffer = pdf.buffer;
-        saveMime = pdf.mime;
-        saveName = pdf.originalName;
-      } catch (err) {
-        console.warn("[image-upload] PDF render failed:", err);
-        return Response.json(
-          { error: "Couldn't read that PDF." },
-          { status: 400 },
-        );
-      }
+    const prepared = await prepareUploadedReceipt(uploaded, "image-upload");
+    if (prepared === null) {
+      return Response.json(
+        { error: "Couldn't read that PDF." },
+        { status: 400 },
+      );
     }
     const { filename, mime: storedMime } = await saveImage(
       user.accountId,
-      saveBuffer,
-      saveMime,
-      saveName,
+      prepared.buffer,
+      prepared.mime,
+      prepared.originalName,
     );
     if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
     expense.imageFile = filename;
     expense.imageMime = storedMime;
-    expense.originalName = saveName;
+    expense.originalName = prepared.originalName;
     expense.updatedAt = new Date().toISOString();
     // Rename to convention immediately if date+report already set.
     const renamed = await renameImageToConvention(
