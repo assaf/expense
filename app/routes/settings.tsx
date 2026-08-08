@@ -29,6 +29,7 @@ import {
   listInboundSenders,
   listUserOAuthSessions,
   readAccount,
+  readAccountUsers,
   readCategories,
   readCategoryCounts,
   readReportCounts,
@@ -67,6 +68,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     categoryCounts,
     oauthSessions,
     rates,
+    members,
   ] = await Promise.all([
     readReports(user.accountId),
     readCategories(user.accountId),
@@ -76,6 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     readCategoryCounts(user.accountId),
     listUserOAuthSessions(user.id),
     readMileageRates(),
+    readAccountUsers(user.accountId),
   ]);
   // A compact "current rate" line for Settings — the editor itself resolves
   // the exact rate per trip (date + type), so the page only needs today's.
@@ -98,6 +101,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     currentRates,
     oauthSessions,
+    members,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
@@ -229,6 +233,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     userEmail,
     inboundAddress,
     oauthSessions,
+    members,
     mcpUrl,
   } = loaderData;
   return (
@@ -261,6 +266,54 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             <div className="font-mono text-2xl font-bold tracking-widest">
               {inviteCode}
             </div>
+          </div>
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <div className="mb-1 text-sm font-medium text-gray-700">
+              Members
+            </div>
+            <ul className="flex flex-col gap-1">
+              {/* The current user first, then everyone else by join date. */}
+              {[
+                ...members.filter((m) => m.email === userEmail),
+                ...members.filter((m) => m.email !== userEmail),
+              ].map((member) => (
+                <li
+                  key={member.email}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-mono text-sm">
+                      {member.email}
+                    </span>
+                    {member.email === userEmail ? (
+                      <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        You
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="shrink-0 text-xs text-gray-400">
+                      Joined {formatShortDate(member.createdAt)}
+                    </span>
+                    {member.emailVerifiedAt ? (
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <Check className="h-3 w-3" /> Active
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                        Waiting to verify
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-gray-500">
+              A member appears here as soon as they join with the invite code.
+              "Active" means they've verified their email and can sign in;
+              "Waiting to verify" means they joined but haven't clicked the
+              emailed verification link yet.
+            </p>
           </div>
         </div>
       </section>

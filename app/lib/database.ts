@@ -267,6 +267,29 @@ export async function readAccount(id: string): Promise<Account | undefined> {
   return row ?? undefined;
 }
 
+/** One member of an account, as shown in Settings — never secrets. */
+export interface AccountMember {
+  email: string;
+  /** When the emailed verification link was clicked; null = can't sign in yet. */
+  emailVerifiedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * Everyone who joined the account, oldest first. The Settings member list
+ * reads only this — password hashes and verification tokens never leave
+ * the store.
+ */
+export async function readAccountUsers(
+  accountId: string,
+): Promise<AccountMember[]> {
+  return prisma.user.findMany({
+    where: { accountId },
+    select: { email: true, emailVerifiedAt: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 /**
  * The bootstrap user (oldest user) — the MCP smoke check issues an OAuth
  * token for them directly. Undefined only when the database has no users.

@@ -12,6 +12,30 @@ describe("Settings", () => {
   let page: Page;
 
   beforeAll(async () => {
+    // Two extra members in the test account: one who verified their email
+    // ("Active") and one who joined but hasn't clicked the link yet
+    // ("Waiting to verify"). Seeded before the page loads so the members
+    // list shows them.
+    await testPrisma.user.createMany({
+      data: [
+        {
+          id: "user_member_verified",
+          accountId: TEST_ACCOUNT_ID,
+          email: "verified.member@example.com",
+          passwordHash: "x",
+          emailVerifiedAt: "2026-07-02T00:00:00.000Z",
+          createdAt: "2026-07-01T00:00:00.000Z",
+        },
+        {
+          id: "user_member_pending",
+          accountId: TEST_ACCOUNT_ID,
+          email: "pending.member@example.com",
+          passwordHash: "x",
+          emailVerifiedAt: null,
+          createdAt: "2026-07-10T00:00:00.000Z",
+        },
+      ],
+    });
     page = await goto("/settings");
   });
 
@@ -34,6 +58,31 @@ describe("Settings", () => {
 
   it("shows the account invite code", async () => {
     await expect(page.getByText("TESTCODE1")).toBeVisible();
+  });
+
+  it("lists account members with their verification status", async () => {
+    const section = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Account" }),
+    });
+    // The signed-in user, pinned first with a "You" badge.
+    await expect(section.getByText("testuser@example.com")).toBeVisible();
+    await expect(section.getByText("You", { exact: true })).toBeVisible();
+    // A member who clicked the emailed verification link is Active — the
+    // signed-in user is verified too, so exactly two Active badges.
+    await expect(
+      section.getByText("verified.member@example.com"),
+    ).toBeVisible();
+    await expect(section.getByText("Active", { exact: true })).toHaveCount(2);
+    // A member who joined but hasn't verified can't sign in yet.
+    await expect(section.getByText("pending.member@example.com")).toBeVisible();
+    await expect(
+      section.getByText("Waiting to verify", { exact: true }),
+    ).toBeVisible();
+    // All three members show their join date (the exact day depends on the
+    // machine's timezone — assert the year only).
+    await expect(section.getByText(/Joined .* 2026/)).toHaveCount(3);
+    // Other accounts' users never leak into this list.
+    await expect(section.getByText("otheruser@example.com")).toHaveCount(0);
   });
 
   it("displays the seeded reports", async () => {

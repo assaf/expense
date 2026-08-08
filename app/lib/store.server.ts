@@ -27,6 +27,8 @@ if (!hasDatabase()) {
 export {
   initStore,
   readAccount,
+  type AccountMember,
+  readAccountUsers,
   createAccount,
   findAccountByInviteCode,
   regenerateInviteCode,
