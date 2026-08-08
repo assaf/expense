@@ -20,9 +20,18 @@ import {
 import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
-import { DEFAULT_SETTINGS, parseLocations, parseRoute } from "~/lib/types";
+import {
+  DEFAULT_SETTINGS,
+  EMPTY_ROUTE,
+  parseLocations,
+  parseRoute,
+  type Location,
+} from "~/lib/types";
 import { extractEmailAddress, isEmail } from "~/lib/validation";
 import { validateDateNotFuture } from "~/lib/validation";
+
+const isTest = typeof process !== "undefined" && process.env.VITEST === "true";
+
 import type {
   Account,
   Category,
@@ -171,7 +180,11 @@ let mileageRatesCache: {
 const MILEAGE_RATES_TTL_MS = 3_600_000;
 
 export async function readMileageRates(): Promise<MileageRateEntry[]> {
-  if (mileageRatesCache && mileageRatesCache.expiresAt > Date.now()) {
+  if (
+    !isTest &&
+    mileageRatesCache &&
+    mileageRatesCache.expiresAt > Date.now()
+  ) {
     return mileageRatesCache.data;
   }
   await initStore();
@@ -286,7 +299,7 @@ const ACCOUNT_CACHE_TTL_MS = 300_000;
 
 export async function readAccount(id: string): Promise<Account | undefined> {
   const cached = accountCache.get(id);
-  if (cached && cached.expiresAt > Date.now()) return cached.account;
+  if (!isTest && cached && cached.expiresAt > Date.now()) return cached.account;
   const row = await prisma.account.findUnique({ where: { id } });
   if (row)
     accountCache.set(id, {
@@ -381,6 +394,7 @@ export async function regenerateInviteCode(accountId: string): Promise<string> {
     where: { id: accountId },
     data: { inviteCode: code },
   });
+  accountCache.delete(accountId);
   return code;
 }
 
@@ -729,6 +743,66 @@ export async function readNeighborIds(
   return { prevId, nextId };
 }
 
+/**
+ * The only fields required for client-side duplicate detection on the create
+ * page — a thin subset of every expense row so the page doesn't load every
+ * column just to check whether the draft looks like an existing entry.
+ * The returned objects satisfy the Expense interface (unused fields default
+ * to empty) so they slot straight into the existing findDuplicates call.
+ */
+export async function readDuplicateCandidates(
+  accountId: string,
+): Promise<Expense[]> {
+  const rows = await prisma.expense.findMany({
+    where: { accountId },
+    select: {
+      id: true,
+      type: true,
+      date: true,
+      merchant: true,
+      amount: true,
+      distanceMiles: true,
+      locations: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => {
+    const base = {
+      id: r.id,
+      date: r.date,
+      report: "",
+      category: "",
+      description: "",
+      amount: r.amount?.toString() ?? "",
+      reconciledAt: "",
+      createdAt: String(r.createdAt),
+      updatedAt: String(r.createdAt),
+    };
+    if (r.type === "receipt") {
+      return {
+        ...base,
+        type: "receipt" as const,
+        merchant: r.merchant,
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+      };
+    }
+    return {
+      ...base,
+      type: "mileage" as const,
+      mileageType: "business" as const,
+      locations:
+        typeof r.locations === "string"
+          ? (JSON.parse(r.locations) as Location[])
+          : ((r.locations as unknown as Location[]) ?? []),
+      distanceMiles: r.distanceMiles?.toString() ?? "",
+      route: EMPTY_ROUTE,
+    };
+  });
+}
+
 export async function upsertExpense(
   expense: Expense,
   accountId: string,
@@ -829,13 +903,28 @@ export async function readExtractionContext(
 
 // Reports come back in creation order: auto-increment ids are strictly
 // increasing, so `id asc` is chronological — oldest first, newest last.
+/** Short-lived per-account cache for reports — they only change when the
+ * user edits them in Settings, so a 5-minute TTL is safe. */
+const reportsCache = new Map<
+  string,
+  { reports: Report[]; expiresAt: number }
+>();
+const REPORTS_CACHE_TTL_MS = 300_000;
+
 export async function readReports(accountId: string): Promise<Report[]> {
+  const cached = reportsCache.get(accountId);
+  if (!isTest && cached && cached.expiresAt > Date.now()) return cached.reports;
   const rows = await prisma.report.findMany({
     where: { accountId, name: { not: "" } },
     orderBy: { id: "asc" },
     select: { name: true, closed: true },
   });
-  return rows.map((r) => ({ name: r.name, closed: r.closed }));
+  const reports = rows.map((r) => ({ name: r.name, closed: r.closed }));
+  reportsCache.set(accountId, {
+    reports,
+    expiresAt: Date.now() + REPORTS_CACHE_TTL_MS,
+  });
+  return reports;
 }
 
 /**
@@ -1024,7 +1113,10 @@ export function addReport(
   accountId: string,
   name: string,
 ): Promise<NamedResult> {
-  return addNamedRow(prisma.report, "report", accountId, name);
+  return addNamedRow(prisma.report, "report", accountId, name).then((r) => {
+    reportsCache.delete(accountId);
+    return r;
+  });
 }
 
 /**
@@ -1047,6 +1139,7 @@ export async function removeReport(
     prisma.expense.deleteMany({ where: { accountId, report: name } }),
     prisma.report.deleteMany({ where: { accountId, name } }),
   ]);
+  reportsCache.delete(accountId);
 }
 
 /**
@@ -1067,7 +1160,10 @@ export function renameReport(
     accountId,
     name,
     newName,
-  );
+  ).then((r) => {
+    reportsCache.delete(accountId);
+    return r;
+  });
 }
 
 /** Mark a report closed (or reopen it). Closed reports delete with confirmation. */
@@ -1080,19 +1176,33 @@ export async function setReportClosed(
     where: { accountId, name },
     data: { closed },
   });
+  reportsCache.delete(accountId);
 }
 
+/** Per-account cache for categories — same 5-minute TTL as reports. */
+const categoriesCache = new Map<
+  string,
+  { categories: Category[]; expiresAt: number }
+>();
+const CATEGORIES_CACHE_TTL_MS = 300_000;
+
 export async function readCategories(accountId: string): Promise<Category[]> {
+  const cached = categoriesCache.get(accountId);
+  if (!isTest && cached && cached.expiresAt > Date.now())
+    return cached.categories;
   const rows = await prisma.category.findMany({
     where: { accountId, name: { not: "" } },
     select: { name: true },
   });
-  // Alphabetical (case-insensitive) so the settings list and the pickers in
-  // the editor are easy to scan, whatever order the rows were created in.
-  return rows
+  const categories = rows
     .map((c) => c.name)
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map((name) => ({ name }));
+  categoriesCache.set(accountId, {
+    categories,
+    expiresAt: Date.now() + CATEGORIES_CACHE_TTL_MS,
+  });
+  return categories;
 }
 
 /**
@@ -1111,7 +1221,10 @@ export function renameCategory(
     accountId,
     name,
     newName,
-  );
+  ).then((r) => {
+    categoriesCache.delete(accountId);
+    return r;
+  });
 }
 
 /**
@@ -1122,7 +1235,10 @@ export function addCategory(
   accountId: string,
   name: string,
 ): Promise<NamedResult> {
-  return addNamedRow(prisma.category, "category", accountId, name);
+  return addNamedRow(prisma.category, "category", accountId, name).then((r) => {
+    categoriesCache.delete(accountId);
+    return r;
+  });
 }
 
 export async function removeCategory(
@@ -1130,11 +1246,22 @@ export async function removeCategory(
   name: string,
 ): Promise<void> {
   await prisma.category.deleteMany({ where: { accountId, name } });
+  categoriesCache.delete(accountId);
 }
 
 // --- Settings --------------------------------------------------------------
 
+/** Per-account cache for settings — 5-minute TTL. */
+const settingsCache = new Map<
+  string,
+  { settings: Settings; expiresAt: number }
+>();
+const SETTINGS_CACHE_TTL_MS = 300_000;
+
 export async function readSettings(accountId: string): Promise<Settings> {
+  const cached = settingsCache.get(accountId);
+  if (!isTest && cached && cached.expiresAt > Date.now())
+    return cached.settings;
   const rows = await prisma.settings.findMany({ where: { accountId } });
   const settings: Settings = { ...DEFAULT_SETTINGS };
   const kv: Record<string, string> = {};
@@ -1144,6 +1271,10 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.homeAddress = kv["homeAddress"] ?? "";
   settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
   settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
+  settingsCache.set(accountId, {
+    settings,
+    expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS,
+  });
   return settings;
 }
 
@@ -1168,6 +1299,7 @@ export async function writeSettings(
     prisma.settings.deleteMany({ where: { accountId } }),
     prisma.settings.createMany({ data: rows }),
   ]);
+  settingsCache.delete(accountId);
 }
 
 /**

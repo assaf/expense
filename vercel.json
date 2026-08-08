@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "react-router",
-  "buildCommand": "pnpm build"
+  "buildCommand": "pnpm build",
+  "regions": ["sfo1"]
 }

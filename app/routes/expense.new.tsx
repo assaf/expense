@@ -4,7 +4,11 @@ import { requireUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { todayDate } from "~/lib/format";
-import { addReport, newExpenseShell, readExpenses } from "~/lib/store.server";
+import {
+  addReport,
+  newExpenseShell,
+  readDuplicateCandidates,
+} from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.new";
 
@@ -24,7 +28,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Existing expenses feed the live duplicate warning in the create editor.
   const [context, existing] = await Promise.all([
     loadEditorContext(user.accountId, expense),
-    readExpenses(user.accountId),
+    readDuplicateCandidates(user.accountId),
   ]);
   // New mileage expenses default to the Travel category when the account has
   // one (the IRS Schedule C bucket every new account is seeded with).
