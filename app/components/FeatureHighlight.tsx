@@ -6,6 +6,7 @@ import {
   Mail,
   MapPinned,
   ReceiptText,
+  Tags,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -23,6 +24,7 @@ import { Button } from "~/components/ui/Button";
 
 export type HighlightId =
   | "capture"
+  | "categories"
   | "email"
   | "mcp"
   | "mileage-location"
@@ -58,6 +60,19 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       </>
     ),
     cta: { label: "Add a receipt", to: "/expense/new" },
+  },
+  categories: {
+    icon: Tags,
+    title: "Add your own categories",
+    body: () => (
+      <>
+        Expense starts with the IRS Schedule C categories, but you can add your
+        own anytime in Settings — for clients, projects, or whatever makes your
+        taxes clearer. New categories are offered automatically when receipts
+        are parsed.
+      </>
+    ),
+    cta: { label: "Manage categories", to: "/settings#categories" },
   },
   email: {
     icon: Mail,
@@ -165,6 +180,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
 export function availableHighlights(data: HighlightData): HighlightId[] {
   const pool: HighlightId[] = [
     "capture",
+    "categories",
     "mileage-location",
     "reports",
     "reconcile",

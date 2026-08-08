@@ -23,6 +23,7 @@ describe("feature highlights", () => {
   it("always offers the always-on highlights", () => {
     expect(availableHighlights(EMPTY).sort()).toEqual([
       "capture",
+      "categories",
       "mileage-location",
       "reconcile",
       "reports",

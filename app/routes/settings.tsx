@@ -328,6 +328,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       />
       <NameList
         title="Categories"
+        id="categories"
         items={categories}
         addIntent="addCategory"
         addPlaceholder="Add category"
