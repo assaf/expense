@@ -4,8 +4,6 @@ import {
   ReceiptText,
   Settings,
   Download,
-  Mail,
-  Info,
   AlertTriangle,
   Search,
   X,
@@ -14,6 +12,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
+import {
+  FeatureHighlight,
+  pickHighlight,
+  type HighlightData,
+  type HighlightId,
+} from "~/components/FeatureHighlight";
 import LandingPage from "~/components/LandingPage";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
@@ -40,6 +44,7 @@ import { usePasteImage } from "~/lib/use-paste-image";
 import {
   deleteExpense,
   dismissDuplicatePair,
+  readAccount,
   readDuplicateDismissals,
   readExpenses,
   readMileageRates,
@@ -56,15 +61,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { mode: "landing" as const };
   }
   const user = await requireUser(request);
-  const [expenses, dismissed, merchants, allReports, rates] = await Promise.all(
-    [
+  const [expenses, dismissed, merchants, allReports, rates, account] =
+    await Promise.all([
       readExpenses(user.accountId),
       readDuplicateDismissals(user.accountId),
       readPriorMerchants(user.accountId),
       readReports(user.accountId),
       readMileageRates(),
-    ],
-  );
+      readAccount(user.accountId),
+    ]);
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
@@ -75,8 +80,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
   // The "current rate" tip: today's business rate (falls back to the most
   // recent known period until the IRS publishes the next one).
-  const mileageRate =
-    currentMileageRates(rates, todayDate())?.byType.business ?? "";
+  const mileageRate = formatRate(
+    currentMileageRates(rates, todayDate())?.byType.business ?? "",
+  );
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
     .sort((a, b) =>
@@ -86,13 +92,21 @@ export async function loader({ request }: Route.LoaderArgs) {
           ? -1
           : a.name.localeCompare(b.name),
     );
+  // The feature highlight that shows at the bottom of the list — picked at
+  // random from the ones this account's data can render, so every return
+  // visit surfaces something different.
+  const highlightData: HighlightData = {
+    inboundAddress: INBOUND_EMAIL_ADDRESS,
+    mcpUrl: new URL("/mcp", request.url).toString(),
+    inviteCode: account?.inviteCode ?? "",
+    mileageRate,
+  };
   return {
     mode: "app" as const,
     expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
-    mileageRate: formatRate(mileageRate),
     merchants,
     reports,
-    inboundAddress: INBOUND_EMAIL_ADDRESS,
+    highlight: { id: pickHighlight(highlightData), data: highlightData },
   };
 }
 
@@ -230,28 +244,24 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
   ) : (
     <ExpenseList
       expenses={loaderData.expenses}
-      mileageRate={loaderData.mileageRate}
       reports={loaderData.reports}
-      inboundAddress={loaderData.inboundAddress}
+      highlight={loaderData.highlight}
     />
   );
 }
 
 function ExpenseList({
   expenses,
-  mileageRate,
   reports,
-  inboundAddress,
+  highlight,
 }: {
   expenses: ReturnType<typeof toListItem>[];
-  mileageRate: string;
   reports: { name: string; count: number; total: string }[];
-  inboundAddress: string;
+  highlight: { id: HighlightId; data: HighlightData };
 }) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [showEmailHelp, setShowEmailHelp] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   // Id of the expense created just now — the create action redirects here
   // with `?new=<id>`; the row stays highlighted for three seconds.
@@ -442,19 +452,6 @@ function ExpenseList({
               e.currentTarget.value = "";
             }}
           />
-          {inboundAddress ? (
-            <button
-              type="button"
-              onClick={() => setShowEmailHelp((v) => !v)}
-              aria-expanded={showEmailHelp}
-              aria-controls="receipt-email-help"
-              aria-label="Receipts by email"
-              title="Receipts by email"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          ) : null}
         </div>
         <div className="relative w-full sm:min-w-56 sm:flex-1 sm:max-w-96">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -477,51 +474,7 @@ function ExpenseList({
             </button>
           ) : null}
         </div>
-        <div className="flex basis-full flex-wrap items-center gap-2 text-xs text-gray-400">
-          <p>
-            Tip: upload or paste (⌘V) a receipt image or PDF, or drag one
-            anywhere on this page — merchant, amount, and category fill in
-            automatically.
-          </p>
-          {mileageRate ? (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
-              {`Mileage $${mileageRate}/mi`}
-            </span>
-          ) : null}
-        </div>
       </div>
-
-      {inboundAddress && showEmailHelp ? (
-        <div
-          id="receipt-email-help"
-          className="mb-6 rounded-xl border border-gray-200 bg-white p-3"
-        >
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 shrink-0 text-gray-400" />
-            <span className="min-w-0 text-sm text-gray-600">
-              Send receipts to{" "}
-              <span className="font-mono font-semibold text-gray-800">
-                {inboundAddress}
-              </span>
-            </span>
-          </div>
-          <div className="mt-2 border-t border-gray-100 pt-2">
-            <ul className="flex list-disc flex-col gap-1 pl-4 text-sm text-gray-500">
-              <li>
-                Forward a receipt email to the address above and it is added
-                automatically — merchant, amount, and category are parsed for
-                you.
-              </li>
-              <li>The expense date is the date of the forwarded email.</li>
-              <li>PDF and image attachments are supported.</li>
-              <li>
-                Only emails from your allowed sender addresses are imported —
-                manage them in Settings → Receipts by email.
-              </li>
-            </ul>
-          </div>
-        </div>
-      ) : null}
 
       {reports.length > 0 ? (
         <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -587,6 +540,8 @@ function ExpenseList({
           ))}
         </ul>
       )}
+
+      <FeatureHighlight id={highlight.id} data={highlight.data} />
 
       {confirmDeleteId ? (
         <ConfirmDialog
