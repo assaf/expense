@@ -5,7 +5,6 @@ import {
   renameImageToConvention,
   saveImage,
 } from "~/lib/images.server";
-import { resizeToJpeg, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import { prepareUploadedReceipt } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
 import { readExpense, upsertExpense } from "~/lib/store.server";
@@ -13,12 +12,11 @@ import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id.image";
 
 /**
- * The list view renders 56px thumbnails per row — serving the full stored
- * image for each is wasteful, so the loader resizes on the fly when asked
- * (`?w=160`). Result is JPEG regardless of stored format; undecodable or
- * out-of-range params fall back to the full image. The cap matches the
- * storage normalizer (image-normalize.ts) so a thumbnail request can never
- * upscale beyond the stored resolution.
+ * Receipt image serving. The only hot path is the list view, which asks for
+ * 160px thumbnails — those are precomputed at upload time and stored in the
+ * `thumbnail` column so serving never touches sharp. Legacy images without a
+ * thumbnail fall back to the full stored image instead of resizing on the
+ * fly.
  */
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -32,9 +30,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const width = Number(url.searchParams.get("w"));
-  // The list view asks for 160px thumbnails — serve the precomputed
-  // thumbnail (generated at upload time) instead of resizing on the
-  // fly. This was the single biggest CPU consumer.
+  // 160px is the list-view size — serve the precomputed thumbnail when
+  // available; legacy images without one get the full stored image (zero
+  // CPU, just a bigger payload for the one-off legacy row).
   if (
     Number.isInteger(width) &&
     width >= 16 &&
@@ -47,29 +45,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         "Cache-Control": "public, max-age=86400, immutable",
       },
     });
-  }
-  // For widths above 160px (or when the thumbnail wasn't precomputed),
-  // fall back to the sharp resize path.
-  if (
-    Number.isInteger(width) &&
-    width >= 16 &&
-    width <= STORED_IMAGE_MAX_WIDTH
-  ) {
-    try {
-      const thumb = await resizeToJpeg(image.buffer, {
-        maxWidth: width,
-        maxHeight: width,
-        quality: 80,
-      });
-      return new Response(thumb as BodyInit, {
-        headers: {
-          "Content-Type": "image/jpeg",
-          "Cache-Control": "public, max-age=86400, immutable",
-        },
-      });
-    } catch {
-      // Fall through to the original bytes below.
-    }
   }
 
   return new Response(image.buffer as BodyInit, {
