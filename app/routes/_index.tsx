@@ -48,7 +48,6 @@ import {
   readDuplicateDismissals,
   readExpenses,
   readMileageRates,
-  readPriorMerchants,
   readReports,
 } from "~/lib/store.server";
 import type { Expense } from "~/lib/types";
@@ -61,15 +60,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     return { mode: "landing" as const };
   }
   const user = await requireUser(request);
-  const [expenses, dismissed, merchants, allReports, rates, account] =
-    await Promise.all([
-      readExpenses(user.accountId),
-      readDuplicateDismissals(user.accountId),
-      readPriorMerchants(user.accountId),
-      readReports(user.accountId),
-      readMileageRates(),
-      readAccount(user.accountId),
-    ]);
+  const [expenses, dismissed, allReports, rates, account] = await Promise.all([
+    readExpenses(user.accountId),
+    readDuplicateDismissals(user.accountId),
+    readReports(user.accountId),
+    readMileageRates(),
+    readAccount(user.accountId),
+  ]);
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
@@ -104,7 +101,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     mode: "app" as const,
     expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
-    merchants,
     reports,
     highlight: { id: pickHighlight(highlightData), data: highlightData },
   };

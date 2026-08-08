@@ -162,12 +162,28 @@ function rateEntryEquals(a: MileageRateEntry, b: MileageRateEntry): boolean {
 }
 
 /** All mileage rates in the global master table (newest period first). */
+/** In-memory cache for the global IRS mileage rates table — it changes at
+ * most once a year when new rates are published. 1-hour TTL is safe. */
+let mileageRatesCache: {
+  data: MileageRateEntry[];
+  expiresAt: number;
+} | null = null;
+const MILEAGE_RATES_TTL_MS = 3_600_000;
+
 export async function readMileageRates(): Promise<MileageRateEntry[]> {
+  if (mileageRatesCache && mileageRatesCache.expiresAt > Date.now()) {
+    return mileageRatesCache.data;
+  }
   await initStore();
   const rows = await prisma.mileageRate.findMany({
     orderBy: [{ startDate: "desc" }, { type: "asc" }],
   });
-  return rows.map(rateRowToEntry);
+  const data = rows.map(rateRowToEntry);
+  mileageRatesCache = {
+    data,
+    expiresAt: Date.now() + MILEAGE_RATES_TTL_MS,
+  };
+  return data;
 }
 
 /**
@@ -262,8 +278,21 @@ function seedDefaultCategories(
   });
 }
 
+/** Short-lived in-process cache for readAccount — an account's invite code
+ * and name rarely change once set. 5-minute TTL; cache miss or regeneration
+ * re-queries. */
+const accountCache = new Map<string, { account: Account; expiresAt: number }>();
+const ACCOUNT_CACHE_TTL_MS = 300_000;
+
 export async function readAccount(id: string): Promise<Account | undefined> {
+  const cached = accountCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) return cached.account;
   const row = await prisma.account.findUnique({ where: { id } });
+  if (row)
+    accountCache.set(id, {
+      account: row,
+      expiresAt: Date.now() + ACCOUNT_CACHE_TTL_MS,
+    });
   return row ?? undefined;
 }
 
