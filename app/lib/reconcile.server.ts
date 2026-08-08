@@ -1015,12 +1015,12 @@ export function matchStatementRows(
   // statement lines is ambiguous — both lines go to review (the user picks
   // which one really is that expense; the other becomes unmatched).
   const claimedByExpense = new Map<string, number[]>();
-  bestByRow.forEach((best, i) => {
-    if (!best) return;
+  for (const [i, best] of bestByRow.entries()) {
+    if (!best) continue;
     const list = claimedByExpense.get(best.e.id) ?? [];
     list.push(i);
     claimedByExpense.set(best.e.id, list);
-  });
+  }
   const conflicted = new Set<string>();
   for (const [expenseId, indices] of claimedByExpense) {
     if (indices.length > 1) conflicted.add(expenseId);

@@ -2044,7 +2044,7 @@ export async function completeReconciliationRun(
     | { kind: "match"; expenseId: string }
     | { kind: "new"; draft: NewExpenseDraft }
   >();
-  data.rows.forEach((_row, i) => {
+  for (const [i, _row] of data.rows.entries()) {
     const decision = data.decisions[String(i)];
     if (decision?.kind === "match") {
       resolutions.set(i, { kind: "match", expenseId: decision.expenseId });
@@ -2056,7 +2056,7 @@ export async function completeReconciliationRun(
         expenseId: data.matches[i]!.expenseId,
       });
     }
-  });
+  }
 
   // Render the new-expense receipt images up front — the transaction below
   // must not hold a sharp/render pass.
