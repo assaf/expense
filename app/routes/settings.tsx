@@ -259,7 +259,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               </Button>
             </Form>
           </div>
-          <div>
+          <div id="invite-code" className="scroll-mt-6">
             <div className="text-sm font-medium text-gray-500">
               Invite code — share to let someone join this account
             </div>
@@ -320,6 +320,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <NameList
         title="Reports"
+        id="reports"
         items={reports}
         addIntent="addReport"
         addPlaceholder="Add report"
@@ -335,7 +336,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         )}
       />
 
-      <section className="mb-8">
+      <section id="mileage-rates" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Mileage rates</h2>
         <p className="text-sm text-gray-500">
           The IRS rate for a trip is picked automatically from its date and type
@@ -367,7 +368,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </p>
       </section>
 
-      <section className="mb-8">
+      <section id="start-location" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Start/end location</h2>
         <p className="mb-3 text-sm text-gray-500">
           Used as the start and end of every mileage route — trips are always
@@ -384,7 +385,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </Form>
       </section>
 
-      <section className="mb-8">
+      <section id="receipts-by-email" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Receipts by email</h2>
         <p className="mb-3 text-sm text-gray-500">
           Forward receipt emails to the address below and they are parsed
@@ -632,7 +633,7 @@ function AgentsSection({
   const removeFetcher = useFetcher<{ ok: boolean }>();
 
   return (
-    <section className="mb-8">
+    <section id="agents" className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
       <p className="mb-3 text-sm text-gray-500">
         Connect your AI assistant — Claude, OpenAI, or any MCP client — to this
@@ -714,12 +715,15 @@ function AgentsSection({
 
 function NameList<T extends { name: string }>({
   title,
+  id,
   items,
   addIntent,
   addPlaceholder,
   renderItem,
 }: {
   title: string;
+  /** Anchor target for in-page links (e.g. /settings#reports). */
+  id?: string;
   items: readonly T[];
   addIntent: string;
   addPlaceholder: string;
@@ -760,7 +764,7 @@ function NameList<T extends { name: string }>({
   }, [flashName]);
 
   return (
-    <section className="mb-8">
+    <section id={id} className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (

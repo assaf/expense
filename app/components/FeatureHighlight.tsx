@@ -73,7 +73,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         Settings.
       </>
     ),
-    cta: { label: "Manage email addresses", to: "/settings" },
+    cta: { label: "Manage email addresses", to: "/settings#receipts-by-email" },
   },
   mcp: {
     icon: Bot,
@@ -88,7 +88,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         export reports. Revoke access to any app in Settings.
       </>
     ),
-    cta: { label: "Manage connected apps", to: "/settings" },
+    cta: { label: "Manage connected apps", to: "/settings#agents" },
   },
   "mileage-location": {
     icon: MapPinned,
@@ -100,7 +100,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         Settings.
       </>
     ),
-    cta: { label: "Set your location", to: "/settings" },
+    cta: { label: "Set your location", to: "/settings#start-location" },
   },
   "mileage-rate": {
     icon: Fuel,
@@ -127,7 +127,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         from Settings.
       </>
     ),
-    cta: { label: "Manage reports", to: "/settings" },
+    cta: { label: "Manage reports", to: "/settings#reports" },
   },
   invite: {
     icon: Users,
@@ -142,7 +142,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         reports, and settings.
       </>
     ),
-    cta: { label: "Get your invite code", to: "/settings" },
+    cta: { label: "Get your invite code", to: "/settings#invite-code" },
   },
   reconcile: {
     icon: CreditCard,
