@@ -125,6 +125,19 @@ export function oauthMetadataResponse(request: Request): Response {
   });
 }
 
+/** OAuth error response per RFC 6749 §5.2: `{ error, error_description }`.
+ * Shared by the token and revocation endpoints. */
+export function oauthError(
+  status: number,
+  error: string,
+  description: string,
+): Response {
+  return Response.json(
+    { error, error_description: description },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 // --- Client registration ---------------------------------------------------
 
 /** True when a redirect URI is acceptable: https, or http on loopback. */

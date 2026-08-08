@@ -1,4 +1,4 @@
-import { authenticateClient, hashToken } from "~/lib/oauth.server";
+import { authenticateClient, hashToken, oauthError } from "~/lib/oauth.server";
 import { findOAuthToken, revokeOAuthToken } from "~/lib/store.server";
 import type { Route } from "./+types/oauth.revoke";
 
@@ -11,6 +11,7 @@ export async function action({ request }: Route.ActionArgs) {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.includes("application/x-www-form-urlencoded")) {
     return oauthError(
+      400,
       "invalid_request",
       "Content-Type must be application/x-www-form-urlencoded.",
     );
@@ -23,7 +24,7 @@ export async function action({ request }: Route.ActionArgs) {
     request.headers.get("authorization"),
   );
   if (auth.error || !auth.client) {
-    return oauthError("invalid_client", auth.error ?? "invalid_client");
+    return oauthError(400, "invalid_client", auth.error ?? "invalid_client");
   }
 
   const row = await findOAuthToken(hashToken(token));
@@ -32,11 +33,4 @@ export async function action({ request }: Route.ActionArgs) {
     await revokeOAuthToken(row.tokenHash);
   }
   return new Response(null, { status: 200 });
-}
-
-function oauthError(error: string, description: string): Response {
-  return Response.json(
-    { error, error_description: description },
-    { status: 400, headers: { "Cache-Control": "no-store" } },
-  );
 }

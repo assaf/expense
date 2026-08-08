@@ -3,6 +3,7 @@ import {
   authenticateClient,
   hashToken,
   issueTokenPair,
+  oauthError,
   pkceChallenge,
   rotateRefreshToken,
   safeEqual,
@@ -104,16 +105,5 @@ function tokenResponse(accessToken: string, refreshToken: string): Response {
       scope: "",
     },
     { headers: { "Cache-Control": "no-store" } },
-  );
-}
-
-function oauthError(
-  status: number,
-  error: string,
-  description: string,
-): Response {
-  return Response.json(
-    { error, error_description: description },
-    { status, headers: { "Cache-Control": "no-store" } },
   );
 }
