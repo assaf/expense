@@ -186,3 +186,22 @@ export function generateOpaqueToken(): string {
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
+
+/** Constant-time string equality (crypto.timingSafeEqual) for hashes and
+ * secrets: equal length required, never short-circuits on content. Shared
+ * by the OAuth server (client secrets, PKCE challenges, refresh-token
+ * hashes) and the webhook signature check. */
+export function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
+
+/** Constant-time equality for base64-encoded signatures (webhook HMACs):
+ * both sides are decoded first, and empty/undecodable inputs never compare
+ * equal (timingSafeEqual can't take an empty buffer). */
+export function safeEqualBase64(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "base64");
+  const bb = Buffer.from(b, "base64");
+  return ab.length !== 0 && ab.length === bb.length && timingSafeEqual(ab, bb);
+}

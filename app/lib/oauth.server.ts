@@ -1,6 +1,6 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { PUBLIC_URL } from "~/lib/env";
-import { generateOpaqueToken, hashToken } from "~/lib/passwords";
+import { generateOpaqueToken, hashToken, safeEqual } from "~/lib/passwords";
 import {
   createOAuthCode,
   createOAuthToken,
@@ -10,8 +10,9 @@ import {
 } from "~/lib/store.server";
 import type { OAuthClientRecord, OAuthTokenRecord } from "~/lib/types";
 
-/** Re-exported so the token/code routes hash secrets the shared way. */
-export { hashToken };
+/** Re-exported so the token/code routes hash secrets and compare values
+ * the shared way. */
+export { hashToken, safeEqual };
 
 /**
  * The MCP authorization server (OAuth 2.1 with PKCE) for the /mcp endpoint.
@@ -45,13 +46,6 @@ export const PKCE_METHOD = "S256";
 function randomToken(prefix: "oat" | "ort" | "code"): string {
   const raw = generateOpaqueToken();
   return prefix === "code" ? raw : `${prefix}_${raw}`;
-}
-
-/** Constant-time equality for hashes and secrets. */
-export function safeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
 /** RFC 7636 S256 challenge: base64url(sha256(code_verifier)) without padding. */

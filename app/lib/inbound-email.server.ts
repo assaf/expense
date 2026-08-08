@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { ulid } from "ulid";
 import {
   FORWARD_MARKERS,
@@ -12,6 +12,7 @@ import {
   type RenderTextEmailOptions,
 } from "~/lib/email-render.server";
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
+import { safeEqualBase64 } from "~/lib/passwords";
 import { isImage, isPdf } from "~/lib/file-types";
 import {
   classifyReceiptAttachment,
@@ -209,17 +210,9 @@ export function verifyWebhookSignature(
     const version = entry.slice(0, comma);
     const candidate = entry.slice(comma + 1);
     if (version !== "v1") continue;
-    if (safeBase64Equal(expected, candidate)) return true;
+    if (safeEqualBase64(expected, candidate)) return true;
   }
   return false;
-}
-
-/** Constant-time comparison of two base64 signatures (any length). */
-function safeBase64Equal(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "base64");
-  const bb = Buffer.from(b, "base64");
-  if (ab.length !== bb.length || ab.length === 0) return false;
-  return timingSafeEqual(ab, bb);
 }
 
 // --- Date -------------------------------------------------------------------
