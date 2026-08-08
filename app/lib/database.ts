@@ -404,13 +404,15 @@ export async function createUser(input: {
   return user;
 }
 
-export async function findUserByEmail(
-  email: string,
-): Promise<User | undefined> {
-  const row = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
-  });
-  if (!row) return undefined;
+/** Map a Prisma user row to the domain User shape (the password hash and
+ * verification token columns are deliberately never exposed). */
+function rowToUser(row: {
+  id: string;
+  accountId: string;
+  email: string;
+  emailVerifiedAt: string | null;
+  createdAt: string;
+}): User {
   return {
     id: row.id,
     accountId: row.accountId,
@@ -418,6 +420,15 @@ export async function findUserByEmail(
     emailVerifiedAt: row.emailVerifiedAt ?? null,
     createdAt: row.createdAt,
   };
+}
+
+export async function findUserByEmail(
+  email: string,
+): Promise<User | undefined> {
+  const row = await prisma.user.findUnique({
+    where: { email: email.trim().toLowerCase() },
+  });
+  return row ? rowToUser(row) : undefined;
 }
 
 /** Short-lived in-process cache for findUserById — every request re-resolves
@@ -433,15 +444,7 @@ export async function findUserById(id: string): Promise<User | undefined> {
   const cached = userCache.get(id);
   if (cached && cached.expiresAt > Date.now()) return cached.user;
   const row = await prisma.user.findUnique({ where: { id } });
-  const user = row
-    ? {
-        id: row.id,
-        accountId: row.accountId,
-        email: row.email,
-        emailVerifiedAt: row.emailVerifiedAt ?? null,
-        createdAt: row.createdAt,
-      }
-    : undefined;
+  const user = row ? rowToUser(row) : undefined;
   if (user)
     userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
   return user;
@@ -469,11 +472,11 @@ export async function updateUserPasswordHash(
   });
 }
 
-/** Verification links expire 7 days after the email is sent (same as the
- * receipts-by-email sender links). */
-const USER_VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Verification links (account signup + receipts-by-email sender) expire
+ * 7 days after the email is sent. */
+const VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Don't re-send a verification email for one address more than once a day. */
-const USER_VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
+const VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
 
 /** Store the current verification token for a user (sha256 at rest) with a
  * fresh sent-at time. Called by the signup/join flows and the resend path. */
@@ -514,7 +517,7 @@ export async function verifyUserEmailAddress(
     return { status: "already-verified", email: row.email };
   }
   const sentAt = row.verificationSentAt;
-  if (!sentAt || Date.now() - Date.parse(sentAt) > USER_VERIFICATION_TTL_MS) {
+  if (!sentAt || Date.now() - Date.parse(sentAt) > VERIFICATION_TTL_MS) {
     return { status: "expired", email: row.email };
   }
   await prisma.user.update({
@@ -579,8 +582,7 @@ export async function resendUserVerification(
   if (!row || row.emailVerifiedAt) return { status: "already-verified" };
   if (
     row.verificationSentAt &&
-    Date.now() - Date.parse(row.verificationSentAt) <
-      USER_VERIFICATION_RESEND_MS
+    Date.now() - Date.parse(row.verificationSentAt) < VERIFICATION_RESEND_MS
   ) {
     return { status: "rate-limited" };
   }
@@ -1714,12 +1716,6 @@ async function mintSenderToken(
   });
   return token;
 }
-
-/** Verification links expire 7 days after the email is sent. */
-const VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Don't auto-re-send a verification email for one address more than once a day. */
-const VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
 
 // --- Helpers ---------------------------------------------------------------
 
