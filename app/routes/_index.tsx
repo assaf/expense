@@ -110,6 +110,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+/**
+ * Let Vercel's CDN cache the landing page for anonymous visitors (requests
+ * without a session cookie). Browsers always revalidate (max-age=0) so
+ * authenticated users never see a cached expense list. The CDN respects
+ * s-maxage only for cookieless requests, keeping the origin cold for
+ * crawlers and first-time visitors.
+ */
+export function headers() {
+  return {
+    "Cache-Control":
+      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
+  };
+}
+
 /** List-level actions: dismiss a duplicate warning or delete a row.
  * Deleting from the list still goes through the confirm dialog — deletion
  * has no undo, so it always asks first. */

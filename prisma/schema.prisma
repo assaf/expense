@@ -215,6 +215,7 @@ model ImageBlob {
   key       String
   mime      String
   data      Bytes
+  thumbnail Bytes? // precomputed 160px JPEG thumbnail — served instead of resizing on the hot path
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 

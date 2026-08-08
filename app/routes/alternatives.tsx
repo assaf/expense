@@ -47,6 +47,13 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
+export function headers() {
+  return {
+    "Cache-Control":
+      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
+  };
+}
+
 export default function AlternativesPage() {
   return (
     <MarketingPage

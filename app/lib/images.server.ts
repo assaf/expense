@@ -3,7 +3,7 @@ import { extname } from "node:path";
 import { ulid } from "ulid";
 import { Prisma } from "prisma/generated";
 import prisma from "~/lib/prisma.server";
-import { normalizeStoredImage } from "~/lib/image-normalize";
+import { normalizeStoredImage, resizeToJpeg } from "~/lib/image-normalize";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
@@ -179,6 +179,14 @@ export async function saveImage(
     extForMime(resolvedMime) ||
     ".png";
 
+  // Precompute the 160px thumbnail at save time — the list page hammers
+  // this and on-the-fly sharp resizing was the biggest CPU consumer.
+  const thumbnail = await resizeToJpeg(storedBuffer, {
+    maxWidth: 160,
+    maxHeight: 160,
+    quality: 80,
+  }).catch(() => null as Buffer | null);
+
   const base = `${ulid()}${ext}`;
   let name = await uniqueName(accountId, base, (key) =>
     pgExists(accountId, key),
@@ -191,6 +199,7 @@ export async function saveImage(
           key: namespacedKey(accountId, name),
           mime: storedMime,
           data: new Uint8Array(storedBuffer),
+          thumbnail: thumbnail ? new Uint8Array(thumbnail) : undefined,
         },
       });
       return { filename: namespacedKey(accountId, name), mime: storedMime };
@@ -235,17 +244,18 @@ export async function renameImageToConvention(
 export async function readImage(
   accountId: string,
   filename: string,
-): Promise<{ buffer: Buffer; mime: string } | null> {
+): Promise<{ buffer: Buffer; mime: string; thumbnail: Buffer | null } | null> {
   if (!filename) return null;
 
   const row = await prisma.imageBlob.findFirst({
     where: { accountId, key: filename },
-    select: { data: true, mime: true },
+    select: { data: true, mime: true, thumbnail: true },
   });
   if (!row) return null;
   return {
     buffer: Buffer.from(row.data),
     mime: row.mime || mimeForFile(filename),
+    thumbnail: row.thumbnail ? Buffer.from(row.thumbnail) : null,
   };
 }
 

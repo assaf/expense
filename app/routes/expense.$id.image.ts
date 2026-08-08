@@ -32,6 +32,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const url = new URL(request.url);
   const width = Number(url.searchParams.get("w"));
+  // The list view asks for 160px thumbnails — serve the precomputed
+  // thumbnail (generated at upload time) instead of resizing on the
+  // fly. This was the single biggest CPU consumer.
+  if (
+    Number.isInteger(width) &&
+    width >= 16 &&
+    width <= 160 &&
+    image.thumbnail
+  ) {
+    return new Response(image.thumbnail as BodyInit, {
+      headers: {
+        "Content-Type": "image/jpeg",
+        "Cache-Control": "public, max-age=86400, immutable",
+      },
+    });
+  }
+  // For widths above 160px (or when the thumbnail wasn't precomputed),
+  // fall back to the sharp resize path.
   if (
     Number.isInteger(width) &&
     width >= 16 &&
@@ -46,7 +64,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       return new Response(thumb as BodyInit, {
         headers: {
           "Content-Type": "image/jpeg",
-          "Cache-Control": "private, max-age=86400",
+          "Cache-Control": "public, max-age=86400, immutable",
         },
       });
     } catch {
@@ -57,7 +75,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return new Response(image.buffer as BodyInit, {
     headers: {
       "Content-Type": image.mime || expense.imageMime || "image/png",
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 }
