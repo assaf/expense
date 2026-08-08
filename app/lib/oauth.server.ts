@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { hash, randomBytes } from "node:crypto";
 import { PUBLIC_URL } from "~/lib/env";
 import { generateOpaqueToken, hashToken, safeEqual } from "~/lib/passwords";
 import {
@@ -50,10 +50,7 @@ function randomToken(prefix: "oat" | "ort" | "code"): string {
 
 /** RFC 7636 S256 challenge: base64url(sha256(code_verifier)) without padding. */
 export function pkceChallenge(codeVerifier: string): string {
-  return createHash("sha256")
-    .update(codeVerifier)
-    .digest("base64url")
-    .replace(/=+$/, "");
+  return hash("sha256", codeVerifier, "base64url");
 }
 
 /** A fresh PKCE verifier (43–128 chars per RFC 7636). */

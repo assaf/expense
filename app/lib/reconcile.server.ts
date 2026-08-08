@@ -1097,7 +1097,7 @@ export function reconcileForMcp(
 
   // Newest first, matching the web UI — `line` still points at the
   // row's original position in the statement.
-  const orderedRows = [...rows].sort(
+  const orderedRows = rows.toSorted(
     (a, b) => b.date.localeCompare(a.date) || a.index - b.index,
   );
   for (const row of orderedRows) {

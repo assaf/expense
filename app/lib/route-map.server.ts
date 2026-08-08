@@ -224,7 +224,7 @@ async function renderTiled(
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
       const buf = await fetcher(z, tx, ty);
-      const href = `data:image/png;base64,${buf.toString("base64")}`;
+      const href = `data:image/png;base64,${buf.toBase64()}`;
       tiles.push({ tx, ty, href });
     }
   }

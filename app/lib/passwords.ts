@@ -1,5 +1,5 @@
 import {
-  createHash,
+  hash,
   randomBytes,
   scrypt as scryptCb,
   timingSafeEqual,
@@ -184,7 +184,7 @@ export function generateOpaqueToken(): string {
  * and sender-verification tokens), so a leaked database never exposes
  * usable tokens. */
 export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return hash("sha256", token, "hex");
 }
 
 /** Constant-time string equality (crypto.timingSafeEqual) for hashes and

@@ -85,7 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   );
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
-    .sort((a, b) =>
+    .toSorted((a, b) =>
       a.name === "Unassigned"
         ? 1
         : b.name === "Unassigned"

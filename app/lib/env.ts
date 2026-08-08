@@ -1,5 +1,10 @@
-import "dotenv/config";
+import { existsSync } from "node:fs";
 import "node:process";
+
+// Load the local .env in dev/test (existing vars win, dotenv-style).
+// Vercel injects env vars directly and ships no .env file — skip when
+// absent, since loadEnvFile throws if the file is missing.
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 const env = process.env;
 

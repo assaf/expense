@@ -89,7 +89,7 @@ export function buildReceiptSvg(
 
 /** The SVG with the bundled font embedded as a data-URI @font-face. */
 function embedFontFace(svg: string): string {
-  const style = `<style>@font-face{font-family:'${JETBRAINS_MONO}';src:url(data:font/woff2;base64,${jetbrainsMonoBytes.toString("base64")}) format('woff2')}</style>`;
+  const style = `<style>@font-face{font-family:'${JETBRAINS_MONO}';src:url(data:font/woff2;base64,${jetbrainsMonoBytes.toBase64()}) format('woff2')}</style>`;
   return svg.replace(/(<svg[^>]*>)/, `$1<defs>${style}</defs>`);
 }
 

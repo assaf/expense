@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -111,10 +111,13 @@ export async function action({ request }: Route.ActionArgs) {
       );
     }
     const buffer = Buffer.from(await file.arrayBuffer());
-    const hash = createHash("sha256").update(buffer).digest("hex");
+    const fileHash = hash("sha256", buffer, "hex");
     // Idempotency: the same bytes are the same statement. An open draft
     // resumes where the user left off; a completed run refuses to re-run.
-    const existing = await findReconciliationRunByHash(user.accountId, hash);
+    const existing = await findReconciliationRunByHash(
+      user.accountId,
+      fileHash,
+    );
     if (existing) {
       if (existing.status === "draft") {
         return redirect(`/reconcile?run=${existing.id}`);
@@ -155,7 +158,7 @@ export async function action({ request }: Route.ActionArgs) {
     const run = await createReconciliationRun(user.accountId, {
       id: ulid(),
       fileName: file.name,
-      fileHash: hash,
+      fileHash: fileHash,
       rows: parsed.rows,
       matches,
       skipped: parsed.skipped,

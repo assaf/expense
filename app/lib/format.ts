@@ -120,7 +120,7 @@ export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
  * array (callers' input is never mutated).
  */
 export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
-  return [...expenses].sort((a, b) => {
+  return expenses.toSorted((a, b) => {
     if (!a.date && !b.date) {
       return desc
         ? b.createdAt.localeCompare(a.createdAt)

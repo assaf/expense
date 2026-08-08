@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 let serverProcess: ChildProcess | undefined;
 let serverPort = 5199;
@@ -47,7 +48,7 @@ export async function launchServer(): Promise<string> {
     } catch {
       // not ready yet
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(500);
   }
   throw new Error("Server startup timeout after 60s");
 }
@@ -100,7 +101,7 @@ function run(cmd: string, args: string[]): Promise<void> {
 export async function closeServer(): Promise<void> {
   if (serverProcess) {
     serverProcess.kill("SIGTERM");
-    await new Promise((r) => setTimeout(r, 3000));
+    await sleep(3000);
     if (serverProcess?.killed === false) serverProcess.kill("SIGKILL");
     serverProcess = undefined;
   }

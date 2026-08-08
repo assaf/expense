@@ -156,7 +156,7 @@ function fontStyle(): string {
   return [
     ...FONT_FAMILIES.map(
       (family) =>
-        `@font-face{font-family:'${family}';src:url(data:font/woff2;base64,${fontBytes.toString("base64")}) format('woff2');font-weight:100 900;font-style:normal}`,
+        `@font-face{font-family:'${family}';src:url(data:font/woff2;base64,${fontBytes.toBase64()}) format('woff2');font-weight:100 900;font-style:normal}`,
     ),
     "html,body{font-family:Arial,Helvetica,sans-serif}",
   ].join("");
@@ -178,7 +178,7 @@ function rewriteToDataUris(
   for (const entry of entries) {
     if (!entry) continue;
     const [reference, image] = entry;
-    const uri = `data:${image.mime};base64,${image.buffer.toString("base64")}`;
+    const uri = `data:${image.mime};base64,${image.buffer.toBase64()}`;
     out = out.split(reference).join(uri);
   }
   return out;

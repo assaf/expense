@@ -174,7 +174,8 @@ function preserveHouseNumber(typed: string, address: string): string {
   const match = typed.trim().match(/^(\d+[a-z]?)\b/i);
   if (!match) return address;
   const number = match[1]!;
-  if (new RegExp(`\\b${number}\\b`).test(address)) return address;
+  if (new RegExp(`\\b${RegExp.escape(number)}\\b`).test(address))
+    return address;
   return `${number} ${address}`;
 }
 

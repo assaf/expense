@@ -95,7 +95,7 @@ export function currentMileageRates(
   });
   // The fallback is the latest published period by start date (then end
   // date) — independent of the input order.
-  const latest = [...periods.keys()].sort((a, b) => {
+  const latest = [...periods.keys()].toSorted((a, b) => {
     const [as, ae] = a.split("|");
     const [bs, be] = b.split("|");
     return bs!.localeCompare(as!) || (be ?? "").localeCompare(ae ?? "");

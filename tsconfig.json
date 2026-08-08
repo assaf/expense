@@ -12,7 +12,7 @@
   "compilerOptions": {
     "esModuleInterop": true,
     "jsx": "react-jsx",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "lib": ["DOM", "DOM.Iterable", "ES2025", "ESNext.TypedArrays"],
     "module": "ES2022",
     "moduleResolution": "bundler",
     "noEmit": true,
