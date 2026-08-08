@@ -12,6 +12,7 @@ import {
   parseStatementCsv,
   parseStatementText,
   parseStatementUpload,
+  reconcileForMcp,
   sniffStatementText,
   tokensOf,
   withinAmount,
@@ -708,6 +709,31 @@ describe("statement matching", () => {
   it("never matches mileage expenses (they aren't card transactions)", () => {
     const matches = matchStatementRows(stubRows(), [makeMileage()]);
     expect(matches[0]!.status).toBe("unmatched");
+  });
+
+  it("orders the MCP statement lines newest first (matches the web UI)", () => {
+    const csv = [
+      "date,description,amount",
+      "2026-01-15,OLD STORE PURCHASE,42.50",
+      "2026-03-10,NEW STORE PURCHASE,11.00",
+      "2026-02-05,MID STORE PURCHASE,22.00",
+    ].join("\n");
+    const result = reconcileForMcp(csv, []) as {
+      matchedPairs: { date: string }[];
+      unmatchedLines: { date: string; line: number }[];
+      needsReview: { date: string }[];
+    };
+    // No expenses → every line lands in unmatchedLines, in statement order.
+    expect(result.unmatchedLines.map((l) => l.date)).toEqual([
+      "2026-03-10",
+      "2026-02-05",
+      "2026-01-15",
+    ]);
+    // `line` still points at each row's original position in the file
+    // (1-based), independent of the display order.
+    expect(result.unmatchedLines.map((l) => l.line)).toEqual([2, 3, 1]);
+    expect(result.matchedPairs).toEqual([]);
+    expect(result.needsReview).toEqual([]);
   });
 
   it("applies the amount tolerance: within $0.50/1% yes, tips no", () => {

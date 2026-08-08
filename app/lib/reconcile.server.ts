@@ -1095,8 +1095,13 @@ export function reconcileForMcp(
   const unmatchedLines: unknown[] = [];
   const matchedExpenseIds = new Set<string>();
 
-  rows.forEach((row, i) => {
-    const match = matches[i]!;
+  // Newest first, matching the web UI — `line` still points at the
+  // row's original position in the statement.
+  const orderedRows = [...rows].sort(
+    (a, b) => b.date.localeCompare(a.date) || a.index - b.index,
+  );
+  for (const row of orderedRows) {
+    const match = matches[row.index]!;
     const displayAmount =
       row.direction === "refund" ? `-${row.amount}` : row.amount;
     if (match.status === "matched") {
@@ -1138,7 +1143,7 @@ export function reconcileForMcp(
         amount: displayAmount,
       });
     }
-  });
+  }
 
   const receipts = expenses.filter(
     (e): e is ReceiptExpense =>

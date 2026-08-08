@@ -572,8 +572,15 @@ function DraftReview({
   const fetcher = useFetcher();
   const busy = fetcher.state !== "idle";
 
+  // Rows are stored in file order — show them newest first (dates are
+  // YYYY-MM-DD, so lexicographic sort is chronological; ties keep file
+  // order). Matches and decisions are keyed by `row.index`, so reordering
+  // the display list never misaligns them.
   const rows: { row: StatementRow; match: RowMatch | undefined }[] = useMemo(
-    () => data.rows.map((row) => ({ row, match: data.matches[row.index] })),
+    () =>
+      [...data.rows]
+        .sort((a, b) => b.date.localeCompare(a.date) || a.index - b.index)
+        .map((row) => ({ row, match: data.matches[row.index] })),
     [data],
   );
 
