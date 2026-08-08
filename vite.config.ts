@@ -58,6 +58,7 @@ export default defineConfig((config) => ({
         org: "labnotes",
         project: "expense",
         authToken: process.env.SENTRY_AUTH_TOKEN,
+        telemetry: false,
       },
       config,
     ),
