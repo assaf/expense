@@ -61,8 +61,8 @@ export function MarketingPage({
  * The dark "create your account" panel that closes every marketing page:
  * ink background, centered heading + body, and a primary CTA button (white
  * variant on FAQ/Compare) with an optional ghost secondary button. The panel
- * always links to the signup — pages only vary the copy, the icon, and the
- * spacing.
+ * always links to the signup — pages only vary the copy, the icon, the
+ * heading size, and the spacing.
  */
 export function MarketingCta({
   heading,
@@ -73,6 +73,8 @@ export function MarketingCta({
   secondaryHref,
   className,
   buttonRow = "mt-8",
+  headingClassName,
+  secondaryClassName,
 }: {
   heading: ReactNode;
   body: ReactNode;
@@ -86,6 +88,11 @@ export function MarketingCta({
   className?: string;
   /** Button-row margin (mt-6 on FAQ/Compare). */
   buttonRow?: string;
+  /** Heading size override (the landing page's closing panel uses text-3xl). */
+  headingClassName?: string;
+  /** Secondary-button style override (the landing page's "Sign in" is
+   * transparent instead of blue). */
+  secondaryClassName?: string;
 }) {
   return (
     <section
@@ -102,6 +109,7 @@ export function MarketingCta({
       <h2
         className={cn(
           "text-2xl font-bold tracking-tight text-white",
+          headingClassName,
           icon ? "mt-4" : "",
         )}
       >
@@ -126,7 +134,10 @@ export function MarketingCta({
             asChild
             size="lg"
             variant="ghost"
-            className="w-full text-white hover:bg-white/10 hover:text-white sm:w-auto bg-blue-600"
+            className={cn(
+              "w-full text-white hover:bg-white/10 hover:text-white sm:w-auto bg-blue-600",
+              secondaryClassName,
+            )}
           >
             <Link to={secondaryHref}>{secondaryLabel}</Link>
           </Button>

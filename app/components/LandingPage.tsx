@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
+import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
 import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
 import { BENEFITS, BLOG_URL, SITE_URL } from "~/lib/seo-content";
@@ -284,32 +285,17 @@ export default function LandingPage() {
 
         {/* CTA */}
         <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-          <div className="rounded-2xl bg-ink px-6 py-14 text-center sm:px-12">
-            <h2 className="text-3xl font-bold tracking-tight text-white">
-              Start collecting this year's expenses.
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-gray-300">
-              No credit card, no subscription. Accounts start empty and stay
-              free.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button
-                asChild
-                size="lg"
-                className="w-full bg-white text-ink hover:bg-gray-100 sm:w-auto"
-              >
-                <Link to="/login?mode=create">Create your account</Link>
-              </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="ghost"
-                className="w-full text-white hover:bg-white/10 hover:text-white sm:w-auto"
-              >
-                <Link to="/login">Sign in</Link>
-              </Button>
-            </div>
-          </div>
+          {/* The landing page's closing panel is the page's final moment —
+           * larger heading, taller padding, transparent Sign in. */}
+          <MarketingCta
+            heading="Start collecting this year's expenses."
+            body="No credit card, no subscription. Accounts start empty and stay free."
+            secondaryLabel="Sign in"
+            secondaryHref="/login"
+            className="py-14"
+            headingClassName="text-3xl"
+            secondaryClassName="bg-transparent"
+          />
         </section>
       </main>
 
