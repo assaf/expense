@@ -32,7 +32,7 @@ import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { duplicateLabel, findDuplicates } from "~/lib/duplicates";
 import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
 import { escapeHtml } from "~/lib/escape";
-import { normalizeAmount, sortExpenses, todayDate } from "~/lib/format";
+import { normalizeAmount, todayDate } from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
@@ -45,7 +45,7 @@ import {
   addReport,
   deleteExpense,
   readExpense,
-  readExpenses,
+  readNeighborIds,
 } from "~/lib/store.server";
 import type {
   Expense,
@@ -72,19 +72,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw new Response("Not found", { status: 404 });
-  // Editor context (open reports, categories, merchants, home, rate) and
-  // neighbours in the main list order (newest first, empty dates last).
-  const [all, context] = await Promise.all([
-    readExpenses(user.accountId),
+  // Editor context (reports, categories, merchants, home, rate) and the
+  // prev/next neighbours for the ← → arrows — two targeted queries instead
+  // of loading every expense.
+  const [nav, context] = await Promise.all([
+    readNeighborIds(user.accountId, expense),
     loadEditorContext(user.accountId, expense),
   ]);
-  const sorted = sortExpenses(all);
-  const i = sorted.findIndex((e) => e.id === expense.id);
-  const nav = {
-    prevId: i > 0 ? sorted[i - 1]!.id : null,
-    nextId: i >= 0 && i < sorted.length - 1 ? sorted[i + 1]!.id : null,
-  };
-  return { mode: "edit" as const, ...context, nav, existing: all };
+  return { mode: "edit" as const, ...context, nav, existing: [] };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {

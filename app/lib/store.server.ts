@@ -44,6 +44,7 @@ export {
   type ReplaceUnverifiedOutcome,
   readExpenses,
   readExpense,
+  readNeighborIds,
   upsertExpense,
   deleteExpense,
   readPriorMerchants,

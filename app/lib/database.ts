@@ -608,6 +608,98 @@ export async function readExpense(
   return row ? rowToExpense(row) : undefined;
 }
 
+/**
+ * The two expenses immediately before and after `expense` in the main list
+ * sort order (dated newest-first, undated newest-createdAt last). Two
+ * lightweight queries instead of loading every expense just for prev/next
+ * arrows.
+ */
+export async function readNeighborIds(
+  accountId: string,
+  expense: { id: string; date: string; createdAt: string },
+): Promise<{ prevId: string | null; nextId: string | null }> {
+  const hasDate = expense.date !== "";
+  let prevId: string | null = null;
+  let nextId: string | null = null;
+
+  if (hasDate) {
+    // Prev: the expense with the closest *newer* date (date > this one,
+    // ordered ascending — the smallest gap forward in time = the one just
+    // before in a newest-first list).
+    const prev = await prisma.expense.findFirst({
+      where: {
+        accountId,
+        date: { gt: expense.date },
+        id: { not: expense.id },
+      },
+      orderBy: { date: "asc" },
+      select: { id: true },
+    });
+    prevId = prev?.id ?? null;
+
+    // Next: the expense with the closest *older* date (date < this one,
+    // ordered descending).
+    const next = await prisma.expense.findFirst({
+      where: {
+        accountId,
+        date: { lt: expense.date },
+        id: { not: expense.id },
+      },
+      orderBy: { date: "desc" },
+      select: { id: true },
+    });
+    if (next) {
+      nextId = next.id;
+    } else {
+      // No older dated expense — fall back to the first undated row.
+      const firstUndated = await prisma.expense.findFirst({
+        where: { accountId, date: "", id: { not: expense.id } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      nextId = firstUndated?.id ?? null;
+    }
+  } else {
+    // Undated expense: prev is the closest newer undated, or the oldest
+    // dated row when this is the first undated.
+    const prevUndated = await prisma.expense.findFirst({
+      where: {
+        accountId,
+        date: "",
+        createdAt: { gt: expense.createdAt },
+        id: { not: expense.id },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (prevUndated) {
+      prevId = prevUndated.id;
+    } else {
+      const oldestDated = await prisma.expense.findFirst({
+        where: { accountId, date: { not: "" }, id: { not: expense.id } },
+        orderBy: { date: "asc" },
+        select: { id: true },
+      });
+      prevId = oldestDated?.id ?? null;
+    }
+
+    // Next: closest older undated (createdAt < this one, ordered desc).
+    const nextUndated = await prisma.expense.findFirst({
+      where: {
+        accountId,
+        date: "",
+        createdAt: { lt: expense.createdAt },
+        id: { not: expense.id },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    nextId = nextUndated?.id ?? null;
+  }
+
+  return { prevId, nextId };
+}
+
 export async function upsertExpense(
   expense: Expense,
   accountId: string,

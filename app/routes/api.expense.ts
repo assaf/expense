@@ -31,7 +31,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const image = await readImage(user.accountId, key);
   if (!image) return new Response("Not found", { status: 404 });
   return new Response(image.buffer as BodyInit, {
-    headers: { "Content-Type": image.mime || "image/png" },
+    headers: {
+      "Content-Type": image.mime || "image/png",
+      "Cache-Control": "public, max-age=300",
+    },
   });
 }
 
