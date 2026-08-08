@@ -41,7 +41,12 @@ import {
   mileageRateLabel,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
-import { deleteExpense, readExpense, readExpenses } from "~/lib/store.server";
+import {
+  addReport,
+  deleteExpense,
+  readExpense,
+  readExpenses,
+} from "~/lib/store.server";
 import type {
   Expense,
   Location,
@@ -94,6 +99,14 @@ export async function action({ request, params }: Route.ActionArgs) {
     return redirect("/");
   }
 
+  if (intent === "addReport") {
+    // Fetcher-driven (no page navigation): return the created name or the
+    // error so the editor's Report picker can select the new report.
+    const name = formString(form, "name").trim();
+    const result = await addReport(user.accountId, name);
+    return Response.json(result.ok ? { ok: true, name } : result);
+  }
+
   if (intent === "save") {
     const result = await saveExpenseFromForm(form, user.accountId, existing);
     if (result.error)
@@ -128,12 +141,17 @@ export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
 }
 
 /** Shared entry point for both routes; keys by id so navigating to a
- * different expense remounts the editor with fresh field state. */
+ * different expense remounts the editor with fresh field state. Create
+ * mode keeps a stable key instead: the route loader builds a fresh shell
+ * (new id) on every revalidation, and a changing key would remount the
+ * editor mid-edit — wiping the draft form state. */
 export function Editor({ data }: { data: EditorData }) {
+  const key =
+    data.mode === "create" ? `create-${data.expense.type}` : data.expense.id;
   return data.expense.type === "receipt" ? (
-    <ReceiptEditor key={data.expense.id} data={data} />
+    <ReceiptEditor key={key} data={data} />
   ) : (
-    <MileageEditor key={data.expense.id} data={data} />
+    <MileageEditor key={key} data={data} />
   );
 }
 
@@ -1367,6 +1385,133 @@ function DateAmountFields({
   );
 }
 
+/** Sentinel value of the Report select option that opens the new-report
+ * input. Can never collide with a real name (report names are trimmed,
+ * non-empty). */
+const NEW_REPORT = "__new__";
+
+/** The Report picker: a dropdown of open reports plus a "+ New report…"
+ * option that swaps the select for an inline name input with explicit
+ * Create/Cancel. Selecting the dropdown never creates anything — creation
+ * requires a name and an explicit Create click (or Enter), so a stray tap
+ * or scroll through the list can't mint a report by accident. Escape (or
+ * Cancel) closes the input untouched. */
+function ReportField({
+  value,
+  onChange,
+  reports,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  reports: string[];
+}) {
+  const fetcher = useFetcher<{ ok: boolean; name?: string; error?: string }>();
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // A created report becomes the selection and closes the input; a rejected
+  // add (empty or duplicate name) keeps the input open with its error.
+  useEffect(() => {
+    const { data } = fetcher;
+    if (!data) return;
+    if (data.ok && data.name) {
+      onChange(data.name);
+      setCreating(false);
+      setDraft("");
+      setError(null);
+    } else if (data.error) {
+      setError(data.error);
+    }
+  }, [fetcher.data, onChange]);
+
+  // Focus the name input as soon as the inline form opens.
+  useEffect(() => {
+    if (creating) inputRef.current?.focus();
+  }, [creating]);
+
+  const submit = () => {
+    const name = draft.trim();
+    if (!name) return;
+    void fetcher.submit({ intent: "addReport", name }, { method: "post" });
+  };
+  const cancel = () => {
+    setCreating(false);
+    setDraft("");
+    setError(null);
+  };
+
+  if (creating) {
+    return (
+      <Field label="Report">
+        <div className="flex items-center gap-2" data-report-create>
+          <Input
+            ref={inputRef}
+            type="text"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape") {
+                cancel();
+              }
+            }}
+            placeholder="New report name"
+            aria-invalid={error ? true : undefined}
+            invalid={!!error}
+            className="min-w-0 flex-1"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!draft.trim()}
+            onClick={submit}
+          >
+            <Plus className="h-4 w-4" /> Create
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={cancel}>
+            Cancel
+          </Button>
+        </div>
+        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+      </Field>
+    );
+  }
+
+  const opts =
+    value && !reports.includes(value) ? [value, ...reports] : reports;
+  return (
+    <Field label="Report">
+      <Select
+        value={value}
+        onChange={(e) => {
+          if (e.target.value === NEW_REPORT) {
+            setCreating(true);
+            setError(null);
+          } else {
+            onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="">—</option>
+        {opts.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        <option value={NEW_REPORT}>+ New report…</option>
+      </Select>
+    </Field>
+  );
+}
+
 /** The Report + Category picker pair shared by both editors. */
 function ReportCategoryFields({
   report,
@@ -1384,13 +1529,8 @@ function ReportCategoryFields({
   categories: string[];
 }) {
   return (
-    <div className="mt-4 grid grid-cols-2 gap-4">
-      <SelectField
-        label="Report"
-        value={report}
-        onChange={onReport}
-        options={reports}
-      />
+    <div className="mt-4 grid grid-cols-2 gap-4 items-start">
+      <ReportField value={report} onChange={onReport} reports={reports} />
       <SelectField
         label="Category"
         value={category}
@@ -1539,6 +1679,10 @@ function useFormKeys(opts: {
       if (blocked) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
+      // The inline new-report form (input + buttons) handles Enter/Escape
+      // itself — the editor shortcuts must not hijack it (Escape would
+      // cancel the whole editor).
+      if (target?.closest?.("[data-report-create]")) return;
       // Inputs with a <datalist> (e.g. merchant autocomplete): Enter picks the
       // suggestion, so let the browser handle it and don't submit.
       const hasList = !!target?.getAttribute?.("list");
