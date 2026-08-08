@@ -54,6 +54,12 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', email);
     await page.fill('input[name="password"]', password);
     await page.click('button[type="submit"]');
+    // Wait for the form submission to finish — the button re-enables when
+    // the action resolves. Without this, the "Check your email" assert
+    // races against the server round-trip and flakes under load.
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+      timeout: 15_000,
+    });
     await expect(
       page.getByRole("heading", { name: "Check your email" }),
     ).toBeVisible();
@@ -150,6 +156,9 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', TEST_EMAIL);
     await page.fill('input[name="password"]', "definitely-wrong");
     await page.click('button[type="submit"]');
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+      timeout: 10_000,
+    });
     await expect(page.getByRole("alert")).toContainText(
       "Invalid email or password",
     );
@@ -329,6 +338,9 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', "unverifieduser@example.com");
     await page.fill('input[name="password"]', "unverified-password");
     await page.click('button[type="submit"]');
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+      timeout: 10_000,
+    });
     await expect(page.getByRole("alert")).toContainText("verify your email");
     await expect(
       page.getByRole("button", { name: "Resend verification email" }),
@@ -405,6 +417,9 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', "thirduser@example.com");
     await page.fill('input[name="password"]', "third-password");
     await page.click('button[type="submit"]');
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+      timeout: 10_000,
+    });
     await expect(page.getByRole("alert")).toContainText(
       "That invite code is not valid",
     );

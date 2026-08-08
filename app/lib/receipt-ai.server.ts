@@ -84,7 +84,7 @@ async function chatCompletion(
       {
         type: "image_url",
         image_url: {
-          url: `data:${opts.image.mime};base64,${opts.image.buffer.toBase64()}`,
+          url: `data:${opts.image.mime};base64,${opts.image.buffer.toString("base64")}`,
         },
       },
     ];
