@@ -121,25 +121,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /**
- * Let Vercel's CDN cache the landing page for anonymous visitors (requests
- * without a session cookie). Browsers always revalidate (max-age=0) so
- * authenticated users never see a cached expense list. The CDN respects
- * s-maxage only for cookieless requests, keeping the origin cold for
- * crawlers and first-time visitors.
- *
- * Authenticated responses set Cache-Control in the loader via `data()`.
- * Here we only set the landing-page cache policy when the loader didn't
- * already set one (i.e. when `loaderHeaders` doesn't already have a
- * Cache-Control).
+ * Never cache the home page — it switches between landing (anonymous) and
+ * expense list (authenticated) based on the session cookie. Browsers and
+ * CDNs must revalidate on every request and segment by cookie so an
+ * authenticated user never sees the cached landing page.
  */
 export function headers({ loaderHeaders }: Route.HeadersArgs) {
   if (loaderHeaders.has("Cache-Control")) {
-    // Already set by the loader (authenticated response).
-    return {};
+    // Already set by the loader (authenticated response) — keep it.
+    return { Vary: "Cookie" };
   }
   return {
-    "Cache-Control":
-      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    Vary: "Cookie",
   };
 }
 
