@@ -234,6 +234,54 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 - **No `dangerouslySetInnerHTML`** — `react/no-danger` errors; escape
   untrusted text with `escapeHtml` (`app/lib/escape.ts`).
 
+### Accessibility
+
+- **Icons must carry `aria-hidden="true"`.** Every lucide-react icon is
+  decorative when paired with visible text; the few standalone icon buttons
+  already have `aria-label` on the `<button>` which overrides the hidden
+  SVG. A new icon without `aria-hidden` will be read aloud by screen readers
+  as raw SVG markup.
+- **Inputs must set `aria-invalid={true}` when `invalid` is true.** The
+  shared `Input` and `Textarea` components do this automatically — pass
+  the `invalid` prop and `aria-invalid` follows. When wiring validation
+  errors outside those components, pair the error message element with
+  `aria-describedby` on the input.
+- **Focus must be managed.** Dialogs and overlays (`ConfirmDialog`,
+  `Lightbox`) trap focus on open and restore it on close. Any new overlay
+  must follow the same pattern: capture `document.activeElement` before
+  mounting, focus the least-destructive action on open, wrap Tab/Shift+Tab,
+  and close on Escape (restoring the captured element).
+- **Color contrast must meet WCAG AA.** The baseline is `text-gray-500`
+  (#6b7280) on white backgrounds (4.6:1); `text-gray-400` (#9ca3af) is
+  ~2.6:1 and fails. Placeholder text, helper text, and functional icons
+  must use at least `text-gray-500`. The `text-amber-700` incomplete badge
+  should be checked on `bg-amber-50`.
+- **Touch targets must be ≥ 24×24 CSS pixels** (WCAG 2.2 AA). Small
+  icon-only buttons (clear-search X, remove-stop X) need at least `p-1`
+  on the `<button>` to reach the minimum.
+- **Every page must have a meaningful `<title>`.** Route modules must export
+  a `meta` function that sets a descriptive title — not just the app name.
+  The expense editor includes the merchant + amount (or mileage type +
+  distance); other routes should follow.
+- **Use landmark elements and heading hierarchy.** Every page has a
+  `<main id="main-content">` (the skip-link target) and exactly one `<h1>`.
+  Sections get `<h2>` (at minimum `sr-only` if the visual design omits
+  them). The `<header>` and `<nav>` elements are implicit landmarks.
+- **Keyboard shortcuts must exist for primary actions.** The editor already
+  binds Enter → Save and Escape → Cancel (guarded against textareas and
+  datalist inputs). Any new editor or modal must follow the same contract.
+- **Respect `prefers-reduced-motion`.** `global.css` already kills all
+  animations/transitions when the user requests reduced motion.
+  `scrollIntoView({ behavior: "smooth" })` guards against it too — any
+  new animation or smooth scroll must do the same.
+- **Tests must use accessible selectors.** Prefer `getByRole`,
+  `getByLabel`, `getByPlaceholder`, and `getByText` over CSS class
+  selectors or `.locator("button")` — this keeps tests aligned with the
+  accessible name contract. The a11y smoke tests live in
+  `test/a11y.test.ts` and cover skip-link, page titles, keyboard
+  shortcuts, focus trapping, `aria-invalid`, `aria-pressed`, and
+  `aria-expanded`.
+
 ### Conditionals & logic
 
 - **Prefer early returns** over nested if/else.
