@@ -35,12 +35,12 @@ interface SiteNavItem {
 /** The wordmark link every public page's header starts with. */
 function SiteLogo() {
   return (
-    <Link to="/" className="flex items-center gap-2 rounded-lg font-semibold">
+    <a href="/" className="flex items-center gap-2 rounded-lg font-semibold">
       <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
         <ReceiptText className="h-4 w-4 text-white" />
       </span>
       Expense
-    </Link>
+    </a>
   );
 }
 
