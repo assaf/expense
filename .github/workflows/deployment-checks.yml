@@ -67,7 +67,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpx secretlint --format github "**/*"
+      - run: pnpm exec secretlint --format github "**/*"
 
   # Static checks (fmt, lint, types) — no database, no browsers. Runs in
   # parallel with the test job (after the secretlint gate).
