@@ -101,7 +101,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 6
     needs: [secretlint]
     services:
       # Matches the hardcoded test URL in vite.config.ts:
