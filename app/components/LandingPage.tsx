@@ -1,5 +1,6 @@
 import {
   Bot,
+  CreditCard,
   FolderOpen,
   MapPinned,
   ReceiptText,
@@ -44,6 +45,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   "PDF reports to show your accountant": FolderOpen,
   "Get ready with your deductions on time": Tags,
   "Log drives without Excel": MapPinned,
+  "Reconcile against your monthly statement": CreditCard,
 };
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
@@ -171,19 +173,21 @@ export default function LandingPage() {
               possible, so year-end is not a grueling process but just a
               download.
             </p>
-            <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mx-auto mt-12 flex max-w-2xl flex-col gap-3">
               {FEATURES.map((f) => (
                 <div
                   key={f.title}
-                  className="rounded-xl border border-gray-200 bg-white p-5"
+                  className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5"
                 >
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
                     <f.icon className="h-5 w-5 text-ink" />
                   </div>
-                  <h3 className="font-semibold text-ink">{f.title}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
-                    {f.body}
-                  </p>
+                  <div>
+                    <h3 className="font-semibold text-ink">{f.title}</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                      {f.body}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>

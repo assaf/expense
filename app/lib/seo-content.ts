@@ -41,6 +41,7 @@ export const KEY_FACTS = [
   "Receipt capture: upload, paste, drag & drop, or forward from email (images and PDFs)",
   "The OCR finds a merchant and amount, an LLM categorizes the receipt and you just save it",
   "Export: a PDF per report with the receipts attached or a ZIP with everything (CSV plus all the receipt images)",
+  "Reconciliation: upload a bank statement (PDF, CSV, QFX/OFX, Excel) to match charges against your logged expenses and catch deductions you missed",
   "Mileage: map-based drives at the IRS mileage rate for the drive date/type",
   "AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth). The assistant can capture receipts, log mileage, answer your spending questions, and build and export reports",
   "Multi-user accounts: collaborate on one account with an invite code",
@@ -76,6 +77,10 @@ export const BENEFITS = [
   {
     title: "Duplicates detection",
     body: "If you upload the same receipt twice, or resend the email receipt, you will be warned about a duplicate before it messes up your totals.",
+  },
+  {
+    title: "Reconcile against your monthly statement",
+    body: "Upload a credit card or bank statement — PDF, CSV, QuickBooks, or Excel — and Expense matches every charge against your logged expenses. Any charge without a receipt stands out, so you never miss a deductible expense that slipped through. Reconcile as many statements as you need, even from a card you use for both personal and business spending.",
   },
   {
     title: "Export for the tax time",
@@ -147,6 +152,10 @@ const STANDALONE_FAQS: Faq[] = [
     answer: `You will get a visual warning and you can discard it or mark as "not a duplicate". This covers re-uploaded file and sending the same email twice.`,
   },
   {
+    question: "Can I reconcile my expenses against a credit card statement?",
+    answer: `Yes. Upload a credit card or bank statement — PDF, CSV, QuickBooks (QFX/OFX), or Excel — and Expense matches every charge against your logged expenses. Any charge without a matching receipt is flagged, so you can spot deductible expenses you missed. You can reconcile multiple statements (across different cards or months), and mixed-use cards are no problem — Expense only cares about matching business expenses. Nothing is written until you confirm which matches to keep and which charges to add as new expenses.`,
+  },
+  {
     question: "Can I share Expense with my spouse or accountant?",
     answer: `Yes. Share the invitation code, and any new users you invite will see the same expense information. Any other accounts will remain completely separate.`,
   },
@@ -172,7 +181,7 @@ const STANDALONE_FAQS: Faq[] = [
 /** The Expensify comparison — pulled out so /alternatives can cite it. */
 export const COMPARISON_FAQ: Faq = {
   question: "Can Expense be used as a replacement for Expensify?",
-  answer: `Certainly, for personal or small-team expense tracking. Expense is free, reads receipts with OCR, suggests categories, calculates miles based on IRS rate, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you for free.`,
+  answer: `Certainly, for personal or small-team expense tracking. Expense is free, reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you for free.`,
 };
 
 /** The full FAQ list — the standalone questions, then the comparison. */
@@ -218,6 +227,13 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
     expensify: "Mileage tracking with IRS rates on paid plans.",
   },
   {
+    aspect: "Statement reconciliation",
+    expense:
+      "Upload statements from any credit card or bank account (PDF, CSV, QFX/OFX, Excel) and match charges against logged expenses to catch deductions you missed. Works across multiple cards and handles mixed personal/business spending on the same statement.",
+    expensify:
+      "Corporate card reconciliation with real-time transaction matching, settlement tracking, and accounting-software integration on paid plans.",
+  },
+  {
     aspect: "Multiple users",
     expense: "One account per invitation code, accounts are separated.",
     expensify: "Corporate roles, approval chains, and policy controls.",
@@ -232,8 +248,9 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
 /** The quotable verdict paragraph for the comparison page. */
 export const COMPARISON_SUMMARY = `In case you are a private person, freelancer, or small business team who tracks
 expenses for tax season, Expense is a better fit as it is free, reads receipts
-with OCR technology, categorizes with AI, and arranges all the expenses
-according to Schedule C format, reports, and mileage at the IRS rate. Expensify
+with OCR technology, categorizes with AI, reconciles credit card statements to
+catch missed deductions, and arranges all the expenses according to Schedule C
+format, reports, and mileage at the IRS rate. Expensify
 is a corporate expense management system (workflows, reimbursement, accounting
 integrations). Expensify free version is limited to 25 SmartScans a month, and
 there are paid versions based on per-user monthly subscription ($5-$9 per user
