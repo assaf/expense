@@ -12,6 +12,7 @@
     "screenshot": "SCREENSHOT=1 vp test run test/screenshot.test.ts",
     "start": "NODE_ENV=production react-router-serve ./build/server/index.js",
     "test": "react-router build --force && vp test run",
+    "test:unit": "vitest run --project unit",
     "prepare": "vp config",
     "build:prisma": "prisma generate",
     "test:ocr": "RUN_OCR_TESTS=1 vp test run test/pdf-ocr.test.ts",

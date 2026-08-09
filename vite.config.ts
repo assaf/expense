@@ -77,25 +77,7 @@ export default defineConfig((config) => ({
   },
 
   test: {
-    browser: { screenshotDirectory: "__screenshots__" },
-    disableConsoleIntercept: !process.env.CI,
-    env: {
-      DATABASE_URL: "postgres://assaf@localhost/expense_test",
-    },
-    execArgv: ["--max-old-space-size=3072"],
-    fileParallelism: false,
-    globalSetup: "test/helpers/globalSetup.ts",
-    hookTimeout: 60_000,
-    include: ["test/**/*.test.ts", "test/**/*.test.tsx"],
-    maxConcurrency: 1,
-    maxWorkers: 1,
-    pool: "forks",
-    reporters: process.env.GITHUB_ACTIONS
-      ? ["github-actions", "verbose"]
-      : ["verbose"],
-    setupFiles: "test/helpers/testSuiteSetup.ts",
-    teardownTimeout: 5_000,
-    testTimeout: 30_000,
+    projects: ["./vitest.unit.config.ts", "./vitest.main.config.ts"],
   },
 
   optimizeDeps: {
