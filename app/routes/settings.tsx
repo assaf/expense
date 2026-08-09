@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Check,
   Plus,
   Trash2,
@@ -6,16 +7,16 @@ import {
   MapPin,
   LogOut,
   RefreshCw,
+  Settings,
   KeyRound,
 } from "lucide-react";
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Form, useFetcher } from "react-router";
+import { Form, Link, useFetcher } from "react-router";
 import { redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
-import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
@@ -104,6 +105,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     members,
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
+}
+
+export function meta(): Route.MetaDescriptors {
+  return [{ title: "Settings — Expense" }];
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -237,7 +242,18 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     mcpUrl,
   } = loaderData;
   return (
-    <PageShell title="Settings">
+    <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 text-2xl font-bold">
+          <Settings aria-hidden="true" className="h-6 w-6" /> Settings
+        </h1>
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
+            expenses
+          </Link>
+        </Button>
+      </header>
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Account</h2>
         <p className="mb-3 text-sm text-gray-500">
@@ -453,7 +469,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Form>
         </div>
       </section>
-    </PageShell>
+    </main>
   );
 }
 

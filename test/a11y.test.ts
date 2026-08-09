@@ -2,7 +2,7 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
-import { seedTestData, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import { seedTestData } from "./helpers/seedTestData";
 
 /**
  * Accessibility smoke tests — keyboard interaction, ARIA attributes,

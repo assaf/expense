@@ -1,6 +1,6 @@
-import { FileDown, FileArchive } from "lucide-react";
+import { ArrowLeft, FileArchive, FileDown } from "lucide-react";
+import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
-import { PageShell } from "~/components/PageShell";
 import { requireUser } from "~/lib/auth.server";
 import { readReportSummaries } from "~/lib/store.server";
 import type { ReportSummary } from "~/lib/store.server";
@@ -12,6 +12,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   // All reports with their exact counts + totals (one query pass).
   const reports = await readReportSummaries(user.accountId);
   return { reports };
+}
+
+export function meta(): Route.MetaDescriptors {
+  return [{ title: "Export — Expense" }];
 }
 
 function ReportList({ reports }: { reports: ReportSummary[] }) {
@@ -54,7 +58,18 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
   const open = reports.filter((r) => !r.closed);
   const main = split ? open : reports;
   return (
-    <PageShell title="Export">
+    <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="flex items-center gap-2 text-2xl font-bold">
+          <FileDown aria-hidden="true" className="h-6 w-6" /> Export
+        </h1>
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/">
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
+            expenses
+          </Link>
+        </Button>
+      </header>
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Reports (PDF)</h2>
         <p className="mb-3 text-sm text-gray-500">
@@ -97,6 +112,6 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           </a>
         </Button>
       </section>
-    </PageShell>
+    </main>
   );
 }

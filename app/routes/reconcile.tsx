@@ -77,6 +77,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+export function meta(): Route.MetaDescriptors {
+  return [{ title: "Reconcile — Expense" }];
+}
+
 /**
  * Reconcile a credit card statement against logged expenses:
  *  - upload: parse + match (server-side), create a draft run
@@ -310,7 +314,9 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
               {busy ? "Reading statement…" : "Match my expenses"}
             </Button>
             {error ? (
-              <span className="text-sm text-red-600">{error}</span>
+              <span role="alert" className="text-sm text-red-600">
+                {error}
+              </span>
             ) : null}
           </div>
         </fetcher.Form>
