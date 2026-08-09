@@ -11,7 +11,13 @@ import {
   ListChecks,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Link, useFetcher, useNavigate, useSearchParams } from "react-router";
+import {
+  data,
+  Link,
+  useFetcher,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import {
   FeatureHighlight,
   pickHighlight,
@@ -57,7 +63,7 @@ import type { Route } from "./+types/_index";
 export async function loader({ request }: Route.LoaderArgs) {
   // Anonymous visitors see the landing page; signed-in users see the app.
   if (!(await isAuthenticated(request))) {
-    return { mode: "landing" as const };
+    return data({ mode: "landing" as const });
   }
   const user = await requireUser(request);
   const [expenses, dismissed, allReports, rates, account] = await Promise.all([
@@ -98,12 +104,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     inviteCode: account?.inviteCode ?? "",
     mileageRate,
   };
-  return {
-    mode: "app" as const,
-    expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
-    reports,
-    highlight: { id: pickHighlight(highlightData), data: highlightData },
-  };
+  return data(
+    {
+      mode: "app" as const,
+      expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
+      reports,
+      highlight: { id: pickHighlight(highlightData), data: highlightData },
+    },
+    {
+      headers: {
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        Vary: "Cookie",
+      },
+    },
+  );
 }
 
 /**
@@ -112,8 +126,17 @@ export async function loader({ request }: Route.LoaderArgs) {
  * authenticated users never see a cached expense list. The CDN respects
  * s-maxage only for cookieless requests, keeping the origin cold for
  * crawlers and first-time visitors.
+ *
+ * Authenticated responses set Cache-Control in the loader via `data()`.
+ * Here we only set the landing-page cache policy when the loader didn't
+ * already set one (i.e. when `loaderHeaders` doesn't already have a
+ * Cache-Control).
  */
-export function headers() {
+export function headers({ loaderHeaders }: Route.HeadersArgs) {
+  if (loaderHeaders.has("Cache-Control")) {
+    // Already set by the loader (authenticated response).
+    return {};
+  }
   return {
     "Cache-Control":
       "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
@@ -409,12 +432,17 @@ function ExpenseList({
 
   return (
     <main
+      id="main-content"
       className={`mx-auto max-w-4xl px-4 py-8 ${dragOver ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500" : ""}`}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      aria-label="Expense list — drag a receipt image anywhere to upload"
     >
+      <div className="sr-only" role="status" aria-live="polite">
+        {dragOver ? "Receipt file detected — drop to upload" : ""}
+      </div>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Expense</h1>
         <nav className="flex items-center gap-2">
@@ -495,6 +523,7 @@ function ExpenseList({
                 key={r.name}
                 type="button"
                 onClick={() => setSelectedReport(active ? null : r.name)}
+                aria-pressed={active}
                 className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-gray-200 bg-white hover:border-gray-300"}`}
               >
                 <div className="truncate text-sm font-medium text-gray-700">
@@ -514,7 +543,7 @@ function ExpenseList({
 
       {selectedReport !== null || debouncedQuery ? (
         <div className="mb-3 flex items-center justify-between gap-2 text-sm text-gray-600">
-          <span>
+          <span role="status" aria-live="polite">
             {debouncedQuery
               ? `Showing ${filtered.length} of ${expenses.length} expenses`
               : selectedReport === "Unassigned"
@@ -534,7 +563,10 @@ function ExpenseList({
       {expenses.length === 0 ? (
         <EmptyState />
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-gray-500">
+        <div
+          role="status"
+          className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-gray-500"
+        >
           No expenses match these filters.
         </div>
       ) : (
@@ -605,6 +637,7 @@ function ExpenseRow({
         <Link
           to={to}
           className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5"
+          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}`}
         >
           <Thumbnail expense={expense} />
           <div className="min-w-0 flex-1">
@@ -622,7 +655,10 @@ function ExpenseRow({
                 {formatAmount(expense.amount)}
               </span>
             </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500">
+            <div
+              className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-gray-500"
+              aria-hidden="true"
+            >
               <span>{formatDate(expense.date)}</span>
               {expense.reconciled ? (
                 <span
@@ -737,7 +773,10 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
 
 function EmptyState() {
   return (
-    <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center text-gray-500">
+    <div
+      role="status"
+      className="rounded-xl border border-dashed border-gray-300 p-12 text-center text-gray-500"
+    >
       Nothing here yet. Add your first receipt or log a drive — it takes under a
       minute.
     </div>
