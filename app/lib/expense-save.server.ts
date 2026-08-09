@@ -2,6 +2,7 @@ import { normalizeAmount } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import {
+  addReport,
   findOpenReport,
   newExpenseShell,
   upsertExpense,
@@ -15,6 +16,20 @@ import {
   type ReceiptExpense,
 } from "~/lib/types";
 import { formString, validateDateNotFuture } from "~/lib/validation";
+
+/**
+ * Shared handler for the "addReport" intent — used by both expense editor
+ * routes (create and edit). Fetcher-driven — returns the created name or
+ * the error so the editor's Report picker can select the new report.
+ */
+export async function addReportAction(
+  form: FormData,
+  accountId: string,
+): Promise<Response> {
+  const name = formString(form, "name").trim();
+  const result = await addReport(accountId, name);
+  return Response.json(result.ok ? { ok: true, name } : result);
+}
 
 /**
  * Validate the inputs every expense write shares — the date (a valid

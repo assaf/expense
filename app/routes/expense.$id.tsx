@@ -28,7 +28,10 @@ import { Textarea } from "~/components/ui/Textarea";
 import { requireUser } from "~/lib/auth.server";
 import { isComplete } from "~/lib/completeness";
 import { loadEditorContext } from "~/lib/editor.server";
-import { saveExpenseFromForm } from "~/lib/expense-save.server";
+import {
+  addReportAction,
+  saveExpenseFromForm,
+} from "~/lib/expense-save.server";
 import { duplicateLabel, findDuplicates } from "~/lib/duplicates";
 import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
 import { escapeHtml } from "~/lib/escape";
@@ -42,7 +45,6 @@ import {
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import {
-  addReport,
   deleteExpense,
   readExpense,
   readNeighborIds,
@@ -107,13 +109,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     return redirect("/");
   }
 
-  if (intent === "addReport") {
-    // Fetcher-driven (no page navigation): return the created name or the
-    // error so the editor's Report picker can select the new report.
-    const name = formString(form, "name").trim();
-    const result = await addReport(user.accountId, name);
-    return Response.json(result.ok ? { ok: true, name } : result);
-  }
+  if (intent === "addReport") return addReportAction(form, user.accountId);
 
   if (intent === "save") {
     const result = await saveExpenseFromForm(form, user.accountId, existing);

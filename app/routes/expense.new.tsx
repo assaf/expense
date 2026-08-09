@@ -2,13 +2,12 @@ import { redirect } from "react-router";
 import { Editor } from "./expense.$id";
 import { requireUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
-import { saveExpenseFromForm } from "~/lib/expense-save.server";
-import { todayDate } from "~/lib/format";
 import {
-  addReport,
-  newExpenseShell,
-  readDuplicateCandidates,
-} from "~/lib/store.server";
+  addReportAction,
+  saveExpenseFromForm,
+} from "~/lib/expense-save.server";
+import { todayDate } from "~/lib/format";
+import { newExpenseShell, readDuplicateCandidates } from "~/lib/store.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.new";
 
@@ -42,13 +41,8 @@ export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
   const intent = formString(form, "intent");
-  if (intent === "addReport") {
-    // Fetcher-driven (no page navigation): return the created name or the
-    // error so the editor's Report picker can select the new report.
-    const name = formString(form, "name").trim();
-    const result = await addReport(user.accountId, name);
-    return Response.json(result.ok ? { ok: true, name } : result);
-  }
+  if (intent === "addReport") return addReportAction(form, user.accountId);
+
   if (intent !== "save") {
     return unknownIntent();
   }

@@ -4,6 +4,15 @@ import { registerOAuthClient } from "~/lib/store.server";
 import type { Route } from "./+types/oauth.register";
 
 /**
+ * GET /oauth/register — not a valid endpoint. RFC 7591 only defines POST
+ * for client registration. Return 405 so React Router doesn't throw
+ * getInternalRouterError.
+ */
+export function loader(): Response {
+  return new Response("Method Not Allowed", { status: 405 });
+}
+
+/**
  * POST /oauth/register — dynamic client registration (RFC 7591). MCP clients
  * call this once and keep the returned client_id; the response includes a
  * client_secret only for `client_secret_basic` (confidential) registrations.

@@ -32,6 +32,33 @@ import { validateDateNotFuture } from "~/lib/validation";
 
 const isTest = typeof process !== "undefined" && process.env.VITEST === "true";
 
+// --- Cache helpers ----------------------------------------------------------
+
+/** Simple in-memory TTL cache. The read side gates with `isTest` to keep
+ * tests deterministic — this helper only handles storage + expiry. */
+interface CacheStore<T> {
+  get(key: string): T | undefined;
+  set(key: string, value: T): void;
+  delete(key: string): void;
+}
+
+function createCache<T>(ttlMs: number): CacheStore<T> {
+  const map = new Map<string, { value: T; expiresAt: number }>();
+  return {
+    get(key) {
+      const entry = map.get(key);
+      if (entry && entry.expiresAt > Date.now()) return entry.value;
+      return undefined;
+    },
+    set(key, value) {
+      map.set(key, { value, expiresAt: Date.now() + ttlMs });
+    },
+    delete(key) {
+      map.delete(key);
+    },
+  };
+}
+
 import type {
   Account,
   Category,
@@ -294,18 +321,15 @@ function seedDefaultCategories(
 /** Short-lived in-process cache for readAccount — an account's invite code
  * and name rarely change once set. 5-minute TTL; cache miss or regeneration
  * re-queries. */
-const accountCache = new Map<string, { account: Account; expiresAt: number }>();
-const ACCOUNT_CACHE_TTL_MS = 300_000;
+const accountCache = createCache<Account>(300_000);
 
 export async function readAccount(id: string): Promise<Account | undefined> {
-  const cached = accountCache.get(id);
-  if (!isTest && cached && cached.expiresAt > Date.now()) return cached.account;
+  if (!isTest) {
+    const cached = accountCache.get(id);
+    if (cached !== undefined) return cached;
+  }
   const row = await prisma.account.findUnique({ where: { id } });
-  if (row)
-    accountCache.set(id, {
-      account: row,
-      expiresAt: Date.now() + ACCOUNT_CACHE_TTL_MS,
-    });
+  if (row) accountCache.set(id, row);
   return row ?? undefined;
 }
 
@@ -480,16 +504,14 @@ export async function findUserByEmail(
  * churn that exhausts the Supabase session pooler under load. Only successful
  * lookups are cached; a deleted user is re-checked after the TTL (and a stale
  * hit merely means the next request redirects to login). */
-const userCache = new Map<string, { user: User; expiresAt: number }>();
-const USER_CACHE_TTL_MS = 30_000;
+const userCache = createCache<User>(30_000);
 
 export async function findUserById(id: string): Promise<User | undefined> {
   const cached = userCache.get(id);
-  if (cached && cached.expiresAt > Date.now()) return cached.user;
+  if (cached !== undefined) return cached;
   const row = await prisma.user.findUnique({ where: { id } });
   const user = row ? rowToUser(row) : undefined;
-  if (user)
-    userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+  if (user) userCache.set(id, user);
   return user;
 }
 
@@ -905,25 +927,20 @@ export async function readExtractionContext(
 // increasing, so `id asc` is chronological — oldest first, newest last.
 /** Short-lived per-account cache for reports — they only change when the
  * user edits them in Settings, so a 5-minute TTL is safe. */
-const reportsCache = new Map<
-  string,
-  { reports: Report[]; expiresAt: number }
->();
-const REPORTS_CACHE_TTL_MS = 300_000;
+const reportsCache = createCache<Report[]>(300_000);
 
 export async function readReports(accountId: string): Promise<Report[]> {
-  const cached = reportsCache.get(accountId);
-  if (!isTest && cached && cached.expiresAt > Date.now()) return cached.reports;
+  if (!isTest) {
+    const cached = reportsCache.get(accountId);
+    if (cached !== undefined) return cached;
+  }
   const rows = await prisma.report.findMany({
     where: { accountId, name: { not: "" } },
     orderBy: { id: "asc" },
     select: { name: true, closed: true },
   });
   const reports = rows.map((r) => ({ name: r.name, closed: r.closed }));
-  reportsCache.set(accountId, {
-    reports,
-    expiresAt: Date.now() + REPORTS_CACHE_TTL_MS,
-  });
+  reportsCache.set(accountId, reports);
   return reports;
 }
 
@@ -1180,16 +1197,13 @@ export async function setReportClosed(
 }
 
 /** Per-account cache for categories — same 5-minute TTL as reports. */
-const categoriesCache = new Map<
-  string,
-  { categories: Category[]; expiresAt: number }
->();
-const CATEGORIES_CACHE_TTL_MS = 300_000;
+const categoriesCache = createCache<Category[]>(300_000);
 
 export async function readCategories(accountId: string): Promise<Category[]> {
-  const cached = categoriesCache.get(accountId);
-  if (!isTest && cached && cached.expiresAt > Date.now())
-    return cached.categories;
+  if (!isTest) {
+    const cached = categoriesCache.get(accountId);
+    if (cached !== undefined) return cached;
+  }
   const rows = await prisma.category.findMany({
     where: { accountId, name: { not: "" } },
     select: { name: true },
@@ -1198,10 +1212,7 @@ export async function readCategories(accountId: string): Promise<Category[]> {
     .map((c) => c.name)
     .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
     .map((name) => ({ name }));
-  categoriesCache.set(accountId, {
-    categories,
-    expiresAt: Date.now() + CATEGORIES_CACHE_TTL_MS,
-  });
+  categoriesCache.set(accountId, categories);
   return categories;
 }
 
@@ -1252,16 +1263,13 @@ export async function removeCategory(
 // --- Settings --------------------------------------------------------------
 
 /** Per-account cache for settings — 5-minute TTL. */
-const settingsCache = new Map<
-  string,
-  { settings: Settings; expiresAt: number }
->();
-const SETTINGS_CACHE_TTL_MS = 300_000;
+const settingsCache = createCache<Settings>(300_000);
 
 export async function readSettings(accountId: string): Promise<Settings> {
-  const cached = settingsCache.get(accountId);
-  if (!isTest && cached && cached.expiresAt > Date.now())
-    return cached.settings;
+  if (!isTest) {
+    const cached = settingsCache.get(accountId);
+    if (cached !== undefined) return cached;
+  }
   const rows = await prisma.settings.findMany({ where: { accountId } });
   const settings: Settings = { ...DEFAULT_SETTINGS };
   const kv: Record<string, string> = {};
@@ -1271,10 +1279,7 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.homeAddress = kv["homeAddress"] ?? "";
   settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
   settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
-  settingsCache.set(accountId, {
-    settings,
-    expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS,
-  });
+  settingsCache.set(accountId, settings);
   return settings;
 }
 

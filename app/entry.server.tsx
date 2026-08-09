@@ -36,7 +36,10 @@ if (process.env.VERCEL_ENV === "production") {
       tracesSampleRate: 1.0, // Capture 100% of the transactions
       profilesSampleRate: 1.0, // profile every transaction
 
-      // Filter out 404s from error reporting
+      // Filter out 404s and routing errors from error reporting.
+      // React Router throws getInternalRouterError for unmatched routes
+      // ("No route matches URL") and missing loaders ("did not provide
+      // a `loader`") — these aren't app bugs, just normal web traffic.
       beforeSend(event) {
         if (event.exception) {
           const error = event.exception.values?.[0];
@@ -45,6 +48,18 @@ if (process.env.VERCEL_ENV === "production") {
             error?.value?.includes("404")
           ) {
             return null;
+          }
+          // getInternalRouterError for unmatched routes and missing
+          // loaders — bots/crawlers/curious humans hitting paths that
+          // don't exist or only support POST.
+          if (error?.type === "Error") {
+            const msg = error?.value ?? "";
+            if (
+              msg.includes("No route matches URL") ||
+              msg.includes("did not provide a `loader`")
+            ) {
+              return null;
+            }
           }
         }
         return event;
