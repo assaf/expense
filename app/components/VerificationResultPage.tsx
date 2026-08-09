@@ -28,11 +28,11 @@ export function VerificationResultPage({
 }) {
   const icon =
     status === "expired" ? (
-      <Clock3 className="h-6 w-6 text-amber-600" aria-hidden />
+      <Clock3 aria-hidden="true" className="h-6 w-6 text-amber-600" />
     ) : status === "invalid" ? (
-      <XCircle className="h-6 w-6 text-red-600" aria-hidden />
+      <XCircle aria-hidden="true" className="h-6 w-6 text-red-600" />
     ) : (
-      <CheckCircle2 className="h-6 w-6 text-green-600" aria-hidden />
+      <CheckCircle2 aria-hidden="true" className="h-6 w-6 text-green-600" />
     );
   return (
     <main
@@ -42,7 +42,7 @@ export function VerificationResultPage({
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
         <div className="mb-4 flex items-center justify-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
-            <ReceiptText className="h-6 w-6 text-white" />
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
           </div>
         </div>
         <div className="mb-3 flex items-center justify-center gap-2">

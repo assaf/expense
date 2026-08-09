@@ -255,7 +255,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             <Form method="post" className="contents">
               <input type="hidden" name="intent" value="regenerateCode" />
               <Button type="submit" size="sm" variant="secondary">
-                <RefreshCw className="h-4 w-4" /> New code
+                <RefreshCw aria-hidden="true" className="h-4 w-4" /> New code
               </Button>
             </Form>
           </div>
@@ -297,7 +297,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                     </span>
                     {member.emailVerifiedAt ? (
                       <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                        <Check className="h-3 w-3" /> Active
+                        <Check aria-hidden="true" className="h-3 w-3" /> Active
                       </span>
                     ) : (
                       <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
@@ -381,7 +381,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             <Input type="text" name="homeAddress" defaultValue={homeAddress} />
           </Field>
           <Button type="submit" size="md">
-            <MapPin className="h-4 w-4" /> Save
+            <MapPin aria-hidden="true" className="h-4 w-4" /> Save
           </Button>
         </Form>
       </section>
@@ -448,7 +448,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </p>
           <Form method="post" action="/sign-out">
             <Button type="submit" size="md" variant="secondary">
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut aria-hidden="true" className="h-4 w-4" /> Sign out
             </Button>
           </Form>
         </div>
@@ -484,7 +484,7 @@ function SenderRow({
           ) : null}
           {sender.verified ? (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-              <Check className="h-3 w-3" /> Verified
+              <Check aria-hidden="true" className="h-3 w-3" /> Verified
             </span>
           ) : (
             <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
@@ -516,10 +516,10 @@ function SenderRow({
               <input type="hidden" name="address" value={sender.address} />
               <button
                 type="submit"
-                className="text-gray-400 hover:text-red-600"
+                className="text-gray-500 hover:text-red-600"
                 aria-label={`Remove ${sender.address}`}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 aria-hidden="true" className="h-4 w-4" />
               </button>
             </removeFetcher.Form>
           ) : null}
@@ -595,7 +595,8 @@ function AddSenderForm() {
           variant="secondary"
           disabled={busy || !address.trim()}
         >
-          <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add address"}
+          <Plus aria-hidden="true" className="h-4 w-4" />{" "}
+          {busy ? "Adding…" : "Add address"}
         </Button>
       </fetcher.Form>
       {notice ? (
@@ -669,12 +670,15 @@ function AgentsSection({
                 <li key={client.id} className="rounded-lg bg-gray-50 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <KeyRound className="h-4 w-4 shrink-0 text-gray-400" />
+                      <KeyRound
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 text-gray-500"
+                      />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">
                           {client.name}
                         </div>
-                        <div className="truncate font-mono text-xs text-gray-400">
+                        <div className="truncate font-mono text-xs text-gray-500">
                           {client.id}
                         </div>
                       </div>
@@ -688,11 +692,11 @@ function AgentsSection({
                       <input type="hidden" name="clientId" value={client.id} />
                       <button
                         type="submit"
-                        className="shrink-0 text-gray-400 hover:text-red-600"
+                        className="shrink-0 text-gray-500 hover:text-red-600"
                         aria-label={`Remove ${client.name}`}
                         title={`Remove ${client.name}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
                       </button>
                     </removeFetcher.Form>
                   </div>
@@ -815,7 +819,7 @@ function NameList<T extends { name: string }>({
           variant="secondary"
           disabled={!draft.trim()}
         >
-          <Plus className="h-4 w-4" /> Add
+          <Plus aria-hidden="true" className="h-4 w-4" /> Add
         </Button>
       </fetcher.Form>
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
@@ -910,10 +914,10 @@ const RenameButton = forwardRef<
       ref={ref}
       type="button"
       onClick={onClick}
-      className="text-gray-400 hover:text-ink"
+      className="text-gray-500 hover:text-ink"
       aria-label={`Rename ${name}`}
     >
-      <Pencil className="h-4 w-4" />
+      <Pencil aria-hidden="true" className="h-4 w-4" />
     </button>
   );
 });
@@ -947,10 +951,10 @@ function RemoveButton({
       <input type="hidden" name="name" value={name} />
       <button
         type="submit"
-        className="text-gray-400 hover:text-red-600"
+        className="text-gray-500 hover:text-red-600"
         aria-label={`Remove ${name}`}
       >
-        <Trash2 className="h-4 w-4" />
+        <Trash2 aria-hidden="true" className="h-4 w-4" />
       </button>
     </fetcher.Form>
   );

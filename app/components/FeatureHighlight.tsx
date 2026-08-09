@@ -210,7 +210,7 @@ export function FeatureHighlight({
     <aside className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-          <Icon className="h-4 w-4" />
+          <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">

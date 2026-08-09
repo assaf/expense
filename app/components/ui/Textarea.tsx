@@ -22,6 +22,7 @@ export function Textarea({ className, invalid, ...props }: TextareaProps) {
   return (
     <textarea
       className={cn(textareaVariants({ invalid }), className)}
+      aria-invalid={invalid || undefined}
       {...props}
     />
   );

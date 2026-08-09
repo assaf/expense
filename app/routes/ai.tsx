@@ -98,7 +98,8 @@ export default function AiPage() {
         bg-gray-50"
         >
           <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-500">
-            <Link2 className="h-3.5 w-3.5" /> Claude: .mcp.json
+            <Link2 aria-hidden="true" className="h-3.5 w-3.5" /> Claude:
+            .mcp.json
           </div>
           <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700">
             {`{
@@ -127,7 +128,10 @@ export default function AiPage() {
               key={prompt}
               className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white p-4"
             >
-              <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <Sparkles
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"
+              />
               <span className="text-sm leading-relaxed text-gray-700">
                 {prompt}
               </span>
@@ -139,7 +143,10 @@ export default function AiPage() {
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">Security</h2>
         <div className="mt-6 flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-5">
-          <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+          <ShieldCheck
+            aria-hidden="true"
+            className="mt-0.5 h-5 w-5 shrink-0 text-blue-600"
+          />
           <p className="text-sm leading-relaxed text-gray-600">{AI_SECURITY}</p>
         </div>
       </section>
@@ -147,7 +154,7 @@ export default function AiPage() {
       <MarketingCta
         heading="Your expenses, on speaking terms with your assistant."
         body="Accounts are free and start empty. Add your first receipt in under a minute, then connect your assistant whenever you're ready."
-        icon={<Bot className="h-6 w-6 text-white" />}
+        icon={<Bot aria-hidden="true" className="h-6 w-6 text-white" />}
         secondaryLabel="Read the FAQ"
         secondaryHref="/faq"
       />

@@ -37,7 +37,7 @@ function SiteLogo() {
   return (
     <a href="/" className="flex items-center gap-2 rounded-lg font-semibold">
       <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
-        <ReceiptText className="h-4 w-4 text-white" />
+        <ReceiptText aria-hidden="true" className="h-4 w-4 text-white" />
       </span>
       Expense
     </a>
@@ -55,7 +55,7 @@ function SiteNavLink({ item }: { item: SiteNavItem }) {
     return (
       <a href={item.to} target="_blank" rel="noreferrer" className={classes}>
         {item.label}
-        <ArrowUpRight className="h-3.5 w-3.5" />
+        <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
       </a>
     );
   }
@@ -85,7 +85,7 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink">
-            <ReceiptText className="h-3 w-3 text-white" />
+            <ReceiptText aria-hidden="true" className="h-3 w-3 text-white" />
           </span>
           Expense · © {new Date().getFullYear()} · Built by{" "}
           <a href="https://labnotes.org">Assaf Arkin</a>

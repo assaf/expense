@@ -123,7 +123,7 @@ export default function OAuthAuthorizePage({
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50">
-            <ShieldCheck className="h-6 w-6 text-blue-600" />
+            <ShieldCheck aria-hidden="true" className="h-6 w-6 text-blue-600" />
           </div>
           <h1 className="text-xl font-bold">Connect to Expense</h1>
           <p className="text-sm text-gray-500">

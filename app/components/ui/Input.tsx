@@ -22,6 +22,10 @@ interface InputProps extends ComponentProps<"input"> {
  * left to the caller (grid/flex stretch, or a class like `w-24`). */
 export function Input({ className, invalid, ...props }: InputProps) {
   return (
-    <input className={cn(inputVariants({ invalid }), className)} {...props} />
+    <input
+      className={cn(inputVariants({ invalid }), className)}
+      aria-invalid={invalid || undefined}
+      {...props}
+    />
   );
 }

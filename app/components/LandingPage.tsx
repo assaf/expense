@@ -180,7 +180,7 @@ export default function LandingPage() {
                   className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5"
                 >
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                    <f.icon className="h-5 w-5 text-ink" />
+                    <f.icon aria-hidden="true" className="h-5 w-5 text-ink" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-ink">{f.title}</h3>
@@ -235,7 +235,10 @@ export default function LandingPage() {
                 className="w-full"
               />
               <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                <Sparkles className="h-4 w-4 text-blue-600" />
+                <Sparkles
+                  aria-hidden="true"
+                  className="h-4 w-4 text-blue-600"
+                />
                 The receipt editor: OCR and AI filled in merchant, amount, and
                 category.
               </figcaption>
@@ -250,7 +253,7 @@ export default function LandingPage() {
         >
           <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-12">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
-              <Bot className="h-4 w-4" /> AI-native
+              <Bot aria-hidden="true" className="h-4 w-4" /> AI-native
             </div>
             <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">
               Your Own Personal AI Assistant
@@ -267,7 +270,10 @@ export default function LandingPage() {
                   key={example.title}
                   className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4"
                 >
-                  <example.icon className="h-5 w-5 shrink-0 text-blue-600" />
+                  <example.icon
+                    aria-hidden="true"
+                    className="h-5 w-5 shrink-0 text-blue-600"
+                  />
                   <div>
                     <h3 className="text-sm font-semibold text-ink">
                       {example.title}

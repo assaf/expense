@@ -82,6 +82,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return { mode: "edit" as const, ...context, nav, existing: [] };
 }
 
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (!loaderData || loaderData.mode !== "edit") return [{ title: "Expense" }];
+  const e = loaderData.expense;
+  if (e.type === "receipt") {
+    const merchant = e.merchant || "New receipt";
+    const amount = e.amount ? ` · $${e.amount}` : "";
+    return [{ title: `${merchant}${amount} — Expense` }];
+  }
+  const label = MILEAGE_TYPE_LABELS[e.mileageType];
+  const dist = e.distanceMiles ? ` · ${e.distanceMiles} mi` : "";
+  return [{ title: `${label}${dist} — Expense` }];
+}
+
 export async function action({ request, params }: Route.ActionArgs) {
   const user = await requireUser(request);
   const existing = await readExpense(params.id, user.accountId);
@@ -165,7 +178,7 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] }) {
   const extra = matches.length - 1;
   return (
     <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <span>
         This looks like a duplicate of{" "}
         <Link
@@ -210,7 +223,7 @@ function Shell({
                   : "pointer-events-none text-gray-300"
               }
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft aria-hidden="true" className="h-5 w-5" />
             </Link>
             <Link
               to={`/expense/${nav.nextId}`}
@@ -221,7 +234,7 @@ function Shell({
                   : "pointer-events-none text-gray-300"
               }
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight aria-hidden="true" className="h-5 w-5" />
             </Link>
           </div>
         ) : null
@@ -519,7 +532,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
               size="sm"
               onClick={() => fileRef.current?.click()}
             >
-              <Upload className="h-4 w-4" /> Replace
+              <Upload aria-hidden="true" className="h-4 w-4" /> Replace
             </Button>
             {(isNew ? draftPreview : expense.imageFile) ? (
               <Button
@@ -543,7 +556,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
                   setImageVersion((v) => v + 1);
                 }}
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 aria-hidden="true" className="h-4 w-4" />
               </Button>
             ) : null}
           </span>
@@ -570,8 +583,8 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-500">
             {isNew && drafting && !draftPreview ? (
               <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Preparing your
-                receipt…
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />{" "}
+                Preparing your receipt…
               </span>
             ) : (
               "No image. Upload or paste one (⌘V)."
@@ -1068,23 +1081,26 @@ function MileageEditor({ data }: { data: EditorData }) {
               role="status"
               className="flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-sm font-medium text-gray-700 shadow-lg"
             >
-              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              <Loader2
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin text-blue-600"
+              />
               Calculating route…
             </span>
           </div>
         ) : null}
         {routeError ? (
           <div className="flex items-center gap-2 border-t border-gray-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle aria-hidden="true" className="h-4 w-4" />
             {routeError}
           </div>
         ) : (
           <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
             <span className="flex items-center gap-2 text-gray-600">
               {computing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
               ) : (
-                <MapPinned className="h-4 w-4" />
+                <MapPinned aria-hidden="true" className="h-4 w-4" />
               )}
               {distanceMiles ? `${distanceMiles} mi` : "—"}
               {approximate ? (
@@ -1118,7 +1134,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         <div className="mb-1 flex items-center justify-between">
           <span className="text-sm font-medium text-gray-700">Locations</span>
           <Button type="button" variant="ghost" size="sm" onClick={addLocation}>
-            <Plus className="h-4 w-4" /> Add stop
+            <Plus aria-hidden="true" className="h-4 w-4" /> Add stop
           </Button>
         </div>
         <ol className="flex flex-col gap-2">
@@ -1146,7 +1162,7 @@ function MileageEditor({ data }: { data: EditorData }) {
                   {geocodingFields.includes(i) ? (
                     <Loader2
                       aria-label="Geocoding address"
-                      className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400"
+                      className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500"
                     />
                   ) : null}
                 </div>
@@ -1164,11 +1180,11 @@ function MileageEditor({ data }: { data: EditorData }) {
               {i >= 2 ? (
                 <button
                   type="button"
-                  className="mt-2 text-gray-400 hover:text-red-600"
+                  className="mt-2 rounded p-1 text-gray-500 hover:text-red-600"
                   onClick={() => removeLocation(i)}
                   aria-label="Remove stop"
                 >
-                  <X className="h-4 w-4" />
+                  <X aria-hidden="true" className="h-4 w-4" />
                 </button>
               ) : null}
             </li>
@@ -1301,7 +1317,10 @@ function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
       className="mt-2 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"
     >
       <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
+        <Loader2
+          aria-hidden="true"
+          className="h-4 w-4 shrink-0 animate-spin text-blue-600"
+        />
         <span>{converting ? "Converting PDF…" : "Reading receipt…"}</span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
@@ -1478,7 +1497,7 @@ function ReportField({
             disabled={!draft.trim()}
             onClick={submit}
           >
-            <Plus className="h-4 w-4" /> Create
+            <Plus aria-hidden="true" className="h-4 w-4" /> Create
           </Button>
           <Button type="button" size="sm" variant="ghost" onClick={cancel}>
             Cancel
@@ -1589,7 +1608,7 @@ function EditorActions({
           onClick={onDelete}
           disabled={saving}
         >
-          <Trash2 className="h-4 w-4" /> Delete
+          <Trash2 aria-hidden="true" className="h-4 w-4" /> Delete
         </Button>
       ) : (
         <span />
@@ -1655,7 +1674,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
           }}
           aria-label="Close image viewer"
         >
-          <X className="h-7 w-7" />
+          <X aria-hidden="true" className="h-7 w-7" />
         </button>
       </div>
       {/* Scrollable area: image fits width, natural height -> scroll if taller. */}
@@ -1738,7 +1757,7 @@ function TransitionOverlay({ kind }: { kind: "save" | "cancel" | "delete" }) {
       aria-live="assertive"
     >
       <div className="flex flex-col items-center gap-2 rounded-xl bg-white/90 px-6 py-4 shadow-lg text-gray-600">
-        <Loader2 className="h-7 w-7 animate-spin" />
+        <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin" />
         <span className="text-sm font-medium">
           {kind === "save"
             ? "Saving…"

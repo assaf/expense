@@ -233,11 +233,12 @@ export default function ReconcilePage({ loaderData }: Route.ComponentProps) {
     <main id="main-content" className="mx-auto max-w-4xl px-4 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <ListChecks className="h-6 w-6" /> Reconcile
+          <ListChecks aria-hidden="true" className="h-6 w-6" /> Reconcile
         </h1>
         <Button asChild variant="ghost" size="sm">
           <Link to="/">
-            <ArrowLeft className="h-4 w-4" /> Back to expenses
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
+            expenses
           </Link>
         </Button>
       </header>
@@ -302,9 +303,9 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
           <div className="flex items-center gap-3">
             <Button type="submit" disabled={!file || busy}>
               {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
               ) : (
-                <CreditCard className="h-4 w-4" />
+                <CreditCard aria-hidden="true" className="h-4 w-4" />
               )}
               {busy ? "Reading statement…" : "Match my expenses"}
             </Button>
@@ -411,9 +412,9 @@ function DiscardRunButton({ runId }: { runId: string }) {
       className="shrink-0 text-gray-500"
     >
       {busy ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
       ) : (
-        <X className="h-4 w-4" />
+        <X aria-hidden="true" className="h-4 w-4" />
       )}
       Discard
     </Button>
@@ -459,7 +460,7 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
     <div className="flex flex-col gap-6">
       <section className="rounded-xl border border-green-200 bg-green-50 p-6">
         <h2 className="mb-1 flex items-center gap-2 font-semibold text-green-800">
-          <BadgeCheck className="h-5 w-5" /> Reconciled
+          <BadgeCheck aria-hidden="true" className="h-5 w-5" /> Reconciled
         </h2>
         <p className="text-sm text-green-800/80">
           {run.fileName} ·{" "}
@@ -493,7 +494,8 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
       <div>
         <Button asChild variant="secondary">
           <Link to="/reconcile">
-            <Plus className="h-4 w-4" /> Reconcile another statement
+            <Plus aria-hidden="true" className="h-4 w-4" /> Reconcile another
+            statement
           </Link>
         </Button>
       </div>
@@ -519,6 +521,7 @@ function SkippedList({
         className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-800"
       >
         <ChevronDown
+          aria-hidden="true"
           className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
         {skipped.length} unreadable line{skipped.length === 1 ? "" : "s"} (not
@@ -640,9 +643,9 @@ function DraftReview({
               onClick={() => setConfirmComplete(true)}
             >
               {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
               ) : (
-                <BadgeCheck className="h-4 w-4" />
+                <BadgeCheck aria-hidden="true" className="h-4 w-4" />
               )}
               Complete reconciliation
             </Button>
@@ -659,8 +662,8 @@ function DraftReview({
       {autoMatched.length > 0 ? (
         <section>
           <h2 className="mb-2 flex items-center gap-1.5 font-semibold">
-            <BadgeCheck className="h-4 w-4 text-green-600" /> Matched
-            automatically
+            <BadgeCheck aria-hidden="true" className="h-4 w-4 text-green-600" />{" "}
+            Matched automatically
             <span className="text-sm font-normal text-gray-500">
               ({autoMatched.length})
             </span>
@@ -963,7 +966,7 @@ function ReviewRowCard({
             onClick={decision.toggleDraft}
             className="text-sm font-medium text-blue-700 hover:underline disabled:opacity-50"
           >
-            <Plus className="mr-1 inline h-3.5 w-3.5" />
+            <Plus aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
             Add as new expense
           </button>
         </div>
@@ -1154,7 +1157,9 @@ function NewExpenseForm({
         onClick={save}
         disabled={busy || !report || !merchant.trim() || !date}
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {busy ? (
+          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+        ) : null}
         Add
       </Button>
     </div>

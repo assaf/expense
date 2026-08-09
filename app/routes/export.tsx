@@ -37,7 +37,7 @@ function ReportList({ reports }: { reports: ReportSummary[] }) {
             data-umami-event-file={`${r.name}.pdf`}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
           >
-            <FileDown className="h-4 w-4" /> PDF
+            <FileDown aria-hidden="true" className="h-4 w-4" /> PDF
           </a>
         </li>
       ))}
@@ -93,7 +93,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
             data-umami-event="file-download"
             data-umami-event-file="all.zip"
           >
-            <FileArchive className="h-4 w-4" /> Download ZIP
+            <FileArchive aria-hidden="true" className="h-4 w-4" /> Download ZIP
           </a>
         </Button>
       </section>

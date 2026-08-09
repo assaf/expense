@@ -160,7 +160,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
           <div className="mb-4 flex items-center justify-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
-              <MailCheck className="h-6 w-6 text-white" />
+              <MailCheck aria-hidden="true" className="h-6 w-6 text-white" />
             </div>
           </div>
           <h1 className="text-xl font-bold">Check your email</h1>
@@ -220,7 +220,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
-            <ReceiptText className="h-6 w-6 text-white" />
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-xl font-bold">{titles[mode].title}</h1>
           <p className="text-sm text-gray-500">{titles[mode].blurb}</p>
@@ -267,7 +267,7 @@ export default function LoginPage() {
               role="alert"
               className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600"
             >
-              <AlertCircle className="h-4 w-4 shrink-0" />
+              <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
               {error}
             </p>
           )}

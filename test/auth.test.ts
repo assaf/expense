@@ -54,15 +54,12 @@ describe("Access control", () => {
     await page.fill('input[name="email"]', email);
     await page.fill('input[name="password"]', password);
     await page.click('button[type="submit"]');
-    // Wait for the form submission to finish — the button re-enables when
-    // the action resolves. Without this, the "Check your email" assert
-    // races against the server round-trip and flakes under load.
-    await page.waitForSelector('button[type="submit"]:not([disabled])', {
-      timeout: 15_000,
-    });
+    // On success the form is replaced by the "Check your email" screen
+    // (there is no submit button on it), so wait for the heading directly
+    // with a generous timeout to absorb the server round-trip.
     await expect(
       page.getByRole("heading", { name: "Check your email" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
   }
 
   /** Complete email verification for a user: the app mints tokens

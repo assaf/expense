@@ -38,14 +38,14 @@ export function PageShell({
             onClick={onBack}
             className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
           >
-            <ArrowLeft className="h-4 w-4" /> Back
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
           </button>
         ) : (
           <Link
             to={backTo}
             className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ink"
           >
-            <ArrowLeft className="h-4 w-4" /> Back
+            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
           </Link>
         )}
         {headerRight ?? null}

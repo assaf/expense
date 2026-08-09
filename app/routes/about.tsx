@@ -84,7 +84,10 @@ export default function AboutPage() {
         <ul className="mt-6 flex flex-col gap-3">
           {KEY_FACTS.map((fact) => (
             <li key={fact} className="flex items-start gap-2">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <CheckCircle2
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"
+              />
               <span className="text-sm leading-relaxed text-gray-700">
                 {fact}
               </span>

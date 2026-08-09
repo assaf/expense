@@ -442,17 +442,17 @@ function ExpenseList({
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link to="/reconcile">
-              <ListChecks className="h-4 w-4" /> Reconcile
+              <ListChecks aria-hidden="true" className="h-4 w-4" /> Reconcile
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
             <Link to="/export">
-              <Download className="h-4 w-4" /> Export
+              <Download aria-hidden="true" className="h-4 w-4" /> Export
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
             <Link to="/settings">
-              <Settings className="h-4 w-4" /> Settings
+              <Settings aria-hidden="true" className="h-4 w-4" /> Settings
             </Link>
           </Button>
         </nav>
@@ -461,17 +461,17 @@ function ExpenseList({
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-0.5 sm:gap-2">
           <Button onClick={() => createExpense("receipt")}>
-            <ReceiptText className="h-4 w-4" /> Add receipt
+            <ReceiptText aria-hidden="true" className="h-4 w-4" /> Add receipt
           </Button>
           <Button onClick={() => createExpense("mileage")} variant="secondary">
-            <MapPinned className="h-4 w-4" /> Add mileage
+            <MapPinned aria-hidden="true" className="h-4 w-4" /> Add mileage
           </Button>
           <Button
             type="button"
             variant="secondary"
             onClick={() => fileRef.current?.click()}
           >
-            <Upload className="h-4 w-4" /> Upload file
+            <Upload aria-hidden="true" className="h-4 w-4" /> Upload file
           </Button>
           <input
             ref={fileRef}
@@ -486,30 +486,37 @@ function ExpenseList({
           />
         </div>
         <div className="relative w-full sm:min-w-56 sm:flex-1 sm:max-w-96">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500"
+          />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search amount, merchant, description, or category"
             aria-label="Search expenses"
-            className="h-10 w-full rounded-lg border border-gray-300 pl-9 pr-9 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="h-10 w-full rounded-lg border border-gray-300 pl-9 pr-9 text-sm outline-none placeholder:text-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600"
             >
-              <X className="h-4 w-4" />
+              <X aria-hidden="true" className="h-4 w-4" />
             </button>
           ) : null}
         </div>
       </div>
 
       {reports.length > 0 ? (
-        <section className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <section
+          aria-label="Report summaries"
+          className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        >
+          <h2 className="sr-only">Report summaries</h2>
           {reports.map((r) => {
             const active = selectedReport === r.name;
             return (
@@ -564,17 +571,20 @@ function ExpenseList({
           No expenses match these filters.
         </div>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {filtered.map((e) => (
-            <ExpenseRow
-              key={e.id}
-              expense={e}
-              isNew={e.id === highlightId}
-              onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
-              onRemove={() => setConfirmDeleteId(e.id)}
-            />
-          ))}
-        </ul>
+        <section aria-label="Expense list">
+          <h2 className="sr-only">Expenses</h2>
+          <ul className="flex flex-col gap-2">
+            {filtered.map((e) => (
+              <ExpenseRow
+                key={e.id}
+                expense={e}
+                isNew={e.id === highlightId}
+                onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
+                onRemove={() => setConfirmDeleteId(e.id)}
+              />
+            ))}
+          </ul>
+        </section>
       )}
 
       <FeatureHighlight id={highlight.id} data={highlight.data} />
@@ -612,7 +622,9 @@ function ExpenseRow({
     if (isNew) {
       rowRef.current?.scrollIntoView({
         block: "nearest",
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant"
+          : "smooth",
       });
     }
   }, [isNew]);
@@ -659,7 +671,8 @@ function ExpenseRow({
                   className="flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700"
                   title="Matched against a credit card statement"
                 >
-                  <BadgeCheck className="h-3.5 w-3.5" /> Reconciled
+                  <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />{" "}
+                  Reconciled
                 </span>
               ) : null}
               {expense.category ? (
@@ -677,7 +690,10 @@ function ExpenseRow({
         {dup ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-amber-200 px-3 py-2 text-xs text-amber-800">
             <span className="flex items-center gap-1.5 font-medium">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <AlertTriangle
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0"
+              />
               <span>
                 Possible duplicate of {dup.label}
                 {expense.duplicates.length > 1
@@ -728,7 +744,7 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-gray-300">
-            <ReceiptText className="h-6 w-6" />
+            <ReceiptText aria-hidden="true" className="h-6 w-6" />
           </div>
         )}
       </div>
