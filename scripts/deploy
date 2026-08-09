@@ -31,8 +31,10 @@ export DATABASE_URL="$DATABASE_URL_UNPOOLED"
 pnpm prisma db push --accept-data-loss
 
 echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
-DEPLOY_OUTPUT=$(pnpx -y vercel@latest deploy --prod --yes 2>&1)
-echo "$DEPLOY_OUTPUT"
+DEPLOY_TMP=$(mktemp)
+pnpx -y vercel@latest deploy --prod --yes 2>&1 | tee "$DEPLOY_TMP"
+DEPLOY_OUTPUT=$(cat "$DEPLOY_TMP")
+rm "$DEPLOY_TMP"
 DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -1 || true)
 if [ -z "$DEPLOY_URL" ]; then
   echo -e "\033[0;33mCould not determine the deployment URL — falling back to the production alias.\033[0m"
