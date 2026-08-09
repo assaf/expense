@@ -166,7 +166,7 @@ export const handleError: HandleErrorFunction = (error, { request }) => {
 Reveal the server entry if it doesn't exist:
 
 ```shellscript
-npx react-router reveal entry.server
+pnpx react-router reveal entry.server
 ```
 
 ## Validation Errors (Not Error Boundaries)

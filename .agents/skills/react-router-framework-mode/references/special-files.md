@@ -286,7 +286,7 @@ export default {
 The browser entry point for hydrating server-rendered markup. React Router provides a default, but you can customize it:
 
 ```bash
-npx react-router reveal
+pnpx react-router reveal
 ```
 
 ```tsx
@@ -317,7 +317,7 @@ startTransition(() => {
 The server entry point for rendering HTML responses. React Router provides a default for Node, but you may need to customize for other runtimes (Cloudflare, Deno).
 
 ```bash
-npx react-router reveal
+pnpx react-router reveal
 ```
 
 ```tsx

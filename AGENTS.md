@@ -94,7 +94,7 @@ Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
 `app/lib/env.ts`). `DATABASE_URL` is required — no file fallback. Dev/test use
 `.env` (`DATABASE_URL`, and auth: `APP_EMAIL`, `APP_PASSWORD`,
 `SESSION_SECRET`); prod uses the Vercel dashboard (`DATABASE_URL`, plus the same
-three auth vars). Pull prod env with `npx vercel env pull
+three auth vars). Pull prod env with `pnpx vercel env pull
 --environment=production .env.prod` (use `DATABASE_URL_UNPOOLED` for psql/prisma
 DDL; both point at the Supabase session pooler — see “Database connections
 (Supabase)” above). Tests hardcode local services (`expense_test`, image blobs

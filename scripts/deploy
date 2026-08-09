@@ -23,7 +23,7 @@ else
 fi
 
 echo -e "\033[0;32m--- Step 3: Sync production database schema ---\033[0m"
-npx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+pnpx -y vercel@latest env pull --environment=production --yes .env.prod.pull
 set -a
 source .env.prod.pull
 set +a
@@ -31,7 +31,7 @@ export DATABASE_URL="$DATABASE_URL_UNPOOLED"
 pnpm prisma db push --accept-data-loss
 
 echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
-DEPLOY_OUTPUT=$(npx -y vercel@latest deploy --prod --yes 2>&1)
+DEPLOY_OUTPUT=$(pnpx -y vercel@latest deploy --prod --yes 2>&1)
 echo "$DEPLOY_OUTPUT"
 DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -1 || true)
 if [ -z "$DEPLOY_URL" ]; then
