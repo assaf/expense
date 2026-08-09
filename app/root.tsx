@@ -36,8 +36,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   // navigation (e.g. /about.data for a Link click on /about) — match the
   // page path, not the fetch path, so public pages stay public.
   if (path.endsWith(".data")) path = path.slice(0, -5);
+  // React Router maps `_index` layout index routes to `/_` for their
+  // `.data` URLs (e.g. `/_.data` for the root `_index`). Treat `/_`
+  // as `/` so client-side navigations back to the home page don't get
+  // caught by `requireUser` and redirected to `/login`.
   const isPublic =
     path === "/" ||
+    path === "/_" ||
     path.startsWith("/login") ||
     path.startsWith("/api/inbound-email") ||
     path.startsWith("/receipts-email-verify") ||

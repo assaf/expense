@@ -612,7 +612,7 @@ function DraftReview({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-semibold">{run.fileName}</div>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-500" role="status">
               {rows.length} transactions ·{" "}
               <span className="text-green-700">
                 {autoMatched.length} matched

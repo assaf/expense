@@ -8,7 +8,7 @@ import {
   RefreshCw,
   KeyRound,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Form, useFetcher } from "react-router";
 import { redirect } from "react-router";
@@ -600,6 +600,7 @@ function AddSenderForm() {
       </fetcher.Form>
       {notice ? (
         <p
+          role="status"
           className={`mt-1 text-xs ${notice.ok ? "text-green-700" : "text-red-600"}`}
         >
           {notice.text}
@@ -764,9 +765,18 @@ function NameList<T extends { name: string }>({
     return () => clearTimeout(timer);
   }, [flashName]);
 
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+  useEffect(() => {
+    if (flashName) setAnnouncement(`Added ${flashName}`);
+    else setAnnouncement(null);
+  }, [flashName]);
+
   return (
     <section id={id} className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
+      <div className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </div>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (
           <li className="text-sm text-gray-500">None yet.</li>
@@ -891,15 +901,13 @@ function RenameForm({
   );
 }
 
-function RenameButton({
-  onClick,
-  name,
-}: {
-  onClick: () => void;
-  name: string;
-}) {
+const RenameButton = forwardRef<
+  HTMLButtonElement,
+  { onClick: () => void; name: string }
+>(function RenameButton({ onClick, name }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       className="text-gray-400 hover:text-ink"
@@ -908,7 +916,7 @@ function RenameButton({
       <Pencil className="h-4 w-4" />
     </button>
   );
-}
+});
 
 /**
  * The trash button for a named row (category/report): hidden intent/name
@@ -950,11 +958,15 @@ function RemoveButton({
 
 function CategoryRow({ category }: { category: CategoryItem }) {
   const [editing, setEditing] = useState(false);
+  const renameRef = useRef<HTMLButtonElement>(null);
   const removeFetcher = useFetcher();
   const confirmRemove =
     category.count > 1
       ? `This category contains ${category.count} expenses in open reports. Delete it anyway?`
       : undefined;
+  useEffect(() => {
+    if (!editing) renameRef.current?.focus();
+  }, [editing]);
   if (editing) {
     return (
       <RenameForm
@@ -974,7 +986,11 @@ function CategoryRow({ category }: { category: CategoryItem }) {
         >
           {category.count === 0 ? "No expenses" : countLabel(category.count)}
         </span>
-        <RenameButton onClick={() => setEditing(true)} name={category.name} />
+        <RenameButton
+          ref={renameRef}
+          onClick={() => setEditing(true)}
+          name={category.name}
+        />
         <RemoveButton
           fetcher={removeFetcher}
           intent="removeCategory"
@@ -1007,9 +1023,13 @@ function reportDeleteConfirm(report: ReportItem): string | undefined {
  */
 function ReportRow({ report }: { report: ReportItem }) {
   const [editing, setEditing] = useState(false);
+  const renameRef = useRef<HTMLButtonElement>(null);
   const toggleFetcher = useFetcher();
   const removeFetcher = useFetcher();
   const confirmRemove = reportDeleteConfirm(report);
+  useEffect(() => {
+    if (!editing) renameRef.current?.focus();
+  }, [editing]);
   if (editing) {
     return (
       <RenameForm
@@ -1056,7 +1076,11 @@ function ReportRow({ report }: { report: ReportItem }) {
             {report.closed ? "Reopen" : "Close"}
           </button>
         </toggleFetcher.Form>
-        <RenameButton onClick={() => setEditing(true)} name={report.name} />
+        <RenameButton
+          ref={renameRef}
+          onClick={() => setEditing(true)}
+          name={report.name}
+        />
         <RemoveButton
           fetcher={removeFetcher}
           intent="removeReport"

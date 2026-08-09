@@ -116,7 +116,10 @@ export default function OAuthAuthorizePage({
     };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
+    <main
+      id="main-content"
+      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4"
+    >
       <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50">
@@ -213,7 +216,7 @@ function redirectWith(
 
 function errorPage(message: string): Response {
   return new Response(
-    `<!doctype html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb"><div style="max-width:420px;padding:2rem;background:#fff;border:1px solid #e5e7eb;border-radius:12px;color:#374151"><h1 style="font-size:1.25rem;color:#111827">Can't connect</h1><p>${escapeHtml(message)}</p><p style="color:#9ca3af;font-size:0.875rem">Return to the app you were connecting and try again.</p></div></body></html>`,
+    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb"><div style="max-width:420px;padding:2rem;background:#fff;border:1px solid #e5e7eb;border-radius:12px;color:#374151"><h1 style="font-size:1.25rem;color:#111827">Can't connect</h1><p>${escapeHtml(message)}</p><p style="color:#9ca3af;font-size:0.875rem">Return to the app you were connecting and try again.</p></div></body></html>`,
     { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
 }
