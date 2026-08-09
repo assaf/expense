@@ -125,6 +125,12 @@ export default function App() {
         ) : null}
       </head>
       <body>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
+        >
+          Skip to main content
+        </a>
         {process.env.NODE_ENV === "development" ? (
           <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-md bg-green-600 px-2 py-0.5 text-xs font-bold tracking-wider text-white shadow">
             DEV

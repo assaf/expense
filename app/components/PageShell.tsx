@@ -28,6 +28,7 @@ export function PageShell({
 }) {
   return (
     <main
+      id="main-content"
       className={`mx-auto max-w-2xl px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""}`}
     >
       <div className="mb-4 flex items-center justify-between">

@@ -1,5 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cloneElement, isValidElement, type ReactElement } from "react";
+import {
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  type ReactElement,
+} from "react";
 import type * as React from "react";
 import { cn } from "~/lib/cn";
 
@@ -33,24 +38,22 @@ interface ButtonProps
   asChild?: boolean;
 }
 
-export function Button({
-  className,
-  variant,
-  size,
-  asChild,
-  children,
-  ...props
-}: ButtonProps) {
-  const classes = cn(buttonVariants({ variant, size }), className);
-  if (asChild && isValidElement(children)) {
-    const child = children as ReactElement<{ className?: string }>;
-    return cloneElement(child, {
-      className: cn(classes, child.props.className),
-    });
-  }
-  return (
-    <button className={classes} {...props}>
-      {children}
-    </button>
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { className, variant, size, asChild, children, ...props },
+    ref,
+  ) {
+    const classes = cn(buttonVariants({ variant, size }), className);
+    if (asChild && isValidElement(children)) {
+      const child = children as ReactElement<{ className?: string }>;
+      return cloneElement(child, {
+        className: cn(classes, child.props.className),
+      });
+    }
+    return (
+      <button ref={ref} className={classes} {...props}>
+        {children}
+      </button>
+    );
+  },
+);

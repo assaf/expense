@@ -230,7 +230,7 @@ type LoaderData = Route.ComponentProps["loaderData"];
 export default function ReconcilePage({ loaderData }: Route.ComponentProps) {
   const run = loaderData.run;
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
+    <main id="main-content" className="mx-auto max-w-4xl px-4 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold">
           <ListChecks className="h-6 w-6" /> Reconcile
@@ -528,9 +528,9 @@ function SkippedList({
         <ul className="mt-2 flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-600">
           {skipped.map((s, i) => (
             <li key={i} className="flex gap-2">
-              <span className="shrink-0 text-gray-400">L{s.line}</span>
+              <span className="shrink-0 text-gray-500">L{s.line}</span>
               <span className="min-w-0 truncate">{s.raw}</span>
-              <span className="ml-auto shrink-0 text-gray-400">{s.reason}</span>
+              <span className="ml-auto shrink-0 text-gray-500">{s.reason}</span>
             </li>
           ))}
         </ul>

@@ -129,7 +129,7 @@ export default function LandingPage() {
             into the correct category of a Schedule C form and a report of your
             choice. And when tax season comes, all is ready.
           </p>
-          <p className="mt-4 text-sm text-gray-400">
+          <p className="mt-4 text-sm text-gray-500">
             By a freelancer. Open-source, no funding.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

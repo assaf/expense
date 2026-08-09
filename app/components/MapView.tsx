@@ -24,6 +24,8 @@ interface MapViewProps {
   height?: number | string;
   interactive?: boolean;
   className?: string;
+  /** Accessible label for the map container (screen readers). */
+  ariaLabel?: string;
 }
 
 type Leaflet = typeof LType;
@@ -43,6 +45,7 @@ export default function MapView({
   height = 160,
   interactive = false,
   className,
+  ariaLabel,
 }: MapViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LType.Map | null>(null);
@@ -199,6 +202,8 @@ export default function MapView({
     <div
       ref={ref}
       className={className}
+      aria-label={ariaLabel}
+      role="img"
       style={{ height: typeof height === "number" ? `${height}px` : height }}
     />
   );

@@ -292,7 +292,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                     ) : null}
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    <span className="shrink-0 text-xs text-gray-400">
+                    <span className="shrink-0 text-xs text-gray-500">
                       Joined {formatShortDate(member.createdAt)}
                     </span>
                     {member.emailVerifiedAt ? (
@@ -404,7 +404,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
           ) : (
-            <p className="mb-4 text-sm text-gray-400">
+            <p className="mb-4 text-sm text-gray-500">
               Set the INBOUND_EMAIL_ADDRESS environment variable to show the
               forwarding address here.
             </p>
@@ -421,7 +421,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </p>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (
-                <li className="text-sm text-gray-400">None yet.</li>
+                <li className="text-sm text-gray-500">None yet.</li>
               ) : (
                 inboundSenders.map((sender) => (
                   <SenderRow
@@ -605,7 +605,7 @@ function AddSenderForm() {
           {notice.text}
         </p>
       ) : (
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-gray-500">
           A verification email is sent to the address before receipts are
           accepted.
         </p>
@@ -647,7 +647,7 @@ function AgentsSection({
         <div className="mb-4">
           <div className="mb-1 text-sm font-medium text-gray-700">Endpoint</div>
           <div className="font-mono text-sm text-gray-600">{mcpUrl}</div>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-500">
             Point your MCP client here — it discovers the sign-in flow
             automatically.
           </p>
@@ -658,7 +658,7 @@ function AgentsSection({
             Connected apps
           </div>
           {oauthSessions.length === 0 ? (
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-gray-500">
               None yet. The first time an assistant connects, you approve it
               here by signing in.
             </p>
@@ -704,7 +704,7 @@ function AgentsSection({
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs text-gray-400">
+          <p className="mt-3 text-xs text-gray-500">
             Removing an app revokes its access tokens immediately and stops it
             from connecting again; it can reconnect by signing in again.
           </p>
@@ -769,7 +769,7 @@ function NameList<T extends { name: string }>({
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (
-          <li className="text-sm text-gray-400">None yet.</li>
+          <li className="text-sm text-gray-500">None yet.</li>
         ) : (
           items.map((item) => (
             <li

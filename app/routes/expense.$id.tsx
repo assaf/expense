@@ -526,6 +526,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
                 type="button"
                 variant="ghost"
                 size="sm"
+                aria-label="Remove receipt image"
                 onClick={async () => {
                   if (isNew) {
                     await removeDraft();
@@ -551,6 +552,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           <button
             type="button"
             onClick={() => setLightbox(true)}
+            aria-label="View receipt full screen"
             className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
           >
             <img
@@ -565,7 +567,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             />
           </button>
         ) : (
-          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-400">
+          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-500">
             {isNew && drafting && !draftPreview ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Preparing your
@@ -581,7 +583,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         ) : isNew && drafting ? (
           <DraftProgress stage={draftStage} />
         ) : (
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-500">
             Click the image to view full screen.
           </p>
         )}
@@ -1055,6 +1057,7 @@ function MileageEditor({ data }: { data: EditorData }) {
           stops={stops}
           height={260}
           interactive
+          ariaLabel={`Driving route map with ${stops.length} stops — ${distanceMiles ? `${distanceMiles} miles` : "distance not yet computed"}`}
         />
         {computing ? (
           // Geocoding + OSRM can take a couple of seconds — a pill centered
@@ -1130,6 +1133,9 @@ function MileageEditor({ data }: { data: EditorData }) {
                     type="text"
                     placeholder="Address"
                     invalid={!!addressErrors[i]}
+                    aria-describedby={
+                      addressErrors[i] ? `address-error-${i}` : undefined
+                    }
                     className={`w-full ${
                       geocodingFields.includes(i) ? "pr-9" : ""
                     }`}
@@ -1145,7 +1151,10 @@ function MileageEditor({ data }: { data: EditorData }) {
                   ) : null}
                 </div>
                 {addressErrors[i] ? (
-                  <p className="mt-1 text-xs text-red-600">
+                  <p
+                    id={`address-error-${i}`}
+                    className="mt-1 text-xs text-red-600"
+                  >
                     {addressErrors[i]}
                   </p>
                 ) : null}
@@ -1165,7 +1174,7 @@ function MileageEditor({ data }: { data: EditorData }) {
             </li>
           ))}
         </ol>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-gray-500">
           The route runs Start / end → stops → back to Start / end. Distance
           updates automatically.
         </p>
@@ -1607,9 +1616,21 @@ function EditorActions({
 }
 
 function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+
+  // Move focus into the lightbox and restore on close.
+  useEffect(() => {
+    previousFocus.current = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        previousFocus.current?.focus();
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -1617,17 +1638,22 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Receipt image viewer"
       className="fixed inset-0 z-50 flex flex-col bg-black/85"
       onClick={onClose}
     >
       <div className="flex justify-end p-3">
         <button
-          className="text-white"
+          ref={closeRef}
+          className="rounded-lg p-1 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           onClick={(e) => {
             e.stopPropagation();
+            previousFocus.current?.focus();
             onClose();
           }}
-          aria-label="Close"
+          aria-label="Close image viewer"
         >
           <X className="h-7 w-7" />
         </button>
@@ -1706,7 +1732,11 @@ function useFormKeys(opts: {
 /** Brief visual feedback while a save/cancel navigation is in flight. */
 function TransitionOverlay({ kind }: { kind: "save" | "cancel" | "delete" }) {
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center"
+      role="status"
+      aria-live="assertive"
+    >
       <div className="flex flex-col items-center gap-2 rounded-xl bg-white/90 px-6 py-4 shadow-lg text-gray-600">
         <Loader2 className="h-7 w-7 animate-spin" />
         <span className="text-sm font-medium">

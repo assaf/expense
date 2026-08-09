@@ -213,7 +213,7 @@ export function FeatureHighlight({
           <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
             Did you know?
           </p>
           <p className="text-sm font-semibold text-gray-800">{title}</p>

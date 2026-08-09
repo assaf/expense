@@ -16,7 +16,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 function ReportList({ reports }: { reports: ReportSummary[] }) {
   if (reports.length === 0) {
-    return <p className="text-sm text-gray-400">No reports yet.</p>;
+    return <p className="text-sm text-gray-500">No reports yet.</p>;
   }
   return (
     <ul className="flex flex-col gap-2">
@@ -62,7 +62,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           images appended.
         </p>
         {main.length === 0 ? (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-500">
             {split ? "No open reports." : "No reports yet."}
           </p>
         ) : (
