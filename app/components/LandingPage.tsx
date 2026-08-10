@@ -107,7 +107,7 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white dark:bg-gray-900">
       <script type="application/ld+json">
         {JSON.stringify(SOFTWARE_SCHEMA)}
       </script>
@@ -116,20 +116,20 @@ export default function LandingPage() {
       <main>
         {/* Hero */}
         <section className="mx-auto max-w-4xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pt-16">
-          <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600">
+          <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">
             Expense tracking for tax season
           </p>
           <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl lg:text-6xl">
             Every receipt, ready for tax season.
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600 dark:text-gray-300">
             Your receipts, all collected to prepare for tax season. Expense does
             that for you: take a picture of it, drop a screenshot or a receipt
             email. OCR recognizes the merchant and amount and puts the spend
             into the correct category of a Schedule C form and a report of your
             choice. And when tax season comes, all is ready.
           </p>
-          <p className="mt-4 text-sm text-gray-500">
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             By a freelancer. Open-source, no funding.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -137,7 +137,7 @@ export default function LandingPage() {
               <Link to="/login?mode=create">Create your account</Link>
             </Button>
           </div>
-          <p className="mt-5 text-sm text-gray-500">
+          <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
             No credit card required. Your data stays in your account. Export and
             leave anytime.
           </p>
@@ -145,8 +145,8 @@ export default function LandingPage() {
 
         {/* App screenshot */}
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
-          <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5">
-            <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3">
+          <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
+            <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
               <span className="h-3 w-3 rounded-full bg-red-400" />
               <span className="h-3 w-3 rounded-full bg-amber-400" />
               <span className="h-3 w-3 rounded-full bg-green-400" />
@@ -162,13 +162,13 @@ export default function LandingPage() {
         {/* Features */}
         <section
           id="features"
-          className="border-t border-gray-100 bg-gray-50 py-20"
+          className="border-t border-gray-100 bg-gray-50 py-20 dark:border-gray-800 dark:bg-gray-800/50"
         >
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <h2 className="text-center text-3xl font-bold tracking-tight text-ink">
               What you get
             </h2>
-            <p className="mx-auto mt-3 max-w-xl text-center text-gray-600">
+            <p className="mx-auto mt-3 max-w-xl text-center text-gray-600 dark:text-gray-300">
               Tailored for one purpose: to get your expense data as quickly as
               possible, so year-end is not a grueling process but just a
               download.
@@ -177,14 +177,14 @@ export default function LandingPage() {
               {FEATURES.map((f) => (
                 <div
                   key={f.title}
-                  className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5"
+                  className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700">
                     <f.icon aria-hidden="true" className="h-5 w-5 text-ink" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-ink">{f.title}</h3>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                    <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                       {f.body}
                     </p>
                   </div>
@@ -204,18 +204,18 @@ export default function LandingPage() {
               <h2 className="text-3xl font-bold tracking-tight text-ink">
                 From receipt to export
               </h2>
-              <p className="mt-3 max-w-md text-gray-600">
+              <p className="mt-3 max-w-md text-gray-600 dark:text-gray-300">
                 Just three fast moves, no data input required.
               </p>
               <ol className="mt-8 flex flex-col gap-6">
                 {STEPS.map((step, i) => (
                   <li key={step.title} className="flex gap-4">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600 dark:bg-blue-900/60 dark:text-blue-400">
                       {i + 1}
                     </span>
                     <div>
                       <h3 className="font-semibold text-ink">{step.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                      <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                         {step.body}
                       </p>
                     </div>
@@ -223,8 +223,8 @@ export default function LandingPage() {
                 ))}
               </ol>
             </div>
-            <figure className="overflow-hidden rounded-xl bg-white shadow-xl shadow-gray-900/10 ring-1 ring-gray-900/5">
-              <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3">
+            <figure className="overflow-hidden rounded-xl bg-white shadow-xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
+              <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
                 <span className="h-3 w-3 rounded-full bg-red-400" />
                 <span className="h-3 w-3 rounded-full bg-amber-400" />
                 <span className="h-3 w-3 rounded-full bg-green-400" />
@@ -234,10 +234,10 @@ export default function LandingPage() {
                 alt="The receipt editor: OCR and AI filled in merchant, amount, and category"
                 className="w-full"
               />
-              <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
                 <Sparkles
                   aria-hidden="true"
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-blue-600 dark:text-blue-400"
                 />
                 The receipt editor: OCR and AI filled in merchant, amount, and
                 category.
@@ -251,14 +251,14 @@ export default function LandingPage() {
           id="ai-assistants"
           className="mx-auto max-w-6xl px-4 pb-20 sm:px-6"
         >
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-12">
-            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-600">
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-12 dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
               <Bot aria-hidden="true" className="h-4 w-4" /> AI-native
             </div>
             <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">
               Your Own Personal AI Assistant
             </h2>
-            <p className="mt-3 max-w-2xl text-gray-600">
+            <p className="mt-3 max-w-2xl text-gray-600 dark:text-gray-300">
               Expense uses the Model Context Protocol (MCP). Simply point
               Claude, OpenAI, or any other MCP client to your account, log in
               for authentication (no tokens to deal with), and let the assistant
@@ -268,24 +268,24 @@ export default function LandingPage() {
               {AGENT_EXAMPLES.map((example) => (
                 <li
                   key={example.title}
-                  className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4"
+                  className="flex gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50"
                 >
                   <example.icon
                     aria-hidden="true"
-                    className="h-5 w-5 shrink-0 text-blue-600"
+                    className="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
                   />
                   <div>
                     <h3 className="text-sm font-semibold text-ink">
                       {example.title}
                     </h3>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                    <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                       {example.body}
                     </p>
                   </div>
                 </li>
               ))}
             </ul>
-            <p className="mt-6 text-sm text-gray-500">
+            <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
               Connection is authorization: the assistant opens the browser, you
               allow access, and it is connected. Disconnect any time with one
               click in the Settings menu.

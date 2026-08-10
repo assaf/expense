@@ -83,10 +83,13 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+        className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <p id={headingId} className="mb-4 text-center text-gray-700">
+        <p
+          id={headingId}
+          className="mb-4 text-center text-gray-700 dark:text-gray-200"
+        >
           {message}
         </p>
         <div className="flex justify-center gap-2">

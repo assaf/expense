@@ -71,11 +71,11 @@ export default function AlternativesPage() {
         </>
       }
     >
-      <section className="mt-10 overflow-x-auto rounded-xl border border-gray-200">
+      <section className="mt-10 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
         <table className="w-full min-w-140 border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="w-32 px-4 py-3 font-semibold text-gray-500">
+            <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+              <th className="w-32 px-4 py-3 font-semibold text-gray-500 dark:text-gray-400">
                 Aspect
               </th>
               <th className="px-4 py-3 font-semibold text-ink">{APP_NAME}</th>
@@ -86,18 +86,18 @@ export default function AlternativesPage() {
             {COMPARISON_ROWS.map((row) => (
               <tr
                 key={row.aspect}
-                className="border-b border-gray-100 last:border-0"
+                className="border-b border-gray-100 dark:border-gray-800 last:border-0"
               >
                 <th
                   scope="row"
-                  className="px-4 py-3 align-top font-medium text-gray-500"
+                  className="px-4 py-3 align-top font-medium text-gray-500 dark:text-gray-400"
                 >
                   {row.aspect}
                 </th>
-                <td className="px-4 py-3 align-top leading-relaxed text-gray-700">
+                <td className="px-4 py-3 align-top leading-relaxed text-gray-700 dark:text-gray-200">
                   {row.expense}
                 </td>
-                <td className="px-4 py-3 align-top leading-relaxed text-gray-700">
+                <td className="px-4 py-3 align-top leading-relaxed text-gray-700 dark:text-gray-200">
                   {row.expensify}
                 </td>
               </tr>
@@ -111,7 +111,7 @@ export default function AlternativesPage() {
           Which one should you choose?
         </h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-gray-800 p-5">
             <h3 className="font-semibold text-blue-900">
               Choose {APP_NAME} if…
             </h3>
@@ -121,11 +121,11 @@ export default function AlternativesPage() {
               without any typing of receipts.
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <h3 className="font-semibold text-gray-700">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-5">
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200">
               Choose Expensify if…
             </h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+            <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
               You manage a company which requires employee expense policies,
               workflows, reimbursement, and integration with accounting
               software, and you have budget for per-user subscriptions.
@@ -138,7 +138,7 @@ export default function AlternativesPage() {
         <h2 className="text-2xl font-bold tracking-tight text-ink">
           {VERDICT_QUESTION.question}
         </h2>
-        <p className="mt-3 text-sm leading-relaxed text-gray-600">
+        <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
           {VERDICT_QUESTION.answer}
         </p>
       </section>

@@ -52,10 +52,10 @@ export default function FaqPage() {
         {FAQS.map((f) => (
           <article
             key={f.question}
-            className="rounded-xl border border-gray-200 bg-white p-5"
+            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
           >
             <h2 className="font-semibold text-ink">{f.question}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-gray-600">
+            <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
               {f.answer}
             </p>
           </article>

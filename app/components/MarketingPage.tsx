@@ -42,13 +42,13 @@ export function MarketingPage({
           className ?? "max-w-4xl",
         )}
       >
-        <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600">
+        <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">
           {eyebrow}
         </p>
         <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl">
           {title}
         </h1>
-        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-600">
+        <p className="mt-5 max-w-2xl text-lg leading-relaxed text-gray-600 dark:text-gray-300">
           {summary}
         </p>
         {children}
@@ -97,7 +97,7 @@ export function MarketingCta({
   return (
     <section
       className={cn(
-        "rounded-2xl bg-ink px-6 py-12 text-center sm:px-12",
+        "rounded-2xl bg-gray-900 px-6 py-12 text-center sm:px-12",
         className,
       )}
     >
@@ -115,7 +115,9 @@ export function MarketingCta({
       >
         {heading}
       </h2>
-      <p className="mx-auto mt-3 max-w-md text-gray-300">{body}</p>
+      <p className="mx-auto mt-3 max-w-md text-gray-300 dark:text-gray-700 dark:text-gray-200">
+        {body}
+      </p>
       <div
         className={cn(
           "flex flex-col items-center justify-center gap-3 sm:flex-row",
@@ -125,7 +127,7 @@ export function MarketingCta({
         <Button
           asChild
           size="lg"
-          className="w-full bg-white text-ink hover:bg-gray-100 sm:w-auto"
+          className="w-full bg-white dark:bg-gray-800 text-ink hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-700 sm:w-auto"
         >
           <Link to="/login?mode=create">{primaryLabel}</Link>
         </Button>

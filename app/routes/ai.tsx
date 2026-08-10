@@ -63,10 +63,10 @@ export default function AiPage() {
           {AI_CAPABILITIES.map((c) => (
             <div
               key={c.title}
-              className="rounded-xl border border-gray-200 bg-white p-5"
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
             >
               <h3 className="font-semibold text-ink">{c.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+              <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 {c.body}
               </p>
             </div>
@@ -81,12 +81,12 @@ export default function AiPage() {
         <ol className="mt-6 flex flex-col gap-6">
           {AI_STEPS.map((step, i) => (
             <li key={step.title} className="flex gap-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-gray-800 text-sm font-bold text-blue-600 dark:text-blue-400">
                 {i + 1}
               </span>
               <div>
                 <h3 className="font-semibold text-ink">{step.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                   {step.body}
                 </p>
               </div>
@@ -94,14 +94,14 @@ export default function AiPage() {
           ))}
         </ol>
         <div
-          className="mt-6 overflow-hidden rounded-xl border border-gray-200
-        bg-gray-50"
+          className="mt-6 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700
+        bg-gray-50 dark:bg-gray-900"
         >
-          <div className="flex items-center gap-2 border-b border-gray-200 bg-white px-4 py-2.5 text-xs font-medium text-gray-500">
+          <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
             <Link2 aria-hidden="true" className="h-3.5 w-3.5" /> Claude:
             .mcp.json
           </div>
-          <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700">
+          <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
             {`{
   "mcpServers": {
     "expense": {
@@ -112,7 +112,7 @@ export default function AiPage() {
 }`}
           </pre>
         </div>
-        <p className="mt-3 text-sm text-gray-500">
+        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
           No headers or keys. The client discovers the sign-in flow itself.
           Claude and OpenAI connect the same way.
         </p>
@@ -126,13 +126,13 @@ export default function AiPage() {
           {AI_PROMPTS.map((prompt) => (
             <li
               key={prompt}
-              className="flex items-start gap-2 rounded-xl border border-gray-200 bg-white p-4"
+              className="flex items-start gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
             >
               <Sparkles
                 aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"
+                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
               />
-              <span className="text-sm leading-relaxed text-gray-700">
+              <span className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
                 {prompt}
               </span>
             </li>
@@ -142,12 +142,14 @@ export default function AiPage() {
 
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">Security</h2>
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-5">
+        <div className="mt-6 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
           <ShieldCheck
             aria-hidden="true"
-            className="mt-0.5 h-5 w-5 shrink-0 text-blue-600"
+            className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
           />
-          <p className="text-sm leading-relaxed text-gray-600">{AI_SECURITY}</p>
+          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+            {AI_SECURITY}
+          </p>
         </div>
       </section>
 

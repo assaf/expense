@@ -278,9 +278,9 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
         <h2 className="mb-1 font-semibold">Upload a statement</h2>
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
           Download this month's transactions from your credit card website and
           upload them here — CSV, QFX/OFX, QBO, XLSX, or PDF. Expense matches
           every charge against your logged receipts; you review the close
@@ -293,7 +293,7 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
         >
           <input type="hidden" name="intent" value="upload" />
           <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
               Statement file
             </span>
             <input
@@ -301,7 +301,7 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
               name="file"
               accept=".csv,.qfx,.ofx,.qbo,.xlsx,.pdf,text/csv,application/pdf"
               onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 dark:bg-gray-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 dark:text-gray-200 hover:file:bg-gray-200 dark:bg-gray-600"
             />
           </label>
           <div className="flex items-center gap-3">
@@ -314,7 +314,10 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
               {busy ? "Reading statement…" : "Match my expenses"}
             </Button>
             {error ? (
-              <span role="alert" className="text-sm text-red-600">
+              <span
+                role="alert"
+                className="text-sm text-red-600 dark:text-red-400"
+              >
                 {error}
               </span>
             ) : null}
@@ -334,22 +337,22 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
                   {inProgress.map((run) => (
                     <li
                       key={run.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
                     >
                       <Link
                         to={`/reconcile?run=${run.id}`}
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 transition-colors hover:text-gray-600"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 transition-colors hover:text-gray-600 dark:text-gray-300"
                       >
                         <div className="min-w-0">
                           <div className="truncate font-medium">
                             {run.fileName}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
                             {run.rowCount} transactions · started{" "}
                             {formatDate(run.createdAt)}
                           </div>
                         </div>
-                        <span className="shrink-0 text-sm text-blue-600">
+                        <span className="shrink-0 text-sm text-blue-600 dark:text-blue-400">
                           Keep going →
                         </span>
                       </Link>
@@ -368,18 +371,18 @@ function Landing({ loaderData }: { loaderData: LoaderData }) {
                     <li key={run.id}>
                       <Link
                         to={`/reconcile?run=${run.id}`}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 transition-colors hover:border-gray-300"
+                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 transition-colors hover:border-gray-300 dark:border-gray-600"
                       >
                         <div className="min-w-0">
                           <div className="truncate font-medium">
                             {run.fileName}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
                             {formatDate(run.completedAt ?? run.createdAt)}
                             {run.status === "discarded" ? " · discarded" : ""}
                           </div>
                         </div>
-                        <div className="shrink-0 text-sm text-gray-500">
+                        <div className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
                           {run.status === "completed"
                             ? `${run.matchedCount} reconciled · ${run.createdCount} added`
                             : `${run.rowCount} rows`}
@@ -415,7 +418,7 @@ function DiscardRunButton({ runId }: { runId: string }) {
       size="sm"
       disabled={busy}
       onClick={discard}
-      className="shrink-0 text-gray-500"
+      className="shrink-0 text-gray-500 dark:text-gray-400"
     >
       {busy ? (
         <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
@@ -441,9 +444,12 @@ function RunPage({
   }
   if (run.status === "discarded") {
     return (
-      <p className="rounded-xl border border-gray-200 bg-white p-6 text-gray-500">
+      <p className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 text-gray-500 dark:text-gray-400">
         This reconciliation was discarded — no expenses were changed.{" "}
-        <Link to="/reconcile" className="text-blue-600 hover:underline">
+        <Link
+          to="/reconcile"
+          className="text-blue-600 dark:text-blue-400 hover:underline"
+        >
           Upload a statement
         </Link>
         .
@@ -464,25 +470,25 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
   const skipped = run.skipped;
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-green-200 bg-green-50 p-6">
-        <h2 className="mb-1 flex items-center gap-2 font-semibold text-green-800">
+      <section className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-6">
+        <h2 className="mb-1 flex items-center gap-2 font-semibold text-green-800 dark:text-green-300">
           <BadgeCheck aria-hidden="true" className="h-5 w-5" /> Reconciled
         </h2>
-        <p className="text-sm text-green-800/80">
+        <p className="text-sm text-green-800 dark:text-green-300/80">
           {run.fileName} ·{" "}
           {completed
             ? `${completed.matched} expenses matched · ${completed.created} added as new expenses`
             : `${run.matchedCount} matched · ${run.createdCount} added`}
         </p>
         {completed && completed.errors.length > 0 ? (
-          <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm text-amber-800">
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm text-amber-800 dark:text-amber-300">
             {completed.errors.map((e) => (
               <li key={e}>{e}</li>
             ))}
           </ul>
         ) : null}
         {completed && completed.created > 0 ? (
-          <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm text-green-800">
+          <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-sm text-green-800 dark:text-green-300">
             {completed.createdExpenseIds.map((id) => (
               <li key={id}>
                 <Link
@@ -524,7 +530,7 @@ function SkippedList({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-800"
+        className="flex items-center gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:text-gray-100"
       >
         <ChevronDown
           aria-hidden="true"
@@ -534,12 +540,16 @@ function SkippedList({
         included)
       </button>
       {open ? (
-        <ul className="mt-2 flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-600">
+        <ul className="mt-2 flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 font-mono text-xs text-gray-600 dark:text-gray-300">
           {skipped.map((s, i) => (
             <li key={i} className="flex gap-2">
-              <span className="shrink-0 text-gray-500">L{s.line}</span>
+              <span className="shrink-0 text-gray-500 dark:text-gray-400">
+                L{s.line}
+              </span>
               <span className="min-w-0 truncate">{s.raw}</span>
-              <span className="ml-auto shrink-0 text-gray-500">{s.reason}</span>
+              <span className="ml-auto shrink-0 text-gray-500 dark:text-gray-400">
+                {s.reason}
+              </span>
             </li>
           ))}
         </ul>
@@ -617,17 +627,20 @@ function DraftReview({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-semibold">{run.fileName}</div>
-            <div className="text-sm text-gray-500" role="status">
+            <div
+              className="text-sm text-gray-500 dark:text-gray-400"
+              role="status"
+            >
               {rows.length} transactions ·{" "}
-              <span className="text-green-700">
+              <span className="text-green-700 dark:text-green-400">
                 {autoMatched.length} matched
               </span>
               {" · "}
-              <span className="text-amber-700">
+              <span className="text-amber-700 dark:text-amber-400">
                 {rows.length - autoMatched.length - newExpenses.length} to
                 review
               </span>
@@ -658,7 +671,7 @@ function DraftReview({
           </div>
         </div>
         {droppedCount > 0 ? (
-          <p className="mt-3 text-xs text-gray-500">
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             {droppedCount} transaction{droppedCount === 1 ? "" : "s"} without a
             decision will be left out — they are not added as expenses.
           </p>
@@ -668,9 +681,12 @@ function DraftReview({
       {autoMatched.length > 0 ? (
         <section>
           <h2 className="mb-2 flex items-center gap-1.5 font-semibold">
-            <BadgeCheck aria-hidden="true" className="h-4 w-4 text-green-600" />{" "}
+            <BadgeCheck
+              aria-hidden="true"
+              className="h-4 w-4 text-green-600 dark:text-green-400"
+            />{" "}
             Matched automatically
-            <span className="text-sm font-normal text-gray-500">
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
               ({autoMatched.length})
             </span>
           </h2>
@@ -709,7 +725,7 @@ function DraftReview({
         <section>
           <h2 className="mb-2 font-semibold">
             Needs your decision{" "}
-            <span className="text-sm font-normal text-gray-500">
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
               ({unmatched.length})
             </span>
           </h2>
@@ -733,7 +749,7 @@ function DraftReview({
         <section>
           <h2 className="mb-2 font-semibold">
             Will be added as new expenses{" "}
-            <span className="text-sm font-normal text-gray-500">
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
               ({newExpenses.length})
             </span>
           </h2>
@@ -792,12 +808,14 @@ function RowFacts({ row }: { row: StatementRow }) {
         <div className="truncate font-medium">
           {row.description || "(no description)"}
           {row.direction === "refund" ? (
-            <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+            <span className="ml-2 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
               refund / credit
             </span>
           ) : null}
         </div>
-        <div className="text-sm text-gray-500">{formatDate(row.date)}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {formatDate(row.date)}
+        </div>
       </div>
       <span className="shrink-0 font-semibold tabular-nums">
         {formatAmount(row.amount)}
@@ -894,13 +912,13 @@ function MatchedRowCard({
   const decision = useRowDecision(runId, row.index);
   const { busy, submit } = decision;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-green-200 bg-green-50/50 p-3">
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-green-200 dark:border-green-800 bg-green-50/50 p-3">
       <RowFacts row={row} />
       <div className="flex shrink-0 flex-col items-end gap-1">
         {candidate ? (
           <Link
             to={`/expense/${candidate.expenseId}`}
-            className="max-w-56 truncate text-sm font-medium text-green-800 underline-offset-2 hover:underline"
+            className="max-w-56 truncate text-sm font-medium text-green-800 dark:text-green-300 underline-offset-2 hover:underline"
           >
             {candidate.merchant} · {formatDate(candidate.date)} ·{" "}
             {formatAmount(candidate.amount)}
@@ -908,24 +926,24 @@ function MatchedRowCard({
         ) : null}
         <div className="flex items-center gap-2 text-xs">
           {match?.status === "matched" && !candidate ? (
-            <span className="text-green-700">Matched</span>
+            <span className="text-green-700 dark:text-green-400">Matched</span>
           ) : null}
           <button
             type="button"
             disabled={busy}
             onClick={decision.toggleDraft}
-            className="font-medium text-blue-700 hover:underline disabled:opacity-50"
+            className="font-medium text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-50"
           >
             Add as new expense
           </button>
-          <span aria-hidden="true" className="text-gray-300">
+          <span aria-hidden="true" className="text-gray-300 dark:text-gray-500">
             ·
           </span>
           <button
             type="button"
             disabled={busy}
             onClick={() => submit("none")}
-            className="text-gray-500 hover:underline disabled:opacity-50"
+            className="text-gray-500 dark:text-gray-400 hover:underline disabled:opacity-50"
           >
             Don't match
           </button>
@@ -962,7 +980,7 @@ function ReviewRowCard({
   const candidates = match?.status === "review" ? match.candidates : [];
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50 p-3">
       <div className="flex flex-wrap items-center gap-3">
         <RowFacts row={row} />
         <div className="flex shrink-0 items-center gap-2">
@@ -970,7 +988,7 @@ function ReviewRowCard({
             type="button"
             disabled={busy}
             onClick={decision.toggleDraft}
-            className="text-sm font-medium text-blue-700 hover:underline disabled:opacity-50"
+            className="text-sm font-medium text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-50"
           >
             <Plus aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" />
             Add as new expense
@@ -979,18 +997,20 @@ function ReviewRowCard({
       </div>
 
       {match?.status === "review" && match.reasons.length > 0 ? (
-        <p className="mt-2 text-xs text-amber-800">{match.reasons.join(" ")}</p>
+        <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+          {match.reasons.join(" ")}
+        </p>
       ) : null}
 
       {candidates.length > 0 ? (
         <fieldset className="mt-2 flex flex-col gap-1">
-          <legend className="mb-1 text-xs font-medium text-gray-600">
+          <legend className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">
             Match to an expense:
           </legend>
           {candidates.map((c) => (
             <label
               key={c.expenseId}
-              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-white"
+              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-white dark:hover:bg-gray-800 dark:bg-gray-800"
             >
               <input
                 type="radio"
@@ -1003,7 +1023,7 @@ function ReviewRowCard({
               <span className="min-w-0 flex-1 truncate">
                 {c.merchant} · {formatDate(c.date)} · {formatAmount(c.amount)}
                 {c.exactDate && c.exactAmount ? (
-                  <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
+                  <span className="ml-2 rounded bg-green-100 dark:bg-green-900/60 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
                     exact
                   </span>
                 ) : null}
@@ -1011,13 +1031,13 @@ function ReviewRowCard({
               <Link
                 to={`/expense/${c.expenseId}`}
                 onClick={(e) => e.stopPropagation()}
-                className="text-blue-600 hover:underline"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
               >
                 View
               </Link>
             </label>
           ))}
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-white">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 dark:bg-gray-800">
             <input
               type="radio"
               name={`candidate-${row.index}`}
@@ -1047,16 +1067,18 @@ function ReviewRowCard({
 function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
   const { busy, submit } = useRowDecision(runId, row.index);
   return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3">
+    <div className="rounded-xl border border-blue-200 dark:border-gray-600 bg-blue-50/50 dark:bg-blue-900/50 p-3">
       <div className="flex items-center gap-3">
         <RowFacts row={row} />
         <div className="flex shrink-0 items-center gap-2 text-sm">
-          <span className="text-blue-700">Will be added</span>
+          <span className="text-blue-700 dark:text-blue-400">
+            Will be added
+          </span>
           <button
             type="button"
             disabled={busy}
             onClick={() => submit("none")}
-            className="text-gray-500 hover:underline disabled:opacity-50"
+            className="text-gray-500 dark:text-gray-400 hover:underline disabled:opacity-50"
           >
             Remove
           </button>
@@ -1102,7 +1124,7 @@ function NewExpenseForm({
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3">
+    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
       <Field label="Merchant" className="min-w-40 flex-1">
         <Input
           value={merchant}

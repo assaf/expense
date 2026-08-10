@@ -30,18 +30,21 @@ export function VerificationResultPage({
     status === "expired" ? (
       <Clock3 aria-hidden="true" className="h-6 w-6 text-amber-600" />
     ) : status === "invalid" ? (
-      <XCircle aria-hidden="true" className="h-6 w-6 text-red-600" />
+      <XCircle
+        aria-hidden="true"
+        className="h-6 w-6 text-red-600 dark:text-red-400"
+      />
     ) : (
       <CheckCircle2 aria-hidden="true" className="h-6 w-6 text-green-600" />
     );
   return (
     <main
       id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4"
+      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
     >
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+      <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 text-center shadow-sm">
         <div className="mb-4 flex items-center justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900">
             <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
           </div>
         </div>
@@ -49,11 +52,13 @@ export function VerificationResultPage({
           {icon}
           <h1 className="text-lg font-bold">{title}</h1>
         </div>
-        <div className="flex flex-col gap-2 text-sm text-gray-600">{body}</div>
-        <div className="mt-6 border-t border-gray-100 pt-4 text-sm">
+        <div className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
+          {body}
+        </div>
+        <div className="mt-6 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
           <a
             href="/login"
-            className="font-medium text-blue-600 hover:underline"
+            className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
           >
             Sign in to Expense
           </a>

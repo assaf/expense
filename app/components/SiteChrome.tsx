@@ -36,7 +36,7 @@ interface SiteNavItem {
 function SiteLogo() {
   return (
     <a href="/" className="flex items-center gap-2 rounded-lg font-semibold">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900">
         <ReceiptText aria-hidden="true" className="h-4 w-4 text-white" />
       </span>
       Expense
@@ -47,7 +47,7 @@ function SiteLogo() {
 /** One nav link: an internal <Link>, or an external <a> with an arrow. */
 function SiteNavLink({ item }: { item: SiteNavItem }) {
   const classes = cn(
-    "rounded-md text-gray-500 transition-colors hover:text-ink",
+    "rounded-md text-gray-500 dark:text-gray-400 transition-colors hover:text-ink dark:hover:text-gray-100",
     item.external && "inline-flex items-center gap-1",
     item.hideOnMobile && "hidden sm:inline-flex",
   );
@@ -81,10 +81,10 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-gray-100">
+    <footer className="border-t border-gray-100 dark:border-gray-700">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ink">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-900">
             <ReceiptText aria-hidden="true" className="h-3 w-3 text-white" />
           </span>
           Expense · © {new Date().getFullYear()} · Built by{" "}

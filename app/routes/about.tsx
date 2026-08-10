@@ -66,10 +66,10 @@ export default function AboutPage() {
           {BENEFITS.map((b) => (
             <div
               key={b.title}
-              className="rounded-xl border border-gray-200 bg-white p-5"
+              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
             >
               <h3 className="font-semibold text-ink">{b.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+              <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 {b.body}
               </p>
             </div>
@@ -86,9 +86,9 @@ export default function AboutPage() {
             <li key={fact} className="flex items-start gap-2">
               <CheckCircle2
                 aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"
+                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
               />
-              <span className="text-sm leading-relaxed text-gray-700">
+              <span className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
                 {fact}
               </span>
             </li>

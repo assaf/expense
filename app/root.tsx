@@ -14,6 +14,20 @@ import "~/global.css";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/root";
 
+/** Inline script that runs before first paint — applies the `dark` class
+ * based on `prefers-color-scheme` and listens for live system changes. */
+const THEME_SCRIPT = `
+(() => {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  function apply(e) {
+    document.documentElement.classList.toggle("dark", e.matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", e.matches ? "#0f172a" : "#ffffff");
+  }
+  apply(mq);
+  mq.addEventListener("change", apply);
+})();`;
+
 /** Public marketing/SEO pages (plus their markdown mirrors like /faq.md). */
 const PUBLIC_PAGES = new Set([
   "/about",
@@ -116,11 +130,12 @@ export default function App() {
         <meta property="og:locale" content="en_US" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="theme-color" content="#111827" />
+        <meta name="theme-color" content="#ffffff" />
         <Meta />
         <Links />
         {/* Umami is production-only: no tracking script (or identify calls)
         in dev — dev traffic would pollute the stats. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {process.env.NODE_ENV === "production" ? (
           <script
             defer
@@ -132,7 +147,7 @@ export default function App() {
       <body>
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-gray-900 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none dark:focus:bg-gray-100 dark:focus:text-gray-900"
         >
           Skip to main content
         </a>
@@ -161,14 +176,21 @@ export function ErrorBoundary() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#ffffff" />
         <title>{`${status} — Expense`}</title>
         <Links />
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>
         <main className="mx-auto flex max-w-xl flex-col items-center gap-2 px-4 py-24">
-          <h1 className="text-4xl font-bold text-red-600">{status}</h1>
-          <p className="text-gray-500">{String(message)}</p>
-          <a href="/" className="mt-4 text-blue-600 underline">
+          <h1 className="text-4xl font-bold text-red-600 dark:text-red-400">
+            {status}
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400">{String(message)}</p>
+          <a
+            href="/"
+            className="mt-4 text-blue-600 underline dark:text-blue-400"
+          >
             Back to expenses
           </a>
         </main>

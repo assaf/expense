@@ -259,14 +259,14 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       </header>
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Account</h2>
-        <p className="mb-3 text-sm text-gray-500">
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Everyone in this account shares expenses, reports, categories, and
           settings.
         </p>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-500">
+              <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Account name
               </div>
               <div className="font-semibold">{accountName}</div>
@@ -279,15 +279,15 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </Form>
           </div>
           <div id="invite-code" className="scroll-mt-6">
-            <div className="text-sm font-medium text-gray-500">
+            <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
               Invite code — share to let someone join this account
             </div>
             <div className="font-mono text-2xl font-bold tracking-widest">
               {inviteCode}
             </div>
           </div>
-          <div className="mt-4 border-t border-gray-100 pt-3">
-            <div className="mb-1 text-sm font-medium text-gray-700">
+          <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-3">
+            <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
               Members
             </div>
             <ul className="flex flex-col gap-1">
@@ -298,28 +298,28 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               ].map((member) => (
                 <li
                   key={member.email}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-1.5"
+                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-1.5"
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate font-mono text-sm">
                       {member.email}
                     </span>
                     {member.email === userEmail ? (
-                      <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                      <span className="shrink-0 rounded-full bg-blue-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
                         You
                       </span>
                     ) : null}
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    <span className="shrink-0 text-xs text-gray-500">
+                    <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
                       Joined {formatShortDate(member.createdAt)}
                     </span>
                     {member.emailVerifiedAt ? (
-                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
                         <Check aria-hidden="true" className="h-3 w-3" /> Active
                       </span>
                     ) : (
-                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      <span className="shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                         Waiting to verify
                       </span>
                     )}
@@ -327,7 +327,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               A member appears here as soon as they join with the invite code.
               "Active" means they've verified their email and can sign in;
               "Waiting to verify" means they joined but haven't clicked the
@@ -358,12 +358,12 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <section id="mileage-rates" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Mileage rates</h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           The IRS rate for a trip is picked automatically from its date and type
           (business, charity, medical, moving).{" "}
           {currentRates ? (
             <>
-              <span className="font-medium text-gray-700">
+              <span className="font-medium text-gray-700 dark:text-gray-200">
                 {currentRates.isCurrent ? "Current" : "Latest published"}:{" "}
                 {MILEAGE_TYPES.map(
                   (t) =>
@@ -380,7 +380,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
             target="_blank"
             rel="noreferrer"
-            className="text-blue-600 hover:underline"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
           >
             IRS standard mileage rates page
           </a>
@@ -390,7 +390,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <section id="start-location" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Start/end location</h2>
-        <p className="mb-3 text-sm text-gray-500">
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Used as the start and end of every mileage route — trips are always
           round trips back here.
         </p>
@@ -407,15 +407,15 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <section id="receipts-by-email" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Receipts by email</h2>
-        <p className="mb-3 text-sm text-gray-500">
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Forward receipt emails to the address below and they are parsed
           (merchant, amount, category) and added automatically. The expense date
           is the date of the forwarded email.
         </p>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
           {inboundAddress ? (
             <div className="mb-4">
-              <div className="text-sm font-medium text-gray-500">
+              <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Forward receipts to
               </div>
               <div className="font-mono text-lg font-semibold">
@@ -423,16 +423,16 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
           ) : (
-            <p className="mb-4 text-sm text-gray-500">
+            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
               Set the INBOUND_EMAIL_ADDRESS environment variable to show the
               forwarding address here.
             </p>
           )}
           <div className="mb-3">
-            <div className="mb-1 text-sm font-medium text-gray-700">
+            <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
               Sender addresses
             </div>
-            <p className="mb-2 text-xs text-gray-500">
+            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
               Receipts are imported only from <b>verified</b> addresses. Adding
               an address sends a verification link to that inbox. Once the link
               is clicked, the address is locked to your account — no one else
@@ -440,7 +440,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </p>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (
-                <li className="text-sm text-gray-500">None yet.</li>
+                <li className="text-sm text-gray-500 dark:text-gray-400">
+                  None yet.
+                </li>
               ) : (
                 inboundSenders.map((sender) => (
                   <SenderRow
@@ -458,10 +460,10 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
 
-      <section className="border-t border-gray-100 pt-6">
+      <section className="border-t border-gray-100 dark:border-gray-800 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Sign out of this device. You will need your email and password to
             get back in.
           </p>
@@ -492,21 +494,21 @@ function SenderRow({
   const resendFetcher = useFetcher<{ ok: boolean; error?: string }>();
   const removeFetcher = useFetcher();
   return (
-    <li className="flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-1.5">
+    <li className="flex flex-col gap-1 rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-sm">{sender.address}</span>
           {isDefault ? (
-            <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+            <span className="shrink-0 rounded-full bg-blue-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
               Your sign-in email
             </span>
           ) : null}
           {sender.verified ? (
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
               <Check aria-hidden="true" className="h-3 w-3" /> Verified
             </span>
           ) : (
-            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+            <span className="shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
               Awaiting verification
             </span>
           )}
@@ -522,7 +524,7 @@ function SenderRow({
               <input type="hidden" name="address" value={sender.address} />
               <button
                 type="submit"
-                className="text-xs font-medium text-blue-600 hover:underline"
+                className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
                 aria-label={`Resend verification email to ${sender.address}`}
               >
                 Resend email
@@ -535,7 +537,7 @@ function SenderRow({
               <input type="hidden" name="address" value={sender.address} />
               <button
                 type="submit"
-                className="text-gray-500 hover:text-red-600"
+                className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
                 aria-label={`Remove ${sender.address}`}
               >
                 <Trash2 aria-hidden="true" className="h-4 w-4" />
@@ -545,13 +547,17 @@ function SenderRow({
         </div>
       </div>
       {resendFetcher.state !== "idle" ? (
-        <p className="text-xs text-gray-500">Sending verification email…</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Sending verification email…
+        </p>
       ) : resendFetcher.data?.ok ? (
-        <p className="text-xs text-green-700">
+        <p className="text-xs text-green-700 dark:text-green-400">
           Verification email sent — check that inbox and click the link.
         </p>
       ) : resendFetcher.data?.error ? (
-        <p className="text-xs text-red-600">{resendFetcher.data.error}</p>
+        <p className="text-xs text-red-600 dark:text-red-400">
+          {resendFetcher.data.error}
+        </p>
       ) : null}
     </li>
   );
@@ -621,12 +627,12 @@ function AddSenderForm() {
       {notice ? (
         <p
           role="status"
-          className={`mt-1 text-xs ${notice.ok ? "text-green-700" : "text-red-600"}`}
+          className={`mt-1 text-xs ${notice.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
         >
           {notice.text}
         </p>
       ) : (
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           A verification email is sent to the address before receipts are
           accepted.
         </p>
@@ -657,47 +663,54 @@ function AgentsSection({
   return (
     <section id="agents" className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
-      <p className="mb-3 text-sm text-gray-500">
+      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Connect your AI assistant — Claude, OpenAI, or any MCP client — to this
         account. Point the client at the endpoint below and approve the
         connection in your browser by signing in. Agents can capture receipts,
         log mileage, answer “how much did I spend on …?”, build and export
         reports, and reconcile bank statements against logged expenses.
       </p>
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
         <div className="mb-4">
-          <div className="mb-1 text-sm font-medium text-gray-700">Endpoint</div>
-          <div className="font-mono text-sm text-gray-600">{mcpUrl}</div>
-          <p className="mt-1 text-xs text-gray-500">
+          <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+            Endpoint
+          </div>
+          <div className="font-mono text-sm text-gray-600 dark:text-gray-300">
+            {mcpUrl}
+          </div>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Point your MCP client here — it discovers the sign-in flow
             automatically.
           </p>
         </div>
 
         <div>
-          <div className="mb-1 text-sm font-medium text-gray-700">
+          <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
             Connected apps
           </div>
           {oauthSessions.length === 0 ? (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               None yet. The first time an assistant connects, you approve it
               here by signing in.
             </p>
           ) : (
             <ul className="flex flex-col gap-2">
               {oauthSessions.map(({ client, lastUsedAt, expiresAt }) => (
-                <li key={client.id} className="rounded-lg bg-gray-50 px-3 py-2">
+                <li
+                  key={client.id}
+                  className="rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <KeyRound
                         aria-hidden="true"
-                        className="h-4 w-4 shrink-0 text-gray-500"
+                        className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
                       />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">
                           {client.name}
                         </div>
-                        <div className="truncate font-mono text-xs text-gray-500">
+                        <div className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">
                           {client.id}
                         </div>
                       </div>
@@ -711,7 +724,7 @@ function AgentsSection({
                       <input type="hidden" name="clientId" value={client.id} />
                       <button
                         type="submit"
-                        className="shrink-0 text-gray-500 hover:text-red-600"
+                        className="shrink-0 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
                         aria-label={`Remove ${client.name}`}
                         title={`Remove ${client.name}`}
                       >
@@ -719,7 +732,7 @@ function AgentsSection({
                       </button>
                     </removeFetcher.Form>
                   </div>
-                  <p className="mt-1 border-t border-gray-200 pl-8 pt-1.5 text-xs text-gray-500">
+                  <p className="mt-1 border-t border-gray-200 dark:border-gray-700 pl-8 pt-1.5 text-xs text-gray-500 dark:text-gray-400">
                     {expiresAt
                       ? `Last used ${formatShortDate(lastUsedAt)} · expires ${formatShortDate(expiresAt)}`
                       : `Last used ${formatShortDate(lastUsedAt)} · no active tokens`}
@@ -728,7 +741,7 @@ function AgentsSection({
               ))}
             </ul>
           )}
-          <p className="mt-3 text-xs text-gray-500">
+          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             Removing an app revokes its access tokens immediately and stops it
             from connecting again; it can reconnect by signing in again.
           </p>
@@ -802,14 +815,18 @@ function NameList<T extends { name: string }>({
       </div>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (
-          <li className="text-sm text-gray-500">None yet.</li>
+          <li className="text-sm text-gray-500 dark:text-gray-400">
+            None yet.
+          </li>
         ) : (
           items.map((item) => (
             <li
               key={item.name}
               ref={item.name === flashName ? flashRef : undefined}
               className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition-colors duration-500 ${
-                item.name === flashName ? "bg-amber-200" : "bg-gray-50"
+                item.name === flashName
+                  ? "bg-amber-200 dark:bg-amber-800"
+                  : "bg-gray-50 dark:bg-gray-900"
               }`}
             >
               {renderItem(item)}
@@ -841,7 +858,9 @@ function NameList<T extends { name: string }>({
           <Plus aria-hidden="true" className="h-4 w-4" /> Add
         </Button>
       </fetcher.Form>
-      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+      ) : null}
     </section>
   );
 }
@@ -914,12 +933,14 @@ function RenameForm({
         <button
           type="button"
           onClick={onCancel}
-          className="shrink-0 text-sm text-gray-500 hover:text-ink"
+          className="shrink-0 text-sm text-gray-500 dark:text-gray-400 hover:text-ink"
         >
           Cancel
         </button>
       </fetcher.Form>
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {error ? (
+        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -933,7 +954,7 @@ const RenameButton = forwardRef<
       ref={ref}
       type="button"
       onClick={onClick}
-      className="text-gray-500 hover:text-ink"
+      className="text-gray-500 dark:text-gray-400 hover:text-ink"
       aria-label={`Rename ${name}`}
     >
       <Pencil aria-hidden="true" className="h-4 w-4" />
@@ -970,7 +991,7 @@ function RemoveButton({
       <input type="hidden" name="name" value={name} />
       <button
         type="submit"
-        className="text-gray-500 hover:text-red-600"
+        className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
         aria-label={`Remove ${name}`}
       >
         <Trash2 aria-hidden="true" className="h-4 w-4" />
@@ -1004,7 +1025,7 @@ function CategoryRow({ category }: { category: CategoryItem }) {
       <span className="truncate">{category.name}</span>
       <div className="flex shrink-0 items-center gap-2">
         <span
-          className="text-xs text-gray-500"
+          className="text-xs text-gray-500 dark:text-gray-400"
           title="Expenses in reports that are not closed"
         >
           {category.count === 0 ? "No expenses" : countLabel(category.count)}
@@ -1069,14 +1090,14 @@ function ReportRow({ report }: { report: ReportItem }) {
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
             report.closed
-              ? "bg-gray-200 text-gray-600"
-              : "bg-green-100 text-green-700"
+              ? "bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300"
+              : "bg-green-100 dark:bg-green-900/60 text-green-700 dark:text-green-400"
           }`}
         >
           {report.closed ? "Closed" : "Open"}
         </span>
       </div>
-      <span className="shrink-0 text-xs text-gray-500">
+      <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
         {report.count === 0 ? "No expenses" : countLabel(report.count)}
       </span>
       <div className="flex shrink-0 items-center gap-2">
@@ -1092,8 +1113,8 @@ function ReportRow({ report }: { report: ReportItem }) {
             type="submit"
             className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
               report.closed
-                ? "border-gray-300 text-gray-600 hover:bg-gray-200"
-                : "border-green-300 text-green-700 hover:bg-green-50"
+                ? "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:bg-gray-600"
+                : "border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:bg-green-950"
             }`}
           >
             {report.closed ? "Reopen" : "Close"}

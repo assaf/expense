@@ -173,13 +173,13 @@ function DuplicateWarning({ matches }: { matches: DuplicateMatch[] }) {
   const first = matches[0]!;
   const extra = matches.length - 1;
   return (
-    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+    <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
       <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
       <span>
         This looks like a duplicate of{" "}
         <Link
           to={`/expense/${first.expense.id}`}
-          className="font-medium text-blue-700 hover:underline"
+          className="font-medium text-blue-700 dark:text-blue-400 hover:underline"
         >
           {duplicateLabel(first.expense)}
         </Link>
@@ -215,8 +215,8 @@ function Shell({
               aria-label="Previous expense"
               className={
                 nav.prevId
-                  ? "inline-flex items-center text-gray-500 hover:text-ink"
-                  : "pointer-events-none text-gray-300"
+                  ? "inline-flex items-center text-gray-500 dark:text-gray-400 hover:text-ink"
+                  : "pointer-events-none text-gray-300 dark:text-gray-500"
               }
             >
               <ChevronLeft aria-hidden="true" className="h-5 w-5" />
@@ -226,8 +226,8 @@ function Shell({
               aria-label="Next expense"
               className={
                 nav.nextId
-                  ? "inline-flex items-center text-gray-500 hover:text-ink"
-                  : "pointer-events-none text-gray-300"
+                  ? "inline-flex items-center text-gray-500 dark:text-gray-400 hover:text-ink"
+                  : "pointer-events-none text-gray-300 dark:text-gray-500"
               }
             >
               <ChevronRight aria-hidden="true" className="h-5 w-5" />
@@ -508,7 +508,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
 
       <div className="mb-6">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
             Receipt image
           </span>
           <span className="flex gap-1">
@@ -562,7 +562,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             type="button"
             onClick={() => setLightbox(true)}
             aria-label="View receipt full screen"
-            className="block w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
+            className="block w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
           >
             <img
               key={imageVersion}
@@ -576,7 +576,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             />
           </button>
         ) : (
-          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm text-gray-500">
+          <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400">
             {isNew && drafting && !draftPreview ? (
               <span className="flex items-center gap-2">
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />{" "}
@@ -588,11 +588,13 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           </div>
         )}
         {draftError ? (
-          <p className="mt-1 text-xs text-red-600">{draftError}</p>
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            {draftError}
+          </p>
         ) : isNew && drafting ? (
           <DraftProgress stage={draftStage} />
         ) : (
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Click the image to view full screen.
           </p>
         )}
@@ -1059,7 +1061,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         <DuplicateWarning matches={duplicateMatches} />
       ) : null}
 
-      <div className="relative mb-6 overflow-hidden rounded-xl border border-gray-200">
+      <div className="relative mb-6 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
         <MapView
           coords={coords}
           returnCoords={returnCoords}
@@ -1075,24 +1077,24 @@ function MileageEditor({ data }: { data: EditorData }) {
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span
               role="status"
-              className="flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-sm font-medium text-gray-700 shadow-lg"
+              className="flex items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-lg"
             >
               <Loader2
                 aria-hidden="true"
-                className="h-4 w-4 animate-spin text-blue-600"
+                className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400"
               />
               Calculating route…
             </span>
           </div>
         ) : null}
         {routeError ? (
-          <div className="flex items-center gap-2 border-t border-gray-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-400">
             <AlertTriangle aria-hidden="true" className="h-4 w-4" />
             {routeError}
           </div>
         ) : (
-          <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-3 py-2 text-sm">
-            <span className="flex items-center gap-2 text-gray-600">
+          <div className="flex items-center justify-between border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm">
+            <span className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
               {computing ? (
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
               ) : (
@@ -1100,10 +1102,12 @@ function MileageEditor({ data }: { data: EditorData }) {
               )}
               {distanceMiles ? `${distanceMiles} mi` : "—"}
               {approximate ? (
-                <span className="text-xs text-amber-600">(approx.)</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400">
+                  (approx.)
+                </span>
               ) : null}
             </span>
-            <span className="text-gray-500">
+            <span className="text-gray-500 dark:text-gray-400">
               {rate ? (
                 <>{mileageRateLabel(mileageType, rate)}</>
               ) : (
@@ -1128,7 +1132,9 @@ function MileageEditor({ data }: { data: EditorData }) {
 
       <div className="mt-4">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700">Locations</span>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+            Locations
+          </span>
           <Button type="button" variant="ghost" size="sm" onClick={addLocation}>
             <Plus aria-hidden="true" className="h-4 w-4" /> Add stop
           </Button>
@@ -1136,7 +1142,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
             <li key={i} className="flex items-start gap-2">
-              <span className="w-20 shrink-0 pt-2 text-xs font-medium text-gray-500">
+              <span className="w-20 shrink-0 pt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
                 {i === 0 ? "Start / end" : `Stop ${i}`}
               </span>
               <div className="min-w-0 flex-1">
@@ -1158,14 +1164,14 @@ function MileageEditor({ data }: { data: EditorData }) {
                   {geocodingFields.includes(i) ? (
                     <Loader2
                       aria-label="Geocoding address"
-                      className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500"
+                      className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500 dark:text-gray-400"
                     />
                   ) : null}
                 </div>
                 {addressErrors[i] ? (
                   <p
                     id={`address-error-${i}`}
-                    className="mt-1 text-xs text-red-600"
+                    className="mt-1 text-xs text-red-600 dark:text-red-400"
                   >
                     {addressErrors[i]}
                   </p>
@@ -1176,7 +1182,7 @@ function MileageEditor({ data }: { data: EditorData }) {
               {i >= 2 ? (
                 <button
                   type="button"
-                  className="mt-2 rounded p-1 text-gray-500 hover:text-red-600"
+                  className="mt-2 rounded p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
                   onClick={() => removeLocation(i)}
                   aria-label="Remove stop"
                 >
@@ -1186,7 +1192,7 @@ function MileageEditor({ data }: { data: EditorData }) {
             </li>
           ))}
         </ol>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           The route runs Start / end → stops → back to Start / end. Distance
           updates automatically.
         </p>
@@ -1296,7 +1302,7 @@ function ErrorBanner({ error }: { error: string }) {
   return (
     <p
       role="alert"
-      className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
+      className="mb-4 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-400"
     >
       {error}
     </p>
@@ -1313,19 +1319,19 @@ function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
   return (
     <div
       role="status"
-      className="mt-2 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3"
+      className="mt-2 rounded-xl border border-blue-100 dark:border-gray-700 bg-blue-50/60 dark:bg-blue-900/60 px-4 py-3"
     >
-      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
         <Loader2
           aria-hidden="true"
-          className="h-4 w-4 shrink-0 animate-spin text-blue-600"
+          className="h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-400"
         />
         <span>{converting ? "Converting PDF…" : "Reading receipt…"}</span>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100 dark:bg-gray-700">
         <div className="h-full w-1/3 animate-[progress-slide_1.2s_ease-in-out_infinite] rounded-full bg-blue-500" />
       </div>
-      <p className="mt-1 text-xs text-gray-500">
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {converting
           ? "Rasterizing the PDF so it can be displayed and read."
           : "Extracting the merchant, amount, and category."}
@@ -1502,7 +1508,9 @@ function ReportField({
             Cancel
           </Button>
         </div>
-        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+        {error ? (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+        ) : null}
       </Field>
     );
   }
@@ -1598,7 +1606,7 @@ function EditorActions({
   saveLabel?: string;
 }) {
   return (
-    <div className="mt-8 flex items-center justify-between border-t border-gray-200 pt-4">
+    <div className="mt-8 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
       {onDelete ? (
         <Button
           type="button"
@@ -1614,7 +1622,9 @@ function EditorActions({
       )}
       <div className="flex items-center gap-2">
         {!complete ? (
-          <span className="text-sm text-amber-700">Incomplete</span>
+          <span className="text-sm text-amber-700 dark:text-amber-400">
+            Incomplete
+          </span>
         ) : null}
         <Button
           type="button"
@@ -1755,7 +1765,7 @@ function TransitionOverlay({ kind }: { kind: "save" | "cancel" | "delete" }) {
       role="status"
       aria-live="assertive"
     >
-      <div className="flex flex-col items-center gap-2 rounded-xl bg-white/90 px-6 py-4 shadow-lg text-gray-600">
+      <div className="flex flex-col items-center gap-2 rounded-xl bg-white/90 px-6 py-4 shadow-lg text-gray-600 dark:text-gray-300">
         <Loader2 aria-hidden="true" className="h-7 w-7 animate-spin" />
         <span className="text-sm font-medium">
           {kind === "save"

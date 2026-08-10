@@ -155,16 +155,16 @@ export default function LoginPage() {
     return (
       <main
         id="main-content"
-        className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4"
+        className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
       >
-        <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+        <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 text-center shadow-sm">
           <div className="mb-4 flex items-center justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900">
               <MailCheck aria-hidden="true" className="h-6 w-6 text-white" />
             </div>
           </div>
           <h1 className="text-xl font-bold">Check your email</h1>
-          <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600">
+          <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
             <p>
               We sent a verification link to{" "}
               <b className="font-mono">{pendingEmail}</b>. Click it to activate
@@ -183,7 +183,7 @@ export default function LoginPage() {
           </Button>
           <button
             type="button"
-            className="mt-3 text-sm text-gray-500 hover:underline"
+            className="mt-3 text-sm text-gray-500 dark:text-gray-400 hover:underline"
             onClick={() => setDismissed(true)}
           >
             Use a different email
@@ -215,15 +215,17 @@ export default function LoginPage() {
   return (
     <main
       id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4"
+      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
     >
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-ink">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900">
             <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-xl font-bold">{titles[mode].title}</h1>
-          <p className="text-sm text-gray-500">{titles[mode].blurb}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {titles[mode].blurb}
+          </p>
         </div>
 
         <fetcher.Form method="post" className="flex flex-col gap-4">
@@ -265,7 +267,7 @@ export default function LoginPage() {
           {error && (
             <p
               role="alert"
-              className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600"
+              className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400"
             >
               <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
               {error}
@@ -301,19 +303,19 @@ export default function LoginPage() {
           </Button>
         </fetcher.Form>
 
-        <div className="mt-6 flex flex-col items-center gap-1 border-t border-gray-100 pt-4 text-sm">
+        <div className="mt-6 flex flex-col items-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
           {mode === "signin" ? (
             <>
               <button
                 type="button"
-                className="font-medium text-blue-600 hover:underline"
+                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
                 onClick={() => setMode("create")}
               >
                 Create a new account
               </button>
               <button
                 type="button"
-                className="text-gray-500 hover:underline"
+                className="text-gray-500 dark:text-gray-400 hover:underline"
                 onClick={() => setMode("join")}
               >
                 Join an existing account with an invite code
@@ -322,7 +324,7 @@ export default function LoginPage() {
           ) : (
             <button
               type="button"
-              className="font-medium text-blue-600 hover:underline"
+              className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
               onClick={() => setMode("signin")}
             >
               Already have an account? Sign in

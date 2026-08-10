@@ -1,4 +1,5 @@
 import { ShieldCheck } from "lucide-react";
+import { Card } from "~/components/ui/Card";
 import { Form, redirect } from "react-router";
 import { requireUser } from "~/lib/auth.server";
 import { escapeHtml } from "~/lib/escape";
@@ -118,23 +119,30 @@ export default function OAuthAuthorizePage({
   return (
     <main
       id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4"
+      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
     >
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      <Card className="w-full max-w-sm p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50">
-            <ShieldCheck aria-hidden="true" className="h-6 w-6 text-blue-600" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-50 dark:bg-gray-800">
+            <ShieldCheck
+              aria-hidden="true"
+              className="h-6 w-6 text-blue-600 dark:text-blue-400"
+            />
           </div>
           <h1 className="text-xl font-bold">Connect to Expense</h1>
-          <p className="text-sm text-gray-500">
-            <span className="font-medium text-gray-800">{client.name}</span>{" "}
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            <span className="font-medium text-gray-800 dark:text-gray-100">
+              {client.name}
+            </span>{" "}
             wants to access your expenses — capture receipts, log mileage,
             answer spending questions, and build reports.
           </p>
         </div>
-        <div className="mb-6 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
+        <div className="mb-6 rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
           Signed in as{" "}
-          <span className="font-medium text-gray-800">{userEmail}</span>
+          <span className="font-medium text-gray-800 dark:text-gray-100">
+            {userEmail}
+          </span>
         </div>
         <Form method="post" className="flex flex-col gap-2">
           <input type="hidden" name="client_id" value={clientId} />
@@ -145,7 +153,7 @@ export default function OAuthAuthorizePage({
             type="submit"
             name="decision"
             value="approve"
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
           >
             Allow
           </button>
@@ -153,12 +161,12 @@ export default function OAuthAuthorizePage({
             type="submit"
             name="decision"
             value="deny"
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-700"
           >
             Deny
           </button>
         </Form>
-      </div>
+      </Card>
     </main>
   );
 }

@@ -24,9 +24,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.dark {
+  --color-ink: #e2e8f0;
+  --color-paper: #1e293b;
+  --color-incomplete: #422006;
+}
+
 /* Thin, unobtrusive scrollbars */
 * {
   scrollbar-width: thin;
+}
+
+.dark * {
+  scrollbar-color: #475569 #1e293b;
 }
 
 /* Anchor-target highlight: when navigating to /settings#reports (or any
@@ -41,9 +56,22 @@ body {
   }
 }
 
+@keyframes target-flash-dark {
+  from {
+    background-color: #78350f;
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 .settings-page :target > h2 {
   animation: target-flash 3s ease-out forwards;
   border-radius: 4px;
+}
+
+.dark .settings-page :target > h2 {
+  animation: target-flash-dark 3s ease-out forwards;
 }
 
 /* Indeterminate bar for the draft-upload progress indicator (PDF convert →
@@ -78,11 +106,19 @@ a:focus-visible {
   border-radius: 4px;
 }
 
+.dark a:focus-visible {
+  outline-color: #60a5fa;
+}
+
 /* Leaflet containers need an explicit height */
 .leaflet-container {
   height: 100%;
   width: 100%;
   background: #e5e7eb;
+}
+
+.dark .leaflet-container {
+  background: #334155;
 }
 
 /* Numbered stop bubble on the route map (S, 1, 2, …) — white disc with a
@@ -99,9 +135,19 @@ a:focus-visible {
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
 }
 
+.dark .map-stop-bubble {
+  background: #1e293b;
+  border-color: #60a5fa;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+
 .map-stop-bubble span {
   color: #2563eb;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
+}
+
+.dark .map-stop-bubble span {
+  color: #93c5fd;
 }

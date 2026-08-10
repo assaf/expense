@@ -80,7 +80,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: (data) => (
       <>
         Forward a receipt email to{" "}
-        <span className="break-all font-mono font-semibold text-gray-700">
+        <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inboundAddress}
         </span>{" "}
         and it is added automatically — PDF and image attachments supported.
@@ -96,7 +96,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: (data) => (
       <>
         Point any MCP client — Claude, OpenAI, or another assistant — at{" "}
-        <span className="break-all font-mono font-semibold text-gray-700">
+        <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.mcpUrl}
         </span>
         . It can capture receipts, log mileage, answer spending questions, and
@@ -123,7 +123,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: (data) => (
       <>
         Rates update automatically from the IRS —{" "}
-        <span className="font-semibold text-gray-700">
+        <span className="font-semibold text-gray-700 dark:text-gray-200">
           ${data.mileageRate}/mi
         </span>{" "}
         for business right now. Classify each drive as business, charity, or
@@ -150,7 +150,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: (data) => (
       <>
         Share your invite code{" "}
-        <span className="break-all font-mono font-semibold text-gray-700">
+        <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inviteCode}
         </span>{" "}
         and they can join your account — everyone sees the same expenses,
@@ -207,17 +207,21 @@ export function FeatureHighlight({
 }) {
   const { icon: Icon, title, body, cta } = HIGHLIGHTS[id];
   return (
-    <aside className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+    <aside className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400">
           <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Did you know?
           </p>
-          <p className="text-sm font-semibold text-gray-800">{title}</p>
-          <p className="mt-1 text-sm text-gray-500">{body(data)}</p>
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {title}
+          </p>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {body(data)}
+          </p>
         </div>
       </div>
       <div className="mt-3 pl-12">
