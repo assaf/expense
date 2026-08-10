@@ -29,6 +29,23 @@ body {
   scrollbar-width: thin;
 }
 
+/* Anchor-target highlight: when navigating to /settings#reports (or any
+ * element with an id that matches the URL hash), flash a warm background
+ * for 3 seconds to draw attention to the linked section. */
+@keyframes target-flash {
+  from {
+    background-color: #fef3c7;
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.settings-page :target > h2 {
+  animation: target-flash 3s ease-out forwards;
+  border-radius: 4px;
+}
+
 /* Indeterminate bar for the draft-upload progress indicator (PDF convert →
  * OCR). Slides a third-width segment across the track repeatedly. */
 @keyframes progress-slide {
