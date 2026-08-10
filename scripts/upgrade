@@ -20,8 +20,8 @@ git add package.json pnpm-lock.yaml
 
 echo -e "\033[32m  Running tests …\033[0m"
 rm -rf __screenshots__/*
-pnpm run check
-pnpm vp test run
+vpr check
+vpr test
 
 echo -e "\033[32m  Auditing dependencies …\033[0m"
 pnpm pnpm audit --prod || echo "Security audit failed"

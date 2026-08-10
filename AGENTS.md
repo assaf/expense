@@ -191,7 +191,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 
 ### TypeScript
 
-- **Strict mode required** — code must pass `vp check` (type-aware linting:
+- **Strict mode required** — code must pass `vpr check` (type-aware linting:
   `typeAware: true`, `typeCheck: true`).
 - **Prefer interfaces over types** for object shapes (`interface Location`);
   use `type` for unions and aliases (`type Expense = ReceiptExpense | MileageExpense`).
@@ -311,7 +311,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   `react/no-danger` is an error.
 - Sanitize free-text filenames (`sanitizeFilenamePart`).
 
-### Testing (`vp test` + Playwright)
+### Testing (`vpr test` + Playwright)
 
 - Test files live in `test/*.test.ts` — NOT alongside source.
 - Browser tests via Playwright (vitest provider); helpers in `test/helpers/`
@@ -429,7 +429,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   remove those entries or deploys fail on the 100MB upload limit.
 - When renaming a report, expenses update but image files are **not** auto-renamed
   (they keep their old convention name). Re-saving each receipt rewrites the name.
-- `vp check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
+- `vpr check` excludes `vite.config.ts` from tsgolint (recursion limits); tsc
   still type-checks it.
 - **PDF/OCR can't be fully verified locally** — local tests run against
   node_modules, where every file exists; Vercel's dependency tracer is what
