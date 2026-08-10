@@ -14,8 +14,8 @@ import { resolveCategory } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
-/** OCR + extraction can take a while (DeepSeek, or tesseract on first run). */
-export const config = { maxDuration: 60 };
+/** OCR + extraction can take ~10-15s (DeepSeek, or tesseract on first run). */
+export const config = { maxDuration: 15 };
 
 /**
  * Serve a draft receipt image. Drafts live under temporary keys with no

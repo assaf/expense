@@ -19,7 +19,7 @@ import type { Route } from "./+types/api.inbound-email";
  */
 
 // Vercel: allow the pipeline (attachment download + OCR + LLM) up to 60s.
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 15 };
 
 function isEmailReceivedEvent(value: unknown): value is {
   type: string;

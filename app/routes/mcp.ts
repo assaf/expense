@@ -18,7 +18,7 @@ import type { Route } from "./+types/mcp";
  * `initialize` handshake) and 2026-07-28 stateless clients (a per-request
  * `_meta` envelope). Nothing is held between requests — no sessions.
  */
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 15 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   return handleMcpRequest(request);

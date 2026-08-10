@@ -32,7 +32,7 @@ import type { Route } from "./+types/api.smoke";
  */
 
 // Vercel: tesseract downloads eng.traineddata on the first cold start.
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 15 };
 
 const SMOKE_TEXT = "SMOKE RECEIPT TOTAL $12.34";
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
