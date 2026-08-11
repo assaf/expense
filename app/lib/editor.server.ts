@@ -25,6 +25,7 @@ export async function loadEditorContext(
   merchants: string[];
   home: Location;
   rates: MileageRateEntry[];
+  reportClosed: boolean;
 }> {
   const [reports, categories, settings, merchants, rates] = await Promise.all([
     readReports(accountId),
@@ -33,6 +34,9 @@ export async function loadEditorContext(
     readPriorMerchants(accountId),
     readMileageRates(),
   ]);
+  const closedReportNames = new Set(
+    reports.filter((r) => r.closed).map((r) => r.name),
+  );
   return {
     expense,
     // Closed reports can't be selected; the expense's current report is
@@ -42,5 +46,6 @@ export async function loadEditorContext(
     merchants,
     home: homeLocation(settings),
     rates,
+    reportClosed: closedReportNames.has(expense.report),
   };
 }

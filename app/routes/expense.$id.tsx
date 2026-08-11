@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  Lock,
 } from "lucide-react";
 import {
   useFetcher,
@@ -48,6 +49,7 @@ import {
   deleteExpense,
   readExpense,
   readNeighborIds,
+  readReports,
 } from "~/lib/store.server";
 import type {
   Expense,
@@ -112,6 +114,19 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (intent === "addReport") return addReportAction(form, user.accountId);
 
   if (intent === "save") {
+    // Expenses in closed reports cannot be edited.
+    if (existing.report) {
+      const allReports = await readReports(user.accountId);
+      const closed = allReports.find(
+        (r) => r.name === existing.report && r.closed,
+      );
+      if (closed) {
+        return Response.json(
+          { error: "This expense is in a closed report and cannot be edited." },
+          { status: 400 },
+        );
+      }
+    }
     const result = await saveExpenseFromForm(form, user.accountId, existing);
     if (result.error)
       return Response.json({ error: result.error }, { status: 400 });
@@ -138,6 +153,8 @@ export type EditorData = {
    * it by (date, type), so changing either recomputes the amount. */
   rates: MileageRateEntry[];
   nav?: { prevId: string | null; nextId: string | null } | null;
+  /** True when the expense's report is closed — all fields become read-only. */
+  reportClosed: boolean;
 };
 
 export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
@@ -246,17 +263,23 @@ function SelectField({
   value,
   onChange,
   options,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  disabled?: boolean;
 }) {
   const opts =
     value && !options.includes(value) ? [value, ...options] : options;
   return (
     <Field label={label}>
-      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">—</option>
         {opts.map((o) => (
           <option key={o} value={o}>
@@ -271,7 +294,7 @@ function SelectField({
 // --- Receipt editor --------------------------------------------------------
 
 function ReceiptEditor({ data }: { data: EditorData }) {
-  const { reports, categories, merchants } = data;
+  const { reports, categories, merchants, reportClosed } = data;
   const expense = data.expense as ReceiptExpense;
   const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
@@ -494,7 +517,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
   useFormKeys({
     onSave: () => doSave(onSave),
     onCancel,
-    disabled: fetcher.state !== "idle" || drafting,
+    disabled: fetcher.state !== "idle" || drafting || reportClosed,
     blocked: lightbox || confirmDelete,
   });
 
@@ -506,6 +529,12 @@ function ReceiptEditor({ data }: { data: EditorData }) {
       onBack={isNew ? onCancel : undefined}
     >
       <ErrorBanner error={error} />
+      {reportClosed ? (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+          <Lock aria-hidden="true" className="h-4 w-4" />
+          This expense is in a closed report.
+        </div>
+      ) : null}
       {duplicateMatches.length > 0 ? (
         <DuplicateWarning matches={duplicateMatches} />
       ) : null}
@@ -516,25 +545,29 @@ function ReceiptEditor({ data }: { data: EditorData }) {
             Receipt image
           </span>
           <span className="flex gap-1">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*,application/pdf"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.currentTarget.files?.[0];
-                if (f) void replaceImage(f);
-              }}
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => fileRef.current?.click()}
-            >
-              <Upload aria-hidden="true" className="h-4 w-4" /> Replace
-            </Button>
-            {(isNew ? draftPreview : expense.imageFile) ? (
+            {!reportClosed ? (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.currentTarget.files?.[0];
+                    if (f) void replaceImage(f);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Upload aria-hidden="true" className="h-4 w-4" /> Replace
+                </Button>
+              </>
+            ) : null}
+            {(isNew ? draftPreview : expense.imageFile) && !reportClosed ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -610,6 +643,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         amount={amount}
         onAmount={setAmount}
         amountRef={amountRef}
+        disabled={reportClosed}
       />
 
       <Field label="Merchant" className="mt-4">
@@ -617,6 +651,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
           type="text"
           list="merchants"
           value={merchant}
+          disabled={reportClosed}
           onChange={(e) => setMerchant(e.target.value)}
         />
         <datalist id="merchants">
@@ -633,9 +668,14 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         category={category}
         onCategory={setCategory}
         categories={categories}
+        disabled={reportClosed}
       />
 
-      <DescriptionField value={description} onChange={setDescription} />
+      <DescriptionField
+        value={description}
+        onChange={setDescription}
+        disabled={reportClosed}
+      />
 
       <EditorActions
         complete={complete}
@@ -644,6 +684,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         onSave={() => doSave(onSave)}
         onDelete={isNew ? undefined : () => setConfirmDelete(true)}
         saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
+        readOnly={reportClosed}
       />
 
       {lightbox && (isNew ? draftPreview : expense.imageFile) ? (
@@ -676,7 +717,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
 // --- Mileage editor --------------------------------------------------------
 
 function MileageEditor({ data }: { data: EditorData }) {
-  const { reports, categories, home, rates } = data;
+  const { reports, categories, home, rates, reportClosed } = data;
   const expense = data.expense as MileageExpense;
   const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
@@ -1037,7 +1078,7 @@ function MileageEditor({ data }: { data: EditorData }) {
   useFormKeys({
     onSave: () => void onSave(),
     onCancel: doCancel,
-    disabled: fetcher.state !== "idle",
+    disabled: fetcher.state !== "idle" || reportClosed,
     blocked: confirmDelete,
   });
 
@@ -1061,6 +1102,12 @@ function MileageEditor({ data }: { data: EditorData }) {
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
       <ErrorBanner error={error} />
+      {reportClosed ? (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+          <Lock aria-hidden="true" className="h-4 w-4" />
+          This expense is in a closed report.
+        </div>
+      ) : null}
       {duplicateMatches.length > 0 ? (
         <DuplicateWarning matches={duplicateMatches} />
       ) : null}
@@ -1129,6 +1176,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         onType={changeMileageType}
         amount={amount}
         onAmount={setAmount}
+        disabled={reportClosed}
         onManualAmount={() => {
           manualAmount.current = true;
         }}
@@ -1139,9 +1187,16 @@ function MileageEditor({ data }: { data: EditorData }) {
           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
             Locations
           </span>
-          <Button type="button" variant="ghost" size="sm" onClick={addLocation}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Add stop
-          </Button>
+          {!reportClosed ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={addLocation}
+            >
+              <Plus aria-hidden="true" className="h-4 w-4" /> Add stop
+            </Button>
+          ) : null}
         </div>
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
@@ -1154,6 +1209,7 @@ function MileageEditor({ data }: { data: EditorData }) {
                   <Input
                     type="text"
                     placeholder="Address"
+                    disabled={reportClosed}
                     invalid={!!addressErrors[i]}
                     aria-describedby={
                       addressErrors[i] ? `address-error-${i}` : undefined
@@ -1183,7 +1239,7 @@ function MileageEditor({ data }: { data: EditorData }) {
               </div>
               {/* The start/end and the first stop are required — only extra
                   stops can be removed. */}
-              {i >= 2 ? (
+              {i >= 2 && !reportClosed ? (
                 <button
                   type="button"
                   className="mt-2 rounded p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
@@ -1209,9 +1265,14 @@ function MileageEditor({ data }: { data: EditorData }) {
         category={category}
         onCategory={setCategory}
         categories={categories}
+        disabled={reportClosed}
       />
 
-      <DescriptionField value={description} onChange={setDescription} />
+      <DescriptionField
+        value={description}
+        onChange={setDescription}
+        disabled={reportClosed}
+      />
 
       <EditorActions
         complete={complete}
@@ -1220,6 +1281,7 @@ function MileageEditor({ data }: { data: EditorData }) {
         onSave={() => void onSave()}
         onDelete={isNew ? undefined : () => setConfirmDelete(true)}
         saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
+        readOnly={reportClosed}
       />
       {confirmDelete ? (
         <ConfirmDialog
@@ -1358,6 +1420,7 @@ function DateAmountFields({
   onAmount,
   amountRef,
   onManualAmount,
+  disabled,
 }: {
   date: string;
   onDate: (v: string) => void;
@@ -1370,6 +1433,7 @@ function DateAmountFields({
   amountRef?: React.RefObject<HTMLInputElement | null>;
   /** Mileage: runs before each keystroke (marks the amount as hand-edited). */
   onManualAmount?: () => void;
+  disabled?: boolean;
 }) {
   const hasType = type !== undefined && onType !== undefined;
   return (
@@ -1380,6 +1444,7 @@ function DateAmountFields({
           tabIndex={-1}
           max={todayDate()}
           value={date}
+          disabled={disabled}
           onChange={(e) => onDate(e.target.value)}
         />
       </Field>
@@ -1387,6 +1452,7 @@ function DateAmountFields({
         <Field label="Type">
           <Select
             value={type}
+            disabled={disabled}
             onChange={(e) => onType(e.target.value as MileageType)}
           >
             {MILEAGE_TYPES.map((t) => (
@@ -1405,6 +1471,7 @@ function DateAmountFields({
           placeholder="0.00"
           value={amount}
           ref={amountRef}
+          disabled={disabled}
           onClick={(e) => e.currentTarget.select()}
           onChange={(e) => {
             onManualAmount?.();
@@ -1432,10 +1499,12 @@ function ReportField({
   value,
   onChange,
   reports,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   reports: string[];
+  disabled?: boolean;
 }) {
   const fetcher = useFetcher<{ ok: boolean; name?: string; error?: string }>();
   const [creating, setCreating] = useState(false);
@@ -1525,6 +1594,7 @@ function ReportField({
     <Field label="Report">
       <Select
         value={value}
+        disabled={disabled}
         onChange={(e) => {
           if (e.target.value === NEW_REPORT) {
             setCreating(true);
@@ -1540,7 +1610,7 @@ function ReportField({
             {o}
           </option>
         ))}
-        <option value={NEW_REPORT}>+ New report…</option>
+        {!disabled ? <option value={NEW_REPORT}>+ New report…</option> : null}
       </Select>
     </Field>
   );
@@ -1554,6 +1624,7 @@ function ReportCategoryFields({
   category,
   onCategory,
   categories,
+  disabled,
 }: {
   report: string;
   onReport: (v: string) => void;
@@ -1561,15 +1632,22 @@ function ReportCategoryFields({
   category: string;
   onCategory: (v: string) => void;
   categories: string[];
+  disabled?: boolean;
 }) {
   return (
     <div className="mt-4 grid grid-cols-2 gap-4 items-start">
-      <ReportField value={report} onChange={onReport} reports={reports} />
+      <ReportField
+        value={report}
+        onChange={onReport}
+        reports={reports}
+        disabled={disabled}
+      />
       <SelectField
         label="Category"
         value={category}
         onChange={onCategory}
         options={categories}
+        disabled={disabled}
       />
     </div>
   );
@@ -1579,15 +1657,18 @@ function ReportCategoryFields({
 function DescriptionField({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <Field label="Description" className="mt-4">
       <Textarea
         rows={3}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
@@ -1601,6 +1682,7 @@ function EditorActions({
   onSave,
   onDelete,
   saveLabel,
+  readOnly,
 }: {
   complete: boolean;
   saving: boolean;
@@ -1608,10 +1690,12 @@ function EditorActions({
   onSave: () => void;
   onDelete?: () => void;
   saveLabel?: string;
+  readOnly?: boolean;
 }) {
+  if (readOnly) return null;
   return (
     <div className="mt-8 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
-      {onDelete ? (
+      {onDelete && !readOnly ? (
         <Button
           type="button"
           variant="danger"
