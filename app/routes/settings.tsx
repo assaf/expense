@@ -25,7 +25,6 @@ import { readSettings, writeSettings } from "~/lib/settings.server";
 import {
   addCategory,
   addInboundSender,
-  addReport,
   disconnectOAuthClient,
   listInboundSenders,
   listUserOAuthSessions,
@@ -33,17 +32,12 @@ import {
   readAccountUsers,
   readCategories,
   readCategoryCounts,
-  readReportCounts,
-  readReports,
+  readMileageRates,
   regenerateInviteCode,
   removeCategory,
   removeInboundSender,
-  removeReport,
   renameCategory,
-  renameReport,
   resendInboundSenderVerification,
-  setReportClosed,
-  readMileageRates,
 } from "~/lib/store.server";
 import { countLabel, formatShortDate, todayDate } from "~/lib/format";
 import type { InboundSenderRecord } from "~/lib/types";
@@ -61,21 +55,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const account = await readAccount(user.accountId);
   const [
-    reports,
     categories,
     settings,
     inboundSenders,
-    reportCounts,
     categoryCounts,
     oauthSessions,
     rates,
     members,
   ] = await Promise.all([
-    readReports(user.accountId),
     readCategories(user.accountId),
     readSettings(user.accountId),
     listInboundSenders(user.accountId),
-    readReportCounts(user.accountId),
     readCategoryCounts(user.accountId),
     listUserOAuthSessions(user.id),
     readMileageRates(),
@@ -87,11 +77,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     accountName: account?.name ?? "",
     inviteCode: account?.inviteCode ?? "",
-    reports: reports.map((r) => ({
-      name: r.name,
-      closed: r.closed,
-      count: reportCounts.get(r.name) ?? 0,
-    })),
     categories: categories.map((c) => ({
       name: c.name,
       count: categoryCounts.get(c.name) ?? 0,
@@ -119,31 +104,6 @@ export async function action({ request }: Route.ActionArgs) {
   switch (intent) {
     case "regenerateCode":
       await regenerateInviteCode(user.accountId);
-      break;
-    case "addReport": {
-      const name = formString(form, "name").trim();
-      // Fetcher-driven: return the created name (or the error) so the list
-      // can flash the new row in place — no page navigation.
-      const result = await addReport(user.accountId, name);
-      return Response.json(result.ok ? { ok: true, name } : result);
-    }
-    case "removeReport":
-      await removeReport(user.accountId, formString(form, "name"));
-      break;
-    case "renameReport": {
-      const result = await renameReport(
-        user.accountId,
-        formString(form, "name"),
-        formString(form, "newName"),
-      );
-      return Response.json(result);
-    }
-    case "setReportClosed":
-      await setReportClosed(
-        user.accountId,
-        formString(form, "name"),
-        formString(form, "closed") === "true",
-      );
       break;
     case "addCategory": {
       const name = formString(form, "name").trim();
@@ -228,7 +188,6 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   const {
-    reports,
     categories,
     homeAddress,
     currentRates,
@@ -337,14 +296,6 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </section>
 
-      <NameList
-        title="Reports"
-        id="reports"
-        items={reports}
-        addIntent="addReport"
-        addPlaceholder="Add report"
-        renderItem={(report) => <ReportRow key={report.name} report={report} />}
-      />
       <NameList
         title="Categories"
         id="categories"
@@ -865,8 +816,6 @@ function NameList<T extends { name: string }>({
   );
 }
 
-type ReportItem = { name: string; closed: boolean; count: number };
-
 /**
  * One category row in Settings: name + the number of expenses in reports
  * that are not closed, and a delete button. Deleting a category used by
@@ -1039,96 +988,6 @@ function CategoryRow({ category }: { category: CategoryItem }) {
           fetcher={removeFetcher}
           intent="removeCategory"
           name={category.name}
-          confirm={confirmRemove}
-        />
-      </div>
-    </>
-  );
-}
-
-/** Confirm text for deleting a report, or undefined when the delete is safe
- * (open + at most one expense) and needs no prompt. */
-function reportDeleteConfirm(report: ReportItem): string | undefined {
-  if (!report.closed && report.count <= 1) return undefined;
-  const flags: string[] = [];
-  if (report.closed) flags.push("is closed");
-  if (report.count > 1) flags.push(`contains ${report.count} expenses`);
-  const loss =
-    report.count > 0
-      ? ` Deleting it also deletes the expense${report.count === 1 ? "" : "s"} and any receipt images.`
-      : "";
-  return `This report ${flags.join(" and ")}.${loss} Delete it anyway?`;
-}
-
-/**
- * One report row in Settings: name + Open/Closed badge, expense count, a
- * Close/Reopen toggle, and a delete button. Deleting a closed report or one
- * with several expenses asks for confirmation first.
- */
-function ReportRow({ report }: { report: ReportItem }) {
-  const [editing, setEditing] = useState(false);
-  const renameRef = useRef<HTMLButtonElement>(null);
-  const toggleFetcher = useFetcher();
-  const removeFetcher = useFetcher();
-  const confirmRemove = reportDeleteConfirm(report);
-  useEffect(() => {
-    if (!editing) renameRef.current?.focus();
-  }, [editing]);
-  if (editing) {
-    return (
-      <RenameForm
-        intent="renameReport"
-        name={report.name}
-        onCancel={() => setEditing(false)}
-      />
-    );
-  }
-  return (
-    <>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate">{report.name}</span>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-            report.closed
-              ? "bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300"
-              : "bg-green-100 dark:bg-green-900/60 text-green-700 dark:text-green-400"
-          }`}
-        >
-          {report.closed ? "Closed" : "Open"}
-        </span>
-      </div>
-      <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-        {report.count === 0 ? "No expenses" : countLabel(report.count)}
-      </span>
-      <div className="flex shrink-0 items-center gap-2">
-        <toggleFetcher.Form method="post" className="contents">
-          <input type="hidden" name="intent" value="setReportClosed" />
-          <input type="hidden" name="name" value={report.name} />
-          <input
-            type="hidden"
-            name="closed"
-            value={report.closed ? "false" : "true"}
-          />
-          <button
-            type="submit"
-            className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
-              report.closed
-                ? "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:bg-gray-600"
-                : "border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:bg-green-950"
-            }`}
-          >
-            {report.closed ? "Reopen" : "Close"}
-          </button>
-        </toggleFetcher.Form>
-        <RenameButton
-          ref={renameRef}
-          onClick={() => setEditing(true)}
-          name={report.name}
-        />
-        <RemoveButton
-          fetcher={removeFetcher}
-          intent="removeReport"
-          name={report.name}
           confirm={confirmRemove}
         />
       </div>

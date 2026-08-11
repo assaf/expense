@@ -1003,6 +1003,7 @@ export async function readReports(accountId: string): Promise<Report[]> {
  * Number of expenses in each report (reports are referenced by name — no
  * foreign key). Only reports that actually have expenses appear in the map.
  */
+/** @public */
 export async function readReportCounts(
   accountId: string,
 ): Promise<Map<string, number>> {

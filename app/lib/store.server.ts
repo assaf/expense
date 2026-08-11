@@ -55,6 +55,7 @@ export {
   readExtractionContext,
   findOpenReport,
   readReports,
+  /** @public */
   readReportCounts,
   reportExists,
   type ReportSummary,

@@ -452,7 +452,7 @@ function ExpenseList({
           </Button>
           <Button asChild variant="ghost" size="sm">
             <Link to="/export">
-              <Download aria-hidden="true" className="h-4 w-4" /> Export
+              <Download aria-hidden="true" className="h-4 w-4" /> Reports
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
