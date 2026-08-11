@@ -1,7 +1,8 @@
-import { ArrowUpRight, ReceiptText } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router";
 import { cn } from "~/lib/cn";
 import { Button } from "~/components/ui/Button";
+import { Logo } from "~/components/Logo";
 import { BLOG_URL, GITHUB_URL } from "~/lib/seo-content";
 
 const FOOTER_NAV: SiteNavItem[] = [
@@ -32,18 +33,6 @@ interface SiteNavItem {
   hideOnMobile?: boolean;
 }
 
-/** The wordmark link every public page's header starts with. */
-function SiteLogo() {
-  return (
-    <a href="/" className="flex items-center gap-2 rounded-lg font-semibold">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900">
-        <ReceiptText aria-hidden="true" className="h-4 w-4 text-white" />
-      </span>
-      Expense
-    </a>
-  );
-}
-
 /** One nav link: an internal <Link>, or an external <a> with an arrow. */
 function SiteNavLink({ item }: { item: SiteNavItem }) {
   const classes = cn(
@@ -69,7 +58,7 @@ function SiteNavLink({ item }: { item: SiteNavItem }) {
 export function SiteHeader() {
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
-      <SiteLogo />
+      <Logo link />
       <nav className="flex items-center gap-4 text-sm">
         <Button asChild variant="ghost" size="sm" className="ml-2">
           <Link to="/login">Sign in</Link>
@@ -84,10 +73,7 @@ export function SiteFooter() {
     <footer className="border-t border-gray-100 dark:border-gray-700">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gray-900">
-            <ReceiptText aria-hidden="true" className="h-3 w-3 text-white" />
-          </span>
-          Expense · © {new Date().getFullYear()} · Built by{" "}
+          <Logo icon /> · © {new Date().getFullYear()} · Built by{" "}
           <a href="https://labnotes.org">Assaf Arkin</a>
         </div>
         <nav className="flex items-center gap-4 text-sm">

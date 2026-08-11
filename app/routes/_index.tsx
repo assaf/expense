@@ -25,6 +25,7 @@ import {
   type HighlightId,
 } from "~/components/FeatureHighlight";
 import LandingPage from "~/components/LandingPage";
+import { Logo } from "~/components/Logo";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Input } from "~/components/ui/Input";
@@ -440,7 +441,9 @@ function ExpenseList({
         {dragOver ? "Receipt file detected — drop to upload" : ""}
       </div>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Expense</h1>
+        <h1>
+          <Logo link />
+        </h1>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link to="/reconcile">
