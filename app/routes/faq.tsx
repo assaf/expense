@@ -1,5 +1,11 @@
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
-import { APP_NAME, APP_SUMMARY, FAQS, SITE_URL } from "~/lib/seo-content";
+import {
+  APP_NAME,
+  APP_SUMMARY,
+  FAQS,
+  marketingPageHeaders,
+  SITE_URL,
+} from "~/lib/seo-content";
 import type { Route } from "./+types/faq";
 
 /** FAQPage structured data — the primary signal for FAQ-style AI answers. */
@@ -30,12 +36,7 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
-export function headers() {
-  return {
-    "Cache-Control":
-      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
-  };
-}
+export const headers = marketingPageHeaders;
 
 export default function FaqPage() {
   return (

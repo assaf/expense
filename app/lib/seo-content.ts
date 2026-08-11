@@ -8,6 +8,27 @@
  * /about.md, /alternatives.md) are all rendered from this module — edit the
  * copy here and every surface stays in sync.
  *
+ * The marketing pages (/about, /ai, /faq, /alternatives) share a Cache-
+ * Control header — it lives here so the four pages can't drift apart.
+ */
+
+/**
+ * Cache-Control header shared by the marketing/SEO pages: browsers
+ * revalidate on every request (max-age=0), but the CDN caches for one hour
+ * and serves stale for up to 24h while revalidating in the background.
+ */
+export function marketingPageHeaders(): Record<string, string> {
+  return {
+    "Cache-Control":
+      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
+  };
+}
+
+/**
+ * (/alternatives), the /llms.txt file, and the markdown variants (/faq.md,
+ * /about.md, /alternatives.md) are all rendered from this module — edit the
+ * copy here and every surface stays in sync.
+ *
  * Voice: the pitch is "expenses tracked for tax season", and the copy reads
  * like the person who built it — plain sentences, concrete details, no
  * marketing filler, nothing that sounds like a press release.

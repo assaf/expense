@@ -7,6 +7,7 @@ import {
   BENEFITS,
   BLOG_URL,
   KEY_FACTS,
+  marketingPageHeaders,
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/about";
@@ -38,12 +39,7 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
-export function headers() {
-  return {
-    "Cache-Control":
-      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
-  };
-}
+export const headers = marketingPageHeaders;
 
 export default function AboutPage() {
   return (
