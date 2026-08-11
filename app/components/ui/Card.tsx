@@ -1,5 +1,4 @@
 import type { ComponentProps } from "react";
-import type { ReactNode } from "react";
 import { cn } from "~/lib/cn";
 
 const variants = {
