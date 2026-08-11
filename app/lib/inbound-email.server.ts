@@ -42,7 +42,7 @@ import {
   upsertInboundEmail,
 } from "~/lib/store.server";
 import { saveImage } from "~/lib/images.server";
-import { RESEND_API_KEY } from "~/lib/env";
+import { INBOUND_EMAIL_ADDRESS, RESEND_API_KEY } from "~/lib/env";
 import type { ReceiptExpense } from "~/lib/types";
 
 /**
@@ -125,7 +125,8 @@ export type ProcessResult =
   | { status: "error"; error: string }
   | { status: "duplicate" }
   | { status: "unknown-sender" }
-  | { status: "unverified-sender" };
+  | { status: "unverified-sender" }
+  | { status: "self-reply" };
 
 /** Injectable collaborators (fakes in tests, real implementations by default). */
 export interface InboundDeps {
@@ -485,6 +486,13 @@ export async function processInboundEvent(
 ): Promise<ProcessResult> {
   const subject = data.subject ?? "";
   const fromEmail = extractEmailAddress(data.from);
+
+  // Self-reply guard: if the sender is our own inbound address, this is
+  // an outbound reply looping back. Skip it without sending another reply
+  // (which would itself loop back, creating an infinite chain).
+  if (fromEmail === INBOUND_EMAIL_ADDRESS) {
+    return { status: "self-reply" };
+  }
 
   // Only VERIFIED sender addresses accept receipts. A sender row that was
   // added but never verified gets a "verify first" reply instead of an
