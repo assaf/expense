@@ -94,20 +94,15 @@ describe("Closed reports", () => {
     await editor.close();
   });
 
-  it("keeps an expense's closed report as its current value", async () => {
-    // The expense lives in a closed report; the editor must not silently
-    // drop the assignment. Saving without touching the report keeps it.
+  it("shows a closed-report expense as read-only with no Save button", async () => {
+    // The expense lives in a closed report; the editor must be read-only —
+    // fields are disabled and the Save button is not rendered.
     const editor = await goto("/expense/exp_closedq3");
     const reportSelect = editor.locator("select").first();
     await expect(reportSelect).toHaveValue("Closed Q3");
-    await editor.getByRole("button", { name: "Save" }).click();
-    await editor.waitForURL("/", { timeout: 10_000 });
+    await expect(reportSelect).toBeDisabled();
+    await expect(editor.getByRole("button", { name: "Save" })).toHaveCount(0);
     await editor.close();
-    expect(
-      await testPrisma.expense.count({
-        where: { id: "exp_closedq3", report: "Closed Q3" },
-      }),
-    ).toBe(1);
   });
 
   it("rejects saving an expense into a closed report", async () => {

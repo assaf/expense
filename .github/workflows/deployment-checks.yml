@@ -94,14 +94,14 @@ jobs:
 
       - run: pnpm check
 
-  # Full test suite against a throwaway Postgres. This is the long pole:
-  # pnpm test alone is ~2m and the suite floor with install + browsers is
-  # ~3m, so 4m is the tightest timeout that doesn't flake on cold-cache
-  # runs. Keep the job lean (no pnpm check here; browsers cached).
+  # Full test suite against a throwaway Postgres. The Playwright browser
+  # tests (closed-reports, editor-create-report, home, mileage) add ~2m
+  # on top of the ~2m unit-test core; a cold-cache run with browser
+  # install hits ~5-6m, so 10m leaves headroom for flaky CI runners.
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 10
     needs: [secretlint]
     services:
       # Matches the hardcoded test URL in vite.config.ts:
