@@ -15,7 +15,7 @@ describe("Export", () => {
   });
 
   it("shows the export page", async () => {
-    await expect(page.locator("h1")).toContainText("Export");
+    await expect(page.locator("h1")).toContainText("Reports");
   });
 
   it("shows report entries for PDF downloads", async () => {
@@ -41,13 +41,13 @@ describe("Export", () => {
     const page = await goto("/export");
     const mainSection = page.locator("section").filter({
       has: page.getByRole("heading", {
-        name: "Reports (PDF)",
+        name: "Open reports",
         exact: true,
       }),
     });
     const closedSection = page.locator("section").filter({
       has: page.getByRole("heading", {
-        name: "Closed reports (PDF)",
+        name: "Closed reports",
         exact: true,
       }),
     });
@@ -121,13 +121,13 @@ describe("Export", () => {
     const page = await goto("/export");
     const mainSection = page.locator("section").filter({
       has: page.getByRole("heading", {
-        name: "Reports (PDF)",
+        name: "Open reports",
         exact: true,
       }),
     });
     const closedSection = page.locator("section").filter({
       has: page.getByRole("heading", {
-        name: "Closed reports (PDF)",
+        name: "Closed reports",
         exact: true,
       }),
     });
