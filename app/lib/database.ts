@@ -879,6 +879,15 @@ export async function readPriorMerchants(accountId: string): Promise<string[]> {
  * new receipt's merchant matches a previous one — the category is reused
  * instead of guessed.
  */
+const NINETY_DAYS_MS = 90 * 24 * 3600 * 1000;
+
+/** The date 90 days ago as an ISO string — used as the lower bound for
+ * merchant-history lookups. Computed once per call so tests can advance time
+ * without restarting. */
+function ninetyDaysAgo(): string {
+  return new Date(Date.now() - NINETY_DAYS_MS).toISOString();
+}
+
 export async function readMerchantCategories(
   accountId: string,
 ): Promise<Map<string, string>> {
@@ -888,6 +897,7 @@ export async function readMerchantCategories(
       type: "receipt",
       merchant: { not: "" },
       category: { not: "" },
+      createdAt: { gte: ninetyDaysAgo() },
     },
     select: { merchant: true, category: true, createdAt: true },
   });
@@ -906,19 +916,64 @@ export async function readMerchantCategories(
 }
 
 /**
+ * Map from normalized merchant name to the report of the most recent receipt
+ * for that merchant (last 90 days). Only receipts with a non-empty report
+ * are considered. Used alongside `readMerchantCategories` so a receipt from
+ * a known merchant inherits both category and report.
+ */
+/** @public */
+export async function readMerchantReports(
+  accountId: string,
+): Promise<Map<string, string>> {
+  const rows = await prisma.expense.findMany({
+    where: {
+      accountId,
+      type: "receipt",
+      merchant: { not: "" },
+      report: { not: "" },
+      createdAt: { gte: ninetyDaysAgo() },
+    },
+    select: { merchant: true, report: true, createdAt: true },
+  });
+  const latest = new Map<string, { report: string; createdAt: string }>();
+  for (const row of rows) {
+    const key = normalizeMerchant(row.merchant);
+    if (!key) continue;
+    const prev = latest.get(key);
+    if (!prev || row.createdAt > prev.createdAt) {
+      latest.set(key, { report: row.report, createdAt: row.createdAt });
+    }
+  }
+  const byMerchant = new Map<string, string>();
+  for (const [key, value] of latest) byMerchant.set(key, value.report);
+  return byMerchant;
+}
+
+/**
  * Category names + prior merchant categories — the extraction context shared
  * by the draft-image and inbound-email pipelines. Loading both up front is
  * one round-trip; the merchant's previous category (normalized name match)
  * is reused instead of re-guessed.
  */
-export async function readExtractionContext(
-  accountId: string,
-): Promise<{ categories: string[]; merchantCategories: Map<string, string> }> {
-  const [categories, merchantCategories] = await Promise.all([
-    readCategories(accountId).then((cs) => cs.map((c) => c.name)),
-    readMerchantCategories(accountId),
-  ]);
-  return { categories, merchantCategories };
+export async function readExtractionContext(accountId: string): Promise<{
+  categories: string[];
+  reports: string[];
+  merchantCategories: Map<string, string>;
+  merchantReports: Map<string, string>;
+}> {
+  const [categoriesRaw, merchantCategories, merchantReports, reports] =
+    await Promise.all([
+      readCategories(accountId),
+      readMerchantCategories(accountId),
+      readMerchantReports(accountId),
+      readReports(accountId),
+    ]);
+  return {
+    categories: categoriesRaw.map((c) => c.name),
+    reports: reports.map((r) => r.name),
+    merchantCategories,
+    merchantReports,
+  };
 }
 
 // --- Reports & Categories --------------------------------------------------

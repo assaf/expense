@@ -59,6 +59,7 @@ function fakeExtract(text?: string): ExtractionResult {
     amount: normalizeAmount(amount),
     currency: "USD",
     category: t.match(/CATEGORY:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
+    report: "",
     confidence: "high",
     notes: "",
   };
@@ -751,8 +752,9 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.imageFile).not.toBe("");
     expect(created.imageMime).toBe("image/jpeg"); // body render stored as JPEG
     usedExpenseIds.push(expenseIdOf(result));
-    // Success → no reply email.
-    expect(deps.sent).toHaveLength(0);
+    // Successful imports send a confirmation email.
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toBe("Receipt imported");
   });
 
   it("reuses the category a previous expense for the same merchant used", async () => {
@@ -832,7 +834,9 @@ describe("processInboundEvent (body receipt)", () => {
     usedExpenseIds.push(expenseIdOf(result));
     expect(result).toMatchObject({ status: "created" });
     expect(textSheetCalls).toBe(1);
-    expect(deps.sent).toHaveLength(0); // fully imported — no reply email
+    // Successful imports send a confirmation email.
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toBe("Receipt imported");
   });
 
   it("renders text-only emails through the plain-text renderer", async () => {

@@ -361,6 +361,7 @@ export async function extractFromImage(input: {
   buffer: Buffer;
   mime: string;
   categories?: string[];
+  reports?: string[];
 }): Promise<{
   result: ExtractionResult;
   text: string;
@@ -374,12 +375,14 @@ export async function extractFromImage(input: {
         ? await extractReceipt({
             text: pdfText,
             categories: input.categories,
+            reports: input.reports,
           })
         : (
             await extractFromImage({
               buffer: png,
               mime: "image/png",
               categories: input.categories,
+              reports: input.reports,
             })
           ).result;
     return {
@@ -397,6 +400,7 @@ export async function extractFromImage(input: {
       result = await extractReceipt({
         image: { buffer: stored.buffer, mime: stored.mime },
         categories: input.categories,
+        reports: input.reports,
       });
     } catch (err) {
       if (RECEIPT_OCR_MODE === "deepseek" || !isVisionUnsupportedError(err)) {
@@ -410,6 +414,7 @@ export async function extractFromImage(input: {
     result = await extractReceipt({
       text,
       categories: input.categories,
+      reports: input.reports,
     });
   }
   return { result, text, stored };

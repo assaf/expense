@@ -367,6 +367,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         merchant?: string;
         amount?: string;
         category?: string;
+        report?: string;
       };
       // Replace any earlier draft so a draft never outlives the editor.
       if (draft) await deleteDraftBlob(draft.key);
@@ -391,6 +392,7 @@ function ReceiptEditor({ data }: { data: EditorData }) {
       setMerchant((prev) => prev || json.merchant || "");
       setAmount((prev) => prev || json.amount || "");
       setCategory((prev) => prev || json.category || "");
+      setReport((prev) => prev || json.report || "");
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
@@ -412,11 +414,13 @@ function ReceiptEditor({ data }: { data: EditorData }) {
         merchant?: string;
         amount?: string;
         category?: string;
+        report?: string;
       };
       // Same rule as the draft upload: fill only what's still empty.
       setMerchant((prev) => prev || json.merchant || "");
       setAmount((prev) => prev || json.amount || "");
       setCategory((prev) => prev || json.category || "");
+      setReport((prev) => prev || json.report || "");
     } catch {
       // Fields stay empty; the user can fill them by hand.
     }

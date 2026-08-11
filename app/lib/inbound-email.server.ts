@@ -18,6 +18,7 @@ import {
   classifyReceiptAttachment,
   extractReceipt,
   resolveCategory,
+  resolveReport,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -42,7 +43,7 @@ import {
   upsertInboundEmail,
 } from "~/lib/store.server";
 import { saveImage } from "~/lib/images.server";
-import { INBOUND_EMAIL_ADDRESS, RESEND_API_KEY } from "~/lib/env";
+import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
 import type { ReceiptExpense } from "~/lib/types";
 
 /**
@@ -138,11 +139,13 @@ export interface InboundDeps {
     text?: string;
     image?: { buffer: Buffer; mime: string };
     categories?: string[];
+    reports?: string[];
   }): Promise<ExtractionResult>;
   extractFromImage(input: {
     buffer: Buffer;
     mime: string;
     categories?: string[];
+    reports?: string[];
   }): Promise<{
     result: ExtractionResult;
     text: string;
@@ -466,11 +469,60 @@ function replyHtml(title: string, paragraphs: string[]): string {
   });
 }
 
-function summaryLine(r: ExtractionResult, date: string): string {
-  const parts = [r.merchant, r.amount ? `$${r.amount}` : "", date].filter(
-    Boolean,
-  );
-  return parts.join(" · ");
+/** The fields extracted for a receipt, with a dash for any blank value. */
+function fieldRow(label: string, value: string): string {
+  return `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td><td style="padding:4px 0">${escapeHtml(value || "\u2014")}</td></tr>`;
+}
+
+/** Build the confirmation email for a receipt import (partial or complete). */
+function confirmationHtml(opts: {
+  expenseId: string;
+  date: string;
+  merchant: string;
+  amount: string;
+  category: string;
+  report: string;
+  notes: string;
+  missing: string[];
+}): string {
+  const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
+  const rows = [
+    fieldRow("Date", opts.date),
+    fieldRow("Merchant", opts.merchant),
+    fieldRow("Amount", opts.amount ? `$${opts.amount}` : ""),
+    fieldRow("Category", opts.category),
+    fieldRow("Report", opts.report),
+  ].join("");
+
+  const blocks: string[] = [
+    `<p style="margin:8px 0">Thanks for forwarding your receipt. Here's what we found:</p>`,
+    `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
+  ];
+
+  if (opts.missing.length > 0) {
+    blocks.push(
+      `<p style="margin:8px 0;color:#92400e">These fields couldn't be determined: <b>${opts.missing.map(escapeHtml).join(", ")}</b>.</p>`,
+    );
+  }
+  if (opts.notes) {
+    blocks.push(
+      `<p style="margin:8px 0;color:#6b7280;font-size:13px">${escapeHtml(opts.notes)}</p>`,
+    );
+  }
+  if (editUrl) {
+    blocks.push(
+      `<p style="margin:16px 0 0"><a href="${escapeHtml(editUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Edit this receipt</a></p>`,
+    );
+  }
+
+  return emailShell({
+    title:
+      opts.missing.length > 0
+        ? "Receipt imported \u2014 needs attention"
+        : "Receipt imported",
+    body: blocks.join(""),
+    footer: SIMPLE_FOOTER,
+  });
 }
 
 // --- Pipeline ----------------------------------------------------------------
@@ -635,9 +687,8 @@ export async function processInboundEvent(
     }
 
     // Extract receipt data.
-    const { categories, merchantCategories } = await readExtractionContext(
-      account.id,
-    );
+    const { categories, merchantCategories, merchantReports, reports } =
+      await readExtractionContext(account.id);
     let extraction: ExtractionResult;
     let receiptImage: Buffer | null = null;
     let imageMime: string;
@@ -653,6 +704,7 @@ export async function processInboundEvent(
         buffer,
         mime: contentType || "application/octet-stream",
         categories,
+        reports,
       });
       extraction = ocr.result;
       receiptImage = ocr.stored.buffer;
@@ -708,7 +760,11 @@ export async function processInboundEvent(
       }
       imageMime = "image/png";
       originalName = "email-receipt.png";
-      extraction = await deps.extractReceipt({ text: bodyText, categories });
+      extraction = await deps.extractReceipt({
+        text: bodyText,
+        categories,
+        reports,
+      });
       if (renderError) {
         console.error("[inbound] email receipt render failed:", renderError);
       }
@@ -752,6 +808,12 @@ export async function processInboundEvent(
       merchantCategories,
       categories,
     );
+    const report = resolveReport(
+      extraction.merchant,
+      extraction.report,
+      merchantReports,
+      reports,
+    );
     if (!category) missing.push("category");
 
     const now = new Date().toISOString();
@@ -759,7 +821,7 @@ export async function processInboundEvent(
       id: ulid(),
       type: "receipt",
       date: expenseDate,
-      report: "",
+      report,
       category,
       description: "",
       amount: extraction.amount,
@@ -776,24 +838,27 @@ export async function processInboundEvent(
     if (missing.length > 0) {
       await deps.sendReply({
         to: data.from,
-        subject: "Receipt imported — needs attention",
-        html: replyHtml("Receipt imported, but incomplete", [
-          `Imported <b>${escapeHtml(summaryLine(extraction, expenseDate))}</b> into your account, but these fields couldn't be determined: <b>${missing.map(escapeHtml).join(", ")}</b>.`,
-          "Open the expense in the app to fill them in.",
-          ...(extraction.notes
-            ? [`Note: ${escapeHtml(extraction.notes)}`]
-            : []),
-          ...(renderError
-            ? [
-                `Note: the email body could not be rendered as a receipt image (${escapeHtml(renderError)}). You can attach a photo in the app.`,
-              ]
-            : []),
-          ...(extraction.currency && extraction.currency !== "USD"
-            ? [
-                `Amount is in <b>${escapeHtml(extraction.currency)}</b> — the app assumes USD.`,
-              ]
-            : []),
-        ]),
+        subject: "Receipt imported \u2014 needs attention",
+        html: confirmationHtml({
+          expenseId: expense.id,
+          date: expenseDate,
+          merchant: extraction.merchant,
+          amount: extraction.amount,
+          category,
+          report,
+          notes: [
+            extraction.notes,
+            extraction.currency && extraction.currency !== "USD"
+              ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
+              : "",
+            renderError
+              ? `The email body could not be rendered as a receipt image (${renderError}). You can attach a photo in the app.`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+          missing,
+        }),
         inReplyTo: data.message_id,
         idempotencyKey: data.email_id,
       });
@@ -806,6 +871,31 @@ export async function processInboundEvent(
       });
       return { status: "partial", expenseId: expense.id, missing };
     }
+
+    // Successful import — send a confirmation email with the details.
+    await deps.sendReply({
+      to: data.from,
+      subject: "Receipt imported",
+      html: confirmationHtml({
+        expenseId: expense.id,
+        date: expenseDate,
+        merchant: extraction.merchant,
+        amount: extraction.amount,
+        category,
+        report,
+        notes: [
+          extraction.notes,
+          extraction.currency && extraction.currency !== "USD"
+            ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        missing: [],
+      }),
+      inReplyTo: data.message_id,
+      idempotencyKey: data.email_id,
+    });
 
     await upsertInboundEmail({
       emailId: data.email_id,

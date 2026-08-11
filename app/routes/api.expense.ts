@@ -10,7 +10,7 @@ import {
   extractFromImage,
   prepareUploadedReceipt,
 } from "~/lib/receipt-ocr.server";
-import { resolveCategory } from "~/lib/receipt-ai.server";
+import { resolveCategory, resolveReport } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
@@ -109,6 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
       merchant: ocr?.merchant ?? "",
       amount: ocr?.amount ?? "",
       category: ocr?.category ?? "",
+      report: ocr?.report ?? "",
     });
   }
 
@@ -135,6 +136,7 @@ export async function action({ request }: Route.ActionArgs) {
         merchant: ocr.merchant,
         amount: ocr.amount,
         category: ocr.category,
+        report: ocr.report,
       });
     } catch (err) {
       console.warn("[draft-ocr] receipt extraction failed:", err);
@@ -143,6 +145,7 @@ export async function action({ request }: Route.ActionArgs) {
         merchant: "",
         amount: "",
         category: "",
+        report: "",
       });
     }
   }
@@ -162,10 +165,20 @@ async function extractFromUploadedImage(
   accountId: string,
   buffer: Buffer,
   mime: string,
-): Promise<{ merchant: string; amount: string; category: string }> {
-  const { categories, merchantCategories } =
+): Promise<{
+  merchant: string;
+  amount: string;
+  category: string;
+  report: string;
+}> {
+  const { categories, merchantCategories, merchantReports, reports } =
     await readExtractionContext(accountId);
-  const { result } = await extractFromImage({ buffer, mime, categories });
+  const { result } = await extractFromImage({
+    buffer,
+    mime,
+    categories,
+    reports,
+  });
   return {
     merchant: result.merchant,
     amount: result.amount,
@@ -174,6 +187,12 @@ async function extractFromUploadedImage(
       result.category,
       merchantCategories,
       categories,
+    ),
+    report: resolveReport(
+      result.merchant,
+      result.report,
+      merchantReports,
+      reports,
     ),
   };
 }

@@ -22,6 +22,8 @@ interface ExtractionInput {
   image?: { buffer: Buffer; mime: string };
   /** Existing category names — the model picks the closest one or "". */
   categories?: string[];
+  /** Existing report names — the model picks the closest one or "". */
+  reports?: string[];
 }
 
 type Confidence = "high" | "medium" | "low";
@@ -32,6 +34,7 @@ export interface ExtractionResult {
   amount: string; // decimal string "42.50", "" when unknown
   currency: string; // ISO 4217
   category: string;
+  report: string;
   confidence: Confidence;
   notes: string;
 }
@@ -51,7 +54,8 @@ const SYSTEM_PROMPT = `You extract receipt data for a personal expense tracker. 
 - "merchant": the merchant or vendor name (the business the money was paid to), or "" if unknown
 - "amount": the total amount paid as a plain decimal string like "42.50" — no currency symbols, no commas, no text; "" if unknown
 - "currency": ISO 4217 currency code (e.g. "USD", "EUR"); "USD" if unclear
-- "category": a suggested category such as "Office Supplies", "Travel", "Meals", "Software", "Shipping", or "" if unclear
+- "category": a suggested category — only set this if you are at least 80% confident it is correct; otherwise ""
+- "report": a suggested report name — only set this if you are at least 95% confident it is correct; otherwise ""
 - "confidence": "high", "medium", or "low"
 - "notes": one short sentence about anything ambiguous or missing
 Only output valid JSON. If the content is not a receipt, set "is_receipt" to false and leave the other fields empty.`;
@@ -61,6 +65,11 @@ function buildUserPrompt(input: ExtractionInput): string {
   if (input.categories && input.categories.length > 0) {
     lines.push(
       `Existing categories — pick the closest match for "category" or use "": ${input.categories.join(", ")}`,
+    );
+  }
+  if (input.reports && input.reports.length > 0) {
+    lines.push(
+      `Existing reports — pick the closest match for "report" or use "": ${input.reports.join(", ")}`,
     );
   }
   lines.push("Receipt content:", (input.text ?? "").slice(0, 30_000));
@@ -191,6 +200,7 @@ export async function extractReceipt(
     amount,
     currency,
     category: stringField(parsed, "category").trim(),
+    report: stringField(parsed, "report").trim(),
     confidence: confidenceField(parsed["confidence"]),
     notes: stringField(parsed, "notes").trim(),
   };
@@ -204,6 +214,19 @@ export function matchCategory(suggested: string, existing: string[]): string {
   if (exact) return exact;
   const fuzzy = existing.find(
     (c) => c.toLowerCase().includes(s) || s.includes(c.toLowerCase()),
+  );
+  return fuzzy ?? "";
+}
+
+/** Best-matching existing report name, or "" when nothing matches. */
+/** @public */
+export function matchReport(suggested: string, existing: string[]): string {
+  const s = suggested.trim().toLowerCase();
+  if (!s) return "";
+  const exact = existing.find((r) => r.toLowerCase() === s);
+  if (exact) return exact;
+  const fuzzy = existing.find(
+    (r) => r.toLowerCase().includes(s) || s.includes(r.toLowerCase()),
   );
   return fuzzy ?? "";
 }
@@ -226,6 +249,25 @@ export function resolveCategory(
     if (prior) return prior;
   }
   return matchCategory(suggested, existing);
+}
+
+/**
+ * Pick the report for a new receipt. A previous expense for the same
+ * merchant (normalized name match, last 90 days) wins — the merchant was
+ * already filed to a report. Without a prior report, the model's suggestion
+ * is mapped onto an existing report name ("" when nothing fits).
+ */
+export function resolveReport(
+  merchant: string,
+  suggested: string,
+  merchantReports: ReadonlyMap<string, string>,
+  existing: string[],
+): string {
+  if (merchant.trim()) {
+    const prior = merchantReports.get(normalizeMerchant(merchant));
+    if (prior) return prior;
+  }
+  return matchReport(suggested, existing);
 }
 
 /** True when the hosted API rejected the request because it can't read images. */

@@ -50,6 +50,8 @@ export {
   deleteExpense,
   readPriorMerchants,
   readMerchantCategories,
+  /** @public */
+  readMerchantReports,
   readExtractionContext,
   findOpenReport,
   readReports,
