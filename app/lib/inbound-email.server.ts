@@ -510,7 +510,7 @@ function reportChangeLine(opts: {
   const plural = (n: number): string => (n === 1 ? "expense" : "expenses");
   const verb =
     Number(after.total) < Number(before.total) ? "decreased" : "increased";
-  return `<p style="margin-top:20px;color:#6b7280;font-size:12px">${escapeHtml(opts.report)} ${verb} from ${before.count} ${plural(before.count)} / ${formatAmount(before.total)} to ${after.count} ${plural(after.count)} / ${formatAmount(after.total)}</p>`;
+  return `<p style="margin-top:20px;font-size:14px;font-weight:600;color:#1f2937">FYI: ${escapeHtml(opts.report)} ${verb} from ${before.count} ${plural(before.count)} / ${formatAmount(before.total)} to ${after.count} ${plural(after.count)} / ${formatAmount(after.total)}</p>`;
 }
 
 /** Build the confirmation email for a receipt import (partial or complete). */

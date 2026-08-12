@@ -823,7 +823,7 @@ describe("processInboundEvent (body receipt)", () => {
     );
     const html = deps.sent[0]!.html;
     expect(html).toContain(
-      "Inbound Report increased from 2 expenses / $30.00 to 3 expenses / $35.00",
+      "FYI: Inbound Report increased from 2 expenses / $30.00 to 3 expenses / $35.00",
     );
 
     // Cleanup seeded rows.
@@ -898,7 +898,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(result).toMatchObject({ status: "created" });
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.html).toContain(
-      "Refund Report decreased from 2 expenses / $50.00 to 3 expenses / $30.00",
+      "FYI: Refund Report decreased from 2 expenses / $50.00 to 3 expenses / $30.00",
     );
 
     await testPrisma.expense.deleteMany({
