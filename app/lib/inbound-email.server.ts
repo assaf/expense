@@ -14,6 +14,7 @@ import {
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import { safeEqualBase64 } from "~/lib/passwords";
 import { isImage, isPdf } from "~/lib/file-types";
+import { formatAmount } from "~/lib/format";
 import {
   classifyReceiptAttachment,
   extractReceipt,
@@ -475,26 +476,66 @@ function fieldRow(label: string, value: string): string {
   return `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td><td style="padding:4px 0">${escapeHtml(value || "\u2014")}</td></tr>`;
 }
 
-/** Build the confirmation email for a receipt import (partial or complete). */
-function confirmationHtml(opts: {
-  expenseId: string;
-  date: string;
-  merchant: string;
+/**
+ * The reply subject: "Receipt accepted: <amount> \u2014 <category> \u2014
+ * <report>", each field only shown when known. Partial imports keep the
+ * needs-attention marker.
+ */
+function confirmationSubject(opts: {
   amount: string;
   category: string;
   report: string;
-  notes: string;
   missing: string[];
+}): string {
+  const parts: string[] = [];
+  if (opts.amount) parts.push(formatAmount(opts.amount));
+  if (opts.category) parts.push(opts.category);
+  if (opts.report) parts.push(opts.report);
+  let subject = "Receipt accepted";
+  if (parts.length > 0) subject += `: ${parts.join(" \u2014 ")}`;
+  if (opts.missing.length > 0) subject += " \u2014 needs attention";
+  return subject;
+}
+
+/** The footer line summarizing how a report changed, or "" without a report. */
+function reportChangeLine(opts: {
+  report: string;
   reportStats?: {
     before: { count: number; total: string };
     after: { count: number; total: string };
   };
 }): string {
+  if (!opts.reportStats) return "";
+  const { before, after } = opts.reportStats;
+  const plural = (n: number): string => (n === 1 ? "expense" : "expenses");
+  const verb =
+    Number(after.total) < Number(before.total) ? "decreased" : "increased";
+  return `<p style="margin-top:20px;color:#6b7280;font-size:12px">${escapeHtml(opts.report)} ${verb} from ${before.count} ${plural(before.count)} / ${formatAmount(before.total)} to ${after.count} ${plural(after.count)} / ${formatAmount(after.total)}</p>`;
+}
+
+/** Build the confirmation email for a receipt import (partial or complete). */
+function confirmationHtml(
+  opts: {
+    expenseId: string;
+    date: string;
+    merchant: string;
+    amount: string;
+    category: string;
+    report: string;
+    notes: string;
+    missing: string[];
+    reportStats?: {
+      before: { count: number; total: string };
+      after: { count: number; total: string };
+    };
+  },
+  subject: string,
+): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
   const rows = [
     fieldRow("Date", opts.date),
     fieldRow("Merchant", opts.merchant),
-    fieldRow("Amount", opts.amount ? `$${opts.amount}` : ""),
+    fieldRow("Amount", opts.amount ? formatAmount(opts.amount) : ""),
     fieldRow("Category", opts.category),
     fieldRow("Report", opts.report),
   ].join("");
@@ -503,23 +544,6 @@ function confirmationHtml(opts: {
     `<p style="margin:8px 0">Thanks for forwarding your receipt. Here's what we found:</p>`,
     `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
   ];
-
-  // Report aggregate: show the report's count + total before and after
-  // this receipt was added, so the sender can see at a glance how the
-  // report changed.
-  if (opts.reportStats) {
-    const { before, after } = opts.reportStats;
-    blocks.push(
-      `<div style="margin:12px 0;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">`,
-    );
-    blocks.push(
-      `<p style="margin:0;font-size:13px;color:#166534">` +
-        `<b>${escapeHtml(opts.report)}</b>` +
-        `<span style="color:#6b7280"> from ${before.count} / $${escapeHtml(before.total)} to ${after.count} / $${escapeHtml(after.total)}</span>` +
-        `</p>`,
-    );
-    blocks.push(`</div>`);
-  }
 
   if (opts.missing.length > 0) {
     blocks.push(
@@ -538,34 +562,35 @@ function confirmationHtml(opts: {
   }
 
   return emailShell({
-    title:
-      opts.missing.length > 0
-        ? "Receipt imported \u2014 needs attention"
-        : "Receipt imported",
+    title: subject,
     body: blocks.join(""),
-    footer: SIMPLE_FOOTER,
+    footer: `${reportChangeLine({ report: opts.report, reportStats: opts.reportStats })}${SIMPLE_FOOTER}`,
   });
 }
 
-/**
- * The reply subject: "Receipt accepted: <amount> <category> <report>" —
- * each field only appears when known. Partial imports keep the
- * needs-attention marker.
- */
-function confirmationSubject(opts: {
+/** The subject and HTML for a confirmation reply, so the subject line and
+ * the in-body heading always match. */
+function confirmationEmail(opts: {
+  expenseId: string;
+  date: string;
+  merchant: string;
   amount: string;
   category: string;
   report: string;
+  notes: string;
   missing: string[];
-}): string {
-  const parts: string[] = [];
-  if (opts.amount) parts.push(`$${opts.amount}`);
-  if (opts.category) parts.push(opts.category);
-  if (opts.report) parts.push(opts.report);
-  let subject = "Receipt accepted";
-  if (parts.length > 0) subject += `: ${parts.join(" ")}`;
-  if (opts.missing.length > 0) subject += " \u2014 needs attention";
-  return subject;
+  reportStats?: {
+    before: { count: number; total: string };
+    after: { count: number; total: string };
+  };
+}): { subject: string; html: string } {
+  const subject = confirmationSubject({
+    amount: opts.amount,
+    category: opts.category,
+    report: opts.report,
+    missing: opts.missing,
+  });
+  return { subject, html: confirmationHtml(opts, subject) };
 }
 
 // --- Pipeline ----------------------------------------------------------------
@@ -900,35 +925,31 @@ export async function processInboundEvent(
     }
 
     if (missing.length > 0) {
+      const confirmation = confirmationEmail({
+        expenseId: expense.id,
+        date: expenseDate,
+        merchant: extraction.merchant,
+        amount: extraction.amount,
+        category,
+        report,
+        notes: [
+          extraction.notes,
+          extraction.currency && extraction.currency !== "USD"
+            ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
+            : "",
+          renderError
+            ? `The email body could not be rendered as a receipt image (${renderError}). You can attach a photo in the app.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        missing,
+        reportStats,
+      });
       await deps.sendReply({
         to: data.from,
-        subject: confirmationSubject({
-          amount: extraction.amount,
-          category,
-          report,
-          missing,
-        }),
-        html: confirmationHtml({
-          expenseId: expense.id,
-          date: expenseDate,
-          merchant: extraction.merchant,
-          amount: extraction.amount,
-          category,
-          report,
-          notes: [
-            extraction.notes,
-            extraction.currency && extraction.currency !== "USD"
-              ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
-              : "",
-            renderError
-              ? `The email body could not be rendered as a receipt image (${renderError}). You can attach a photo in the app.`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-          missing,
-          reportStats,
-        }),
+        subject: confirmation.subject,
+        html: confirmation.html,
         inReplyTo: data.message_id,
         idempotencyKey: data.email_id,
       });
@@ -943,32 +964,28 @@ export async function processInboundEvent(
     }
 
     // Successful import — send a confirmation email with the details.
+    const confirmation = confirmationEmail({
+      expenseId: expense.id,
+      date: expenseDate,
+      merchant: extraction.merchant,
+      amount: extraction.amount,
+      category,
+      report,
+      notes: [
+        extraction.notes,
+        extraction.currency && extraction.currency !== "USD"
+          ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+      missing: [],
+      reportStats,
+    });
     await deps.sendReply({
       to: data.from,
-      subject: confirmationSubject({
-        amount: extraction.amount,
-        category,
-        report,
-        missing: [],
-      }),
-      html: confirmationHtml({
-        expenseId: expense.id,
-        date: expenseDate,
-        merchant: extraction.merchant,
-        amount: extraction.amount,
-        category,
-        report,
-        notes: [
-          extraction.notes,
-          extraction.currency && extraction.currency !== "USD"
-            ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
-        missing: [],
-        reportStats,
-      }),
+      subject: confirmation.subject,
+      html: confirmation.html,
       inReplyTo: data.message_id,
       idempotencyKey: data.email_id,
     });
