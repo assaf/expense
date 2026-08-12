@@ -257,7 +257,7 @@ export function resolveCategory(
  * already filed to a report. Without a prior report, the model's suggestion
  * is mapped onto an existing report name ("" when nothing fits).
  */
-export function resolveReport(
+function resolveReport(
   merchant: string,
   suggested: string,
   merchantReports: ReadonlyMap<string, string>,
@@ -268,6 +268,44 @@ export function resolveReport(
     if (prior) return prior;
   }
   return matchReport(suggested, existing);
+}
+
+/** The extraction context resolved by `readExtractionContext` (database.ts):
+ * the account's category/report names plus the prior merchant → category and
+ * merchant → report maps. */
+export interface ExtractionContext {
+  categories: string[];
+  reports: string[];
+  merchantCategories: ReadonlyMap<string, string>;
+  merchantReports: ReadonlyMap<string, string>;
+}
+
+/**
+ * Resolve a receipt's category + report from its extracted merchant and the
+ * model's suggestions against the account's extraction context. The
+ * merchant's prior category/report (normalized name match) wins; otherwise
+ * the suggestion is mapped onto an existing name ("" when nothing fits).
+ * Shared by the draft-image and inbound-email pipelines so the two can't
+ * drift apart.
+ */
+export function resolveExtraction(
+  context: ExtractionContext,
+  input: { merchant: string; category: string; report: string },
+): { category: string; report: string } {
+  return {
+    category: resolveCategory(
+      input.merchant,
+      input.category,
+      context.merchantCategories,
+      context.categories,
+    ),
+    report: resolveReport(
+      input.merchant,
+      input.report,
+      context.merchantReports,
+      context.reports,
+    ),
+  };
 }
 
 /** True when the hosted API rejected the request because it can't read images. */

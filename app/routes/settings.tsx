@@ -21,7 +21,6 @@ import { requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
 import { sendVerificationEmail } from "~/lib/sender-verification.server";
-import { readSettings, writeSettings } from "~/lib/settings.server";
 import {
   addCategory,
   addInboundSender,
@@ -33,11 +32,13 @@ import {
   readCategories,
   readCategoryCounts,
   readMileageRates,
+  readSettings,
   regenerateInviteCode,
   removeCategory,
   removeInboundSender,
   renameCategory,
   resendInboundSenderVerification,
+  writeSettings,
 } from "~/lib/store.server";
 import { countLabel, formatShortDate, todayDate } from "~/lib/format";
 import type { InboundSenderRecord } from "~/lib/types";

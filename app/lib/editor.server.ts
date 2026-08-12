@@ -1,12 +1,12 @@
-import { homeLocation, readSettings } from "~/lib/settings.server";
 import {
   readCategories,
   readMileageRates,
   readPriorMerchants,
   readReports,
+  readSettings,
 } from "~/lib/store.server";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
-import type { Expense, Location } from "~/lib/types";
+import { homeLocation, type Expense, type Location } from "~/lib/types";
 
 /**
  * Editor context shared by the edit loader (/expense/:id) and the create

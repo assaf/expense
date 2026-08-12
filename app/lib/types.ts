@@ -188,6 +188,15 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLng: null,
 };
 
+/** The configured home location (used as first/last stop of mileage routes). */
+export function homeLocation(settings: Settings): Location {
+  return {
+    address: settings.homeAddress,
+    lat: settings.homeLat,
+    lng: settings.homeLng,
+  };
+}
+
 /** One processed inbound email (idempotency + audit). */ export interface InboundEmailRecord {
   emailId: string;
   accountId: string;

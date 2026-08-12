@@ -1,5 +1,4 @@
 import { createHmac } from "node:crypto";
-import { ulid } from "ulid";
 import {
   FORWARD_MARKERS,
   renderEmailImage,
@@ -14,12 +13,11 @@ import {
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import { safeEqualBase64 } from "~/lib/passwords";
 import { isImage, isPdf } from "~/lib/file-types";
-import { formatAmount, formatLongDate } from "~/lib/format";
+import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
   classifyReceiptAttachment,
   extractReceipt,
-  resolveCategory,
-  resolveReport,
+  resolveExtraction,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -38,6 +36,7 @@ import type { ReplyInput } from "~/lib/reply.server";
 import {
   findPendingSenderRow,
   findVerifiedSenderAccount,
+  newExpenseShell,
   readExtractionContext,
   readInboundEmail,
   readReportSummary,
@@ -508,10 +507,9 @@ function reportChangeLine(opts: {
 }): string {
   if (!opts.reportStats) return "";
   const { before, after } = opts.reportStats;
-  const plural = (n: number): string => (n === 1 ? "expense" : "expenses");
   const verb =
     Number(after.total) < Number(before.total) ? "decreased" : "increased";
-  return `<p style="margin-top:20px;font-size:14px;font-weight:600;color:#1f2937">FYI: ${escapeHtml(opts.report)} ${verb} from ${before.count} ${plural(before.count)} / ${formatAmount(before.total)} to ${after.count} ${plural(after.count)} / ${formatAmount(after.total)}</p>`;
+  return `<p style="margin-top:20px;font-size:14px;font-weight:600;color:#1f2937">FYI: ${escapeHtml(opts.report)} ${verb} from ${countLabel(before.count)} / ${formatAmount(before.total)} to ${countLabel(after.count)} / ${formatAmount(after.total)}</p>`;
 }
 
 /** Build the confirmation email for a receipt import (partial or complete). */
@@ -534,7 +532,7 @@ function confirmationHtml(
 ): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
   const rows = [
-    fieldRow("Date", formatLongDate(opts.date)),
+    fieldRow("Date", formatDate(opts.date, { long: true })),
     fieldRow("Merchant", opts.merchant),
     fieldRow("Amount", opts.amount ? formatAmount(opts.amount) : ""),
     fieldRow("Category", opts.category),
@@ -756,8 +754,7 @@ export async function processInboundEvent(
     }
 
     // Extract receipt data.
-    const { categories, merchantCategories, merchantReports, reports } =
-      await readExtractionContext(account.id);
+    const context = await readExtractionContext(account.id);
     let extraction: ExtractionResult;
     let receiptImage: Buffer | null = null;
     let imageMime: string;
@@ -772,8 +769,8 @@ export async function processInboundEvent(
       const ocr = await deps.extractFromImage({
         buffer,
         mime: contentType || "application/octet-stream",
-        categories,
-        reports,
+        categories: context.categories,
+        reports: context.reports,
       });
       extraction = ocr.result;
       receiptImage = ocr.stored.buffer;
@@ -831,8 +828,8 @@ export async function processInboundEvent(
       originalName = "email-receipt.png";
       extraction = await deps.extractReceipt({
         text: bodyText,
-        categories,
-        reports,
+        categories: context.categories,
+        reports: context.reports,
       });
       if (renderError) {
         console.error("[inbound] email receipt render failed:", renderError);
@@ -871,24 +868,15 @@ export async function processInboundEvent(
       missing.push("receipt image");
     }
 
-    const category = resolveCategory(
-      extraction.merchant,
-      extraction.category,
-      merchantCategories,
-      categories,
-    );
-    const report = resolveReport(
-      extraction.merchant,
-      extraction.report,
-      merchantReports,
-      reports,
-    );
+    const { category, report } = resolveExtraction(context, {
+      merchant: extraction.merchant,
+      category: extraction.category,
+      report: extraction.report,
+    });
     if (!category) missing.push("category");
 
-    const now = new Date().toISOString();
     const expense: ReceiptExpense = {
-      id: ulid(),
-      type: "receipt",
+      ...(newExpenseShell("receipt") as ReceiptExpense),
       date: expenseDate,
       report,
       category,
@@ -898,9 +886,6 @@ export async function processInboundEvent(
       imageFile,
       imageMime,
       originalName,
-      reconciledAt: "",
-      createdAt: now,
-      updatedAt: now,
     };
     await upsertExpense(expense, account.id);
 

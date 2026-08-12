@@ -10,7 +10,7 @@ import {
   extractFromImage,
   prepareUploadedReceipt,
 } from "~/lib/receipt-ocr.server";
-import { resolveCategory, resolveReport } from "~/lib/receipt-ai.server";
+import { resolveExtraction } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
@@ -171,28 +171,22 @@ async function extractFromUploadedImage(
   category: string;
   report: string;
 }> {
-  const { categories, merchantCategories, merchantReports, reports } =
-    await readExtractionContext(accountId);
+  const context = await readExtractionContext(accountId);
   const { result } = await extractFromImage({
     buffer,
     mime,
-    categories,
-    reports,
+    categories: context.categories,
+    reports: context.reports,
+  });
+  const resolved = resolveExtraction(context, {
+    merchant: result.merchant,
+    category: result.category,
+    report: result.report,
   });
   return {
     merchant: result.merchant,
     amount: result.amount,
-    category: resolveCategory(
-      result.merchant,
-      result.category,
-      merchantCategories,
-      categories,
-    ),
-    report: resolveReport(
-      result.merchant,
-      result.report,
-      merchantReports,
-      reports,
-    ),
+    category: resolved.category,
+    report: resolved.report,
   };
 }

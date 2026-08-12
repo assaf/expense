@@ -44,29 +44,19 @@ export function normalizeAmount(amount: string): string {
   return d.toFixed(2);
 }
 
-/** Format a YYYY-MM-DD date as "Jan 2, 2026". Empty → "—". */
-export function formatDate(date: string): string {
+/** Format a YYYY-MM-DD date as "Jan 2, 2026" — or "August 12, 2026" when
+ * `long` is set. Empty → "—". */
+export function formatDate(
+  date: string,
+  opts: { long?: boolean } = {},
+): string {
   if (!date) return "—";
   const [y, m, d] = date.split("-").map(Number);
   if (!y || !m || !d) return date;
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.toLocaleDateString("en-US", {
     year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-/** Format a YYYY-MM-DD date as "August 12, 2026" (full month). Empty → "—". */
-export function formatLongDate(date: string): string {
-  if (!date) return "—";
-  const [y, m, d] = date.split("-").map(Number);
-  if (!y || !m || !d) return date;
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  return dt.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
+    month: opts.long ? "long" : "short",
     day: "numeric",
     timeZone: "UTC",
   });
