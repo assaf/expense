@@ -477,9 +477,9 @@ function fieldRow(label: string, value: string): string {
 }
 
 /**
- * The reply subject: "Receipt accepted: <amount> \u2014 <category> \u2014
- * <report>", each field only shown when known. Partial imports keep the
- * needs-attention marker.
+ * The reply subject: "👍 Receipt accepted: <amount> \u2014 <category> \u2014
+ * <report>", each field only shown when known. Partial imports get a ⚠️
+ * prefix and keep the needs-attention marker.
  */
 function confirmationSubject(opts: {
   amount: string;
@@ -491,7 +491,8 @@ function confirmationSubject(opts: {
   if (opts.amount) parts.push(formatAmount(opts.amount));
   if (opts.category) parts.push(opts.category);
   if (opts.report) parts.push(opts.report);
-  let subject = "Receipt accepted";
+  const emoji = opts.missing.length > 0 ? "⚠️ " : "👍 ";
+  let subject = `${emoji}Receipt accepted`;
   if (parts.length > 0) subject += `: ${parts.join(" \u2014 ")}`;
   if (opts.missing.length > 0) subject += " \u2014 needs attention";
   return subject;
@@ -623,7 +624,7 @@ export async function processInboundEvent(
     if (pending) {
       await deps.sendReply({
         to: data.from,
-        subject: "Receipt not imported — sender not verified yet",
+        subject: "⚠️ Receipt not imported — sender not verified yet",
         html: replyHtml("Receipt not imported — verify this address first", [
           `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} from <b>${escapeHtml(data.from)}</b>, but this address hasn't been verified yet, so receipts from it are not imported.`,
           "Check the inbox of that address for the verification email we sent, or open the app and go to <b>Settings → Receipts by email</b> to resend it. Then forward the receipt again.",
@@ -635,7 +636,7 @@ export async function processInboundEvent(
     }
     await deps.sendReply({
       to: data.from,
-      subject: "Receipt not imported — sender not recognized",
+      subject: "⚠️ Receipt not imported — sender not recognized",
       html: replyHtml("Receipt not imported", [
         `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} but the sender address <b>${escapeHtml(data.from)}</b> is not set up to import receipts.`,
         "Open the app, go to <b>Settings → Receipts by email</b>, and add this address to the list of allowed senders. Then forward the receipt again.",
@@ -670,7 +671,7 @@ export async function processInboundEvent(
     if (previousStatus !== "error") {
       await deps.sendReply({
         to: data.from,
-        subject: "Receipt not imported — something went wrong",
+        subject: "⚠️ Receipt not imported — something went wrong",
         html: replyHtml("Receipt not imported", paragraphs),
         inReplyTo: data.message_id,
         idempotencyKey: data.email_id,

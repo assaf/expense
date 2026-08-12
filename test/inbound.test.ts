@@ -755,7 +755,7 @@ describe("processInboundEvent (body receipt)", () => {
     // Successful imports send a confirmation email.
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
-      "Receipt accepted: $42.50 \u2014 Office Supplies",
+      "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
   });
 
@@ -819,7 +819,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(result).toMatchObject({ status: "created" });
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
-      "Receipt accepted: $5.00 \u2014 Office Supplies \u2014 Inbound Report",
+      "👍 Receipt accepted: $5.00 \u2014 Office Supplies \u2014 Inbound Report",
     );
     const html = deps.sent[0]!.html;
     expect(html).toContain(
@@ -989,7 +989,7 @@ describe("processInboundEvent (body receipt)", () => {
     // Successful imports send a confirmation email.
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
-      "Receipt accepted: $42.50 \u2014 Office Supplies",
+      "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
   });
 
