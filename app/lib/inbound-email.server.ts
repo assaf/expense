@@ -39,6 +39,7 @@ import {
   findVerifiedSenderAccount,
   readExtractionContext,
   readInboundEmail,
+  readReportSummary,
   upsertExpense,
   upsertInboundEmail,
 } from "~/lib/store.server";
@@ -484,6 +485,10 @@ function confirmationHtml(opts: {
   report: string;
   notes: string;
   missing: string[];
+  reportStats?: {
+    before: { count: number; total: string };
+    after: { count: number; total: string };
+  };
 }): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
   const rows = [
@@ -498,6 +503,23 @@ function confirmationHtml(opts: {
     `<p style="margin:8px 0">Thanks for forwarding your receipt. Here's what we found:</p>`,
     `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
   ];
+
+  // Report aggregate: show the report's count + total before and after
+  // this receipt was added, so the sender can see at a glance how the
+  // report changed.
+  if (opts.reportStats) {
+    const { before, after } = opts.reportStats;
+    blocks.push(
+      `<div style="margin:12px 0;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">`,
+    );
+    blocks.push(
+      `<p style="margin:0;font-size:13px;color:#166534">` +
+        `<b>${escapeHtml(opts.report)}</b>` +
+        `<span style="color:#6b7280"> from ${before.count} / $${escapeHtml(before.total)} to ${after.count} / $${escapeHtml(after.total)}</span>` +
+        `</p>`,
+    );
+    blocks.push(`</div>`);
+  }
 
   if (opts.missing.length > 0) {
     blocks.push(
@@ -835,6 +857,27 @@ export async function processInboundEvent(
     };
     await upsertExpense(expense, account.id);
 
+    // Compute report before/after stats when a report is assigned.
+    let reportStats:
+      | {
+          before: { count: number; total: string };
+          after: { count: number; total: string };
+        }
+      | undefined;
+    if (report) {
+      const summary = await readReportSummary(account.id, report);
+      if (summary) {
+        const amt = extraction.amount ? Number(extraction.amount) : 0;
+        reportStats = {
+          before: {
+            count: summary.count - 1,
+            total: (Number(summary.total) - amt).toFixed(2),
+          },
+          after: { count: summary.count, total: summary.total },
+        };
+      }
+    }
+
     if (missing.length > 0) {
       await deps.sendReply({
         to: data.from,
@@ -858,6 +901,7 @@ export async function processInboundEvent(
             .filter(Boolean)
             .join(" "),
           missing,
+          reportStats,
         }),
         inReplyTo: data.message_id,
         idempotencyKey: data.email_id,
@@ -892,6 +936,7 @@ export async function processInboundEvent(
           .filter(Boolean)
           .join(" "),
         missing: [],
+        reportStats,
       }),
       inReplyTo: data.message_id,
       idempotencyKey: data.email_id,

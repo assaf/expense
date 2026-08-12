@@ -60,6 +60,7 @@ export {
   reportExists,
   type ReportSummary,
   readReportSummaries,
+  readReportSummary,
   readCategoryCounts,
   addReport,
   removeReport,

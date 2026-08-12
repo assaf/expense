@@ -59,7 +59,7 @@ function fakeExtract(text?: string): ExtractionResult {
     amount: normalizeAmount(amount),
     currency: "USD",
     category: t.match(/CATEGORY:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
-    report: "",
+    report: t.match(/REPORT:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
     confidence: "high",
     notes: "",
   };
@@ -755,6 +755,78 @@ describe("processInboundEvent (body receipt)", () => {
     // Successful imports send a confirmation email.
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe("Receipt imported");
+  });
+
+  it("shows report before/after aggregates in the confirmation email", async () => {
+    // Seed a report with two known expenses so the before state is exact.
+    const reportName = "Inbound Report";
+    await testPrisma.report.create({
+      data: { name: reportName, accountId: TEST_ACCOUNT_ID },
+    });
+    const now = new Date().toISOString();
+    await testPrisma.expense.createMany({
+      data: [
+        {
+          id: "seed-a",
+          accountId: TEST_ACCOUNT_ID,
+          type: "receipt",
+          date: "2026-01-01",
+          report: reportName,
+          category: "Testing",
+          description: "",
+          amount: "10.00",
+          merchant: "A",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          distanceMiles: null,
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: "seed-b",
+          accountId: TEST_ACCOUNT_ID,
+          type: "receipt",
+          date: "2026-01-02",
+          report: reportName,
+          category: "Testing",
+          description: "",
+          amount: "20.00",
+          merchant: "B",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          distanceMiles: null,
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    });
+
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: "MERCHANT: Amazon\nTOTAL: 5.00\nCATEGORY: office supplies\nREPORT: Inbound Report",
+      });
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+
+    expect(result).toMatchObject({ status: "created" });
+    expect(deps.sent).toHaveLength(1);
+    const html = deps.sent[0]!.html;
+    expect(html).toContain("<b>Inbound Report</b>");
+    expect(html).toContain(" from 2 / $30.00 to 3 / $35.00");
+
+    // Cleanup seeded rows.
+    await testPrisma.expense.deleteMany({
+      where: { id: { in: ["seed-a", "seed-b"] } },
+    });
+    await testPrisma.report.deleteMany({
+      where: { name: reportName, accountId: TEST_ACCOUNT_ID },
+    });
   });
 
   it("reuses the category a previous expense for the same merchant used", async () => {

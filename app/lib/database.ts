@@ -1106,6 +1106,28 @@ export async function readReportSummaries(
   }));
 }
 
+/**
+ * Single-report aggregate (count + exact total) via a targeted Prisma query
+ * — cheaper than loading every expense. Returns null when the report has no
+ * expenses (or the report name is blank).
+ */
+export async function readReportSummary(
+  accountId: string,
+  reportName: string,
+): Promise<{ count: number; total: string } | null> {
+  if (!reportName) return null;
+  const agg = await prisma.expense.aggregate({
+    _count: true,
+    _sum: { amount: true },
+    where: { accountId, report: reportName },
+  });
+  if (agg._count === 0) return null;
+  return {
+    count: agg._count,
+    total: agg._sum.amount?.toFixed(2) ?? "0.00",
+  };
+}
+
 // --- Add/rename helpers shared by reports and categories -------------------
 
 /** The report/category model shape used by the add/rename helpers. */
