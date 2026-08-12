@@ -58,6 +58,20 @@ export function formatDate(date: string): string {
   });
 }
 
+/** Format a YYYY-MM-DD date as "August 12, 2026" (full month). Empty → "—". */
+export function formatLongDate(date: string): string {
+  if (!date) return "—";
+  const [y, m, d] = date.split("-").map(Number);
+  if (!y || !m || !d) return date;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /** Short "Aug 4, 2026" label for an ISO timestamp; "—" when unset. */
 export function formatShortDate(iso: string | null): string {
   if (!iso) return "—";

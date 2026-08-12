@@ -14,7 +14,7 @@ import {
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import { safeEqualBase64 } from "~/lib/passwords";
 import { isImage, isPdf } from "~/lib/file-types";
-import { formatAmount } from "~/lib/format";
+import { formatAmount, formatLongDate } from "~/lib/format";
 import {
   classifyReceiptAttachment,
   extractReceipt,
@@ -533,7 +533,7 @@ function confirmationHtml(
 ): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
   const rows = [
-    fieldRow("Date", opts.date),
+    fieldRow("Date", formatLongDate(opts.date)),
     fieldRow("Merchant", opts.merchant),
     fieldRow("Amount", opts.amount ? formatAmount(opts.amount) : ""),
     fieldRow("Category", opts.category),
