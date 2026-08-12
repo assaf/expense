@@ -39,7 +39,7 @@ import {
   renameCategory,
   resendInboundSenderVerification,
   writeSettings,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import { countLabel, formatShortDate, todayDate } from "~/lib/format";
 import type { InboundSenderRecord } from "~/lib/types";
 import {

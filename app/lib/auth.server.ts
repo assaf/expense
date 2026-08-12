@@ -24,7 +24,7 @@ import {
   setUserVerificationToken,
   type ReplaceUnverifiedOutcome,
   updateUserPasswordHash,
-} from "./store.server";
+} from "./database";
 import { isEmail } from "./validation";
 import type { User } from "./types";
 

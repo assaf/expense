@@ -7,7 +7,8 @@ import {
   saveExpenseFromForm,
 } from "~/lib/expense-save.server";
 import { todayDate } from "~/lib/format";
-import { newExpenseShell, readDuplicateCandidates } from "~/lib/store.server";
+import { readDuplicateCandidates } from "~/lib/database";
+import { newExpenseShell } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.new";
 

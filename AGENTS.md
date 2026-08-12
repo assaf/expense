@@ -4,7 +4,7 @@ Personal expense tracker (receipts + mileage). React Router v8 framework mode,
 Tailwind v4. Storage is Postgres-only (required), accessed through **Prisma**
 (schema in `prisma/schema.prisma` — the single source of truth; client in
 `app/lib/prisma.server.ts`). Domain reads/writes go through
-`app/lib/store.server.ts` → `app/lib/database.ts`; receipt images via
+`app/lib/database.ts`; receipt images via
 `app/lib/images.server.ts` (Postgres BYTEA — prod and local both; no separate
 storage service). There is **no runtime DDL** — schema changes go through Prisma
 (`prisma migrate dev` locally, `pnpm db:push` on deploy). Dev/tests run on local
@@ -153,7 +153,7 @@ production env var (for the deploy script) and as a GitHub Actions secret.
   Required,
   everywhere.
   Never read state on the client; all reads/writes go through
-  `app/lib/store.server.ts` → `app/lib/database.ts` (Prisma queries, scoped
+  `app/lib/database.ts` (Prisma queries, scoped
   by `accountId`). `prisma/generated` is the generated client (gitignored,
   produced by `pnpm build:prisma`).
 - **MCP (agents)**: `/mcp` (Streamable HTTP) exposes the store to any MCP
@@ -397,8 +397,7 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `prisma/migrations/0_init`              | Baseline migration (fresh DBs via `prisma migrate`).                                                                                                                                                                                                                                                                                                                                                                          |
 | `scripts/clone`                         | Clone prod (Supabase) DB into the local dev DB: dump `DATABASE_URL_UNPOOLED` to `prisma/backup.sql`, drop/recreate the local schema, restore, then sync the local schema to the latest (`prisma db push`) and mark the dump's missing migrations as applied — prod applies schema via db push, which never records migrations, so a raw dump would report them pending and the next `migrate dev` would try to re-apply them. |
 | `scripts/import-expensify.ts`           | API-driven Expensify import: effective SmartScan fields + receipt images (needs `EXPENSIFY_PARTNER_USER_ID`/`_SECRET`; receipts are login-gated — `--cookie` or `--receipts-dir`).                                                                                                                                                                                                                                            |
-| `app/lib/store.server.ts`               | Storage entry point (Postgres only).                                                                                                                                                                                                                                                                                                                                                                                          |
-| `app/lib/database.ts`                   | Postgres backend (accounts/users + scoped rows).                                                                                                                                                                                                                                                                                                                                                                              |
+| `app/lib/database.ts`                   | Postgres backend and storage entry point (accounts/users + scoped rows).                                                                                                                                                                                                                                                                                                                                                      |
 | `app/lib/maps.server.ts`                | Geocode + route (Nominatim/OSRM).                                                                                                                                                                                                                                                                                                                                                                                             |
 | `app/lib/route-map.server.ts`           | Real route map for report PDFs, same look as the editor: Carto Positron light tiles fetched server-side (cached, descriptive User-Agent), white-cased blue route + dashed gray return + numbered stop bubbles, rendered with resvg + bundled JetBrains Mono. Falls back to a schematic drawing when the tile server is unreachable; `tileFetcher` injectable for offline tests.                                               |
 | `app/lib/mileage-rates.ts`              | IRS rate lookup + amount math: `mileageRateFor(entries, date, type)`, `currentMileageRates(entries, date)`, `mileageAmount(distance, rate)` (exact half-up cents), `formatRate`, `MILEAGE_TYPES`. Pure — shared by the editor (client) and server.                                                                                                                                                                            |

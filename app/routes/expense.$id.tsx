@@ -14,7 +14,7 @@ import {
   readExpense,
   readNeighborIds,
   readReports,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 

@@ -1,14 +1,10 @@
 import { normalizeAmount } from "~/lib/format";
 import { renameImageToConvention } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
-import {
-  addReport,
-  findOpenReport,
-  newExpenseShell,
-  upsertExpense,
-} from "~/lib/store.server";
+import { addReport, findOpenReport, upsertExpense } from "~/lib/database";
 import {
   EMPTY_ROUTE,
+  newExpenseShell,
   parseLocations,
   parseRoute,
   type Expense,

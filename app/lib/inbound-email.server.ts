@@ -36,16 +36,15 @@ import type { ReplyInput } from "~/lib/reply.server";
 import {
   findPendingSenderRow,
   findVerifiedSenderAccount,
-  newExpenseShell,
   readExtractionContext,
   readInboundEmail,
   readReportSummary,
   upsertExpense,
   upsertInboundEmail,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import { saveImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
-import type { ReceiptExpense } from "~/lib/types";
+import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 
 /**
  * Inbound email pipeline (receipts by email).

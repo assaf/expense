@@ -3,7 +3,7 @@ import { VerificationResultPage } from "~/components/VerificationResultPage";
 import {
   verifyUserEmailAddress,
   type VerifyEmailOutcome,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import type { Route } from "./+types/verify-email";
 
 /**

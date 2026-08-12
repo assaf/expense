@@ -5,7 +5,7 @@ import {
   saveImage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import { readExtractionContext } from "~/lib/store.server";
+import { readExtractionContext } from "~/lib/database";
 import {
   extractFromImage,
   prepareUploadedReceipt,

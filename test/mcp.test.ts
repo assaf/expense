@@ -11,7 +11,7 @@ import {
   deleteOAuthClient,
   registerOAuthClient,
   revokeOAuthToken,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";

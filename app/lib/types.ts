@@ -6,6 +6,8 @@
  * in-memory shape after parsing.
  */
 
+import { ulid } from "ulid";
+
 type ExpenseType = "receipt" | "mileage";
 
 /** IRS reimbursement type for a mileage expense — determines the rate
@@ -195,6 +197,42 @@ export function homeLocation(settings: Settings): Location {
     lat: settings.homeLat,
     lng: settings.homeLng,
   };
+}
+
+/** Build a new expense shell with sensible defaults. */
+export function newExpenseShell(type: Expense["type"]): Expense {
+  const now = new Date().toISOString();
+  const base = {
+    id: ulid(),
+    date: "",
+    report: "",
+    category: "",
+    description: "",
+    amount: "",
+    reconciledAt: "",
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (type === "receipt") {
+    const receipt: ReceiptExpense = {
+      ...base,
+      type: "receipt",
+      merchant: "",
+      imageFile: "",
+      imageMime: "",
+      originalName: "",
+    };
+    return receipt;
+  }
+  const mileage: MileageExpense = {
+    ...base,
+    type: "mileage",
+    mileageType: "business",
+    locations: [],
+    distanceMiles: "",
+    route: EMPTY_ROUTE,
+  };
+  return mileage;
 }
 
 /** One processed inbound email (idempotency + audit). */ export interface InboundEmailRecord {

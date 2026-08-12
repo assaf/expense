@@ -7,7 +7,7 @@ import {
 } from "~/lib/images.server";
 import { prepareUploadedReceipt } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
-import { readExpense, upsertExpense } from "~/lib/store.server";
+import { readExpense, upsertExpense } from "~/lib/database";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id.image";
 

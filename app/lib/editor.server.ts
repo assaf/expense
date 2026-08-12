@@ -4,7 +4,7 @@ import {
   readPriorMerchants,
   readReports,
   readSettings,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import { homeLocation, type Expense, type Location } from "~/lib/types";
 

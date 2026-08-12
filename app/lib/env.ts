@@ -78,11 +78,6 @@ export const RECEIPT_OCR_MODE = (env.RECEIPT_OCR_MODE || "auto") as
   | "deepseek"
   | "tesseract";
 
-/** True when Postgres storage is configured (required — the app fails fast without it). */
-export function hasDatabase(): boolean {
-  return Boolean(DATABASE_URL);
-}
-
 /**
  * Secret gating GET /api/smoke (post-deploy PDF+OCR health check). Requests
  * must send it in the `x-smoke-secret` header; when unset the route is

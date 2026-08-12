@@ -7,7 +7,7 @@ import {
   findOAuthClient,
   hasOAuthConsent,
   saveOAuthConsent,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import { issueAuthorizationCode, PKCE_METHOD } from "~/lib/oauth.server";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/oauth.authorize";

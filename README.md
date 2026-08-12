@@ -146,8 +146,8 @@ Postgres BYTEA (`image_blobs`) in prod and dev — no separate storage service.
 | `categories` / `settings` / |                                |
 | `mileage` / `image_blobs`   |                                |
 
-All reads/writes go through `app/lib/store.server.ts` (→
-`app/lib/database.ts`, Prisma queries scoped by `accountId`); image storage
+All reads/writes go through `app/lib/database.ts`
+(Prisma queries scoped by `accountId`); image storage
 is behind `app/lib/images.server.ts` (Prisma `imageBlob`).
 Keys are `images/{accountId}/...` pathnames on every backend — namespaced
 per account so two accounts can never collide on the same filename.

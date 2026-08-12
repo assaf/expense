@@ -28,11 +28,10 @@ import {
   addReport,
   setReportClosed,
   upsertExpense,
-  newExpenseShell,
   readBootstrapUser,
   registerOAuthClient,
   deleteOAuthClient,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import {
   normalizeAmount,
   sortExpenses,
@@ -51,12 +50,13 @@ import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
-import type {
-  Expense,
-  Location,
-  MileageExpense,
-  MileageType,
-  ReceiptExpense,
+import {
+  newExpenseShell,
+  type Expense,
+  type Location,
+  type MileageExpense,
+  type MileageType,
+  type ReceiptExpense,
 } from "~/lib/types";
 
 /**

@@ -7,7 +7,7 @@ import {
   findOAuthClient,
   findOAuthToken,
   revokeOAuthToken,
-} from "~/lib/store.server";
+} from "~/lib/database";
 import type { OAuthClientRecord, OAuthTokenRecord } from "~/lib/types";
 
 /** Re-exported so the token/code routes hash secrets and compare values

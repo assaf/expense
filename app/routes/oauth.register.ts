@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { buildRegisteredClient } from "~/lib/oauth.server";
-import { registerOAuthClient } from "~/lib/store.server";
+import { registerOAuthClient } from "~/lib/database";
 import type { Route } from "./+types/oauth.register";
 
 /**
