@@ -754,7 +754,9 @@ describe("processInboundEvent (body receipt)", () => {
     usedExpenseIds.push(expenseIdOf(result));
     // Successful imports send a confirmation email.
     expect(deps.sent).toHaveLength(1);
-    expect(deps.sent[0]!.subject).toBe("Receipt imported");
+    expect(deps.sent[0]!.subject).toBe(
+      "Receipt accepted: $42.50 Office Supplies",
+    );
   });
 
   it("shows report before/after aggregates in the confirmation email", async () => {
@@ -908,7 +910,9 @@ describe("processInboundEvent (body receipt)", () => {
     expect(textSheetCalls).toBe(1);
     // Successful imports send a confirmation email.
     expect(deps.sent).toHaveLength(1);
-    expect(deps.sent[0]!.subject).toBe("Receipt imported");
+    expect(deps.sent[0]!.subject).toBe(
+      "Receipt accepted: $42.50 Office Supplies",
+    );
   });
 
   it("renders text-only emails through the plain-text renderer", async () => {

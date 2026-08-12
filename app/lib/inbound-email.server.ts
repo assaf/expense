@@ -547,6 +547,27 @@ function confirmationHtml(opts: {
   });
 }
 
+/**
+ * The reply subject: "Receipt accepted: <amount> <category> <report>" —
+ * each field only appears when known. Partial imports keep the
+ * needs-attention marker.
+ */
+function confirmationSubject(opts: {
+  amount: string;
+  category: string;
+  report: string;
+  missing: string[];
+}): string {
+  const parts: string[] = [];
+  if (opts.amount) parts.push(`$${opts.amount}`);
+  if (opts.category) parts.push(opts.category);
+  if (opts.report) parts.push(opts.report);
+  let subject = "Receipt accepted";
+  if (parts.length > 0) subject += `: ${parts.join(" ")}`;
+  if (opts.missing.length > 0) subject += " \u2014 needs attention";
+  return subject;
+}
+
 // --- Pipeline ----------------------------------------------------------------
 
 /**
@@ -881,7 +902,12 @@ export async function processInboundEvent(
     if (missing.length > 0) {
       await deps.sendReply({
         to: data.from,
-        subject: "Receipt imported \u2014 needs attention",
+        subject: confirmationSubject({
+          amount: extraction.amount,
+          category,
+          report,
+          missing,
+        }),
         html: confirmationHtml({
           expenseId: expense.id,
           date: expenseDate,
@@ -919,7 +945,12 @@ export async function processInboundEvent(
     // Successful import — send a confirmation email with the details.
     await deps.sendReply({
       to: data.from,
-      subject: "Receipt imported",
+      subject: confirmationSubject({
+        amount: extraction.amount,
+        category,
+        report,
+        missing: [],
+      }),
       html: confirmationHtml({
         expenseId: expense.id,
         date: expenseDate,
