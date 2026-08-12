@@ -334,7 +334,7 @@ export async function readAccount(id: string): Promise<Account | undefined> {
 }
 
 /** One member of an account, as shown in Settings — never secrets. */
-export interface AccountMember {
+interface AccountMember {
   email: string;
   /** When the emailed verification link was clicked; null = can't sign in yet. */
   emailVerifiedAt: string | null;
@@ -922,7 +922,7 @@ export async function readMerchantCategories(
  * a known merchant inherits both category and report.
  */
 /** @public */
-export async function readMerchantReports(
+async function readMerchantReports(
   accountId: string,
 ): Promise<Map<string, string>> {
   const rows = await prisma.expense.findMany({
@@ -997,22 +997,6 @@ export async function readReports(accountId: string): Promise<Report[]> {
   const reports = rows.map((r) => ({ name: r.name, closed: r.closed }));
   reportsCache.set(accountId, reports);
   return reports;
-}
-
-/**
- * Number of expenses in each report (reports are referenced by name — no
- * foreign key). Only reports that actually have expenses appear in the map.
- */
-/** @public */
-export async function readReportCounts(
-  accountId: string,
-): Promise<Map<string, number>> {
-  const groups = await prisma.expense.groupBy({
-    by: ["report"],
-    where: { accountId, report: { not: "" } },
-    _count: { _all: true },
-  });
-  return new Map(groups.map((g) => [g.report, g._count._all]));
 }
 
 /**
@@ -2172,7 +2156,7 @@ function rowToExpense(row: {
 // --- Reconciliation --------------------------------------------------------
 
 /** Everything needed to create a draft reconciliation run. */
-export interface CreateReconciliationRunInput {
+interface CreateReconciliationRunInput {
   id: string;
   fileName: string;
   fileHash: string;
@@ -2335,7 +2319,7 @@ export async function discardReconciliationRun(
   return res.count > 0;
 }
 
-export interface CompleteReconciliationResult {
+interface CompleteReconciliationResult {
   matched: number;
   created: number;
   errors: string[];

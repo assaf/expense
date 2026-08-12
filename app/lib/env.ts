@@ -8,6 +8,34 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 
 const env = process.env;
 
+// In tests, outbound network is forbidden: the suite must mock every
+// external service (DeepSeek, Resend, OSRM/Nominatim, map tiles) rather than
+// call it live. Localhost requests — the spawned test server and the MCP
+// endpoint — still pass. Dev and production are unaffected. Guarding here
+// (not in the test setup) reaches the spawned app server too, whose browser
+// tests otherwise share the process env and would hit live services.
+if (env.NODE_ENV === "test") {
+  const realFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = ((
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    const host = new URL(url, "http://localhost").hostname;
+    if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
+      throw new Error(
+        `Blocked live network call in tests: ${url}. Mock this dependency instead.`,
+      );
+    }
+    return realFetch(input, init);
+  }) as typeof fetch;
+}
+
 /** Postgres connection string. Required — the app fails fast without it. */
 export const DATABASE_URL = env.DATABASE_URL ?? "";
 

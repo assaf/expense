@@ -21,6 +21,12 @@ export async function launchServer(): Promise<string> {
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
     DATABASE_URL: "postgres://assaf@localhost/expense_test",
+    // Never call live services from the test server — the suite mocks them.
+    // Empty values also win over `loadEnvFile(".env")`, which never
+    // overrides existing vars, so a developer's real keys can't leak in.
+    DEEPSEEK_API_KEY: "",
+    RESEND_API_KEY: "",
+    INBOUND_EMAIL_WEBHOOK_SECRET: "",
   };
 
   serverProcess = spawn("pnpm", ["start"], {
