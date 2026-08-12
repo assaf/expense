@@ -70,16 +70,9 @@ export async function sendResendEmail(
 }
 
 /** Send a reply email back to the person who forwarded a receipt. Used for
- * confirmation replies (success + partial) and failure replies. The subject
- * gets a "Re:" prefix so the reply threads with the forwarded email in the
- * client (the In-Reply-To/References headers do the actual grouping). */
+ * confirmation replies (success + partial) and failure replies. */
 export interface ReplyInput extends ResendEmailInput {}
 
 export async function sendReplyEmail(input: ReplyInput): Promise<void> {
-  await sendResendEmail({
-    ...input,
-    subject: input.subject.startsWith("Re:")
-      ? input.subject
-      : `Re: ${input.subject}`,
-  });
+  await sendResendEmail(input);
 }
