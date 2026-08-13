@@ -1,12 +1,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "~/lib/reconcile.server";
+import { parse as parseYaml } from "yaml";
 import { htmlToText } from "~/lib/receipt-render.server";
 
 /**
  * HTML email fixtures. Each `.html` file in test/fixtures/emails/ is a
  * receipt email with no PDF/image attachment (the body is the receipt),
- * paired with a `<name>.csv` carrying the ground truth: `date,amount,
+ * paired with a `<name>.yaml` carrying the ground truth: `date,amount,
  * merchant,text` — the receipt's date, total, and merchant name plus the
  * full extracted text. This test reduces each email body to text with the
  * same `htmlToText` the inbound pipeline uses, and asserts it recovers the
@@ -42,7 +42,14 @@ const PII_NUMBERS = [
   /867530/,
 ];
 
-/** Email source files: everything ending in .html (the companion CSV shares
+interface Fixture {
+  date: string;
+  amount: string;
+  merchant: string;
+  text: string;
+}
+
+/** Email source files: everything ending in .html (the companion YAML shares
  * the basename). */
 const emails = readdirSync(FIXTURES_DIR)
   .filter((f) => f.endsWith(".html"))
@@ -62,14 +69,9 @@ describe("HTML email fixtures parse to their expected text", () => {
   for (const file of emails) {
     it(`extracts the text of ${file}`, () => {
       const basename = file.replace(/\.html$/, "");
-      const rows = parseCsv(
-        readFileSync(`${FIXTURES_DIR}/${basename}.csv`, "utf8"),
-      );
-      const data = rows[1]!;
-      const date = data[0]!.trim();
-      const amount = data[1]!.trim();
-      const merchant = data[2]!.trim();
-      const text = (data[3] ?? "").trim();
+      const { date, amount, merchant, text } = parseYaml(
+        readFileSync(`${FIXTURES_DIR}/${basename}.yaml`, "utf8"),
+      ) as Fixture;
 
       const norm = normalize(
         htmlToText(readFileSync(`${FIXTURES_DIR}/${file}`, "utf8")),

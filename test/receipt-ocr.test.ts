@@ -1,12 +1,12 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "~/lib/reconcile.server";
+import { parse as parseYaml } from "yaml";
 import { ocrImage } from "~/lib/receipt-ocr.server";
 
 /**
  * Receipt-image OCR fixtures. Each PNG in test/fixtures/images/ is a receipt
  * text sheet rendered by `renderReceiptImage` (the app's own email-receipt
- * renderer), paired with a `<name>.csv` carrying the receipt's ground truth:
+ * renderer), paired with a `<name>.yaml` carrying the receipt's ground truth:
  * `date,amount,merchant,text` — the printed date, total, and merchant name
  * plus the full receipt text. This test OCRs each image with the real
  * tesseract pipeline (`ocrImage`) and asserts the recognized text recovers
@@ -21,11 +21,18 @@ import { ocrImage } from "~/lib/receipt-ocr.server";
 
 const FIXTURES_DIR = "test/fixtures/images";
 
+interface Fixture {
+  date: string;
+  amount: string;
+  merchant: string;
+  text: string;
+}
+
 function normalize(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-/** Receipt image files: everything ending in .png (the companion CSV shares
+/** Receipt image files: everything ending in .png (the companion YAML shares
  * the basename). */
 const images = readdirSync(FIXTURES_DIR)
   .filter((f) => f.endsWith(".png"))
@@ -35,14 +42,9 @@ describe.skipIf(!process.env.RUN_OCR_TESTS)("receipt image OCR", () => {
   for (const file of images) {
     it(`OCRs ${file}`, async () => {
       const basename = file.replace(/\.png$/, "");
-      const rows = parseCsv(
-        readFileSync(`${FIXTURES_DIR}/${basename}.csv`, "utf8"),
-      );
-      const data = rows[1]!;
-      const date = data[0]!.trim();
-      const amount = data[1]!.trim();
-      const merchant = data[2]!.trim();
-      const text = (data[3] ?? "").trim();
+      const { date, amount, merchant, text } = parseYaml(
+        readFileSync(`${FIXTURES_DIR}/${basename}.yaml`, "utf8"),
+      ) as Fixture;
 
       const norm = normalize(
         await ocrImage(readFileSync(`${FIXTURES_DIR}/${file}`)),

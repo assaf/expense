@@ -1,11 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "~/lib/reconcile.server";
+import { parse as parseYaml } from "yaml";
 import { extractPdfText } from "~/lib/receipt-ocr.server";
 
 /**
  * PDF receipt fixtures. Each PDF in test/fixtures/pdf/ is a receipt with a
- * text layer, paired with a `<name>.csv` carrying the receipt's ground truth:
+ * text layer, paired with a `<name>.yaml` carrying the receipt's ground truth:
  * `date,amount,merchant,text` — the printed date, total, and merchant name
  * plus the full extracted text. This test extracts each PDF's text layer with
  * the real pdf.js pipeline (`extractPdfText`, the same function the receipt
@@ -32,11 +32,18 @@ const PII_OTHER = ["@labnotes", "1050 flower", "1050 south flower", "apt 503"];
 const PII_ZIP = /\b(90015|94606)\b/;
 const PII_CARD = /\b1476\b/;
 
+interface Fixture {
+  date: string;
+  amount: string;
+  merchant: string;
+  text: string;
+}
+
 function normalize(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-/** PDF receipt files: everything ending in .pdf (the companion CSV shares the
+/** PDF receipt files: everything ending in .pdf (the companion YAML shares the
  * basename). */
 const pdfs = readdirSync(FIXTURES_DIR)
   .filter((f) => f.endsWith(".pdf"))
@@ -46,14 +53,9 @@ describe("PDF receipt fixtures parse to their expected text", () => {
   for (const file of pdfs) {
     it(`extracts the text of ${file}`, async () => {
       const basename = file.replace(/\.pdf$/, "");
-      const rows = parseCsv(
-        readFileSync(`${FIXTURES_DIR}/${basename}.csv`, "utf8"),
-      );
-      const data = rows[1]!;
-      const date = data[0]!.trim();
-      const amount = data[1]!.trim();
-      const merchant = data[2]!.trim();
-      const text = (data[3] ?? "").trim();
+      const { date, amount, merchant, text } = parseYaml(
+        readFileSync(`${FIXTURES_DIR}/${basename}.yaml`, "utf8"),
+      ) as Fixture;
 
       const norm = normalize(
         await extractPdfText(readFileSync(`${FIXTURES_DIR}/${file}`)),
