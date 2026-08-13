@@ -141,7 +141,7 @@ def _parse(data, pdf):
     return ContentStream(wrap, pdf)
 
 
-def redact_pdf(src_path: str, dst_path: str) -> dict:
+def redact_pdf(src_path: str, dst_path: str, is_pii=_is_pii) -> dict:
     reader = PdfReader(src_path)
     if reader.is_encrypted:
         # Owner-password-only statements (Chase) open with an empty password;
@@ -187,7 +187,7 @@ def redact_pdf(src_path: str, dst_path: str) -> dict:
 
         page.extract_text(visitor_operand_before=vob, visitor_text=vt)
 
-        flagged = [(t, x, y, fs) for (t, x, y, fs) in runs if _is_pii(t)]
+        flagged = [(t, x, y, fs) for (t, x, y, fs) in runs if is_pii(t)]
         stats["runs"] += len(runs)
         stats["flagged"] += len(flagged)
 
