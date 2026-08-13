@@ -16,6 +16,7 @@ export default defineConfig((config) => ({
       "node_modules/**",
       "data-test/**",
       "prisma/generated/**",
+      "test/fixtures/**",
     ],
     printWidth: 80,
     tabWidth: 2,
@@ -30,6 +31,7 @@ export default defineConfig((config) => ({
       "node_modules/**",
       "data-test/**",
       "prisma/generated/**",
+      "test/fixtures/**",
       // tsgolint overflows on vite config generics; tsc checks it cleanly.
       "vite.config.ts",
     ],
