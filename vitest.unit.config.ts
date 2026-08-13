@@ -19,6 +19,7 @@ export default defineConfig({
       "test/default-categories.test.ts",
       "test/escape.test.ts",
       "test/file-types.test.ts",
+      "test/excel.test.ts",
       "test/validation.test.ts",
       "test/statements.test.ts",
       "test/receipt-pdf.test.ts",

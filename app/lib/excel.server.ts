@@ -10,9 +10,10 @@ import { load } from "cheerio";
  * numbers, inline strings), placed by their column reference so sparse
  * rows come out right, with trailing empties trimmed.
  *
- * Excel date cells (serial numbers with a date number-format) are not
- * converted — bank statement exports use text dates; the numbers would
- * surface as unparseable and be reported as skipped lines.
+ * Excel date cells (serial numbers with a date number-format) are
+ * converted to ISO YYYY-MM-DD. "Date-ness" lives in the cell's style:
+ * cell → `s` attribute → styles.xml cellXfs[numFmtId] → a built-in date
+ * ID (14–22, 45–47) or a custom format code with y/m/d/h/s tokens.
  *
  * Uses only libraries the app already ships (fflate for the ZIP, cheerio
  * for the XML) — no new dependency.
@@ -55,8 +56,69 @@ function sharedStrings(zip: Record<string, Uint8Array>): string[] {
   return out;
 }
 
+/**
+ * styles.xml → the set of cellXfs indices whose number format is a date.
+ * A cell's `s` attribute indexes into cellXfs; that xf's numFmtId is a
+ * built-in date/time ID (14–22, 45–47) or a custom format code whose
+ * tokens contain y/m/d/h/s (after stripping quoted literals, bracket
+ * sections like [$‑409], and backslash escapes).
+ */
+function dateStyles(zip: Record<string, Uint8Array>): Set<number> {
+  const out = new Set<number>();
+  const xml = decode(zip["xl/styles.xml"]);
+  if (!xml) return out;
+  const $ = load(xml, { xmlMode: true });
+
+  const custom = new Map<number, string>();
+  $("numFmts numFmt").each((_, el) => {
+    const id = Number($(el).attr("numFmtId"));
+    const code = $(el).attr("formatCode") ?? "";
+    if (Number.isInteger(id) && id > 163) custom.set(id, code);
+  });
+
+  const isDateCode = (code: string): boolean => {
+    // Elapsed-time formats ([h]:mm:ss) count duration, not a calendar date.
+    if (/\[[hms]\]/i.test(code)) return false;
+    const bare = code
+      .replace(/"[^"]*"/g, "") // quoted literals ("Jul" dd)
+      .replace(/\[[^\]]*\]/g, "") // locale/color/condition sections
+      .replace(/\\./g, ""); // escaped chars
+    return /[ymdhs]/i.test(bare);
+  };
+
+  const isDateFmtId = (id: number): boolean =>
+    (id >= 14 && id <= 22) ||
+    (id >= 45 && id <= 47) ||
+    isDateCode(custom.get(id) ?? "");
+
+  let idx = 0;
+  $("cellXfs xf").each((_, el) => {
+    const numFmtId = Number($(el).attr("numFmtId")) || 0;
+    if (isDateFmtId(numFmtId)) out.add(idx);
+    idx++;
+  });
+  return out;
+}
+
+/** Excel serial number → ISO date (YYYY-MM-DD). The Excel epoch is
+ * 1899-12-30; 25569 is the day offset to the Unix epoch. Time-of-day
+ * fractions are dropped — the statement matcher only needs the date. */
+function serialToDate(serial: number): string {
+  if (!Number.isFinite(serial)) return "";
+  const ms = (Math.floor(serial) - 25569) * 86_400_000;
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** One worksheet → rows of cell values (strings, placed by column ref). */
-function parseSheet(xml: string, shared: string[]): string[][] {
+function parseSheet(
+  xml: string,
+  shared: string[],
+  dates: Set<number>,
+): string[][] {
   const $ = load(xml, { xmlMode: true });
   const rows: string[][] = [];
   $("sheetData row").each((_, rowEl) => {
@@ -89,6 +151,8 @@ function parseSheet(xml: string, shared: string[]): string[][] {
               .map((_, tEl) => $(tEl).text())
               .get()
               .join("");
+          } else if (dates.has(Number($c.attr("s")) || 0)) {
+            val = serialToDate(Number($c.find("v").first().text()));
           } else {
             val = $c.find("v").first().text();
           }
@@ -106,6 +170,7 @@ export function parseXlsxSheets(buffer: Buffer): string[][][] {
   const zip = unzipSync(new Uint8Array(buffer));
   const rels = sheetTargets(zip);
   const shared = sharedStrings(zip);
+  const dates = dateStyles(zip);
 
   const sheets: string[][][] = [];
   const workbookXml = decode(zip["xl/workbook.xml"]);
@@ -117,7 +182,7 @@ export function parseXlsxSheets(buffer: Buffer): string[][][] {
     if (!target) return;
     const xml = decode(zip[target]);
     if (!xml) return;
-    sheets.push(parseSheet(xml, shared));
+    sheets.push(parseSheet(xml, shared, dates));
   });
   return sheets;
 }
