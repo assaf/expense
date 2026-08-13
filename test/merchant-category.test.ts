@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ulid } from "ulid";
 import { resolveCategory } from "~/lib/receipt-ai.server";
-import { readMerchantCategories } from "~/lib/database";
+import { readMerchantCategories } from "~/lib/db/expenses";
 import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,

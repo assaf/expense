@@ -23,10 +23,10 @@ import {
   discardReconciliationRun,
   findReconciliationRunByHash,
   listReconciliationRuns,
-  readExpenses,
   readReconciliationRun,
   updateReconciliationDecision,
-} from "~/lib/database";
+} from "~/lib/db/reconcile";
+import { readExpenses } from "~/lib/db/expenses";
 import type {
   Expense,
   MileageExpense,

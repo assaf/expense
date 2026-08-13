@@ -33,7 +33,7 @@ import {
   renderReceiptImage,
 } from "~/lib/receipt-render.server";
 import { parseJsonObject } from "~/lib/receipt-ai.server";
-import { deleteExpense, readExpenses } from "~/lib/database";
+import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,

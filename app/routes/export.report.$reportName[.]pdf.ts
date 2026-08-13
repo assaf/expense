@@ -1,5 +1,7 @@
 import { requireUser } from "~/lib/auth.server";
-import { readExpenses, readMileageRates, reportExists } from "~/lib/database";
+import { readExpenses } from "~/lib/db/expenses";
+import { reportExists } from "~/lib/db/reports";
+import { readMileageRates } from "~/lib/db/seed";
 import { buildReportPdf } from "~/lib/report-pdf.server";
 import { sanitizeFilenamePart } from "~/lib/validation";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";

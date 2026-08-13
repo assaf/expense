@@ -50,15 +50,14 @@ import {
 } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { usePasteImage } from "~/lib/use-paste-image";
+import { readAccount } from "~/lib/db/accounts";
+import { deleteExpense, readExpenses } from "~/lib/db/expenses";
+import { readReports } from "~/lib/db/reports";
+import { readMileageRates } from "~/lib/db/seed";
 import {
-  deleteExpense,
   dismissDuplicatePair,
-  readAccount,
   readDuplicateDismissals,
-  readExpenses,
-  readMileageRates,
-  readReports,
-} from "~/lib/database";
+} from "~/lib/db/settings";
 import type { Expense } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/_index";

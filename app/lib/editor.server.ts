@@ -1,10 +1,8 @@
-import {
-  readCategories,
-  readMileageRates,
-  readPriorMerchants,
-  readReports,
-  readSettings,
-} from "~/lib/database";
+import { readCategories } from "~/lib/db/categories";
+import { readPriorMerchants } from "~/lib/db/expenses";
+import { readReports } from "~/lib/db/reports";
+import { readMileageRates } from "~/lib/db/seed";
+import { readSettings } from "~/lib/db/settings";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import { homeLocation, type Expense, type Location } from "~/lib/types";
 

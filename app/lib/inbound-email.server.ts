@@ -33,15 +33,15 @@ import { escapeHtml } from "~/lib/escape";
 import { extractEmailAddress } from "~/lib/validation";
 import { sendReplyEmail } from "~/lib/reply.server";
 import type { ReplyInput } from "~/lib/reply.server";
+import { upsertExpense } from "~/lib/db/expenses";
+import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   findPendingSenderRow,
   findVerifiedSenderAccount,
-  readExtractionContext,
   readInboundEmail,
-  readReportSummary,
-  upsertExpense,
   upsertInboundEmail,
-} from "~/lib/database";
+} from "~/lib/db/inbound";
+import { readReportSummary } from "~/lib/db/reports";
 import { saveImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";

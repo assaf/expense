@@ -13,18 +13,18 @@ import {
   createAccount,
   createUser,
   deleteUnverifiedUser,
-  ensureInboundSenderForUser,
   findAccountByInviteCode,
   findUserByEmail,
   findUserById,
   getPasswordHash,
-  initStore,
   readAccount,
   resendUserVerification,
   setUserVerificationToken,
   type ReplaceUnverifiedOutcome,
   updateUserPasswordHash,
-} from "./database";
+} from "~/lib/db/accounts";
+import { ensureInboundSenderForUser } from "~/lib/db/inbound";
+import { initStore } from "~/lib/db/seed";
 import { isEmail } from "./validation";
 import type { User } from "./types";
 

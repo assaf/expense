@@ -8,7 +8,7 @@ import {
   rotateRefreshToken,
   safeEqual,
 } from "~/lib/oauth.server";
-import { consumeOAuthCode } from "~/lib/database";
+import { consumeOAuthCode } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.token";
 
 /**

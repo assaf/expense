@@ -19,8 +19,8 @@ import {
   removeReport,
   renameReport,
   setReportClosed,
-} from "~/lib/database";
-import type { ReportSummary } from "~/lib/database";
+} from "~/lib/db/reports";
+import type { ReportSummary } from "~/lib/db/reports";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/export";
 

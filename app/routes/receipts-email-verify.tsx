@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { VerificationResultPage } from "~/components/VerificationResultPage";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
-import { verifyInboundSenderAddress } from "~/lib/database";
+import { verifyInboundSenderAddress } from "~/lib/db/inbound";
 import type { Route } from "./+types/receipts-email-verify";
 
 /**

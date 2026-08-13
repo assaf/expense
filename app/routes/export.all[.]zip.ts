@@ -2,7 +2,8 @@ import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
 import { requireUser } from "~/lib/auth.server";
 import { bareName, readImage } from "~/lib/images.server";
-import { readExpenses, readMileageRates } from "~/lib/database";
+import { readExpenses } from "~/lib/db/expenses";
+import { readMileageRates } from "~/lib/db/seed";
 import { merchantLabel, sortExpenses } from "~/lib/format";
 import type { Route } from "./+types/export.all[.]zip";
 

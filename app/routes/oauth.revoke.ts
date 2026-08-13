@@ -1,5 +1,5 @@
 import { authenticateClient, hashToken, oauthError } from "~/lib/oauth.server";
-import { findOAuthToken, revokeOAuthToken } from "~/lib/database";
+import { findOAuthToken, revokeOAuthToken } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.revoke";
 
 /**

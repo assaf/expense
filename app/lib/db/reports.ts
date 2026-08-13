@@ -1,0 +1,214 @@
+import prisma from "~/lib/prisma.server";
+import { summarizeByReport } from "~/lib/format";
+import { createCache, isTest } from "~/lib/db/shared";
+import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
+import { deleteReceiptImages, readExpenses } from "~/lib/db/expenses";
+import type { Report } from "~/lib/types";
+
+// Reports come back in creation order: auto-increment ids are strictly
+// increasing, so `id asc` is chronological — oldest first, newest last.
+/** Short-lived per-account cache for reports — they only change when the
+ * user edits them in Settings, so a 5-minute TTL is safe. */
+const reportsCache = createCache<Report[]>(300_000);
+
+export async function readReports(accountId: string): Promise<Report[]> {
+  if (!isTest) {
+    const cached = reportsCache.get(accountId);
+    if (cached !== undefined) return cached;
+  }
+  const rows = await prisma.report.findMany({
+    where: { accountId, name: { not: "" } },
+    orderBy: { id: "asc" },
+    select: { name: true, closed: true },
+  });
+  const reports = rows.map((r) => ({ name: r.name, closed: r.closed }));
+  reportsCache.set(accountId, reports);
+  return reports;
+}
+
+/**
+ * Expenses per category that belong to reports that are NOT closed (an
+ * expense with no report counts — it isn't in any closed report). Categories
+ * are referenced by name; only categories with live expenses appear.
+ */
+export async function readCategoryCounts(
+  accountId: string,
+): Promise<Map<string, number>> {
+  const [groups, reports] = await Promise.all([
+    prisma.expense.groupBy({
+      by: ["category", "report"],
+      where: { accountId, category: { not: "" } },
+      _count: { _all: true },
+    }),
+    prisma.report.findMany({
+      where: { accountId },
+      select: { name: true, closed: true },
+    }),
+  ]);
+  const closed = new Set(reports.filter((r) => r.closed).map((r) => r.name));
+  const counts = new Map<string, number>();
+  for (const g of groups) {
+    if (closed.has(g.report)) continue;
+    counts.set(g.category, (counts.get(g.category) ?? 0) + g._count._all);
+  }
+  return counts;
+}
+
+/** True when a report with this name exists (open or closed). Used by the
+ * MCP export_report tool — the report must exist, but closed reports are
+ * still exportable. */
+export async function reportExists(
+  accountId: string,
+  name: string,
+): Promise<boolean> {
+  return (await readReports(accountId)).some((r) => r.name === name);
+}
+
+/**
+ * Find a report that can accept expenses: exists and is not closed. Returns
+ * the report, or an error message when it doesn't exist or is closed. Every
+ * "report must exist and be open" check — the web expense save path and the
+ * MCP capture_receipt / log_mileage / add_to_report tools — goes through
+ * this one helper, so the validation and its error text live in one place.
+ */
+export async function findOpenReport(
+  accountId: string,
+  name: string,
+): Promise<{ report: Report; error: null } | { report: null; error: string }> {
+  const report = (await readReports(accountId)).find((r) => r.name === name);
+  if (!report) {
+    return {
+      report: null,
+      error: `Report "${name}" doesn't exist — create it first with create_report.`,
+    };
+  }
+  if (report.closed) {
+    return { report: null, error: `Report "${name}" is closed.` };
+  }
+  return { report, error: null };
+}
+
+/** One report's expense count and exact total (2-dp string). */
+export interface ReportSummary {
+  name: string;
+  closed: boolean;
+  count: number;
+  total: string;
+}
+
+/**
+ * All reports with their expense counts and exact totals — the shape shared
+ * by the export page and the MCP list_reports tool. Counts and totals come
+ * from the same summarizeByReport pass, so they always agree.
+ */
+export async function readReportSummaries(
+  accountId: string,
+): Promise<ReportSummary[]> {
+  const [reports, expenses] = await Promise.all([
+    readReports(accountId),
+    readExpenses(accountId),
+  ]);
+  const byReport = summarizeByReport(expenses);
+  return reports.map((r) => ({
+    name: r.name,
+    closed: r.closed,
+    count: byReport.get(r.name)?.count ?? 0,
+    total: byReport.get(r.name)?.total.toFixed(2) ?? "0.00",
+  }));
+}
+
+/**
+ * Single-report aggregate (count + exact total) via a targeted Prisma query
+ * — cheaper than loading every expense. Returns null when the report has no
+ * expenses (or the report name is blank).
+ */
+export async function readReportSummary(
+  accountId: string,
+  reportName: string,
+): Promise<{ count: number; total: string } | null> {
+  if (!reportName) return null;
+  const agg = await prisma.expense.aggregate({
+    _count: true,
+    _sum: { amount: true },
+    where: { accountId, report: reportName },
+  });
+  if (agg._count === 0) return null;
+  return {
+    count: agg._count,
+    total: agg._sum.amount?.toFixed(2) ?? "0.00",
+  };
+}
+
+/**
+ * Create a report if it doesn't exist yet. Returns an error message when
+ * the name is empty or already taken.
+ */
+export function addReport(
+  accountId: string,
+  name: string,
+): Promise<NamedResult> {
+  return addNamedRow(prisma.report, "report", accountId, name).then((r) => {
+    reportsCache.delete(accountId);
+    return r;
+  });
+}
+
+/**
+ * Delete a report together with every expense in it — including their
+ * receipt images. Expenses reference reports by name, so the cascade is a
+ * same-account name match, executed in one transaction. An empty name is a
+ * no-op: it must never touch the "unassigned" expenses (report: "").
+ */
+export async function removeReport(
+  accountId: string,
+  name: string,
+): Promise<void> {
+  if (!name.trim()) return;
+  const removed = await prisma.expense.findMany({
+    where: { accountId, report: name },
+    select: { type: true, imageFile: true },
+  });
+  await deleteReceiptImages(accountId, removed);
+  await prisma.$transaction([
+    prisma.expense.deleteMany({ where: { accountId, report: name } }),
+    prisma.report.deleteMany({ where: { accountId, name } }),
+  ]);
+  reportsCache.delete(accountId);
+}
+
+/**
+ * Rename a report and every reference to it: the report row and its
+ * expenses. Receipt image keys keep their old convention name — re-saving a
+ * receipt rewrites them. Returns an error message when the rename can't
+ * happen (empty, unchanged, duplicate).
+ */
+export function renameReport(
+  accountId: string,
+  name: string,
+  newName: string,
+): Promise<NamedResult> {
+  return renameNamedRow(
+    prisma.report,
+    "report",
+    "report",
+    accountId,
+    name,
+    newName,
+  ).then((r) => {
+    reportsCache.delete(accountId);
+    return r;
+  });
+}
+
+/** Mark a report closed (or reopen it). Closed reports delete with confirmation. */
+export async function setReportClosed(
+  accountId: string,
+  name: string,
+  closed: boolean,
+): Promise<void> {
+  await prisma.report.updateMany({
+    where: { accountId, name },
+    data: { closed },
+  });
+  reportsCache.delete(accountId);
+}

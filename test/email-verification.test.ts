@@ -6,7 +6,7 @@ import {
   resendUserVerification,
   setUserVerificationToken,
   verifyUserEmailAddress,
-} from "~/lib/database";
+} from "~/lib/db/accounts";
 import { testPrisma } from "./helpers/seedTestData";
 
 const now = new Date().toISOString();

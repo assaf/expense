@@ -13,25 +13,25 @@ import {
   publicOrigin,
   verifyAccessToken,
 } from "~/lib/oauth.server";
+import { findUserById, readBootstrapUser } from "~/lib/db/accounts";
+import { readCategories } from "~/lib/db/categories";
 import {
-  findUserById,
-  readExpenses,
   readExpense,
-  findOpenReport,
-  reportExists,
-  readReportSummaries,
-  readCategories,
-  readSettings,
-  readMileageRates,
-  readExtractionContext,
+  readExpenses,
   readPriorMerchants,
-  addReport,
-  setReportClosed,
   upsertExpense,
-  readBootstrapUser,
-  registerOAuthClient,
-  deleteOAuthClient,
-} from "~/lib/database";
+} from "~/lib/db/expenses";
+import { readExtractionContext } from "~/lib/db/extraction-context";
+import { deleteOAuthClient, registerOAuthClient } from "~/lib/db/oauth";
+import {
+  addReport,
+  findOpenReport,
+  readReportSummaries,
+  reportExists,
+  setReportClosed,
+} from "~/lib/db/reports";
+import { readMileageRates } from "~/lib/db/seed";
+import { readSettings } from "~/lib/db/settings";
 import {
   normalizeAmount,
   sortExpenses,

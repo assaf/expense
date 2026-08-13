@@ -7,7 +7,7 @@ import {
   removeInboundSender,
   resendInboundSenderVerification,
   verifyInboundSenderAddress,
-} from "~/lib/database";
+} from "~/lib/db/inbound";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,

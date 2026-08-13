@@ -9,12 +9,8 @@ import {
   saveExpenseFromForm,
 } from "~/lib/expense-save.server";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
-import {
-  deleteExpense,
-  readExpense,
-  readNeighborIds,
-  readReports,
-} from "~/lib/database";
+import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
+import { readReports } from "~/lib/db/reports";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/expense.$id";
 
