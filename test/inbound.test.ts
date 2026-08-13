@@ -1095,13 +1095,13 @@ describe("processInboundEvent (body receipt)", () => {
   it("replies and does not create an expense when extraction fails", async () => {
     const deps = fakeDeps();
     deps.extractReceipt = async () => {
-      throw new Error("DeepSeek API 429: rate limited");
+      throw new Error("mock extraction failure");
     };
     const result = await processInboundEvent(eventData(), deps);
     usedEmailIds.push("email-1");
     expect(result).toMatchObject({ status: "error" });
     expect(deps.sent).toHaveLength(1);
-    expect(deps.sent[0]!.html).toContain("rate limited");
+    expect(deps.sent[0]!.html).toContain("mock extraction failure");
     const expenses = await readExpenses(TEST_ACCOUNT_ID);
     expect(
       expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
