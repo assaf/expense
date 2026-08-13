@@ -6,7 +6,7 @@ import { parseStatementUpload } from "~/lib/reconcile.server";
 import type { StatementRow } from "~/lib/types";
 
 /**
- * Runs the REAL bank statement files (committed fixtures, test/fixtures/)
+ * Runs the REAL bank statement files (committed fixtures, test/fixtures/statements/)
  * through the full pipeline — PDFs, CSV, QuickBooks QBO, and Excel — and
  * checks each layout still yields its transactions with clean descriptions
  * and correct credit classification. Extraction quirks (column merging,
@@ -24,7 +24,7 @@ import type { StatementRow } from "~/lib/types";
  * scripts/redact-statements.py.
  */
 
-const FIXTURES_DIR = "test/fixtures";
+const FIXTURES_DIR = "test/fixtures/statements";
 
 interface ExpectedRow {
   date?: string;

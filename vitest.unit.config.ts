@@ -20,6 +20,7 @@ export default defineConfig({
       "test/escape.test.ts",
       "test/file-types.test.ts",
       "test/validation.test.ts",
+      "test/statements.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",
