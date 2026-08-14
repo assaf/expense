@@ -30,6 +30,18 @@ describe("Home page", () => {
     await expect(page.getByText("Test Store")).toBeVisible();
   });
 
+  it("shows the description next to the merchant, single line", async () => {
+    // OfficeMax is seeded with the description "Printer paper".
+    const row = page.locator("li").filter({ hasText: "OfficeMax" }).first();
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("Printer paper");
+    // Both texts live in the same line: the merchant span and the
+    // lighter-gray description span inside it (not the meta line below).
+    await expect(row.locator("span.truncate")).toContainText(
+      /OfficeMax.*Printer paper/,
+    );
+  });
+
   afterAll(async () => {
     await page?.close();
   });

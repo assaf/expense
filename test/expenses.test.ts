@@ -470,6 +470,9 @@ describe("Expense CRUD", () => {
     await page.goto(`/expense/${expense.id}`, { waitUntil: "load" });
     const main = page.locator("main#main-content");
 
+    // The seeded expense has every field but no image — the notice is up.
+    await expect(page.getByText("Incomplete")).toBeVisible();
+
     // Dragging over the page highlights the drop target with a dashed
     // outline and announces it to screen readers.
     const drag = await page.evaluateHandle(() => new DataTransfer());
@@ -523,6 +526,10 @@ describe("Expense CRUD", () => {
       )
       .not.toBe("");
     await expect(page.locator("img")).toBeVisible();
+    // With the image attached, every necessary field is present — the
+    // notice (which reads the editor's local hasImage state, not the stale
+    // loader row) is gone.
+    await expect(page.getByText("Incomplete")).toHaveCount(0);
 
     // Leave the database as we found it.
     const stored = (
