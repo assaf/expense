@@ -1,9 +1,13 @@
 {
+  "defaultProvider": "deepseek",
   "defaultModel": "deepseek-v4-flash",
-  "defaultThinkingLevel": "medium",
-  "quietStartup": true,
   "defaultProjectTrust": "ask",
+  "defaultThinkingLevel": "medium",
+  "defaultTools": ["bash", "edit", "write"],
+  "enableAnalytics": false,
   "enableInstallTelemetry": false,
+  "enableSkillCommands": true,
+  "quietStartup": true,
   "skills": ["skills"],
-  "enableSkillCommands": true
+  "tuiMode": "fullscreen"
 }

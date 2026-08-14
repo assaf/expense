@@ -463,6 +463,82 @@ describe("Expense CRUD", () => {
     }
   });
 
+  it("drags a receipt onto the editor: dashed outline, then upload + re-read", async () => {
+    const expense = await testPrisma.expense.findFirstOrThrow({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Test Store" },
+    });
+    await page.goto(`/expense/${expense.id}`, { waitUntil: "load" });
+    const main = page.locator("main#main-content");
+
+    // Dragging over the page highlights the drop target with a dashed
+    // outline and announces it to screen readers.
+    const drag = await page.evaluateHandle(() => new DataTransfer());
+    await main.dispatchEvent("dragenter", { dataTransfer: drag });
+    await expect(main).toHaveClass(/outline-dashed/);
+    await expect(
+      page.locator('.sr-only[role="status"][aria-live="polite"]'),
+    ).toContainText("Receipt file detected");
+
+    // Leaving clears the highlight.
+    await main.dispatchEvent("dragleave", { dataTransfer: drag });
+    await expect(main).not.toHaveClass(/outline-dashed/);
+
+    // Dropping a receipt image replaces the image (one POST to the image
+    // route) and re-reads the fields (one POST to /api/expense).
+    const png = await tinyPng();
+    const drop = await page.evaluateHandle(() => new DataTransfer());
+    await drop.evaluate(
+      (dt, bytes) => {
+        dt.items.add(
+          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
+        );
+      },
+      [...png],
+    );
+    const replace = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/expense/${expense.id}/image`) &&
+        r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    const ocr = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/expense") && r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    await main.dispatchEvent("drop", { dataTransfer: drop });
+    expect((await replace).ok()).toBeTruthy();
+    expect((await ocr).ok()).toBeTruthy();
+
+    // The image is stored and attached to the expense row.
+    await expect
+      .poll(
+        async () =>
+          (
+            await testPrisma.expense.findUniqueOrThrow({
+              where: { id: expense.id },
+            })
+          ).imageFile,
+        { timeout: 15_000 },
+      )
+      .not.toBe("");
+    await expect(page.locator("img")).toBeVisible();
+
+    // Leave the database as we found it.
+    const stored = (
+      await testPrisma.expense.findUniqueOrThrow({ where: { id: expense.id } })
+    ).imageFile;
+    if (stored) {
+      await testPrisma.imageBlob.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, key: stored },
+      });
+      await testPrisma.expense.update({
+        where: { id: expense.id },
+        data: { imageFile: "", imageMime: "", originalName: "" },
+      });
+    }
+  });
+
   afterAll(async () => {
     await page?.close();
   });

@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
-import { PageShell } from "~/components/PageShell";
+import { PageShell, type DropTarget } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
@@ -81,12 +81,15 @@ export function Shell({
   nav,
   dimmed,
   onBack,
+  drop,
   children,
 }: {
   title: string;
   nav?: { prevId: string | null; nextId: string | null } | null;
   dimmed?: boolean;
   onBack?: () => void;
+  /** Drag-and-drop target handlers + outline (receipt editor). */
+  drop?: DropTarget;
   children: React.ReactNode;
 }) {
   return (
@@ -94,6 +97,7 @@ export function Shell({
       title={title}
       dimmed={dimmed}
       onBack={onBack}
+      drop={drop}
       headerRight={
         nav ? (
           <div className="flex items-center gap-1">

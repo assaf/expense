@@ -5,12 +5,10 @@ import {
   saveImage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
-import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
-  extractFromImage,
+  extractUploadedReceiptFields,
   prepareUploadedReceipt,
 } from "~/lib/receipt-ocr.server";
-import { resolveExtraction } from "~/lib/receipt-ai.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/api.expense";
 
@@ -85,7 +83,7 @@ export async function action({ request }: Route.ActionArgs) {
     // Save the image and OCR it in parallel. No expense row is created —
     // extraction just pre-fills the draft editor when it succeeds.
     const [ocr, saved] = await Promise.all([
-      extractFromUploadedImage(
+      extractUploadedReceiptFields(
         user.accountId,
         prepared.buffer,
         prepared.mime,
@@ -119,18 +117,25 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: true });
   }
 
-  if (intent === "draft-ocr") {
-    // PDFs store their draft before OCR finishes (see draft-upload); this
-    // intent re-runs extraction on the original file so the editor's fields
-    // fill in when the scan is ready. A failure only loses the fields — the
-    // draft is already stored — so the response is always ok.
+  if (intent === "ocr" || intent === "draft-ocr") {
+    // OCR a just-uploaded receipt file and return the extracted fields so
+    // the editor can fill them in. PDFs store their draft before OCR
+    // finishes (see draft-upload); this intent re-runs extraction on the
+    // original file so the editor's fields fill in when the scan is ready.
+    // A failure only loses the fields — the draft or image is already
+    // stored — so the response is always ok. "draft-ocr" is the legacy
+    // name; both work.
     const uploaded = await readUploadedFile(form);
     if (!uploaded) {
       return Response.json({ error: "No image received." }, { status: 400 });
     }
     const { buffer, mime } = uploaded;
     try {
-      const ocr = await extractFromUploadedImage(user.accountId, buffer, mime);
+      const ocr = await extractUploadedReceiptFields(
+        user.accountId,
+        buffer,
+        mime,
+      );
       return Response.json({
         ok: true,
         merchant: ocr.merchant,
@@ -139,7 +144,7 @@ export async function action({ request }: Route.ActionArgs) {
         report: ocr.report,
       });
     } catch (err) {
-      console.warn("[draft-ocr] receipt extraction failed:", err);
+      console.warn("[ocr] receipt extraction failed:", err);
       return Response.json({
         ok: true,
         merchant: "",
@@ -151,42 +156,4 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   return unknownIntent();
-}
-
-/**
- * OCR an uploaded receipt image and fill in the fields: merchant and amount
- * straight from the extraction, and the category as the merchant's previous
- * category when one exists (a merchant the user already categorized is
- * reused, not re-guessed), else the suggested category mapped onto one the
- * account already uses. Throws when extraction fails — callers decide
- * whether that is fatal (it isn't for drafts).
- */
-async function extractFromUploadedImage(
-  accountId: string,
-  buffer: Buffer,
-  mime: string,
-): Promise<{
-  merchant: string;
-  amount: string;
-  category: string;
-  report: string;
-}> {
-  const context = await readExtractionContext(accountId);
-  const { result } = await extractFromImage({
-    buffer,
-    mime,
-    categories: context.categories,
-    reports: context.reports,
-  });
-  const resolved = resolveExtraction(context, {
-    merchant: result.merchant,
-    category: result.category,
-    report: result.report,
-  });
-  return {
-    merchant: result.merchant,
-    amount: result.amount,
-    category: resolved.category,
-    report: resolved.report,
-  };
 }

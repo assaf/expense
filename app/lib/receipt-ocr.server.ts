@@ -8,7 +8,12 @@ import { isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import { pdfImageName } from "~/lib/images.server";
 import { RECEIPT_OCR_MODE } from "~/lib/env";
-import { extractReceipt, isVisionUnsupportedError } from "./receipt-ai.server";
+import { readExtractionContext } from "~/lib/db/extraction-context";
+import {
+  extractReceipt,
+  isVisionUnsupportedError,
+  resolveExtraction,
+} from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
 
 /**
@@ -418,4 +423,44 @@ export async function extractFromImage(input: {
     });
   }
   return { result, text, stored };
+}
+
+/**
+ * OCR an uploaded receipt image and fill in the fields: merchant and amount
+ * straight from the extraction, and the category as the merchant's previous
+ * category when one exists (a merchant the user already categorized is
+ * reused, not re-guessed), else the suggested category mapped onto one the
+ * account already uses. Throws when extraction fails — callers decide
+ * whether that is fatal (it isn't for drafts or edit-mode re-reads).
+ * Shared by the draft upload (/api/expense) and the editor's image replace
+ * (/expense/:id/image).
+ */
+export async function extractUploadedReceiptFields(
+  accountId: string,
+  buffer: Buffer,
+  mime: string,
+): Promise<{
+  merchant: string;
+  amount: string;
+  category: string;
+  report: string;
+}> {
+  const context = await readExtractionContext(accountId);
+  const { result } = await extractFromImage({
+    buffer,
+    mime,
+    categories: context.categories,
+    reports: context.reports,
+  });
+  const resolved = resolveExtraction(context, {
+    merchant: result.merchant,
+    category: result.category,
+    report: result.report,
+  });
+  return {
+    merchant: result.merchant,
+    amount: result.amount,
+    category: resolved.category,
+    report: resolved.report,
+  };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Lock, Loader2, Trash2, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { Button } from "~/components/ui/Button";
@@ -47,6 +47,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
   const [imageVersion, setImageVersion] = useState(0);
+  // Edit mode: whether the expense has a stored image. Local state because
+  // the replace/delete fetch doesn't revalidate the loader — without it an
+  // expense that started imageless would never show the dropped image.
+  const [hasImage, setHasImage] = useState(!!expense.imageFile);
   const [lightbox, setLightbox] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draft, setDraft] = useState<{
@@ -58,8 +62,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<"convert" | "ocr" | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
 
   const complete = useMemo(
     () =>
@@ -148,7 +154,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
           `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
         );
         setDraftStage("ocr");
-        await ocrDraft(file);
+        fillFields(await ocrFile(file), "empty-only");
         return;
       }
       // Extraction only fills fields the user hasn't typed yet — a slow OCR
@@ -166,29 +172,48 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     }
   }
 
-  /** PDFs: OCR runs after the draft is stored, filling the fields in when
-   * the scan is ready. Failures leave the fields empty — never the draft. */
-  async function ocrDraft(file: File) {
+  /** OCR a just-uploaded receipt file and return the extracted fields, or
+   * null when the scan fails (fields stay untouched). Shared by the PDF
+   * draft flow (fields fill when the scan is ready) and the edit-mode
+   * replace (fields update to the new receipt). */
+  async function ocrFile(file: File) {
     const form = new FormData();
-    form.set("intent", "draft-ocr");
+    form.set("intent", "ocr");
     form.set("file", file);
     try {
       const res = await fetch("/api/expense", { method: "POST", body: form });
-      if (!res.ok) return;
-      const json = (await res.json()) as {
+      if (!res.ok) return null;
+      return (await res.json()) as {
         merchant?: string;
         amount?: string;
         category?: string;
         report?: string;
       };
-      // Same rule as the draft upload: fill only what's still empty.
-      setMerchant((prev) => prev || json.merchant || "");
-      setAmount((prev) => prev || json.amount || "");
-      setCategory((prev) => prev || json.category || "");
-      setReport((prev) => prev || json.report || "");
     } catch {
-      // Fields stay empty; the user can fill them by hand.
+      return null;
     }
+  }
+
+  /** Apply extracted fields to the form. Create mode fills only what's
+   * still empty (a slow OCR response must never overwrite typing); edit
+   * mode lets a confident extraction replace the old receipt's values,
+   * keeping whatever the scan left blank. */
+  function fillFields(
+    fields: {
+      merchant?: string;
+      amount?: string;
+      category?: string;
+      report?: string;
+    } | null,
+    mode: "empty-only" | "override",
+  ) {
+    if (!fields) return;
+    const pick = (extracted: string | undefined, current: string) =>
+      mode === "override" ? extracted || current : current || extracted || "";
+    setMerchant((prev) => pick(fields.merchant, prev));
+    setAmount((prev) => pick(fields.amount, prev));
+    setCategory((prev) => pick(fields.category, prev));
+    setReport((prev) => pick(fields.report, prev));
   }
 
   async function deleteDraftBlob(key: string) {
@@ -221,10 +246,59 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     form.set("file", file);
     await fetch(`/expense/${expense.id}/image`, { method: "POST", body: form });
     setImageVersion((v) => v + 1);
+    setHasImage(true);
+    // Re-read the new receipt's fields so the form matches the image.
+    fillFields(await ocrFile(file), "override");
   }
 
   // Paste an image anywhere to replace the receipt image.
   usePasteImage(replaceImage);
+
+  /** The file types the drop zone accepts — matches the upload input. */
+  function isReceiptFile(file: File): boolean {
+    return (
+      file.type.startsWith("image/") ||
+      file.type === "application/pdf" ||
+      /\.pdf$/i.test(file.name)
+    );
+  }
+
+  // dragenter/dragleave fire for every child element crossed, so track depth
+  // instead of toggling on each event — prevents the highlight from
+  // flickering. Closed reports are read-only: no highlight, and the drop is
+  // left to the browser's default (which ignores it).
+  function onDragEnter(e: DragEvent<HTMLElement>) {
+    if (reportClosed) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragOver(true);
+  }
+
+  function onDragOver(e: DragEvent<HTMLElement>) {
+    if (reportClosed) return;
+    // preventDefault is required to turn the drag into a drop target.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDragLeave(e: DragEvent<HTMLElement>) {
+    if (reportClosed) return;
+    e.preventDefault();
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setDragOver(false);
+    }
+  }
+
+  function onDrop(e: DragEvent<HTMLElement>) {
+    if (reportClosed) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && isReceiptFile(file)) void replaceImage(file);
+  }
 
   function onSave() {
     const form = new FormData();
@@ -269,7 +343,11 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       nav={data.nav}
       dimmed={!!transition}
       onBack={isNew ? onCancel : undefined}
+      drop={{ over: dragOver, onDragEnter, onDragOver, onDragLeave, onDrop }}
     >
+      <div className="sr-only" role="status" aria-live="polite">
+        {dragOver ? "Receipt file detected — drop to replace" : ""}
+      </div>
       <ErrorBanner error={error} />
       {reportClosed ? (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
@@ -309,7 +387,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                 </Button>
               </>
             ) : null}
-            {(isNew ? draftPreview : expense.imageFile) && !reportClosed ? (
+            {(isNew ? !!draftPreview : hasImage) && !reportClosed ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -329,6 +407,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                     })(),
                   });
                   setImageVersion((v) => v + 1);
+                  setHasImage(false);
                 }}
               >
                 <Trash2 aria-hidden="true" className="h-4 w-4" />
@@ -336,7 +415,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
             ) : null}
           </span>
         </div>
-        {(isNew ? draftPreview : expense.imageFile) ? (
+        {(isNew ? draftPreview : hasImage) ? (
           <button
             type="button"
             onClick={() => setLightbox(true)}
@@ -362,7 +441,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                 Preparing your receipt…
               </span>
             ) : (
-              "No image. Upload or paste one (⌘V)."
+              "No image. Upload, drag & drop, or paste one (⌘V)."
             )}
           </div>
         )}
@@ -429,7 +508,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         readOnly={reportClosed}
       />
 
-      {lightbox && (isNew ? draftPreview : expense.imageFile) ? (
+      {lightbox && (isNew ? draftPreview : hasImage) ? (
         <Lightbox
           src={
             isNew
