@@ -10,6 +10,7 @@ import {
   AUTHOR_NAME,
   BLOG_URL,
   marketingPageHeaders,
+  pageMeta,
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/ai";
@@ -28,15 +29,11 @@ const AI_SCHEMA = {
 };
 
 export function meta(): Route.MetaDescriptors {
-  return [
-    { title: `${APP_NAME}: connect your AI assistant` },
-    {
-      name: "description",
-      content:
-        "Connect Claude, OpenAI, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
-    },
-    { tagName: "link", rel: "canonical", href: `${SITE_URL}/ai` },
-  ];
+  return pageMeta(
+    `${APP_NAME}: connect your AI assistant`,
+    "Connect Claude, OpenAI, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
+    "/ai",
+  );
 }
 
 export const headers = marketingPageHeaders;

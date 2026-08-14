@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Lock,
   Plus,
   Trash2,
   X,
@@ -11,6 +12,7 @@ import {
 import { Link, useFetcher, useNavigate } from "react-router";
 import { PageShell, type DropTarget } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
@@ -569,6 +571,49 @@ export function EditorActions({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Submit a "delete" intent through a fetcher — the shared delete action
+ * of the receipt and mileage editors (the row is deleted server-side, no
+ * page navigation). */
+export function submitDelete(fetcher: ReturnType<typeof useFetcher>): void {
+  const form = new FormData();
+  form.set("intent", "delete");
+  void fetcher.submit(form, { method: "post" });
+}
+
+/** Banner shown when the expense lives in a closed report (read-only). */
+export function ClosedReportBanner() {
+  return (
+    <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+      <Lock aria-hidden="true" className="h-4 w-4" />
+      This expense is in a closed report.
+    </div>
+  );
+}
+
+/** The confirm-delete dialog both editors render after the Delete button
+ * asks first. Renders nothing until `open`. */
+export function DeleteConfirmDialog({
+  open,
+  onConfirm,
+  onCancel,
+  busy,
+}: {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <ConfirmDialog
+      message="Delete this expense? This cannot be undone."
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+      deleting={busy}
+    />
   );
 }
 

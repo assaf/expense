@@ -5,6 +5,7 @@ import {
   COMPARISON_ROWS,
   COMPARISON_SUMMARY,
   marketingPageHeaders,
+  pageMeta,
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/alternatives";
@@ -35,17 +36,11 @@ const VERDICT_SCHEMA = {
 };
 
 export function meta(): Route.MetaDescriptors {
-  return [
-    {
-      title: `${APP_NAME} vs Expensify: a free alternative for expense tracking`,
-    },
-    {
-      name: "description",
-      content:
-        "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categories, Schedule C-based categories, mileage at the IRS rate, and tax-time exports.",
-    },
-    { tagName: "link", rel: "canonical", href: `${SITE_URL}/alternatives` },
-  ];
+  return pageMeta(
+    `${APP_NAME} vs Expensify: a free alternative for expense tracking`,
+    "Expense is a free alternative to Expensify for personal and small-team expense tracking: OCR receipt capture, AI categories, Schedule C-based categories, mileage at the IRS rate, and tax-time exports.",
+    "/alternatives",
+  );
 }
 
 export const headers = marketingPageHeaders;

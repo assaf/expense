@@ -24,6 +24,26 @@ export function marketingPageHeaders(): Record<string, string> {
   };
 }
 
+/** The three standard meta tags every marketing/SEO page advertises: a
+ * title, a description, and the canonical link against its own path.
+ * Shared by /about, /ai, /faq, /alternatives, and /login so the tag
+ * shape and the canonical URL pattern can't drift between pages. */
+export function pageMeta(
+  title: string,
+  description: string,
+  path: string,
+): Array<
+  | { title: string }
+  | { name: "description"; content: string }
+  | { tagName: "link"; rel: "canonical"; href: string }
+> {
+  return [
+    { title },
+    { name: "description", content: description },
+    { tagName: "link", rel: "canonical", href: `${SITE_URL}${path}` },
+  ];
+}
+
 /**
  * (/alternatives), the /llms.txt file, and the markdown variants (/faq.md,
  * /about.md, /alternatives.md) are all rendered from this module — edit the

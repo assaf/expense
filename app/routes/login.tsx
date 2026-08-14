@@ -12,7 +12,7 @@ import {
   login,
   resendAccountVerification,
 } from "~/lib/auth.server";
-import { SITE_URL } from "~/lib/seo-content";
+import { pageMeta } from "~/lib/seo-content";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/login";
 
@@ -35,15 +35,11 @@ function safeNext(raw: string | null): string {
 }
 
 export function meta(): Route.MetaDescriptors {
-  return [
-    { title: "Sign in to Expense" },
-    {
-      name: "description",
-      content:
-        "Sign in to Expense — free expense tracking for tax season, with receipt OCR, mileage, and PDF/ZIP export.",
-    },
-    { tagName: "link", rel: "canonical", href: `${SITE_URL}/login` },
-  ];
+  return pageMeta(
+    "Sign in to Expense",
+    "Sign in to Expense — free expense tracking for tax season, with receipt OCR, mileage, and PDF/ZIP export.",
+    "/login",
+  );
 }
 
 export async function loader({ request }: Route.LoaderArgs) {

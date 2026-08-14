@@ -4,7 +4,7 @@ import {
   APP_SUMMARY,
   FAQS,
   marketingPageHeaders,
-  SITE_URL,
+  pageMeta,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/faq";
 
@@ -23,17 +23,11 @@ const FAQ_SCHEMA = {
 };
 
 export function meta(): Route.MetaDescriptors {
-  return [
-    {
-      title: `${APP_NAME} FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
-    },
-    {
-      name: "description",
-      content:
-        "Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.",
-    },
-    { tagName: "link", rel: "canonical", href: `${SITE_URL}/faq` },
-  ];
+  return pageMeta(
+    `${APP_NAME} FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
+    "Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.",
+    "/faq",
+  );
 }
 
 export const headers = marketingPageHeaders;

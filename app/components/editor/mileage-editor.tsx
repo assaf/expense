@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Lock, Loader2, MapPinned, Plus, X } from "lucide-react";
+import { AlertTriangle, Loader2, MapPinned, Plus, X } from "lucide-react";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
-import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
 import { findDuplicates } from "~/lib/duplicates";
@@ -20,7 +19,9 @@ import type {
 } from "~/lib/types";
 import { geocodedLocations } from "~/lib/types";
 import {
+  ClosedReportBanner,
   DateAmountFields,
+  DeleteConfirmDialog,
   DescriptionField,
   DuplicateWarning,
   EditorActions,
@@ -29,6 +30,7 @@ import {
   Shell,
   TransitionOverlay,
   fetcherError,
+  submitDelete,
   useEditorFlow,
   useFormKeys,
   type EditorData,
@@ -413,9 +415,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   }
 
   function onDelete() {
-    const form = new FormData();
-    form.set("intent", "delete");
-    void fetcher.submit(form, { method: "post" });
+    submitDelete(fetcher);
   }
 
   const error = fetcherError(fetcher.data);
@@ -446,12 +446,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
       <ErrorBanner error={error} />
-      {reportClosed ? (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
-          <Lock aria-hidden="true" className="h-4 w-4" />
-          This expense is in a closed report.
-        </div>
-      ) : null}
+      {reportClosed ? <ClosedReportBanner /> : null}
       {duplicateMatches.length > 0 ? (
         <DuplicateWarning matches={duplicateMatches} />
       ) : null}
@@ -627,14 +622,12 @@ export function MileageEditor({ data }: { data: EditorData }) {
         saveLabel={duplicateMatches.length > 0 ? "Save anyway" : undefined}
         readOnly={reportClosed}
       />
-      {confirmDelete ? (
-        <ConfirmDialog
-          message="Delete this expense? This cannot be undone."
-          onConfirm={() => doDelete(onDelete)}
-          onCancel={() => setConfirmDelete(false)}
-          deleting={fetcher.state !== "idle"}
-        />
-      ) : null}
+      <DeleteConfirmDialog
+        open={confirmDelete}
+        onConfirm={() => doDelete(onDelete)}
+        onCancel={() => setConfirmDelete(false)}
+        busy={fetcher.state !== "idle"}
+      />
       {transition ? <TransitionOverlay kind={transition} /> : null}
     </Shell>
   );

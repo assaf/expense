@@ -8,6 +8,7 @@ import {
   BLOG_URL,
   KEY_FACTS,
   marketingPageHeaders,
+  pageMeta,
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/about";
@@ -26,17 +27,11 @@ const ABOUT_SCHEMA = {
 };
 
 export function meta(): Route.MetaDescriptors {
-  return [
-    {
-      title: `About ${APP_NAME}: a free expense tracker built for tax season`,
-    },
-    {
-      name: "description",
-      content:
-        "Expense is a free expense tracker built for tax season: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF or ZIP export is ready when you are.",
-    },
-    { tagName: "link", rel: "canonical", href: `${SITE_URL}/about` },
-  ];
+  return pageMeta(
+    `About ${APP_NAME}: a free expense tracker built for tax season`,
+    "Expense is a free expense tracker built for tax season: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF or ZIP export is ready when you are.",
+    "/about",
+  );
 }
 
 export const headers = marketingPageHeaders;

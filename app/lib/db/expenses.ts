@@ -142,21 +142,19 @@ export async function readDuplicateCandidates(
       amount: true,
       distanceMiles: true,
       locations: true,
+      report: true,
+      category: true,
+      description: true,
+      reconciledAt: true,
       createdAt: true,
+      updatedAt: true,
     },
     orderBy: { createdAt: "asc" },
   });
   return rows.map((r) => {
     const base = {
-      id: r.id,
-      date: r.date,
-      report: "",
-      category: "",
-      description: "",
-      amount: r.amount?.toString() ?? "",
-      reconciledAt: "",
-      createdAt: String(r.createdAt),
-      updatedAt: String(r.createdAt),
+      ...expenseBase(r),
+      type: r.type as Expense["type"],
     };
     if (r.type === "receipt") {
       return {
@@ -176,7 +174,7 @@ export async function readDuplicateCandidates(
         typeof r.locations === "string"
           ? (JSON.parse(r.locations) as Location[])
           : ((r.locations as unknown as Location[]) ?? []),
-      distanceMiles: r.distanceMiles?.toString() ?? "",
+      distanceMiles: r.distanceMiles?.toFixed(2) ?? "",
       route: EMPTY_ROUTE,
     };
   });
@@ -194,7 +192,7 @@ export async function upsertExpense(
   const data = { ...expenseData(expense), accountId };
   const updated = await prisma.expense.updateMany({
     where: { id: expense.id, accountId },
-    data: expenseData(expense),
+    data,
   });
   if (updated.count === 0) {
     await prisma.expense.create({ data });
@@ -380,6 +378,46 @@ export function expenseData(
   };
 }
 
+/** The base Expense fields shared by the full row mapping and the thin
+ * duplicate-candidate mapping: the same null→"" defaults and the same
+ * Decimal→2-dp conversion, so a change to one can't silently drift from
+ * the other. "" is the domain's "no value" sentinel throughout. */
+function expenseBase(row: {
+  id: string;
+  date: string | null;
+  report: string | null;
+  category: string | null;
+  description: string | null;
+  amount: Prisma.Decimal | null;
+  reconciledAt: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}): {
+  id: string;
+  date: string;
+  report: string;
+  category: string;
+  description: string;
+  amount: string;
+  reconciledAt: string;
+  createdAt: string;
+  updatedAt: string;
+} {
+  return {
+    id: row.id,
+    date: row.date ?? "",
+    report: row.report ?? "",
+    category: row.category ?? "",
+    description: row.description ?? "",
+    // Decimal → 2-dp string (the domain's "" means no amount). toFixed(2) is
+    // a lossless pad: numeric(10,2) already stores exactly two digits.
+    amount: row.amount?.toFixed(2) ?? "",
+    reconciledAt: row.reconciledAt ?? "",
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt ?? row.createdAt,
+  };
+}
+
 function rowToExpense(row: {
   id: string;
   type: string;
@@ -401,18 +439,8 @@ function rowToExpense(row: {
   updatedAt: string;
 }): Expense {
   const base = {
-    id: row.id,
+    ...expenseBase(row),
     type: row.type as Expense["type"],
-    date: row.date ?? "",
-    report: row.report ?? "",
-    category: row.category ?? "",
-    description: row.description ?? "",
-    // Decimal → 2-dp string (the domain's "" means no amount). toFixed(2) is
-    // a lossless pad: numeric(10,2) already stores exactly two digits.
-    amount: row.amount?.toFixed(2) ?? "",
-    reconciledAt: row.reconciledAt ?? "",
-    createdAt: row.createdAt ?? "",
-    updatedAt: row.updatedAt ?? "",
   };
   if (base.type === "receipt") {
     const receipt: ReceiptExpense = {
