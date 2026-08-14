@@ -136,7 +136,7 @@ export function NameList<T extends { name: string }>({
  */
 type RenameResult = { ok: boolean; error?: string };
 
-function RenameForm({
+export function RenameForm({
   intent,
   name,
   onCancel,
@@ -198,7 +198,7 @@ function RenameForm({
   );
 }
 
-const RenameButton = forwardRef<
+export const RenameButton = forwardRef<
   HTMLButtonElement,
   { onClick: () => void; name: string }
 >(function RenameButton({ onClick, name }, ref) {
@@ -220,7 +220,7 @@ const RenameButton = forwardRef<
  * inputs inside the row's own fetcher form, with an optional confirm
  * prompt before submitting.
  */
-function RemoveButton({
+export function RemoveButton({
   fetcher,
   intent,
   name,

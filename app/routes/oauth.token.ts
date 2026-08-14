@@ -1,6 +1,6 @@
 import {
   ACCESS_TOKEN_TTL_SECONDS,
-  authenticateClient,
+  authenticateFormRequest,
   hashToken,
   issueTokenPair,
   oauthError,
@@ -19,25 +19,10 @@ import type { Route } from "./+types/oauth.token";
  * clients, HTTP Basic for confidential clients.
  */
 export async function action({ request }: Route.ActionArgs) {
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/x-www-form-urlencoded")) {
-    return oauthError(
-      400,
-      "invalid_request",
-      "Content-Type must be application/x-www-form-urlencoded.",
-    );
-  }
-  const form = new URLSearchParams(await request.text());
+  const parsed = await authenticateFormRequest(request);
+  if ("error" in parsed) return parsed.error;
+  const { form, client } = parsed;
   const grantType = form.get("grant_type");
-
-  const auth = await authenticateClient(
-    form.get("client_id"),
-    request.headers.get("authorization"),
-  );
-  if (auth.error || !auth.client) {
-    return oauthError(400, "invalid_client", auth.error ?? "invalid_client");
-  }
-  const client = auth.client;
 
   if (grantType === "authorization_code") {
     const code = form.get("code") ?? "";

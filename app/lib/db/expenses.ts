@@ -237,72 +237,88 @@ function ninetyDaysAgo(): string {
 }
 
 /**
- * The most recent category each merchant was filed under, keyed by the
- * normalized merchant name (same normalization as duplicate detection, so
- * "Blue Bottle" and "blue  bottle" are the same merchant). Only merchants
- * with at least one categorized expense appear; when a merchant has
- * categorized expenses from different times, the newest wins. Used when a
- * new receipt's merchant matches a previous one — the category is reused
- * instead of guessed.
+ * The value of one field (category or report) from the most recent receipt
+ * per merchant, keyed by the normalized merchant name (same normalization
+ * as duplicate detection, so "Blue Bottle" and "blue  bottle" are the same
+ * merchant). Only merchants with a non-empty value for the field appear;
+ * when a merchant has expenses with different values, the newest wins.
+ * Shared by the category and report lookups below, which differ only in
+ * which field they read.
  */
-export async function readMerchantCategories(
+async function readLatestMerchantField(
   accountId: string,
+  field: "category" | "report",
 ): Promise<Map<string, string>> {
-  const rows = await prisma.expense.findMany({
-    where: {
-      accountId,
-      type: "receipt",
-      merchant: { not: "" },
-      category: { not: "" },
-      createdAt: { gte: ninetyDaysAgo() },
-    },
-    select: { merchant: true, category: true, createdAt: true },
-  });
-  const latest = new Map<string, { category: string; createdAt: string }>();
+  // Two typed queries (Prisma can't take a computed column name); each
+  // branch normalizes its rows to the same { merchant, createdAt, value }
+  // shape so the newest-wins loop below is written once.
+  const rows: Array<{ merchant: string; createdAt: string; value: string }> =
+    field === "category"
+      ? (
+          await prisma.expense.findMany({
+            where: {
+              accountId,
+              type: "receipt",
+              merchant: { not: "" },
+              category: { not: "" },
+              createdAt: { gte: ninetyDaysAgo() },
+            },
+            select: { merchant: true, category: true, createdAt: true },
+          })
+        ).map((r) => ({
+          merchant: r.merchant,
+          createdAt: r.createdAt,
+          value: r.category,
+        }))
+      : (
+          await prisma.expense.findMany({
+            where: {
+              accountId,
+              type: "receipt",
+              merchant: { not: "" },
+              report: { not: "" },
+              createdAt: { gte: ninetyDaysAgo() },
+            },
+            select: { merchant: true, report: true, createdAt: true },
+          })
+        ).map((r) => ({
+          merchant: r.merchant,
+          createdAt: r.createdAt,
+          value: r.report,
+        }));
+  const latest = new Map<string, { value: string; createdAt: string }>();
   for (const row of rows) {
     const key = normalizeMerchant(row.merchant);
     if (!key) continue;
     const prev = latest.get(key);
     if (!prev || row.createdAt > prev.createdAt) {
-      latest.set(key, { category: row.category, createdAt: row.createdAt });
+      latest.set(key, { value: row.value, createdAt: row.createdAt });
     }
   }
   const byMerchant = new Map<string, string>();
-  for (const [key, value] of latest) byMerchant.set(key, value.category);
+  for (const [key, value] of latest) byMerchant.set(key, value.value);
   return byMerchant;
 }
 
 /**
- * Map from normalized merchant name to the report of the most recent receipt
- * for that merchant (last 90 days). Only receipts with a non-empty report
- * are considered. Used alongside `readMerchantCategories` so a receipt from
- * a known merchant inherits both category and report.
+ * The most recent category each merchant was filed under (last 90 days).
+ * Used when a new receipt's merchant matches a previous one — the category
+ * is reused instead of guessed.
  */
-export async function readMerchantReports(
+export function readMerchantCategories(
   accountId: string,
 ): Promise<Map<string, string>> {
-  const rows = await prisma.expense.findMany({
-    where: {
-      accountId,
-      type: "receipt",
-      merchant: { not: "" },
-      report: { not: "" },
-      createdAt: { gte: ninetyDaysAgo() },
-    },
-    select: { merchant: true, report: true, createdAt: true },
-  });
-  const latest = new Map<string, { report: string; createdAt: string }>();
-  for (const row of rows) {
-    const key = normalizeMerchant(row.merchant);
-    if (!key) continue;
-    const prev = latest.get(key);
-    if (!prev || row.createdAt > prev.createdAt) {
-      latest.set(key, { report: row.report, createdAt: row.createdAt });
-    }
-  }
-  const byMerchant = new Map<string, string>();
-  for (const [key, value] of latest) byMerchant.set(key, value.report);
-  return byMerchant;
+  return readLatestMerchantField(accountId, "category");
+}
+
+/**
+ * The report of the most recent receipt per merchant (last 90 days), so a
+ * receipt from a known merchant inherits both category and report.
+ */
+export function readMerchantReports(
+  accountId: string,
+): Promise<Map<string, string>> {
+  return readLatestMerchantField(accountId, "report");
 }
 
 // --- Shared expense serialization (used by the reconcile module too) --------

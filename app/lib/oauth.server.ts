@@ -292,7 +292,7 @@ export async function rotateRefreshToken(
  * parameter; confidential clients send HTTP Basic. Returns the client, or
  * an error message when the credentials don't check out.
  */
-export async function authenticateClient(
+async function authenticateClient(
   clientId: string | null,
   basicHeader: string | null,
 ): Promise<{ client?: OAuthClientRecord; error?: string }> {
@@ -331,6 +331,41 @@ export async function authenticateClient(
     return { error: "invalid_client: client does not use client secrets." };
   }
   return { client };
+}
+
+/**
+ * Parse a form-urlencoded POST and authenticate the client from the
+ * `client_id` parameter and/or HTTP Basic header. Returns either the parsed
+ * form plus the authenticated client, or the error response to return.
+ * Shared by the token and revoke endpoints (RFC 6749 §2.3 / RFC 7009 §2.1
+ * — both authenticate the client the same way).
+ */
+export async function authenticateFormRequest(
+  request: Request,
+): Promise<
+  { form: URLSearchParams; client: OAuthClientRecord } | { error: Response }
+> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/x-www-form-urlencoded")) {
+    return {
+      error: oauthError(
+        400,
+        "invalid_request",
+        "Content-Type must be application/x-www-form-urlencoded.",
+      ),
+    };
+  }
+  const form = new URLSearchParams(await request.text());
+  const auth = await authenticateClient(
+    form.get("client_id"),
+    request.headers.get("authorization"),
+  );
+  if (auth.error || !auth.client) {
+    return {
+      error: oauthError(400, "invalid_client", auth.error ?? "invalid_client"),
+    };
+  }
+  return { form, client: auth.client };
 }
 
 /** Generate an authorization code, store it, and return the raw code. */

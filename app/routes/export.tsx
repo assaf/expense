@@ -1,14 +1,11 @@
-import {
-  ArrowLeft,
-  FileArchive,
-  FileDown,
-  Lock,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, FileArchive, FileDown, Lock, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, redirect, useFetcher } from "react-router";
+import {
+  RemoveButton,
+  RenameButton,
+  RenameForm,
+} from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { requireUser } from "~/lib/auth.server";
@@ -161,7 +158,11 @@ function ReportRow({ report }: { report: ReportSummary }) {
   if (editing) {
     return (
       <li className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
-        <RenameForm name={report.name} onCancel={() => setEditing(false)} />
+        <RenameForm
+          intent="renameReport"
+          name={report.name}
+          onCancel={() => setEditing(false)}
+        />
       </li>
     );
   }
@@ -217,102 +218,27 @@ function ReportRow({ report }: { report: ReportSummary }) {
           </button>
         </toggleFetcher.Form>
 
-        <button
+        <RenameButton
           ref={renameRef}
-          type="button"
           onClick={() => setEditing(true)}
-          className="text-gray-500 dark:text-gray-400 hover:text-ink"
-          aria-label={`Rename ${report.name}`}
-        >
-          <Pencil aria-hidden="true" className="h-4 w-4" />
-        </button>
+          name={report.name}
+        />
 
-        <removeFetcher.Form
-          method="post"
-          className="contents"
-          onSubmit={(e) => {
-            if (confirmRemove && !window.confirm(confirmRemove)) {
-              e.preventDefault();
-            }
-          }}
-        >
-          <input type="hidden" name="intent" value="removeReport" />
-          <input type="hidden" name="name" value={report.name} />
-          <button
-            type="submit"
-            className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-            aria-label={`Delete ${report.name}`}
-          >
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </button>
-        </removeFetcher.Form>
+        <RemoveButton
+          fetcher={removeFetcher}
+          intent="removeReport"
+          name={report.name}
+          confirm={confirmRemove}
+        />
       </div>
     </li>
   );
 }
 
-// --- Rename form -----------------------------------------------------------
-
-type RenameResult = { ok: boolean; error?: string };
-
-function RenameForm({
-  name,
-  onCancel,
-}: {
-  name: string;
-  onCancel: () => void;
-}) {
-  const fetcher = useFetcher<RenameResult>();
-  const [draft, setDraft] = useState(name);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (fetcher.data?.error) setError(fetcher.data.error);
-    else if (fetcher.data?.ok) setError(null);
-  }, [fetcher.data]);
-
-  return (
-    <div className="flex w-full flex-col gap-1">
-      <fetcher.Form method="post" className="flex w-full items-center gap-2">
-        <input type="hidden" name="intent" value="renameReport" />
-        <input type="hidden" name="name" value={name} />
-        <Input
-          type="text"
-          name="newName"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") onCancel();
-          }}
-          autoFocus
-          aria-invalid={error ? true : undefined}
-          invalid={!!error}
-          className="min-w-0 flex-1 px-2 py-1"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          disabled={!draft.trim() || draft === name}
-        >
-          Save
-        </Button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="shrink-0 text-sm text-gray-500 dark:text-gray-400 hover:text-ink"
-        >
-          Cancel
-        </button>
-      </fetcher.Form>
-      {error ? (
-        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-      ) : null}
-    </div>
-  );
-}
+// --- Rename/remove row actions --------------------------------------------
+// RenameForm, RenameButton and RemoveButton live in name-list.tsx (the
+// Settings report/category lists); the export page reuses them so a change
+// to the inline-rename or remove behavior lands in one place.
 
 // --- Add report form -------------------------------------------------------
 

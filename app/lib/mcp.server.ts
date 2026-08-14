@@ -145,14 +145,27 @@ async function serveLegacy(
   });
   const server = buildServer(auth.accountId);
   await server.connect(transport);
-  return transport.handleRequest(request, {
-    authInfo: {
-      token: auth.token,
-      clientId: auth.userId,
-      scopes: [],
-      extra: { accountId: auth.accountId },
-    },
-  });
+  return transport.handleRequest(request, { authInfo: authInfoFor(auth) });
+}
+
+/** The auth info both protocol legs pass to the SDK: the token plus the
+ * resolved account. The SDK routes tool calls through these fields. */
+function authInfoFor(auth: {
+  accountId: string;
+  userId: string;
+  token: string;
+}): {
+  token: string;
+  clientId: string;
+  scopes: [];
+  extra: { accountId: string };
+} {
+  return {
+    token: auth.token,
+    clientId: auth.userId,
+    scopes: [],
+    extra: { accountId: auth.accountId },
+  };
 }
 
 /**
@@ -165,14 +178,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   const auth = await authenticateRequest(request);
   if (auth instanceof Response) return auth;
   if (await isLegacyRequest(request)) return serveLegacy(request, auth);
-  return modernHandler.fetch(request, {
-    authInfo: {
-      token: auth.token,
-      clientId: auth.userId,
-      scopes: [],
-      extra: { accountId: auth.accountId },
-    },
-  });
+  return modernHandler.fetch(request, { authInfo: authInfoFor(auth) });
 }
 
 /**
