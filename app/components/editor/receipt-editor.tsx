@@ -76,8 +76,14 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         amount,
         report,
         category,
+        // The image lives in local state, not the loader row: a create-mode
+        // draft is only attached to the skeleton on Save, and an edit-mode
+        // replace/delete never revalidates the loader. Without this the
+        // "Incomplete" notice would stay up even when the editor holds
+        // every field — a dropped receipt included.
+        imageFile: isNew ? (draft ? draft.key : "") : hasImage ? "1" : "",
       } as ReceiptExpense),
-    [expense, date, merchant, amount, report, category],
+    [expense, date, merchant, amount, report, category, isNew, draft, hasImage],
   );
 
   // Create mode: does the draft look like an expense that already exists?

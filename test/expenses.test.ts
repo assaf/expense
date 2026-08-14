@@ -539,6 +539,49 @@ describe("Expense CRUD", () => {
     }
   });
 
+  it("hides the Incomplete notice once every necessary field is present", async () => {
+    await page.goto("/expense/new", { waitUntil: "load" });
+
+    // Fresh editor: date is prefilled, the rest is missing — incomplete.
+    await expect(page.getByText("Incomplete")).toBeVisible();
+
+    // Filled form fields alone don't clear it: the receipt image is also a
+    // necessary field, and the notice tracks the editor's own draft state.
+    await page.getByLabel("Amount").fill("12.34");
+    await page.locator("input[list='merchants']").fill("Drag Test Store");
+    await page.getByLabel("Category").selectOption({ label: "Testing" });
+    await page.getByLabel("Report").selectOption({ label: "2026 Test" });
+    await expect(page.getByText("Incomplete")).toBeVisible();
+
+    // Attach a draft image: every field is now present, so the notice hides.
+    const [resp] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes("/api/expense") && r.request().method() === "POST",
+        { timeout: 30_000 },
+      ),
+      page.locator('input[type="file"]').setInputFiles({
+        name: "complete.png",
+        mimeType: "image/png",
+        buffer: await tinyPng(),
+      }),
+    ]);
+    expect(resp.ok()).toBeTruthy();
+    await expect(page.getByText("Incomplete")).toHaveCount(0);
+
+    // Leave the database as we found it (the draft is never saved).
+    const draft = await testPrisma.imageBlob.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID },
+      orderBy: { key: "desc" },
+      select: { key: true },
+    });
+    if (draft) {
+      await testPrisma.imageBlob.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, key: draft.key },
+      });
+    }
+  });
+
   afterAll(async () => {
     await page?.close();
   });
