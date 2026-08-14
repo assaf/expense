@@ -647,7 +647,7 @@ function ExpenseRow({
         <Link
           to={to}
           className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}`}
+          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}`}
         >
           <Thumbnail expense={expense} />
           <div className="min-w-0 flex-1">
@@ -660,6 +660,12 @@ function ExpenseRow({
                         ? ` · ${expense.distanceMiles} mi`
                         : ""
                     }`}
+                {expense.description ? (
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {" "}
+                    · {expense.description}
+                  </span>
+                ) : null}
               </span>
               <span className="shrink-0 font-semibold tabular-nums">
                 {formatAmount(expense.amount)}
