@@ -7,6 +7,12 @@ const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const OSRM_URL = "https://router.project-osrm.org/route/v1/driving";
 const METERS_PER_MILE = 1609.344;
 
+/** The app's descriptive User-Agent for map-service requests (Nominatim's
+ * usage policy requires one; Carto tiles use the same identity). Shared
+ * with the report-map tile fetcher (route-map.server.ts). */
+export const MAP_USER_AGENT =
+  "expense-personal/1.0 (assaf@expense.labnotes.org)";
+
 interface NominatimResult {
   lat: string;
   lon: string;
@@ -192,7 +198,7 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
     const res = await fetch(url, {
       headers: {
         // Nominatim usage policy requires a descriptive User-Agent.
-        "User-Agent": "expense-personal/1.0 (assaf@expense.labnotes.org)",
+        "User-Agent": MAP_USER_AGENT,
         Accept: "application/json",
       },
       signal: AbortSignal.timeout(8_000),

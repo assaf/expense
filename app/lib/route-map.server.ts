@@ -4,6 +4,7 @@ import {
   jetbrainsMonoBytes,
   resvgFontOptions,
 } from "~/lib/resvg-font.server";
+import { MAP_USER_AGENT } from "~/lib/maps.server";
 import { geocodedLocations, type MileageExpense } from "~/lib/types";
 
 /**
@@ -27,7 +28,6 @@ const WIDTH = 460;
 const HEIGHT = 220;
 const TILE = 256;
 const PAD = 28;
-const USER_AGENT = "expense-personal/1.0 (assaf@expense.labnotes.org)";
 const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
 const TILE_CACHE_MAX = 200;
 
@@ -49,7 +49,7 @@ async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
     const res = await fetch(
       `https://${sub}.basemaps.cartocdn.com/light_all/${key}.png`,
       {
-        headers: { "User-Agent": USER_AGENT, Accept: "image/png" },
+        headers: { "User-Agent": MAP_USER_AGENT, Accept: "image/png" },
         signal: AbortSignal.timeout(10_000),
       },
     );

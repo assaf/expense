@@ -1,5 +1,6 @@
 import {
   deleteImage,
+  imageResponseHeaders,
   readImage,
   readUploadedFile,
   saveImage,
@@ -29,12 +30,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const image = await readImage(user.accountId, key);
   if (!image) return new Response("Not found", { status: 404 });
   return new Response(image.buffer as BodyInit, {
-    headers: {
-      "Content-Type": image.mime || "image/png",
-      "Cache-Control": "public, max-age=300",
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'; sandbox",
-    },
+    headers: imageResponseHeaders(
+      image.mime || "image/png",
+      "public, max-age=300",
+    ),
   });
 }
 

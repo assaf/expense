@@ -1,9 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import * as Sentry from "@sentry/react-router";
 import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
+import { safeEqual } from "~/lib/passwords";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import {
   extractPdfText,
@@ -39,9 +39,7 @@ const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function hasSmokeSecret(header: string | null): boolean {
   if (!SMOKE_TEST_SECRET || !header) return false;
-  const a = Buffer.from(header);
-  const b = Buffer.from(SMOKE_TEST_SECRET);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return safeEqual(header, SMOKE_TEST_SECRET);
 }
 
 /** A one-page LETTER PDF with the smoke text at 40pt (readable by OCR). */

@@ -365,7 +365,6 @@ describe("Expense CRUD", () => {
       select: { data: true },
     });
     expect(stored).not.toBeNull();
-    expect(stored).not.toBeNull();
     expect(startsWithMagic(stored!.data, JPEG_MAGIC)).toBe(true);
 
     // Leave the database as we found it.

@@ -143,6 +143,22 @@ function conventionImageName(
   return name || "";
 }
 
+/** Response headers for serving stored image bytes: nosniff + a sandboxing
+ * CSP, so even if a stored blob's mime were ever renderable (HTML/SVG), a
+ * direct navigation could not execute it in document mode on this origin.
+ * Shared by /expense/:id/image and the /api/expense draft preview. */
+export function imageResponseHeaders(
+  mime: string,
+  cacheControl: string,
+): Record<string, string> {
+  return {
+    "Content-Type": mime,
+    "Cache-Control": cacheControl,
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; sandbox",
+  };
+}
+
 /**
  * Read an uploaded image file from a form's `file` field, or null when
  * absent/empty. The mime falls back to the filename extension then to PNG —

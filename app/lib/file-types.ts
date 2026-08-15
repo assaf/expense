@@ -42,7 +42,26 @@ export function isPdf(input: {
   return false;
 }
 
-const IMAGE_NAME_RE = /\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
+/** File extensions the app treats as image receipts. Single source of truth
+ * for extension-based image detection — add a format here (not in a second
+ * regex) when a new image type is supported. The storage mime map in
+ * images.server.ts covers the narrower subset it re-encodes/stores by
+ * mime; the wider set here is what detection accepts. */
+const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "heic",
+  "heif",
+  "bmp",
+  "tif",
+  "tiff",
+  "avif",
+] as const;
+
+const IMAGE_NAME_RE = new RegExp(`\\.(${IMAGE_EXTENSIONS.join("|")})$`, "i");
 
 /** True when the input is an image — by mime or filename. */
 export function isImage(input: {
