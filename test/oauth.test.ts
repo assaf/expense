@@ -249,6 +249,20 @@ describe("MCP OAuth", () => {
     expect(redirected.searchParams.get("state")).toBe("state-456");
   });
 
+  it("frames out the consent page (clickjacking protection)", async () => {
+    const clientId = await registerClient("oauth-test-framing");
+    const verifier = generateCodeVerifier();
+    const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
+    const res = await page.request.get(authorizeUrl(clientId, verifier));
+    expect(res.status()).toBe(200);
+    const headers = res.headers();
+    expect(headers["x-frame-options"]).toBe("DENY");
+    expect(headers["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+    await page.close();
+  });
+
   it("denies the connection when the user clicks Deny", async () => {
     const clientId = await registerClient("oauth-test-deny");
     const verifier = generateCodeVerifier();

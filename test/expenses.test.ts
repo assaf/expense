@@ -2,8 +2,10 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import PDFDocument from "pdfkit";
+import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
+import { saveImage } from "~/lib/images.server";
 
 /** Local-date string (YYYY-MM-DD) — matches the app's `todayDate()`. */
 function todayLocal(): string {
@@ -372,6 +374,49 @@ describe("Expense CRUD", () => {
       await testPrisma.imageBlob.deleteMany({
         where: { accountId: TEST_ACCOUNT_ID, key: created.imageFile },
       });
+    }
+  });
+
+  it("serves receipt images with nosniff and a sandboxing CSP", async () => {
+    // Defense-in-depth on the image route: even if a stored blob ever had a
+    // renderable type, the headers must stop it executing in document mode.
+    const png = await tinyPng();
+    const { filename } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "headers.png",
+    );
+    const id = ulid();
+    const now = new Date().toISOString();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-01-15",
+        report: "2026 Test",
+        category: "Office Supplies",
+        description: "",
+        amount: "1.00",
+        merchant: "Header Test",
+        imageFile: filename,
+        imageMime: "image/jpeg",
+        originalName: "headers.png",
+        locations: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    try {
+      const res = await page.request.get(`/expense/${id}/image`);
+      expect(res.status()).toBe(200);
+      const headers = res.headers();
+      expect(headers["x-content-type-options"]).toBe("nosniff");
+      expect(headers["content-security-policy"]).toContain("sandbox");
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+      await testPrisma.imageBlob.deleteMany({ where: { key: filename } });
     }
   });
 
