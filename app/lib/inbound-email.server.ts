@@ -12,6 +12,8 @@ import {
 } from "~/lib/email-render.server";
 import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
 import { safeEqualBase64 } from "~/lib/passwords";
+import { fetchPublicUrl } from "~/lib/ssrf.server";
+export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
@@ -1031,81 +1033,32 @@ const REMOTE_IMAGE_MAX_BYTES = 5_000_000; // per-image cap
 const REMOTE_IMAGE_TIMEOUT_MS = 4_000;
 const REMOTE_IMAGE_REDIRECTS = 3;
 
-/** True for loopback, private, link-local, and reserved hosts — remote image
- * fetches never target these (guards against SSRF-style probing from email
- * HTML, since the renderer itself never opens a network connection). */
-export function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/\.$/, "");
-  if (h === "localhost" || h === "::1") return true;
-  if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) {
-    return true; // IPv6 link-local / unique-local
-  }
-  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!ipv4) return false;
-  const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-  return (
-    a === 10 ||
-    a === 127 ||
-    a === 0 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    a >= 224
-  );
-}
-
 /** Pre-fetch a remote image referenced by the email HTML so it can be
  * inlined as a data URI (the renderer blocks all network). Returns null for
  * anything non-image, oversized, timed out, or pointing at a private host.
- * Redirects are followed manually with the same checks at every hop. */
+ * The fetch itself is SSRF-guarded (http(s) only, private/resolved-private
+ * hosts rejected, redirects re-checked at every hop — see ssrf.server). */
 export async function fetchRemoteImageImpl(
   url: string,
 ): Promise<CidImage | null> {
-  let current: URL;
+  let res: Response;
   try {
-    current = new URL(url);
+    res = await fetchPublicUrl(url, {
+      timeoutMs: REMOTE_IMAGE_TIMEOUT_MS,
+      redirects: REMOTE_IMAGE_REDIRECTS,
+    });
   } catch {
     return null;
   }
-  for (let hops = 0; hops <= REMOTE_IMAGE_REDIRECTS; hops += 1) {
-    if (
-      (current.protocol !== "https:" && current.protocol !== "http:") ||
-      isPrivateHost(current.hostname)
-    ) {
-      return null;
-    }
-    let res: Response;
-    try {
-      res = await fetch(current, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(REMOTE_IMAGE_TIMEOUT_MS),
-      });
-    } catch {
-      return null;
-    }
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get("location");
-      if (!location) return null;
-      try {
-        current = new URL(location, current);
-      } catch {
-        return null;
-      }
-      continue;
-    }
-    if (!res.ok) return null;
-    const type = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
-    if (!/^image\//i.test(type)) return null;
-    if (
-      Number(res.headers.get("content-length") ?? 0) > REMOTE_IMAGE_MAX_BYTES
-    ) {
-      return null;
-    }
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length === 0 || buffer.length > REMOTE_IMAGE_MAX_BYTES) {
-      return null;
-    }
-    return { buffer, mime: type || "image/png" };
+  if (!res.ok) return null;
+  const type = (res.headers.get("content-type") ?? "").split(";")[0]!.trim();
+  if (!/^image\//i.test(type)) return null;
+  if (Number(res.headers.get("content-length") ?? 0) > REMOTE_IMAGE_MAX_BYTES) {
+    return null;
   }
-  return null;
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length === 0 || buffer.length > REMOTE_IMAGE_MAX_BYTES) {
+    return null;
+  }
+  return { buffer, mime: type || "image/png" };
 }

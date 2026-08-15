@@ -43,14 +43,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       headers: {
         "Content-Type": "image/jpeg",
         "Cache-Control": "public, max-age=86400, immutable",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }
 
+  // nosniff + a sandboxing CSP on the full image: the stored mime is
+  // coerced to an allowlist at save time, but if a stored blob ever had a
+  // renderable type (HTML/SVG), a direct navigation must still not execute
+  // it in document mode on this origin.
   return new Response(image.buffer as BodyInit, {
     headers: {
       "Content-Type": image.mime || expense.imageMime || "image/png",
       "Cache-Control": "public, max-age=3600",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
     },
   });
 }

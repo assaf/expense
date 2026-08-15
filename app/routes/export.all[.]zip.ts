@@ -7,6 +7,14 @@ import { readMileageRates } from "~/lib/db/seed";
 import { merchantLabel, sortExpenses } from "~/lib/format";
 import type { Route } from "./+types/export.all[.]zip";
 
+/** CSV formula-injection guard (CWE-1236): spreadsheet apps evaluate cells
+ * that start with =, +, -, @, tab, or carriage return as formulas. Prefix
+ * with a single quote so the value is treated as literal text. Applies to
+ * the user-typed fields only — date/amount are app-generated. */
+function csvSafe(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const [expenses, rates] = await Promise.all([
@@ -22,11 +30,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   for (const e of sorted) {
     csvRows.push([
       e.date,
-      merchantLabel(e, rates),
+      csvSafe(merchantLabel(e, rates)),
       e.amount,
-      e.category,
-      e.report,
-      e.description,
+      csvSafe(e.category),
+      csvSafe(e.report),
+      csvSafe(e.description),
     ]);
   }
   const csv = stringify(csvRows, { quoted_string: true });

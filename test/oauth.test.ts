@@ -70,9 +70,9 @@ describe("MCP OAuth", () => {
   }
 
   /**
-   * Run the authorize flow in the browser. When consent is already granted
-   * the loader redirects straight to the callback with a code — otherwise
-   * the consent page appears and we click Allow/Deny.
+   * Run the authorize flow in the browser. The consent page always appears
+   * (the GET never issues codes silently) — we click Allow/Deny and expect
+   * the redirect back to the callback with a code or error.
    */
   async function runAuthorize(
     page: Page,
@@ -226,20 +226,27 @@ describe("MCP OAuth", () => {
     expect(list.expenses.some((e) => e.merchant === "Secret Corp")).toBe(false);
   });
 
-  it("remembers consent: a second connection skips the consent page", async () => {
+  it("requires explicit approval on every connection (no silent codes)", async () => {
     const clientId = await registerClient("oauth-test-remember");
     const verifier = generateCodeVerifier();
     const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
 
     await runAuthorize(page, authorizeUrl(clientId, verifier), "approve");
-    // Second connection with the same user + client → straight to the code.
-    const second = await runAuthorize(
-      page,
-      authorizeUrl(clientId, verifier, "state-456"),
-      "approve",
-    );
-    expect(second.searchParams.get("code")).toBeTruthy();
-    expect(second.searchParams.get("state")).toBe("state-456");
+    // A second connection must show the consent page again — the authorize
+    // GET never issues a code without an Allow click, so a link or image
+    // request from an attacker page can't silently mint a code for an
+    // already-approved client (consent-CSRF).
+    const secondUrl = authorizeUrl(clientId, verifier, "state-456");
+    await page.goto(secondUrl, { waitUntil: "load", timeout: 15_000 });
+    const allow = page.getByRole("button", { name: "Allow" });
+    expect(await allow.isVisible().catch(() => false)).toBe(true);
+    await allow.click();
+    await page.waitForURL((u) => u.searchParams.has("code"), {
+      timeout: 15_000,
+    });
+    const redirected = new URL(page.url());
+    expect(redirected.searchParams.get("code")).toBeTruthy();
+    expect(redirected.searchParams.get("state")).toBe("state-456");
   });
 
   it("denies the connection when the user clicks Deny", async () => {

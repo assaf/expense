@@ -41,6 +41,23 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/heic": ".heic",
 };
 
+/** Mime types the store accepts. Anything else — a browser-supplied
+ * `text/html` or `image/svg+xml` from a crafted upload, an arbitrary MCP
+ * `mime` arg, an odd Resend attachment type — is coerced to
+ * `application/octet-stream` at save time so the image route never serves
+ * renderable content (HTML/SVG with scripts) at a same-origin URL.
+ * PDFs are allowed: uploads are rasterized before storage, and a raw PDF
+ * is inert in a browser. */
+const STORABLE_MIMES = new Set([
+  ...Object.keys(EXT_BY_MIME),
+  "application/pdf",
+]);
+
+/** Coerce a mime to the storable set (see STORABLE_MIMES). */
+function storableMime(mime: string): string {
+  return STORABLE_MIMES.has(mime) ? mime : "application/octet-stream";
+}
+
 /** Mime for a filename's extension, or `fallback` when unknown. The single
  * mime-by-extension map for the app — the MCP capture path guesses the same
  * way (images.server is the source of truth). */
@@ -172,7 +189,10 @@ export async function saveImage(
   // as JPEG (q85). Undecodable/unchanged inputs pass through as-is.
   const normalized = await normalizeStoredImage(buffer);
   const storedBuffer = normalized?.buffer ?? buffer;
-  const storedMime = normalized?.mime ?? resolvedMime;
+  // The mime is coerced to the storable set, so a crafted upload (HTML/SVG
+  // bytes with a browser-supplied content type) can never be stored with a
+  // renderable type and later served as a same-origin document.
+  const storedMime = storableMime(normalized?.mime ?? resolvedMime);
   const ext =
     (normalized ? extForMime(storedMime) : null) ||
     extname(originalName).toLowerCase() ||

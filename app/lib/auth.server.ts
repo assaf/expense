@@ -25,7 +25,12 @@ import {
 } from "~/lib/db/accounts";
 import { ensureInboundSenderForUser } from "~/lib/db/inbound";
 import { initStore } from "~/lib/db/seed";
-import { isEmail } from "./validation";
+import {
+  authLockedUntil,
+  clearAuthFailures,
+  recordAuthFailure,
+} from "~/lib/db/auth-attempts";
+import { isEmail, MAX_PASSWORD_LENGTH } from "./validation";
 import type { User } from "./types";
 
 /**
@@ -117,11 +122,54 @@ export class EmailNotVerifiedError extends Error {
   }
 }
 
+/** Login/join rejected because the target is in brute-force lockout. The
+ * message is user-facing and deliberately vague about the exact window. */
+class TooManyAttemptsError extends Error {
+  constructor() {
+    super(
+      "Too many failed attempts for this account — try again in about 15 minutes.",
+    );
+    this.name = "TooManyAttemptsError";
+  }
+}
+
+/** Best-effort failure bookkeeping: auth must never break because the
+ * counter row couldn't be written. */
+async function recordFailureBestEffort(key: string): Promise<void> {
+  try {
+    await recordAuthFailure(key);
+  } catch (err) {
+    console.warn("[auth] failed to record auth attempt for %s:", key, err);
+  }
+}
+
+async function clearFailuresBestEffort(key: string): Promise<void> {
+  try {
+    await clearAuthFailures(key);
+  } catch (err) {
+    console.warn("[auth] failed to clear auth attempts for %s:", key, err);
+  }
+}
+
+/** Reject when the target key is in lockout (throws TooManyAttemptsError). */
+async function guardLockout(key: string): Promise<void> {
+  if (await authLockedUntil(key)) {
+    throw new TooManyAttemptsError();
+  }
+}
+
 /**
  * Validate credentials and, on success, return the Set-Cookie header value
  * for the session. Throws on invalid credentials or an unverified email
  * (EmailNotVerifiedError). Pass the result to
  * `redirect(…, { headers: { "Set-Cookie": value } })`.
+ *
+ * Brute-force protection: attempts are counted per email in Postgres
+ * (`auth_attempts`); five failures inside 15 minutes lock the account for
+ * 15 minutes, and the lock is checked BEFORE the scrypt derivation (a
+ * locked account costs the attacker nothing). Passwords over
+ * MAX_PASSWORD_LENGTH are rejected without deriving. A successful login
+ * clears the counter.
  *
  * The login email is the account's default receipts-by-email sender: it is
  * ensured to exist and a verification email is sent when owed (see
@@ -133,11 +181,20 @@ export async function login(
   origin?: string,
 ): Promise<string> {
   await initStore();
-  const user = await findUserByEmail(email);
-  const stored = user ? await getPasswordHash(user.id) : "";
-  if (!user || !stored || !(await verifyPassword(password, stored))) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const lockKey = `login:${normalizedEmail}`;
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    // Same public message as a wrong password; scrypt never runs.
     throw new Error("Invalid email or password");
   }
+  await guardLockout(lockKey);
+  const user = await findUserByEmail(normalizedEmail);
+  const stored = user ? await getPasswordHash(user.id) : "";
+  if (!user || !stored || !(await verifyPassword(password, stored))) {
+    await recordFailureBestEffort(lockKey);
+    throw new Error("Invalid email or password");
+  }
+  await clearFailuresBestEffort(lockKey);
   // The account can't sign in until the emailed link was clicked.
   if (!user.emailVerifiedAt) {
     throw new EmailNotVerifiedError(user.email);
@@ -198,10 +255,17 @@ export async function joinAccountWithInviteCode(
 ): Promise<{ email: string }> {
   await initStore();
   validateSignup(input.email, input.password);
-  const account = await findAccountByInviteCode(
-    normalizeInviteCode(input.inviteCode),
-  );
-  if (!account) throw new Error("That invite code is not valid");
+  const code = normalizeInviteCode(input.inviteCode);
+  // Brute-force guard on the invite code itself: five wrong guesses inside
+  // 15 minutes lock that code for 15 minutes.
+  const lockKey = `invite:${code}`;
+  await guardLockout(lockKey);
+  const account = await findAccountByInviteCode(code);
+  if (!account) {
+    await recordFailureBestEffort(lockKey);
+    throw new Error("That invite code is not valid");
+  }
+  await clearFailuresBestEffort(lockKey);
   await replaceUnverifiedSignup(input.email);
   return createPendingUser({
     accountId: account.id,
@@ -339,6 +403,11 @@ function validateSignup(email: string, password: string): void {
   }
   if (password.length < 8) {
     throw new Error("Password must be at least 8 characters");
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    throw new Error(
+      `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
+    );
   }
 }
 

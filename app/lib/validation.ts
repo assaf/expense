@@ -1,5 +1,11 @@
 import { todayDate } from "~/lib/format";
 
+/** Longest accepted password (both the signup validator and the login form
+ * cap at this). Bounds the scrypt work an attacker can force with one
+ * request — a megabyte-long password would otherwise trigger an expensive
+ * derivation per attempt (see also the brute-force lockout in auth.server). */
+export const MAX_PASSWORD_LENGTH = 128;
+
 /** Sanitize a free-text name into a filesystem-safe token (spaces → _). */
 export function sanitizeFilenamePart(input: string): string {
   return input

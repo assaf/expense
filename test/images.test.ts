@@ -32,6 +32,55 @@ afterAll(cleanup);
 beforeEach(cleanup);
 
 describe("saveImage", () => {
+  it("coerces a crafted HTML upload to octet-stream (never renderable)", async () => {
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      Buffer.from("<!doctype html><script>alert(1)</script>"),
+      "text/html",
+      "evil.html",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("application/octet-stream");
+    const row = await testPrisma.imageBlob.findFirst({
+      where: { key: filename },
+    });
+    expect(row!.mime).toBe("application/octet-stream");
+  });
+
+  it("coerces an SVG upload to octet-stream (no script-bearing svg)", async () => {
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+    );
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      svg,
+      "image/svg+xml",
+      "evil.svg",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("application/octet-stream");
+  });
+
+  it("keeps a legitimate image mime through the store", async () => {
+    const png = await sharp({
+      create: {
+        width: 20,
+        height: 20,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const { filename, mime } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "ok.png",
+    );
+    createdKeys.push(filename);
+    expect(mime).toBe("image/jpeg"); // resized + re-encoded
+  });
   it("saves two images with the same original name under distinct keys", async () => {
     const a = await saveImage(
       TEST_ACCOUNT_ID,

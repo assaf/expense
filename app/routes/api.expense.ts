@@ -32,6 +32,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     headers: {
       "Content-Type": image.mime || "image/png",
       "Cache-Control": "public, max-age=300",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
     },
   });
 }

@@ -18,8 +18,13 @@ import type { Route } from "./+types/oauth.authorize";
  * The user is already signed in (session cookie) — the flow is: an MCP
  * client opens this URL in the browser, the user sees who wants access and
  * clicks Allow, and we redirect back to the client with a PKCE-bound
- * authorization code. Consent is remembered, so subsequent connections
- * skip the page and get a code immediately.
+ * authorization code. Consent is remembered (a "previously connected" note
+ * is shown), but every authorization still requires an explicit Allow click
+ * on this page: the GET never issues codes, so a link/image request from an
+ * attacker-controlled page can never silently mint a code for an
+ * already-approved client (consent-CSRF / silent re-authorization). The
+ * page is also framed-out (X-Frame-Options + CSP frame-ancestors) so
+ * clickjacking can't fake that click.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -35,22 +40,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     return errorPage("The redirect URI is not registered for this client.");
   }
 
-  if (await hasOAuthConsent(user.id, client.id)) {
-    const code = await issueAuthorizationCode({
-      userId: user.id,
-      client,
-      redirectUri: parsed.params.redirectUri,
-      codeChallenge: parsed.params.codeChallenge,
-    });
-    return redirect(
-      redirectWith(parsed.params.redirectUri, {
-        code,
-        state: parsed.params.state,
-      }),
-    );
-  }
-
-  return { client, ...parsed.params, userEmail: user.email };
+  // Codes are ONLY issued from the approve POST below — never from this
+  // GET — so an <img>/<a> request can't mint a code without a click.
+  return {
+    client,
+    ...parsed.params,
+    userEmail: user.email,
+    previouslyConnected: await hasOAuthConsent(user.id, client.id),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -106,15 +103,23 @@ export async function action({ request }: Route.ActionArgs) {
 export default function OAuthAuthorizePage({
   loaderData,
 }: Route.ComponentProps) {
-  const { client, clientId, redirectUri, codeChallenge, state, userEmail } =
-    loaderData as Route.ComponentProps["loaderData"] & {
-      client: NonNullable<Awaited<ReturnType<typeof findOAuthClient>>>;
-      clientId: string;
-      redirectUri: string;
-      codeChallenge: string;
-      state: string;
-      userEmail: string;
-    };
+  const {
+    client,
+    clientId,
+    redirectUri,
+    codeChallenge,
+    state,
+    userEmail,
+    previouslyConnected,
+  } = loaderData as Route.ComponentProps["loaderData"] & {
+    client: NonNullable<Awaited<ReturnType<typeof findOAuthClient>>>;
+    clientId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    state: string;
+    userEmail: string;
+    previouslyConnected: boolean;
+  };
 
   return (
     <main
@@ -137,6 +142,12 @@ export default function OAuthAuthorizePage({
             wants to access your expenses — capture receipts, log mileage,
             answer spending questions, and build reports.
           </p>
+          {previouslyConnected && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Previously connected — approving refreshes this connection's
+              access.
+            </p>
+          )}
         </div>
         <div className="mb-6 rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-600 dark:text-gray-300">
           Signed in as{" "}
@@ -225,6 +236,22 @@ function redirectWith(
 function errorPage(message: string): Response {
   return new Response(
     `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#f9fafb"><div style="max-width:420px;padding:2rem;background:#fff;border:1px solid #e5e7eb;border-radius:12px;color:#374151"><h1 style="font-size:1.25rem;color:#111827">Can't connect</h1><p>${escapeHtml(message)}</p><p style="color:#9ca3af;font-size:0.875rem">Return to the app you were connecting and try again.</p></div></body></html>`,
-    { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } },
+    {
+      status: 400,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "frame-ancestors 'none'",
+      },
+    },
   );
+}
+
+/** The consent page must never be frameable (clickjacking can fake the
+ * Allow click) and must never issue a code on a plain GET. */
+export function headers(): HeadersInit {
+  return {
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+  };
 }

@@ -343,3 +343,19 @@ model OAuthToken {
   @@index([userId])
   @@map("oauth_tokens")
 }
+
+/// Brute-force lockout state for sign-in / invite-code attempts. One row
+/// per key ("login:<email>", "invite:<code>"); failures inside a window are
+/// counted, and crossing the threshold sets lockedUntil. Rows are cleared
+/// on a successful login/join. Read-modify-write is not atomic under
+/// concurrency, but a race can only under-count — the threshold lock still
+/// trips at >= 5. See app/lib/db/auth-attempts.ts.
+model AuthAttempt {
+  key         String  @id
+  failures    Int
+  windowStart String // ISO — the counter resets when this is older than the window
+  lockedUntil String? // ISO — null when not locked
+  updatedAt   String
+
+  @@map("auth_attempts")
+}

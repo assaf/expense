@@ -333,6 +333,23 @@ describe("MCP endpoint", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("rejects capture_receipt URLs pointing at private hosts (SSRF)", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "capture_receipt", {
+      url: "http://169.254.169.254/latest/meta-data/",
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.payload)).toContain("private");
+  });
+
+  it("rejects capture_receipt URLs with non-http(s) schemes (SSRF)", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "capture_receipt", {
+      url: "file:///etc/passwd",
+    });
+    expect(result.isError).toBe(true);
+  });
+
   it("rejects log_mileage with zero stops", async () => {
     await initialize(accessToken);
     const result = await callTool(accessToken, "log_mileage", {

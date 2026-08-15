@@ -50,6 +50,7 @@ import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
+import { fetchPublicUrl, SsrfError } from "~/lib/ssrf.server";
 import {
   newExpenseShell,
   type Expense,
@@ -947,9 +948,13 @@ async function captureReceipt(
   } else if (args.url) {
     let res: Response;
     try {
-      res = await fetch(args.url, { signal: AbortSignal.timeout(20_000) });
-    } catch {
-      return fail(`Couldn't fetch ${args.url}: network error or timeout.`);
+      // SSRF-guarded: http(s) only, private/resolved-private hosts are
+      // rejected, redirects are re-checked at every hop (ssrf.server).
+      res = await fetchPublicUrl(args.url, { timeoutMs: 20_000 });
+    } catch (err) {
+      const reason =
+        err instanceof SsrfError ? err.message : "network error or timeout";
+      return fail(`Couldn't fetch ${args.url}: ${reason}.`);
     }
     if (!res.ok) return fail(`Couldn't fetch ${args.url}: HTTP ${res.status}.`);
     const data = await res.arrayBuffer();

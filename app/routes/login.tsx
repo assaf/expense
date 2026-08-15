@@ -13,7 +13,7 @@ import {
   resendAccountVerification,
 } from "~/lib/auth.server";
 import { pageMeta } from "~/lib/seo-content";
-import { formString } from "~/lib/validation";
+import { formString, MAX_PASSWORD_LENGTH } from "~/lib/validation";
 import type { Route } from "./+types/login";
 
 type Mode = "signin" | "create" | "join" | "resend-verification";
@@ -255,6 +255,7 @@ export default function LoginPage() {
             label="Password"
             name="password"
             type="password"
+            maxLength={MAX_PASSWORD_LENGTH}
             autoComplete={
               mode === "signin" ? "current-password" : "new-password"
             }
@@ -338,6 +339,7 @@ function AuthField({
   type = "text",
   autoComplete,
   placeholder,
+  maxLength,
   onChange,
 }: {
   label: string;
@@ -345,6 +347,7 @@ function AuthField({
   type?: string;
   autoComplete?: string;
   placeholder?: string;
+  maxLength?: number;
   onChange?: (value: string) => void;
 }) {
   return (
@@ -354,6 +357,7 @@ function AuthField({
         name={name}
         required
         minLength={name === "password" ? 8 : undefined}
+        maxLength={maxLength}
         autoComplete={autoComplete}
         placeholder={placeholder}
         inputMode={type === "email" ? "email" : undefined}

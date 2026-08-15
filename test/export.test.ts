@@ -2,6 +2,7 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { getDocument, OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { unzipSync } from "fflate";
 import { ulid } from "ulid";
 import { extractPdfText } from "~/lib/receipt-ocr.server";
 import { goto } from "./helpers/launchBrowser";
@@ -234,6 +235,42 @@ describe("Export", () => {
       expect(text).toContain("No category");
       expect(text).toContain("Random Diner");
       expect(text).toContain("$13.37");
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+    }
+  });
+
+  it("escapes formula-like cells in the exported CSV (CWE-1236)", async () => {
+    // Merchant/category/report/description starting with =, +, - or @ would
+    // execute as spreadsheet formulas when opened in Excel/LibreOffice.
+    const id = ulid();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-05-21",
+        report: "2026 Test",
+        category: "+SUM(A1:A9)",
+        description: "@cmd|' /C calc'!A0",
+        amount: "10.00",
+        merchant: '=HYPERLINK("https://evil.example","x")',
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-05-21T00:00:00.000Z",
+        updatedAt: "2026-05-21T00:00:00.000Z",
+      },
+    });
+    try {
+      const res = await page.context().request.get("/export/all.zip");
+      expect(res.status()).toBe(200);
+      const zip = unzipSync(new Uint8Array(await res.body()));
+      const csv = new TextDecoder().decode(zip["expenses.csv"]);
+      expect(csv).toContain("'=HYPERLINK");
+      expect(csv).toContain("'+SUM");
+      expect(csv).toContain("'@cmd");
     } finally {
       await testPrisma.expense.deleteMany({ where: { id } });
     }

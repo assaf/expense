@@ -2,6 +2,7 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { expect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
+import { ulid } from "ulid";
 import { signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
@@ -12,7 +13,8 @@ import {
   testPrisma,
 } from "./helpers/seedTestData";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
-import { hashToken, verifyPassword } from "~/lib/passwords";
+import { hashPassword, hashToken, verifyPassword } from "~/lib/passwords";
+import { createAccountWithUser } from "~/lib/auth.server";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
 
@@ -421,6 +423,156 @@ describe("Access control", () => {
       "That invite code is not valid",
     );
     await page.close();
+  });
+
+  /** Create a verified user row directly (no email round trip) with a real
+   * password hash so correct-password logins work. Returns the account id
+   * for cleanup. */
+  async function createVerifiedUser(
+    email: string,
+    password: string,
+  ): Promise<string> {
+    const accountId = `lock-account-${ulid()}`;
+    const now = new Date().toISOString();
+    await testPrisma.account.create({
+      data: {
+        id: accountId,
+        name: `Lock Test ${ulid()}`,
+        inviteCode: `LK${ulid()}`.toUpperCase(),
+        createdAt: now,
+      },
+    });
+    await testPrisma.user.create({
+      data: {
+        id: `lock-user-${ulid()}`,
+        accountId,
+        // Stored lowercase, exactly like a real signup (the login route
+        // normalizes before insert/lookup).
+        email: email.toLowerCase(),
+        passwordHash: await hashPassword(password),
+        emailVerifiedAt: now,
+        createdAt: now,
+      },
+    });
+    return accountId;
+  }
+
+  async function attemptSignIn(
+    page: Page,
+    email: string,
+    password: string,
+  ): Promise<void> {
+    await page.fill('input[name="email"]', email);
+    await page.fill('input[name="password"]', password);
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('button[type="submit"]:not([disabled])', {
+      timeout: 10_000,
+    });
+  }
+
+  /** Poll the auth_attempts row until the server has recorded the expected
+   * failure count — the browser alert text is identical across wrong
+   * attempts, so the DB is the only unambiguous signal that the previous
+   * request finished server-side before the next one fires. */
+  async function waitForFailures(
+    key: string,
+    minFailures: number,
+    timeoutMs = 10_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const row = await testPrisma.authAttempt.findUnique({ where: { key } });
+      if (row && row.failures >= minFailures) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(
+      `auth_attempts row ${key} never reached ${minFailures} failures`,
+    );
+  }
+
+  it("locks the account after five failed sign-ins (brute-force guard)", async () => {
+    const email = `lockout-${ulid()}@example.com`;
+    const password = "correct-password";
+    const accountId = await createVerifiedUser(email, password);
+    // login() normalizes the email to lowercase before keying the counter.
+    const lockKey = `login:${email.toLowerCase()}`;
+    const page = await openPage();
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    try {
+      for (let i = 0; i < 5; i += 1) {
+        await attemptSignIn(page, email, "wrong-password");
+        // Wait for THIS attempt to be recorded before the next click.
+        await waitForFailures(lockKey, i + 1);
+      }
+      // The lockout check runs BEFORE the password check, so even the
+      // correct password is rejected while the account is locked.
+      await attemptSignIn(page, email, password);
+      await expect(page.getByRole("alert")).toContainText(
+        "Too many failed attempts",
+      );
+      const row = await testPrisma.authAttempt.findUnique({
+        where: { key: lockKey },
+      });
+      expect(row).not.toBeNull();
+      expect(row!.failures).toBeGreaterThanOrEqual(5);
+      expect(row!.lockedUntil).not.toBeNull();
+    } finally {
+      await page.close();
+      await testPrisma.authAttempt.deleteMany({ where: { key: lockKey } });
+      await testPrisma.account.deleteMany({ where: { id: accountId } });
+    }
+  });
+
+  it("lifts the lock once the lock window has passed", async () => {
+    const email = `lockout-expired-${ulid()}@example.com`;
+    const password = "correct-password";
+    const accountId = await createVerifiedUser(email, password);
+    // login() normalizes the email to lowercase before keying the counter.
+    const lockKey = `login:${email.toLowerCase()}`;
+    const now = Date.now();
+    await testPrisma.authAttempt.create({
+      data: {
+        key: lockKey,
+        failures: 5,
+        windowStart: new Date(now - 60_000).toISOString(),
+        lockedUntil: new Date(now - 1_000).toISOString(), // already expired
+        updatedAt: new Date(now).toISOString(),
+      },
+    });
+    const page = await openPage();
+    try {
+      await signIn(page, email, password);
+      // A successful login clears the failure row.
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const row = await testPrisma.authAttempt.findUnique({
+          where: { key: lockKey },
+        });
+        if (row === null) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      const row = await testPrisma.authAttempt.findUnique({
+        where: { key: lockKey },
+      });
+      expect(row).toBeNull();
+    } finally {
+      await page.close();
+      await testPrisma.authAttempt.deleteMany({ where: { key: lockKey } });
+      await testPrisma.account.deleteMany({ where: { id: accountId } });
+    }
+  });
+
+  it("rejects a password longer than 128 characters at signup", async () => {
+    // Exercised at the boundary (createAccountWithUser) rather than through
+    // the form, because the password input's maxLength truncates typed
+    // values before they reach the validator.
+    await expect(
+      createAccountWithUser({
+        accountName: "Long Password Co",
+        email: `longpass-${ulid()}@example.com`,
+        password: "a".repeat(200),
+      }),
+    ).rejects.toThrow("Password must be at most 128 characters");
   });
 
   it("never exposes another account's expenses, reports, or PDFs", async () => {
