@@ -96,12 +96,36 @@ describe("Completeness", () => {
     expect(isReceiptComplete(makeReceipt({ amount: "0.00" }))).toBe(false);
   });
 
-  it("a receipt missing image is incomplete", () => {
-    expect(isReceiptComplete(makeReceipt({ imageFile: "" }))).toBe(false);
+  it("a receipt missing date, category, or report is incomplete", () => {
+    expect(isReceiptComplete(makeReceipt({ date: "" }))).toBe(false);
+    expect(isReceiptComplete(makeReceipt({ category: "" }))).toBe(false);
+    expect(isReceiptComplete(makeReceipt({ report: "" }))).toBe(false);
+  });
+
+  it("a receipt with all fields but no image is complete", () => {
+    // The image is not a completeness factor — the badge tracks the data
+    // fields only.
+    expect(isReceiptComplete(makeReceipt({ imageFile: "" }))).toBe(true);
   });
 
   it("a zero-amount mileage is incomplete", () => {
     expect(isMileageComplete(makeMileage({ amount: "0.00" }))).toBe(false);
+  });
+
+  it("a mileage missing date, category, or report is incomplete", () => {
+    expect(isMileageComplete(makeMileage({ date: "" }))).toBe(false);
+    expect(isMileageComplete(makeMileage({ category: "" }))).toBe(false);
+    expect(isMileageComplete(makeMileage({ report: "" }))).toBe(false);
+  });
+
+  it("a mileage with fewer than two route addresses is incomplete", () => {
+    // The route is what the distance and amount are calculated from.
+    expect(isMileageComplete(makeMileage({ locations: [] }))).toBe(false);
+    expect(
+      isMileageComplete(
+        makeMileage({ locations: [makeMileage().locations[0]] }),
+      ),
+    ).toBe(false);
   });
 
   it("a complete mileage is complete", () => {

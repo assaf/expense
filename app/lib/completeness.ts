@@ -7,26 +7,30 @@ function hasAmount(amount: string): boolean {
   return d !== null && !d.isZero();
 }
 
-/** A receipt is complete when it has date, merchant, amount, image, category, report. */
+/** A receipt is complete when it has date, merchant, amount, category, and
+ * report. The receipt image is deliberately NOT a completeness factor — the
+ * badge tracks the data fields only. */
 export function isReceiptComplete(
   e: Extract<Expense, { type: "receipt" }>,
 ): boolean {
   return Boolean(
     e.date &&
     e.merchant.trim() &&
-    e.imageFile &&
     e.category.trim() &&
     e.report.trim() &&
     hasAmount(e.amount),
   );
 }
 
-/** A mileage expense is complete with date, amount, 2+ addresses, and a report. */
+/** A mileage expense is complete with date, amount, category, report, and at
+ * least two route addresses (the route is what the distance and amount are
+ * calculated from). Mileage has no merchant field. */
 export function isMileageComplete(
   e: Extract<Expense, { type: "mileage" }>,
 ): boolean {
   return Boolean(
     e.date &&
+    e.category.trim() &&
     e.report.trim() &&
     hasAmount(e.amount) &&
     e.locations.filter((l) => l.address.trim()).length >= 2,

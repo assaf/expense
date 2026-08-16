@@ -514,8 +514,9 @@ describe("Expense CRUD", () => {
     await page.goto(`/expense/${expense.id}`, { waitUntil: "load" });
     const main = page.locator("main#main-content");
 
-    // The seeded expense has every field but no image — the notice is up.
-    await expect(page.getByText("Incomplete")).toBeVisible();
+    // The seeded expense has every data field — no image — and the notice
+    // is down (the image is not a completeness factor).
+    await expect(page.getByText("Incomplete")).toHaveCount(0);
 
     // Dragging over the page highlights the drop target with a dashed
     // outline and announces it to screen readers.
@@ -570,9 +571,8 @@ describe("Expense CRUD", () => {
       )
       .not.toBe("");
     await expect(page.locator("img")).toBeVisible();
-    // With the image attached, every necessary field is present — the
-    // notice (which reads the editor's local hasImage state, not the stale
-    // loader row) is gone.
+    // All data fields are present before and after the drop — the notice
+    // stays down.
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
     // Leave the database as we found it.
@@ -596,41 +596,17 @@ describe("Expense CRUD", () => {
     // Fresh editor: date is prefilled, the rest is missing — incomplete.
     await expect(page.getByText("Incomplete")).toBeVisible();
 
-    // Filled form fields alone don't clear it: the receipt image is also a
-    // necessary field, and the notice tracks the editor's own draft state.
+    // Filling the data fields clears the notice — the receipt image is not
+    // a completeness factor, so no draft upload is needed.
     await page.getByLabel("Amount").fill("12.34");
     await page.locator("input[list='merchants']").fill("Drag Test Store");
     await page.getByLabel("Category").selectOption({ label: "Testing" });
     await page.getByLabel("Report").selectOption({ label: "2026 Test" });
-    await expect(page.getByText("Incomplete")).toBeVisible();
-
-    // Attach a draft image: every field is now present, so the notice hides.
-    const [resp] = await Promise.all([
-      page.waitForResponse(
-        (r) =>
-          r.url().includes("/api/expense") && r.request().method() === "POST",
-        { timeout: 30_000 },
-      ),
-      page.locator('input[type="file"]').setInputFiles({
-        name: "complete.png",
-        mimeType: "image/png",
-        buffer: await tinyPng(),
-      }),
-    ]);
-    expect(resp.ok()).toBeTruthy();
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
-    // Leave the database as we found it (the draft is never saved).
-    const draft = await testPrisma.imageBlob.findFirst({
-      where: { accountId: TEST_ACCOUNT_ID },
-      orderBy: { key: "desc" },
-      select: { key: true },
-    });
-    if (draft) {
-      await testPrisma.imageBlob.deleteMany({
-        where: { accountId: TEST_ACCOUNT_ID, key: draft.key },
-      });
-    }
+    // Emptying a field brings the notice back.
+    await page.getByLabel("Amount").fill("");
+    await expect(page.getByText("Incomplete")).toBeVisible();
   });
 
   afterAll(async () => {
