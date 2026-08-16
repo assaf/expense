@@ -2,7 +2,7 @@ import { expect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { generateCodeVerifier, pkceChallenge } from "~/lib/oauth.server";
-import { signIn } from "./helpers/launchBrowser";
+import { freezePageClock, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
@@ -65,6 +65,7 @@ describe("MCP OAuth", () => {
   async function signedInPage(email: string, password: string): Promise<Page> {
     const context = await browser.newContext({ baseURL });
     const page = await context.newPage();
+    await freezePageClock(page);
     await signIn(page, email, password);
     return page;
   }

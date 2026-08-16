@@ -88,5 +88,10 @@
     "node": ">=24"
   },
   "packageManager": "pnpm@11.21.0",
+  "knip": {
+    "ignoreFiles": [
+      "test/helpers/pinned-clock.mjs"
+    ]
+  },
   "portless": "expense"
 }

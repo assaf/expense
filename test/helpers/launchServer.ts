@@ -27,6 +27,10 @@ export async function launchServer(): Promise<string> {
     DEEPSEEK_API_KEY: "",
     RESEND_API_KEY: "",
     INBOUND_EMAIL_WEBHOOK_SECRET: "",
+    // Pin the server's clock to the suite-wide pinned instant (see
+    // pinned-clock.mjs / frozen-time.ts) so server-computed "today" matches
+    // the frozen test and browser clocks.
+    NODE_OPTIONS: "--import ./test/helpers/pinned-clock.mjs",
   };
 
   serverProcess = spawn("pnpm", ["start"], {
@@ -42,10 +46,12 @@ export async function launchServer(): Promise<string> {
     // print for debugging
   });
 
-  // Wait for the server to be ready by polling the port
+  // Wait for the server to be ready by polling the port. Uses
+  // performance.now() — the test-process Date is frozen by the suite, so
+  // Date.now() would never advance past the deadline.
   const baseURL = `http://127.0.0.1:${serverPort}`;
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline) {
+  const deadline = performance.now() + 60_000;
+  while (performance.now() < deadline) {
     try {
       const res = await fetch(`${baseURL}/`);
       if (res.ok || res.status === 404) {

@@ -44,11 +44,13 @@ describe("renderEmailImage (headless chromium)", () => {
   });
 
   it("never fetches external images (network blocked)", async () => {
-    const started = Date.now();
+    // performance.now(): the suite freezes Date, so a Date.now() delta
+    // would always be 0.
+    const started = performance.now();
     const png = await renderEmailImage(
       '<html><body><img src="https://example.com/track.png"><p>Done</p></body></html>',
     );
-    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(performance.now() - started).toBeLessThan(15_000);
     await expectInk(png);
   });
 

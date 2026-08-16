@@ -30,6 +30,7 @@ export default defineConfig({
     },
     pool: "threads",
     fileParallelism: true,
+    setupFiles: "test/helpers/frozen-time-setup.ts",
     testTimeout: 10_000,
     reporters: process.env.GITHUB_ACTIONS
       ? ["github-actions", "verbose"]

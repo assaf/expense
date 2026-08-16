@@ -3,7 +3,7 @@ import { expect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { ulid } from "ulid";
-import { signIn } from "./helpers/launchBrowser";
+import { freezePageClock, signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
@@ -32,7 +32,9 @@ describe("Access control", () => {
   /** A fresh context — no session cookie, no shared state. */
   async function openPage(): Promise<Page> {
     const context = await browser.newContext({ baseURL });
-    return context.newPage();
+    const page = await context.newPage();
+    await freezePageClock(page);
+    return page;
   }
 
   /** A fresh context signed in as the seeded testuser. */
@@ -479,8 +481,8 @@ describe("Access control", () => {
     minFailures: number,
     timeoutMs = 10_000,
   ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    const deadline = performance.now() + timeoutMs;
+    while (performance.now() < deadline) {
       const row = await testPrisma.authAttempt.findUnique({ where: { key } });
       if (row && row.failures >= minFailures) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -543,8 +545,10 @@ describe("Access control", () => {
     try {
       await signIn(page, email, password);
       // A successful login clears the failure row.
-      const deadline = Date.now() + 10_000;
-      while (Date.now() < deadline) {
+      // performance.now(): the suite freezes Date, so a Date.now() deadline
+      // would never advance.
+      const deadline = performance.now() + 10_000;
+      while (performance.now() < deadline) {
         const row = await testPrisma.authAttempt.findUnique({
           where: { key: lockKey },
         });

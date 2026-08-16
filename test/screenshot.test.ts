@@ -17,7 +17,7 @@ import { ulid } from "ulid";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
-import { signIn } from "./helpers/launchBrowser";
+import { freezePageClock, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const ACCOUNT = "acct_screenshot";
@@ -429,6 +429,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
         deviceScaleFactor: 2,
       });
       const page = await context.newPage();
+      await freezePageClock(page);
       const pageErrors: string[] = [];
       page.on("pageerror", (err) => pageErrors.push(String(err)));
       await signIn(page, TEST_EMAIL, TEST_PASSWORD);
