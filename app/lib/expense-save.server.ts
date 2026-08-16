@@ -12,7 +12,7 @@ import {
   type MileageExpense,
   type ReceiptExpense,
 } from "~/lib/types";
-import { formString, validateDateNotFuture } from "~/lib/validation";
+import { formString, validateDate } from "~/lib/validation";
 
 /**
  * Shared handler for the "addReport" intent — used by both expense editor
@@ -42,7 +42,7 @@ export async function validateExpenseInputs(
   report: string,
   opts: { checkReport?: boolean } = {},
 ): Promise<string | null> {
-  const dateError = validateDateNotFuture(date);
+  const dateError = validateDate(date);
   if (dateError) return dateError;
   if (opts.checkReport && report) {
     const { error } = await findOpenReport(accountId, report);

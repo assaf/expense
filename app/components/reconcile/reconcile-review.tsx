@@ -6,7 +6,7 @@ import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
-import { formatAmount, formatDate } from "~/lib/format";
+import { formatAmount, formatDate, todayDate } from "~/lib/format";
 import type {
   MatchCandidate,
   ReconciliationDecision,
@@ -590,6 +590,7 @@ function NewExpenseForm({
       <Field label="Date" className="w-36">
         <Input
           type="date"
+          max={todayDate()}
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="h-9"

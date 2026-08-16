@@ -80,7 +80,7 @@ describe("Accessibility", () => {
       editor = await goto("/expense/new");
       await editor.locator("input[list='merchants']").fill("Keyboard Test");
       await editor.locator("input[type='number']").fill("25.00");
-      await editor.locator("input[type='date']").fill("2026-07-01");
+      await editor.getByLabel("Date").fill("2026-07-01");
       await editor.keyboard.press("Enter");
       await editor.waitForURL((url) => url.pathname === "/", {
         timeout: 10_000,
@@ -106,7 +106,7 @@ describe("Accessibility", () => {
       editor = await goto("/expense/new");
       await editor.locator("input[list='merchants']").fill("Textarea Test");
       await editor.locator("input[type='number']").fill("10.00");
-      await editor.locator("input[type='date']").fill("2026-07-02");
+      await editor.getByLabel("Date").fill("2026-07-02");
       const textarea = editor.locator("textarea").first();
       await textarea.fill("line one");
       // Enter in a textarea inserts a newline, doesn't submit.

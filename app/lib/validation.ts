@@ -45,10 +45,19 @@ export function extractEmailAddress(addr: string): string {
   return candidate.trim().toLowerCase();
 }
 
-/** Validate that a date string is YYYY-MM-DD and not in the future. */
-export function validateDateNotFuture(date: string): string | null {
+/** Validate that a date string is YYYY-MM-DD. Future dates are allowed —
+ * an invoice received today can be dated for a payment due next week. */
+export function validateDate(date: string): string | null {
   if (!date) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Use a valid calendar date.";
+  return null;
+}
+
+/** Validate that a date string is YYYY-MM-DD and not in the future. Used by
+ * reconciliation, where statement transactions are always past-dated. */
+export function validateDateNotFuture(date: string): string | null {
+  const error = validateDate(date);
+  if (error) return error;
   if (date > todayDate()) return "Date cannot be in the future.";
   return null;
 }

@@ -5,6 +5,7 @@ import {
   sanitizeFilenamePart,
   formString,
   unknownIntent,
+  validateDate,
   validateDateNotFuture,
 } from "~/lib/validation";
 
@@ -135,6 +136,28 @@ describe("unknownIntent", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("Unknown intent");
+  });
+});
+
+describe("validateDate", () => {
+  it("returns null for a valid past date", () => {
+    expect(validateDate("2026-01-15")).toBeNull();
+  });
+
+  it("allows future dates (an invoice can predate its payment)", () => {
+    expect(validateDate("2099-12-31")).toBeNull();
+  });
+
+  it("returns null for empty input", () => {
+    expect(validateDate("")).toBeNull();
+  });
+
+  it("returns an error for non-date strings", () => {
+    expect(validateDate("next Tuesday")).toContain("valid");
+  });
+
+  it("returns an error for partial dates", () => {
+    expect(validateDate("2026-01")).toContain("valid");
   });
 });
 

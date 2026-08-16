@@ -14,12 +14,13 @@ import { PageShell, type DropTarget } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
+import { DatePicker } from "~/components/ui/DatePicker";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
 import { Textarea } from "~/components/ui/Textarea";
 import { duplicateLabel } from "~/lib/duplicates";
 import type { DuplicateMatch, DuplicateReason } from "~/lib/duplicates";
-import { normalizeAmount, todayDate } from "~/lib/format";
+import { normalizeAmount } from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
@@ -282,13 +283,10 @@ export function DateAmountFields({
   return (
     <div className={`grid gap-4 ${hasType ? "grid-cols-3" : "grid-cols-2"}`}>
       <Field label="Date">
-        <Input
-          type="date"
-          tabIndex={-1}
-          max={todayDate()}
+        <DatePicker
           value={date}
           disabled={disabled}
-          onChange={(e) => onDate(e.target.value)}
+          onChange={(v) => onDate(v)}
         />
       </Field>
       {hasType ? (

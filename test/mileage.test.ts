@@ -45,7 +45,7 @@ describe("Mileage expense", () => {
       timeout: 10_000,
     });
     // A new mileage expense starts with today's date too.
-    await expect(page.locator("input[type='date']")).toHaveValue(todayLocal());
+    await expect(page.getByLabel("Date")).toHaveValue(todayLocal());
     await page.getByText("Save").click();
     await page.waitForURL((url) => url.pathname === "/", {
       timeout: 15_000,
@@ -132,13 +132,13 @@ describe("Mileage expense", () => {
     // Changing the date can move the trip into a different IRS period:
     // business was $0.725/mi in 2026 H1 → 10.00 × 0.725 = $7.25.
     await page.getByLabel("Type").selectOption("business");
-    await page.locator("input[type='date']").fill("2026-03-15");
+    await page.getByLabel("Date").fill("2026-03-15");
     await expect(page.locator("input[type='number']")).toHaveValue("7.25");
     await expect(page.getByText("Business · $0.725/mi")).toBeVisible();
 
     // A date with no published rate clears the amount (never $0.00) and
     // the footer says why.
-    await page.locator("input[type='date']").fill("2010-06-01");
+    await page.getByLabel("Date").fill("2010-06-01");
     await expect(page.locator("input[type='number']")).toHaveValue("");
     await expect(page.getByText("No rate for this date/type")).toBeVisible();
     await page.unroute("**/api/route");

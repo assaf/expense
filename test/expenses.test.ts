@@ -75,7 +75,7 @@ describe("Expense CRUD", () => {
       }),
     ).toBe(before);
     // A new receipt always starts with today's date.
-    await expect(page.locator("input[type='date']")).toHaveValue(todayLocal());
+    await expect(page.getByLabel("Date")).toHaveValue(todayLocal());
     // Should be on the receipt editor (title is "New receipt" if merchant empty)
     await expect(page.locator("h1")).toBeVisible();
     // Amount should be focused on open
@@ -419,25 +419,25 @@ describe("Expense CRUD", () => {
     }
   });
 
-  it("rejects saving with a future date and keeps the editor open", async () => {
+  it("saves with a future date (invoice dated ahead of payment)", async () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByText("Add receipt").click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
 
     await page.locator("input[list='merchants']").fill("Future Shop");
     await page.locator("input[type='number']").fill("50.00");
-    await page.locator("input[type='date']").fill("2099-12-31");
+    await page.getByLabel("Date").fill("2099-12-31");
     await page.getByText("Save").click();
 
-    // The save is rejected — we stay on the editor and see the error.
-    await expect(page).toHaveURL(/\/expense\/new/);
-    await expect(page.getByText(/date cannot be in the future/i)).toBeVisible();
-    // No row was written.
-    await expect(
-      testPrisma.expense.findFirst({
-        where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
-      }),
-    ).resolves.toBeNull();
+    // Future dates are allowed — the save succeeds and returns to the list.
+    await expect(page).toHaveURL(/\/$/);
+    const row = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
+    });
+    expect(row?.date).toBe("2099-12-31");
+    await testPrisma.expense.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
+    });
   });
 
   it("drags a file onto the home page to create a receipt draft", async () => {
