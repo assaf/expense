@@ -354,6 +354,21 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   seeded constants, `launchServer.ts`).
 - Use `testPrisma` for DB assertions; seed with the account/user constants.
 - Requires local Postgres (`expense_test`); the schema is force-reset each run.
+- **The suite runs on a pinned clock** — `2026-07-15T12:00:00Z`, ticking in
+  real time from that base, shared by the test process, browser pages, and
+  the test server (`test/helpers/frozen-time.ts`, `pinned-time.ts`,
+  `pinned-clock.mjs`, `launchBrowser.ts::freezePageClock`). Consequence for
+  test writers:
+  - `Date.now()` / `new Date()` return pinned base + elapsed — NEVER use them
+    for real-time deadlines or polling loops (they hang); use
+    `performance.now()` (see `launchServer.ts`, `auth.test.ts` polling).
+  - Derive webhook timestamps (`svix-timestamp`) from `Date.now()`, not
+    absolute wall-clock values, so they stay inside the server's replay guard.
+  - The browser pin is a `context.addInitScript` Date override — NOT
+    Playwright's `page.clock` (`setFixedTime` never fires page timers;
+    `install()` doesn't survive navigations).
+  - The server pin loads via `NODE_OPTIONS=--import ./test/helpers/pinned-clock.mjs`
+    in `launchServer.ts`; keep the pinned instant in sync across all files.
 
 ### Git commits
 
@@ -407,6 +422,13 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/data/mileage-rates.ts`             | The IRS standard rates seed for the global `mileage_rates` master table (synced by `initStore` when the seed differs) — edit this to update rates (snapshot: `docs/2026-08-04 IRS standard mileage rates.md`).                                                                                                                                                                                                                                                            |
 
 ## Gotchas
+
+- **Completeness (the "Incomplete" badge)**: a receipt is incomplete when
+  missing date, amount, merchant, category, or report — the receipt image is
+  NOT a factor; a mileage expense additionally needs 2+ route addresses
+  (distance/amount are calculated from the route) and has no merchant field.
+  Shared `isComplete` in `app/lib/completeness.ts`, display-only (editor badge
+  - home list) — no server-side save gate.
 
 - **Pooler caps and serverless pools**: the Supavisor poolers cap total
   connections (session pooler: `pool_size: 40`, max 80% of the DB's
