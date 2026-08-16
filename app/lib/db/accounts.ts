@@ -201,7 +201,7 @@ export async function findUserByEmail(
 /** Short-lived in-process cache for findUserById — every request re-resolves
  * the session's user (requireUser), and image-heavy pages fire dozens of
  * those per render; caching the lookup for a few seconds cuts the connection
- * churn that exhausts the Supabase session pooler under load. Only successful
+ * churn that exhausts the Supabase pooler under load. Only successful
  * lookups are cached; a deleted user is re-checked after the TTL (and a stale
  * hit merely means the next request redirects to login). */
 const userCache = createCache<User>(30_000);

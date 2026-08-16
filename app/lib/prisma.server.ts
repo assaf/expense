@@ -18,13 +18,15 @@ if (!DATABASE_URL) {
  * node-postgres reads `sslmode` from the connection string (Supabase
  * pooler URLs carry `?sslmode=require`); local dev/test URLs omit it → no TLS.
  *
- * Pool sizing matters here: prod connects through Supabase's session-mode
- * pooler, which caps total sessions (default pool_size 15). Every Vercel
- * serverless instance gets its own pool, so a burst of concurrent requests
- * (e.g. the image-heavy list page) can exhaust the cap with `(EMAXCONNSESSION)
- * max clients reached` 500s. Keep the per-instance pool small and release
- * idle sessions fast so slots recycle between requests; if you raise the
- * pooler's pool_size in the Supabase dashboard you can loosen `max` again.
+ * Serverless: every Vercel instance opens its own node-postgres pool, so a
+ * burst of concurrent requests multiplies connections per request. Prod
+ * connects through Supabase's TRANSACTION-mode pooler (port 6543), which
+ * shares ONE small backend pool across all clients — connections are
+ * checked out only for the duration of a query/transaction, so serverless
+ * instances stop holding dedicated slots. Keep the per-instance pool small
+ * and release idle connections fast; the pooler's `pool_size` in the
+ * Supabase dashboard must stay ≤ 80% of the DB's `max_connections` (see
+ * AGENTS.md "Database connections") or bursts fail with `(EMAXCONN)`.
  */
 const adapter = new PrismaPg({
   connectionString: DATABASE_URL,

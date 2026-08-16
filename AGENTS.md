@@ -40,8 +40,22 @@ Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
 pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for 30s
 (the image-list burst). Pooler `pool_size` is capped at **80% of the DB's
 `max_connections`** (48 on the current 60-connection compute); the session
-pooler is set to 40. Rollback if anything misbehaves: flip `DATABASE_URL` back
-to port 5432.
+pooler is set to 40. **Invariant: never raise a pooler's `pool_size` above 80%
+of `max_connections`, and if you change one (e.g. a compute upgrade that bumps
+`max_connections`) resize the poolers to match.** A pooler that may open more
+backends than Postgres has room for fails with `(EMAXCONN) max client
+connections reached, limit: <pool_size>` while holding most of the budget idle
+(see incident below). Temporary fallback if transaction mode misbehaves: flip
+`DATABASE_URL` back to port 5432 — but session mode is strictly worse under
+serverless (one dedicated slot per client); fix the pooler instead.
+
+Incident 2026-08-16: prod 500s with `(EMAXCONN) max client connections
+reached, limit: 200` on `prisma.user.findUnique`. `max_connections` was still
+60; the pooler already held ~44 idle backends plus ~8 Supabase services
+(PostgREST/pg_net/pg_cron/exporter), so the budget was near-exhausted at
+idle. Cause: `pool_size` had been raised to 200 (3.3× the whole budget) in
+Supabase → Database → Connection pooling. Fix: session pooler ≤ 40,
+transaction pooler 10–15.
 
 When setting these in Vercel, add them with `vercel env add … --no-sensitive`: a
 _Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which silently
@@ -441,7 +455,9 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   (`DATABASE_URL_UNPOOLED`). `app/lib/prisma.server.ts` still keeps the
   per-instance pool small (`max: 2`, 4s idle release) and `findUserById`
   caches lookups for 30s. If 500s reappear under load, check the pooler
-  sizes in the Supabase dashboard and Sentry for `EMAXCONNSESSION`.
+  sizes in the Supabase dashboard and Sentry for `EMAXCONNSESSION` /
+  `EMAXCONN`. **Never raise `pool_size` above 80% of `max_connections`**
+  (see the 2026-08-16 incident in "Database connections (Supabase)").
 
 - **Auth & accounts**: multi-user access control with account-level sharing.
   Users live in Postgres (`users`, `accounts`); every expense, report,
