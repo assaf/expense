@@ -44,7 +44,7 @@ import {
   upsertInboundEmail,
 } from "~/lib/db/inbound";
 import { readReportSummary } from "~/lib/db/reports";
-import { saveImage } from "~/lib/images.server";
+import { saveImage, readImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 
@@ -461,6 +461,22 @@ const defaultDeps: InboundDeps = {
   sendReply: sendReplyEmail,
 };
 
+/** The receipt image to embed in the confirmation reply: base64 content for
+ * the Resend attachment plus the cid filename the HTML references. undefined
+ * when the import produced no stored image. */
+async function receiptImageAttachment(
+  accountId: string,
+  imageFile: string,
+): Promise<{ content: string; filename: string } | undefined> {
+  if (!imageFile) return undefined;
+  const stored = await readImage(accountId, imageFile);
+  if (!stored) return undefined;
+  return {
+    content: stored.buffer.toString("base64"),
+    filename: stored.mime === "image/jpeg" ? "receipt.jpg" : "receipt.png",
+  };
+}
+
 // --- Reply email builders ----------------------------------------------------
 
 function replyHtml(title: string, paragraphs: string[]): string {
@@ -524,6 +540,7 @@ function confirmationHtml(
     report: string;
     notes: string;
     missing: string[];
+    image?: { filename: string } | null;
     reportStats?: {
       before: { count: number; total: string };
       after: { count: number; total: string };
@@ -560,6 +577,12 @@ function confirmationHtml(
       `<p style="margin:16px 0 0"><a href="${escapeHtml(editUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Edit this receipt</a></p>`,
     );
   }
+  // The receipt image goes below all the information and above the footer.
+  if (opts.image) {
+    blocks.push(
+      `<p style="margin:16px 0 0"><img src="cid:${opts.image.filename}" alt="Receipt" style="display:block;max-width:100%;max-height:480px;border:1px solid #e5e7eb;border-radius:8px" /></p>`,
+    );
+  }
 
   return emailShell({
     title: subject,
@@ -579,6 +602,7 @@ function confirmationEmail(opts: {
   report: string;
   notes: string;
   missing: string[];
+  image?: { filename: string } | null;
   reportStats?: {
     before: { count: number; total: string };
     after: { count: number; total: string };
@@ -890,6 +914,12 @@ export async function processInboundEvent(
     };
     await upsertExpense(expense, account.id);
 
+    // The receipt image for the confirmation reply (base64 + cid filename).
+    const receiptAttachment = await receiptImageAttachment(
+      account.id,
+      imageFile,
+    );
+
     // Compute report before/after stats when a report is assigned.
     let reportStats:
       | {
@@ -931,12 +961,14 @@ export async function processInboundEvent(
           .filter(Boolean)
           .join(" "),
         missing,
+        image: receiptAttachment,
         reportStats,
       });
       await deps.sendReply({
         to: data.from,
         subject: confirmation.subject,
         html: confirmation.html,
+        attachments: receiptAttachment ? [receiptAttachment] : undefined,
         inReplyTo: data.message_id,
         idempotencyKey: data.email_id,
       });
@@ -967,12 +999,14 @@ export async function processInboundEvent(
         .filter(Boolean)
         .join(" "),
       missing: [],
+      image: receiptAttachment,
       reportStats,
     });
     await deps.sendReply({
       to: data.from,
       subject: confirmation.subject,
       html: confirmation.html,
+      attachments: receiptAttachment ? [receiptAttachment] : undefined,
       inReplyTo: data.message_id,
       idempotencyKey: data.email_id,
     });

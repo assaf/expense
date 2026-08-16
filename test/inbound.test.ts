@@ -124,10 +124,20 @@ function attachment(overrides: Partial<AttachmentMeta> = {}): AttachmentMeta {
 
 /** Build fake deps: real renderReceiptImage (resvg + bundled font), everything else faked. */
 function fakeDeps(): InboundDeps & {
-  sent: { subject: string; html: string; to: string }[];
+  sent: {
+    subject: string;
+    html: string;
+    to: string;
+    attachments?: { content: string; filename: string }[];
+  }[];
   downloads: AttachmentMeta[];
 } {
-  const sent: { subject: string; html: string; to: string }[] = [];
+  const sent: {
+    subject: string;
+    html: string;
+    to: string;
+    attachments?: { content: string; filename: string }[];
+  }[] = [];
   const downloads: AttachmentMeta[] = [];
   const deps: InboundDeps = {
     fetchReceivedEmail: async (id) => receivedEmail({ id }),
@@ -149,7 +159,14 @@ function fakeDeps(): InboundDeps & {
     renderEmailImage: async () => TINY_PNG,
     renderTextEmail: async () => TINY_PNG,
     sendReply: async (input) => {
-      sent.push({ subject: input.subject, html: input.html, to: input.to });
+      sent.push({
+        subject: input.subject,
+        html: input.html,
+        to: input.to,
+        ...(input.attachments?.length
+          ? { attachments: input.attachments }
+          : {}),
+      });
     },
   };
   return { ...deps, sent, downloads };
@@ -757,6 +774,18 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent[0]!.subject).toBe(
       "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
+    // … embedding the stored receipt image below the details and above the
+    // footer (cid attachment, not a data URI).
+    const confirmation = deps.sent[0]!;
+    expect(confirmation.attachments).toHaveLength(1);
+    const att = confirmation.attachments![0]!;
+    expect(confirmation.html).toContain(`src="cid:${att.filename}"`);
+    expect(att.content.length).toBeGreaterThan(100);
+    const imgAt = confirmation.html.indexOf(`cid:${att.filename}`);
+    expect(imgAt).toBeGreaterThan(
+      confirmation.html.indexOf("Here's what we found"),
+    );
+    expect(imgAt).toBeLessThan(confirmation.html.indexOf("receipts by email"));
   });
 
   it("shows report before/after aggregates in the confirmation email", async () => {
@@ -1052,6 +1081,12 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("needs attention");
     expect(deps.sent[0]!.html).toContain("merchant");
+    // The partial confirmation still embeds the rendered receipt image.
+    const partial = deps.sent[0]!;
+    expect(partial.attachments).toHaveLength(1);
+    expect(partial.html).toContain(
+      `src="cid:${partial.attachments![0]!.filename}"`,
+    );
   });
 
   it("replies when the email contains no receipt at all", async () => {

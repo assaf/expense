@@ -20,6 +20,9 @@ interface ResendEmailInput {
   inReplyTo?: string;
   /** Idempotency key (use the email_id) so Resend retries never double-send. */
   idempotencyKey?: string;
+  /** Inline attachments (e.g. the receipt image). `content` is base64;
+   * reference an attachment in the HTML as `cid:<filename>`. */
+  attachments?: { content: string; filename: string }[];
 }
 
 /** The From address for every app email. */
@@ -59,6 +62,7 @@ export async function sendResendEmail(
             },
           }
         : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
   });
   if (!res.ok) {
