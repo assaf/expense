@@ -31,6 +31,7 @@ type Confidence = "high" | "medium" | "low";
 export interface ExtractionResult {
   isReceipt: boolean;
   merchant: string;
+  description: string;
   amount: string; // decimal string "42.50", "" when unknown
   currency: string; // ISO 4217
   category: string;
@@ -52,6 +53,7 @@ class DeepSeekError extends Error {
 const SYSTEM_PROMPT = `You extract receipt data for a personal expense tracker. Given receipt text or a receipt image, return JSON with exactly these fields:
 - "is_receipt": true when the content is a receipt, invoice, order confirmation, or payment confirmation that shows a total amount; otherwise false
 - "merchant": the merchant or vendor name (the business the money was paid to), or "" if unknown
+- "description": a short description of the purchase (e.g. "Team lunch", "Printer paper"), or "" if unknown
 - "amount": the total amount paid as a plain decimal string like "42.50" — no currency symbols, no commas, no text; "" if unknown
 - "currency": ISO 4217 currency code (e.g. "USD", "EUR"); "USD" if unclear
 - "category": a suggested category — only set this if you are at least 80% confident it is correct; otherwise ""
@@ -197,6 +199,7 @@ export async function extractReceipt(
   return {
     isReceipt,
     merchant,
+    description: stringField(parsed, "description").trim(),
     amount,
     currency,
     category: stringField(parsed, "category").trim(),

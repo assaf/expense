@@ -538,6 +538,7 @@ function confirmationHtml(
     amount: string;
     category: string;
     report: string;
+    description: string;
     notes: string;
     missing: string[];
     image?: { filename: string } | null;
@@ -555,6 +556,7 @@ function confirmationHtml(
     fieldRow("Amount", opts.amount ? formatAmount(opts.amount) : ""),
     fieldRow("Category", opts.category),
     fieldRow("Report", opts.report),
+    ...(opts.description ? [fieldRow("Description", opts.description)] : []),
   ].join("");
 
   const blocks: string[] = [
@@ -600,6 +602,7 @@ function confirmationEmail(opts: {
   amount: string;
   category: string;
   report: string;
+  description: string;
   notes: string;
   missing: string[];
   image?: { filename: string } | null;
@@ -905,7 +908,7 @@ export async function processInboundEvent(
       date: expenseDate,
       report,
       category,
-      description: "",
+      description: extraction.description,
       amount: extraction.amount,
       merchant: extraction.merchant,
       imageFile,
@@ -949,6 +952,7 @@ export async function processInboundEvent(
         amount: extraction.amount,
         category,
         report,
+        description: extraction.description,
         notes: [
           extraction.notes,
           extraction.currency && extraction.currency !== "USD"
@@ -990,6 +994,7 @@ export async function processInboundEvent(
       amount: extraction.amount,
       category,
       report,
+      description: extraction.description,
       notes: [
         extraction.notes,
         extraction.currency && extraction.currency !== "USD"

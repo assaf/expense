@@ -133,7 +133,9 @@ proxy (e.g. a local `https://expense.localhost` setup) so MCP clients see the
 public origin instead of the proxy-internal `http://` one — otherwise they
 refuse to authenticate ("Protected resource … does not match expected"). Without
 it, the request origin is used, honoring `x-forwarded-proto`/`x-forwarded-host`
-for http requests.
+for http requests. Also used as the base URL for the “Edit this receipt”
+link in inbound confirmation emails — set it to the production origin
+(`https://expense.labnotes.org`) or those emails have no edit link.
 
 `SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable Sentry
 error monitoring (server runtime + browser build-time respectively; see

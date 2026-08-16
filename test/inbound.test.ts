@@ -56,6 +56,7 @@ function fakeExtract(text?: string): ExtractionResult {
   return {
     isReceipt: t.includes("TOTAL:") || t.includes("MERCHANT:"),
     merchant,
+    description: t.match(/DESCRIPTION:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
     amount: normalizeAmount(amount),
     currency: "USD",
     category: t.match(/CATEGORY:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
@@ -786,6 +787,27 @@ describe("processInboundEvent (body receipt)", () => {
       confirmation.html.indexOf("Here's what we found"),
     );
     expect(imgAt).toBeLessThan(confirmation.html.indexOf("receipts by email"));
+  });
+
+  it("shows the extracted description as a field and saves it on the expense", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: "MERCHANT: Amazon\nTOTAL: 42.50\nCATEGORY: office supplies\nDESCRIPTION: Printer paper",
+      });
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+
+    expect(result).toMatchObject({ status: "created" });
+    const created = asReceipt(
+      (await readExpenses(TEST_ACCOUNT_ID)).find(
+        (e) => e.id === expenseIdOf(result),
+      ),
+    );
+    expect(created.description).toBe("Printer paper");
+    expect(deps.sent[0]!.html).toContain("Description");
+    expect(deps.sent[0]!.html).toContain("Printer paper");
   });
 
   it("shows report before/after aggregates in the confirmation email", async () => {
