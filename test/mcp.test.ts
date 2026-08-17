@@ -14,7 +14,7 @@ import {
 } from "~/lib/db/oauth";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
-const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
+const baseURL = "http://localhost:5199";
 
 /**
  * End-to-end tests for the MCP endpoint (/mcp, Streamable HTTP). Auth is

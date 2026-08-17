@@ -40,7 +40,7 @@ export async function freezePageClock(page: Page): Promise<void> {
  * in the browser context (subsequent navigations stay authenticated).
  */
 export async function goto(path: string): Promise<Page> {
-  const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
+  const baseURL = "https://expense.labnotes.org";
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     baseURL,

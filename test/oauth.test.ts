@@ -5,7 +5,7 @@ import { generateCodeVerifier, pkceChallenge } from "~/lib/oauth.server";
 import { freezePageClock, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
-const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
+const baseURL = "http://localhost:5199";
 const CALLBACK = "http://127.0.0.1:5199/callback";
 
 /**
@@ -173,7 +173,7 @@ describe("MCP OAuth", () => {
     );
     expect(res.status).toBe(200);
     const meta = (await res.json()) as Record<string, unknown>;
-    expect(meta.issuer).toBe(new URL(baseURL).origin);
+    expect(meta.issuer).toBe("https://expense.labnotes.org");
     expect(meta.authorization_endpoint).toContain("/oauth/authorize");
     expect(meta.token_endpoint).toContain("/oauth/token");
     expect(meta.registration_endpoint).toContain("/oauth/register");
@@ -462,9 +462,9 @@ describe("MCP OAuth", () => {
       { headers },
     );
     const meta = (await metaRes.json()) as Record<string, string>;
-    expect(meta.issuer).toBe("https://expense.localhost");
+    expect(meta.issuer).toBe("https://expense.labnotes.org");
     expect(meta.authorization_endpoint).toBe(
-      "https://expense.localhost/oauth/authorize",
+      "https://expense.labnotes.org/oauth/authorize",
     );
 
     const resourceRes = await fetch(
@@ -475,9 +475,9 @@ describe("MCP OAuth", () => {
       resource: string;
       authorization_servers: string[];
     };
-    expect(resource.resource).toBe("https://expense.localhost/mcp");
+    expect(resource.resource).toBe("https://expense.labnotes.org/mcp");
     expect(resource.authorization_servers).toEqual([
-      "https://expense.localhost",
+      "https://expense.labnotes.org",
     ]);
 
     // And the /mcp 401 WWW-Authenticate hint carries the public origin too.
@@ -501,7 +501,7 @@ describe("MCP OAuth", () => {
     });
     expect(mcpRes.status).toBe(401);
     expect(mcpRes.headers.get("www-authenticate")).toContain(
-      "https://expense.localhost/.well-known/oauth-protected-resource",
+      "https://expense.labnotes.org/.well-known/oauth-protected-resource",
     );
   });
 

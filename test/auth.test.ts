@@ -16,7 +16,7 @@ import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { hashPassword, hashToken, verifyPassword } from "~/lib/passwords";
 import { createAccountWithUser } from "~/lib/auth.server";
 
-const baseURL = process.env.TEST_BASE_URL ?? "http://localhost:5199";
+const baseURL = "http://localhost:5199";
 
 describe("Access control", () => {
   let browser: Browser;
