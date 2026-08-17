@@ -775,18 +775,14 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent[0]!.subject).toBe(
       "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
-    // … embedding the stored receipt image below the details and above the
-    // footer (cid attachment, not a data URI).
+    // … attaching the stored receipt image (attachment only — never inline
+    // in the body).
     const confirmation = deps.sent[0]!;
     expect(confirmation.attachments).toHaveLength(1);
     const att = confirmation.attachments![0]!;
-    expect(confirmation.html).toContain(`src="cid:${att.filename}"`);
     expect(att.content.length).toBeGreaterThan(100);
-    const imgAt = confirmation.html.indexOf(`cid:${att.filename}`);
-    expect(imgAt).toBeGreaterThan(
-      confirmation.html.indexOf("Here's what we found"),
-    );
-    expect(imgAt).toBeLessThan(confirmation.html.indexOf("receipts by email"));
+    expect(confirmation.html).not.toContain("cid:");
+    expect(confirmation.html).not.toContain("<img");
   });
 
   it("shows the extracted description as a field and saves it on the expense", async () => {
@@ -1103,12 +1099,12 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("needs attention");
     expect(deps.sent[0]!.html).toContain("merchant");
-    // The partial confirmation still embeds the rendered receipt image.
+    // The partial confirmation still attaches the rendered receipt image
+    // (attachment only — never inline in the body).
     const partial = deps.sent[0]!;
     expect(partial.attachments).toHaveLength(1);
-    expect(partial.html).toContain(
-      `src="cid:${partial.attachments![0]!.filename}"`,
-    );
+    expect(partial.html).not.toContain("cid:");
+    expect(partial.html).not.toContain("<img");
   });
 
   it("replies when the email contains no receipt at all", async () => {

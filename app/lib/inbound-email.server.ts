@@ -462,8 +462,8 @@ const defaultDeps: InboundDeps = {
 };
 
 /** The receipt image to embed in the confirmation reply: base64 content for
- * the Resend attachment plus the cid filename the HTML references. undefined
- * when the import produced no stored image. */
+ * The receipt image attached to the confirmation reply (base64 content +
+ * filename). undefined when the import produced no stored image. */
 async function receiptImageAttachment(
   accountId: string,
   imageFile: string,
@@ -541,7 +541,6 @@ function confirmationHtml(
     description: string;
     notes: string;
     missing: string[];
-    image?: { filename: string } | null;
     reportStats?: {
       before: { count: number; total: string };
       after: { count: number; total: string };
@@ -579,12 +578,6 @@ function confirmationHtml(
       `<p style="margin:16px 0 0"><a href="${escapeHtml(editUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Edit this receipt</a></p>`,
     );
   }
-  // The receipt image goes below all the information and above the footer.
-  if (opts.image) {
-    blocks.push(
-      `<p style="margin:16px 0 0"><img src="cid:${opts.image.filename}" alt="Receipt" style="display:block;max-width:100%;max-height:480px;border:1px solid #e5e7eb;border-radius:8px" /></p>`,
-    );
-  }
 
   return emailShell({
     title: subject,
@@ -605,7 +598,6 @@ function confirmationEmail(opts: {
   description: string;
   notes: string;
   missing: string[];
-  image?: { filename: string } | null;
   reportStats?: {
     before: { count: number; total: string };
     after: { count: number; total: string };
@@ -917,7 +909,7 @@ export async function processInboundEvent(
     };
     await upsertExpense(expense, account.id);
 
-    // The receipt image for the confirmation reply (base64 + cid filename).
+    // The receipt image for the confirmation reply (base64 attachment).
     const receiptAttachment = await receiptImageAttachment(
       account.id,
       imageFile,
@@ -965,7 +957,6 @@ export async function processInboundEvent(
           .filter(Boolean)
           .join(" "),
         missing,
-        image: receiptAttachment,
         reportStats,
       });
       await deps.sendReply({
@@ -1004,7 +995,6 @@ export async function processInboundEvent(
         .filter(Boolean)
         .join(" "),
       missing: [],
-      image: receiptAttachment,
       reportStats,
     });
     await deps.sendReply({
