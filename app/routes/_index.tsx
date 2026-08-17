@@ -752,6 +752,8 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
           <img
             src={`/expense/${expense.id}/image?w=160`}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         ) : (

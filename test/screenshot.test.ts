@@ -412,7 +412,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
 
     // The globalSetup server is usually already listening on 5199; reuse it
     // rather than spawning a second instance.
-    let baseURL = process.env.TEST_BASE_URL ?? "http://127.0.0.1:5199";
+    let baseURL = "http://127.0.0.1:5199";
     let launched = false;
     try {
       await fetch(`${baseURL}/login`, { signal: AbortSignal.timeout(3_000) });
