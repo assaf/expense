@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "react-router",
   "buildCommand": "pnpm build",
-  "regions": ["sfo1"]
+  "regions": ["sfo1"],
+  "crons": [
+    {
+      "path": "/api/inbound-cron",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }
