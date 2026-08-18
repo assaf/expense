@@ -70,7 +70,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   } else {
     user = await requireUser(request);
   }
-  return { user: user ? { id: user.id } : null };
+  return {
+    user: user ? { id: user.id } : null,
+    // Clickjacking defense: no page may render inside a frame (covers the
+    // OAuth consent page and every other HTML document — the root headers
+    // merge into all matched routes). HSTS is set by the platform: Vercel
+    // emits strict-transport-security for production domains.
+    headers: {
+      "X-Frame-Options": "DENY",
+      "Content-Security-Policy": "frame-ancestors 'none'",
+    },
+  };
 }
 
 export function meta(): Route.MetaDescriptors {

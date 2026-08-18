@@ -43,7 +43,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return new Response(image.thumbnail as BodyInit, {
       headers: imageResponseHeaders(
         "image/jpeg",
-        "public, max-age=86400, immutable",
+        "private, max-age=86400, immutable",
       ),
     });
   }
@@ -51,7 +51,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return new Response(image.buffer as BodyInit, {
     headers: imageResponseHeaders(
       image.mime || expense.imageMime || "image/png",
-      "public, max-age=3600",
+      "private, max-age=3600",
     ),
   });
 }
