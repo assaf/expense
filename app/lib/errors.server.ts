@@ -19,6 +19,22 @@ export function captureError(
   }
 }
 
+/**
+ * Log a warning and capture it in Sentry when initialized (no-op otherwise,
+ * same contract as captureError). For recoverable failures the app absorbs
+ * and keeps running — e.g. an outbound reply email that could not be sent
+ * (the pipeline treats replies as fire-and-forget).
+ */
+export function captureWarning(
+  message: string,
+  extra?: Record<string, unknown>,
+): void {
+  console.warn(message, extra);
+  if (Sentry.isInitialized()) {
+    Sentry.captureMessage(message, { level: "warning", extra });
+  }
+}
+
 // Errors that are fatal during the initial SSR render surface twice: the
 // render stream's onError fires, then renderToReadableStream rejects with
 // the same error object and React Router forwards that rejection to

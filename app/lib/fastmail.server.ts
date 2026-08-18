@@ -1,4 +1,5 @@
 import { FASTMAIL_TOKEN, FASTMAIL_FROM, RECEIPTS_FOLDER } from "~/lib/env";
+import { captureWarning } from "~/lib/errors.server";
 import {
   buildRfc822Message,
   type SendEmailInput,
@@ -371,7 +372,7 @@ export async function destroySubscription(id: string): Promise<void> {
 
 // --- Sending (EmailSubmission/set) ------------------------------------------
 
-interface FastmailIdentity {
+export interface FastmailIdentity {
   id: string;
   name: string;
   email: string;
@@ -486,15 +487,34 @@ async function submitEmail(identityId: string, emailId: string): Promise<void> {
   );
 }
 
+/** The JMAP send flow's collaborators — injectable so tests exercise the
+ * whole identity→upload→import→submit sequence offline. `fromAddress`
+ * overrides FASTMAIL_FROM when provided. */
+export interface JmapSendDeps {
+  listIdentities(): Promise<FastmailIdentity[]>;
+  uploadBlob(raw: Buffer): Promise<string>;
+  importEmail(blobId: string, mailboxId: string): Promise<string>;
+  submitEmail(identityId: string, emailId: string): Promise<void>;
+  fromAddress?: string;
+}
+
+const realJmapSendDeps: JmapSendDeps = {
+  listIdentities,
+  uploadBlob,
+  importEmail,
+  submitEmail,
+};
+
 /** Build the RFC 5322 message bytes for a reply and send it from the
  * account via JMAP `EmailSubmission/set`. Returns false (after logging) on
  * any failure — callers must never fail because email did. */
 export async function sendEmailViaJmap(
   input: SendEmailInput,
+  deps: JmapSendDeps = realJmapSendDeps,
 ): Promise<boolean> {
   try {
-    const identities = await listIdentities();
-    const fromAddress = FASTMAIL_FROM;
+    const identities = await deps.listIdentities();
+    const fromAddress = deps.fromAddress ?? FASTMAIL_FROM;
     const identity = fromAddress
       ? matchIdentity(identities, fromAddress)
       : undefined;
@@ -513,14 +533,15 @@ export async function sendEmailViaJmap(
       inReplyTo: input.inReplyTo,
       attachments: input.attachments,
     });
-    const blobId = await uploadBlob(raw);
-    const emailId = await importEmail(blobId, chosen.saveSentToMailboxId);
-    await submitEmail(chosen.id, emailId);
+    const blobId = await deps.uploadBlob(raw);
+    const emailId = await deps.importEmail(blobId, chosen.saveSentToMailboxId);
+    await deps.submitEmail(chosen.id, emailId);
     return true;
   } catch (err) {
-    console.warn(
-      "[email] Fastmail send failed:",
-      err instanceof Error ? err.message : String(err),
+    captureWarning(
+      `[email] Fastmail send failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
       { to: input.to, subject: input.subject },
     );
     return false;
