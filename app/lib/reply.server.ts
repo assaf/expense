@@ -106,9 +106,23 @@ export interface ReplyInput extends ResendEmailInput {}
  */
 export async function sendEmail(input: ResendEmailInput): Promise<boolean> {
   if (FASTMAIL_TOKEN) {
-    return sendEmailViaJmap(input);
+    const ok = await sendEmailViaJmap(input);
+    if (ok) {
+      console.info("[email] sent via FastMail", {
+        to: input.to,
+        subject: input.subject,
+      });
+    }
+    return ok;
   }
-  return sendResendEmail(input);
+  const ok = await sendResendEmail(input);
+  if (ok) {
+    console.info("[email] sent via Resend", {
+      to: input.to,
+      subject: input.subject,
+    });
+  }
+  return ok;
 }
 
 export async function sendReplyEmail(input: ReplyInput): Promise<void> {

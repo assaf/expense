@@ -237,6 +237,28 @@ export interface ProcessUnprocessedResult {
   destroyed: number;
 }
 
+/** The outbound reply a processing result implies — for the per-email log. */
+function replyTypeFor(
+  result: Awaited<ReturnType<typeof processInboundEvent>>,
+): string {
+  switch (result.status) {
+    case "created":
+      return "confirmation (accepted)";
+    case "partial":
+      return `confirmation (partial — missing ${result.missing.join(", ")})`;
+    case "error":
+      return "failure";
+    case "unknown-sender":
+      return "sender not recognized";
+    case "unverified-sender":
+      return "verify first";
+    case "duplicate":
+      return "none (duplicate)";
+    case "self-reply":
+      return "none (self-reply)";
+  }
+}
+
 /**
  * Process unprocessed emails in the Receipts folder. Each email is marked
  * `$receipt-processed` BEFORE processing (a concurrent push or cron must see
@@ -269,12 +291,27 @@ export async function processUnprocessedReceipts(
         const result = await processInboundEvent(data, deps);
         if (result.status === "error") {
           failed++;
+          console.info("[fastmail-inbound] processed email", {
+            id,
+            subject: data.subject,
+            from: data.from,
+            status: result.status,
+            reply: replyTypeFor(result),
+          });
           continue;
         }
         await adapter.destroyEmail(id);
         invalidateMimeCache(id);
         destroyed++;
         processed++;
+        console.info("[fastmail-inbound] processed email", {
+          id,
+          subject: data.subject,
+          from: data.from,
+          status: result.status,
+          reply: replyTypeFor(result),
+          destroyed: true,
+        });
       } catch (err) {
         // No rollback: Fastmail won't remove the $receipt-processed keyword,
         // so an email that reaches this point stays marked and is skipped
