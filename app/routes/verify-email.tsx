@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
-import { VerificationResultPage } from "~/components/VerificationResultPage";
+import {
+  VerificationResultPage,
+  type VerificationCopy,
+} from "~/components/VerificationResultPage";
 import {
   verifyUserEmailAddress,
   type VerifyEmailOutcome,
@@ -24,10 +26,7 @@ export async function loader({
 }
 
 /** Per-outcome copy; the shared page shell renders the icons and card. */
-function copyFor(outcome: VerifyEmailOutcome): {
-  title: string;
-  body: ReactNode;
-} {
+function copyFor(outcome: VerifyEmailOutcome): VerificationCopy {
   switch (outcome.status) {
     case "verified":
       return {

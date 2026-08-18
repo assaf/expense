@@ -17,15 +17,17 @@ export type VerificationStatus =
   | "expired"
   | "invalid";
 
+/** The per-status copy a verification route supplies to the shared shell. */
+export type VerificationCopy = {
+  title: string;
+  body: ReactNode;
+};
+
 export function VerificationResultPage({
   status,
   title,
   body,
-}: {
-  status: VerificationStatus;
-  title: string;
-  body: ReactNode;
-}) {
+}: VerificationCopy & { status: VerificationStatus }) {
   const icon =
     status === "expired" ? (
       <Clock3 aria-hidden="true" className="h-6 w-6 text-amber-600" />

@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
-import { VerificationResultPage } from "~/components/VerificationResultPage";
+import {
+  VerificationResultPage,
+  type VerificationCopy,
+} from "~/components/VerificationResultPage";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { verifyInboundSenderAddress } from "~/lib/db/inbound";
 import type { Route } from "./+types/receipts-email-verify";
@@ -23,10 +25,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /** Per-outcome copy; the shared page shell renders the icons and card. */
-function copyFor(outcome: Awaited<ReturnType<typeof loader>>): {
-  title: string;
-  body: ReactNode;
-} {
+function copyFor(
+  outcome: Awaited<ReturnType<typeof loader>>,
+): VerificationCopy {
   switch (outcome.status) {
     case "verified":
       return {
