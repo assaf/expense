@@ -1,5 +1,8 @@
 import { FASTMAIL_TOKEN, FASTMAIL_FROM, RECEIPTS_FOLDER } from "~/lib/env";
-import { buildRfc822Message } from "~/lib/email-mime.server";
+import {
+  buildRfc822Message,
+  type SendEmailInput,
+} from "~/lib/email-mime.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -135,8 +138,12 @@ function firstArgs(responses: [string, unknown, string][]): unknown {
   return first[1];
 }
 
-async function call<Args, Result>(name: string, args: Args): Promise<Result> {
-  return firstArgs(await jmapApi([[name, args, "m0"]])) as Result;
+async function call<Args, Result>(
+  name: string,
+  args: Args,
+  capabilities?: JmapCapability[],
+): Promise<Result> {
+  return firstArgs(await jmapApi([[name, args, "m0"]], capabilities)) as Result;
 }
 
 interface Mailbox {
@@ -362,7 +369,7 @@ export async function destroySubscription(id: string): Promise<void> {
   });
 }
 
-// --- Sending (Email/submit) --------------------------------------------------
+// --- Sending (EmailSubmission/set) ------------------------------------------
 
 interface FastmailIdentity {
   id: string;
@@ -374,20 +381,20 @@ interface FastmailIdentity {
 
 /** The account's sending identities (Identity/get). */
 async function listIdentities(): Promise<FastmailIdentity[]> {
-  const s = await jmapSession();
   // Fastmail gates Identity/get behind the submission capability.
-  const [response] = await jmapApi(
-    [["Identity/get", { accountId: s.accountId }, "m0"]],
-    ["urn:ietf:params:jmap:submission"],
-  );
-  const { list } = response![1] as {
-    list: Array<{
-      id: string;
-      name?: string;
-      email?: string;
-      saveSentToMailboxId?: string;
-    }>;
-  };
+  const { list } = await call<
+    { accountId: string },
+    {
+      list: Array<{
+        id: string;
+        name?: string;
+        email?: string;
+        saveSentToMailboxId?: string;
+      }>;
+    }
+  >("Identity/get", { accountId: (await jmapSession()).accountId }, [
+    "urn:ietf:params:jmap:submission",
+  ]);
   return list
     .filter((i) => i.email)
     .map((i) => ({
@@ -461,42 +468,30 @@ async function importEmail(blobId: string, mailboxId: string): Promise<string> {
   return email.id;
 }
 
-/** Submit a message for sending (Fastmail delivers via SMTP). */
 /** Submit a message for sending (Fastmail delivers via SMTP). Fastmail
  * implements the RFC 8621 `EmailSubmission/set` method (not `Email/submit`). */
 async function submitEmail(identityId: string, emailId: string): Promise<void> {
-  const s = await jmapSession();
-  await jmapApi(
-    [
-      [
-        "EmailSubmission/set",
-        {
-          accountId: s.accountId,
-          create: {
-            k1: {
-              identityId,
-              emailId,
-            },
-          },
+  await call<{ accountId: string; create: Record<string, unknown> }, unknown>(
+    "EmailSubmission/set",
+    {
+      accountId: (await jmapSession()).accountId,
+      create: {
+        k1: {
+          identityId,
+          emailId,
         },
-        "m0",
-      ],
-    ],
+      },
+    },
     ["urn:ietf:params:jmap:submission"],
   );
 }
 
 /** Build the RFC 5322 message bytes for a reply and send it from the
- * account via JMAP Email/submit. Returns false (after logging) on any
- * failure — callers must never fail because email did. */
-export async function sendEmailViaJmap(input: {
-  to: string;
-  subject: string;
-  html: string;
-  text?: string;
-  inReplyTo?: string;
-  attachments?: { content: string; filename: string }[];
-}): Promise<boolean> {
+ * account via JMAP `EmailSubmission/set`. Returns false (after logging) on
+ * any failure — callers must never fail because email did. */
+export async function sendEmailViaJmap(
+  input: SendEmailInput,
+): Promise<boolean> {
   try {
     const identities = await listIdentities();
     const fromAddress = FASTMAIL_FROM;

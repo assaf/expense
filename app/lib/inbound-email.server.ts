@@ -33,8 +33,8 @@ import {
 } from "~/lib/email-layout.server";
 import { escapeHtml } from "~/lib/escape";
 import { extractEmailAddress } from "~/lib/validation";
-import { outboundFromAddress, sendReplyEmail } from "~/lib/reply.server";
-import type { ReplyInput } from "~/lib/reply.server";
+import { outboundFromAddress, sendEmail } from "~/lib/reply.server";
+import type { SendEmailOptions } from "~/lib/reply.server";
 import { upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
@@ -159,7 +159,7 @@ export interface InboundDeps {
   ): Promise<Buffer>;
   renderEmailImage(html: string, opts?: RenderEmailOptions): Promise<Buffer>;
   renderTextEmail(text: string, opts?: RenderTextEmailOptions): Promise<Buffer>;
-  sendReply(input: ReplyInput): Promise<void>;
+  sendReply(input: SendEmailOptions): Promise<unknown>;
 }
 
 // --- Webhook signature (Svix format) ----------------------------------------
@@ -458,7 +458,7 @@ const defaultDeps: InboundDeps = {
   renderReceiptImage,
   renderEmailImage,
   renderTextEmail,
-  sendReply: sendReplyEmail,
+  sendReply: sendEmail,
 };
 
 /** The receipt image to embed in the confirmation reply: base64 content for

@@ -21,7 +21,7 @@ import {
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
-import { sendReplyEmail } from "~/lib/reply.server";
+import { sendEmail } from "~/lib/reply.server";
 
 /**
  * FastMail-backed transport for the receipts-by-email pipeline.
@@ -190,7 +190,7 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
     renderReceiptImage,
     renderEmailImage,
     renderTextEmail,
-    sendReply: sendReplyEmail,
+    sendReply: sendEmail,
   };
 }
 

@@ -1,4 +1,5 @@
 import { sendEmailViaJmap } from "~/lib/fastmail.server";
+import type { SendEmailInput } from "~/lib/email-mime.server";
 import {
   FASTMAIL_FROM,
   FASTMAIL_TOKEN,
@@ -14,17 +15,11 @@ import {
  * never break the caller — failures are logged and return false.
  */
 
-interface ResendEmailInput {
-  to: string;
-  subject: string;
-  html: string;
-  text?: string;
-  /** Original email's message id — threads the reply into the same conversation. */
-  inReplyTo?: string;
-  /** Idempotency key (use the email_id) so Resend retries never double-send. */
+/** The dispatch input: `SendEmailInput` plus the Resend-only idempotency
+ * key (the email_id) so Resend retries never double-send. The FastMail path
+ * ignores the extra field. */
+export interface SendEmailOptions extends SendEmailInput {
   idempotencyKey?: string;
-  /** File attachments (e.g. the receipt image). `content` is base64. */
-  attachments?: { content: string; filename: string }[];
 }
 
 /** The address the app currently sends FROM (FastMail identity when
@@ -41,7 +36,7 @@ const EXPENSE_FROM = `Expense <${INBOUND_EMAIL_ADDRESS}>`;
 
 /** POST an email via the Resend API. Returns false after logging when it
  * can't be sent — callers must never fail because email did. */
-async function sendResendEmail(input: ResendEmailInput): Promise<boolean> {
+async function sendResendEmail(input: SendEmailOptions): Promise<boolean> {
   if (!RESEND_API_KEY || !INBOUND_EMAIL_ADDRESS) {
     console.warn(
       `[email] send skipped (RESEND_API_KEY/INBOUND_EMAIL_ADDRESS unset): ${input.subject}`,
@@ -96,15 +91,9 @@ async function sendResendEmail(input: ResendEmailInput): Promise<boolean> {
   return true;
 }
 
-/** Send a reply email back to the person who forwarded a receipt. Used for
- * confirmation replies (success + partial) and failure replies. */
-export interface ReplyInput extends ResendEmailInput {}
-
-/**
- * Send an app email through the configured transport: FastMail JMAP when
- * the token is set (with send permission), otherwise the Resend API.
- */
-export async function sendEmail(input: ResendEmailInput): Promise<boolean> {
+/** Send an app email through the configured transport: FastMail JMAP when
+ * the token is set (with send permission), otherwise the Resend API. */
+export async function sendEmail(input: SendEmailOptions): Promise<boolean> {
   if (FASTMAIL_TOKEN) {
     const ok = await sendEmailViaJmap(input);
     if (ok) {
@@ -123,8 +112,4 @@ export async function sendEmail(input: ResendEmailInput): Promise<boolean> {
     });
   }
   return ok;
-}
-
-export async function sendReplyEmail(input: ReplyInput): Promise<void> {
-  await sendEmail(input);
 }

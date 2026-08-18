@@ -9,9 +9,10 @@
  * subjects like the receipt replies). CRLF line endings throughout.
  */
 
-export interface OutboundMessageInput {
-  fromName: string;
-  fromEmail: string;
+/** The transport-level input both senders accept (FastMail JMAP + Resend).
+ * Defined here (dependency-free) so fastmail.server and reply.server share
+ * one shape instead of each declaring its own. */
+export interface SendEmailInput {
   to: string;
   subject: string;
   html: string;
@@ -20,6 +21,11 @@ export interface OutboundMessageInput {
   inReplyTo?: string;
   /** File attachments; `content` is base64. */
   attachments?: { content: string; filename: string }[];
+}
+
+export interface OutboundMessageInput extends SendEmailInput {
+  fromName: string;
+  fromEmail: string;
 }
 
 const CRLF = "\r\n";
@@ -31,9 +37,12 @@ export function encodeHeader(value: string): string {
 }
 
 function base64Part(lines: string[]): string {
-  return Buffer.from(lines.join(CRLF), "utf8")
-    .toString("base64")
-    .replace(/(.{76})/g, "$1" + CRLF);
+  return wrapBase64(Buffer.from(lines.join(CRLF), "utf8").toString("base64"));
+}
+
+/** Wrap a base64 string at 76 chars with CRLF (RFC 2045). */
+function wrapBase64(base64: string): string {
+  return base64.replace(/(.{76})/g, "$1" + CRLF);
 }
 
 function randomBoundary(): string {
@@ -112,7 +121,7 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
       );
       body.push("Content-Transfer-Encoding: base64");
       body.push("");
-      body.push(att.content.replace(/(.{76})/g, "$1" + CRLF));
+      body.push(wrapBase64(att.content));
     }
     body.push("--" + boundary + "--");
   } else {
