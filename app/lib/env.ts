@@ -51,7 +51,8 @@ export const APP_PASSWORD = env.APP_PASSWORD ?? "";
 /** Secret used to sign the session cookie. Required — the app fails fast without it. */
 export const SESSION_SECRET = env.SESSION_SECRET ?? "";
 
-/** Resend API key — fetches received email content/attachments and sends failure replies. */
+/** Resend API key — fetches received email content/attachments for the
+ * inbound webhook path (outbound replies go through FastMail JMAP). */
 export const RESEND_API_KEY = env.RESEND_API_KEY ?? "";
 
 /** Resend inbound webhook signing secret (`whsec_…`) — verifies `email.received` webhooks. */

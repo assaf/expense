@@ -152,8 +152,10 @@ When `FASTMAIL_TOKEN` IS set, all outbound email (receipt replies +
 verification emails) goes through FastMail JMAP `EmailSubmission/set` (NOT
 RFC 8621 `Email/submit` — FastMail rejects it as unknownMethod; `Identity/get`
 is likewise gated behind the `urn:ietf:params:jmap:submission` capability)
-from `INBOUND_EMAIL_ADDRESS`; the Resend path stays as the fallback for
-unconfigured deployments.
+from `INBOUND_EMAIL_ADDRESS` (identity-matched, falling back to the
+account's default identity); the Resend outbound fallback was removed (Aug 2026) — without `FASTMAIL_TOKEN` send permission, outbound emails are
+skipped with a warning (logged + Sentry-captured), they never silently fail
+in a Resend API call.
 
 `SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
@@ -659,8 +661,11 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
     failure/confirmation replies are sent FROM the FastMail identity
     (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
     `EmailSubmission/set` (upload raw MIME → `Email/import` into the
-    identity's Sent mailbox → submit) when `FASTMAIL_TOKEN` has send
-    permission, else via Resend. The self-reply guard compares the incoming
+    identity's Sent mailbox → submit; the submit step retries once on a
+    transient failure, reusing the same email id — the blob/Sent import
+    doesn't repeat) when `FASTMAIL_TOKEN` has send
+    permission; without it the send is skipped with a warning. The
+    self-reply guard compares the incoming
     From against the outbound address, so forwarded replies can't loop.
     **When pushes stop arriving, the subscription is unverified** — a
     subscription created before the webhook was live (or with stale push
@@ -679,11 +684,10 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
     (default `expense-receipts`), `RECEIPTS_FOLDER` (must match the rule's
     folder), `INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL is
     `<PUBLIC_URL>/api/inbound-push` — set it in prod or verification fails).
-    (Opaque Resend failure seen Aug 2026: the unknown-sender reply once
-    failed with `422 Invalid input: expected ""` — the field was never
-    identified; `sendResendEmail` now logs the full request shape on failure
-    and, since replies moved to FastMail, the Resend path only runs when
-    `FASTMAIL_TOKEN` is unset.)
+    (The Resend 422 from Aug 2026 — an unknown-sender reply failing with
+    `422 Invalid input: expected ""` — is obsolete: the outbound Resend path
+    was removed in Aug 2026. `RESEND_API_KEY` now serves the inbound webhook
+    only, fetching the received email's content/attachments.)
   - **Verification + exclusivity**: adding an address (Settings → Receipts by
     email, or auto-added at signup/join/login) puts it in `inbound_senders` as
     **pending** and emails a verification link to it (single-use token hashed

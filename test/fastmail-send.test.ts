@@ -139,14 +139,34 @@ describe("sendEmailViaJmap", () => {
     expect(raw).toContain('filename="receipt.png"');
   });
 
-  it("returns false (not throw) when submit fails", async () => {
-    const { deps } = fakes([identity()], {
-      submitEmail: vi.fn(async () => {
-        throw new Error("boom");
-      }),
+  it("returns false (not throw) when both submit attempts fail", async () => {
+    const submitEmail = vi.fn(async () => {
+      throw new Error("boom");
     });
+    const { deps } = fakes([identity()], { submitEmail });
 
     expect(await sendEmailViaJmap(input, deps)).toBe(false);
+    // The transient-failure retry runs once, then gives up.
+    expect(submitEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries the submission once with the same email id", async () => {
+    const submitEmail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network blip"))
+      .mockResolvedValueOnce(undefined);
+    const { deps, uploadBlob, importEmail } = fakes([identity()], {
+      submitEmail,
+    });
+
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(submitEmail).toHaveBeenCalledTimes(2);
+    // The retry reuses the same email id — the blob upload and Sent import
+    // already succeeded, so only the submission repeats.
+    expect(submitEmail).toHaveBeenNthCalledWith(1, "id-1", "email-1");
+    expect(submitEmail).toHaveBeenNthCalledWith(2, "id-1", "email-1");
+    expect(uploadBlob).toHaveBeenCalledTimes(1);
+    expect(importEmail).toHaveBeenCalledTimes(1);
   });
 
   it("returns false when there are no identities", async () => {

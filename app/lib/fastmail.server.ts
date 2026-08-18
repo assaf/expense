@@ -539,7 +539,24 @@ export async function sendEmailViaJmap(
     });
     const blobId = await deps.uploadBlob(raw);
     const emailId = await deps.importEmail(blobId, chosen.saveSentToMailboxId);
-    await deps.submitEmail(chosen.id, emailId);
+    try {
+      await deps.submitEmail(chosen.id, emailId);
+    } catch (err) {
+      // A transient submission failure (network blip, provider hiccup)
+      // would otherwise drop the reply forever — a lost confirmation makes
+      // the sender re-forward, which creates a duplicate expense. Retry once
+      // with the SAME emailId: the blob upload and Sent-mailbox import
+      // already succeeded, so only the submission repeats. If the first
+      // attempt landed and only the response was lost, this can deliver a
+      // duplicate email — the rarer and cheaper failure of the two.
+      console.warn(
+        `[email] submit failed, retrying once: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        { to: input.to, subject: input.subject },
+      );
+      await deps.submitEmail(chosen.id, emailId);
+    }
     return true;
   } catch (err) {
     captureWarning(

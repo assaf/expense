@@ -484,16 +484,14 @@ async function receiptImageAttachment(
 // --- Reply email builders ----------------------------------------------------
 
 /** The envelope shared by every pipeline reply: reply to the sender,
- * threaded to the original message, idempotent per email. */
+ * threaded to the original message. */
 function replyEnvelope(data: EmailReceivedData): {
   to: string;
   inReplyTo: string | undefined;
-  idempotencyKey: string;
 } {
   return {
     to: data.from,
     inReplyTo: data.message_id,
-    idempotencyKey: data.email_id,
   };
 }
 
