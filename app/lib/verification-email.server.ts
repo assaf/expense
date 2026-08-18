@@ -5,7 +5,7 @@ import {
   valuePropFooter,
 } from "~/lib/email-layout.server";
 import { PUBLIC_URL } from "~/lib/env";
-import { sendResendEmail } from "~/lib/reply.server";
+import { sendEmail } from "~/lib/reply.server";
 
 /**
  * Shared builder for the app's two verification emails — the account
@@ -39,8 +39,8 @@ function verifyButton(link: string, label: string): string {
 /**
  * Send a verification email for a single-use token link: the intro
  * paragraphs, the CTA button, and a closing note inside the shared email
- * shell. Returns true when Resend accepted it — false after logging when
- * it can't be sent or no public origin is set (PUBLIC_URL), because
+ * shell. Returns true when the transport accepted it — false after logging
+ * when it can't be sent or no public origin is set (PUBLIC_URL), because
  * callers must never fail because email did.
  */
 export async function sendVerificationEmail(input: {
@@ -75,5 +75,5 @@ export async function sendVerificationEmail(input: {
     ].join("\n"),
     footer: valuePropFooter(home),
   });
-  return sendResendEmail({ to: input.to, subject: input.subject, html });
+  return sendEmail({ to: input.to, subject: input.subject, html });
 }

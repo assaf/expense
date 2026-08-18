@@ -1,4 +1,5 @@
-import { FASTMAIL_TOKEN, RECEIPTS_FOLDER } from "~/lib/env";
+import { FASTMAIL_TOKEN, FASTMAIL_FROM, RECEIPTS_FOLDER } from "~/lib/env";
+import { buildRfc822Message } from "~/lib/email-mime.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -73,9 +74,16 @@ interface ApiResponse {
   methodResponses: [string, unknown, string][];
 }
 
-/** POST a batch of method calls; throws on the first per-call error. */
+/** Extra JMAP capabilities beyond core + mail (e.g. submission for sending). */
+type JmapCapability = "urn:ietf:params:jmap:submission";
+
+/**
+ * POST a batch of method calls; throws on the first per-call error.
+ * `capabilities` adds to the standard core + mail capabilities.
+ */
 async function jmapApi(
   methodCalls: unknown[][],
+  capabilities: JmapCapability[] = [],
 ): Promise<[string, unknown, string][]> {
   const s = await jmapSession();
   const res = await fetch(s.apiUrl, {
@@ -85,7 +93,11 @@ async function jmapApi(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      using: ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+      using: [
+        "urn:ietf:params:jmap:core",
+        "urn:ietf:params:jmap:mail",
+        ...capabilities,
+      ],
       methodCalls,
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -348,4 +360,174 @@ export async function destroySubscription(id: string): Promise<void> {
   await call<{ destroy: string[] }, unknown>("PushSubscription/set", {
     destroy: [id],
   });
+}
+
+// --- Sending (Email/submit) --------------------------------------------------
+
+interface FastmailIdentity {
+  id: string;
+  name: string;
+  email: string;
+  /** The mailbox the identity saves sent mail to (e.g. the Sent folder). */
+  saveSentToMailboxId: string;
+}
+
+/** The account's sending identities (Identity/get). */
+async function listIdentities(): Promise<FastmailIdentity[]> {
+  const s = await jmapSession();
+  // Fastmail gates Identity/get behind the submission capability.
+  const [response] = await jmapApi(
+    [["Identity/get", { accountId: s.accountId }, "m0"]],
+    ["urn:ietf:params:jmap:submission"],
+  );
+  const { list } = response![1] as {
+    list: Array<{
+      id: string;
+      name?: string;
+      email?: string;
+      saveSentToMailboxId?: string;
+    }>;
+  };
+  return list
+    .filter((i) => i.email)
+    .map((i) => ({
+      id: i.id,
+      name: i.name ?? "",
+      email: i.email!,
+      saveSentToMailboxId: i.saveSentToMailboxId ?? "",
+    }));
+}
+
+/**
+ * The identity for an address: exact match first, then a Fastmail wildcard
+ * identity (`*@domain`) — receipts@labnotes.org matches `*@labnotes.org`.
+ */
+function matchIdentity(
+  identities: FastmailIdentity[],
+  address: string,
+): FastmailIdentity | undefined {
+  const lower = address.toLowerCase();
+  return (
+    identities.find((i) => i.email.toLowerCase() === lower) ??
+    identities.find((i) => {
+      const at = i.email.indexOf("@");
+      return (
+        i.email.startsWith("*@") &&
+        i.email.slice(at + 1).toLowerCase() ===
+          lower.slice(lower.indexOf("@") + 1)
+      );
+    })
+  );
+}
+
+/** Upload a raw RFC 5322 message blob; returns the blobId. */
+async function uploadBlob(raw: Buffer): Promise<string> {
+  const s = await jmapSession();
+  const url = s.uploadUrl.replace("{accountId}", s.accountId);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      ...bearer(),
+      "Content-Type": "message/rfc822",
+    },
+    body: new Uint8Array(raw),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`upload failed: ${res.status} ${await res.text()}`);
+  }
+  const j = (await res.json()) as { blobId?: string };
+  if (!j.blobId) throw new Error("upload missing blobId");
+  return j.blobId;
+}
+
+/** Import a sent message into the given mailbox (the identity's Sent box). */
+async function importEmail(blobId: string, mailboxId: string): Promise<string> {
+  const s = await jmapSession();
+  const { created } = await call<
+    { accountId: string; emails: Record<string, unknown> },
+    { created: Record<string, { id: string } | null> }
+  >("Email/import", {
+    accountId: s.accountId,
+    emails: {
+      e1: {
+        blobId,
+        mailboxIds: mailboxId ? { [mailboxId]: true } : {},
+      },
+    },
+  });
+  const email = created["e1"];
+  if (!email) throw new Error("Email/import did not create the message");
+  return email.id;
+}
+
+/** Submit a message for sending (Fastmail delivers via SMTP). */
+/** Submit a message for sending (Fastmail delivers via SMTP). Fastmail
+ * implements the RFC 8621 `EmailSubmission/set` method (not `Email/submit`). */
+async function submitEmail(identityId: string, emailId: string): Promise<void> {
+  const s = await jmapSession();
+  await jmapApi(
+    [
+      [
+        "EmailSubmission/set",
+        {
+          accountId: s.accountId,
+          create: {
+            k1: {
+              identityId,
+              emailId,
+            },
+          },
+        },
+        "m0",
+      ],
+    ],
+    ["urn:ietf:params:jmap:submission"],
+  );
+}
+
+/** Build the RFC 5322 message bytes for a reply and send it from the
+ * account via JMAP Email/submit. Returns false (after logging) on any
+ * failure — callers must never fail because email did. */
+export async function sendEmailViaJmap(input: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  inReplyTo?: string;
+  attachments?: { content: string; filename: string }[];
+}): Promise<boolean> {
+  try {
+    const identities = await listIdentities();
+    const fromAddress = FASTMAIL_FROM;
+    const identity = fromAddress
+      ? matchIdentity(identities, fromAddress)
+      : undefined;
+    const chosen = identity ?? identities[0];
+    if (!chosen) {
+      console.warn("[email] send skipped: no Fastmail identity found");
+      return false;
+    }
+    const raw = buildRfc822Message({
+      fromName: chosen.name,
+      fromEmail: chosen.email,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+      inReplyTo: input.inReplyTo,
+      attachments: input.attachments,
+    });
+    const blobId = await uploadBlob(raw);
+    const emailId = await importEmail(blobId, chosen.saveSentToMailboxId);
+    await submitEmail(chosen.id, emailId);
+    return true;
+  } catch (err) {
+    console.warn(
+      "[email] Fastmail send failed:",
+      err instanceof Error ? err.message : String(err),
+      { to: input.to, subject: input.subject },
+    );
+    return false;
+  }
 }

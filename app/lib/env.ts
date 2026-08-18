@@ -90,6 +90,14 @@ export const DEVICE_CLIENT_ID = env.DEVICE_CLIENT_ID || "expense-receipts";
 export const RECEIPTS_FOLDER = env.RECEIPTS_FOLDER || "Receipts";
 
 /**
+ * The address the app sends its reply/verification emails FROM when
+ * FastMail sending is configured (e.g. `receipts@labnotes.org`). Optional —
+ * when unset the account's default identity is used. Only meaningful when
+ * `FASTMAIL_TOKEN` has send permission.
+ */
+export const FASTMAIL_FROM = env.FASTMAIL_FROM ?? "";
+
+/**
  * Secret gating the daily FastMail cron (GET /api/inbound-cron). Vercel
  * sends cron requests with `Authorization: Bearer <CRON_SECRET>` when the
  * env var is set; the route rejects everything else. Optional — the cron

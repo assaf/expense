@@ -1,14 +1,17 @@
-import { INBOUND_EMAIL_ADDRESS, RESEND_API_KEY } from "~/lib/env";
+import { sendEmailViaJmap } from "~/lib/fastmail.server";
+import {
+  FASTMAIL_FROM,
+  FASTMAIL_TOKEN,
+  INBOUND_EMAIL_ADDRESS,
+  RESEND_API_KEY,
+} from "~/lib/env";
 
 /**
- * Send email via the Resend Email API from the Expense mailbox — the same
- * mailbox receipts are forwarded to (INBOUND_EMAIL_ADDRESS), so one env var
- * covers routing and From for every email the app sends: inbound failure
- * replies (sendReplyEmail) and sender-verification emails
- * (sendVerificationEmail in sender-verification.server.ts).
- *
- * If Resend isn't configured the send is skipped (the error is logged) —
- * this must never break the caller.
+ * Send email from the app's mailbox. When FastMail is configured
+ * (FASTMAIL_TOKEN), messages go out through the FastMail JMAP account from
+ * the FASTMAIL_FROM address (or the account's default identity); otherwise
+ * they go through the Resend API from INBOUND_EMAIL_ADDRESS. Both paths
+ * never break the caller — failures are logged and return false.
  */
 
 interface ResendEmailInput {
@@ -24,14 +27,21 @@ interface ResendEmailInput {
   attachments?: { content: string; filename: string }[];
 }
 
-/** The From address for every app email. */
+/** The address the app currently sends FROM (FastMail identity when
+ * configured, else the Resend inbound address). The inbound pipeline uses
+ * this to recognize its own replies looping back (self-reply guard). */
+export function outboundFromAddress(): string {
+  return FASTMAIL_TOKEN && FASTMAIL_FROM
+    ? FASTMAIL_FROM
+    : INBOUND_EMAIL_ADDRESS;
+}
+
+/** The From address for Resend-sent email (the fallback transport). */
 const EXPENSE_FROM = `Expense <${INBOUND_EMAIL_ADDRESS}>`;
 
 /** POST an email via the Resend API. Returns false after logging when it
  * can't be sent — callers must never fail because email did. */
-export async function sendResendEmail(
-  input: ResendEmailInput,
-): Promise<boolean> {
+async function sendResendEmail(input: ResendEmailInput): Promise<boolean> {
   if (!RESEND_API_KEY || !INBOUND_EMAIL_ADDRESS) {
     console.warn(
       `[email] send skipped (RESEND_API_KEY/INBOUND_EMAIL_ADDRESS unset): ${input.subject}`,
@@ -90,6 +100,17 @@ export async function sendResendEmail(
  * confirmation replies (success + partial) and failure replies. */
 export interface ReplyInput extends ResendEmailInput {}
 
+/**
+ * Send an app email through the configured transport: FastMail JMAP when
+ * the token is set (with send permission), otherwise the Resend API.
+ */
+export async function sendEmail(input: ResendEmailInput): Promise<boolean> {
+  if (FASTMAIL_TOKEN) {
+    return sendEmailViaJmap(input);
+  }
+  return sendResendEmail(input);
+}
+
 export async function sendReplyEmail(input: ReplyInput): Promise<void> {
-  await sendResendEmail(input);
+  await sendEmail(input);
 }
