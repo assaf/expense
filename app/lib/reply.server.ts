@@ -66,7 +66,21 @@ export async function sendResendEmail(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.warn(`[email] send failed ${res.status}: ${body.slice(0, 300)}`);
+    // Include the request shape on failure so a Resend validation error can
+    // be traced to the exact field (the to/from/inReplyTo/attachment values
+    // come straight from the incoming email). Content is logged as sizes
+    // only.
+    console.warn(`[email] send failed ${res.status}: ${body.slice(0, 300)}`, {
+      to: input.to,
+      subject: input.subject,
+      inReplyTo: input.inReplyTo,
+      htmlBytes: input.html.length,
+      textBytes: input.text?.length ?? 0,
+      attachments: input.attachments?.map((a) => ({
+        filename: a.filename,
+        contentBytes: a.content.length,
+      })),
+    });
     return false;
   }
   return true;
