@@ -10,8 +10,7 @@ const METERS_PER_MILE = 1609.344;
 /** The app's descriptive User-Agent for map-service requests (Nominatim's
  * usage policy requires one; Carto tiles use the same identity). Shared
  * with the report-map tile fetcher (route-map.server.ts). */
-export const MAP_USER_AGENT =
-  "expense-personal/1.0 (assaf@expense.labnotes.org)";
+export const MAP_USER_AGENT = "expense-personal/1.0 (assaf@labnotes.org)";
 
 interface NominatimResult {
   lat: string;
