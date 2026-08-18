@@ -179,6 +179,12 @@ server errors only ever reached Sentry locally this way). The post-deploy smoke
 check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
 production deployment boots with it false. Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
+`SENTRY_AUTH_TOKEN` (optional) is read by the vite plugin (`sentryReactRouter`
+in `vite.config.ts`) to create releases + upload sourcemaps at build time;
+without it every build warns "No auth token provided" and stack traces arrive
+without source maps (errors still report — the DSN works). Generate a token in
+Sentry → Settings → Auth Tokens with `org:read`, `project:read`,
+`project:write`, `project:releases:write` and add it to Vercel.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
 Automation secret (Vercel → Settings → Security). Deployment URLs are behind
