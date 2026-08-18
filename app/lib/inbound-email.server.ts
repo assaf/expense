@@ -479,6 +479,20 @@ async function receiptImageAttachment(
 
 // --- Reply email builders ----------------------------------------------------
 
+/** The envelope shared by every pipeline reply: reply to the sender,
+ * threaded to the original message, idempotent per email. */
+function replyEnvelope(data: EmailReceivedData): {
+  to: string;
+  inReplyTo: string | undefined;
+  idempotencyKey: string;
+} {
+  return {
+    to: data.from,
+    inReplyTo: data.message_id,
+    idempotencyKey: data.email_id,
+  };
+}
+
 function replyHtml(title: string, paragraphs: string[]): string {
   return emailShell({
     title,
@@ -646,26 +660,22 @@ export async function processInboundEvent(
     const pending = await findPendingSenderRow(fromEmail);
     if (pending) {
       await deps.sendReply({
-        to: data.from,
+        ...replyEnvelope(data),
         subject: "⚠️ Receipt not imported — sender not verified yet",
         html: replyHtml("Receipt not imported — verify this address first", [
           `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} from <b>${escapeHtml(data.from)}</b>, but this address hasn't been verified yet, so receipts from it are not imported.`,
           "Check the inbox of that address for the verification email we sent, or open the app and go to <b>Settings → Receipts by email</b> to resend it. Then forward the receipt again.",
         ]),
-        inReplyTo: data.message_id,
-        idempotencyKey: data.email_id,
       });
       return { status: "unverified-sender" };
     }
     await deps.sendReply({
-      to: data.from,
+      ...replyEnvelope(data),
       subject: "⚠️ Receipt not imported — sender not recognized",
       html: replyHtml("Receipt not imported", [
         `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} but the sender address <b>${escapeHtml(data.from)}</b> is not set up to import receipts.`,
         "Open the app, go to <b>Settings → Receipts by email</b>, and add this address to the list of allowed senders. Then forward the receipt again.",
       ]),
-      inReplyTo: data.message_id,
-      idempotencyKey: data.email_id,
     });
     return { status: "unknown-sender" };
   }
@@ -693,11 +703,9 @@ export async function processInboundEvent(
   ): Promise<ProcessResult> => {
     if (previousStatus !== "error") {
       await deps.sendReply({
-        to: data.from,
+        ...replyEnvelope(data),
         subject: "⚠️ Receipt not imported — something went wrong",
         html: replyHtml("Receipt not imported", paragraphs),
-        inReplyTo: data.message_id,
-        idempotencyKey: data.email_id,
       });
     }
     await upsertInboundEmail({
@@ -965,12 +973,10 @@ export async function processInboundEvent(
         reportStats,
       });
       await deps.sendReply({
-        to: data.from,
+        ...replyEnvelope(data),
         subject: confirmation.subject,
         html: confirmation.html,
         attachments: receiptAttachment ? [receiptAttachment] : undefined,
-        inReplyTo: data.message_id,
-        idempotencyKey: data.email_id,
       });
       await upsertInboundEmail({
         emailId: data.email_id,
@@ -1003,12 +1009,10 @@ export async function processInboundEvent(
       reportStats,
     });
     await deps.sendReply({
-      to: data.from,
+      ...replyEnvelope(data),
       subject: confirmation.subject,
       html: confirmation.html,
       attachments: receiptAttachment ? [receiptAttachment] : undefined,
-      inReplyTo: data.message_id,
-      idempotencyKey: data.email_id,
     });
 
     await upsertInboundEmail({
