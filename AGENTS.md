@@ -143,8 +143,10 @@ falls back to the account's default identity), and
 `CRON_SECRET` (gates `/api/inbound-cron`). All optional — when `FASTMAIL_TOKEN`
 is unset the push/cron routes 503 and receipts keep flowing through Resend.
 When `FASTMAIL_TOKEN` IS set, all outbound email (receipt replies +
-verification emails) goes through FastMail JMAP `Email/submit` from
-`FASTMAIL_FROM`; the Resend path stays as the fallback for unconfigured
+verification emails) goes through FastMail JMAP `EmailSubmission/set` (NOT
+RFC 8621 `Email/submit` — FastMail rejects it as unknownMethod; `Identity/get`
+is likewise gated behind the `urn:ietf:params:jmap:submission` capability)
+from `FASTMAIL_FROM`; the Resend path stays as the fallback for unconfigured
 deployments.
 
 `SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
@@ -411,6 +413,11 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
     `install()` doesn't survive navigations).
   - The server pin loads via `NODE_OPTIONS=--import ./test/helpers/pinned-clock.mjs`
     in `launchServer.ts`; keep the pinned instant in sync across all files.
+  - The test server blanks `PUBLIC_URL` in its env (like the live-service
+    keys) so the OAuth metadata issuer follows the request/forwarded origin.
+    A `.env` `PUBLIC_URL` (set for the FastMail push URL) changed the issuer
+    to the prod origin locally and prompted a bad hardcode in `531e814` —
+    keep OAuth test expectations origin-derived, never hardcoded.
 
 ### Git commits
 
@@ -619,13 +626,32 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
     model as the webhook (From must have a verified `inbound_senders` row);
     failure/confirmation replies are sent FROM the FastMail identity
     (`FASTMAIL_FROM`, default the account's primary identity) via
-    `Email/submit` when `FASTMAIL_TOKEN` has send permission, else via Resend.
-    The self-reply guard compares the incoming From against the outbound
-    address, so forwarded replies can't loop. Env: `FASTMAIL_TOKEN`,
+    `EmailSubmission/set` (upload raw MIME → `Email/import` into the
+    identity's Sent mailbox → submit) when `FASTMAIL_TOKEN` has send
+    permission, else via Resend. The self-reply guard compares the incoming
+    From against the outbound address, so forwarded replies can't loop.
+    **When pushes stop arriving, the subscription is unverified** — a
+    subscription created before the webhook was live (or with stale push
+    keys) never completed the PushVerification handshake, and verification
+    state is invisible via the API (`verificationCode` reads null either
+    way). Fix: destroy the subscription and recreate it (a tsx script
+    calling `destroySubscription` + `ensureSubscription`) so FastMail sends a
+    fresh PushVerification against the live webhook. `RECEIPTS_FOLDER` must
+    match the folder name EXACTLY (a `Receipt` vs `Receipts` mismatch makes
+    every drain throw and die silently). To test the push handler without
+    waiting for FastMail: encrypt a StateChange with the app's own keys
+    (`p256dhFromPrivate(PUSH_PRIVATE_KEY)` + `http_ece` encrypt) and POST it
+    to `/api/inbound-push` — decryption is the auth, so this works.
+    Env: `FASTMAIL_TOKEN`,
     `PUSH_PRIVATE_KEY`/`PUSH_AUTH` (from `pnpm setup:push`), `DEVICE_CLIENT_ID`
     (default `expense-receipts`), `RECEIPTS_FOLDER` (must match the rule's
     folder), `FASTMAIL_FROM`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL is
     `<PUBLIC_URL>/api/inbound-push` — set it in prod or verification fails).
+    (Opaque Resend failure seen Aug 2026: the unknown-sender reply once
+    failed with `422 Invalid input: expected ""` — the field was never
+    identified; `sendResendEmail` now logs the full request shape on failure
+    and, since replies moved to FastMail, the Resend path only runs when
+    `FASTMAIL_TOKEN` is unset.)
   - **Verification + exclusivity**: adding an address (Settings → Receipts by
     email, or auto-added at signup/join/login) puts it in `inbound_senders` as
     **pending** and emails a verification link to it (single-use token hashed
