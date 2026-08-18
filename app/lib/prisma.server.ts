@@ -15,8 +15,13 @@ if (!DATABASE_URL) {
 }
 
 /**
- * node-postgres reads `sslmode` from the connection string (Supabase
- * pooler URLs carry `?sslmode=require`); local dev/test URLs omit it → no TLS.
+ * node-postgres reads `sslmode` from the connection string. The Supabase
+ * pooler REQUIRES TLS (ESSLREQUIRED without it) but its cert is signed by
+ * Supabase's private CA (`Supabase Intermediate 2021 CA`), so
+ * `sslmode=require`/`verify-full` FAIL with "self-signed certificate" on
+ * pg >= 8.13 (sslmode=require no longer skips verification). Prod URLs
+ * therefore carry `?sslmode=no-verify` (encrypt-only — matches the pooler's
+ * long-standing behavior); local dev/test URLs omit it → no TLS.
  *
  * Serverless: every Vercel instance opens its own node-postgres pool, so a
  * burst of concurrent requests multiplies connections per request. Prod

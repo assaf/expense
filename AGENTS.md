@@ -29,6 +29,14 @@ should not rely on it either. Use the **Supavisor pooler** on
   Supavisor's transaction mode handles the extended protocol / prepared
   statements and Prisma's batch + interactive transactions (verified against
   prod with the PrismaPg adapter).
+  **Both pooler URLs must carry `?sslmode=no-verify`.** The pooler requires
+  TLS (rejects plaintext with `(ESSLREQUIRED)`), but its cert is signed by
+  Supabase's private CA (`Supabase Intermediate 2021 CA`), and pg >= 8.13
+  verifies the chain for `sslmode=require`/`verify-full` (fails with
+  "self-signed certificate"). `no-verify` = encrypt-only, which is the
+  long-standing behavior. A URL pasted from the Supabase dashboard's copy
+  button has NO sslmode param — every DB call then fails `(ESSLREQUIRED)`;
+  this is how prod broke in Aug 2026 (URL re-pasted without the param).
 - **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`,
   `scripts/migrate-prod` and `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL want stable sessions; the session pooler behaves
   like a direct connection. Keep it here, not on the transaction pooler. Also
