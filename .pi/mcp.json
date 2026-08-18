@@ -2,7 +2,7 @@
   "mcpServers": {
     "sentry": {
       "url": "https://mcp.sentry.dev/mcp",
-      "directTools": ["update_issue"]
+      "directTools": ["update_issue", "search_issues"]
     },
     "expense": {
       "url": "https://expense.labnotes.org/mcp",
