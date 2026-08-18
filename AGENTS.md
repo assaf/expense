@@ -142,7 +142,11 @@ subscriptions on the same FastMail account), `RECEIPTS_FOLDER` (default
 `INBOUND_EMAIL_ADDRESS` — the single address for the feature: users forward
 receipts TO it AND (when FastMail sending is configured) replies/
 verifications are sent FROM it (identity-matched, falling back to the
-account's default identity). All optional — when `FASTMAIL_TOKEN`
+account's default identity). It moved from `receipts@expense.labnotes.org`
+(Resend era) to `receipts@labnotes.org` in Aug 2026 — mail to any other
+address is not processed (the delivery rule only matches the current one),
+and the FastMail rule/identity must stay in sync with this var. All optional
+— when `FASTMAIL_TOKEN`
 is unset the push/cron routes 503 and receipts keep flowing through Resend.
 When `FASTMAIL_TOKEN` IS set, all outbound email (receipt replies +
 verification emails) goes through FastMail JMAP `EmailSubmission/set` (NOT
@@ -187,6 +191,13 @@ without it every build warns "No auth token provided" and stack traces arrive
 without source maps (errors still report — the DSN works). Generate a token in
 Sentry → Settings → Auth Tokens with `org:read`, `project:read`,
 `project:write`, `project:releases:write` and add it to Vercel.
+`app/lib/errors.server.ts` holds the capture helpers — `captureError`
+(console.error + Sentry.captureException), `captureErrorOnce` (deduped by
+error identity, for the SSR double-report paths), and `captureWarning`
+(console.warn + Sentry.captureMessage, for recoverable failures the app
+absorbs — e.g. an outbound reply email that failed to send; the FastMail
+and Resend send paths both use it). All three are no-ops until the server
+SDK inits, so they're safe to call unconditionally.
 
 `VERCEL_PROTECTION_BYPASS` (optional) is the project's Protection Bypass for
 Automation secret (Vercel → Settings → Security). Deployment URLs are behind
@@ -401,6 +412,19 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 ### Testing (`vpr test` + Playwright)
 
 - Test files live in `test/*.test.ts` — NOT alongside source.
+- To unit-test a route action directly (no browser), type the args object as
+  `Parameters<typeof action>[0]` — the generated `+types/<route>` module
+  only resolves via tsconfig `rootDirs` for relative imports inside `app/`,
+  so `~/routes/+types/…` does NOT resolve from `test/`. See
+  `test/api-inbound-push.test.ts` for the pattern (mock the route's
+  network-facing collaborators with `vi.mock`, keep real decryption).
+- The FastMail flows are unit-tested offline: `test/fastmail-send.test.ts`
+  drives `sendEmailViaJmap` through its injectable `JmapSendDeps`
+  (identity match → upload → import → submit, failures return false), and
+  `test/api-inbound-push.test.ts` forges RFC 8291 payloads encrypted to the
+  app's own keys (PushVerification echo, StateChange drain, unknown type).
+  The decrypt-dependent route cases `describe.skipIf` when the push keys are
+  absent (CI without `.env` runs the unconfigured-503 path instead).
 - Browser tests via Playwright (vitest provider); helpers in `test/helpers/`
   (`launchBrowser.ts` → `goto`/`signIn`, `seedTestData.ts` → `testPrisma` +
   seeded constants, `launchServer.ts`).
