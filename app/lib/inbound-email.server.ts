@@ -159,7 +159,9 @@ export interface InboundDeps {
   ): Promise<Buffer>;
   renderEmailImage(html: string, opts?: RenderEmailOptions): Promise<Buffer>;
   renderTextEmail(text: string, opts?: RenderTextEmailOptions): Promise<Buffer>;
-  sendReply(input: SendEmailOptions): Promise<unknown>;
+  /** Send a reply email; failures are logged inside the transport and never
+   * throw — the pipeline treats replies as fire-and-forget. */
+  sendReply(input: SendEmailOptions): Promise<void>;
 }
 
 // --- Webhook signature (Svix format) ----------------------------------------
@@ -458,7 +460,9 @@ const defaultDeps: InboundDeps = {
   renderReceiptImage,
   renderEmailImage,
   renderTextEmail,
-  sendReply: sendEmail,
+  sendReply: async (input) => {
+    await sendEmail(input);
+  },
 };
 
 /** The receipt image to embed in the confirmation reply: base64 content for

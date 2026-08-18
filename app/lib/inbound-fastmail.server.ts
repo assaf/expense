@@ -190,7 +190,9 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
     renderReceiptImage,
     renderEmailImage,
     renderTextEmail,
-    sendReply: sendEmail,
+    sendReply: async (input) => {
+      await sendEmail(input);
+    },
   };
 }
 
