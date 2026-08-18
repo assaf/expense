@@ -1,12 +1,13 @@
 {
   "mcpServers": {
     "sentry": {
-      "url": "https://mcp.sentry.dev/mcp"
+      "url": "https://mcp.sentry.dev/mcp",
+      "directTools": ["update_issue"]
     },
     "expense": {
       "url": "https://expense.labnotes.org/mcp",
       "auth": "oauth",
-      "directTools": ["get_settings"]
+      "directTools": false
     },
     "supabase": {
       "url": "https://mcp.supabase.com/mcp",
