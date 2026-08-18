@@ -1,4 +1,8 @@
-import { FASTMAIL_TOKEN, FASTMAIL_FROM, RECEIPTS_FOLDER } from "~/lib/env";
+import {
+  FASTMAIL_TOKEN,
+  INBOUND_EMAIL_ADDRESS,
+  RECEIPTS_FOLDER,
+} from "~/lib/env";
 import { captureWarning } from "~/lib/errors.server";
 import {
   buildRfc822Message,
@@ -489,7 +493,7 @@ async function submitEmail(identityId: string, emailId: string): Promise<void> {
 
 /** The JMAP send flow's collaborators — injectable so tests exercise the
  * whole identity→upload→import→submit sequence offline. `fromAddress`
- * overrides FASTMAIL_FROM when provided. */
+ * overrides the receipts address when provided. */
 export interface JmapSendDeps {
   listIdentities(): Promise<FastmailIdentity[]>;
   uploadBlob(raw: Buffer): Promise<string>;
@@ -514,7 +518,7 @@ export async function sendEmailViaJmap(
 ): Promise<boolean> {
   try {
     const identities = await deps.listIdentities();
-    const fromAddress = deps.fromAddress ?? FASTMAIL_FROM;
+    const fromAddress = deps.fromAddress ?? INBOUND_EMAIL_ADDRESS;
     const identity = fromAddress
       ? matchIdentity(identities, fromAddress)
       : undefined;

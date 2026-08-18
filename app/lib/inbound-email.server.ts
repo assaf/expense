@@ -33,7 +33,7 @@ import {
 } from "~/lib/email-layout.server";
 import { escapeHtml } from "~/lib/escape";
 import { extractEmailAddress } from "~/lib/validation";
-import { outboundFromAddress, sendEmail } from "~/lib/reply.server";
+import { sendEmail } from "~/lib/reply.server";
 import type { SendEmailOptions } from "~/lib/reply.server";
 import { upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
@@ -644,15 +644,11 @@ export async function processInboundEvent(
   const subject = data.subject ?? "";
   const fromEmail = extractEmailAddress(data.from);
 
-  // Self-reply guard: if the sender is our own outbound address (FastMail
-  // identity when configured, else the Resend inbound address), this is an
-  // outbound reply looping back. Skip it without sending another reply
-  // (which would itself loop back, creating an infinite chain). Both
-  // addresses are checked during the Resend→FastMail transition.
-  if (
-    fromEmail === outboundFromAddress() ||
-    fromEmail === INBOUND_EMAIL_ADDRESS
-  ) {
+  // Self-reply guard: if the sender is the receipts address (what the app
+  // sends replies FROM), this is an outbound reply looping back. Skip it
+  // without sending another reply (which would itself loop back, creating
+  // an infinite chain).
+  if (fromEmail === INBOUND_EMAIL_ADDRESS) {
     return { status: "self-reply" };
   }
 

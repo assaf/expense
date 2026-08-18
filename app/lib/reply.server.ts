@@ -2,18 +2,18 @@ import { sendEmailViaJmap } from "~/lib/fastmail.server";
 import type { SendEmailInput } from "~/lib/email-mime.server";
 import { captureWarning } from "~/lib/errors.server";
 import {
-  FASTMAIL_FROM,
-  FASTMAIL_TOKEN,
   INBOUND_EMAIL_ADDRESS,
+  FASTMAIL_TOKEN,
   RESEND_API_KEY,
 } from "~/lib/env";
 
 /**
  * Send email from the app's mailbox. When FastMail is configured
  * (FASTMAIL_TOKEN), messages go out through the FastMail JMAP account from
- * the FASTMAIL_FROM address (or the account's default identity); otherwise
- * they go through the Resend API from INBOUND_EMAIL_ADDRESS. Both paths
- * never break the caller — failures are logged and return false.
+ * the receipts address (INBOUND_EMAIL_ADDRESS — identity-matched, falling
+ * back to the account's default identity); otherwise they go through the
+ * Resend API from INBOUND_EMAIL_ADDRESS. Both paths never break the caller
+ * — failures are logged and return false.
  */
 
 /** The dispatch input: `SendEmailInput` plus the Resend-only idempotency
@@ -21,15 +21,6 @@ import {
  * ignores the extra field. */
 export interface SendEmailOptions extends SendEmailInput {
   idempotencyKey?: string;
-}
-
-/** The address the app currently sends FROM (FastMail identity when
- * configured, else the Resend inbound address). The inbound pipeline uses
- * this to recognize its own replies looping back (self-reply guard). */
-export function outboundFromAddress(): string {
-  return FASTMAIL_TOKEN && FASTMAIL_FROM
-    ? FASTMAIL_FROM
-    : INBOUND_EMAIL_ADDRESS;
 }
 
 /** The From address for Resend-sent email (the fallback transport). */

@@ -58,7 +58,12 @@ export const RESEND_API_KEY = env.RESEND_API_KEY ?? "";
 export const INBOUND_EMAIL_WEBHOOK_SECRET =
   env.INBOUND_EMAIL_WEBHOOK_SECRET ?? "";
 
-/** The address users forward receipts to — shown in Settings (e.g. receipts@labnotes.org). */
+/** The app's receipts address — the single address for the receipts-by-email
+ * feature: users forward receipts TO it (shown in Settings, used in the
+ * verification-email copy) and, when FastMail sending is configured,
+ * replies/verifications are sent FROM it (identity-matched against the
+ * account; the account's default identity is used when unset). The FastMail
+ * delivery rule must file mail to this address into RECEIPTS_FOLDER. */
 export const INBOUND_EMAIL_ADDRESS = env.INBOUND_EMAIL_ADDRESS ?? "";
 
 /**
@@ -88,14 +93,6 @@ export const DEVICE_CLIENT_ID = env.DEVICE_CLIENT_ID || "expense-receipts";
  * emails after a successful import, so receipts never land in the Inbox.
  */
 export const RECEIPTS_FOLDER = env.RECEIPTS_FOLDER || "Receipts";
-
-/**
- * The address the app sends its reply/verification emails FROM when
- * FastMail sending is configured (e.g. `receipts@labnotes.org`). Optional —
- * when unset the account's default identity is used. Only meaningful when
- * `FASTMAIL_TOKEN` has send permission.
- */
-export const FASTMAIL_FROM = env.FASTMAIL_FROM ?? "";
 
 /**
  * Secret gating the daily FastMail cron (GET /api/inbound-cron). Vercel
