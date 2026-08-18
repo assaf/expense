@@ -410,6 +410,18 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 - Escape untrusted text before embedding in HTML/SVG/email (`escapeHtml`);
   `react/no-danger` is an error.
 - Sanitize free-text filenames (`sanitizeFilenamePart`).
+- **Authenticated responses must not be shared-cacheable.** Receipt images
+  use `Cache-Control: private` (browser-only) — never flip them back to
+  `public` for perceived performance. Every HTML document denies framing
+  (`X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors
+'none'`, set in the `app/root.tsx` loader headers, merged into all matched
+  routes — covers the OAuth consent page). HSTS comes from Vercel, no
+  app header needed.
+- Server-side fetches of untrusted URLs (MCP `capture_receipt` url, `<img
+src>` in forwarded email HTML) go through `fetchPublicUrl`
+  (`app/lib/ssrf.server.ts`) — literal + DNS-resolved private-address
+  checks, re-checked on every redirect hop. Never raw-fetch an
+  attacker-controlled URL.
 
 ### Testing (`vpr test` + Playwright)
 
@@ -422,11 +434,13 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
   network-facing collaborators with `vi.mock`, keep real decryption).
 - The FastMail flows are unit-tested offline: `test/fastmail-send.test.ts`
   drives `sendEmailViaJmap` through its injectable `JmapSendDeps`
-  (identity match → upload → import → submit, failures return false), and
-  `test/api-inbound-push.test.ts` forges RFC 8291 payloads encrypted to the
-  app's own keys (PushVerification echo, StateChange drain, unknown type).
-  The decrypt-dependent route cases `describe.skipIf` when the push keys are
-  absent (CI without `.env` runs the unconfigured-503 path instead).
+  (identity match → upload → import → submit; the submit step retries once
+  on a transient failure with the same email id; failures return false),
+  and `test/api-inbound-push.test.ts` forges RFC 8291 payloads encrypted to
+  throwaway keys from a `vi.mock`'d `~/lib/env` (generated lazily in
+  getters — `vi.hoisted` runs before `node:crypto` initializes), so the
+  decrypt cases run everywhere, CI included (PushVerification echo,
+  StateChange drain, unknown type, undecryptable body).
 - Browser tests via Playwright (vitest provider); helpers in `test/helpers/`
   (`launchBrowser.ts` → `goto`/`signIn`, `seedTestData.ts` → `testPrisma` +
   seeded constants, `launchServer.ts`).
@@ -511,6 +525,14 @@ Enforced by `pnpm check` (oxfmt + oxlint + tsc via `vp`) unless noted.
 | `app/data/mileage-rates.ts`             | The IRS standard rates seed for the global `mileage_rates` master table (synced by `initStore` when the seed differs) — edit this to update rates (snapshot: `docs/2026-08-04 IRS standard mileage rates.md`).                                                                                                                                                                                                                                                            |
 
 ## Gotchas
+
+- **Known dependency advisory (unfixed by design)**: `deepmerge-ts` 7.1.5
+  (GHSA-ggr8-5vv4-36mx, stack-exhaustion DoS) comes transitively via
+  `@prisma/config` (Prisma CLI config merge). Prisma 7.9.1 is current and
+  upstream hasn't bumped it; practical risk is ~zero (only exploitable by
+  someone who can already write the repo's config files). If `npm audit`
+  flags it again, fix via `pnpm.overrides: { "deepmerge-ts": "^8.0.0" }`
+  and verify `prisma db push`/migrate still work.
 
 - **Completeness (the "Incomplete" badge)**: a receipt is incomplete when
   missing date, amount, merchant, category, or report — the receipt image is
