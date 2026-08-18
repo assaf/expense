@@ -27,6 +27,10 @@ export async function launchServer(): Promise<string> {
     DEEPSEEK_API_KEY: "",
     RESEND_API_KEY: "",
     INBOUND_EMAIL_WEBHOOK_SECRET: "",
+    // PUBLIC_URL would otherwise leak from .env into the test server and
+    // change the OAuth metadata issuer to the production origin — tests
+    // assert on the request/forwarded origin instead.
+    PUBLIC_URL: "",
     // Pin the server's clock to the suite-wide pinned instant (see
     // pinned-clock.mjs / frozen-time.ts) so server-computed "today" matches
     // the frozen test and browser clocks.
