@@ -125,7 +125,8 @@ export type ProcessResult =
   | { status: "duplicate" }
   | { status: "unknown-sender" }
   | { status: "unverified-sender" }
-  | { status: "self-reply" };
+  | { status: "self-reply" }
+  | { status: "bounce" };
 
 /** Injectable collaborators (fakes in tests, real implementations by default). */
 export interface InboundDeps {
@@ -506,6 +507,53 @@ function confirmationEmail(opts: {
   return { subject, html: confirmationHtml(opts, subject) };
 }
 
+// --- Bounce / auto-reply detection ------------------------------------------
+//
+// Delivery-status notifications (bounces) arrive when one of OUR outbound
+// replies fails. Without a guard, a bounce looks like an unknown sender and
+// gets a "sender not recognized" reply — which itself bounces, which gets
+// another reply, looping forever and filling the Sent folder. Autoresponders
+// (vacation notices, delivery receipts) are the same trap: they reply to
+// every message, so replying to them is also an infinite loop.
+//
+// Two layers: a cheap check on metadata that exists before any fetch (DSN
+// subject lines and daemon senders — catches Fastmail's own bounces), and a
+// header check after fetch (null Return-Path, multipart/report, Auto-Submitted
+// — catches DSNs that arrive with a spoofed From and autoresponder loops).
+
+/** Subject lines of standard delivery-status / bounce notifications. */
+const BOUNCE_SUBJECT_RE =
+  /undelivered mail|delivery status notification|mail delivery (failed|failure|subsystem)|returned mail|failure notice|message.{0,12}bounc|bounced message|auto[-\s]?(reply|responder)|out of office|vacation (reply|notice)/i;
+
+/** Bounce daemon senders, matched against the extracted address. */
+const BOUNCE_SENDER_RE =
+  /^(?:mailer-daemon|mail delivery system|postmaster|root)@/i;
+
+/** Is this email a bounce/autoreply, from metadata alone (no fetch)? */
+function looksLikeBounce(
+  data: Pick<EmailReceivedData, "from" | "subject">,
+): boolean {
+  return (
+    BOUNCE_SUBJECT_RE.test(data.subject) ||
+    BOUNCE_SENDER_RE.test(extractEmailAddress(data.from))
+  );
+}
+
+/** Is this email a DSN/autoreply, from parsed headers (after fetch)? */
+function isDeliveryNotification(headers: Record<string, string>): boolean {
+  const contentType = (headers["content-type"] ?? "").toLowerCase();
+  if (
+    contentType.includes("multipart/report") ||
+    contentType.includes("message/delivery-status")
+  ) {
+    return true;
+  }
+  if ((headers["return-path"] ?? "").trim() === "<>") return true;
+  const autoSubmitted = (headers["auto-submitted"] ?? "").toLowerCase();
+  if (autoSubmitted.startsWith("auto-")) return true;
+  return false;
+}
+
 // --- Pipeline ----------------------------------------------------------------
 
 /**
@@ -526,6 +574,15 @@ export async function processInboundEvent(
   // an infinite chain).
   if (fromEmail === INBOUND_EMAIL_ADDRESS) {
     return { status: "self-reply" };
+  }
+
+  // Bounce guard: a delivery-status notification is one of OUR replies that
+  // failed. Never import it and never answer it — replying to a bounce (or
+  // to an autoresponder) starts a reply→bounce→reply loop that fills Sent.
+  // This check runs before the sender resolution so Fastmail's own
+  // MAILER-DAEMON bounces never reach the "unknown sender" reply path.
+  if (looksLikeBounce(data)) {
+    return { status: "bounce" };
   }
 
   // Only VERIFIED sender addresses accept receipts. A sender row that was
@@ -599,6 +656,13 @@ export async function processInboundEvent(
       deps.fetchReceivedEmail(data.email_id),
       deps.listAttachments(data.email_id),
     ]);
+
+    // Header-level DSN/autoreply check: bounces whose From is spoofed or
+    // whose subject is clean still carry a null Return-Path, a
+    // multipart/report body, or an Auto-Submitted header. Skip those too.
+    if (isDeliveryNotification(email.headers)) {
+      return { status: "bounce" };
+    }
 
     // Original email date: forwarded-quote → .eml → received header.
     const eml = attachments.find(isEmlMeta);

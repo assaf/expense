@@ -1099,6 +1099,82 @@ describe("processInboundEvent (body receipt)", () => {
     ).toBe(false);
   });
 
+  it("silently drops a daemon bounce without replying or importing", async () => {
+    const deps = fakeDeps();
+    const before = (await readExpenses(TEST_ACCOUNT_ID)).length;
+    const result = await processInboundEvent(
+      eventData({
+        from: "Mail Delivery System <MAILER-DAEMON@messagingengine.com>",
+        subject: "Undelivered Mail Returned to Sender",
+        message_id: "<bounce-1@mailfhigh.stl.internal>",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "bounce" });
+    expect(deps.sent).toHaveLength(0);
+    expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
+  });
+
+  it("silently drops a DSN with a clean sender but a bounce subject", async () => {
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        from: "Stranger <stranger@evil.com>",
+        subject: "Delivery Status Notification (Failure)",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "bounce" });
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("silently drops an autoresponder (vacation notice)", async () => {
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({ subject: "Re: Out of office: Re: Your receipt" }),
+      deps,
+    );
+    expect(result).toMatchObject({ status: "bounce" });
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("drops a verified sender's email carrying DSN headers (null Return-Path)", async () => {
+    await allowSender(TEST_ACCOUNT_ID, SENDER, undefined, true);
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        headers: {
+          date: "Sat, 20 Jun 2026 09:00:00 -0700",
+          "return-path": "<>",
+          "content-type": "multipart/report; report-type=delivery-status",
+        },
+      });
+    const before = (await readExpenses(TEST_ACCOUNT_ID)).length;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(result).toMatchObject({ status: "bounce" });
+    expect(deps.sent).toHaveLength(0);
+    expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
+  });
+
+  it("drops a verified sender's autoresponder (Auto-Submitted header)", async () => {
+    await allowSender(TEST_ACCOUNT_ID, SENDER, undefined, true);
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        headers: {
+          date: "Sat, 20 Jun 2026 09:00:00 -0700",
+          "auto-submitted": "auto-replied",
+        },
+      });
+    const before = (await readExpenses(TEST_ACCOUNT_ID)).length;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    expect(result).toMatchObject({ status: "bounce" });
+    expect(deps.sent).toHaveLength(0);
+    expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
+  });
+
   it("rejects an added-but-unverified sender with a verify-first reply", async () => {
     await allowSender(TEST_ACCOUNT_ID, "pending@example.com", undefined, false);
     const deps = fakeDeps();

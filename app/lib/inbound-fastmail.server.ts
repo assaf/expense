@@ -259,6 +259,8 @@ function replyTypeFor(
       return "none (duplicate)";
     case "self-reply":
       return "none (self-reply)";
+    case "bounce":
+      return "none (bounce)";
   }
 }
 

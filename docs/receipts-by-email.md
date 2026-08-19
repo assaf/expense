@@ -27,6 +27,15 @@ doesn't repeat) when `FASTMAIL_TOKEN` has send
 permission; without it the send is skipped with a warning. The
 self-reply guard compares the incoming
 From against the outbound address, so forwarded replies can't loop.
+**Bounces and autoresponders are dropped silently** (never imported,
+never answered): a cheap pre-fetch check matches DSN subject lines
+(`Undelivered Mail`, `Delivery Status Notification`, …) and daemon
+senders (`mailer-daemon@`, `postmaster@`), and a post-fetch header check
+matches null `Return-Path: <>`, `multipart/report` bodies, and
+`Auto-Submitted: auto-*`. Without this, a failed outbound reply bounces
+back from the mail server, the bounce looks like an unknown sender, gets
+another reply, bounces again — an infinite Sent-folder loop (Aug 2026: a
+run of this produced hundreds of "Receipt not imported" emails in Sent).
 **When pushes stop arriving, the subscription is unverified** — a
 subscription created before the webhook was live (or with stale push
 keys) never completed the PushVerification handshake, and verification
