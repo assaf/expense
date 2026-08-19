@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-router";
 import { CRON_SECRET, FASTMAIL_TOKEN } from "~/lib/env";
 import { ensureSubscription } from "~/lib/fastmail-push.server";
 import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
@@ -35,13 +36,27 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   try {
-    const subscriptionId = await ensureSubscription();
-    const result = await processUnprocessedReceipts();
+    // Sentry cron monitor: a missed check-in (cron stops firing, the drain
+    // throws before completing, the route breaks on a bad deploy) alerts —
+    // the watchdog for the receipts pipeline. No-op when Sentry isn't
+    // initialized (dev/tests/previews), so the tick still runs everywhere.
+    const runTick = async () => {
+      const subscriptionId = await ensureSubscription();
+      const result = await processUnprocessedReceipts();
+      return { subscriptionId, ...result };
+    };
+    const result = Sentry.isInitialized()
+      ? await Sentry.withMonitor("expense-inbound-cron", runTick, {
+          schedule: { type: "crontab", value: "0 12 * * *" },
+        })
+      : await runTick();
     console.info("[inbound-cron] tick complete", {
-      subscriptionId,
       ...result,
     });
-    return Response.json({ ok: true, subscriptionId, ...result });
+    return Response.json({
+      ok: true,
+      ...result,
+    });
   } catch (err) {
     console.error("[inbound-cron] tick failed:", err);
     return Response.json({ error: "cron failed" }, { status: 500 });

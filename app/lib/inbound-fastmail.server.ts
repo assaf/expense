@@ -7,7 +7,7 @@ import {
   unprocessedReceiptIds,
   type RawEmail,
 } from "~/lib/fastmail.server";
-import { captureError } from "~/lib/errors.server";
+import { captureError, captureWarning } from "~/lib/errors.server";
 import { processInboundEvent } from "~/lib/inbound-email.server";
 import type {
   AttachmentMeta,
@@ -20,6 +20,7 @@ import {
   extractReceipt,
 } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
+import { extractEmailAddress } from "~/lib/validation";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
 import { sendEmail } from "~/lib/reply.server";
@@ -285,6 +286,31 @@ export async function processUnprocessedReceipts(
   let failed = 0;
   let destroyed = 0;
 
+  // Reply circuit breaker: never reply to the same address twice in one
+  // drain. A drain legitimately replies to each sender at most once, so a
+  // repeated target means the same mail (typically a bounce or an
+  // autoresponder that slipped past the guards in inbound-email.server) is
+  // generating reply after reply — suppress the duplicates and raise a
+  // Sentry warning instead of filling the Sent folder. Bounded to this
+  // drain (no persistence): the durable stop is the bounce guard; this is
+  // the alarm that fires when the guard is bypassed.
+  const repliedTo = new Set<string>();
+  const guardedDeps: InboundDeps = {
+    ...deps,
+    sendReply: async (input) => {
+      const target = extractEmailAddress(input.to);
+      if (repliedTo.has(target)) {
+        captureWarning(
+          "[inbound] duplicate reply suppressed — possible bounce loop",
+          { to: input.to, subject: input.subject },
+        );
+        return;
+      }
+      repliedTo.add(target);
+      await deps.sendReply(input);
+    },
+  };
+
   while (true) {
     const ids = await adapter.unprocessedReceiptIds(batchSize);
     if (ids.length === 0) break;
@@ -293,7 +319,7 @@ export async function processUnprocessedReceipts(
       await adapter.markProcessed(id);
       try {
         const data = await receiptEmailData(id, adapter);
-        const result = await processInboundEvent(data, deps);
+        const result = await processInboundEvent(data, guardedDeps);
         if (result.status === "error") {
           failed++;
           console.info("[fastmail-inbound] processed email", {

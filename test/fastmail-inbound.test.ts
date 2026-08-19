@@ -106,6 +106,29 @@ function rawEmailOf(id: string): RawEmail {
   };
 }
 
+/** Two receipts forwarded by the SAME unknown sender (one drain, two emails). */
+function unknownSenderRawEmailOf(id: string, messageId: string): RawEmail {
+  return {
+    id,
+    raw: Buffer.from(
+      [
+        "From: Stranger <stranger@evil.com>",
+        "To: receipts@labnotes.org",
+        "Subject: Fwd: Your receipt",
+        `Message-ID: <${messageId}>`,
+        "",
+        "MERCHANT: Acme",
+        "TOTAL: 9.99",
+      ].join("\r\n"),
+    ),
+    receivedAt: "2025-07-15T17:00:00Z",
+    subject: "Fwd: Your receipt",
+    from: "Stranger <stranger@evil.com>",
+    to: ["receipts@labnotes.org"],
+    messageId: `<${messageId}>`,
+  };
+}
+
 /** Fake adapter over an in-memory map of emails, recording JMAP calls. */
 function recordingAdapter(emails: Map<string, RawEmail>): {
   adapter: FastmailAdapter;
@@ -449,6 +472,38 @@ describe("processUnprocessedReceipts", () => {
       ),
     ).toHaveLength(1);
     usedEmailIds.push(id);
+  });
+
+  it("suppresses a second reply to the same sender within one drain", async () => {
+    // Loop guard: the reply circuit breaker must cap replies per sender per
+    // drain, so a runaway mail (a bounce or autoresponder variant that slips
+    // past the guards) can't fill the Sent folder. Two unknown-sender emails
+    // in one drain → exactly one "sender not recognized" reply.
+    const sent: { to: string; subject: string }[] = [];
+    const { adapter, destroyed } = recordingAdapter(
+      new Map([
+        ["fm-loop-1", unknownSenderRawEmailOf("fm-loop-1", "loop-1@evil.com")],
+        ["fm-loop-2", unknownSenderRawEmailOf("fm-loop-2", "loop-2@evil.com")],
+      ]),
+    );
+    const deps = fastmailInboundDeps(adapter);
+    const pipelineDeps: InboundDeps = {
+      ...deps,
+      ...fakeDeps(),
+      sendReply: async (input) => {
+        sent.push({ to: input.to, subject: input.subject });
+      },
+    };
+
+    const result = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+
+    expect(result).toEqual({ processed: 2, failed: 0, destroyed: 2 });
+    expect(sent).toHaveLength(1); // duplicate reply suppressed
+    expect(sent[0]!.subject).toContain("sender not recognized");
+    expect(destroyed).toHaveLength(2);
   });
 
   it("drains multiple batches when the backlog exceeds the batch size", async () => {

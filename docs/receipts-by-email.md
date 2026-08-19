@@ -36,6 +36,23 @@ matches null `Return-Path: <>`, `multipart/report` bodies, and
 back from the mail server, the bounce looks like an unknown sender, gets
 another reply, bounces again — an infinite Sent-folder loop (Aug 2026: a
 run of this produced hundreds of "Receipt not imported" emails in Sent).
+
+**Runaway protection (three layers, all still live):**
+
+1. The bounce guard above is the durable stop — it drops DSNs and
+   autoresponders before they reach the reply path.
+2. A reply circuit breaker in `processUnprocessedReceipts` never replies
+   to the same address twice in one drain; a repeated target means the
+   guard was bypassed, so the duplicates are suppressed and a Sentry warning
+   (`[inbound] duplicate reply suppressed — possible bounce loop`) fires.
+3. The daily cron tick is wrapped in a Sentry cron monitor
+   (`expense-inbound-cron`) — a missed check-in alerts if the pipeline stops
+   draining (bad deploy, broken auth, …).
+
+Recurrence diagnosis: search Sent for `[inbound] duplicate reply` or the
+cron monitor's missed check-in; in Fastmail, `from:me subject:"Receipt
+not imported"` counts the sent-loop fallout (delete the old ones — the
+loop itself is dead).
 **When pushes stop arriving, the subscription is unverified** — a
 subscription created before the webhook was live (or with stale push
 keys) never completed the PushVerification handshake, and verification
