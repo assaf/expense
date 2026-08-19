@@ -27,6 +27,8 @@ function toView(
     receivedCount: number;
     processedCount: number;
     lastPushAt: string | null;
+    pushSubscriptionId: string | null;
+    pushExpiresAt: string | null;
     createdAt: string;
   },
   processedLast24h: number,
@@ -39,6 +41,8 @@ function toView(
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
     lastPushAt: row.lastPushAt,
+    pushSubscriptionId: row.pushSubscriptionId,
+    pushExpiresAt: row.pushExpiresAt,
     createdAt: row.createdAt,
     processedLast24h,
   };
@@ -52,6 +56,8 @@ const CONNECTION_SELECT = {
   receivedCount: true,
   processedCount: true,
   lastPushAt: true,
+  pushSubscriptionId: true,
+  pushExpiresAt: true,
   createdAt: true,
 } as const;
 
@@ -96,15 +102,27 @@ export async function findEmailConnectionByAddress(
   return row ?? undefined;
 }
 
-/** A connection with its decrypted-ready ciphertext (server-side only). */
-export async function readEmailConnection(
-  id: string,
-): Promise<
-  | (EmailConnectionRecord & { tokenEnc: string; jmapAccountId: string })
-  | undefined
-> {
-  const row = await prisma.emailConnection.findUnique({ where: { id } });
-  if (!row) return undefined;
+/** A connection row with the token ciphertext and push-subscription state
+ * (server-side only — never returned to the client). */
+export interface EmailConnectionWithSecret extends EmailConnectionRecord {
+  tokenEnc: string;
+  jmapAccountId: string;
+}
+
+function rowWithSecret(row: {
+  id: string;
+  provider: string;
+  emailAddress: string;
+  status: string;
+  receivedCount: number;
+  processedCount: number;
+  lastPushAt: string | null;
+  pushSubscriptionId: string | null;
+  pushExpiresAt: string | null;
+  createdAt: string;
+  tokenEnc: string;
+  jmapAccountId: string;
+}): EmailConnectionWithSecret {
   return {
     id: row.id,
     provider: row.provider,
@@ -113,10 +131,41 @@ export async function readEmailConnection(
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
     lastPushAt: row.lastPushAt,
+    pushSubscriptionId: row.pushSubscriptionId,
+    pushExpiresAt: row.pushExpiresAt,
     createdAt: row.createdAt,
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
   };
+}
+
+/** A connection with its token, scoped to the owning workspace. */
+export async function readEmailConnection(
+  accountId: string,
+  id: string,
+): Promise<EmailConnectionWithSecret | undefined> {
+  const row = await prisma.emailConnection.findFirst({
+    where: { id, accountId },
+  });
+  return row ? rowWithSecret(row) : undefined;
+}
+
+/** A connection by id alone — the push webhook has no session/account. */
+export async function readEmailConnectionById(
+  id: string,
+): Promise<EmailConnectionWithSecret | undefined> {
+  const row = await prisma.emailConnection.findUnique({ where: { id } });
+  return row ? rowWithSecret(row) : undefined;
+}
+
+/** Every connection across all workspaces, for the renewal cron. */
+export async function listAllEmailConnections(): Promise<
+  EmailConnectionWithSecret[]
+> {
+  const rows = await prisma.emailConnection.findMany({
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(rowWithSecret);
 }
 
 export type CreateEmailConnectionResult =
@@ -178,4 +227,32 @@ export async function removeEmailConnection(
   if (!row) return false;
   await prisma.emailConnection.delete({ where: { id } });
   return true;
+}
+
+/** Record the subscription the renewal created (or found) for a connection. */
+export async function saveEmailConnectionSubscription(
+  id: string,
+  subscriptionId: string,
+  expiresAt: string,
+): Promise<void> {
+  await prisma.emailConnection.update({
+    where: { id },
+    data: { pushSubscriptionId: subscriptionId, pushExpiresAt: expiresAt },
+  });
+}
+
+/** A push arrived — stamp lastPushAt (the "last handled webhook" stat). */
+export async function touchEmailConnectionPush(id: string): Promise<void> {
+  await prisma.emailConnection.update({
+    where: { id },
+    data: { lastPushAt: new Date().toISOString() },
+  });
+}
+
+/** Set/clear the needs-attention state shown in Settings. */
+export async function setEmailConnectionStatus(
+  id: string,
+  status: "active" | "error",
+): Promise<void> {
+  await prisma.emailConnection.update({ where: { id }, data: { status } });
 }

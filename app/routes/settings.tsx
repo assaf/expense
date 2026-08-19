@@ -42,6 +42,7 @@ import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
 import {
   createEmailConnection,
   listEmailConnections,
+  readEmailConnection,
   removeEmailConnection,
 } from "~/lib/db/email-connections";
 import { readCategoryCounts } from "~/lib/db/reports";
@@ -58,9 +59,11 @@ import {
 import { formString, unknownIntent } from "~/lib/validation";
 import { verifyJmapToken } from "~/lib/jmap.server";
 import {
+  decryptSecret,
   encryptSecret,
   isTokenCryptoConfigured,
 } from "~/lib/token-crypto.server";
+import { destroyConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import type { Route } from "./+types/settings";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -216,10 +219,29 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
     case "disconnectEmail": {
-      const removed = await removeEmailConnection(
-        user.accountId,
-        formString(form, "id"),
-      );
+      const id = formString(form, "id");
+      const connection = await readEmailConnection(user.accountId, id);
+      if (connection) {
+        // Best effort: tear down the server-side push subscription with
+        // the user's token. A failure (revoked token, FastMail down) still
+        // disconnects — the orphaned subscription dies at expiry and its
+        // pushes hit the webhook's unknown-connection path.
+        try {
+          const token = decryptSecret(connection.tokenEnc);
+          if (connection.pushSubscriptionId) {
+            await destroyConnectionPushSubscription(
+              token,
+              connection.pushSubscriptionId,
+            );
+          }
+        } catch (err) {
+          console.warn("[email-connections] subscription teardown failed", {
+            id: connection.id,
+            err,
+          });
+        }
+      }
+      const removed = await removeEmailConnection(user.accountId, id);
       console.info("[email-connections] disconnected", {
         accountId: user.accountId,
         removed,

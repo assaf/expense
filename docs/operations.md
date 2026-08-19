@@ -80,12 +80,17 @@ DDL; both point at the Supabase session pooler — see “Database connections�
 in Postgres), not `.env`.
 
 Connected email accounts (auto-import — `docs/email-connections.md`) add
-`EMAIL_TOKEN_KEY`: a 32-byte base64 key encrypting users' FastMail API
+`EMAIL_TOKEN_ENCRYPTION_KEY`: a 32-byte base64 key encrypting users' FastMail API
 tokens at rest (AES-256-GCM). Set it in production **before** anyone
 connects an account; when unset the Settings section reports the feature
 unconfigured and connect returns 503. Losing the key invalidates all stored
 tokens — users would need to reconnect (there is no rotation without that
 cost, since the tokens must stay decryptable to act on the user's mailbox).
+The connected-accounts webhook and renewal cron reuse the push keys
+(`PUSH_PRIVATE_KEY`/`PUSH_AUTH`) and `CRON_SECRET`; the push URL is
+`<PUBLIC_URL>/api/email-connections-push?c=<connectionId>`, so `PUBLIC_URL`
+must be set before the first connection, and the cron runs daily at 13:00
+UTC (vercel.json) after the receipts cron at 12:00.
 
 Receipts-by-email adds optional vars: `INBOUND_EMAIL_ADDRESS`,
 `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-v4-flash`),

@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { EMAIL_TOKEN_KEY } from "~/lib/env";
+import { EMAIL_TOKEN_ENCRYPTION_KEY } from "~/lib/env";
 
 /**
  * AES-256-GCM encryption for connected email-account API tokens. The tokens
@@ -9,7 +9,7 @@ import { EMAIL_TOKEN_KEY } from "~/lib/env";
  * Ciphertext format: `base64(iv).base64(tag).base64(ciphertext)` — the tag
  * makes tampering detectable, the random IV makes repeats non-deterministic.
  *
- * Requires EMAIL_TOKEN_KEY (32 bytes, base64); `isTokenCryptoConfigured`
+ * Requires EMAIL_TOKEN_ENCRYPTION_KEY (32 bytes, base64); `isTokenCryptoConfigured`
  * gates the Settings UI so the app degrades to "feature not configured"
  * instead of crashing at decrypt time.
  */
@@ -18,14 +18,14 @@ const IV_BYTES = 12;
 const KEY_BYTES = 32;
 
 export function isTokenCryptoConfigured(): boolean {
-  return EMAIL_TOKEN_KEY.length > 0;
+  return EMAIL_TOKEN_ENCRYPTION_KEY.length > 0;
 }
 
 function key(): Buffer {
-  const buf = Buffer.from(EMAIL_TOKEN_KEY, "base64");
+  const buf = Buffer.from(EMAIL_TOKEN_ENCRYPTION_KEY, "base64");
   if (buf.byteLength !== KEY_BYTES) {
     throw new Error(
-      `EMAIL_TOKEN_KEY must be ${KEY_BYTES} bytes (base64) — got ${buf.byteLength}`,
+      `EMAIL_TOKEN_ENCRYPTION_KEY must be ${KEY_BYTES} bytes (base64) — got ${buf.byteLength}`,
     );
   }
   return buf;

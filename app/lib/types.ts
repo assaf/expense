@@ -267,6 +267,8 @@ export interface EmailConnectionRecord {
   receivedCount: number;
   processedCount: number;
   lastPushAt: string | null;
+  pushSubscriptionId: string | null;
+  pushExpiresAt: string | null;
   createdAt: string;
 }
 

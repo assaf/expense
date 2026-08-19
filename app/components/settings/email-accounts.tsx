@@ -54,7 +54,7 @@ export function EmailAccountsSection({
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Email account connections are not configured on this deployment
-            (missing <code>EMAIL_TOKEN_KEY</code>).
+            (missing <code>EMAIL_TOKEN_ENCRYPTION_KEY</code>).
           </p>
         )}
       </div>

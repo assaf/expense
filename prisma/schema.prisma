@@ -302,6 +302,11 @@ model EmailConnection {
   receivedCount Int     @default(0)
   processedCount Int    @default(0)
   lastPushAt    String?
+  /// FastMail PushSubscription id for this connection (renewed by the
+  /// daily cron; deviceClientId `expense-conn-<id>` — see
+  /// email-connection-push.server.ts).
+  pushSubscriptionId String?
+  pushExpiresAt     String?
   createdAt     String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)

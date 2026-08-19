@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterAll } from "vitest";
 import type { JmapTokenInfo } from "~/lib/jmap.server";
 
 /**
- * Token-crypto + JMAP token verification. EMAIL_TOKEN_KEY is set before the
+ * Token-crypto + JMAP token verification. EMAIL_TOKEN_ENCRYPTION_KEY is set before the
  * module graph loads (env.ts snapshots it at import time), so the module is
  * imported dynamically after vi.resetModules().
  */
@@ -11,7 +11,7 @@ const TEST_KEY = Buffer.alloc(32, 7).toString("base64");
 
 async function loadCrypto() {
   vi.resetModules();
-  process.env.EMAIL_TOKEN_KEY = TEST_KEY;
+  process.env.EMAIL_TOKEN_ENCRYPTION_KEY = TEST_KEY;
   return import("~/lib/token-crypto.server");
 }
 
@@ -45,9 +45,9 @@ describe("token crypto", () => {
     ).toThrow();
   });
 
-  it("reports unconfigured when EMAIL_TOKEN_KEY is unset", async () => {
+  it("reports unconfigured when EMAIL_TOKEN_ENCRYPTION_KEY is unset", async () => {
     vi.resetModules();
-    delete process.env.EMAIL_TOKEN_KEY;
+    delete process.env.EMAIL_TOKEN_ENCRYPTION_KEY;
     const { isTokenCryptoConfigured } =
       await import("~/lib/token-crypto.server");
     expect(isTokenCryptoConfigured()).toBe(false);
@@ -55,9 +55,10 @@ describe("token crypto", () => {
 
   it("throws on a wrong-length key instead of encrypting weakly", async () => {
     vi.resetModules();
-    process.env.EMAIL_TOKEN_KEY = Buffer.alloc(16).toString("base64");
+    process.env.EMAIL_TOKEN_ENCRYPTION_KEY =
+      Buffer.alloc(16).toString("base64");
     const { encryptSecret } = await import("~/lib/token-crypto.server");
-    expect(() => encryptSecret("x")).toThrow(/EMAIL_TOKEN_KEY/);
+    expect(() => encryptSecret("x")).toThrow(/EMAIL_TOKEN_ENCRYPTION_KEY/);
   });
 });
 
@@ -164,5 +165,5 @@ describe("verifyJmapToken", () => {
 });
 
 afterAll(() => {
-  delete process.env.EMAIL_TOKEN_KEY;
+  delete process.env.EMAIL_TOKEN_ENCRYPTION_KEY;
 });

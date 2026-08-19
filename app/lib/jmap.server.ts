@@ -1,11 +1,12 @@
 /**
- * JMAP session lookup for user-supplied API tokens (connected email
- * accounts — Settings → Email accounts). FastMail today; the session
- * handshake is the same for any JMAP provider, only the endpoint differs.
+ * JMAP client for user-supplied API tokens (connected email accounts —
+ * Settings → Email accounts). FastMail today; the session handshake is the
+ * same for any JMAP provider, only the endpoint differs.
  *
  * Distinct from fastmail.server.ts, which is the app's OWN FastMail mailbox
  * (one global token, module-level session cache). Here every call is scoped
- * to one user's token, so nothing is cached across tokens.
+ * to one user's token; sessions are cached per token (a cache entry is
+ * evicted when its lookup fails, so revoked tokens don't stick).
  */
 
 const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
@@ -38,14 +39,7 @@ interface SessionResponse {
   primaryAccounts: Record<string, string>;
 }
 
-/**
- * Verify a user-supplied FastMail API token by loading its JMAP session.
- * `invalid-token` covers 401/403 (bad or revoked token); anything else
- * (timeout, 5xx) is `network` so the UI can suggest retrying.
- */
-export async function verifyJmapToken(
-  token: string,
-): Promise<JmapTokenVerification> {
+async function loadSession(token: string): Promise<JmapTokenVerification> {
   let res: Response;
   try {
     res = await fetch(FASTMAIL_SESSION_URL, {
@@ -102,4 +96,94 @@ export async function verifyJmapToken(
       downloadUrl: j.downloadUrl,
     },
   };
+}
+
+/**
+ * Verify a user-supplied FastMail API token by loading its JMAP session.
+ * `invalid-token` covers 401/403 (bad or revoked token); anything else
+ * (timeout, 5xx) is `network` so the UI can suggest retrying.
+ */
+export async function verifyJmapToken(
+  token: string,
+): Promise<JmapTokenVerification> {
+  return loadSession(token);
+}
+
+// --- Per-token JMAP calls ----------------------------------------------------
+
+const sessionCache = new Map<string, Promise<JmapTokenInfo>>();
+
+/** The JMAP session for a user token, cached per token (per serverless
+ * instance). A failed lookup is evicted so the next call retries. */
+export async function jmapSessionForToken(
+  token: string,
+): Promise<JmapTokenInfo> {
+  let cached = sessionCache.get(token);
+  if (!cached) {
+    cached = loadSession(token).then((r) => {
+      if (r.ok) return r.info;
+      throw new Error(r.message);
+    });
+    sessionCache.set(token, cached);
+    cached.catch(() => sessionCache.delete(token));
+  }
+  return cached;
+}
+
+interface ApiResponse {
+  methodResponses: [string, unknown, string][];
+}
+
+/** Extra JMAP capabilities beyond core + mail (e.g. submission for sending). */
+export type JmapCapability = "urn:ietf:params:jmap:submission";
+
+/**
+ * POST a batch of JMAP method calls with a user token; throws on the first
+ * per-call error — including per-object /set failures surfaced via
+ * notUpdated/notCreated/notDestroyed (the FastMail gotcha the app's own
+ * client, fastmail.server.ts, documents).
+ */
+export async function jmapCall(
+  token: string,
+  methodCalls: unknown[][],
+  capabilities: JmapCapability[] = [],
+): Promise<[string, unknown, string][]> {
+  const s = await jmapSessionForToken(token);
+  const res = await fetch(s.apiUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      using: [
+        "urn:ietf:params:jmap:core",
+        "urn:ietf:params:jmap:mail",
+        ...capabilities,
+      ],
+      methodCalls,
+    }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`JMAP API failed: ${res.status} ${await res.text()}`);
+  }
+  const j = (await res.json()) as ApiResponse;
+  for (const [name, args] of j.methodResponses) {
+    if (name === "error") {
+      throw new Error(`JMAP ${name} error: ${JSON.stringify(args)}`);
+    }
+    const a = args as {
+      notUpdated?: Record<string, unknown>;
+      notCreated?: Record<string, unknown>;
+      notDestroyed?: Record<string, unknown>;
+    };
+    for (const key of ["notUpdated", "notCreated", "notDestroyed"] as const) {
+      const failures = a[key];
+      if (failures && Object.keys(failures).length > 0) {
+        throw new Error(`JMAP ${name} ${key}: ${JSON.stringify(failures)}`);
+      }
+    }
+  }
+  return j.methodResponses;
 }
