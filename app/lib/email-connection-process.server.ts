@@ -29,6 +29,8 @@ import {
 } from "~/lib/email-connection-mail.server";
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
+import { looksLikeReceiptEmail } from "~/lib/email-classify";
+import { htmlToText } from "~/lib/receipt-render.server";
 import prisma from "~/lib/prisma.server";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
@@ -349,6 +351,20 @@ export async function processConnectionEmail(
     if (isDeliveryNotification(email.headers)) {
       await log("ignored", true, "bounce");
       return { status: "ignored", reason: "bounce" };
+    }
+
+    // LOCAL gate before any model call: marketing/shipping mail from a
+    // rule-matched sender is filtered by regex only (no LLM per webhook).
+    // The extraction that follows may use the model; its isReceipt verdict
+    // stays as the backstop.
+    if (
+      !looksLikeReceiptEmail({
+        subject: summary.subject,
+        bodyText: email.text ?? htmlToText(email.html ?? ""),
+      })
+    ) {
+      await log("ignored", true, "not a receipt (local)");
+      return { status: "ignored", reason: "not a receipt (local)" };
     }
 
     const attachments = await deps.listAttachments(summary.id);

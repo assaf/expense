@@ -75,7 +75,11 @@ push webhook + renewal cron, rules + processing pipeline). Phase 4
 - **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
   on each push (and daily via the cron) the Inbox is drained (3-day
   lookback, EmailProcessLog = idempotency). Per email: self/bounce guards
-  → rule match (no match = ignore, untouched) → the shared receipt core
+  → rule match (no match = ignore, untouched) → **local classification**
+  (`app/lib/email-classify.ts` — regex only, no LLM: marketing and
+  shipping mail from rule-matched senders is filtered before any model
+  call, so a webhook never costs a DeepSeek request for junk) → the shared
+  receipt core
   (same extraction/render/save as receipts-by-email — see
   `selectReceiptSource`/`extractReceiptFromSource`/`saveExpenseFromExtraction`
   in `inbound-email.server.ts`) → on success the email moves to **Trash**

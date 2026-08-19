@@ -271,7 +271,7 @@ describe("processConnectionEmail", () => {
     expect(trashed).toEqual([]);
   });
 
-  it("ignores marketing mail from a rule-matched sender (not a receipt)", async () => {
+  it("ignores marketing mail from a rule-matched sender without calling the model", async () => {
     await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
     const { adapter, trashed } = fakeAdapter(
       new Map([
@@ -285,18 +285,22 @@ describe("processConnectionEmail", () => {
         ],
       ]),
     );
+    const deps = depsFor(adapter, conn.id);
+    const extractReceipt = vi.fn(deps.extractReceipt);
+    const guarded: typeof deps = { ...deps, extractReceipt };
     const result = await processConnectionEmail(
       conn,
       summary("e4", "Apple <news@email.apple.com>", "New products!"),
-      depsFor(adapter, conn.id),
+      guarded,
       {
         moveToTrash: (id: string) => adapter.moveToTrash(id),
         sendToOwner: async () => {},
       },
     );
     expect(result.status).toBe("ignored");
-    expect((result as { reason: string }).reason).toBe("not a receipt");
+    expect((result as { reason: string }).reason).toBe("not a receipt (local)");
     expect(trashed).toEqual([]);
+    expect(extractReceipt).not.toHaveBeenCalled();
     expect((await logRow(conn.id, "e4"))?.matched).toBe(true);
   });
 
