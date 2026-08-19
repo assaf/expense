@@ -82,7 +82,9 @@ in Postgres), not `.env`.
 Receipts-by-email adds optional vars: `INBOUND_EMAIL_ADDRESS`,
 `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-v4-flash`),
 `RECEIPT_OCR_MODE` (`auto`
-default | `deepseek` | `tesseract`). All optional — receipts stop arriving when
+default | `deepseek` | `tesseract`), and `RECEIPT_VISION_MAX_WIDTH` (default
+768, clamped 384–1536 — the downscale applied before the DeepSeek vision
+call; see `docs/extraction.md`). All optional — receipts stop arriving when
 the FastMail vars are unset, but the app keeps working.
 
 The **FastMail JMAP push reader** (the receipts source — reads

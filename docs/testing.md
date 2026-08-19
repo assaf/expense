@@ -41,3 +41,14 @@
     A `.env` `PUBLIC_URL` (set for the FastMail push URL) changed the issuer
     to the prod origin locally and prompted a bad hardcode in `531e814` —
     keep OAuth test expectations origin-derived, never hardcoded.
+- **React Router remounts route components when a data navigation settles**
+  (~1ms after the URL changes): the create-editor mounts, unmounts, and
+  remounts, replacing the file input in between. A Playwright
+  `setInputFiles` landing in that window sets files on the instance about to
+  be torn down and the change event is silently lost (no request ever
+  fires — the suite caught this as a flaky 30s `waitForResponse` timeout).
+  Upload tests must wait for the settle before setting files:
+  `waitForEditorSettle(page)` (`test/expenses.test.ts`), a 100ms beat that
+  lands well past the ~1ms remount. Drag-drop uploads are exempt (the
+  editor's `useEffect` upload fires from mount #1 and `draftUploadsInFlight`
+  dedupes the remount).

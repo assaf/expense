@@ -66,7 +66,8 @@ Run `pnpm check` before committing.
   Settings → Agents & API lists connected apps (name, client id, last used,
   expires) with a per-app remove that revokes all its tokens. Tools:
   capture_receipt (reuses the OCR/DeepSeek pipeline
-  - merchant history), log_mileage, list_expenses/expense_summary, report
+  - known-merchant skip + sha256 cache keep repeat receipts at zero LLM
+    tokens — see docs/extraction.md), log_mileage, list_expenses/expense_summary, report
     create/close/add/export PDF, list_categories/merchants, get_settings,
     reconcile (read-only statement CSV matching). See `docs/mcp.md`.
 - **Images**: Postgres BYTEA (`image_blobs` table) — all images live in
