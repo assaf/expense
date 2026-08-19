@@ -1,11 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ulid } from "ulid";
-import { resolveCategory } from "~/lib/receipt-ai.server";
-import {
-  readKnownMerchants,
-  readMerchantCategories,
-  readMerchantReports,
-} from "~/lib/db/expenses";
+import { resolveCategory, type KnownMerchant } from "~/lib/receipt-ai.server";
+import { readKnownMerchants } from "~/lib/db/expenses";
 import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,
@@ -18,16 +14,22 @@ import {
  * category is mapped onto an existing category name.
  */
 describe("resolveCategory", () => {
-  const byMerchant = new Map([
-    ["officemax", "Office Supplies"],
-    ["blue bottle coffee", "Meals"],
+  const knownMerchants = new Map<string, KnownMerchant>([
+    [
+      "officemax",
+      { display: "OfficeMax", category: "Office Supplies", report: "" },
+    ],
+    [
+      "blue bottle coffee",
+      { display: "Blue Bottle Coffee", category: "Meals", report: "" },
+    ],
   ]);
   const existing = ["Office Supplies", "Meals", "Travel", "Software"];
 
   it("reuses the category a previous expense for the same merchant used", () => {
-    expect(resolveCategory("OfficeMax", "Meals", byMerchant, existing)).toBe(
-      "Office Supplies",
-    );
+    expect(
+      resolveCategory("OfficeMax", "Meals", knownMerchants, existing),
+    ).toBe("Office Supplies");
   });
 
   it("matches the merchant case- and whitespace-insensitively", () => {
@@ -35,167 +37,49 @@ describe("resolveCategory", () => {
       resolveCategory(
         "  BLUE BOTTLE   COFFEE ",
         "Travel",
-        byMerchant,
+        knownMerchants,
         existing,
       ),
     ).toBe("Meals");
   });
 
   it("falls back to the suggested category for an unknown merchant", () => {
-    expect(resolveCategory("New Cafe", "Meals", byMerchant, existing)).toBe(
+    expect(resolveCategory("New Cafe", "Meals", knownMerchants, existing)).toBe(
       "Meals",
     );
   });
 
   it("maps the suggestion onto an existing category name", () => {
     // The model said "Office" — the account's closest category wins.
-    expect(resolveCategory("New Store", "Office", byMerchant, existing)).toBe(
-      "Office Supplies",
-    );
+    expect(
+      resolveCategory("New Store", "Office", knownMerchants, existing),
+    ).toBe("Office Supplies");
   });
 
   it("returns an empty category when nothing fits", () => {
     expect(
-      resolveCategory("New Store", "Rocket Fuel", byMerchant, existing),
+      resolveCategory("New Store", "Rocket Fuel", knownMerchants, existing),
     ).toBe("");
   });
 
   it("guesses from the suggestion when the merchant has no prior category", () => {
     expect(
-      resolveCategory("Unknown Merchant", "Software", byMerchant, existing),
+      resolveCategory("Unknown Merchant", "Software", knownMerchants, existing),
     ).toBe("Software");
   });
-});
 
-/** The store helper that feeds resolveCategory — reads the seeded rows. */
-describe("readMerchantCategories", () => {
-  it("returns each merchant's category, keyed by normalized name", async () => {
-    const byMerchant = await readMerchantCategories(TEST_ACCOUNT_ID);
-    expect(byMerchant.get("officemax")).toBe("Office Supplies");
-    expect(byMerchant.get("test store")).toBe("Testing");
-    expect(byMerchant.get("devshop")).toBe("Development");
-    expect(byMerchant.get("misc")).toBe("Testing");
-  });
-
-  it("excludes merchants from other accounts", async () => {
-    const byMerchant = await readMerchantCategories(TEST_ACCOUNT_ID);
-    // "Secret Corp" belongs to the other account only.
-    expect(byMerchant.has("secret corp")).toBe(false);
-  });
-
-  it("keeps the most recent category when a merchant was recategorized", async () => {
-    const created = [
-      {
-        id: ulid(),
-        accountId: TEST_ACCOUNT_ID,
-        type: "receipt" as const,
-        date: "2026-06-10",
-        report: "2026 Test",
-        category: "Office Supplies",
-        description: "",
-        amount: "9.99",
-        merchant: "Recat Store",
-        imageFile: "",
-        imageMime: "",
-        originalName: "",
-        locations: [],
-        createdAt: "2026-06-10T00:00:00.000Z",
-        updatedAt: "2026-06-10T00:00:00.000Z",
-      },
-      {
-        id: ulid(),
-        accountId: TEST_ACCOUNT_ID,
-        type: "receipt" as const,
-        date: "2026-06-20",
-        report: "2026 Test",
-        category: "Testing",
-        description: "",
-        amount: "19.99",
-        merchant: "Recat Store",
-        imageFile: "",
-        imageMime: "",
-        originalName: "",
-        locations: [],
-        createdAt: "2026-06-20T00:00:00.000Z",
-        updatedAt: "2026-06-20T00:00:00.000Z",
-      },
-    ];
-    await testPrisma.expense.createMany({ data: created });
-    try {
-      const byMerchant = await readMerchantCategories(TEST_ACCOUNT_ID);
-      expect(byMerchant.get("recat store")).toBe("Testing");
-    } finally {
-      await testPrisma.expense.deleteMany({
-        where: { accountId: TEST_ACCOUNT_ID, merchant: "Recat Store" },
-      });
-    }
-  });
-
-  it("scopes to the account's own rows", async () => {
-    const byMerchant = await readMerchantCategories(OTHER_ACCOUNT_ID);
-    // The other account sees its own merchant's category.
-    expect(byMerchant.get("secret corp")).toBe("Confidential");
+  it("ignores a known merchant whose stored category is empty", () => {
+    const uncategorized = new Map<string, KnownMerchant>([
+      ["new shop", { display: "New Shop", category: "", report: "" }],
+    ]);
+    expect(resolveCategory("New Shop", "Travel", uncategorized, existing)).toBe(
+      "Travel",
+    );
   });
 });
 
-/** The report lookup mirrors the category lookup (same newest-wins rule). */
-describe("readMerchantReports", () => {
-  it("returns each merchant's report, keyed by normalized name", async () => {
-    const byMerchant = await readMerchantReports(TEST_ACCOUNT_ID);
-    expect(byMerchant.get("officemax")).toBe("2026 Test");
-    expect(byMerchant.get("test store")).toBe("2026 Test");
-  });
-
-  it("keeps the newest report when a merchant changed reports", async () => {
-    const created = [
-      {
-        id: ulid(),
-        accountId: TEST_ACCOUNT_ID,
-        type: "receipt" as const,
-        date: "2026-06-10",
-        report: "2026 Test",
-        category: "Testing",
-        description: "",
-        amount: "3.00",
-        merchant: "Report Store",
-        imageFile: "",
-        imageMime: "",
-        originalName: "",
-        locations: [],
-        createdAt: "2026-06-10T00:00:00.000Z",
-        updatedAt: "2026-06-10T00:00:00.000Z",
-      },
-      {
-        id: ulid(),
-        accountId: TEST_ACCOUNT_ID,
-        type: "receipt" as const,
-        date: "2026-06-20",
-        report: "2027 Test",
-        category: "Testing",
-        description: "",
-        amount: "4.00",
-        merchant: "Report Store",
-        imageFile: "",
-        imageMime: "",
-        originalName: "",
-        locations: [],
-        createdAt: "2026-06-20T00:00:00.000Z",
-        updatedAt: "2026-06-20T00:00:00.000Z",
-      },
-    ];
-    await testPrisma.expense.createMany({ data: created });
-    try {
-      const byMerchant = await readMerchantReports(TEST_ACCOUNT_ID);
-      expect(byMerchant.get("report store")).toBe("2027 Test");
-    } finally {
-      await testPrisma.expense.deleteMany({
-        where: { accountId: TEST_ACCOUNT_ID, merchant: "Report Store" },
-      });
-    }
-  });
-});
-
-/** The combined merchant map that drives the LLM-skip path. */
+/** The combined merchant map that drives the LLM-skip path and the prior
+ * category/report lookups. */
 describe("readKnownMerchants", () => {
   it("exposes display name, category, and report per merchant", async () => {
     const known = await readKnownMerchants(TEST_ACCOUNT_ID);
@@ -208,6 +92,21 @@ describe("readKnownMerchants", () => {
       display: "OfficeMax",
       category: "Office Supplies",
       report: "2026 Test",
+    });
+  });
+
+  it("excludes merchants from other accounts", async () => {
+    const known = await readKnownMerchants(TEST_ACCOUNT_ID);
+    // "Secret Corp" belongs to the other account only.
+    expect(known.has("secret corp")).toBe(false);
+  });
+
+  it("scopes to the account's own rows", async () => {
+    const known = await readKnownMerchants(OTHER_ACCOUNT_ID);
+    expect(known.get("secret corp")).toEqual({
+      display: "Secret Corp",
+      category: "Confidential",
+      report: "Private Report",
     });
   });
 

@@ -236,15 +236,15 @@ function ninetyDaysAgo(): string {
 }
 
 /**
- * The value of one field (category or report) from the most recent receipt
- * per merchant, keyed by the normalized merchant name (same normalization
- * as duplicate detection, so "Blue Bottle" and "blue  bottle" are the same
- * merchant). Only merchants with a non-empty value for the field appear;
- * when a merchant has expenses with different values, the newest wins.
- * Shared by the category and report lookups below, which differ only in
- * which field they read.
+ * Every merchant the account has spent with in the last 90 days: display
+ * name plus the most recent category/report per field, keyed by the
+ * normalized merchant name (same normalization as duplicate detection, so
+ * "Blue Bottle" and "blue  bottle" are the same merchant). When a
+ * merchant has expenses with different values, the newest non-empty value
+ * per field wins; the display spelling comes from the newest row. Drives
+ * the LLM-skip path and the prior category/report lookups.
  */
-async function readKnownMerchantsInternal(
+export async function readKnownMerchants(
   accountId: string,
 ): Promise<Map<string, KnownMerchant>> {
   const rows = await prisma.expense.findMany({
@@ -283,9 +283,9 @@ async function readKnownMerchantsInternal(
       m.latestAt = row.createdAt;
       m.display = row.merchant.trim();
     }
-    // Per-field newest non-empty value wins (same rule as the old separate
-    // category/report queries — a field is inherited from its own newest
-    // expense, even when the overall-newest row left it empty).
+    // Per-field newest non-empty value wins — a field is inherited from
+    // its own newest expense, even when the overall-newest row left it
+    // empty.
     if (row.category && (!m.category || row.createdAt > m.category.at)) {
       m.category = { value: row.category, at: row.createdAt };
     }
@@ -302,49 +302,6 @@ async function readKnownMerchantsInternal(
     });
   }
   return out;
-}
-
-/**
- * Every merchant the account has spent with in the last 90 days: display
- * name plus the most recent category/report per field. One query shared by
- * the two per-field lookups below and by the LLM-skip path (receipt text
- * is matched against these before any model call).
- */
-export async function readKnownMerchants(
-  accountId: string,
-): Promise<Map<string, KnownMerchant>> {
-  return readKnownMerchantsInternal(accountId);
-}
-
-/**
- * The most recent category each merchant was filed under (last 90 days).
- * Used when a new receipt's merchant matches a previous one — the category
- * is reused instead of guessed.
- */
-export async function readMerchantCategories(
-  accountId: string,
-): Promise<Map<string, string>> {
-  const known = await readKnownMerchantsInternal(accountId);
-  const byMerchant = new Map<string, string>();
-  for (const [key, m] of known) {
-    if (m.category) byMerchant.set(key, m.category);
-  }
-  return byMerchant;
-}
-
-/**
- * The report of the most recent receipt per merchant (last 90 days), so a
- * receipt from a known merchant inherits both category and report.
- */
-export async function readMerchantReports(
-  accountId: string,
-): Promise<Map<string, string>> {
-  const known = await readKnownMerchantsInternal(accountId);
-  const byMerchant = new Map<string, string>();
-  for (const [key, m] of known) {
-    if (m.report) byMerchant.set(key, m.report);
-  }
-  return byMerchant;
 }
 
 // --- Shared expense serialization (used by the reconcile module too) --------

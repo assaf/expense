@@ -354,15 +354,13 @@ export async function prepareUploadedReceipt(
 }
 
 /**
- * Extract structured receipt data from an image attachment. When the
- * account has known merchants, the image is OCR'd locally first and a
- * known-merchant match with a parseable total skips the LLM entirely
- * (tryKnownMerchantExtraction) — the common repeat-merchant case costs no
- * tokens. Otherwise DeepSeek vision is tried first (RECEIPT_OCR_MODE !==
- * "tesseract"); on a vision-unsupported error (or when forced to
- * tesseract) it falls back to local OCR + text parsing. LLM results are
- * cached per account by input hash (extractReceipt), so re-uploading the
- * same receipt skips the call too.
+ * Extract structured receipt data from an image attachment. Text-mode
+ * inputs (PDF text layer, tesseract fallback) go through the known-merchant
+ * skip (tryKnownMerchantExtraction) before any model call; the image path
+ * itself is vision-first — a local OCR pre-scan would add seconds of
+ * latency to every upload, while the email/PDF paths get the skip for free.
+ * LLM results are cached per account by input hash (extractReceipt), so
+ * re-uploading the same receipt skips the call too.
  * `stored` is the normalized, browser-friendly image for saving as the
  * receipt image.
  *
@@ -418,15 +416,6 @@ export async function extractFromImage(input: {
   const stored = await toBrowserImage(input.buffer, input.mime);
   let result: ExtractionResult | null = null;
   let text = "";
-  // Known-merchant skip: local OCR is free, so run it first when the
-  // account has history — the repeat-merchant case never pays for vision.
-  // Accounts without history go straight to vision (no added latency).
-  const known = input.knownMerchants;
-  if (known && known.size > 0) {
-    text = await ocrImage(stored.buffer);
-    const skipped = tryKnownMerchantExtraction(text, known);
-    if (skipped) return { result: skipped, text, stored };
-  }
   if (RECEIPT_OCR_MODE !== "tesseract") {
     try {
       result = await extractReceipt({
@@ -443,7 +432,7 @@ export async function extractFromImage(input: {
     }
   }
   if (!result) {
-    if (!text) text = await ocrImage(stored.buffer);
+    text = await ocrImage(stored.buffer);
     result = await extractReceipt({
       accountId: input.accountId,
       text,

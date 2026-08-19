@@ -976,8 +976,7 @@ async function captureReceipt(
   }
 
   // Extraction: best-effort. The capture still succeeds without it.
-  const { categories, merchantCategories, knownMerchants } =
-    await readExtractionContext(accountId);
+  const { categories, knownMerchants } = await readExtractionContext(accountId);
   let extracted: {
     isReceipt: boolean;
     merchant: string;
@@ -1012,7 +1011,7 @@ async function captureReceipt(
   const category = resolveCategory(
     merchant,
     args.category ?? extracted?.category ?? "",
-    merchantCategories,
+    knownMerchants,
     categories,
   );
   const amount = normalizeAmount(args.amount ?? extracted?.amount ?? "");

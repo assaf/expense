@@ -154,6 +154,25 @@ function currencyValue(symOrCode: string): string {
   );
 }
 
+/** Every (amount, currency) pair on a line, left to right. Currency is ""
+ * when no symbol/code sits adjacent to the number. */
+function amountsOnLine(line: string): Array<{
+  num: string;
+  start: number;
+  currency: string;
+}> {
+  const amounts: Array<{ num: string; start: number; currency: string }> = [];
+  for (const m of line.matchAll(AMOUNT_NUM_GLOBAL)) {
+    const num = m[1]!;
+    amounts.push({
+      num,
+      start: m.index!,
+      currency: currencyAround(line, m.index!, num.length),
+    });
+  }
+  return amounts;
+}
+
 /**
  * Deterministic total extraction for the LLM-skip path: prefer an explicit
  * "total"/"amount due" line (either decimal convention, symbol or code
@@ -172,15 +191,12 @@ export function parseReceiptAmount(text: string): {
   // keyword so "Subtotal: $38.00 — TOTAL: $42.50" picks the total.
   for (const line of lines) {
     if (!TOTAL_LINE.test(line)) continue;
-    const keyword = line.match(TOTAL_LINE);
-    const keywordIndex = keyword?.index ?? 0;
+    const keywordIndex = line.match(TOTAL_LINE)?.index ?? 0;
     let best: { num: string; dist: number; currency: string } | null = null;
-    for (const m of line.matchAll(AMOUNT_NUM_GLOBAL)) {
-      const num = m[1]!;
-      const currency = currencyAround(line, m.index!, num.length);
-      const dist = Math.abs(m.index! - keywordIndex);
+    for (const a of amountsOnLine(line)) {
+      const dist = Math.abs(a.start - keywordIndex);
       if (!best || dist <= best.dist) {
-        best = { num, dist, currency };
+        best = { num: a.num, dist, currency: a.currency };
       }
     }
     if (best) {
@@ -194,13 +210,11 @@ export function parseReceiptAmount(text: string): {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i]!;
     if (NON_AMOUNT_LINE.test(line)) continue;
-    for (const m of line.matchAll(AMOUNT_NUM_GLOBAL)) {
-      const num = m[1]!;
-      const currency = currencyAround(line, m.index!, num.length);
-      if (!currency) continue;
+    const marked = amountsOnLine(line).find((a) => a.currency);
+    if (marked) {
       return {
-        amount: normalizeAmount(normalizeAmountMatch(num)),
-        currency: currencyValue(currency),
+        amount: normalizeAmount(normalizeAmountMatch(marked.num)),
+        currency: currencyValue(marked.currency),
       };
     }
   }
@@ -458,29 +472,23 @@ function buildExtractionResult(raw: string): ExtractionResult {
   };
 }
 
-/** Best-matching existing category name, or "" when nothing matches. */
-export function matchCategory(suggested: string, existing: string[]): string {
+/** Best-matching existing name, or "" when nothing matches. Exact match
+ * wins; otherwise a containment match either direction. Shared by the
+ * category and report lookups, which differ only in the label. */
+function matchName(suggested: string, existing: string[]): string {
   const s = suggested.trim().toLowerCase();
   if (!s) return "";
-  const exact = existing.find((c) => c.toLowerCase() === s);
+  const exact = existing.find((name) => name.toLowerCase() === s);
   if (exact) return exact;
   const fuzzy = existing.find(
-    (c) => c.toLowerCase().includes(s) || s.includes(c.toLowerCase()),
+    (name) => name.toLowerCase().includes(s) || s.includes(name.toLowerCase()),
   );
   return fuzzy ?? "";
 }
 
-/** Best-matching existing report name, or "" when nothing matches. */
-/** @public */
-export function matchReport(suggested: string, existing: string[]): string {
-  const s = suggested.trim().toLowerCase();
-  if (!s) return "";
-  const exact = existing.find((r) => r.toLowerCase() === s);
-  if (exact) return exact;
-  const fuzzy = existing.find(
-    (r) => r.toLowerCase().includes(s) || s.includes(r.toLowerCase()),
-  );
-  return fuzzy ?? "";
+/** Best-matching existing category name, or "" when nothing matches. */
+export function matchCategory(suggested: string, existing: string[]): string {
+  return matchName(suggested, existing);
 }
 
 /**
@@ -493,14 +501,17 @@ export function matchReport(suggested: string, existing: string[]): string {
 export function resolveCategory(
   merchant: string,
   suggested: string,
-  merchantCategories: ReadonlyMap<string, string>,
+  knownMerchants: ReadonlyMap<string, KnownMerchant>,
   existing: string[],
 ): string {
-  if (merchant.trim()) {
-    const prior = merchantCategories.get(normalizeMerchant(merchant));
-    if (prior) return prior;
-  }
-  return matchCategory(suggested, existing);
+  return resolvePriorField(
+    merchant,
+    suggested,
+    knownMerchants,
+    existing,
+    (m) => m.category,
+    matchCategory,
+  );
 }
 
 /**
@@ -512,25 +523,47 @@ export function resolveCategory(
 function resolveReport(
   merchant: string,
   suggested: string,
-  merchantReports: ReadonlyMap<string, string>,
+  knownMerchants: ReadonlyMap<string, KnownMerchant>,
   existing: string[],
 ): string {
+  return resolvePriorField(
+    merchant,
+    suggested,
+    knownMerchants,
+    existing,
+    (m) => m.report,
+    matchName,
+  );
+}
+
+/** Shared by resolveCategory/resolveReport: the merchant's stored value for
+ * the field wins over the model's suggestion; otherwise the suggestion is
+ * mapped onto an existing name. */
+function resolvePriorField(
+  merchant: string,
+  suggested: string,
+  knownMerchants: ReadonlyMap<string, KnownMerchant>,
+  existing: string[],
+  field: (m: KnownMerchant) => string,
+  match: (suggested: string, existing: string[]) => string,
+): string {
   if (merchant.trim()) {
-    const prior = merchantReports.get(normalizeMerchant(merchant));
-    if (prior) return prior;
+    const prior = knownMerchants.get(normalizeMerchant(merchant));
+    if (prior) {
+      const value = field(prior);
+      if (value) return value;
+    }
   }
-  return matchReport(suggested, existing);
+  return match(suggested, existing);
 }
 
 /** The extraction context resolved by `readExtractionContext` (database.ts):
- * the account's category/report names, the prior merchant → category and
- * merchant → report maps, and the known-merchant map that drives the
- * LLM-skip path. */
+ * the account's category/report names plus the known-merchant map (which
+ * also supplies the prior category/report lookups and drives the LLM-skip
+ * path). */
 export interface ExtractionContext {
   categories: string[];
   reports: string[];
-  merchantCategories: ReadonlyMap<string, string>;
-  merchantReports: ReadonlyMap<string, string>;
   knownMerchants: ReadonlyMap<string, KnownMerchant>;
 }
 
@@ -550,13 +583,13 @@ export function resolveExtraction(
     category: resolveCategory(
       input.merchant,
       input.category,
-      context.merchantCategories,
+      context.knownMerchants,
       context.categories,
     ),
     report: resolveReport(
       input.merchant,
       input.report,
-      context.merchantReports,
+      context.knownMerchants,
       context.reports,
     ),
   };
