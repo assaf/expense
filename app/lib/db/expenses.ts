@@ -31,6 +31,38 @@ export async function readExpense(
   return row ? rowToExpense(row) : undefined;
 }
 
+/** Expense row plus its image blob in one round trip, for the image serving
+ * route — the home list requests one image per receipt, and two sequential
+ * queries per tile (expense, then blob) doubled the DB round trips. The
+ * LEFT JOIN is on the expense's namespaced `imageFile` key, so `blobMime` /
+ * `blobData` / `thumbnail` are null when the expense has no image (or its
+ * blob row is missing) — callers 404 on that, same as a null blob read. */
+export type ExpenseImageRow = {
+  type: string;
+  imageFile: string;
+  imageMime: string;
+  updatedAt: string;
+  blobMime: string | null;
+  blobData: Uint8Array | null;
+  thumbnail: Uint8Array | null;
+};
+
+export async function readExpenseImage(
+  id: string,
+  accountId: string,
+): Promise<ExpenseImageRow | undefined> {
+  const rows = await prisma.$queryRaw<ExpenseImageRow[]>`
+    SELECT e."type", e."imageFile", e."imageMime", e."updatedAt",
+           b."mime" AS "blobMime", b."data" AS "blobData", b."thumbnail"
+    FROM "expenses" e
+    LEFT JOIN "image_blobs" b
+      ON b."accountId" = e."accountId" AND b."key" = e."imageFile"
+    WHERE e."id" = ${id} AND e."accountId" = ${accountId}
+    LIMIT 1
+  `;
+  return rows[0];
+}
+
 /**
  * The two expenses immediately before and after `expense` in the main list
  * sort order (dated newest-first, undated newest-createdAt last). Two

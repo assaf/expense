@@ -33,6 +33,7 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { isComplete } from "~/lib/completeness";
 import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import type { DuplicateMatch } from "~/lib/duplicates";
+import { imageVersion } from "~/lib/image-version";
 import {
   countLabel,
   formatAmount,
@@ -180,6 +181,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     complete: isComplete(e),
     reconciled: Boolean(e.reconciledAt),
     imageFile: e.type === "receipt" ? e.imageFile : "",
+    updatedAt: e.updatedAt,
     locations: e.type === "mileage" ? e.locations : [],
     distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
     merchant: e.type === "mileage" ? "" : e.merchant,
@@ -750,7 +752,9 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700">
         {expense.imageFile ? (
           <img
-            src={`/expense/${expense.id}/image?w=160`}
+            src={`/expense/${expense.id}/image?w=160&v=${encodeURIComponent(
+              imageVersion(expense),
+            )}`}
             alt=""
             loading="lazy"
             decoding="async"

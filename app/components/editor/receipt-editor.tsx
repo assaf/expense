@@ -6,6 +6,7 @@ import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
 import { findDuplicates } from "~/lib/duplicates";
+import { imageVersion } from "~/lib/image-version";
 import { usePasteImage } from "~/lib/use-paste-image";
 import type { ReceiptExpense } from "~/lib/types";
 import {
@@ -48,7 +49,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [report, setReport] = useState(expense.report);
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
-  const [imageVersion, setImageVersion] = useState(0);
+  const [imageSrcVersion, setImageSrcVersion] = useState(() =>
+    imageVersion(expense),
+  );
   // Edit mode: whether the expense has a stored image. Local state because
   // the replace/delete fetch doesn't revalidate the loader — without it an
   // expense that started imageless would never show the dropped image.
@@ -231,8 +234,24 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     const form = new FormData();
     form.set("intent", "upload");
     form.set("file", file);
-    await fetch(`/expense/${expense.id}/image`, { method: "POST", body: form });
-    setImageVersion((v) => v + 1);
+    const res = await fetch(`/expense/${expense.id}/image`, {
+      method: "POST",
+      body: form,
+    });
+    // The action returns the new content version (its updatedAt is not
+    // revalidated by the action) — render it into the image URL so a
+    // replaced image gets a fresh, content-keyed URL instead of a stale
+    // cache hit.
+    const json = (await res.json()) as {
+      ok?: boolean;
+      imageFile?: string;
+      updatedAt?: string;
+    };
+    if (json.ok && json.updatedAt && json.imageFile) {
+      setImageSrcVersion(
+        imageVersion({ updatedAt: json.updatedAt, imageFile: json.imageFile }),
+      );
+    }
     setHasImage(true);
     // Re-read the new receipt's fields so the form matches the image.
     fillFields(await ocrFile(file), "override");
@@ -386,7 +405,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                       return f;
                     })(),
                   });
-                  setImageVersion((v) => v + 1);
+                  setImageSrcVersion("");
                   setHasImage(false);
                 }}
               >
@@ -403,11 +422,13 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
             className="block w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
           >
             <img
-              key={imageVersion}
+              key={imageSrcVersion}
               src={
                 isNew
                   ? (draftPreview ?? "")
-                  : `/expense/${expense.id}/image?v=${imageVersion}`
+                  : `/expense/${expense.id}/image?v=${encodeURIComponent(
+                      imageSrcVersion,
+                    )}`
               }
               alt="Receipt"
               className="min-h-53 max-h-120 w-full object-cover object-top"
@@ -493,7 +514,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
           src={
             isNew
               ? (draftPreview ?? "")
-              : `/expense/${expense.id}/image?v=${imageVersion}`
+              : `/expense/${expense.id}/image?v=${encodeURIComponent(
+                  imageSrcVersion,
+                )}`
           }
           onClose={() => {
             setLightbox(false);

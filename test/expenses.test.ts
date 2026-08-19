@@ -5,6 +5,7 @@ import PDFDocument from "pdfkit";
 import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
+import { imageVersion } from "~/lib/image-version";
 import { saveImage } from "~/lib/images.server";
 
 /** Local-date string (YYYY-MM-DD) — matches the app's `todayDate()`. */
@@ -428,6 +429,68 @@ describe("Expense CRUD", () => {
       const headers = res.headers();
       expect(headers["x-content-type-options"]).toBe("nosniff");
       expect(headers["content-security-policy"]).toContain("sandbox");
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+      await testPrisma.imageBlob.deleteMany({ where: { key: filename } });
+    }
+  });
+
+  it("caches content-keyed image URLs immutably for a year", async () => {
+    const png = await tinyPng();
+    const { filename } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "version.png",
+    );
+    const id = ulid();
+    const now = new Date().toISOString();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-01-15",
+        report: "2026 Test",
+        category: "Office Supplies",
+        description: "",
+        amount: "1.00",
+        merchant: "Version Test",
+        imageFile: filename,
+        imageMime: "image/jpeg",
+        originalName: "version.png",
+        locations: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    // The version the list/editor render into the URL.
+    const version = imageVersion({ updatedAt: now, imageFile: filename });
+    const versionedUrl = `/expense/${id}/image?w=160&v=${encodeURIComponent(
+      version,
+    )}`;
+    try {
+      const res = await page.request.get(versionedUrl);
+      expect(res.status()).toBe(200);
+      const headers = res.headers();
+      expect(headers["cache-control"]).toContain("max-age=31536000");
+      expect(headers["cache-control"]).toContain("immutable");
+      expect(headers["etag"]).toBe(`W/"${version}"`);
+
+      // A matching If-None-Match is answered with a bodyless 304.
+      const revalidated = await page.request.get(versionedUrl, {
+        headers: { "if-none-match": `W/"${version}"` },
+      });
+      expect(revalidated.status()).toBe(304);
+
+      // A stale/mismatched version (legacy URL, old tab) falls back to the
+      // short TTL so the browser revalidates and picks up a replacement.
+      const stale = await page.request.get(
+        `/expense/${id}/image?w=160&v=stale`,
+      );
+      expect(stale.status()).toBe(200);
+      expect(stale.headers()["cache-control"]).toContain("max-age=86400");
+      expect(stale.headers()["cache-control"]).not.toContain("31536000");
     } finally {
       await testPrisma.expense.deleteMany({ where: { id } });
       await testPrisma.imageBlob.deleteMany({ where: { key: filename } });
