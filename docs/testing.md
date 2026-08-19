@@ -18,7 +18,12 @@
   StateChange drain, unknown type, undecryptable body).
 - Browser tests via Playwright (vitest provider); helpers in `test/helpers/`
   (`launchBrowser.ts` → `goto`/`signIn`, `seedTestData.ts` → `testPrisma` +
-  seeded constants, `launchServer.ts`).
+  seeded constants, `launchServer.ts`). `goto` reuses one browser + signed-in
+  context per test file (each file runs in its own vitest fork) and skips the
+  /login flow when the `expense_session` cookie is present — tests that need
+  a logged-out or multi-account session drive their own browser directly.
+  The post-hydration settle sleep is 150ms (was 500ms); the 100ms
+  `waitForEditorSettle` beat in `test/expenses.test.ts` is separate.
 - Use `testPrisma` for DB assertions; seed with the account/user constants.
 - Requires local Postgres (`expense_test`); the schema is force-reset each run.
 - **The suite runs on a pinned clock** — `2026-07-15T12:00:00Z`, ticking in

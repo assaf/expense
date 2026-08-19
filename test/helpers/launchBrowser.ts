@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Browser, BrowserContext, Page } from "playwright";
 import { chromium } from "playwright";
 import { TEST_EMAIL, TEST_PASSWORD } from "./seedTestData";
 import { FROZEN_MS } from "./frozen-time";
@@ -34,27 +34,62 @@ export async function freezePageClock(page: Page): Promise<void> {
   );
 }
 
+// The session cookie set by app/lib/auth.server.ts (SESSION_COOKIE). Kept in
+// sync manually — importing that module here would drag the server's Prisma
+// client into every test-process fork.
+const SESSION_COOKIE = "expense_session";
+
+// One browser + one signed-in context per test file (each file runs in its
+// own vitest fork, so this state never crosses files). goto() used to launch
+// a fresh Chromium and re-log-in on every call; sharing them saves the
+// launch + login on every call after the first. Files that need a
+// logged-out or multi-account session drive their own browser directly.
+let sharedBrowser: Browser | undefined;
+let sharedContext: BrowserContext | undefined;
+
+async function getSharedContext(): Promise<BrowserContext> {
+  if (!sharedBrowser) {
+    sharedBrowser = await chromium.launch({ headless: true });
+  }
+  if (!sharedContext) {
+    sharedContext = await sharedBrowser.newContext({
+      baseURL: "http://localhost:5199",
+      viewport: { width: 1024, height: 780 },
+    });
+  }
+  return sharedContext;
+}
+
+/** Close the per-file browser, if any. Registered in testSuiteSetup's
+ * afterAll so browsers don't outlive their test file. */
+export async function closeBrowser(): Promise<void> {
+  await sharedBrowser?.close();
+  sharedBrowser = undefined;
+  sharedContext = undefined;
+}
+
 /**
  * Navigate to a path on the test server and return a Playwright page.
- * Signs in first through the real /login flow so the session cookie is set
- * in the browser context (subsequent navigations stay authenticated).
+ * Signs in through the real /login flow when the shared context has no
+ * session cookie (first call per file, or after a test cleared cookies);
+ * already-signed-in calls skip straight to the navigation. The clock-freeze
+ * init script is installed once per context and inherited by later pages.
  */
 export async function goto(path: string): Promise<Page> {
-  const baseURL = "http://localhost:5199";
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    baseURL,
-    viewport: { width: 1024, height: 780 },
-  });
+  const context = await getSharedContext();
   const page = await context.newPage();
-  await freezePageClock(page);
-  await signIn(page, TEST_EMAIL, TEST_PASSWORD);
+  const cookies = await context.cookies();
+  const isSignedIn = cookies.some((c) => c.name === SESSION_COOKIE);
+  if (!isSignedIn) {
+    await freezePageClock(page);
+    await signIn(page, TEST_EMAIL, TEST_PASSWORD);
+  }
   await page.goto(path, { waitUntil: "load", timeout: 15_000 });
   // Wait for React Router to hydrate
   await page.waitForFunction(() => "__reactRouterContext" in window, {
     timeout: 10_000,
   });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(150);
   return page;
 }
 

@@ -3,6 +3,7 @@
  * Re-seeds the test database for isolation.
  */
 import { afterAll, beforeAll } from "vitest";
+import { closeBrowser } from "./launchBrowser";
 import { seedTestData } from "./seedTestData";
 import { installPinnedClock } from "./pinned-time";
 
@@ -17,5 +18,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await closeBrowser();
   if ("gc" in global && global.gc) global.gc();
 });
