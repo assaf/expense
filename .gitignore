@@ -21,6 +21,7 @@ server.log
 .test-server.json
 .vercel
 .env*
+.pi
 
 # tesseract.js downloads traineddata into the cwd on first run
 tesseract-*.traineddata
