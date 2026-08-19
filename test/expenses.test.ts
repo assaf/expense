@@ -48,6 +48,19 @@ function tinyPdf(pages = 1): Promise<Buffer> {
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
 
+/**
+ * Wait for React Router to settle the create-editor navigation. The router
+ * renders the route element once the URL changes, then remounts it ~1ms
+ * later when the loader settles — replacing the file input in between. A
+ * file set in that window lands on the instance that is about to be torn
+ * down and the change event is silently lost (no request ever fires). The
+ * remount is tied to React's render cycle, so a short settle beat after
+ * waitForURL lands well past it.
+ */
+async function waitForEditorSettle(page: Page): Promise<void> {
+  await page.waitForTimeout(100);
+}
+
 /** True when the stored bytes start with the given magic sequence. */
 function startsWithMagic(data: Uint8Array, magic: Buffer): boolean {
   const head = Buffer.from(data).subarray(0, magic.length);
@@ -204,6 +217,7 @@ describe("Expense CRUD", () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByText("Add receipt").click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+    await waitForEditorSettle(page);
 
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },
@@ -263,6 +277,7 @@ describe("Expense CRUD", () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByText("Add receipt").click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+    await waitForEditorSettle(page);
 
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },

@@ -6,6 +6,7 @@ import {
   saveImage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
+import { captureWarning } from "~/lib/errors.server";
 import {
   extractUploadedReceiptFields,
   prepareUploadedReceipt,
@@ -55,10 +56,10 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json({ error: "No image received." }, { status: 400 });
     }
     // PDFs are rasterized to PNG before they can be displayed or stored (the
-    // editor renders receipts as <img>). The draft is saved immediately after
-    // rendering — OCR never blocks it, so a slow scan or OCR timeout can't
-    // prevent the upload (the editor runs a separate draft-ocr request for
-    // the fields). Only an unreadable PDF fails the upload.
+    // editor renders receipts as <img>). The draft is saved immediately —
+    // OCR never blocks the upload, so a slow scan or timeout can't prevent
+    // it (the editor runs a separate "ocr" request for the fields, for
+    // images and PDFs alike). Only an unreadable PDF fails the upload.
     const prepared = await prepareUploadedReceipt(uploaded, "draft-upload");
     if (prepared === null) {
       return Response.json(
@@ -66,49 +67,19 @@ export async function action({ request }: Route.ActionArgs) {
         { status: 400 },
       );
     }
-    if (prepared.wasPdf) {
-      const saved = await saveImage(
-        user.accountId,
-        prepared.buffer,
-        prepared.mime,
-        prepared.originalName,
-      );
-      return Response.json({
-        ok: true,
-        draftKey: saved.filename,
-        mime: saved.mime,
-        originalName: prepared.originalName,
-      });
-    }
-
-    // Save the image and OCR it in parallel. No expense row is created —
-    // extraction just pre-fills the draft editor when it succeeds.
-    const [ocr, saved] = await Promise.all([
-      extractUploadedReceiptFields(
-        user.accountId,
-        prepared.buffer,
-        prepared.mime,
-      ).catch((err) => {
-        console.warn("[draft-upload] receipt extraction failed:", err);
-        return null;
-      }),
-      saveImage(
-        user.accountId,
-        prepared.buffer,
-        prepared.mime,
-        prepared.originalName,
-      ),
-    ]);
-
+    const saved = await saveImage(
+      user.accountId,
+      prepared.buffer,
+      prepared.mime,
+      prepared.originalName,
+    );
+    // No expense row is created — the draft is just a stored blob; the
+    // editor's "ocr" request extracts and pre-fills the fields.
     return Response.json({
       ok: true,
       draftKey: saved.filename,
       mime: saved.mime,
       originalName: prepared.originalName,
-      merchant: ocr?.merchant ?? "",
-      amount: ocr?.amount ?? "",
-      category: ocr?.category ?? "",
-      report: ocr?.report ?? "",
     });
   }
 
@@ -145,7 +116,7 @@ export async function action({ request }: Route.ActionArgs) {
         report: ocr.report,
       });
     } catch (err) {
-      console.warn("[ocr] receipt extraction failed:", err);
+      captureWarning("[ocr] receipt extraction failed", { error: err });
       return Response.json({
         ok: true,
         merchant: "",

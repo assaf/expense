@@ -7,6 +7,7 @@ import {
   unprocessedReceiptIds,
   type RawEmail,
 } from "~/lib/fastmail.server";
+import { captureError } from "~/lib/errors.server";
 import { processInboundEvent } from "~/lib/inbound-email.server";
 import type {
   AttachmentMeta,
@@ -321,10 +322,7 @@ export async function processUnprocessedReceipts(
         // lost — the error reply (when the pipeline got that far) or the
         // folder itself is the recovery path.
         failed++;
-        console.error("[fastmail-inbound] failed to process email", {
-          id,
-          err: err instanceof Error ? err.message : String(err),
-        });
+        captureError(err, { emailId: id });
       }
     }
 

@@ -23,6 +23,7 @@ import {
 } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import { deleteOAuthClient, registerOAuthClient } from "~/lib/db/oauth";
+import { captureWarning } from "~/lib/errors.server";
 import {
   addReport,
   findOpenReport,
@@ -1004,7 +1005,7 @@ async function captureReceipt(
     buffer = stored.buffer;
     mime = stored.mime;
   } catch (err) {
-    console.warn("[mcp] capture_receipt extraction failed:", err);
+    captureWarning("[mcp] capture_receipt extraction failed", { error: err });
   }
 
   const merchant = args.merchant?.trim() || extracted?.merchant || "";

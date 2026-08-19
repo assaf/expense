@@ -129,10 +129,6 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         draftKey: string;
         mime: string;
         originalName: string;
-        merchant?: string;
-        amount?: string;
-        category?: string;
-        report?: string;
       };
       // Replace any earlier draft so a draft never outlives the editor.
       if (draft) await deleteDraftBlob(draft.key);
@@ -142,22 +138,19 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         originalName: json.originalName,
       });
       if (isPdf) {
-        // PDF uploads return before OCR runs (a slow scan must never block
-        // the draft); extract as a second request so fields fill when ready.
+        // PDFs can't render from a blob; the preview is the rasterized PNG
+        // served from storage.
         setDraftPreview(
           `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
         );
-        setDraftStage("ocr");
-        fillFields(await ocrFile(file), "empty-only");
-        return;
       }
-      // Extraction only fills fields the user hasn't typed yet — a slow OCR
-      // response arriving after the user started editing must not overwrite
-      // what they wrote.
-      setMerchant((prev) => prev || json.merchant || "");
-      setAmount((prev) => prev || json.amount || "");
-      setCategory((prev) => prev || json.category || "");
-      setReport((prev) => prev || json.report || "");
+      // The upload returns before OCR runs (a slow scan must never block the
+      // draft); extract as a second request so fields fill when ready — same
+      // for images and PDFs. Extraction only fills fields the user hasn't
+      // typed yet — a slow response arriving after the user started editing
+      // must not overwrite what they wrote.
+      setDraftStage("ocr");
+      fillFields(await ocrFile(file), "empty-only");
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {

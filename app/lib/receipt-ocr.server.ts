@@ -8,7 +8,7 @@ import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import { pdfImageName } from "~/lib/images.server";
-import { RECEIPT_OCR_MODE } from "~/lib/env";
+import { RECEIPT_OCR_MODE, RECEIPT_VISION_MAX_WIDTH } from "~/lib/env";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   extractReceipt,
@@ -113,20 +113,37 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
 );
 
 /**
- * OCR an image with tesseract.js. The wasm core comes from the local
- * tesseract.js-core package; traineddata downloads from a CDN at runtime.
+ * Singleton tesseract worker, created lazily and reused across calls. The
+ * wasm core comes from the local tesseract.js-core package; traineddata
+ * downloads from a CDN once per process. A per-call worker paid WASM init +
+ * (in serverless) a fresh traineddata download on every OCR — seconds of
+ * cold-start latency per image. One worker serializes recognize jobs
+ * internally, so concurrent calls queue instead of spawning workers. Reset
+ * on error: a failed recognize can leave the worker in a bad state, and the
+ * next call recreates it.
  */
+let ocrWorker: Awaited<ReturnType<typeof createWorker>> | null = null;
+
+async function getOcrWorker() {
+  if (!ocrWorker) {
+    ocrWorker = await createWorker(["eng"], 1, {
+      workerPath: TESSERACT_NODE_WORKER,
+      langPath: "https://tessdata.projectnaptha.com/4.0.0",
+    });
+  }
+  return ocrWorker;
+}
+
+/** OCR an image with tesseract.js. */
 export async function ocrImage(buffer: Buffer): Promise<string> {
   const png = await normalizeImage(buffer);
-  const worker = await createWorker(["eng"], 1, {
-    workerPath: TESSERACT_NODE_WORKER,
-    langPath: "https://tessdata.projectnaptha.com/4.0.0",
-  });
   try {
+    const worker = await getOcrWorker();
     const { data } = await worker.recognize(png);
     return (data.text ?? "").trim();
-  } finally {
-    await worker.terminate();
+  } catch (err) {
+    ocrWorker = null;
+    throw err;
   }
 }
 
@@ -418,9 +435,16 @@ export async function extractFromImage(input: {
   let text = "";
   if (RECEIPT_OCR_MODE !== "tesseract") {
     try {
+      // Vision tokens scale with pixels² and receipts are text-heavy — send
+      // a downscaled copy (the stored/displayed image stays at
+      // STORED_IMAGE_MAX_WIDTH). resizeIfWider returns null when the image
+      // already fits or isn't decodable; the original is used then.
+      const visionBuffer =
+        (await resizeIfWider(stored.buffer, RECEIPT_VISION_MAX_WIDTH)) ??
+        stored.buffer;
       result = await extractReceipt({
         accountId: input.accountId,
-        image: { buffer: stored.buffer, mime: stored.mime },
+        image: { buffer: visionBuffer, mime: stored.mime },
         categories: input.categories,
         reports: input.reports,
       });

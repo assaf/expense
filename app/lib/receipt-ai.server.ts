@@ -235,6 +235,7 @@ export function tryKnownMerchantExtraction(
   if (!merchant) return null;
   const amount = parseReceiptAmount(text);
   if (!amount) return null;
+  console.info("[extraction] known-merchant skip:", merchant.display);
   return {
     isReceipt: true,
     merchant: merchant.display,
@@ -424,7 +425,10 @@ export async function extractReceipt(
   const cacheKey = extractionCacheKey(input);
   if (cacheKey) {
     const cached = await readCachedExtraction(input.accountId, cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      console.info("[extraction] cache hit:", cached.merchant || "(unknown)");
+      return cached;
+    }
   }
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },

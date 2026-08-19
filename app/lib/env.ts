@@ -113,6 +113,21 @@ export const RECEIPT_OCR_MODE = (env.RECEIPT_OCR_MODE || "auto") as
   | "tesseract";
 
 /**
+ * Max image width sent to the DeepSeek vision call. Image tokens scale
+ * with pixels², and receipts are text-heavy — 768px reads fine while
+ * costing ~44% fewer vision tokens than the 1024px stored image. The
+ * stored/displayed image is untouched (still STORED_IMAGE_MAX_WIDTH).
+ * Tune down if extraction quality ever suffers on dense receipts, up if a
+ * receipt comes back under-recognized.
+ */
+export const RECEIPT_VISION_MAX_WIDTH = clampInt(
+  env.RECEIPT_VISION_MAX_WIDTH,
+  384,
+  1536,
+  768,
+);
+
+/**
  * Secret gating GET /api/smoke (post-deploy PDF+OCR health check). Requests
  * must send it in the `x-smoke-secret` header; when unset the route is
  * disabled (404). `scripts/deploy` uses it after every production deploy.
@@ -126,3 +141,16 @@ export const SMOKE_TEST_SECRET = env.SMOKE_TEST_SECRET ?? "";
  * clients see the public origin, not the proxy-internal one. Optional.
  */
 export const PUBLIC_URL = env.PUBLIC_URL ?? "";
+
+/** Parse an integer env var, clamped to [min, max], with a fallback when
+ * unset or unparseable. */
+function clampInt(
+  raw: string | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
