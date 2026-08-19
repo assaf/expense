@@ -145,7 +145,20 @@ verifications are sent FROM it (identity-matched, falling back to the
 account's default identity). It moved from `receipts@expense.labnotes.org`
 (Resend era) to `receipts@labnotes.org` in Aug 2026 — mail to any other
 address is not processed (the delivery rule only matches the current one),
-and the FastMail rule/identity must stay in sync with this var. All optional
+and the FastMail rule/identity must stay in sync with this var. **The old
+Resend-era address is back in service (Aug 2026): `expense.labnotes.org` is a
+FastMail subdomain domain (DNS via Cloudflare — MX
+`us1/us2-smtp.messagingengine.com`, DKIM `fm1-3._domainkey`, SPF
+`include:spf.messagingengine.com`; the old AWS SES MX
+`inbound-smtp.us-east-1.amazonaws.com` and the "FastMail -> Resend ->
+Expense" redirect rule were removed), and `receipts@expense.labnotes.org` has
+the same "Move to label: Receipts" address action as `receipts@labnotes.org`
+— mail to either address lands in the Receipts folder with the original
+sender intact (no SRS rewrite, so sender verification works). Note: FastMail
+offers no API for rules/aliases/domains (the official MCP server is
+read/send-only) — these were configured through the web UI (browser
+automation), and Cloudflare DNS through the Cloudflare MCP
+(`https://mcp.cloudflare.com`). All optional
 — when `FASTMAIL_TOKEN`
 is unset the push/cron routes 503 and receipts keep flowing through Resend.
 When `FASTMAIL_TOKEN` IS set, all outbound email (receipt replies +

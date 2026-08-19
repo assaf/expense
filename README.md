@@ -1,6 +1,9 @@
 # Expense
 
-> Expense is a receipt tracker with no friction: receipts arrive by email and file themselves, mileage prices itself from IRS rates, and an AI assistant does the data entry you'd rather skip — capture, log, and ask, all through MCP.
+> Expense is a seamless receipt tracking solution: receipts are automatically
+> sent via email, mileage uses the tax rate provided by the IRS, and a smart AI
+> assistant does your data entry so that you can forget about the process
+> altogether.
 
 ## Screenshots
 
@@ -10,54 +13,55 @@
 
 What it does:
 
-- Log expenses two ways: receipt-based (upload/scan an image, add date, report,
-  category, merchant, amount) and mileage (drive route on a map — Leaflet + OSRM
-  — with configurable per-year mileage rates)
-- **Receipts by email**: forward a receipt to your inbox address and it's
-  parsed (merchant/amount/category) and added automatically — see below
-- Organize into reports and categories; every receipt image is stored and
-  auto-renamed to a convention (YYYY-MM-DD_Report_Name.jpg)
-- Export: PDF per report (with embedded receipt images) and a ZIP of everything
-- Settings: reports, categories, mileage rates, home location for mileage routes
+- Log receipt expenses (upload/scan the image, specify the date, report,
+  category, merchant, amount) and mileage expenses (map a route on the map —
+  Leaflet + OSRM — using the per year mileage rate)
+- Forward your receipt to the email associated with your Expense account, and
+  the receipt will be parsed and automatically added (see below)
+- Reports and categories — organize your expenses into; every receipt image is
+  saved and automatically renamed to `YYYY-MM-DD_Report_Name.jpg`
+- Export — as a PDF (one PDF per report with receipt images attached) and a ZIP
+  archive
 
 Stack:
 
 - React Router v8 (framework mode) + Tailwind v4, TypeScript
 - Postgres via Prisma — accounts, users, expenses, reports, categories,
   settings, mileage, image blobs
-- Images: Postgres BYTEA (prod and dev/test) — no external store
-- Deployed on Vercel + Supabase Postgres (git push to main auto-deploys)
+- Images: Postgres BYTEA (production and development/test) — no external storage
+- Deployed on Vercel + Supabase Postgres (git push to main automatically
+  deploys)
 
-Auth & accounts (the recent work):
+Auth and accounts:
 
-- Email/password login (scrypt-hashed), sessions via signed cookies
-- Multi-user accounts: each account has its own data, users in the same account
-  share everything, other accounts fully isolated
-- New users join an account via an 8-char invite code (shown in Settings,
-  regenerable); anyone can self-signup into a fresh account
-- Image keys are namespaced per account so two accounts can never collide
+- Email/password login (hashed with scrypt), sessions with signed cookies
+- Multi-user accounts: everything in one account is shared between users, each
+  account is separate from other ones
+- A user can join an account by entering an 8-character invite code (visible in
+  Settings) and can sign up to a new account from scratch; image keys are
+  namespaced by an account so that two accounts won't interfere
 
-## Accounts & sharing
+## Accounts and sharing
 
-Login is email/password (scrypt-hashed) — the email is the login name, stored
-lowercase and unique, format-validated at signup/join. Every expense, report,
-category, and setting belongs to an **account**; everyone in an account shares
-them, and accounts are fully isolated from each other.
+Email/password login — email is the login name, stored in lowercase and
+validated, and unique at signup/join. All expenses, reports, categories, and
+settings belong to an account; everything in an account is shared between users,
+and accounts are fully isolated from each other.
 
-- **Sign up** → creates a brand-new account (starts empty).
-- **Join** → enter an account's invite code (Settings → Account) to share
-  that account's data.
-- The first account/user is bootstrapped from `APP_EMAIL`/`APP_PASSWORD`
-  when the database is empty; pre-email accounts get their login backfilled
-  from `APP_EMAIL` on first start (initStore).
+- **Sign up** -> creates an entirely new account (empty).
+- **Join** -> enters an account invite code (Settings -> Account) to join an
+  existing account and share its data.
+- The first account/user is bootstrapped from `APP_EMAIL`/`APP_PASSWORD` when
+  the database is empty; pre-existing accounts get their login restored from
+  `APP_EMAIL` on the first launch (initStore).
 
-## SEO & AI discovery
+## SEO and AI discovery
 
-The public marketing pages double as the site's AI-search surface: when
-someone asks an assistant for a free expense tracker, GPTBot / OAI-SearchBot /
-ClaudeBot / PerplexityBot crawl and quote them. The copy is written as
-standalone, quotable answers that name the app and its URL, and it lives in
-ONE place — `app/lib/seo-content.ts` — which renders every surface:
+Marketing pages that are available publicly double as the AI search surface: if
+an assistant is asked for an expense tracker, the GPTBot / OAI-SearchBot /
+ClaudeBot / PerplexityBot crawler quotes them. The copy is written in such a way
+that it's easily quotable and includes the app name and the URL and lives only
+in one file — `app/lib/seo-content.ts` — which renders all the surfaces:
 
 | Page                                     | Purpose                                                        |
 | ---------------------------------------- | -------------------------------------------------------------- |
@@ -68,11 +72,8 @@ ONE place — `app/lib/seo-content.ts` — which renders every surface:
 | `/llms.txt`                              | The llmstxt.org file — the curated overview AI assistants read |
 | `/about.md` `/faq.md` `/alternatives.md` | Markdown mirrors per the llms.txt convention                   |
 
-Supporting plumbing: `public/robots.txt` explicitly allows the AI crawlers
-(GPTBot, OAI-SearchBot, ChatGPT-User, ClaudeBot / Claude-SearchBot /
-Claude-User, PerplexityBot / Perplexity-User, Google-Extended,
-Applebot-Extended, meta-externalagent) while app routes stay blocked, and
-`public/sitemap.xml` lists the public pages.
+Plumbing to support it: `public/robots.txt` explicitly permits the AI crawlers
+while app routes are blocked, and `public/sitemap.xml` lists the public pages.
 
 These routes are public (see the root loader in `app/root.tsx`); everything
 else still requires a session.
@@ -81,35 +82,34 @@ else still requires a session.
 
 - Track **receipt** expenses (date, merchant, amount, image, category, report)
   and **mileage** expenses (date, 2+ addresses, distance, amount, report).
-- Mileage routes run **Home → stops → Home**; distance is computed via OSRM and
-  the amount from a per-year mileage rate. Maps use Leaflet + OpenStreetMap —
-  **no API keys required**.
-- Incomplete expenses are highlighted so they're easy to finish.
-- Paste (⌘V) or upload an image anywhere to start a new receipt.
-- **Export**: each report as a PDF (grouped by category, with all receipt
-  images), or everything as a ZIP (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
-- **AI assistants (MCP)**: any MCP client — Claude, OpenAI — connects by signing
-  in with your account (OAuth; no API keys). See [AI
+- Mileage routes run **Home → stops → Home**; distance is calculated using OSRM
+  and the amount based on a per-year mileage rate. Maps is powered by Leaflet +
+  OpenStreetMap — **no API keys necessary**.
+- Incomplete expenses are highlighted to make it easy to complete them.
+- Paste (⌘V) or upload an image anywhere to create a new receipt.
+- **Export** each report as a PDF (grouped by category, with all receipt images
+  attached) and a ZIP archive (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
+- **AI assistants (MCP)**: any MCP client — Claude, OpenAI — can connect by
+  logging in with your account (OAuth; no API keys). See [AI
   assistants](#ai-assistants-mcp) below.
 
 ## AI assistants (MCP)
 
 The app speaks the Model Context Protocol at `https://expense.labnotes.org/mcp`
-(auth: OAuth 2.1 authorization-code + PKCE — sign in with your account and
-approve the connection; no API keys). An assistant connected to your account
-can:
+(auth: OAuth 2.1 authorization-code + PKCE — sign in and authorize the
+connection; no API keys). An assistant linked with to your account can:
 
-- **Capture a receipt** — a photo or PDF in the chat runs the same OCR +
-  extraction pipeline as the web app and is categorized from your own
-  merchant history.
-- **Log a drive** — give it stops in plain English; it geocodes, routes, and
-  prices the trip at the year's IRS rate.
-- **Answer spending questions** — "how much did I spend on flights last
-  quarter?" gets the exact total from your data.
-- **Build reports** — create/close reports, move expenses into them, export
+- **Upload a receipt** — drag and drop a picture or PDF into chat; it processes
+  the same way as the web app and uses the same OCR and extraction as well as
+  your merchant history for categorization.
+- **Log a drive** — drag and drop stops written in plain English; it geocodes,
+  routs, and prices the route according to the year's IRS rates.
+- **Answer questions about spending** — for example "how much have I spent on
+  flights last quarter?" — you'll receive the answer based on your data.
+- **Create reports** — create/close a report, move expenses into it, export
   a report PDF.
-- **Reconcile** — paste a bank statement CSV; it finds every charge with no
-  matching receipt (read-only).
+- **Reconcile** — upload your bank statement as a CSV; it will match all charges
+  without a matching receipt (read-only).
 
 Connect any MCP client:
 
@@ -125,19 +125,19 @@ Connect any MCP client:
 }
 ```
 
-The client opens your browser; you sign in and click Allow. Manage
-connections (per-token delete, full disconnect) in **Settings → Agents &
-API (MCP)**. See [`docs/mcp.md`](docs/mcp.md) for the full reference and
-[`docs/mcp-directories.md`](docs/mcp-directories.md) for the directory
-listings.
+The client will open your browser; you'll log in and click Allow. You can manage
+connections (delete per token, disconnect completely) in **Settings -> Agents &
+API (MCP)**. For the full reference, see [`docs/mcp.md`](docs/mcp.md) and for
+directory listings: [`docs/mcp-directories.md`](docs/mcp-directories.md).
 
 ## State
 
-Storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the
-single schema source of truth; the client is generated to
-`prisma/generated` by `pnpm build:prisma`). `DATABASE_URL` is required at
-startup (the app exits with a clear error otherwise). Receipt images live in
-Postgres BYTEA (`image_blobs`) in prod and dev — no separate storage service.
+The storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the only
+source of truth; the client is built to `prisma/generated` with `pnpm
+build:prisma`). `DATABASE_URL` is required upon launch (otherwise the app will
+crash with an error). Image blobs are stored inside Postgres BYTEA
+(`image_blobs`) in production and development — there is no additional storage
+service.
 
 | Data                        | Images                         |
 | --------------------------- | ------------------------------ |
@@ -146,29 +146,21 @@ Postgres BYTEA (`image_blobs`) in prod and dev — no separate storage service.
 | `categories` / `settings` / |                                |
 | `mileage` / `image_blobs`   |                                |
 
-All reads/writes go through `app/lib/database.ts`
-(Prisma queries scoped by `accountId`); image storage
-is behind `app/lib/images.server.ts` (Prisma `imageBlob`).
-Keys are `images/{accountId}/...` pathnames on every backend — namespaced
-per account so two accounts can never collide on the same filename.
-Schema changes: edit `prisma/schema.prisma`, then `prisma migrate dev --name …` locally and
-`pnpm db:push` (or `pnpm db:migrate`) before deploying.
-
-### `data/` — removed
-
-The file-era migration source (`data/*.csv` + `data/images/*` and the
-`pnpm migrate-data` one-off) was deleted in the Jul 2026 cleanup — data now
-lives in the database, and importing from Expensify happens via
-`scripts/import-expensify.ts`. Cloning prod uses `scripts/clone`
-(`prisma/backup.sql`).
+All reads/writes are done via `app/lib/database.ts` (Prisma queries scoped by
+`accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
+`imageBlob`). Image blobs are kept in `images/{accountId}/...` pathnames on all
+backends — they are namespaced per account and thus, two accounts cannot ever
+have a name conflict. Schema changes: edit `prisma/schema.prisma`, then run
+`prisma migrate dev --name …` locally and `pnpm db:push` (or `pnpm db:migrate`)
+before deploy.
 
 ## Quick start
 
 ## Environment variables
 
 Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
-`.env` file fills the gaps. `DATABASE_URL` is required; `.env` is gitignored. if
-(!hasDatabase()) {
+`.env` is used to fill holes. `DATABASE_URL` is required; `.env` is gitignored.
+if (!hasDatabase()) {
 
 **dev / test — local `.env`:**
 
@@ -185,160 +177,69 @@ APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
 ```
 
 On an empty database the first account + user are bootstrapped from
-`APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing); afterwards users are
-created through the app's signup/join flow. `SESSION_SECRET` is always
-required. `APP_EMAIL`/`APP_PASSWORD` can be removed from `.env` once you
-have at least one user.
+`APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing); thereafter, users are
+created via the app's signup/join flow. `SESSION_SECRET` is always required.
+`APP_EMAIL`/`APP_PASSWORD` can be omitted from `.env` after you have at least
+one user.
 
-Accounts created before email login (username era) keep their old username
-as the stored email until `APP_EMAIL` is set — `initStore` then backfills
-that address onto the bootstrap (oldest) user, so the configured credentials
-keep working.
+Accounts created before email login (username era) retain their original
+username as the stored email until `APP_EMAIL` is set — `initStore` then adds
+that address to the bootstrap (oldest) user, so the configured credentials
+continue to work.
 
-Tests intentionally hardcode `expense_test` (Postgres incl. image blobs),
-ignore the local database, and reset the schema from Prisma on each run
-(`pnpm test:db:push` in the test setup).
+Tests deliberately hardcode `expense_test` (Postgres with blobs/images), ignore
+the local database, and reset the schema from Prisma on every run (`pnpm
+test:db:push` in the test setup).
 
 **prod — Vercel:** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Supabase Supavisor pooled URL),
 `SESSION_SECRET`,
 and (only until the first user exists) `APP_EMAIL` / `APP_PASSWORD`.
-Vercel injects them at runtime; `.env` never exists there.
+Vercel sets them during runtime; `.env` does not exist.
 
 ## Receipts by email
 
-Forward a receipt email to your inbox address and it's parsed and added
-automatically: the merchant, amount, and category are extracted, the receipt
-is stored as an image, and the expense date is the date of the email being
-forwarded. If something can't be processed, a reply email explains what
-happened.
+Forward an email receipt to your inbox address and it will be parsed and
+imported automatically: the merchant, amount, and category are extracted, the
+receipt is uploaded as an image, and the expense date is the date when the email
+was forwarded. In case something could not be parsed, an explanation email is
+sent back.
 
-How it decides what to import:
+How it determines what to import:
 
-- Receipt **attached as PDF/image** → that attachment becomes the receipt
-  image; text is extracted from the PDF text layer (or OCR'd) to get the
-  merchant/amount/category.
-- Receipt **inline in the email** (ASCII/HTML) → the email body is turned
-  into an image and stored; the text is parsed the same way.
-- Multiple attachments (e.g. a receipt + a logo or signature) → only the
-  actual receipt is handled (heuristics + model tiebreak).
-- The sender must be on the account's **allowed sender list** (Settings →
-  Receipts by email); anything else gets a "sender not recognized" reply.
-  You can add several addresses. If the same address is allowed by multiple
-  accounts, the account that added it first claims it — removing it there
-  falls through to the next account that allows it.
-- Successful imports don't email you; incomplete ones (missing merchant,
-  amount, …) create the expense anyway and reply listing what's missing.
-- Each email is processed at most once (idempotent per email id).
+- Receipt **attached as PDF/image** → the attachment is uploaded as the receipt
+  image; text is extracted from the PDF text layer (or OCR'd) in order to parse
+  the merchant/amount/category.
+- Receipt **inline in the email** (ASCII/HTML) → the email body is converted to
+  an image and uploaded; text is parsed similarly.
+- Several attachments (for example, a receipt and some logo or signature) → only
+  the actual receipt is processed (with heuristics + model tie-break).
+- Sender email must be in the account's **allowed senders list** (Settings →
+  Receipts by email); otherwise the email is replied with "sender not
+  recognized".
+- Successful imports trigger a response with all the parsed data; incomplete
+  ones (missing merchant, amount, …) create the expense anyway and reply listing
+  what's missing.
+- Each email is processed at most once (idempotent on email id).
 
-### Setup (Resend + DeepSeek)
+### Setup DeepSeek
 
-Vercel has no inbound email, so receipt emails are received by **Resend**
-(receiving = parse email → POST webhook) and parsed by **DeepSeek**
-(`deepseek-v4-flash`). Replies on failure go out through Resend too.
-
-1. Create a [Resend](https://resend.com) account and add a domain (e.g.
-   `expense.labnotes.org`) — you'll point MX/DKIM/SPF DNS records at Resend.
-2. Resend → **Receiving**: add a receiving domain and an inbound route
-   (catch-all or `receipts@…`) that POSTs to
-   `https://<your-app>/api/inbound-email`.
-3. On the webhook, copy the **signing secret** (`whsec_…`).
-4. Create a [DeepSeek](https://platform.deepseek.com) API key.
-5. Set env vars (dev `.env`, prod Vercel dashboard):
-
-   ```bash
-   RESEND_API_KEY=re_…                     # receive + send replies
-   INBOUND_EMAIL_WEBHOOK_SECRET=whsec_…    # verifies the webhook signature
-   INBOUND_EMAIL_ADDRESS=receipts@expense.labnotes.org  # forwarding address + reply sender
-   DEEPSEEK_API_KEY=sk-…                   # receipt text/OCR extraction
-   DEEPSEEK_MODEL=deepseek-v4-flash        # optional, this is the default
-   RECEIPT_OCR_MODE=auto                   # auto|deepseek|tesseract (default auto)
-   ```
-
-   All are optional — without them the webhook returns 503 and receipts
-   aren't imported.
-
-6. In the app: Settings → **Receipts by email** → add each address you'll
-   forward from (you can add several), then forward a receipt to your
-   inbound address.
-
-Notes:
-
-- **DeepSeek vision**: the hosted DeepSeek API is text-only today — image
-  receipts are OCR'd locally with tesseract.js (worker/fonts fetched from a
-  CDN at runtime). Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model
-  accepts images (it tries vision first and falls back automatically on
-  `auto`).
-- **Scanned PDFs** (no text layer) are rasterized and OCR'd; the first pages
-  become the stored receipt image.
-- **HTML receipts** are stored as a rendered text image (monospace receipt
-  sheet) — no headless browser needed.
-- Forwarding **as attachment (.eml)** — the receipt nested inside the .eml is
-  not unpacked; use normal inline forwarding (Gmail/iOS quote the original in
-  the body).
-- Webhook processing runs up to 60s (Vercel `maxDuration`) — enough for
-  attachment download + OCR + extraction.
-
-## Quick start
-
-Prerequisites: Postgres running locally (`brew services start postgresql@18`).
-
-```bash
-createdb expense_dev          # once
-pnpm install
-# create .env with the local values above
-pnpm db:push                    # create the schema from prisma/schema.prisma
-pnpm dev                        # reads .env
-```
-
-Running the server without `DATABASE_URL` exits immediately with a clear
-error — there is no file-based fallback.
-
-```bash
-pnpm check        # prisma generate + typegen + format + lint + typecheck
-pnpm build        # production build (build:prisma runs first)
-pnpm start        # serve the production build (port 3000)
-pnpm test         # resets expense_test from Prisma and runs the suite
-```
-
-Node 24+ and pnpm 11+ (developed/tested on Node 26).
-
-## Deployment
-
-**Vercel (recommended):** the app deploys with Vercel's zero-config React
-Router support — no preset needed. (`@vercel/react-router`'s `vercelPreset()`
-is still pinned to React Router v7 as of this writing — track
-[vercel/vercel#16730](https://github.com/vercel/vercel/issues/16730); the
-zero-config path builds one SSR function that serves every route.)
-
-1. Push to GitHub (already configured: `origin` → `assaf/expense`).
-2. In Vercel: **Add New → Project → Import `assaf/expense`**. Framework is
-   auto-detected as React Router; `vercel.json` pins the build command.
-3. Set env vars in the project (Settings → Environment Variables):
-   - `DATABASE_URL` — Supabase pooled URL (Supavisor transaction-mode
-     pooler). Schema is managed by Prisma migrations — apply prod schema
-     changes with `./scripts/migrate-prod` (never runtime DDL).
-   - Node 24+ (`engines`; the project runs on Node 26); pick Node 26 in
-     project settings if Vercel doesn't match automatically.
-4. One-time data import is done — the CSV source under `data/` was deleted
-   in the Jul 2026 cleanup (data verified in the database: 306 expenses,
-   247 images). Import from Expensify now goes through
-   `scripts/import-expensify.ts`; cloning prod locally uses `scripts/clone`.
-
-5. Deploy. Test the app is behind Deployment Protection or basic auth — the
-   app has no built-in login (single-user personal tool).
-
-```bash
-./scripts/deploy            # check + tests + deploy
-./scripts/deploy --skip-tests
-```
-
-Vercel has its own environment management (dashboard) — set `DATABASE_URL`
-there directly (all images are stored in the database, so no other storage
-env is needed).
+- **DeepSeek vision**: the hosted DeepSeek API is text-only — receipt images are
+  OCR'd locally with tesseract.js (worker/fonts fetched from a CDN at runtime).
+  Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model will be able to
+  handle receipt images (vision tries first and falls back on `auto`).
+- **Scanned PDFs** (without the text layer) are rasterized and OCR'd; the first
+  pages are uploaded as receipt image.
+- **HTML receipts** are converted to a text image (receipt form on the paper) —
+  no headless browser needed.
+- Forwarding **as attachment (.eml)** — the receipt enclosed in `.eml` is not
+  parsed; use normal inline forwarding (for example, Gmail/iOS includes original
+  email in the body).
+- Webhook processing time limit is 60 seconds (max Vercel `maxDuration`) —
+  enough to download attachment + OCR + parse.
 
 ## Maps & geocoding
 
-Uses free OpenStreetMap services (Nominatim for geocoding, OSRM for routing,
-OSM raster tiles for the map). Rate-limited but fine for personal use. If OSRM
-is unavailable, distance falls back to straight-line (marked "approx.").
+OpenStreetMap services (Nominatim geocoding, OSRM routing, OSM raster tiles
+maps). Rate limited but good enough for personal use. If OSRM is not available,
+distance calculation fallbacks to the straight line (marked "approx.").
