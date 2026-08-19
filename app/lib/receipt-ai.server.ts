@@ -62,6 +62,25 @@ const SYSTEM_PROMPT = `You extract receipt data for a personal expense tracker. 
 - "notes": one short sentence about anything ambiguous or missing
 Only output valid JSON. If the content is not a receipt, set "is_receipt" to false and leave the other fields empty.`;
 
+/**
+ * Cap the receipt text sent to the model. A receipt's key fields sit at the
+ * extremes — merchant/date at the top, tax/total at the bottom — so keep
+ * both ends and drop the middle line items. Only binds on pathological
+ * input (noisy OCR, very long PDFs/email bodies); a normal receipt passes
+ * through untouched.
+ */
+const MAX_RECEIPT_TEXT_CHARS = 6_000;
+const MAX_RECEIPT_HEAD_CHARS = 4_000;
+
+function limitReceiptText(text: string): string {
+  if (text.length <= MAX_RECEIPT_TEXT_CHARS) return text;
+  const head = text.slice(0, MAX_RECEIPT_HEAD_CHARS);
+  const tail = text.slice(
+    text.length - (MAX_RECEIPT_TEXT_CHARS - MAX_RECEIPT_HEAD_CHARS),
+  );
+  return `${head}\n\n… (middle truncated) …\n\n${tail}`;
+}
+
 function buildUserPrompt(input: ExtractionInput): string {
   const lines: string[] = [];
   if (input.categories && input.categories.length > 0) {
@@ -74,7 +93,7 @@ function buildUserPrompt(input: ExtractionInput): string {
       `Existing reports — pick the closest match for "report" or use "": ${input.reports.join(", ")}`,
     );
   }
-  lines.push("Receipt content:", (input.text ?? "").slice(0, 30_000));
+  lines.push("Receipt content:", limitReceiptText(input.text ?? ""));
   return lines.join("\n\n");
 }
 
@@ -82,7 +101,12 @@ type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 async function chatCompletion(
   messages: ChatMessage[],
-  opts: { json?: boolean; image?: { buffer: Buffer; mime: string } } = {},
+  opts: {
+    json?: boolean;
+    image?: { buffer: Buffer; mime: string };
+    /** Output token cap — per call site, sized to that call's real answer. */
+    maxTokens?: number;
+  } = {},
 ): Promise<string> {
   if (!DEEPSEEK_API_KEY) {
     throw new DeepSeekError("DEEPSEEK_API_KEY is not configured", 500, "");
@@ -106,7 +130,7 @@ async function chatCompletion(
     ...(opts.json ? { response_format: { type: "json_object" } } : {}),
     thinking: { type: "disabled" },
     temperature: 0.1,
-    max_tokens: 1500,
+    max_tokens: opts.maxTokens ?? 500,
   };
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -180,6 +204,7 @@ export async function extractReceipt(
   ];
   const raw = await chatCompletion(messages, {
     json: true,
+    maxTokens: 400,
     ...(input.image ? { image: input.image } : {}),
   });
   const parsed = parseJsonObject(raw);
@@ -355,7 +380,7 @@ export async function classifyReceiptAttachment(
       content: `Attachments:\n${list}\n\nWhich one is the receipt?`,
     },
   ];
-  const raw = await chatCompletion(messages, { json: true });
+  const raw = await chatCompletion(messages, { json: true, maxTokens: 80 });
   const parsed = parseJsonObject(raw);
   const idx = parsed["receipt_index"];
   const n =
