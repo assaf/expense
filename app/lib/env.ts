@@ -95,6 +95,12 @@ export const RECEIPTS_FOLDER = env.RECEIPTS_FOLDER || "Receipts";
  */
 export const CRON_SECRET = env.CRON_SECRET ?? "";
 
+/** 32-byte key (base64) encrypting connected email-account API tokens at
+ * rest (AES-256-GCM — see app/lib/token-crypto.server.ts). Generate with
+ * `openssl rand -base64 32`. Optional — when unset, connecting an email
+ * account in Settings is disabled (the token can't be stored safely). */
+export const EMAIL_TOKEN_KEY = env.EMAIL_TOKEN_KEY ?? "";
+
 /** DeepSeek API key — parses receipt text and (when supported) OCRs images. */
 export const DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY ?? "";
 

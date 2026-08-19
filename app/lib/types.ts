@@ -256,6 +256,20 @@ export interface InboundSenderRecord {
   createdAt: string;
 }
 
+/** A connected email account (auto-import). Never carries the API token. */
+export interface EmailConnectionRecord {
+  id: string;
+  /** "fastmail" — JMAP. More providers later (Gmail, …). */
+  provider: string;
+  emailAddress: string;
+  /** "active" | "error" (renewal failures flag the row for Settings). */
+  status: string;
+  receivedCount: number;
+  processedCount: number;
+  lastPushAt: string | null;
+  createdAt: string;
+}
+
 /** An OAuth client registered by an MCP client (RFC 7591 dynamic registration). */
 export interface OAuthClientRecord {
   id: string;

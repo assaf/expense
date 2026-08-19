@@ -11,6 +11,7 @@ import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { AgentsSection } from "~/components/settings/agents-section";
+import { EmailAccountsSection } from "~/components/settings/email-accounts";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
 import {
   AddSenderForm,
@@ -38,6 +39,11 @@ import {
   resendInboundSenderVerification,
 } from "~/lib/db/inbound";
 import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
+import {
+  createEmailConnection,
+  listEmailConnections,
+  removeEmailConnection,
+} from "~/lib/db/email-connections";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
@@ -50,6 +56,11 @@ import {
   periodLabel,
 } from "~/lib/mileage-rates";
 import { formString, unknownIntent } from "~/lib/validation";
+import { verifyJmapToken } from "~/lib/jmap.server";
+import {
+  encryptSecret,
+  isTokenCryptoConfigured,
+} from "~/lib/token-crypto.server";
 import type { Route } from "./+types/settings";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -63,6 +74,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     oauthSessions,
     rates,
     members,
+    emailConnections,
   ] = await Promise.all([
     readCategories(user.accountId),
     readSettings(user.accountId),
@@ -71,6 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     listUserOAuthSessions(user.id),
     readMileageRates(),
     readAccountUsers(user.accountId),
+    listEmailConnections(user.accountId),
   ]);
   // A compact "current rate" line for Settings — the editor itself resolves
   // the exact rate per trip (date + type), so the page only needs today's.
@@ -89,6 +102,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     currentRates,
     oauthSessions,
     members,
+    emailConnections,
+    emailAccountsConfigured: isTokenCryptoConfigured(),
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
@@ -161,6 +176,56 @@ export async function action({ request }: Route.ActionArgs) {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;
     }
+    case "connectEmail": {
+      if (!isTokenCryptoConfigured()) {
+        return Response.json(
+          {
+            ok: false,
+            error:
+              "Email account connections are not configured on this deployment.",
+          },
+          { status: 503 },
+        );
+      }
+      const token = formString(form, "token").trim();
+      if (!token) {
+        return Response.json({
+          ok: false,
+          error: "Paste your API token first.",
+        });
+      }
+      const verification = await verifyJmapToken(token);
+      if (!verification.ok) {
+        return Response.json({ ok: false, error: verification.message });
+      }
+      const result = await createEmailConnection({
+        accountId: user.accountId,
+        provider: "fastmail",
+        emailAddress: verification.info.username,
+        jmapAccountId: verification.info.mailAccountId,
+        tokenEnc: encryptSecret(token),
+      });
+      if (!result.ok) return Response.json(result);
+      console.info("[email-connections] connected", {
+        accountId: user.accountId,
+        address: result.connection.emailAddress,
+      });
+      return Response.json({
+        ok: true,
+        address: result.connection.emailAddress,
+      });
+    }
+    case "disconnectEmail": {
+      const removed = await removeEmailConnection(
+        user.accountId,
+        formString(form, "id"),
+      );
+      console.info("[email-connections] disconnected", {
+        accountId: user.accountId,
+        removed,
+      });
+      return Response.json({ ok: true });
+    }
     case "disconnectOAuthClient": {
       const clientId = formString(form, "clientId");
       if (clientId) await disconnectOAuthClient(user.id, clientId);
@@ -199,6 +264,8 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     inboundAddress,
     oauthSessions,
     members,
+    emailConnections,
+    emailAccountsConfigured,
     mcpUrl,
   } = loaderData;
   return (
@@ -409,6 +476,11 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           <AddSenderForm />
         </div>
       </section>
+
+      <EmailAccountsSection
+        connections={emailConnections}
+        configured={emailAccountsConfigured}
+      />
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
 

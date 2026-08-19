@@ -24,6 +24,9 @@ export default defineConfig({
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",
+      // Fixed key so connected-email-account tests can encrypt/decrypt
+      // tokens (production value lives only in Vercel env).
+      EMAIL_TOKEN_KEY: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
     },
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,

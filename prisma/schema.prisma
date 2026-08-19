@@ -34,6 +34,7 @@ model Account {
   inboundEmails InboundEmail[]
   inboundSenders InboundSender[]
   inboundSenderVerifications InboundSenderVerification[]
+  emailConnections EmailConnection[]
   reconciliationRuns ReconciliationRun[]
   receiptExtractions ReceiptExtraction[]
 
@@ -276,6 +277,61 @@ model InboundSenderVerification {
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("inbound_sender_verifications")
+}
+
+/// A user's own email account connected for automatic expense import
+/// (Settings → Email accounts). Today only FastMail over JMAP: the user
+/// generates an API token in FastMail's Privacy & Security settings, we
+/// verify it against the JMAP session endpoint, and store it encrypted
+/// (EMAIL_TOKEN_KEY, AES-256-GCM). emailAddress is globally unique — one
+/// mailbox can only feed one workspace, so two accounts can never race to
+/// process (and trash) the same email. Counts power the Settings stats;
+/// processed-last-24h is computed from EmailProcessLog.
+model EmailConnection {
+  id            String  @id
+  accountId     String
+  provider      String // "fastmail" (JMAP) — more providers later
+  emailAddress  String  @unique // normalized lowercase
+  /// JMAP account id for the mail capability, resolved at connect time.
+  jmapAccountId String
+  /// AES-256-GCM ciphertext of the user's API token (see token-crypto.server).
+  tokenEnc      String
+  /// active | error — set to error when the push subscription can't be
+  /// renewed (phase 2), so the user sees it in Settings.
+  status        String  @default("active")
+  receivedCount Int     @default(0)
+  processedCount Int    @default(0)
+  lastPushAt    String?
+  createdAt     String
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  processLog EmailProcessLog[]
+
+  @@map("email_connections")
+}
+
+/// One row per email evaluated for a connected account — the health/audit
+/// log for the auto-import pipeline ("never lose an expense"): every decision
+/// (ignored / created / error) is recorded, plus the matched rule and any
+/// error text. Also powers the "processed in the last 24 hours" stat.
+model EmailProcessLog {
+  id           BigInt   @id @default(autoincrement())
+  connectionId String
+  /// JMAP email id — also the idempotency key (one row per email).
+  emailId      String
+  fromAddress  String
+  subject      String
+  matched      Boolean
+  /// ignored | created | error
+  outcome      String
+  error        String?
+  createdAt    String
+
+  emailConnection EmailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, emailId])
+  @@index([connectionId, createdAt])
+  @@map("email_process_log")
 }
 
 /// An OAuth 2.1 client registered by an MCP client via dynamic registration

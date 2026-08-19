@@ -79,6 +79,14 @@ three auth vars). Pull prod env with `pnpx vercel env pull
 DDL; both point at the Supabase session pooler — see “Database connections” below). Tests hardcode local services (`expense_test`, image blobs
 in Postgres), not `.env`.
 
+Connected email accounts (auto-import — `docs/email-connections.md`) add
+`EMAIL_TOKEN_KEY`: a 32-byte base64 key encrypting users' FastMail API
+tokens at rest (AES-256-GCM). Set it in production **before** anyone
+connects an account; when unset the Settings section reports the feature
+unconfigured and connect returns 503. Losing the key invalidates all stored
+tokens — users would need to reconnect (there is no rotation without that
+cost, since the tokens must stay decryptable to act on the user's mailbox).
+
 Receipts-by-email adds optional vars: `INBOUND_EMAIL_ADDRESS`,
 `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-v4-flash`),
 `RECEIPT_OCR_MODE` (`auto`
