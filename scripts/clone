@@ -52,8 +52,12 @@ fi
 
 # 3. Dump production (plain dump; the local schema is dropped and recreated
 #    before restore, so the dump must not carry --clean's drop statements).
+#    The pooler URL carries sslmode=no-verify, a pg/Prisma-only value — libpq
+#    (pg_dump/psql) rejects it. Translate to sslmode=require: encrypt-only,
+#    no CA check, same intent (verify-ca/full would fail on the pooler's
+#    private CA).
 echo -e "\033[0;32mDumping production database → $BACKUP_FILE …\033[0m"
-pg_dump "$PROD_DB_URL" \
+pg_dump "${PROD_DB_URL/sslmode=no-verify/sslmode=require}" \
   --file "$BACKUP_FILE" \
   --schema public \
   --no-owner \
