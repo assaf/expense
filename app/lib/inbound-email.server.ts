@@ -127,7 +127,7 @@ export type ProcessResult =
   | { status: "unknown-sender" }
   | { status: "unverified-sender" }
   | { status: "self-reply" }
-  | { status: "bounce" };
+  | { status: "bounce"; failedRecipient?: string };
 
 /** Injectable collaborators (fakes in tests, real implementations by default). */
 export interface InboundDeps {
@@ -555,6 +555,90 @@ export function isDeliveryNotification(
   return false;
 }
 
+/** Match a delivery-status body for the failed recipient. The address may
+ * appear bare, in angle brackets, or after a display name — captures are
+ * `<?addr>` and trailing punctuation is trimmed by `cleanBounceAddress`. */
+const BOUNCE_RECIPIENT_PATTERNS: RegExp[] = [
+  // delivery-status field: "Final-Recipient: rfc822; user@example.com"
+  /(?:final|original)-recipient\s*:\s*(?:rfc822|smtp)\s*;\s*<?([^\s,;<>]+@[^\s,;<>]+)>?/i,
+  // "user@example.com could not be delivered" / "failed to deliver to ..."
+  /(?:could not be delivered|failed to deliver|was not delivered|undeliverable)(?:\s+to)?\s*[:\s]+<?([^\s,;<>"']+@[^\s,;<>"']+)>?/i,
+  // "The following address(es) failed:" / "... could not be delivered:"
+  // with the address on the same or a following line.
+  /the following (?:address|recipient)(?:es)?[^:\n]*:\s*\n?\s*<?([^\s,;<>"']+@[^\s,;<>"']+)>?/i,
+  // "Address failed:" / "Recipient could not be delivered: ..."
+  /(?:address|recipient)(?:es)?\s+(?:that\s+)?(?:failed|could not be delivered)\s*:?\s*<?([^\s,;<>"']+@[^\s,;<>"']+)>?/i,
+];
+
+/** Trim trailing punctuation from an address pulled out of a DSN. */
+function cleanBounceAddress(addr: string): string {
+  return addr.replace(/[.,;:)\]>]+$/, "").trim();
+}
+
+/**
+ * The failed recipient named by a delivery-status notification: the
+ * X-Failed-Recipients header, a Final/Original-Recipient field in the DSN
+ * body, a "failed to deliver" line, or the To header of the embedded
+ * original message. Null when the bounce names no address — the caller
+ * still drops the bounce either way; this is only for the log.
+ */
+async function bounceRecipient(
+  email: Pick<ReceivedEmail, "text" | "html" | "headers">,
+  attachments: AttachmentMeta[],
+  deps: Pick<InboundDeps, "downloadAttachment">,
+): Promise<string | null> {
+  const header = email.headers["x-failed-recipients"];
+  if (header) {
+    const m = /([^\s,;<>]+@[^\s,;<>]+)/.exec(header);
+    if (m) return cleanBounceAddress(m[1]!);
+  }
+  const body = [email.text, htmlToText(email.html ?? "")]
+    .filter((t): t is string => Boolean(t))
+    .join("\n");
+  for (const re of BOUNCE_RECIPIENT_PATTERNS) {
+    const m = body.match(re);
+    if (m) return cleanBounceAddress(m[1]!);
+  }
+  // The embedded original message carries the To header of the failed send.
+  const eml = attachments.find(isEmlMeta);
+  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
+    try {
+      const text = (await deps.downloadAttachment(eml))
+        .toString("utf8")
+        .slice(0, 100_000);
+      const to = /^[ \t]*To:[ \t]*(.+)$/im.exec(text);
+      if (to) {
+        const addr = /<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i.exec(
+          to[1]!,
+        );
+        if (addr) return cleanBounceAddress(addr[1]!);
+      }
+    } catch {
+      // Best effort — a broken attachment must not fail the drain.
+    }
+  }
+  return null;
+}
+
+/** Build the bounce result, best-effort naming the failed recipient. A
+ * bounce must never fail the drain or trigger a reply. */
+async function bounceResult(
+  emailId: string,
+  deps: InboundDeps,
+): Promise<{ status: "bounce"; failedRecipient?: string }> {
+  try {
+    const [email, attachments] = await Promise.all([
+      deps.fetchReceivedEmail(emailId),
+      deps.listAttachments(emailId),
+    ]);
+    const failedRecipient =
+      (await bounceRecipient(email, attachments, deps)) ?? undefined;
+    return { status: "bounce", failedRecipient };
+  } catch {
+    return { status: "bounce" };
+  }
+}
+
 // --- Pipeline ----------------------------------------------------------------
 
 /**
@@ -951,7 +1035,9 @@ export async function processInboundEvent(
   // This check runs before the sender resolution so Fastmail's own
   // MAILER-DAEMON bounces never reach the "unknown sender" reply path.
   if (looksLikeBounce(data)) {
-    return { status: "bounce" };
+    // Never import and never answer a bounce, but name the failed recipient
+    // for the log (best effort — fetch/extraction failures still drop it).
+    return await bounceResult(data.email_id, deps);
   }
 
   // Only VERIFIED sender addresses accept receipts. A sender row that was
@@ -1030,7 +1116,9 @@ export async function processInboundEvent(
     // whose subject is clean still carry a null Return-Path, a
     // multipart/report body, or an Auto-Submitted header. Skip those too.
     if (isDeliveryNotification(email.headers)) {
-      return { status: "bounce" };
+      const failedRecipient =
+        (await bounceRecipient(email, attachments, deps)) ?? undefined;
+      return { status: "bounce", failedRecipient };
     }
 
     const selected = await selectReceiptSource(email, attachments, deps);

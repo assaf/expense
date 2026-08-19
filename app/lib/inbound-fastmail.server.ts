@@ -342,6 +342,9 @@ export async function processUnprocessedReceipts(
           status: result.status,
           reply: replyTypeFor(result),
           destroyed: true,
+          ...(result.status === "bounce" && result.failedRecipient
+            ? { failedRecipient: result.failedRecipient }
+            : {}),
         });
       } catch (err) {
         // No rollback: Fastmail won't remove the $receipt-processed keyword,

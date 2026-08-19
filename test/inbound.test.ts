@@ -1115,6 +1115,94 @@ describe("processInboundEvent (body receipt)", () => {
     expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
   });
 
+  it("names the failed recipient found in the DSN body", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: [
+          "The message could not be delivered to the following address(es):",
+          "",
+          "  <old-contact@dead-example.com>",
+        ].join("\n"),
+      });
+    const result = await processInboundEvent(
+      eventData({
+        from: "Mail Delivery System <MAILER-DAEMON@messagingengine.com>",
+        subject: "Undelivered Mail Returned to Sender",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({
+      status: "bounce",
+      failedRecipient: "old-contact@dead-example.com",
+    });
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("names the failed recipient from a Final-Recipient field", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: [
+          "Final-Recipient: rfc822; old-contact@dead-example.com",
+          "Action: failed",
+          "Status: 5.1.1",
+        ].join("\n"),
+      });
+    const result = await processInboundEvent(
+      eventData({
+        from: "Mail Delivery System <MAILER-DAEMON@messagingengine.com>",
+        subject: "Undelivered Mail Returned to Sender",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({
+      status: "bounce",
+      failedRecipient: "old-contact@dead-example.com",
+    });
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("names the failed recipient from the embedded original's To header", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        from: "Mail Delivery System <MAILER-DAEMON@messagingengine.com>",
+        subject: "Undelivered Mail Returned to Sender",
+        text: null,
+      });
+    deps.listAttachments = async () => [
+      attachment({
+        id: "att-eml",
+        filename: "original.eml",
+        content_type: "message/rfc822",
+        size: 900,
+      }),
+    ];
+    deps.downloadAttachment = async () =>
+      Buffer.from(
+        [
+          "From: expense@labnotes.org",
+          "To: old-contact@dead-example.com",
+          "Subject: Receipt not imported",
+          "",
+          "body",
+        ].join("\r\n"),
+      );
+    const result = await processInboundEvent(
+      eventData({
+        from: "Mail Delivery System <MAILER-DAEMON@messagingengine.com>",
+        subject: "Undelivered Mail Returned to Sender",
+      }),
+      deps,
+    );
+    expect(result).toMatchObject({
+      status: "bounce",
+      failedRecipient: "old-contact@dead-example.com",
+    });
+    expect(deps.sent).toHaveLength(0);
+  });
+
   it("silently drops a DSN with a clean sender but a bounce subject", async () => {
     const deps = fakeDeps();
     const result = await processInboundEvent(
