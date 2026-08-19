@@ -91,7 +91,7 @@ export interface PublicFetchOptions {
 /** Fetch a user-supplied URL with SSRF guards, following redirects manually
  * (same checks at every hop). Throws SsrfError on any invalid, blocked, or
  * failed request. The response is NOT size-limited here — callers bound the
- * body per use case. */
+ * body per use case with `readBodyLimited`. */
 export async function fetchPublicUrl(
   input: string | URL,
   options: PublicFetchOptions = {},
@@ -133,4 +133,33 @@ export async function fetchPublicUrl(
     return res;
   }
   throw new SsrfError("Too many redirects");
+}
+
+/**
+ * Read a fetch response body into memory, aborting once `maxBytes` is
+ * exceeded. A server-side fetch of a user-supplied URL must never buffer an
+ * unbounded stream — the size check has to happen DURING the read, not
+ * after `arrayBuffer()` has already committed the memory. Throws SsrfError
+ * when the body is larger; the underlying stream is cancelled so the
+ * download stops.
+ */
+export async function readBodyLimited(
+  res: Response,
+  maxBytes: number,
+): Promise<Buffer> {
+  if (!res.body) return Buffer.alloc(0);
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new SsrfError(`Response too large (over ${maxBytes} bytes)`);
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
 }

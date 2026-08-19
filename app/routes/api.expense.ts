@@ -4,6 +4,7 @@ import {
   readImage,
   readUploadedFile,
   saveImage,
+  uploadErrorMessage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
 import { captureWarning } from "~/lib/errors.server";
@@ -52,8 +53,11 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "draft-upload") {
     const uploaded = await readUploadedFile(form);
-    if (!uploaded) {
-      return Response.json({ error: "No image received." }, { status: 400 });
+    if (!uploaded.ok) {
+      return Response.json(
+        { error: uploadErrorMessage(uploaded.error) },
+        { status: 400 },
+      );
     }
     // PDFs are rasterized to PNG before they can be displayed or stored (the
     // editor renders receipts as <img>). The draft is saved immediately —
@@ -98,8 +102,11 @@ export async function action({ request }: Route.ActionArgs) {
     // stored — so the response is always ok. "draft-ocr" is the legacy
     // name; both work.
     const uploaded = await readUploadedFile(form);
-    if (!uploaded) {
-      return Response.json({ error: "No image received." }, { status: 400 });
+    if (!uploaded.ok) {
+      return Response.json(
+        { error: uploadErrorMessage(uploaded.error) },
+        { status: 400 },
+      );
     }
     const { buffer, mime } = uploaded;
     try {

@@ -165,18 +165,43 @@ export function imageResponseHeaders(
  * the same resolution saveImage applies — so files whose type the browser
  * leaves empty (e.g. HEIC) are labeled honestly before normalization.
  */
-export async function readUploadedFile(form: FormData): Promise<{
-  buffer: Buffer;
-  mime: string;
-  originalName: string;
-} | null> {
+export async function readUploadedFile(
+  form: FormData,
+): Promise<UploadedFileResult> {
   const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) return null;
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "missing" };
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { ok: false, error: "too-large" };
+  }
   return {
+    ok: true,
     buffer: Buffer.from(await file.arrayBuffer()),
     mime: file.type || mimeForFile(file.name) || "image/png",
     originalName: file.name || "pasted.png",
   };
+}
+
+/**
+ * Largest receipt file the upload path accepts (bytes). Matches the MCP
+ * capture cap: bigger than any real receipt — a phone photo or a scanned
+ * PDF — while bounding the request body `request.formData()` must buffer
+ * and sharp must decode. The platform body limit is a backstop, not the
+ * check.
+ */
+export const MAX_UPLOAD_BYTES = 15_000_000;
+
+export type UploadedFileResult =
+  | { ok: true; buffer: Buffer; mime: string; originalName: string }
+  | { ok: false; error: "missing" | "too-large" };
+
+/** User-facing error message for a rejected upload — shared by the draft
+ * and image-replace routes so they can't drift apart. */
+export function uploadErrorMessage(error: "missing" | "too-large"): string {
+  return error === "too-large"
+    ? "Image too large — receipts must be under 15MB."
+    : "No image received.";
 }
 
 /** The stored name for a rasterized PDF upload: `receipt.pdf` → `receipt.png`. */

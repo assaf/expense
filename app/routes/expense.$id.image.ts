@@ -5,6 +5,7 @@ import {
   readUploadedFile,
   renameImageToConvention,
   saveImage,
+  uploadErrorMessage,
 } from "~/lib/images.server";
 import { prepareUploadedReceipt } from "~/lib/receipt-ocr.server";
 import { requireUser } from "~/lib/auth.server";
@@ -78,8 +79,11 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (intent === "upload") {
     const uploaded = await readUploadedFile(form);
-    if (!uploaded) {
-      return Response.json({ error: "No image" }, { status: 400 });
+    if (!uploaded.ok) {
+      return Response.json(
+        { error: uploadErrorMessage(uploaded.error) },
+        { status: 400 },
+      );
     }
     // PDFs are rasterized to PNG before storage: receipts are always
     // displayed as images, and the thumbnail/export pipelines assume the

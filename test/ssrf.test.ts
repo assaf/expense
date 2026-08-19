@@ -1,6 +1,11 @@
 import { expect } from "playwright/test";
 import { describe, it } from "vitest";
-import { fetchPublicUrl, isPrivateHost, isPrivateUrl } from "~/lib/ssrf.server";
+import {
+  fetchPublicUrl,
+  isPrivateHost,
+  isPrivateUrl,
+  readBodyLimited,
+} from "~/lib/ssrf.server";
 
 /**
  * SSRF guard tests: private/reserved hosts are rejected by name and by
@@ -146,5 +151,28 @@ describe("fetchPublicUrl", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("readBodyLimited", () => {
+  it("returns the full body when within the cap", async () => {
+    const res = new Response("hello world");
+    expect((await readBodyLimited(res, 100)).toString()).toBe("hello world");
+  });
+
+  it("returns an empty body when the response has none", async () => {
+    expect(await readBodyLimited(new Response(null), 100)).toHaveLength(0);
+  });
+
+  it("throws mid-stream once the cap is exceeded", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3, 4, 5]));
+        controller.enqueue(new Uint8Array([6, 7, 8, 9, 10]));
+        controller.close();
+      },
+    });
+    const res = new Response(stream);
+    await expect(readBodyLimited(res, 7)).rejects.toThrow("Response too large");
   });
 });

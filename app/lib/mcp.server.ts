@@ -51,7 +51,7 @@ import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
-import { fetchPublicUrl, SsrfError } from "~/lib/ssrf.server";
+import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
 import {
   newExpenseShell,
   type Expense,
@@ -958,8 +958,17 @@ async function captureReceipt(
       return fail(`Couldn't fetch ${args.url}: ${reason}.`);
     }
     if (!res.ok) return fail(`Couldn't fetch ${args.url}: HTTP ${res.status}.`);
-    const data = await res.arrayBuffer();
-    buffer = Buffer.from(data);
+    // Stream with a hard cap — the 15MB check must bound the download, not
+    // run after the whole body has already been buffered (a big response
+    // would OOM the function before the guard trips).
+    let data: Buffer;
+    try {
+      data = await readBodyLimited(res, MAX_CAPTURE_BYTES);
+    } catch (err) {
+      const reason = err instanceof SsrfError ? err.message : "download failed";
+      return fail(`Couldn't fetch ${args.url}: ${reason}.`);
+    }
+    buffer = data;
     const fromUrl = args.filename?.trim() || urlFilename(args.url) || "receipt";
     mime =
       args.mime?.trim() ||

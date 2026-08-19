@@ -28,6 +28,16 @@ export const STORED_IMAGE_MAX_WIDTH = 1024;
 const STORED_IMAGE_MAX_HEIGHT = 4096;
 const STORED_IMAGE_QUALITY = 85;
 
+/**
+ * Pixel cap for decoding user-supplied images. Sharp's own default
+ * (268MP) lets a crafted image decode to ~1GB of pixel buffer — a
+ * single-request memory spike in a serverless function. 2^26 (64MP)
+ * covers phone photos and DPI scans while bounding the worst-case decode
+ * to a few hundred MB; larger inputs fail fast at decode instead of
+ * allocating.
+ */
+const MAX_DECODE_PIXELS = 67_108_864; // 2^26
+
 /** Raster formats we will resize + re-encode. Anything else passes through. */
 const RASTER_FORMATS = new Set([
   "jpeg",
@@ -44,9 +54,11 @@ export async function normalizeStoredImage(
 ): Promise<{ buffer: Buffer; mime: string } | null> {
   let meta: Metadata | undefined;
   try {
-    meta = await sharp(buffer).metadata();
+    meta = await sharp(buffer, {
+      limitInputPixels: MAX_DECODE_PIXELS,
+    }).metadata();
   } catch {
-    return null; // not decodable by sharp — pass through
+    return null; // not decodable by sharp (or over the pixel cap) — pass through
   }
   if (!meta.width || !meta.height || !meta.format) return null;
   if (!RASTER_FORMATS.has(meta.format)) return null; // gif/svg/other
@@ -59,13 +71,17 @@ export async function normalizeStoredImage(
   }
 
   // .rotate() applies EXIF orientation so re-encoding never flips sideways.
-  const out = await resizeToJpeg(buffer, {
-    maxWidth: STORED_IMAGE_MAX_WIDTH,
-    maxHeight: STORED_IMAGE_MAX_HEIGHT,
-    quality: STORED_IMAGE_QUALITY,
-    flatten: true,
-  });
-  return { buffer: out, mime: "image/jpeg" };
+  try {
+    const out = await resizeToJpeg(buffer, {
+      maxWidth: STORED_IMAGE_MAX_WIDTH,
+      maxHeight: STORED_IMAGE_MAX_HEIGHT,
+      quality: STORED_IMAGE_QUALITY,
+      flatten: true,
+    });
+    return { buffer: out, mime: "image/jpeg" };
+  } catch {
+    return null; // decode failed (e.g. over the pixel cap) — pass through
+  }
 }
 
 /**
@@ -78,14 +94,22 @@ export async function resizeIfWider(
   buffer: Buffer,
   maxWidth: number,
 ): Promise<Buffer | null> {
-  const meta = await sharp(buffer)
+  const meta = await sharp(buffer, {
+    limitInputPixels: MAX_DECODE_PIXELS,
+  })
     .metadata()
     .catch(() => null);
   if (!meta?.width) return null; // not decodable by sharp
   if (meta.width <= maxWidth) return buffer; // already fits — no re-encode
-  return sharp(buffer)
-    .resize({ width: maxWidth, withoutEnlargement: true })
-    .toBuffer();
+  try {
+    return await sharp(buffer, {
+      limitInputPixels: MAX_DECODE_PIXELS,
+    })
+      .resize({ width: maxWidth, withoutEnlargement: true })
+      .toBuffer();
+  } catch {
+    return null; // decode failed (e.g. over the pixel cap) — pass through
+  }
 }
 
 /**
@@ -102,12 +126,14 @@ export async function resizeToJpeg(
     flatten?: boolean;
   },
 ): Promise<Buffer> {
-  let img = sharp(buffer).rotate().resize({
-    width: opts.maxWidth,
-    height: opts.maxHeight,
-    fit: "inside",
-    withoutEnlargement: true,
-  });
+  let img = sharp(buffer, { limitInputPixels: MAX_DECODE_PIXELS })
+    .rotate()
+    .resize({
+      width: opts.maxWidth,
+      height: opts.maxHeight,
+      fit: "inside",
+      withoutEnlargement: true,
+    });
   if (opts.flatten) img = img.flatten({ background: "#ffffff" });
   return img.jpeg({ quality: opts.quality ?? 80, mozjpeg: true }).toBuffer();
 }

@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import {
   saveImage,
   renameImageToConvention,
   readImage,
+  readUploadedFile,
+  MAX_UPLOAD_BYTES,
+  uploadErrorMessage,
 } from "~/lib/images.server";
+import { normalizeStoredImage, resizeIfWider } from "~/lib/image-normalize";
 import {
   testPrisma,
   TEST_ACCOUNT_ID,
@@ -341,5 +346,90 @@ describe("renameImageToConvention", () => {
     // Same bare name as the test account's image, but a different namespace,
     // so no suffix is needed.
     expect(renamed).toBe("images/acct_test2/2026-01-15_2026_Test_receipt.jpg");
+  });
+});
+
+// --- Upload bounds (CWE-400 / decompression-bomb defense) ------------------
+
+describe("readUploadedFile", () => {
+  it("reads a file within the size cap", async () => {
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([Buffer.from("png-bytes")], "receipt.png", {
+        type: "image/png",
+      }),
+    );
+    const result = await readUploadedFile(form);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.originalName).toBe("receipt.png");
+  });
+
+  it("rejects a file over the size cap with a clear error", async () => {
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "huge.png", {
+        type: "image/png",
+      }),
+    );
+    const result = await readUploadedFile(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("too-large");
+    expect(uploadErrorMessage("too-large")).toMatch(/15MB/);
+  });
+
+  it("rejects a missing or empty file", async () => {
+    expect((await readUploadedFile(new FormData())).ok).toBe(false);
+    const form = new FormData();
+    form.set(
+      "file",
+      new File([new Uint8Array(0)], "empty.png", { type: "image/png" }),
+    );
+    const result = await readUploadedFile(form);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("missing");
+  });
+});
+
+/** Patch a valid 1×1 PNG's IHDR to claim huge dimensions (a lying-header
+ * decompression bomb), recomputing the chunk CRC so libvips accepts the
+ * header. */
+function bombPng(width: number, height: number): Buffer {
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  png.writeUInt32BE(width, 16);
+  png.writeUInt32BE(height, 20);
+  const crc = crc32(png.subarray(12, 29)) >>> 0;
+  png.writeUInt32BE(crc, 29);
+  return png;
+}
+
+describe("pixel cap on decode", () => {
+  it("rejects an over-cap image instead of allocating a huge buffer", async () => {
+    // 16385×4096 ≈ 67.1MP — just past the 2^26 cap; libvips' own limits
+    // are far higher, so this only trips the app's cap.
+    const bomb = bombPng(16385, 4096);
+    expect(await resizeIfWider(bomb, 1024)).toBeNull();
+    expect(await normalizeStoredImage(bomb)).toBeNull();
+  });
+
+  it("still normalizes a normal image", async () => {
+    const png = await sharp({
+      create: {
+        width: 200,
+        height: 100,
+        channels: 3,
+        background: { r: 245, g: 245, b: 245 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const resized = await resizeIfWider(png, 1024);
+    expect(resized).not.toBeNull();
+    const normalized = await normalizeStoredImage(png);
+    expect(normalized?.mime).toBe("image/jpeg");
   });
 });
