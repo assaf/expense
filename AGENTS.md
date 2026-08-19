@@ -20,29 +20,15 @@ new projects — this network has no working IPv6 route, and Vercel functions
 should not rely on it either. Use the **Supavisor pooler** on
 `aws-1-us-west-2.pooler.supabase.com` (IPv4):
 
-- **`DATABASE_URL` (runtime) — transaction-mode pooler, port 6543.** Every
-  Vercel serverless instance opens its own Prisma pool, so session mode (one
-  dedicated backend connection per pooled client) exhausted the pooler cap under
-  the image-heavy list page. Transaction mode shares one small backend pool
-  across all clients — connections are checked out only for the duration of a
-  query/transaction, so serverless instances stop holding dedicated slots.
-  Supavisor's transaction mode handles the extended protocol / prepared
-  statements and Prisma's batch + interactive transactions (verified against
-  prod with the PrismaPg adapter).
-  **Both pooler URLs must carry `?sslmode=no-verify`.** The pooler requires
-  TLS (rejects plaintext with `(ESSLREQUIRED)`), but its cert is signed by
-  Supabase's private CA (`Supabase Intermediate 2021 CA`), and pg >= 8.13
-  verifies the chain for `sslmode=require`/`verify-full` (fails with
-  "self-signed certificate"). `no-verify` = encrypt-only, which is the
-  long-standing behavior. A URL pasted from the Supabase dashboard's copy
-  button has NO sslmode param — every DB call then fails `(ESSLREQUIRED)`;
-  this is how prod broke in Aug 2026 (URL re-pasted without the param).
-- **`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`,
-  `scripts/migrate-prod` and `scripts/clone`) — session-mode pooler, port 5432.** Migrations and DDL want stable sessions; the session pooler behaves
-  like a direct connection. Keep it here, not on the transaction pooler. Also
-  mirrored as the `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI
-  `migrate-db` job (the CI `VERCEL_TOKEN` can't read project settings, so the
-  DDL URL is passed directly rather than pulled via the Vercel CLI).
+**`DATABASE_URL` (runtime) — transaction-mode pooler, port 6543.** Every Vercel
+serverless instance opens its own Prisma pool, so session mode (one dedicated
+backend connection per pooled client) exhausted the pooler cap under the
+image-heavy list page. Transaction mode shares one small backend pool across all
+clients — connections are checked out only for the duration of a
+query/transaction, so serverless instances stop holding dedicated slots.
+Supavisor's transaction mode handles the extended protocol / prepared statements
+and Prisma's batch + interactive transactions (verified against prod with the
+PrismaPg adapter).
 
 Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
 pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for 30s
@@ -57,24 +43,9 @@ connections reached, limit: <pool_size>` while holding most of the budget idle
 `DATABASE_URL` back to port 5432 — but session mode is strictly worse under
 serverless (one dedicated slot per client); fix the pooler instead.
 
-Incident 2026-08-16: prod 500s with `(EMAXCONN) max client connections
-reached, limit: 200` on `prisma.user.findUnique`. `max_connections` was still
-60; the pooler already held ~44 idle backends plus ~8 Supabase services
-(PostgREST/pg_net/pg_cron/exporter), so the budget was near-exhausted at
-idle. Cause: `pool_size` had been raised to 200 (3.3× the whole budget) in
-Supabase → Database → Connection pooling. Fix: session pooler ≤ 40,
-transaction pooler 10–15.
-
-When setting these in Vercel, add them with `vercel env add … --no-sensitive`: a
-_Sensitive_ var pulls back as `[SENSITIVE]` in `vercel env pull`, which silently
-breaks `scripts/deploy` (psql then falls back to stale `PG*` env vars). The old
-Vercel Neon integration (which set `DATABASE_URL`, `PGHOST`, `POSTGRES_URL`,
-`NEON_*`, …) was disconnected in Aug 2026 — don't re-add it. The abandoned Neon
-database still exists as a rollback fallback.
-
 ## Commands
 
-```bash
+```sh
 pnpm dev             # dev server
 pnpm check           # prisma generate + react-router typegen + vp check
 pnpm build           # production build
@@ -85,29 +56,7 @@ pnpm db:migrate      # apply prisma/migrations (deploy)
 pnpm setup:push      # FastMail push setup: generate keys, create the push subscription
 pnpm test            # force-resets expense_test schema + 91 tests (incl. image blobs)
 ./scripts/deploy [--skip-tests]  # check + tests + prod db sync + vercel deploy --prod + open site
-./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql), then sync the local schema to the latest (prisma db push) and reconcile the migration history (prod applies schema with db push, which never records migrations — the clone marks the dump's missing migrations as applied)
-# NOTE: prod runs on Vercel (Supabase Postgres) — `./scripts/deploy` handles
-# schema sync via `vercel env pull` + `prisma db push`, then CLI-deploys and
-# opens the site. `git push origin main` also auto-deploys: the CI workflow's
-# `migrate-db` job passes the prod DDL URL via the `DATABASE_URL_UNPOOLED`
-# GitHub secret and runs `prisma db push`. It does NOT use the Vercel CLI: the
-# `VERCEL_TOKEN` secret can list deployments (smoke job) but is denied on the
-# project-settings/team endpoints `vercel env pull` needs (403
-# PROJECT_UNAUTHORIZED), so the DDL URL is passed directly instead. DEPLOY
-# ORDERING CONTRACT: secretlint → check & test → migrate prod DB →
-# pdf-ocr-smoke. The smoke
-# check (CI `pdf-ocr-smoke`, and the post-deploy /api/smoke curl) runs the
-# deployed bundle against the prod schema and fails on any schema change if the
-# migration was skipped. Migrations must NEVER run before the test suite:
-# `scripts/deploy` runs `pnpm test` before calling migrate-prod, and the CI
-# `migrate-db` job needs both `check` and `test` (which run in parallel, after
-# the secretlint gate). The workflow's job timeouts bound the whole run (~10m
-# ceiling — secretlint 2m + max(check 2m, test 4m) + migrate 2m + smoke 2m —
-# typical ~5m). Schema changes: `prisma migrate
-# dev` locally, then run deploy to sync prod (migration history exists since Jul
-# 2026). Note: `vercel env pull` merges with the existing file, so stale local
-# entries (e.g. leftover `PGHOST`) survive — delete `.env.prod.pull`/
-# `.env.prod` before pulling if they cause trouble.
+./scripts/clone              # clone the prod (Supabase) DB into the local dev DB (prisma/backup.sql)
 ```
 
 Run `pnpm check` before committing.
