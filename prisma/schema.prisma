@@ -315,6 +315,30 @@ model EmailConnection {
   @@map("email_connections")
 }
 
+/// A rule deciding which emails connected accounts auto-import. General
+/// rules (accountId = "") apply to every workspace and are synced from the
+/// seed file (app/data/email-rules.ts) on boot; user rules are scoped to a
+/// workspace and learned when the user forwards a receipt via
+/// receipts-by-email. `sender` is a lowercase address (exact match) or a
+/// bare domain (matches the domain and any subdomain).
+model EmailRule {
+  id        String @id
+  accountId String // "" = general rule (all workspaces)
+  sender    String
+  /// seed (general) | forward (learned from a user forward) | inferred
+  source    String
+  createdAt String
+
+  // No Account relation ON PURPOSE: general rules use accountId = "" (no
+  // matching row), like the global MileageRate table. Orphaned user rules
+  // after an account delete are harmless — matching always passes a live
+  // accountId, so they simply never match again.
+
+  @@unique([accountId, sender])
+  @@index([sender])
+  @@map("email_rules")
+}
+
 /// One row per email evaluated for a connected account — the health/audit
 /// log for the auto-import pipeline ("never lose an expense"): every decision
 /// (ignored / created / error) is recorded, plus the matched rule and any

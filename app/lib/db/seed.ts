@@ -1,5 +1,6 @@
 import { ulid } from "ulid";
 import { MILEAGE_RATES } from "~/data/mileage-rates";
+import { GENERAL_EMAIL_RULES } from "~/data/email-rules";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
@@ -52,6 +53,7 @@ export async function initStore(): Promise<void> {
         });
       }
       await syncMileageRates();
+      await syncGeneralEmailRules();
     })().catch((error) => {
       // Allow a retry on the next call if seeding failed partway.
       ready = undefined;
@@ -85,6 +87,36 @@ async function syncMileageRates(): Promise<void> {
     "[initStore] Synced IRS mileage rates: %d rows (was %d)",
     want.length,
     have.length,
+  );
+}
+
+/**
+ * The GENERAL email rules (accountId = ""), synced from the seed file
+ * (app/data/email-rules.ts) — same diff-based pattern as the mileage rates:
+ * an unchanged seed is a no-op on every boot. User rules (scoped rows) and
+ * removals made here (a general rule deleted from the seed) are never
+ * touched: the sync only adds/updates rows whose sender is in the seed.
+ */
+async function syncGeneralEmailRules(): Promise<void> {
+  const general = await prisma.emailRule.findMany({ where: { accountId: "" } });
+  const known = new Set(general.map((r) => r.sender));
+  const missing = GENERAL_EMAIL_RULES.filter((r) => !known.has(r.sender));
+  if (missing.length === 0) return;
+  const now = new Date().toISOString();
+  await prisma.emailRule.createMany({
+    data: missing.map((r) => ({
+      id: ulid(),
+      accountId: "",
+      sender: r.sender,
+      source: "seed",
+      createdAt: now,
+    })),
+    skipDuplicates: true,
+  });
+  console.warn(
+    "[initStore] Synced general email rules: +%d (was %d)",
+    missing.length,
+    general.length,
   );
 }
 

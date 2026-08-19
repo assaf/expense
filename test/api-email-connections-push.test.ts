@@ -57,6 +57,20 @@ vi.mock("~/lib/env", () => env);
 vi.mock("~/lib/email-connection-push.server", () => ({
   setConnectionVerificationCode: mocks.setConnectionVerificationCode,
 }));
+const drainMock = vi.hoisted(() => ({
+  drainEmailConnection: vi.fn(async () => ({
+    evaluated: 0,
+    created: 0,
+    partial: 0,
+    ignored: 0,
+    failed: 0,
+  })),
+}));
+
+vi.mock("~/lib/email-connection-process.server", () => ({
+  drainEmailConnection: drainMock.drainEmailConnection,
+}));
+
 vi.mock("~/lib/db/email-connections", () => ({
   readEmailConnectionById: mocks.readEmailConnectionById,
   touchEmailConnectionPush: mocks.touchEmailConnectionPush,
@@ -109,6 +123,14 @@ describe("api.email-connections-push", () => {
       mocks.setEmailConnectionStatus,
     ])
       m.mockClear();
+    drainMock.drainEmailConnection.mockClear();
+    drainMock.drainEmailConnection.mockResolvedValue({
+      evaluated: 0,
+      created: 0,
+      partial: 0,
+      ignored: 0,
+      failed: 0,
+    });
     mocks.readEmailConnectionById.mockClear();
     // Reset the default connection (tests may override per case).
     mocks.readEmailConnectionById.mockImplementation(async () => ({
@@ -182,7 +204,7 @@ describe("api.email-connections-push", () => {
     );
   });
 
-  it("stamps lastPushAt on StateChange", async () => {
+  it("stamps lastPushAt on StateChange and drains the connection", async () => {
     const res = await action(
       args(
         post(
@@ -195,6 +217,28 @@ describe("api.email-connections-push", () => {
     );
     expect(res.status).toBe(200);
     expect(mocks.touchEmailConnectionPush).toHaveBeenCalledWith("conn1");
+    expect(drainMock.drainEmailConnection).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags the connection when a drain fails", async () => {
+    drainMock.drainEmailConnection.mockRejectedValueOnce(
+      new Error("token revoked"),
+    );
+    const res = await action(
+      args(
+        post(
+          forge({
+            "@type": "StateChange",
+            changed: { "jmap-1": ["Email"] },
+          }),
+        ),
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith(
+      "conn1",
+      "error",
+    );
   });
 
   it("404s pushes for an unknown connection", async () => {

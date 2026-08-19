@@ -259,6 +259,7 @@ export interface InboundSenderRecord {
 /** A connected email account (auto-import). Never carries the API token. */
 export interface EmailConnectionRecord {
   id: string;
+  accountId: string;
   /** "fastmail" — JMAP. More providers later (Gmail, …). */
   provider: string;
   emailAddress: string;

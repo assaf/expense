@@ -7,6 +7,7 @@ import {
   setEmailConnectionStatus,
   touchEmailConnectionPush,
 } from "~/lib/db/email-connections";
+import { drainEmailConnection } from "~/lib/email-connection-process.server";
 import type { Route } from "./+types/api.email-connections-push";
 
 /**
@@ -101,7 +102,18 @@ export async function action({ request }: Route.ActionArgs) {
     try {
       await touchEmailConnectionPush(connection.id);
       console.info("[email-connections-push] state change", { connectionId });
-      // Phase 3: drain new mail for this connection here.
+      // Best effort — the daily cron is the catch-up net. A token revoked
+      // between push and drain shows up here and flags the connection.
+      try {
+        const result = await drainEmailConnection(connection);
+        console.info("[email-connections-push] drained", result);
+      } catch (err) {
+        console.error("[email-connections-push] drain failed:", {
+          connectionId,
+          err,
+        });
+        await setEmailConnectionStatus(connection.id, "error").catch(() => {});
+      }
     } catch (err) {
       console.error("[email-connections-push] touch failed:", {
         connectionId,

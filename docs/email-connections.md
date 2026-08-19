@@ -5,9 +5,9 @@ their inbox — no forwarding, no manual entry. Distinct from
 [receipts-by-email](receipts-by-email.md) (forward receipts to a dedicated
 address); both coexist.
 
-**Status: phases 1–2 shipped (connect/verify/disconnect + per-connection
-push webhook + renewal cron). Phase 3 (processing pipeline) and phase 4
-(rule inference) are planned.**
+**Status: phases 1–3 shipped (connect/verify/disconnect, per-connection
+push webhook + renewal cron, rules + processing pipeline). Phase 4
+(rule inference from an existing inbox) is planned.**
 
 ## What exists today
 
@@ -66,17 +66,31 @@ push webhook + renewal cron). Phase 3 (processing pipeline) and phase 4
   the key invalidates all stored tokens (users reconnect); it cannot be
   rotated without that cost.
 
+- **Rules** (`app/lib/db/email-rules.ts` + `app/data/email-rules.ts`):
+  general rules (seeded: Apple, Amazon, Uber, …) synced on boot by
+  `initStore`; user rules learned automatically when a receipt forward
+  imports successfully (`learnRuleFromForward` in the inbound pipeline —
+  the ORIGINAL sender from the forwarded content becomes the rule). A rule
+  is an exact address or a domain (matches subdomains).
+- **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
+  on each push (and daily via the cron) the Inbox is drained (3-day
+  lookback, EmailProcessLog = idempotency). Per email: self/bounce guards
+  → rule match (no match = ignore, untouched) → the shared receipt core
+  (same extraction/render/save as receipts-by-email — see
+  `selectReceiptSource`/`extractReceiptFromSource`/`saveExpenseFromExtraction`
+  in `inbound-email.server.ts`) → on success the email moves to **Trash**
+  and the mailbox owner gets a confirmation email (from their own mailbox,
+  with the edit link). Marketing mail from a rule-matched sender is
+  ignored in place. Errors are logged to EmailProcessLog and the email
+  stays in the Inbox — never trashed on failure, never re-expensed.
+  Counters: receivedCount per evaluated email, processedCount per created.
+- **JMAP mail ops as the user** (`app/lib/email-connection-mail.server.ts`):
+  Inbox query, raw RFC 5322 download, Trash move, and send (identity match
+  → upload → import → submit, one retry on transient submission failure).
+
 ## Planned (not built yet)
 
-1. **Phase 3 — processing**: rules engine (general rules seeded
-   Apple/Amazon/etc. + per-user rules learned when a user forwards a
-   receipt via receipts-by-email), body classification (receipt vs
-   marketing), expense creation through the existing extraction pipeline,
-   move the email to **Trash** (not destroy — recoverable), and a reply
-   email with the collected fields + edit link, sent from the user's own
-   mailbox via their token. Every decision logged in `EmailProcessLog`;
-   errors keep the email in place (never lose an expense).
-2. **General-rule inference (phase 4)**: scan a connected inbox (read-only)
+1. **General-rule inference (phase 4)**: scan a connected inbox (read-only)
    to propose general rules from senders with receipt-like history.
 
 ## Safety decisions

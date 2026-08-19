@@ -37,6 +37,7 @@ import {
   readInboundEmail,
   upsertInboundEmail,
 } from "~/lib/db/inbound";
+import { addEmailRule } from "~/lib/db/email-rules";
 import { readReportSummary } from "~/lib/db/reports";
 import { saveImage, readImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL } from "~/lib/env";
@@ -424,23 +425,29 @@ function reportChangeLine(opts: {
   return `<p style="margin-top:20px;font-size:14px;font-weight:600;color:#1f2937">FYI: ${escapeHtml(opts.report)} ${verb} from ${countLabel(before.count)} / ${formatAmount(before.total)} to ${countLabel(after.count)} / ${formatAmount(after.total)}</p>`;
 }
 
+/** Options for the confirmation email (shared by both email pipelines). */
+export interface ConfirmationEmailOptions {
+  expenseId: string;
+  date: string;
+  merchant: string;
+  amount: string;
+  category: string;
+  report: string;
+  description: string;
+  notes: string;
+  missing: string[];
+  /** Intro line — defaults to the forward-flow wording; the
+   * connected-account flow passes its own. */
+  intro?: string;
+  reportStats?: {
+    before: { count: number; total: string };
+    after: { count: number; total: string };
+  };
+}
+
 /** Build the confirmation email for a receipt import (partial or complete). */
 function confirmationHtml(
-  opts: {
-    expenseId: string;
-    date: string;
-    merchant: string;
-    amount: string;
-    category: string;
-    report: string;
-    description: string;
-    notes: string;
-    missing: string[];
-    reportStats?: {
-      before: { count: number; total: string };
-      after: { count: number; total: string };
-    };
-  },
+  opts: ConfirmationEmailOptions,
   subject: string,
 ): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
@@ -454,7 +461,9 @@ function confirmationHtml(
   ].join("");
 
   const blocks: string[] = [
-    `<p style="margin:8px 0">Thanks for forwarding your receipt. Here's what we found:</p>`,
+    `<p style="margin:8px 0">${escapeHtml(
+      opts.intro ?? "Thanks for forwarding your receipt. Here's what we found:",
+    )}</p>`,
     `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
   ];
 
@@ -482,22 +491,12 @@ function confirmationHtml(
 }
 
 /** The subject and HTML for a confirmation reply, so the subject line and
- * the in-body heading always match. */
-function confirmationEmail(opts: {
-  expenseId: string;
-  date: string;
-  merchant: string;
-  amount: string;
-  category: string;
-  report: string;
-  description: string;
-  notes: string;
-  missing: string[];
-  reportStats?: {
-    before: { count: number; total: string };
-    after: { count: number; total: string };
-  };
-}): { subject: string; html: string } {
+ * the in-body heading always match. Exported for the connected-account
+ * pipeline, which sends the same confirmation to the mailbox owner. */
+export function confirmationEmail(opts: ConfirmationEmailOptions): {
+  subject: string;
+  html: string;
+} {
   const subject = confirmationSubject({
     amount: opts.amount,
     category: opts.category,
@@ -530,7 +529,7 @@ const BOUNCE_SENDER_RE =
   /^(?:mailer-daemon|mail delivery system|postmaster|root)@/i;
 
 /** Is this email a bounce/autoreply, from metadata alone (no fetch)? */
-function looksLikeBounce(
+export function looksLikeBounce(
   data: Pick<EmailReceivedData, "from" | "subject">,
 ): boolean {
   return (
@@ -540,7 +539,9 @@ function looksLikeBounce(
 }
 
 /** Is this email a DSN/autoreply, from parsed headers (after fetch)? */
-function isDeliveryNotification(headers: Record<string, string>): boolean {
+export function isDeliveryNotification(
+  headers: Record<string, string>,
+): boolean {
   const contentType = (headers["content-type"] ?? "").toLowerCase();
   if (
     contentType.includes("multipart/report") ||
@@ -561,6 +562,374 @@ function isDeliveryNotification(headers: Record<string, string>): boolean {
  * ProcessResult for the route to log; failure replies are sent by the
  * pipeline itself.
  */
+
+// --- Rule learning from forwards ----------------------------------------------
+//
+// When a user forwards a receipt, the ORIGINAL sender (inside the forwarded
+// content) becomes a user-specific email rule: future mail from that sender
+// to a connected mailbox of the same workspace auto-imports.
+
+/** The bare domain of an address ("a@b.example.com" -> "b.example.com"). */
+function domainOf(address: string): string | null {
+  const domain = address.split("@")[1]?.toLowerCase();
+  return domain && domain.includes(".") ? domain : null;
+}
+
+const FORWARD_FROM_RE =
+  /^[ \t]*From:[ \t]*(?:["']?[^"'\n<>]*["']?[ \t])?<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/im;
+
+/**
+ * The original sender inside a forwarded email: the From header of an .eml
+ * attachment, else the first quoted "From:" line in the body. Null when the
+ * forward carries no recognizable original sender.
+ */
+async function originalForwardedSender(
+  email: Pick<ReceivedEmail, "text" | "html">,
+  attachments: AttachmentMeta[],
+  deps: Pick<InboundDeps, "downloadAttachment">,
+): Promise<string | null> {
+  const eml = attachments.find(isEmlMeta);
+  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
+    const text = (await deps.downloadAttachment(eml))
+      .toString("utf8")
+      .slice(0, 100_000);
+    const match = text.match(FORWARD_FROM_RE);
+    if (match) return domainOf(match[1]!);
+  }
+  const body = email.text || htmlToText(email.html ?? "");
+  const match = body.match(FORWARD_FROM_RE);
+  if (match) return domainOf(match[1]!);
+  return null;
+}
+
+/** Learn a user rule from a successfully imported forward (best effort —
+ * failures log a warning and never affect the import). */
+async function learnRuleFromForward(
+  accountId: string,
+  email: Pick<ReceivedEmail, "text" | "html">,
+  attachments: AttachmentMeta[],
+  deps: Pick<InboundDeps, "downloadAttachment">,
+): Promise<void> {
+  try {
+    const sender = await originalForwardedSender(email, attachments, deps);
+    if (!sender) return;
+    const result = await addEmailRule({ accountId, sender, source: "forward" });
+    if (result.ok) {
+      console.info("[inbound] learned email rule", { accountId, sender });
+    }
+  } catch (err) {
+    console.warn("[inbound] email rule learning failed:", err);
+  }
+}
+
+// --- Shared core (reused by the connected-email-accounts pipeline) ----------
+//
+// processInboundEvent is the receipts-by-email flow (verified forwarders,
+// replies to the sender). The connected-account pipeline shares the heavy
+// middle — pick the receipt source, extract, render, save the expense —
+// through these three helpers, and differs in everything around them
+// (rules instead of sender verification, Trash instead of destroy,
+// notification to the mailbox owner instead of a reply to the sender).
+
+/** The receipt source + the email's own date, picked from an email. */
+interface SelectedReceiptSource {
+  source: ReceiptSource | null;
+  expenseDate: string;
+}
+
+/**
+ * Pick what becomes the receipt: the best attachment (LLM tiebreak on
+ * ambiguity), else the email body. Also resolves the expense date
+ * (forwarded-quote → .eml → received header). `source` is null when
+ * neither the email nor its attachments carry anything usable.
+ */
+export async function selectReceiptSource(
+  email: ReceivedEmail,
+  attachments: AttachmentMeta[],
+  deps: InboundDeps,
+): Promise<SelectedReceiptSource> {
+  // Original email date: forwarded-quote → .eml → received header.
+  const eml = attachments.find(isEmlMeta);
+  let emlText: string | undefined;
+  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
+    emlText = (await deps.downloadAttachment(eml))
+      .toString("utf8")
+      .slice(0, 100_000);
+  }
+  const expenseDate = extractExpenseDate(email, emlText);
+
+  // Pick the receipt: best attachment, LLM tiebreak, else the email body.
+  const pick = pickReceiptAttachment(attachments, email.html ?? "");
+  let source: ReceiptSource | null = null;
+  if (pick && !pick.ambiguous) {
+    const meta = attachments[pick.index]!;
+    const buffer = await deps.downloadAttachment(meta);
+    source = {
+      kind: "attachment",
+      buffer,
+      contentType: meta.content_type ?? "",
+      filename: meta.filename,
+    };
+  } else if (pick?.ambiguous) {
+    const candidates: AttachmentCandidate[] = attachments
+      .map((meta, index) => ({
+        index,
+        filename: meta.filename,
+        contentType: meta.content_type ?? "",
+        size: meta.size,
+        inline: meta.content_disposition?.toLowerCase() === "inline",
+        referenced:
+          Boolean(meta.content_id) &&
+          Boolean(email.html?.includes(`cid:${meta.content_id}`)),
+      }))
+      .filter(
+        (c) =>
+          isPdf({ mime: c.contentType, originalName: c.filename }) ||
+          isImage({ mime: c.contentType, originalName: c.filename }),
+      );
+    const chosen = await deps.classifyAttachment(candidates);
+    if (chosen !== null && attachments[chosen]) {
+      const meta = attachments[chosen]!;
+      const buffer = await deps.downloadAttachment(meta);
+      source = {
+        kind: "attachment",
+        buffer,
+        contentType: meta.content_type ?? "",
+        filename: meta.filename,
+      };
+    }
+  }
+  if (!source) {
+    const bodyText = (email.text || htmlToText(email.html ?? "")).trim();
+    if (bodyText) source = { kind: "body", text: bodyText };
+  }
+  return { source, expenseDate };
+}
+
+/** Extraction output for a picked receipt source. */
+interface ExtractedReceipt {
+  extraction: ExtractionResult;
+  receiptImage: Buffer | null;
+  imageMime: string;
+  originalName: string;
+  renderError: string;
+}
+
+/**
+ * Extract the receipt data from the picked source: OCR for attachments,
+ * known-merchant fast path or the model for body text, with the rendered
+ * email as the receipt image. Returns null when the content isn't a
+ * receipt (the caller decides what to tell the user).
+ */
+export async function extractReceiptFromSource(opts: {
+  accountId: string;
+  email: ReceivedEmail;
+  attachments: AttachmentMeta[];
+  source: ReceiptSource;
+  deps: InboundDeps;
+}): Promise<ExtractedReceipt | null> {
+  const { email, attachments, source, deps } = opts;
+  const context = await readExtractionContext(opts.accountId);
+  let extraction: ExtractionResult;
+  let receiptImage: Buffer | null = null;
+  let imageMime: string;
+  let originalName: string;
+  let renderError = "";
+
+  if (source.kind === "attachment") {
+    const { buffer, contentType, filename } = source;
+    // extractFromImage handles PDFs (rasterizes to PNG and prefers the
+    // text layer) and normalizes other images to a browser-displayable
+    // form; `stored` is the bytes saved as the receipt image.
+    const ocr = await deps.extractFromImage({
+      accountId: opts.accountId,
+      buffer,
+      mime: contentType || "application/octet-stream",
+      categories: context.categories,
+      reports: context.reports,
+      knownMerchants: context.knownMerchants,
+    });
+    extraction = ocr.result;
+    receiptImage = ocr.stored.buffer;
+    imageMime = ocr.stored.mime;
+    // The stored bytes are always displayable: PDFs and HEIC/BMP/TIFF
+    // inputs come back as PNG, so the stored name gets a .png extension.
+    originalName = /\.pdf$/i.test(filename)
+      ? filename.replace(/\.pdf$/i, ".png")
+      : imageMime === "image/png" &&
+          /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
+        ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
+        : filename;
+  } else {
+    const bodyText = stripForwardedText(source.text).slice(0, 20_000);
+    // Render the actual email with headless Chromium — the HTML part when
+    // present, otherwise the plain text as a narrow email-style column.
+    // The resvg text sheet stays as the final fallback (e.g. a runtime
+    // without a browser binary). The forward-quote header block is
+    // stripped first so the receipt image shows the receipt, not the
+    // envelope.
+    const cleanHtml = stripForwardHeader(email.html ?? "");
+    if (cleanHtml) {
+      try {
+        receiptImage = await deps.renderEmailImage(cleanHtml, {
+          resolveImage: makeCidResolver(attachments, cleanHtml, deps),
+          fetchRemoteImage: fetchRemoteImageImpl,
+        });
+      } catch (err) {
+        renderError = err instanceof Error ? err.message : String(err);
+        receiptImage = null;
+      }
+    } else {
+      try {
+        receiptImage = await deps.renderTextEmail(bodyText, {
+          subject: email.subject,
+          from: email.from,
+        });
+      } catch (err) {
+        renderError = err instanceof Error ? err.message : String(err);
+        receiptImage = null;
+      }
+    }
+    if (!receiptImage) {
+      try {
+        receiptImage = await deps.renderReceiptImage(bodyText, {
+          subject: email.subject,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        renderError = renderError ? `${renderError}; ${message}` : message;
+        receiptImage = null;
+      }
+    }
+    imageMime = "image/png";
+    originalName = "email-receipt.png";
+    // Known-merchant skip: the body names a merchant the account has spent
+    // with before and carries a parseable total — no model call needed.
+    extraction =
+      tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
+      (await deps.extractReceipt({
+        accountId: opts.accountId,
+        text: bodyText,
+        categories: context.categories,
+        reports: context.reports,
+      }));
+    if (renderError) {
+      console.error("[inbound] email receipt render failed:", renderError);
+    }
+  }
+
+  // Classify as receipt? If the model says it isn't one and gave nothing
+  // usable, don't create an expense.
+  const hasUsableData = Boolean(extraction.merchant || extraction.amount);
+  if (!extraction.isReceipt && !hasUsableData) {
+    return null;
+  }
+  return { extraction, receiptImage, imageMime, originalName, renderError };
+}
+
+/** Before/after report stats for the confirmation email. */
+interface ReportSummaryStats {
+  before: { count: number; total: string };
+  after: { count: number; total: string };
+}
+
+/** A saved expense plus everything its confirmation email needs. */
+interface SavedExpense {
+  expenseId: string;
+  missing: string[];
+  category: string;
+  report: string;
+  reportStats?: ReportSummaryStats;
+  receiptAttachment?: { content: string; filename: string };
+}
+
+/** Build and save the expense from extracted data (date always comes from
+ * the email, never the model); returns what the confirmation email needs. */
+export async function saveExpenseFromExtraction(opts: {
+  accountId: string;
+  expenseDate: string;
+  extraction: ExtractionResult;
+  receiptImage: Buffer | null;
+  imageMime: string;
+  originalName: string;
+}): Promise<SavedExpense> {
+  const { extraction, receiptImage } = opts;
+  const missing: string[] = [];
+  if (!opts.expenseDate) missing.push("date");
+  if (!extraction.merchant) missing.push("merchant");
+  if (!extraction.amount) missing.push("amount");
+
+  let imageFile = "";
+  let imageMime = opts.imageMime;
+  if (receiptImage) {
+    const saved = await saveImage(
+      opts.accountId,
+      receiptImage,
+      imageMime,
+      opts.originalName,
+    );
+    imageFile = saved.filename;
+    // saveImage may have re-encoded the format (e.g. PNG → JPEG) — record
+    // the mime of the bytes actually stored, not the renderer's mime.
+    imageMime = saved.mime;
+  } else {
+    missing.push("receipt image");
+  }
+
+  const context = await readExtractionContext(opts.accountId);
+  const { category, report } = resolveExtraction(context, {
+    merchant: extraction.merchant,
+    category: extraction.category,
+    report: extraction.report,
+  });
+  if (!category) missing.push("category");
+
+  const expense: ReceiptExpense = {
+    ...(newExpenseShell("receipt") as ReceiptExpense),
+    date: opts.expenseDate,
+    report,
+    category,
+    description: extraction.description,
+    amount: extraction.amount,
+    merchant: extraction.merchant,
+    imageFile,
+    imageMime,
+    originalName: opts.originalName,
+  };
+  await upsertExpense(expense, opts.accountId);
+
+  // The receipt image for the confirmation email (base64 attachment).
+  const receiptAttachment = await receiptImageAttachment(
+    opts.accountId,
+    imageFile,
+  );
+
+  // Compute report before/after stats when a report is assigned.
+  let reportStats: ReportSummaryStats | undefined;
+  if (report) {
+    const summary = await readReportSummary(opts.accountId, report);
+    if (summary) {
+      const amt = extraction.amount ? Number(extraction.amount) : 0;
+      reportStats = {
+        before: {
+          count: summary.count - 1,
+          total: (Number(summary.total) - amt).toFixed(2),
+        },
+        after: { count: summary.count, total: summary.total },
+      };
+    }
+  }
+
+  return {
+    expenseId: expense.id,
+    missing,
+    category,
+    report,
+    reportStats,
+    receiptAttachment,
+  };
+}
+
 export async function processInboundEvent(
   data: EmailReceivedData,
   deps: InboundDeps,
@@ -664,241 +1033,47 @@ export async function processInboundEvent(
       return { status: "bounce" };
     }
 
-    // Original email date: forwarded-quote → .eml → received header.
-    const eml = attachments.find(isEmlMeta);
-    let emlText: string | undefined;
-    if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
-      emlText = (await deps.downloadAttachment(eml))
-        .toString("utf8")
-        .slice(0, 100_000);
-    }
-    const expenseDate = extractExpenseDate(email, emlText);
-
-    // Pick the receipt: best attachment, LLM tiebreak, else the email body.
-    const pick = pickReceiptAttachment(attachments, email.html ?? "");
-    let source: ReceiptSource | null = null;
-    if (pick && !pick.ambiguous) {
-      const meta = attachments[pick.index]!;
-      const buffer = await deps.downloadAttachment(meta);
-      source = {
-        kind: "attachment",
-        buffer,
-        contentType: meta.content_type ?? "",
-        filename: meta.filename,
-      };
-    } else if (pick?.ambiguous) {
-      const candidates: AttachmentCandidate[] = attachments
-        .map((meta, index) => ({
-          index,
-          filename: meta.filename,
-          contentType: meta.content_type ?? "",
-          size: meta.size,
-          inline: meta.content_disposition?.toLowerCase() === "inline",
-          referenced:
-            Boolean(meta.content_id) &&
-            Boolean(email.html?.includes(`cid:${meta.content_id}`)),
-        }))
-        .filter(
-          (c) =>
-            isPdf({ mime: c.contentType, originalName: c.filename }) ||
-            isImage({ mime: c.contentType, originalName: c.filename }),
-        );
-      const chosen = await deps.classifyAttachment(candidates);
-      if (chosen !== null && attachments[chosen]) {
-        const meta = attachments[chosen]!;
-        const buffer = await deps.downloadAttachment(meta);
-        source = {
-          kind: "attachment",
-          buffer,
-          contentType: meta.content_type ?? "",
-          filename: meta.filename,
-        };
-      }
-    }
-    if (!source) {
-      const bodyText = (email.text || htmlToText(email.html ?? "")).trim();
-      if (bodyText) source = { kind: "body", text: bodyText };
-    }
-    if (!source) {
+    const selected = await selectReceiptSource(email, attachments, deps);
+    if (!selected.source) {
       return await fail("No receipt found", [
-        `We couldn't find a receipt in the email${subject ? ` “${escapeHtml(subject)}”` : ""} or in any of its attachments.`,
+        `We couldn't find a receipt in the email${subject ? ` \u201c${escapeHtml(subject)}\u201d` : ""} or in any of its attachments.`,
         "Forward the receipt email again, or add the expense manually in the app.",
       ]);
     }
 
-    // Extract receipt data.
-    const context = await readExtractionContext(account.id);
-    let extraction: ExtractionResult;
-    let receiptImage: Buffer | null = null;
-    let imageMime: string;
-    let originalName: string;
-    let renderError = "";
-
-    if (source.kind === "attachment") {
-      const { buffer, contentType, filename } = source;
-      // extractFromImage handles PDFs (rasterizes to PNG and prefers the
-      // text layer) and normalizes other images to a browser-displayable
-      // form; `stored` is the bytes saved as the receipt image.
-      const ocr = await deps.extractFromImage({
-        accountId: account.id,
-        buffer,
-        mime: contentType || "application/octet-stream",
-        categories: context.categories,
-        reports: context.reports,
-        knownMerchants: context.knownMerchants,
-      });
-      extraction = ocr.result;
-      receiptImage = ocr.stored.buffer;
-      imageMime = ocr.stored.mime;
-      // The stored bytes are always displayable: PDFs and HEIC/BMP/TIFF
-      // inputs come back as PNG, so the stored name gets a .png extension.
-      originalName = /\.pdf$/i.test(filename)
-        ? filename.replace(/\.pdf$/i, ".png")
-        : imageMime === "image/png" &&
-            /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
-          ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
-          : filename;
-    } else {
-      const bodyText = stripForwardedText(source.text).slice(0, 20_000);
-      // Render the actual email with headless Chromium — the HTML part when
-      // present, otherwise the plain text as a narrow email-style column.
-      // The resvg text sheet stays as the final fallback (e.g. a runtime
-      // without a browser binary). The forward-quote header block is
-      // stripped first so the receipt image shows the receipt, not the
-      // envelope.
-      const cleanHtml = stripForwardHeader(email.html ?? "");
-      if (cleanHtml) {
-        try {
-          receiptImage = await deps.renderEmailImage(cleanHtml, {
-            resolveImage: makeCidResolver(attachments, cleanHtml, deps),
-            fetchRemoteImage: fetchRemoteImageImpl,
-          });
-        } catch (err) {
-          renderError = err instanceof Error ? err.message : String(err);
-          receiptImage = null;
-        }
-      } else {
-        try {
-          receiptImage = await deps.renderTextEmail(bodyText, {
-            subject: email.subject,
-            from: email.from,
-          });
-        } catch (err) {
-          renderError = err instanceof Error ? err.message : String(err);
-          receiptImage = null;
-        }
-      }
-      if (!receiptImage) {
-        try {
-          receiptImage = await deps.renderReceiptImage(bodyText, {
-            subject: email.subject,
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          renderError = renderError ? `${renderError}; ${message}` : message;
-          receiptImage = null;
-        }
-      }
-      imageMime = "image/png";
-      originalName = "email-receipt.png";
-      // Known-merchant skip: the body names a merchant the account has spent
-      // with before and carries a parseable total — no model call needed.
-      extraction =
-        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
-        (await deps.extractReceipt({
-          accountId: account.id,
-          text: bodyText,
-          categories: context.categories,
-          reports: context.reports,
-        }));
-      if (renderError) {
-        console.error("[inbound] email receipt render failed:", renderError);
-      }
-    }
-
-    // Classify as receipt? If the model says it isn't one and gave nothing
-    // usable, don't create an expense.
-    const hasUsableData = Boolean(extraction.merchant || extraction.amount);
-    if (!extraction.isReceipt && !hasUsableData) {
-      return await fail("Not a receipt", [
-        `The email${subject ? ` “${escapeHtml(subject)}”` : ""} doesn't look like a receipt, invoice, or order confirmation, so nothing was imported.`,
-        "Forward the receipt email again, or add the expense manually in the app.",
-      ]);
-    }
-
-    // Build the expense (date always comes from the email, never the model).
-    const missing: string[] = [];
-    if (!expenseDate) missing.push("date");
-    if (!extraction.merchant) missing.push("merchant");
-    if (!extraction.amount) missing.push("amount");
-
-    let imageFile = "";
-    if (receiptImage) {
-      const saved = await saveImage(
-        account.id,
-        receiptImage,
-        imageMime,
-        originalName,
-      );
-      imageFile = saved.filename;
-      // saveImage may have re-encoded the format (e.g. PNG → JPEG) — record
-      // the mime of the bytes actually stored, not the renderer's mime.
-      imageMime = saved.mime;
-    } else {
-      missing.push("receipt image");
-    }
-
-    const { category, report } = resolveExtraction(context, {
-      merchant: extraction.merchant,
-      category: extraction.category,
-      report: extraction.report,
+    const extracted = await extractReceiptFromSource({
+      accountId: account.id,
+      email,
+      attachments,
+      source: selected.source,
+      deps,
     });
-    if (!category) missing.push("category");
-
-    const expense: ReceiptExpense = {
-      ...(newExpenseShell("receipt") as ReceiptExpense),
-      date: expenseDate,
-      report,
-      category,
-      description: extraction.description,
-      amount: extraction.amount,
-      merchant: extraction.merchant,
-      imageFile,
-      imageMime,
-      originalName,
-    };
-    await upsertExpense(expense, account.id);
-
-    // The receipt image for the confirmation reply (base64 attachment).
-    const receiptAttachment = await receiptImageAttachment(
-      account.id,
-      imageFile,
-    );
-
-    // Compute report before/after stats when a report is assigned.
-    let reportStats:
-      | {
-          before: { count: number; total: string };
-          after: { count: number; total: string };
-        }
-      | undefined;
-    if (report) {
-      const summary = await readReportSummary(account.id, report);
-      if (summary) {
-        const amt = extraction.amount ? Number(extraction.amount) : 0;
-        reportStats = {
-          before: {
-            count: summary.count - 1,
-            total: (Number(summary.total) - amt).toFixed(2),
-          },
-          after: { count: summary.count, total: summary.total },
-        };
-      }
+    if (!extracted) {
+      return await fail("Not a receipt", [
+        `The email${subject ? ` \u201c${escapeHtml(subject)}\u201d` : ""} doesn't look like a receipt, invoice, or order confirmation, so nothing was imported.`,
+        "Forward the receipt email again, or add the expense manually in the app.",
+      ]);
     }
+
+    const saved = await saveExpenseFromExtraction({
+      accountId: account.id,
+      expenseDate: selected.expenseDate,
+      extraction: extracted.extraction,
+      receiptImage: extracted.receiptImage,
+      imageMime: extracted.imageMime,
+      originalName: extracted.originalName,
+    });
+    const { missing, category, report } = saved;
+    const expenseDate = selected.expenseDate;
+    const extraction = extracted.extraction;
+    const renderError = extracted.renderError;
+    const receiptAttachment = saved.receiptAttachment;
+    const reportStats = saved.reportStats;
+    const expenseId = saved.expenseId;
 
     if (missing.length > 0) {
       const confirmation = confirmationEmail({
-        expenseId: expense.id,
+        expenseId,
         date: expenseDate,
         merchant: extraction.merchant,
         amount: extraction.amount,
@@ -925,6 +1100,7 @@ export async function processInboundEvent(
         html: confirmation.html,
         attachments: receiptAttachment ? [receiptAttachment] : undefined,
       });
+      await learnRuleFromForward(account.id, email, attachments, deps);
       await upsertInboundEmail({
         emailId: data.email_id,
         accountId: account.id,
@@ -932,12 +1108,12 @@ export async function processInboundEvent(
         status: "partial",
         error: `Missing: ${missing.join(", ")}`,
       });
-      return { status: "partial", expenseId: expense.id, missing };
+      return { status: "partial", expenseId, missing };
     }
 
     // Successful import — send a confirmation email with the details.
     const confirmation = confirmationEmail({
-      expenseId: expense.id,
+      expenseId,
       date: expenseDate,
       merchant: extraction.merchant,
       amount: extraction.amount,
@@ -962,6 +1138,7 @@ export async function processInboundEvent(
       attachments: receiptAttachment ? [receiptAttachment] : undefined,
     });
 
+    await learnRuleFromForward(account.id, email, attachments, deps);
     await upsertInboundEmail({
       emailId: data.email_id,
       accountId: account.id,
@@ -969,7 +1146,7 @@ export async function processInboundEvent(
       status: "created",
       error: "",
     });
-    return { status: "created", expenseId: expense.id };
+    return { status: "created", expenseId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[inbound] processing failed:", err);

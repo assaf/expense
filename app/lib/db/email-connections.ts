@@ -21,6 +21,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function toView(
   row: {
     id: string;
+    accountId: string;
     provider: string;
     emailAddress: string;
     status: string;
@@ -35,6 +36,7 @@ function toView(
 ): EmailConnectionView {
   return {
     id: row.id,
+    accountId: row.accountId,
     provider: row.provider,
     emailAddress: row.emailAddress,
     status: row.status,
@@ -50,6 +52,7 @@ function toView(
 
 const CONNECTION_SELECT = {
   id: true,
+  accountId: true,
   provider: true,
   emailAddress: true,
   status: true,
@@ -111,6 +114,7 @@ export interface EmailConnectionWithSecret extends EmailConnectionRecord {
 
 function rowWithSecret(row: {
   id: string;
+  accountId: string;
   provider: string;
   emailAddress: string;
   status: string;
@@ -125,6 +129,7 @@ function rowWithSecret(row: {
 }): EmailConnectionWithSecret {
   return {
     id: row.id,
+    accountId: row.accountId,
     provider: row.provider,
     emailAddress: row.emailAddress,
     status: row.status,

@@ -1,6 +1,7 @@
 import { CRON_SECRET, PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
+import { drainEmailConnection } from "~/lib/email-connection-process.server";
 import {
   listAllEmailConnections,
   setEmailConnectionStatus,
@@ -46,6 +47,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     id: string;
     subscriptionId?: string;
     created?: boolean;
+    drained?: { evaluated: number; created: number };
     error?: string;
   }> = [];
   let failed = 0;
@@ -56,10 +58,22 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (connection.status === "error") {
         await setEmailConnectionStatus(connection.id, "active");
       }
+      // Catch-up drain for anything a missed push left behind.
+      let drained: { evaluated: number; created: number } | undefined;
+      try {
+        const drain = await drainEmailConnection(connection);
+        drained = { evaluated: drain.evaluated, created: drain.created };
+      } catch (err) {
+        console.error("[email-connections-cron] drain failed", {
+          connectionId: connection.id,
+          err,
+        });
+      }
       results.push({
         id: connection.id,
         subscriptionId: sub.subscriptionId,
         created: sub.created,
+        drained,
       });
     } catch (err) {
       failed++;
