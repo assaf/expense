@@ -1,5 +1,10 @@
-import { DEEPSEEK_API_KEY, DEEPSEEK_MODEL } from "~/lib/env";
+import {
+  extractionCacheKey,
+  readCachedExtraction,
+  writeCachedExtraction,
+} from "~/lib/db/extraction-cache";
 import { normalizeMerchant } from "~/lib/duplicates";
+import { DEEPSEEK_API_KEY, DEEPSEEK_MODEL } from "~/lib/env";
 import { normalizeAmount } from "~/lib/format";
 
 /**
@@ -18,6 +23,8 @@ import { normalizeAmount } from "~/lib/format";
  */
 
 interface ExtractionInput {
+  /** Scoped cache key — extraction results are per-account. */
+  accountId: string;
   text?: string;
   image?: { buffer: Buffer; mime: string };
   /** Existing category names — the model picks the closest one or "". */
@@ -27,6 +34,205 @@ interface ExtractionInput {
 }
 
 type Confidence = "high" | "medium" | "low";
+
+/**
+ * A merchant the account has spent with before (last 90 days): its display
+ * name plus the category/report of its most recent expense for each field.
+ * The map keys are normalized merchant names (same rule as duplicate
+ * detection), the values carry the display spelling. Built once per
+ * extraction by `readKnownMerchants`; the LLM-skip path matches receipt
+ * text against these before any model call.
+ */
+export interface KnownMerchant {
+  /** Display spelling from the most recent expense for this merchant. */
+  display: string;
+  /** Category of the merchant's most recent categorized expense, or "". */
+  category: string;
+  /** Report of the merchant's most recent reported expense, or "". */
+  report: string;
+}
+
+/**
+ * The first word-bounded occurrence of a known merchant name in the
+ * receipt text, choosing the longest (most specific) match when several
+ * known merchants appear. Returns null when none match. The text is
+ * normalized the same way as merchant keys (lowercase, whitespace
+ * collapsed) so line breaks and case inside a merchant name don't hide it.
+ */
+export function matchKnownMerchant(
+  text: string,
+  known: ReadonlyMap<string, KnownMerchant>,
+): KnownMerchant | null {
+  if (!text || known.size === 0) return null;
+  const normalized = text.toLowerCase().replace(/\s+/g, " ");
+  let best: { key: string; merchant: KnownMerchant } | null = null;
+  for (const [key, merchant] of known) {
+    if (!key) continue;
+    let from = 0;
+    for (;;) {
+      const i = normalized.indexOf(key, from);
+      if (i === -1) break;
+      if (isWordBounded(normalized, i, i + key.length)) {
+        if (!best || key.length > best.key.length) {
+          best = { key, merchant };
+        }
+        break;
+      }
+      from = i + key.length;
+    }
+  }
+  return best?.merchant ?? null;
+}
+
+/** Key must not be flanked by letters/digits — "amc" must not match
+ * "camcorder" — but punctuation and whitespace are fine boundaries. */
+function isWordBounded(text: string, start: number, end: number): boolean {
+  const before = start === 0 ? "" : text[start - 1]!;
+  const after = end >= text.length ? "" : text[end]!;
+  return !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
+}
+
+const CURRENCY_BY_SYMBOL: Record<string, string> = {
+  $: "USD",
+  "€": "EUR",
+  "£": "GBP",
+  "¥": "JPY",
+};
+
+const CURRENCY_BY_CODE: Record<string, string> = {
+  eur: "EUR",
+  usd: "USD",
+  gbp: "GBP",
+  jpy: "JPY",
+};
+
+/** Lines that must not supply the fallback amount (printed after the total
+ * on many receipts: tip suggestions, change due). */
+const NON_AMOUNT_LINE = /\b(tip|gratuity|change)\b/i;
+/** An amount line that names the total explicitly. */
+const TOTAL_LINE =
+  /\b(total|grand total|amount due|balance due|total due|amount paid|payment)\b/i;
+/**
+ * A two-decimal amount in either convention: "1,234.56" (US grouping,
+ * dot decimal) or "1.234,56" / "12,50" (comma decimal, EU). The
+ * leading lookbehind blocks partial-number matches ("0.00" inside
+ * "-20.00"), the trailing lookahead blocks suffix matches inside
+ * longer decimals ("1,234.56" can't match as "1,23"). Refunds
+ * ("-20.00") never match and fall through to the LLM.
+ */
+const AMOUNT_NUM_RE =
+  /(?<![0-9,.-])(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})(?![0-9])/;
+const AMOUNT_NUM_GLOBAL = new RegExp(AMOUNT_NUM_RE.source, "g");
+
+/** Normalize a matched amount to "1234.56" (dot decimal, no grouping). */
+function normalizeAmountMatch(match: string): string {
+  const commaDecimal = match.lastIndexOf(",") > match.lastIndexOf(".");
+  if (commaDecimal) return match.replace(/\./g, "").replace(/,/g, ".");
+  return match.replace(/,/g, "");
+}
+
+/** The currency symbol or ISO code adjacent to the amount, or "". */
+function currencyAround(line: string, start: number, len: number): string {
+  const before = line.slice(0, start);
+  const symBefore = before.match(/(\$|€|£|¥)\s*$/);
+  if (symBefore) return symBefore[1]!;
+  const codeBefore = before.match(/\b(eur|usd|gbp|jpy)\b\s*$/i);
+  if (codeBefore) return codeBefore[1]!;
+  const after = line.slice(start + len);
+  const symAfter = after.match(/^\s*([€£¥$])/);
+  if (symAfter) return symAfter[1]!;
+  const codeAfter = after.match(/^\s*(eur|usd|gbp|jpy)\b/i);
+  if (codeAfter) return codeAfter[1]!;
+  return "";
+}
+
+function currencyValue(symOrCode: string): string {
+  return (
+    CURRENCY_BY_SYMBOL[symOrCode] ??
+    CURRENCY_BY_CODE[symOrCode.toLowerCase()] ??
+    "USD"
+  );
+}
+
+/**
+ * Deterministic total extraction for the LLM-skip path: prefer an explicit
+ * "total"/"amount due" line (either decimal convention, symbol or code
+ * before or after), else the last currency-marked amount not on a
+ * tip/change line. Returns null when nothing is trustworthy — the caller
+ * then falls through to the LLM. Refund/credit receipts (negative
+ * amounts) never match and are left to the model.
+ */
+export function parseReceiptAmount(text: string): {
+  amount: string;
+  currency: string;
+} | null {
+  if (!text) return null;
+  const lines = text.split("\n");
+  // Pass 1: an explicit total/amount line — take the amount closest to the
+  // keyword so "Subtotal: $38.00 — TOTAL: $42.50" picks the total.
+  for (const line of lines) {
+    if (!TOTAL_LINE.test(line)) continue;
+    const keyword = line.match(TOTAL_LINE);
+    const keywordIndex = keyword?.index ?? 0;
+    let best: { num: string; dist: number; currency: string } | null = null;
+    for (const m of line.matchAll(AMOUNT_NUM_GLOBAL)) {
+      const num = m[1]!;
+      const currency = currencyAround(line, m.index!, num.length);
+      const dist = Math.abs(m.index! - keywordIndex);
+      if (!best || dist <= best.dist) {
+        best = { num, dist, currency };
+      }
+    }
+    if (best) {
+      return {
+        amount: normalizeAmount(normalizeAmountMatch(best.num)),
+        currency: currencyValue(best.currency),
+      };
+    }
+  }
+  // Pass 2: last amount with a currency marker, skipping tip/change lines.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!;
+    if (NON_AMOUNT_LINE.test(line)) continue;
+    for (const m of line.matchAll(AMOUNT_NUM_GLOBAL)) {
+      const num = m[1]!;
+      const currency = currencyAround(line, m.index!, num.length);
+      if (!currency) continue;
+      return {
+        amount: normalizeAmount(normalizeAmountMatch(num)),
+        currency: currencyValue(currency),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Full extraction without any model call: the receipt text names a known
+ * merchant and a total amount, so merchant/category/report come from the
+ * account's own history and the amount is parsed deterministically. Returns
+ * null when either is missing or ambiguous — callers then run the LLM.
+ */
+export function tryKnownMerchantExtraction(
+  text: string,
+  known: ReadonlyMap<string, KnownMerchant>,
+): ExtractionResult | null {
+  const merchant = matchKnownMerchant(text, known);
+  if (!merchant) return null;
+  const amount = parseReceiptAmount(text);
+  if (!amount) return null;
+  return {
+    isReceipt: true,
+    merchant: merchant.display,
+    description: "",
+    amount: amount.amount,
+    currency: amount.currency,
+    category: merchant.category,
+    report: merchant.report,
+    confidence: "high",
+    notes: "",
+  };
+}
 
 export interface ExtractionResult {
   isReceipt: boolean;
@@ -194,10 +400,18 @@ function confidenceField(v: unknown): Confidence {
   return "low";
 }
 
-/** Extract structured receipt data from text and/or an image. */
+/** Extract structured receipt data from text and/or an image. The LLM call
+ * is skipped when (a) the input matches a freshly cached extraction for
+ * this account, or (b) — for text inputs — the text names a known merchant
+ * with a parseable total (see tryKnownMerchantExtraction). */
 export async function extractReceipt(
   input: ExtractionInput,
 ): Promise<ExtractionResult> {
+  const cacheKey = extractionCacheKey(input);
+  if (cacheKey) {
+    const cached = await readCachedExtraction(input.accountId, cacheKey);
+    if (cached) return cached;
+  }
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: buildUserPrompt(input) },
@@ -207,6 +421,16 @@ export async function extractReceipt(
     maxTokens: 400,
     ...(input.image ? { image: input.image } : {}),
   });
+  const result = buildExtractionResult(raw);
+  if (cacheKey) {
+    await writeCachedExtraction(input.accountId, cacheKey, result).catch(
+      () => {},
+    );
+  }
+  return result;
+}
+
+function buildExtractionResult(raw: string): ExtractionResult {
   const parsed = parseJsonObject(raw);
   const isReceiptRaw = parsed["is_receipt"];
   const isReceipt =
@@ -299,13 +523,15 @@ function resolveReport(
 }
 
 /** The extraction context resolved by `readExtractionContext` (database.ts):
- * the account's category/report names plus the prior merchant → category and
- * merchant → report maps. */
+ * the account's category/report names, the prior merchant → category and
+ * merchant → report maps, and the known-merchant map that drives the
+ * LLM-skip path. */
 export interface ExtractionContext {
   categories: string[];
   reports: string[];
   merchantCategories: ReadonlyMap<string, string>;
   merchantReports: ReadonlyMap<string, string>;
+  knownMerchants: ReadonlyMap<string, KnownMerchant>;
 }
 
 /**

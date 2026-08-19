@@ -14,6 +14,8 @@ import {
   extractReceipt,
   isVisionUnsupportedError,
   resolveExtraction,
+  tryKnownMerchantExtraction,
+  type KnownMerchant,
 } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
 
@@ -352,9 +354,15 @@ export async function prepareUploadedReceipt(
 }
 
 /**
- * Extract structured receipt data from an image attachment. Tries DeepSeek
- * vision first (RECEIPT_OCR_MODE !== "tesseract"); on a vision-unsupported
- * error (or when forced to tesseract) falls back to local OCR + text parsing.
+ * Extract structured receipt data from an image attachment. When the
+ * account has known merchants, the image is OCR'd locally first and a
+ * known-merchant match with a parseable total skips the LLM entirely
+ * (tryKnownMerchantExtraction) — the common repeat-merchant case costs no
+ * tokens. Otherwise DeepSeek vision is tried first (RECEIPT_OCR_MODE !==
+ * "tesseract"); on a vision-unsupported error (or when forced to
+ * tesseract) it falls back to local OCR + text parsing. LLM results are
+ * cached per account by input hash (extractReceipt), so re-uploading the
+ * same receipt skips the call too.
  * `stored` is the normalized, browser-friendly image for saving as the
  * receipt image.
  *
@@ -365,10 +373,12 @@ export async function prepareUploadedReceipt(
  * decide the fate (the draft flow stores nothing and surfaces the error).
  */
 export async function extractFromImage(input: {
+  accountId: string;
   buffer: Buffer;
   mime: string;
   categories?: string[];
   reports?: string[];
+  knownMerchants?: ReadonlyMap<string, KnownMerchant>;
 }): Promise<{
   result: ExtractionResult;
   text: string;
@@ -377,21 +387,27 @@ export async function extractFromImage(input: {
   if (isPdfInput(input.buffer, input.mime)) {
     const pdfText = await extractPdfText(input.buffer);
     const png = await renderPdfToPng(input.buffer);
+    const known = input.knownMerchants;
+    const skipped = known ? tryKnownMerchantExtraction(pdfText, known) : null;
     const result =
-      pdfText.trim().length >= 20
+      skipped ??
+      (pdfText.trim().length >= 20
         ? await extractReceipt({
+            accountId: input.accountId,
             text: pdfText,
             categories: input.categories,
             reports: input.reports,
           })
         : (
             await extractFromImage({
+              accountId: input.accountId,
               buffer: png,
               mime: "image/png",
               categories: input.categories,
               reports: input.reports,
+              knownMerchants: known,
             })
-          ).result;
+          ).result);
     return {
       result,
       text: pdfText,
@@ -402,9 +418,19 @@ export async function extractFromImage(input: {
   const stored = await toBrowserImage(input.buffer, input.mime);
   let result: ExtractionResult | null = null;
   let text = "";
+  // Known-merchant skip: local OCR is free, so run it first when the
+  // account has history — the repeat-merchant case never pays for vision.
+  // Accounts without history go straight to vision (no added latency).
+  const known = input.knownMerchants;
+  if (known && known.size > 0) {
+    text = await ocrImage(stored.buffer);
+    const skipped = tryKnownMerchantExtraction(text, known);
+    if (skipped) return { result: skipped, text, stored };
+  }
   if (RECEIPT_OCR_MODE !== "tesseract") {
     try {
       result = await extractReceipt({
+        accountId: input.accountId,
         image: { buffer: stored.buffer, mime: stored.mime },
         categories: input.categories,
         reports: input.reports,
@@ -417,8 +443,9 @@ export async function extractFromImage(input: {
     }
   }
   if (!result) {
-    text = await ocrImage(stored.buffer);
+    if (!text) text = await ocrImage(stored.buffer);
     result = await extractReceipt({
+      accountId: input.accountId,
       text,
       categories: input.categories,
       reports: input.reports,
@@ -449,10 +476,12 @@ export async function extractUploadedReceiptFields(
 }> {
   const context = await readExtractionContext(accountId);
   const { result } = await extractFromImage({
+    accountId,
     buffer,
     mime,
     categories: context.categories,
     reports: context.reports,
+    knownMerchants: context.knownMerchants,
   });
   const resolved = resolveExtraction(context, {
     merchant: result.merchant,

@@ -976,7 +976,7 @@ async function captureReceipt(
   }
 
   // Extraction: best-effort. The capture still succeeds without it.
-  const { categories, merchantCategories } =
+  const { categories, merchantCategories, knownMerchants } =
     await readExtractionContext(accountId);
   let extracted: {
     isReceipt: boolean;
@@ -988,9 +988,11 @@ async function captureReceipt(
   } | null = null;
   try {
     const { result, stored } = await extractFromImage({
+      accountId,
       buffer,
       mime,
       categories,
+      knownMerchants,
     });
     extracted = {
       isReceipt: result.isReceipt,

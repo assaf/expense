@@ -76,6 +76,13 @@ folder), `INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL 
   tesseract.js (CDN worker/lang at runtime). `RECEIPT_OCR_MODE=deepseek`
   forces vision-only. Don't expect image input to work until DeepSeek ships
   it on the hosted API.
+- Extraction is LLM-cheap by design: a body/attachment naming a merchant
+  the account spent with in the last 90 days, with a parseable total,
+  skips the model entirely (stored category/report + deterministic amount
+  parse — `tryKnownMerchantExtraction` in `app/lib/receipt-ai.server.ts`);
+  LLM results are cached per account by input hash
+  (`app/lib/db/extraction-cache.ts`, 7-day TTL), so re-uploading the same
+  receipt costs nothing.
 - Heavy deps (sharp, @resvg/resvg-js, @napi-rs/canvas, tesseract.js,
   pdfjs-dist) are Node-runtime only; native modules must stay external in
   the server build (Vite SSR externalizes node_modules by default).

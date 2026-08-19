@@ -871,6 +871,35 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.category).toBe("Testing");
   });
 
+  it("skips the model when the body names a known merchant with a total", async () => {
+    // The body names "Test Store" (seeded history: Testing / 2026 Test) and
+    // carries a parseable total — the known-merchant skip must produce the
+    // expense without consulting the model at all.
+    const deps = fakeDeps();
+    let modelCalls = 0;
+    deps.extractReceipt = async (input) => {
+      modelCalls++;
+      return fakeExtract(input.text);
+    };
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        text: "Thank you for shopping at Test Store\nTOTAL: 7.25",
+      });
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
+    expect(created.merchant).toBe("Test Store");
+    expect(created.category).toBe("Testing");
+    expect(created.report).toBe("2026 Test");
+    expect(created.amount).toBe("7.25");
+    expect(modelCalls).toBe(0);
+  });
+
   it("renders the HTML body through the browser renderer and resolves cid images", async () => {
     const deps = fakeDeps();
     const html =

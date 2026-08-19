@@ -35,6 +35,7 @@ model Account {
   inboundSenders InboundSender[]
   inboundSenderVerifications InboundSenderVerification[]
   reconciliationRuns ReconciliationRun[]
+  receiptExtractions ReceiptExtraction[]
 
   @@map("accounts")
 }
@@ -358,4 +359,24 @@ model AuthAttempt {
   updatedAt   String
 
   @@map("auth_attempts")
+}
+
+/// Cache of DeepSeek extraction results keyed by sha256 of the input (the
+/// normalized image bytes or the receipt text). Re-uploading the same
+/// receipt — retry, second draft, MCP + web upload — returns the stored
+/// result instead of paying for another LLM call. Scoped per account
+/// because category/report suggestions are account-specific. Rows expire
+/// (TTL enforced on read/write; expired rows are swept on write).
+model ReceiptExtraction {
+  id        String @id @default(cuid())
+  accountId String
+  hash      String // sha256 hex of the input (image bytes or text)
+  result    Json // ExtractionResult
+  createdAt String // ISO
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, hash])
+  @@index([createdAt])
+  @@map("receipt_extractions")
 }

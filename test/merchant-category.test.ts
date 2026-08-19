@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { ulid } from "ulid";
 import { resolveCategory } from "~/lib/receipt-ai.server";
-import { readMerchantCategories } from "~/lib/db/expenses";
+import {
+  readKnownMerchants,
+  readMerchantCategories,
+  readMerchantReports,
+} from "~/lib/db/expenses";
 import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,
@@ -131,5 +135,138 @@ describe("readMerchantCategories", () => {
     const byMerchant = await readMerchantCategories(OTHER_ACCOUNT_ID);
     // The other account sees its own merchant's category.
     expect(byMerchant.get("secret corp")).toBe("Confidential");
+  });
+});
+
+/** The report lookup mirrors the category lookup (same newest-wins rule). */
+describe("readMerchantReports", () => {
+  it("returns each merchant's report, keyed by normalized name", async () => {
+    const byMerchant = await readMerchantReports(TEST_ACCOUNT_ID);
+    expect(byMerchant.get("officemax")).toBe("2026 Test");
+    expect(byMerchant.get("test store")).toBe("2026 Test");
+  });
+
+  it("keeps the newest report when a merchant changed reports", async () => {
+    const created = [
+      {
+        id: ulid(),
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt" as const,
+        date: "2026-06-10",
+        report: "2026 Test",
+        category: "Testing",
+        description: "",
+        amount: "3.00",
+        merchant: "Report Store",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-06-10T00:00:00.000Z",
+        updatedAt: "2026-06-10T00:00:00.000Z",
+      },
+      {
+        id: ulid(),
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt" as const,
+        date: "2026-06-20",
+        report: "2027 Test",
+        category: "Testing",
+        description: "",
+        amount: "4.00",
+        merchant: "Report Store",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-06-20T00:00:00.000Z",
+        updatedAt: "2026-06-20T00:00:00.000Z",
+      },
+    ];
+    await testPrisma.expense.createMany({ data: created });
+    try {
+      const byMerchant = await readMerchantReports(TEST_ACCOUNT_ID);
+      expect(byMerchant.get("report store")).toBe("2027 Test");
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, merchant: "Report Store" },
+      });
+    }
+  });
+});
+
+/** The combined merchant map that drives the LLM-skip path. */
+describe("readKnownMerchants", () => {
+  it("exposes display name, category, and report per merchant", async () => {
+    const known = await readKnownMerchants(TEST_ACCOUNT_ID);
+    expect(known.get("test store")).toEqual({
+      display: "Test Store",
+      category: "Testing",
+      report: "2026 Test",
+    });
+    expect(known.get("officemax")).toEqual({
+      display: "OfficeMax",
+      category: "Office Supplies",
+      report: "2026 Test",
+    });
+  });
+
+  it("keeps the newest value per field and the newest display spelling", async () => {
+    const created = [
+      {
+        id: ulid(),
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt" as const,
+        date: "2026-06-01",
+        report: "2026 Test",
+        category: "Testing",
+        description: "",
+        amount: "1.00",
+        merchant: "Field Store",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+      {
+        // Newer row: recategorized, no report, different display spelling
+        // (normalizes to the same key).
+        id: ulid(),
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt" as const,
+        date: "2026-06-20",
+        report: "",
+        category: "Office Supplies",
+        description: "",
+        amount: "2.00",
+        merchant: "field  store",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: "2026-06-20T00:00:00.000Z",
+        updatedAt: "2026-06-20T00:00:00.000Z",
+      },
+    ];
+    await testPrisma.expense.createMany({ data: created });
+    try {
+      const known = await readKnownMerchants(TEST_ACCOUNT_ID);
+      // Category: newest non-empty wins. Report: the older row's report is
+      // kept because the newer row left it empty. Display: newest spelling.
+      expect(known.get("field store")).toEqual({
+        display: "field  store",
+        category: "Office Supplies",
+        report: "2026 Test",
+      });
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: {
+          accountId: TEST_ACCOUNT_ID,
+          merchant: { in: ["Field Store", "field  store"] },
+        },
+      });
+    }
   });
 });

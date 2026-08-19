@@ -12,10 +12,14 @@ import { fetchPublicUrl } from "~/lib/ssrf.server";
 export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
-import { resolveExtraction } from "~/lib/receipt-ai.server";
+import {
+  resolveExtraction,
+  tryKnownMerchantExtraction,
+} from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
   ExtractionResult,
+  KnownMerchant,
 } from "~/lib/receipt-ai.server";
 import {
   emailShell,
@@ -130,16 +134,19 @@ export interface InboundDeps {
   downloadAttachment(meta: AttachmentMeta): Promise<Buffer>;
   classifyAttachment(candidates: AttachmentCandidate[]): Promise<number | null>;
   extractReceipt(input: {
+    accountId: string;
     text?: string;
     image?: { buffer: Buffer; mime: string };
     categories?: string[];
     reports?: string[];
   }): Promise<ExtractionResult>;
   extractFromImage(input: {
+    accountId: string;
     buffer: Buffer;
     mime: string;
     categories?: string[];
     reports?: string[];
+    knownMerchants?: ReadonlyMap<string, KnownMerchant>;
   }): Promise<{
     result: ExtractionResult;
     text: string;
@@ -669,10 +676,12 @@ export async function processInboundEvent(
       // text layer) and normalizes other images to a browser-displayable
       // form; `stored` is the bytes saved as the receipt image.
       const ocr = await deps.extractFromImage({
+        accountId: account.id,
         buffer,
         mime: contentType || "application/octet-stream",
         categories: context.categories,
         reports: context.reports,
+        knownMerchants: context.knownMerchants,
       });
       extraction = ocr.result;
       receiptImage = ocr.stored.buffer;
@@ -728,11 +737,16 @@ export async function processInboundEvent(
       }
       imageMime = "image/png";
       originalName = "email-receipt.png";
-      extraction = await deps.extractReceipt({
-        text: bodyText,
-        categories: context.categories,
-        reports: context.reports,
-      });
+      // Known-merchant skip: the body names a merchant the account has spent
+      // with before and carries a parseable total — no model call needed.
+      extraction =
+        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
+        (await deps.extractReceipt({
+          accountId: account.id,
+          text: bodyText,
+          categories: context.categories,
+          reports: context.reports,
+        }));
       if (renderError) {
         console.error("[inbound] email receipt render failed:", renderError);
       }
