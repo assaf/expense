@@ -196,12 +196,3 @@ export function safeEqual(a: string, b: string): boolean {
   const bb = Buffer.from(b);
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
-
-/** Constant-time equality for base64-encoded signatures (webhook HMACs):
- * both sides are decoded first, and empty/undecodable inputs never compare
- * equal (timingSafeEqual can't take an empty buffer). */
-export function safeEqualBase64(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "base64");
-  const bb = Buffer.from(b, "base64");
-  return ab.length !== 0 && ab.length === bb.length && timingSafeEqual(ab, bb);
-}

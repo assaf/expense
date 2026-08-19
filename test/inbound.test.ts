@@ -4,8 +4,6 @@ import { normalizeAmount } from "~/lib/format";
 import { extractEmailAddress } from "~/lib/validation";
 import {
   processInboundEvent,
-  verifyWebhookSignature,
-  computeWebhookSignature,
   parseDateString,
   extractDateFromForwardedText,
   extractDateFromEml,
@@ -16,7 +14,6 @@ import {
   fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
 import { matchCategory } from "~/lib/receipt-ai.server";
-import type { WebhookHeaders } from "~/lib/inbound-email.server";
 import type {
   InboundDeps,
   EmailReceivedData,
@@ -243,109 +240,6 @@ afterEach(async () => {
       .catch(() => {});
   }
   usedSenders.length = 0;
-});
-
-describe("Webhook signature", () => {
-  const secret = "whsec_testsecret";
-  const id = "msg_test123";
-  const body = JSON.stringify({ type: "email.received", data: {} });
-
-  function headers(ts: number, payload: string): WebhookHeaders {
-    const sig = computeWebhookSignature(id, String(ts), payload, secret);
-    return { id, timestamp: String(ts), signature: `v1,${sig}` };
-  }
-
-  it("reproduces the Svix documented example exactly", () => {
-    // From https://docs.svix.com/receiving/verifying-payloads/how-manual
-    expect(
-      computeWebhookSignature(
-        "msg_loFOjxBNrRLzqYUf",
-        "1731705121",
-        '{"event_type":"ping","data":{"success":true}}',
-        "whsec_plJ3nmyCDGBKInavdOK15jsl",
-      ),
-    ).toBe("rAvfW3dJ/X/qxhsaXPOyyCGmRKsaKWcsNccKXlIktD0=");
-  });
-
-  it("accepts a valid signature", () => {
-    expect(
-      verifyWebhookSignature(
-        headers(Math.floor(Date.now() / 1000), body),
-        body,
-        secret,
-      ),
-    ).toBe(true);
-  });
-
-  it("accepts any entry in a space-delimited signature list", () => {
-    const ts = Math.floor(Date.now() / 1000);
-    const good = `v1,${computeWebhookSignature(id, String(ts), body, secret)}`;
-    expect(
-      verifyWebhookSignature(
-        {
-          id,
-          timestamp: String(ts),
-          signature: `v1,MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= ${good}`,
-        },
-        body,
-        secret,
-      ),
-    ).toBe(true);
-  });
-
-  it("rejects a tampered body", () => {
-    expect(
-      verifyWebhookSignature(
-        headers(Math.floor(Date.now() / 1000), body),
-        body + "x",
-        secret,
-      ),
-    ).toBe(false);
-  });
-
-  it("rejects a wrong secret", () => {
-    const ts = Math.floor(Date.now() / 1000);
-    const bad = computeWebhookSignature(id, String(ts), body, "whsec_wrong");
-    expect(
-      verifyWebhookSignature(
-        { id, timestamp: String(ts), signature: `v1,${bad}` },
-        body,
-        secret,
-      ),
-    ).toBe(false);
-  });
-
-  it("rejects an expired timestamp (replay guard)", () => {
-    expect(
-      verifyWebhookSignature(
-        headers(Math.floor(Date.now() / 1000) - 600, body),
-        body,
-        secret,
-      ),
-    ).toBe(false);
-  });
-
-  it("rejects a non-v1 signature version", () => {
-    const ts = Math.floor(Date.now() / 1000);
-    const sig = computeWebhookSignature(id, String(ts), body, secret);
-    expect(
-      verifyWebhookSignature(
-        { id, timestamp: String(ts), signature: `v2,${sig}` },
-        body,
-        secret,
-      ),
-    ).toBe(false);
-  });
-
-  it("rejects missing headers", () => {
-    expect(
-      verifyWebhookSignature(
-        { id: null, timestamp: null, signature: null },
-        body,
-        secret,
-      ),
-    ).toBe(false);
-  });
 });
 
 describe("Date extraction", () => {

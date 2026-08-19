@@ -25,8 +25,6 @@ export async function launchServer(): Promise<string> {
     // Empty values also win over `loadEnvFile(".env")`, which never
     // overrides existing vars, so a developer's real keys can't leak in.
     DEEPSEEK_API_KEY: "",
-    RESEND_API_KEY: "",
-    INBOUND_EMAIL_WEBHOOK_SECRET: "",
     // PUBLIC_URL would otherwise leak from .env into the test server and
     // change the OAuth metadata issuer to the production origin — tests
     // assert on the request/forwarded origin instead.

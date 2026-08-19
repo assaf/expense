@@ -40,10 +40,9 @@ const PUBLIC_PAGES = new Set([
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   // The home page (landing for anonymous visitors), the login route, the
-  // inbound email webhook, the sender-verification page, and the public
-  // marketing pages are open; everything else requires a session (the
-  // webhook and the verify link carry their own credentials — the Resend
-  // signature and the single-use emailed token).
+  // sender-verification page, and the public marketing pages are open;
+  // everything else requires a session (the verify link carries its own
+  // credential — the single-use emailed token).
   let path = url.pathname;
   if (path.endsWith(".md")) path = path.slice(0, -3);
   // React Router appends .data to loader fetches during client-side
@@ -58,7 +57,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     path === "/" ||
     path === "/_" ||
     path.startsWith("/login") ||
-    path.startsWith("/api/inbound-email") ||
     path.startsWith("/receipts-email-verify") ||
     path.startsWith("/verify-email") ||
     PUBLIC_PAGES.has(path);

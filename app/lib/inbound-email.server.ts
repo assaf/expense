@@ -1,8 +1,5 @@
-import { createHmac } from "node:crypto";
 import {
   FORWARD_MARKERS,
-  renderEmailImage,
-  renderTextEmail,
   stripForwardedText,
   stripForwardHeader,
   type CidImage,
@@ -10,22 +7,16 @@ import {
   type RenderEmailOptions,
   type RenderTextEmailOptions,
 } from "~/lib/email-render.server";
-import { htmlToText, renderReceiptImage } from "~/lib/receipt-render.server";
-import { safeEqualBase64 } from "~/lib/passwords";
+import { htmlToText } from "~/lib/receipt-render.server";
 import { fetchPublicUrl } from "~/lib/ssrf.server";
 export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
-import {
-  classifyReceiptAttachment,
-  extractReceipt,
-  resolveExtraction,
-} from "~/lib/receipt-ai.server";
+import { resolveExtraction } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
   ExtractionResult,
 } from "~/lib/receipt-ai.server";
-import { extractFromImage } from "~/lib/receipt-ocr.server";
 import {
   emailShell,
   paragraph,
@@ -33,7 +24,6 @@ import {
 } from "~/lib/email-layout.server";
 import { escapeHtml } from "~/lib/escape";
 import { extractEmailAddress } from "~/lib/validation";
-import { sendEmail } from "~/lib/reply.server";
 import type { SendEmailOptions } from "~/lib/reply.server";
 import { upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
@@ -45,16 +35,18 @@ import {
 } from "~/lib/db/inbound";
 import { readReportSummary } from "~/lib/db/reports";
 import { saveImage, readImage } from "~/lib/images.server";
-import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL, RESEND_API_KEY } from "~/lib/env";
+import { INBOUND_EMAIL_ADDRESS, PUBLIC_URL } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 
 /**
  * Inbound email pipeline (receipts by email).
  *
- * Flow: Resend receives a forwarded email → POSTs an `email.received` webhook
- * (metadata only) → this module verifies the signature (in the route),
- * fetches the email body/headers/attachments from the Resend API, determines
- * the expense date, picks the receipt (attachment or email body), extracts
+ * Flow: FastMail delivers a forwarded receipt to the Receipts folder (address
+ * action) and pushes a JMAP StateChange; `processUnprocessedReceipts`
+ * (`~/lib/inbound-fastmail.server`) drains the folder and calls
+ * `processInboundEvent` with FastMail-backed collaborators (fetch/list/
+ * download over JMAP via postal-mime). The pipeline determines the expense
+ * date, picks the receipt (attachment or email body), extracts
  * merchant/amount/category via DeepSeek (with tesseract OCR fallback), stores
  * the receipt image, and creates the expense — scoped to the account whose
  * VERIFIED inbound sender matches the From address (an added-but-unverified
@@ -62,13 +54,13 @@ import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
  *
  * When anything fails or the result is incomplete, a reply email explains
  * what happened. Successful imports don't email (the expense appears in the
- * app). Each email_id is tracked in `inbound_emails` so Resend's webhook
- * retries never create duplicate expenses.
+ * app). Each email id (the JMAP id) is tracked in `inbound_emails` so a
+ * concurrent push/cron drain never creates duplicate expenses.
  */
 
 // --- Types -----------------------------------------------------------------
 
-/** The `data` object of Resend's `email.received` webhook. */
+/** The pipeline's incoming-email metadata (FastMail JMAP id as email_id). */
 export interface EmailReceivedData {
   email_id: string;
   created_at: string;
@@ -88,7 +80,7 @@ export interface EmailReceivedData {
   }[];
 }
 
-/** Received email content fetched from the Resend API. */
+/** Received email content fetched by the transport (FastMail JMAP / postal-mime). */
 export interface ReceivedEmail {
   id: string;
   from: string;
@@ -101,7 +93,7 @@ export interface ReceivedEmail {
   message_id: string;
 }
 
-/** Attachment metadata from the Resend Attachments API. */
+/** Attachment metadata from the transport (FastMail JMAP / postal-mime). */
 export interface AttachmentMeta {
   id: string;
   filename: string;
@@ -162,65 +154,6 @@ export interface InboundDeps {
   /** Send a reply email; failures are logged inside the transport and never
    * throw — the pipeline treats replies as fire-and-forget. */
   sendReply(input: SendEmailOptions): Promise<void>;
-}
-
-// --- Webhook signature (Svix format) ----------------------------------------
-
-export interface WebhookHeaders {
-  id: string | null;
-  timestamp: string | null;
-  signature: string | null;
-}
-
-/**
- * The expected Svix signature (base64, no `v1,` prefix) for a webhook:
- * HMAC-SHA256 of `<id>.<timestamp>.<rawBody>` keyed with the base64-decoded
- * part of the signing secret after the `whsec_` prefix.
- */
-export function computeWebhookSignature(
-  id: string,
-  timestamp: string,
-  rawBody: string,
-  secret: string,
-): string {
-  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
-  return createHmac("sha256", secretBytes)
-    .update(`${id}.${timestamp}.${rawBody}`)
-    .digest("base64");
-}
-
-/**
- * Verify a Resend webhook (standard Svix/Standard-Webhooks format):
- *  - headers `svix-id`, `svix-timestamp`, `svix-signature` (base64, space-
- *    delimited `v1,<sig>` entries)
- *  - signed content is `<id>.<timestamp>.<rawBody>`
- *  - HMAC-SHA256 key is the base64-decoded part of the signing secret after
- *    the `whsec_` prefix
- * Includes a 5-minute replay guard on the timestamp.
- */
-export function verifyWebhookSignature(
-  headers: WebhookHeaders,
-  rawBody: string,
-  secret: string,
-): boolean {
-  const { id, timestamp, signature } = headers;
-  if (!id || !timestamp || !signature || !secret) return false;
-  const tsNum = Number(timestamp);
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (!Number.isFinite(tsNum) || Math.abs(nowSec - tsNum) > 300) return false;
-
-  const expected = computeWebhookSignature(id, timestamp, rawBody, secret);
-
-  // The header is a space-delimited list like "v1,<sig> v1,<sig2> …".
-  for (const entry of signature.split(" ")) {
-    const comma = entry.indexOf(",");
-    if (comma <= 0) continue;
-    const version = entry.slice(0, comma);
-    const candidate = entry.slice(comma + 1);
-    if (version !== "v1") continue;
-    if (safeEqualBase64(expected, candidate)) return true;
-  }
-  return false;
 }
 
 // --- Date -------------------------------------------------------------------
@@ -403,68 +336,6 @@ export function pickReceiptAttachment(
   return { index: top.index, score: top.score, ambiguous };
 }
 
-// --- Default collaborators (real implementations) -----------------------------
-
-async function resendGet(path: string): Promise<unknown> {
-  if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY is not configured");
-  const res = await fetch(`https://api.resend.com${path}`, {
-    headers: { Authorization: `Bearer ${RESEND_API_KEY}` },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `Resend API ${res.status} GET ${path}: ${body.slice(0, 300)}`,
-    );
-  }
-  return res.json();
-}
-
-async function fetchReceivedEmailImpl(emailId: string): Promise<ReceivedEmail> {
-  const data = (await resendGet(
-    `/emails/receiving/${emailId}?html_format=cid`,
-  )) as ReceivedEmail;
-  return {
-    ...data,
-    headers: (data.headers ?? {}) as Record<string, string>,
-    html: data.html ?? null,
-    text: data.text ?? null,
-  };
-}
-
-async function listAttachmentsImpl(emailId: string): Promise<AttachmentMeta[]> {
-  const data = (await resendGet(
-    `/emails/receiving/${emailId}/attachments`,
-  )) as { data?: AttachmentMeta[] };
-  return data.data ?? [];
-}
-
-async function downloadAttachmentImpl(meta: AttachmentMeta): Promise<Buffer> {
-  if (!meta.download_url)
-    throw new Error(`No download URL for ${meta.filename}`);
-  const res = await fetch(meta.download_url);
-  if (!res.ok) {
-    throw new Error(
-      `Attachment download failed ${res.status} for ${meta.filename}`,
-    );
-  }
-  return Buffer.from(await res.arrayBuffer());
-}
-
-const defaultDeps: InboundDeps = {
-  fetchReceivedEmail: fetchReceivedEmailImpl,
-  listAttachments: listAttachmentsImpl,
-  downloadAttachment: downloadAttachmentImpl,
-  classifyAttachment: classifyReceiptAttachment,
-  extractReceipt,
-  extractFromImage,
-  renderReceiptImage,
-  renderEmailImage,
-  renderTextEmail,
-  sendReply: async (input) => {
-    await sendEmail(input);
-  },
-};
-
 /** The receipt image to embed in the confirmation reply: base64 content for
  * The receipt image attached to the confirmation reply (base64 content +
  * filename). undefined when the import produced no stored image. */
@@ -637,7 +508,7 @@ function confirmationEmail(opts: {
  */
 export async function processInboundEvent(
   data: EmailReceivedData,
-  deps: InboundDeps = defaultDeps,
+  deps: InboundDeps,
 ): Promise<ProcessResult> {
   const subject = data.subject ?? "";
   const fromEmail = extractEmailAddress(data.from);
