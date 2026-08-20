@@ -208,15 +208,18 @@ describe("processConnectionEmail", () => {
         },
       },
     );
-    expect(result.status).toBe("created");
+    expect(result.status).toBe("partial");
     expect(trashed).toEqual(["e1"]);
-    // The expense exists with the extracted data.
+    // The expense exists with the extracted data. Local extraction names
+    // the merchant from the rule sender domain and parses the total; the
+    // category is "" until the user sets it once (completeness badge).
     const expenses = await readExpenses(conn.accountId);
     const created = expenses.find(
       (e) => e.id === (result as { expenseId: string }).expenseId,
     );
     expect(created?.type === "receipt" && created.merchant).toBe("Apple");
     expect(created?.amount?.toString()).toBe("1.23");
+    expect(created?.category).toBe("");
     // The owner got one notification FROM their own mailbox TO themselves.
     expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
     const sent = mocks.sendConnectionEmail.mock.calls[0]![0] as {
@@ -224,8 +227,8 @@ describe("processConnectionEmail", () => {
       subject: string;
     };
     expect(sent.subject).toContain("Receipt accepted");
-    // Logged.
-    expect((await logRow(conn.id, "e1"))?.outcome).toBe("created");
+    // Logged as partial (category unknown under local extraction).
+    expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
   });
 
   it("ignores emails with no matching rule and leaves them in the Inbox", async () => {
@@ -286,7 +289,7 @@ describe("processConnectionEmail", () => {
       ]),
     );
     const deps = depsFor(adapter, conn.id);
-    const extractReceipt = vi.fn(deps.extractReceipt);
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
     const guarded: typeof deps = { ...deps, extractReceipt };
     const result = await processConnectionEmail(
       conn,
@@ -302,6 +305,92 @@ describe("processConnectionEmail", () => {
     expect(trashed).toEqual([]);
     expect(extractReceipt).not.toHaveBeenCalled();
     expect((await logRow(conn.id, "e4"))?.matched).toBe(true);
+  });
+
+  it("extracts a first-time receipt locally without ever calling the model", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e6",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt from Apple",
+            body: "App Store\nTotal: $19.99",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
+    const guarded: typeof deps = { ...deps, extractReceipt };
+    const result = await processConnectionEmail(
+      conn,
+      summary(
+        "e6",
+        "Apple <no_reply@email.apple.com>",
+        "Your receipt from Apple",
+      ),
+      guarded,
+      {
+        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    // Created (partial: category unknown) with NO model call.
+    expect(result.status).toBe("partial");
+    expect(trashed).toEqual(["e6"]);
+    expect(extractReceipt).not.toHaveBeenCalled();
+    const expenses = await readExpenses(conn.accountId);
+    const e = expenses.find(
+      (x) => x.id === (result as { expenseId: string }).expenseId,
+    );
+    expect(e?.type === "receipt" && e.merchant).toBe("Apple");
+    expect(e?.type === "receipt" && e.amount?.toString()).toBe("19.99");
+  });
+
+  it("skips a receipt whose total can't be parsed locally, leaves it in Inbox", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e7",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt from Apple",
+            // No "total" keyword, no currency marker -> parseReceiptAmount returns null.
+            body: "Order processed. Reference 4815162342.",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
+    const guarded: typeof deps = { ...deps, extractReceipt };
+    const before = (await readExpenses(conn.accountId)).length;
+    const result = await processConnectionEmail(
+      conn,
+      summary(
+        "e7",
+        "Apple <no_reply@email.apple.com>",
+        "Your receipt from Apple",
+      ),
+      guarded,
+      {
+        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("ignored");
+    expect((result as { reason: string }).reason).toBe(
+      "not extractable locally",
+    );
+    // Never trashed, never expensed, model never called.
+    expect(trashed).toEqual([]);
+    expect(extractReceipt).not.toHaveBeenCalled();
+    const after = (await readExpenses(conn.accountId)).length;
+    expect(after).toBe(before);
+    expect((await logRow(conn.id, "e7"))?.outcome).toBe("ignored");
   });
 
   it("logs errors and leaves the email untouched", async () => {
@@ -390,8 +479,8 @@ describe("drainEmailConnection", () => {
     const first = await drainEmailConnection(conn, { adapter, batchSize: 10 });
     expect(first).toEqual({
       evaluated: 2,
-      created: 1,
-      partial: 0,
+      created: 0,
+      partial: 1,
       ignored: 1,
       failed: 0,
     });

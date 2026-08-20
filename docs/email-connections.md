@@ -110,3 +110,32 @@ from an existing inbox).**
   connection when the push subscription can't be renewed (user-visible).
 - Disconnect deletes the row + token; users should also revoke the token in
   FastMail (the UI says so).
+
+## No-LLM extraction (connected flow)
+
+The connected-mailbox pipeline never calls DeepSeek. Receipts are parsed
+with local logic only:
+
+- **Repeat merchant** → `tryKnownMerchantExtraction`: the body names a
+  merchant the account has spent with before + a regex-parseable total;
+  merchant/category/report come from the account's own history. Zero model
+  calls. (This path is shared with receipts-by-email.)
+- **First-time merchant from a rule-matched sender** →
+  `tryRuleMerchantExtraction`: the merchant name comes from the rule's
+  sender domain (curated map for the seeded senders — Apple, Amazon,
+  Stripe, …; title-cased label otherwise), the total from
+  `parseReceiptAmount`. Category is `""` so the expense lands as
+  **partial** (completeness badge flags it); set the category once and the
+  known-merchant path carries it forward on every later receipt from that
+  sender.
+- **Can't parse locally** (no explicit total — refunds, reference-only
+  confirmations) → the email is skipped, logged `"not extractable locally"`,
+  and left in the Inbox for a manual add. Never trashed, never expensed.
+- **Attachment receipts** (PDF/image) → skipped for manual review. The
+  connected flow overrides `classifyAttachment` to a no-op so ambiguous
+  attachment selection never calls the model tiebreak; it falls through to
+  the email body, which extracts locally.
+
+The receipts-by-email (forward) flow is unchanged: it still uses the LLM for
+unknown senders, where the model's flexibility is the point. Local-only is
+the connected flow, where every sender is rule-matched.

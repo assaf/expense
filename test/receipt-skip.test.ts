@@ -3,6 +3,7 @@ import {
   matchKnownMerchant,
   parseReceiptAmount,
   tryKnownMerchantExtraction,
+  tryRuleMerchantExtraction,
   type KnownMerchant,
 } from "~/lib/receipt-ai.server";
 
@@ -179,5 +180,58 @@ describe("tryKnownMerchantExtraction", () => {
     expect(
       tryKnownMerchantExtraction("CAMCORDER SPECIAL\nTOTAL $299.00", known),
     ).toBeNull();
+  });
+});
+
+describe("tryRuleMerchantExtraction", () => {
+  /** The connected-mailbox flow names a FIRST-TIME merchant from the rule
+   * sender domain (no prior expense history). The amount is parsed
+   * locally; category is "" until the user sets it once. */
+  it("names a curated merchant from the sender and parses the total", () => {
+    expect(
+      tryRuleMerchantExtraction("App Store\nTotal: $19.99", "apple.com"),
+    ).toEqual({
+      isReceipt: true,
+      merchant: "Apple",
+      description: "",
+      amount: "19.99",
+      currency: "USD",
+      category: "",
+      report: "",
+      confidence: "medium",
+      notes: "",
+    });
+  });
+
+  it("handles EU decimal convention and EUR code", () => {
+    const got = tryRuleMerchantExtraction(
+      "Amazon\nGesamtsumme: EUR 42,50",
+      "amazon.com",
+    );
+    expect(got?.merchant).toBe("Amazon");
+    expect(got?.amount).toBe("42.50");
+    expect(got?.currency).toBe("EUR");
+  });
+
+  it("title-cases an unknown sender's leftmost domain label", () => {
+    const got = tryRuleMerchantExtraction(
+      "Thanks for your order\nTotal: $5.00",
+      "acme-shop.example",
+    );
+    expect(got?.merchant).toBe("Acme-shop");
+  });
+
+  it("returns null when no total can be parsed locally", () => {
+    // No "total" keyword, no adjacent currency marker on the number.
+    expect(
+      tryRuleMerchantExtraction(
+        "Order processed. Reference 4815162342.",
+        "apple.com",
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null on empty text", () => {
+    expect(tryRuleMerchantExtraction("", "apple.com")).toBeNull();
   });
 });
