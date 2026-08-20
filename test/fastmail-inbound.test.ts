@@ -435,6 +435,30 @@ describe("processUnprocessedReceipts", () => {
     expect(destroyed).toEqual([]);
   });
 
+  it("skips silently when a concurrent drain already removed the email", async () => {
+    // The id is still returned by unprocessedReceiptIds, but rawEmail
+    // fails — another drain listed and destroyed it first (EXPENSE-K).
+    const id = "fm-proc-3";
+    const { adapter, destroyed } = recordingAdapter(
+      new Map([[id, rawEmailOf(id)]]),
+    );
+    adapter.rawEmail = async () => {
+      throw new Error(`Email ${id} not found`);
+    };
+    const deps = fastmailInboundDeps(adapter);
+    const pipelineDeps: InboundDeps = { ...deps, ...fakeDeps() };
+
+    const result = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+
+    // Gone is the desired end state: no Sentry capture, no failed count,
+    // no abort — the email is counted as handled.
+    expect(result).toEqual({ processed: 0, failed: 0, destroyed: 1 });
+    expect(destroyed).toEqual([]);
+  });
+
   it("is idempotent — a re-fired push for the same email becomes a duplicate", async () => {
     const id = "fm-proc-4";
     const { adapter, marked, destroyed } = recordingAdapter(

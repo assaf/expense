@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 import type { Email as ParsedEmail } from "postal-mime";
 import {
   destroyEmail,
+  isEmailNotFoundError,
   markReceiptProcessed,
   rawEmail,
   unprocessedReceiptIds,
@@ -347,6 +348,17 @@ export async function processUnprocessedReceipts(
             : {}),
         });
       } catch (err) {
+        // A concurrent drain (a burst of pushes, or the cron overlapping a
+        // push) can list an email that another drain destroys before this
+        // one fetches it — rawEmail then reports "Email … not found". Gone
+        // is the desired end state, so skip silently instead of Sentry
+        // noise (EXPENSE-K). Everything else stays the marked-and-skipped
+        // path below.
+        if (isEmailNotFoundError(err)) {
+          invalidateMimeCache(id);
+          destroyed++;
+          continue;
+        }
         // No rollback: Fastmail won't remove the $receipt-processed keyword,
         // so an email that reaches this point stays marked and is skipped
         // next time. The email remains in the Receipts folder, so nothing is

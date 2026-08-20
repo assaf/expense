@@ -271,6 +271,13 @@ export async function rawEmail(id: string): Promise<RawEmail> {
   };
 }
 
+/** True when an Email/get miss means the email is already gone — a
+ * concurrent drain destroyed it between listing and fetching. The drain
+ * treats that as the desired end state, not an error (EXPENSE-K). */
+export function isEmailNotFoundError(err: unknown): boolean {
+  return err instanceof Error && /^Email \S+ not found$/.test(err.message);
+}
+
 /**
  * Query receipt emails in the Receipts folder that have not been processed
  * yet (oldest first). `inMailbox` scopes the query to the folder the rule
