@@ -132,7 +132,12 @@ export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
     }
     if (!a.date) return 1;
     if (!b.date) return -1;
-    return desc ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date);
+    // Same day → by when the expense was recorded (imported receipts:
+    // arrival order; manual entries: entry order). The date itself is
+    // day-granular, so createdAt is the only time signal available.
+    return desc
+      ? b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)
+      : a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
   });
 }
 
