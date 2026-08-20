@@ -480,6 +480,79 @@ describe("processConnectionEmail", () => {
     expect(row?.outcome).toBe("error");
     expect(row?.error).toContain("mailbox exploded");
   });
+
+  it("does not double-process a concurrently-drained email (claim guard)", async () => {
+    // Two drains race on the same email (push + push, or push + cron).
+    // The atomic claim must let only one create an expense; the other
+    // returns "already processed". Previously both read "fresh" and both
+    // created an expense (the #1639-4741 dupe).
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e9",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt from Apple",
+            body: "MERCHANT: Apple\nTOTAL: 7.77",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const opts = {
+      moveToTrash: (id: string) => adapter.moveToTrash(id),
+      sendToOwner: async () => {},
+    };
+    // Fire both concurrently — the claim is the only thing preventing a dupe.
+    const [a, b] = await Promise.all([
+      processConnectionEmail(
+        conn,
+        summary(
+          "e9",
+          "Apple <no_reply@email.apple.com>",
+          "Your receipt from Apple",
+        ),
+        deps,
+        opts,
+      ),
+      processConnectionEmail(
+        conn,
+        summary(
+          "e9",
+          "Apple <no_reply@email.apple.com>",
+          "Your receipt from Apple",
+        ),
+        deps,
+        opts,
+      ),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    // One winner (partial — local extraction leaves category empty) and one
+    // loser ("already processed"). Never two expenses.
+    expect(statuses).toContain("ignored");
+    expect(statuses.filter((s) => s === "ignored")).toHaveLength(1);
+    expect(
+      statuses.filter((s) => s === "created" || s === "partial"),
+    ).toHaveLength(1);
+    const winner = [a, b].find(
+      (r) => r.status === "created" || r.status === "partial",
+    ) as { status: string; expenseId?: string } | undefined;
+    expect(winner).toBeDefined();
+    expect(winner?.expenseId).toBeDefined();
+    // Exactly one expense — the winner's; the loser created none.
+    const expenses = await readExpenses(conn.accountId);
+    const created = expenses.filter((e) => e.id === winner?.expenseId);
+    expect(created).toHaveLength(1);
+    expect(created[0]?.amount?.toString()).toBe("7.77");
+    expect(trashed).toHaveLength(1);
+    const row = await logRow(conn.id, "e9");
+    expect(row?.outcome).toBe("partial");
+    const connectionRow = await testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+    });
+    expect(connectionRow?.receivedCount).toBe(1);
+  });
 });
 
 describe("drainEmailConnection", () => {

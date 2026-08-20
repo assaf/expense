@@ -32,6 +32,7 @@ import {
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import prisma from "~/lib/prisma.server";
+import { Prisma } from "prisma/generated";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -235,7 +236,7 @@ export function connectionInboundDeps(
 
 // --- Log + counters -------------------------------------------------------------
 
-type LogOutcome = "ignored" | "created" | "partial" | "error";
+type LogOutcome = "ignored" | "created" | "partial" | "error" | "processing";
 
 async function logEmailDecision(input: {
   connectionId: string;
@@ -273,6 +274,44 @@ async function logEmailDecision(input: {
 }
 
 /** Has this connection already evaluated this email? */
+/** Atomically claim an email for processing by inserting its log row
+ * with outcome "processing" BEFORE any work runs. Returns true if this
+ * caller won the claim (inserted), false if another concurrent drain
+ * already claimed it (unique-violation P2002). Closes the check-then-act
+ * race where two drains both read "fresh" and both process the same
+ * email -> duplicate expense. The row is updated to the final outcome by
+ * logEmailDecision after processing. */
+async function claimEmailForProcessing(
+  connectionId: string,
+  emailId: string,
+  fromAddress: string,
+  subject: string,
+): Promise<boolean> {
+  try {
+    await prisma.emailProcessLog.create({
+      data: {
+        connectionId,
+        emailId,
+        fromAddress,
+        subject: subject.slice(0, 500),
+        matched: false,
+        outcome: "processing",
+        error: null,
+        createdAt: new Date().toISOString(),
+      },
+    });
+    return true;
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      return false;
+    }
+    throw err;
+  }
+}
+
 async function seenEmail(
   connectionId: string,
   emailId: string,
@@ -340,6 +379,25 @@ export async function processConnectionEmail(
       outcome,
       error,
     });
+
+  // Atomic claim BEFORE any work: insert the log row with outcome
+  // "processing". If another concurrent drain already claimed this
+  // emailId (unique violation), skip — this is the guard against the
+  // duplicate-expense race (two drains both read "fresh" and both process
+  // the same email). The row is updated to the final outcome by `log`
+  // below; bumpReceived is tied to the claim so the counter only moves
+  // for the winning drain.
+  if (
+    !(await claimEmailForProcessing(
+      connection.id,
+      summary.id,
+      fromAddress,
+      summary.subject,
+    ))
+  ) {
+    return { status: "ignored", reason: "already processed" };
+  }
+  await bumpReceived(connection.id);
 
   // Our own notification emails (sent to self) must never be processed.
   if (fromAddress === connection.emailAddress) {
@@ -570,7 +628,6 @@ export async function drainEmailConnection(
         return result;
       }
       result.evaluated++;
-      await bumpReceived(connection.id);
       const outcome = await processConnectionEmail(
         connection,
         summary,
