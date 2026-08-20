@@ -74,7 +74,9 @@ from an existing inbox).**
   is an exact address or a domain (matches subdomains).
 - **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
   on each push (and daily via the cron) the Inbox is drained (3-day
-  lookback, EmailProcessLog = idempotency). Per email: self/bounce guards
+  lookback, cursor-scanned over receivedAt — an all-seen batch slides the
+  window forward instead of stopping, so a front of ignored mail never
+  blocks newer mail from the catch-up; EmailProcessLog = idempotency). Per email: self/bounce guards
   → rule match (no match = ignore, untouched) → **local classification**
   (`app/lib/email-classify.ts` — regex only, no LLM: marketing and
   shipping mail from rule-matched senders is filtered before any model
