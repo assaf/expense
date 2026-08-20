@@ -222,6 +222,23 @@ describe("tryRuleMerchantExtraction", () => {
     expect(got?.merchant).toBe("Acme-shop");
   });
 
+  it("names the curated biller merchants from their sender domain", () => {
+    // The recurring-bill senders have curated display names (not the
+    // title-case fallback) so expenses read "Verizon Wireless", not
+    // "Verizonwireless".
+    const cases: Array<[sender: string, merchant: string]> = [
+      ["shopify.com", "Shopify"],
+      ["conservice.com", "Conservice"],
+      ["spectrum.com", "Spectrum"],
+      ["verizonwireless.com", "Verizon Wireless"],
+    ];
+    for (const [sender, merchant] of cases) {
+      const got = tryRuleMerchantExtraction("Bill\nAmount due: $50.00", sender);
+      expect(got?.merchant).toBe(merchant);
+      expect(got?.amount).toBe("50.00");
+    }
+  });
+
   it("returns null when no total can be parsed locally", () => {
     // No "total" keyword, no adjacent currency marker on the number.
     expect(

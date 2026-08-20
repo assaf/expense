@@ -264,6 +264,10 @@ const MERCHANT_BY_SENDER: Record<string, string> = {
   "grubhub.com": "Grubhub",
   "instacart.com": "Instacart",
   "squareup.com": "Square",
+  "shopify.com": "Shopify",
+  "conservice.com": "Conservice",
+  "spectrum.com": "Spectrum",
+  "verizonwireless.com": "Verizon Wireless",
 };
 
 /** A display merchant name for a rule sender domain. Curated for the seeded

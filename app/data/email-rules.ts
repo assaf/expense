@@ -29,4 +29,11 @@ export const GENERAL_EMAIL_RULES: GeneralEmailRuleSeed[] = [
   { sender: "grubhub.com", note: "Order receipts" },
   { sender: "instacart.com", note: "Order receipts" },
   { sender: "squareup.com", note: "Square receipts" },
+  // Recurring billers — invoices/statements with an Amount-due line. The
+  // local gate keeps them (money total rescues the bland "bill" subject);
+  // marketing mail from the same senders is rejected (no money).
+  { sender: "shopify.com", note: "Shopify subscription bills" },
+  { sender: "conservice.com", note: "Conservice utility statements" },
+  { sender: "spectrum.com", note: "Spectrum internet/cable bills" },
+  { sender: "verizonwireless.com", note: "Verizon Wireless phone bills" },
 ];
