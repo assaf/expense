@@ -12,10 +12,7 @@ import {
   type ReceivedEmail,
 } from "~/lib/inbound-email.server";
 import { captureError } from "~/lib/errors.server";
-import {
-  classifyReceiptAttachment,
-  extractReceipt,
-} from "~/lib/receipt-ai.server";
+import { extractReceipt } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
@@ -151,7 +148,11 @@ export type ConnectionDeps = Pick<
 
 function realExtractionDeps(): ConnectionDeps {
   return {
-    classifyAttachment: classifyReceiptAttachment,
+    // The connected flow is LLM-free: ambiguous-attachment selection
+    // never calls the model tiebreak (returns null -> falls through to
+    // the email body, which extracts locally). Attachment receipts that
+    // can't be read locally are skipped for manual review.
+    classifyAttachment: async () => null,
     extractReceipt,
     extractFromImage,
     renderReceiptImage,
@@ -381,11 +382,14 @@ export async function processConnectionEmail(
       attachments,
       source: selected.source,
       deps,
+      localOnly: true,
+      ruleSender: rule.sender,
     });
     if (!extracted) {
-      // Marketing mail from a rule-matched sender — ignore, leave in Inbox.
-      await log("ignored", true, "not a receipt");
-      return { status: "ignored", reason: "not a receipt" };
+      // Body receipt whose total couldn't be parsed locally, or an
+      // attachment receipt — skip, leave in Inbox for manual review.
+      await log("ignored", true, "not extractable locally");
+      return { status: "ignored", reason: "not extractable locally" };
     }
 
     const saved = await saveExpenseFromExtraction({

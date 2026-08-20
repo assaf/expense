@@ -249,6 +249,64 @@ export function tryKnownMerchantExtraction(
   };
 }
 
+/** Curated display names for the general-rule senders — the merchants a
+ * fresh mailbox is most likely to see first, before any expense history
+ * exists. Falls back to a title-cased leftmost domain label for anything
+ * else (learned/inferred rules on senders without a curated name). */
+const MERCHANT_BY_SENDER: Record<string, string> = {
+  "apple.com": "Apple",
+  "amazon.com": "Amazon",
+  "stripe.com": "Stripe",
+  "paypal.com": "PayPal",
+  "uber.com": "Uber",
+  "lyft.com": "Lyft",
+  "doordash.com": "DoorDash",
+  "grubhub.com": "Grubhub",
+  "instacart.com": "Instacart",
+  "squareup.com": "Square",
+};
+
+/** A display merchant name for a rule sender domain. Curated for the seeded
+ * general rules; otherwise title-cases the leftmost label
+ * ("acme-shop.example" -> "Acme-shop"). */
+function merchantForSender(sender: string): string {
+  const key = sender.trim().toLowerCase();
+  if (MERCHANT_BY_SENDER[key]) return MERCHANT_BY_SENDER[key]!;
+  const label = key.split(".")[0] || key;
+  if (!label) return sender;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/** Local extraction for a FIRST-TIME merchant matched by a general rule:
+ * the merchant name comes from the rule sender domain (no prior expense
+ * history needed), the total from parseReceiptAmount. Category is "" — the
+ * completeness badge prompts the user to set it once, after which the
+ * known-merchant path carries it forward. Returns null when no total can
+ * be parsed locally (refunds, no explicit total, unusual layout) — callers
+ * then skip the email (never fall through to the model in the connected
+ * flow). Confidence is "medium": the merchant is inferred from the sender,
+ * not read off the receipt. */
+export function tryRuleMerchantExtraction(
+  text: string,
+  sender: string,
+): ExtractionResult | null {
+  const amount = parseReceiptAmount(text);
+  if (!amount) return null;
+  const merchant = merchantForSender(sender);
+  console.info("[extraction] rule-merchant skip:", merchant);
+  return {
+    isReceipt: true,
+    merchant,
+    description: "",
+    amount: amount.amount,
+    currency: amount.currency,
+    category: "",
+    report: "",
+    confidence: "medium",
+    notes: "",
+  };
+}
+
 export interface ExtractionResult {
   isReceipt: boolean;
   merchant: string;

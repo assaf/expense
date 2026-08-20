@@ -15,6 +15,7 @@ import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
   resolveExtraction,
   tryKnownMerchantExtraction,
+  tryRuleMerchantExtraction,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -811,6 +812,13 @@ export async function extractReceiptFromSource(opts: {
   attachments: AttachmentMeta[];
   source: ReceiptSource;
   deps: InboundDeps;
+  /** Connected-mailbox flow: extract with local logic only (no model
+   * call). Body receipts parse via the known-merchant or rule-merchant
+   * path; attachment receipts return null (skip for manual review). */
+  localOnly?: boolean;
+  /** The matched rule's sender domain — used to name a first-time merchant
+   * when localOnly is set. Required for the rule-merchant local path. */
+  ruleSender?: string;
 }): Promise<ExtractedReceipt | null> {
   const { email, attachments, source, deps } = opts;
   const context = await readExtractionContext(opts.accountId);
@@ -821,6 +829,12 @@ export async function extractReceiptFromSource(opts: {
   let renderError = "";
 
   if (source.kind === "attachment") {
+    if (opts.localOnly) {
+      // Attachment receipts (PDF/image) need OCR or vision to extract —
+      // the connected flow skips them rather than calling the model. The
+      // email stays in the Inbox for a manual add.
+      return null;
+    }
     const { buffer, contentType, filename } = source;
     // extractFromImage handles PDFs (rasterizes to PNG and prefers the
     // text layer) and normalizes other images to a browser-displayable
@@ -887,16 +901,28 @@ export async function extractReceiptFromSource(opts: {
     }
     imageMime = "image/png";
     originalName = "email-receipt.png";
-    // Known-merchant skip: the body names a merchant the account has spent
-    // with before and carries a parseable total — no model call needed.
-    extraction =
-      tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
-      (await deps.extractReceipt({
-        accountId: opts.accountId,
-        text: bodyText,
-        categories: context.categories,
-        reports: context.reports,
-      }));
+    if (opts.localOnly) {
+      // No model: prefer a known merchant (repeat), else the rule sender.
+      // Null when no total parses locally -> caller skips (stays in Inbox).
+      const local =
+        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
+        (opts.ruleSender
+          ? tryRuleMerchantExtraction(bodyText, opts.ruleSender)
+          : null);
+      if (!local) return null;
+      extraction = local;
+    } else {
+      // Known-merchant skip: the body names a merchant the account has spent
+      // with before and carries a parseable total — no model call needed.
+      extraction =
+        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
+        (await deps.extractReceipt({
+          accountId: opts.accountId,
+          text: bodyText,
+          categories: context.categories,
+          reports: context.reports,
+        }));
+    }
     if (renderError) {
       console.error("[inbound] email receipt render failed:", renderError);
     }
