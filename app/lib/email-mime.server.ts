@@ -73,6 +73,10 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     header("Subject", encodeHeader(input.subject)),
     header("Message-ID", messageId),
     "MIME-Version: 1.0",
+    // Stable marker so the inbound pipelines can recognize this as the
+    // app's own outbound mail (confirmation/reply) and never reprocess it
+    // — the loop guard. Not subject to subject-wording changes.
+    "X-Expense-Confirmation: 1",
   ];
   if (input.inReplyTo) {
     headers.push(header("In-Reply-To", input.inReplyTo));

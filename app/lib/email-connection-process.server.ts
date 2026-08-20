@@ -26,7 +26,10 @@ import {
 } from "~/lib/email-connection-mail.server";
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
-import { looksLikeReceiptEmail } from "~/lib/email-classify";
+import {
+  looksLikeReceiptEmail,
+  hasOwnConfirmationHeader,
+} from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import prisma from "~/lib/prisma.server";
 import { extractEmailAddress } from "~/lib/validation";
@@ -362,6 +365,15 @@ export async function processConnectionEmail(
     if (isDeliveryNotification(email.headers)) {
       await log("ignored", true, "bounce");
       return { status: "ignored", reason: "bounce" };
+    }
+
+    // Loop guard: the app's own outbound confirmations carry the
+    // X-Expense-Confirmation header. If one lands back in the Inbox (it's
+    // self for the connected flow, but a rule could match its sender),
+    // skip it — never reprocess the app's own output. Header-based, stable.
+    if (hasOwnConfirmationHeader(email.headers)) {
+      await log("ignored", true, "own confirmation");
+      return { status: "ignored", reason: "own confirmation" };
     }
 
     // LOCAL gate before any model call: marketing/shipping mail from a

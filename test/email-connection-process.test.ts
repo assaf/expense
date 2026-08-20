@@ -307,6 +307,58 @@ describe("processConnectionEmail", () => {
     expect((await logRow(conn.id, "e4"))?.matched).toBe(true);
   });
 
+  it("ignores the app's own confirmation email (loop guard via header)", async () => {
+    // The app's outbound confirmation carries X-Expense-Confirmation.
+    // If one lands back in the Inbox it must never reprocess — even if a
+    // rule matched its sender (the header is the stable signal).
+    await addEmailRule({
+      accountId: "",
+      sender: "labnotes.org",
+      source: "seed",
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e8",
+          {
+            from: "Expense <assaf@labnotes.org>",
+            subject: "👍 Receipt accepted: $10.00 — Software — 2026 Business",
+            body: "Receipt accepted. Total: $10.00",
+          },
+        ],
+      ]),
+    );
+    // The fake adapter builds a text/plain body with no headers; inject the
+    // X-header via a custom fetch that returns headers on the ReceivedEmail.
+    const deps = depsFor(adapter, conn.id);
+    const guarded = {
+      ...deps,
+      fetchReceivedEmail: async (emailId: string) => {
+        const base = await deps.fetchReceivedEmail(emailId);
+        return {
+          ...base,
+          headers: { ...base.headers, "X-Expense-Confirmation": "1" },
+        };
+      },
+    };
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
+    guarded.extractReceipt = extractReceipt;
+    const result = await processConnectionEmail(
+      conn,
+      summary("e8", "assaf@labnotes.org", "👍 Receipt accepted"),
+      guarded,
+      {
+        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("ignored");
+    expect((result as { reason: string }).reason).toBe("own confirmation");
+    expect(trashed).toEqual([]);
+    expect(extractReceipt).not.toHaveBeenCalled();
+    expect((await logRow(conn.id, "e8"))?.outcome).toBe("ignored");
+  });
+
   it("extracts a first-time receipt locally without ever calling the model", async () => {
     await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
     const { adapter, trashed } = fakeAdapter(

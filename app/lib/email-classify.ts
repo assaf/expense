@@ -31,18 +31,18 @@ const MARKETING_BODY_RE =
 const TOTAL_BODY_RE =
   /((?:grand |order |amount |total )?total|amount paid|paid|charged|balance due|due)[:\s]{0,20}(?:usd|eur|gbp|cad|aud)?\s?[€£$]?\s?\d+(?:[.,]\d{2})|[€£$]\s?\d+(?:[.,]\d{2})/i;
 
-/** The app's OWN confirmation emails — subject starts with 👍/⚠️ then
- * "Receipt accepted:". They look like receipts (the word "receipt" + a $
- * total in the body), so without this guard a flow that re-scans a folder
- * they land in (the forward flow's Receipts folder) reprocesses them in a
- * confirmation feedback loop, spawning duplicate expenses + confirmations
- * across drains. Matches the format built in inbound-email.server.ts
- * confirmationEmail(). */
-const IS_OWN_CONFIRMATION_RE = /^(👍|⚠️)\s*Receipt accepted:/u;
-
-/** True for the app's own confirmation-email subjects (loop guard). */
-export function isOwnConfirmationEmail(subject: string): boolean {
-  return IS_OWN_CONFIRMATION_RE.test(subject.trim());
+/** The app's own outbound mail carries this header (set by
+ * buildRfc822Message) so the inbound pipelines can recognize it and never
+ * reprocess it — the loop guard. Header-based (not subject-based) so it's a
+ * stable signal that survives subject-wording changes and can't be spoofed
+ * by a real receipt (no real sender sets our custom header). */
+export function hasOwnConfirmationHeader(
+  headers: Record<string, string>,
+): boolean {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === "x-expense-confirmation") return true;
+  }
+  return false;
 }
 
 export interface EmailClassifyInput {
@@ -60,13 +60,6 @@ export interface EmailClassifyInput {
 export function looksLikeReceiptEmail(input: EmailClassifyInput): boolean {
   const subject = input.subject;
   const body = input.bodyText;
-
-  // The app's OWN confirmation emails start with 👍/⚠️ and "Receipt
-  // accepted:". They look like receipts (the word "receipt" + a $ total in
-  // the body), so without this guard the forward flow reprocesses them when
-  // one gets filed back into the Receipts folder — a confirmation feedback
-  // loop that spawns duplicate expenses + confirmations across drains.
-  if (IS_OWN_CONFIRMATION_RE.test(subject.trim())) return false;
 
   // A parseable total anywhere in the body is the strongest signal.
   if (TOTAL_BODY_RE.test(body)) return true;

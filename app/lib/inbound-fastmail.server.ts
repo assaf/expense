@@ -9,7 +9,7 @@ import {
   type RawEmail,
 } from "~/lib/fastmail.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
-import { isOwnConfirmationEmail } from "~/lib/email-classify";
+import { hasOwnConfirmationHeader } from "~/lib/email-classify";
 import { processInboundEvent } from "~/lib/inbound-email.server";
 import type {
   AttachmentMeta,
@@ -211,7 +211,7 @@ export async function receiptEmailData(
   id: string,
   adapter: FastmailAdapter = realFastmailAdapter,
 ): Promise<EmailReceivedData> {
-  const { raw } = await parsedEmail(id, adapter);
+  const { raw, email } = await parsedEmail(id, adapter);
   return {
     email_id: id,
     created_at: raw.receivedAt,
@@ -222,6 +222,7 @@ export async function receiptEmailData(
     received_for: [],
     message_id: raw.messageId,
     subject: raw.subject,
+    headers: headerRecord(email.headers),
     // The pipeline never reads data.attachments (metadata comes from
     // deps.listAttachments), so this stays empty.
     attachments: [],
@@ -321,12 +322,11 @@ export async function processUnprocessedReceipts(
       await adapter.markProcessed(id);
       try {
         const data = await receiptEmailData(id, adapter);
-        // Loop guard: the app's own confirmation emails ("Receipt
-        // accepted:...") look like receipts and, if one is filed back
-        // into the Receipts folder, would reprocess on every drain,
-        // spawning duplicate expenses + confirmations. Skip + destroy
-        // them — they are the app's own output, not user receipts.
-        if (isOwnConfirmationEmail(data.subject)) {
+        // Loop guard: the app's own outbound mail carries the
+        // X-Expense-Confirmation header. If one is filed back into the
+        // Receipts folder, skip + destroy it — it's the app's own output,
+        // not a user receipt. Header-based (stable), not subject-based.
+        if (hasOwnConfirmationHeader(data.headers)) {
           console.info(
             "[fastmail-inbound] skipping own confirmation (loop guard)",
             {

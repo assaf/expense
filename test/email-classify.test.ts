@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { looksLikeReceiptEmail } from "~/lib/email-classify";
+import {
+  looksLikeReceiptEmail,
+  hasOwnConfirmationHeader,
+} from "~/lib/email-classify";
 
 /** The local (no-LLM) gate that decides whether extraction runs at all. */
 describe("looksLikeReceiptEmail", () => {
@@ -50,5 +53,35 @@ describe("looksLikeReceiptEmail", () => {
 
   it("ignores nothing on empty input", () => {
     expect(looksLikeReceiptEmail({ subject: "", bodyText: "" })).toBe(false);
+  });
+});
+
+describe("hasOwnConfirmationHeader", () => {
+  it("matches the app's X-Expense-Confirmation header", () => {
+    expect(hasOwnConfirmationHeader({ "X-Expense-Confirmation": "1" })).toBe(
+      true,
+    );
+  });
+
+  it("is case-insensitive on the header name", () => {
+    expect(hasOwnConfirmationHeader({ "x-expense-confirmation": "1" })).toBe(
+      true,
+    );
+    expect(hasOwnConfirmationHeader({ "X-EXPENSE-CONFIRMATION": "yes" })).toBe(
+      true,
+    );
+  });
+
+  it("returns false for a real receipt's headers", () => {
+    expect(
+      hasOwnConfirmationHeader({
+        From: "receipts@apple.com",
+        Subject: "Your receipt from Apple",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for empty headers", () => {
+    expect(hasOwnConfirmationHeader({})).toBe(false);
   });
 });

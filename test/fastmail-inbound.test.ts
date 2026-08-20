@@ -438,7 +438,8 @@ describe("processUnprocessedReceipts", () => {
   it("skips + destroys its own confirmation emails (loop guard)", async () => {
     // The app's own confirmation, filed back into the Receipts folder —
     // without the guard it looks like a receipt ("Receipt" + $10 in the
-    // body) and reprocesses on every drain, spawning dupes.
+    // body) and reprocesses on every drain, spawning dupes. Recognized by
+    // the X-Expense-Confirmation header the app sets on its outbound mail.
     const id = "fm-conf-1";
     const ownConfirmation: RawEmail = {
       id,
@@ -450,6 +451,7 @@ describe("processUnprocessedReceipts", () => {
           "Date: Tue, 15 Jul 2025 10:00:00 -0700",
           "Message-ID: <fm-conf-1@labnotes.org>",
           "MIME-Version: 1.0",
+          "X-Expense-Confirmation: 1",
           "Content-Type: text/plain; charset=utf-8",
           "",
           "Receipt accepted. Total: $10.00",

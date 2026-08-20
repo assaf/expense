@@ -80,6 +80,10 @@ export interface EmailReceivedData {
   received_for: string[];
   message_id: string;
   subject: string;
+  /** Parsed headers (lowercased keys not guaranteed — use
+   * hasOwnConfirmationHeader for case-insensitive lookup). Lets the
+   * pipeline recognize the app's own outbound mail (loop guard). */
+  headers: Record<string, string>;
   attachments: {
     id: string;
     filename: string;

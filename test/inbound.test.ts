@@ -101,6 +101,7 @@ function eventData(
     received_for: ["receipts@labnotes.org"],
     message_id: "<msg-1@example.com>",
     subject: "Fwd: Receipt from Amazon",
+    headers: {},
     attachments: [],
     ...overrides,
   };
