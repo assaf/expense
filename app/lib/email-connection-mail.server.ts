@@ -7,7 +7,6 @@ import {
   buildRfc822Message,
   type SendEmailInput,
 } from "~/lib/email-mime.server";
-import { captureWarning } from "~/lib/errors.server";
 
 /**
  * Mail operations on a CONNECTED email account, all authenticated as the

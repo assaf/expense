@@ -40,4 +40,5 @@ pnpm build && pnpm start   # prod build + serve on :3000
 - **Report rename**: expenses update; image filenames don't (re-save rewrites them).
 - **PDF/OCR**: Vercel's tracer drops pdf.worker/tesseract wasm — real coverage is `test/pdf-ocr.test.ts` + post-deploy `/api/smoke`. Deploy order: secretlint → check & test → migrate-db (never before tests) → pdf-ocr-smoke. `docs/deploy.md`.
 - **deepmerge-ts 7.1.5** advisory (transitive via `@prisma/config`): unfixed by design, ~zero practical risk; if `npm audit` flags it, override `^8.0.0` and verify prisma still works.
+- **FastMail API tokens can't submit mail** (`EmailSubmission`/`Identity` → 403 `urn:ietf:params:jmap:submission` disallowed): connected-mailbox confirmations are _written to the owner's Inbox_ via `Email/import`, never sent. See `docs/email-connections.md`.
 - Reconciliation (`docs/reconciliation.md`), receipts-by-email (`docs/receipts-by-email.md`), connected email accounts (`docs/email-connections.md`), accounts (`docs/accounts.md`), image keys `images/{accountId}/…` named `YYYY-MM-DD_REPORT_FILE.ext` (legacy migration: `scripts/migrate-legacy`).

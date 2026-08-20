@@ -83,14 +83,16 @@ from an existing inbox).**
   (same extraction/render/save as receipts-by-email — see
   `selectReceiptSource`/`extractReceiptFromSource`/`saveExpenseFromExtraction`
   in `inbound-email.server.ts`) → on success the email moves to **Trash**
-  and the mailbox owner gets a confirmation email (from their own mailbox,
-  with the edit link). Marketing mail from a rule-matched sender is
-  ignored in place. Errors are logged to EmailProcessLog and the email
-  stays in the Inbox — never trashed on failure, never re-expensed.
-  Counters: receivedCount per evaluated email, processedCount per created.
+  and the mailbox owner gets a confirmation **written to their Inbox**
+  (see below — the API token can't send) with the edit link. Marketing mail
+  from a rule-matched sender is ignored in place. Errors are logged to
+  EmailProcessLog and the email stays in the Inbox — never trashed on
+  failure, never re-expensed. Counters: receivedCount per evaluated
+  email, processedCount per created.
 - **JMAP mail ops as the user** (`app/lib/email-connection-mail.server.ts`):
-  Inbox query, raw RFC 5322 download, Trash move, and send (identity match
-  → upload → import → submit, one retry on transient submission failure).
+  Inbox query, raw RFC 5322 download, Trash move, and Inbox delivery of
+  the confirmation (upload RFC 5322 blob → `Email/import` into the Inbox;
+  no submit).
 
 - **Rule inference** (`app/lib/email-connection-infer.server.ts` +
   `pnpm infer:rules`, i.e. `scripts/infer-email-rules.ts`): scan a
@@ -139,3 +141,38 @@ with local logic only:
 The receipts-by-email (forward) flow is unchanged: it still uses the LLM for
 unknown senders, where the model's flexibility is the point. Local-only is
 the connected flow, where every sender is rule-matched.
+
+## Confirmation delivery (written to Inbox, not sent)
+
+FastMail **API tokens can't submit mail.** `EmailSubmission/set` and
+`Identity/get` return HTTP 403 `"Disallowed capabilities for this
+type/client: urn:ietf:params:jmap:submission"`. The token can read/write
+mail (Email/get, Email/query, Mailbox/get, Email/set mailboxIds,
+Email/import) but cannot send.
+
+So the confirmation-to-owner is **delivered, not sent**: the RFC 5322
+blob is uploaded and `Email/import`-ed straight into the owner's Inbox
+(mail capability only — the same one used to Trash). The owner sees it
+appear in their Inbox; no SMTP, no identity, no submission. The expense
+
+- Trash already succeeded, so a delivery failure is logged and never
+  fatal.
+
+## Receipt number in the description
+
+`parseReceiptRef` pulls a `#ref` (e.g. `#1718-6067`) from the subject
+(preferred) or body; the connected-flow local extraction sets it as the
+expense `description`, so each expense carries the receipt number it came
+from — the user can tell which expense maps to which receipt email.
+
+## Dev tooling
+
+- `pnpm drain:email --connection <id> [--role inbox|trash] [--limit N]
+[--days N]` (`scripts/drain-email-connection.ts`) — drains a mailbox
+  under tsx with **stubbed renderers** (tsx can't load Vite's `?inline`
+  font asset), so the saved receipt image is a 1×1 placeholder. Use it
+  for fast logic checks, not for the final image.
+- `GET /api/dev-email-drain?connection=<id>` (dev only, `Bearer
+<CRON_SECRET>`) — drains the Inbox in the **bundled dev server** with the
+  real Playwright renderer, so the saved image is a true render of the
+  email. Use this when the image matters.
