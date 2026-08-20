@@ -11,6 +11,9 @@ describe("looksLikeReceiptEmail", () => {
     ["Order confirmation", "", true],
     ["Payment received — thanks!", "", true],
     ["Thanks for your purchase", "", true],
+    // Same sender (no_reply@email.apple.com), not a receipt:
+    // a TestFlight build-notice. No receipt signal, no money → rejected.
+    ["Things 3 3.23 (32300527) for macOS is now available to test.", "", false],
     [
       "Your Amazon.com order with FREE Prime shipping has shipped…",
       "Tracking: 1Z999",
