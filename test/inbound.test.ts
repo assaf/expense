@@ -26,9 +26,9 @@ import type { Expense, ReceiptExpense } from "~/lib/types";
 import type { RenderTextEmailOptions } from "~/lib/email-render.server";
 import {
   buildReceiptSvg,
-  htmlToText,
   renderReceiptImage,
 } from "~/lib/receipt-render.server";
+import { htmlToText } from "~/lib/html-text";
 import { parseJsonObject } from "~/lib/receipt-ai.server";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import {

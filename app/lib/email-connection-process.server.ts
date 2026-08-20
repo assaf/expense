@@ -13,9 +13,9 @@ import {
 } from "~/lib/inbound-email.server";
 import { captureError } from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
-import { extractFromImage } from "~/lib/receipt-ocr.server";
-import { renderReceiptImage } from "~/lib/receipt-render.server";
-import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
+// Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
+// chromium) are lazy-loaded inside realExtractionDeps so importing this
+// module never pulls them — scripts/tests that inject stub deps stay light.
 import {
   inboxEmailSummaries,
   moveConnectionEmailToTrash,
@@ -27,7 +27,7 @@ import {
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { looksLikeReceiptEmail } from "~/lib/email-classify";
-import { htmlToText } from "~/lib/receipt-render.server";
+import { htmlToText } from "~/lib/html-text";
 import prisma from "~/lib/prisma.server";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
@@ -154,10 +154,20 @@ function realExtractionDeps(): ConnectionDeps {
     // can't be read locally are skipped for manual review.
     classifyAttachment: async () => null,
     extractReceipt,
-    extractFromImage,
-    renderReceiptImage,
-    renderEmailImage,
-    renderTextEmail,
+    extractFromImage: (input) =>
+      import("~/lib/receipt-ocr.server").then((m) => m.extractFromImage(input)),
+    renderReceiptImage: (text, opts) =>
+      import("~/lib/receipt-render.server").then((m) =>
+        m.renderReceiptImage(text, opts),
+      ),
+    renderEmailImage: (html, opts) =>
+      import("~/lib/email-render.server").then((m) =>
+        m.renderEmailImage(html, opts),
+      ),
+    renderTextEmail: (text, opts) =>
+      import("~/lib/email-render.server").then((m) =>
+        m.renderTextEmail(text, opts),
+      ),
   };
 }
 

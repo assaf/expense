@@ -17,6 +17,7 @@
     "build:prisma": "prisma generate",
     "setup:push": "tsx scripts/setup-push.ts",
     "infer:rules": "tsx scripts/infer-email-rules",
+    "drain:email": "tsx scripts/drain-email-connection",
     "test:ocr": "RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts test/receipt-ocr.test.ts",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",

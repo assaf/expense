@@ -2,12 +2,14 @@ import {
   FORWARD_MARKERS,
   stripForwardedText,
   stripForwardHeader,
-  type CidImage,
-  type CidResolver,
-  type RenderEmailOptions,
-  type RenderTextEmailOptions,
+} from "~/lib/email-forward";
+import type {
+  CidImage,
+  CidResolver,
+  RenderEmailOptions,
+  RenderTextEmailOptions,
 } from "~/lib/email-render.server";
-import { htmlToText } from "~/lib/receipt-render.server";
+import { htmlToText } from "~/lib/html-text";
 import { fetchPublicUrl } from "~/lib/ssrf.server";
 export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";

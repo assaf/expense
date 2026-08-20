@@ -1,6 +1,5 @@
 import sharp from "sharp";
 import { Resvg } from "@resvg/resvg-js";
-import { load } from "cheerio";
 import { escapeHtml } from "~/lib/escape";
 import {
   JETBRAINS_MONO,
@@ -165,32 +164,4 @@ export async function renderReceiptImage(
   throw new Error(
     `Unable to render email receipt image (${failures.join("; ")})`,
   );
-}
-
-/**
- * Reduce an HTML email body to readable text. Tables keep their cell layout
- * (cells separated by two spaces, rows by newlines); scripts, styles, and
- * embedded SVGs are dropped. Used both for LLM extraction and for rendering
- * the email receipt image.
- */
-export function htmlToText(html: string): string {
-  const $ = load(html);
-  $("script, style, noscript, head, iframe, svg, link, meta, form").remove();
-  $("br").after("\n");
-  $("td, th").each((_, el) => {
-    $(el).append("  ");
-  });
-  $("tr").each((_, el) => {
-    $(el).append("\n");
-  });
-  $(
-    "p, div, li, h1, h2, h3, h4, h5, h6, section, article, blockquote, pre, hr, table, ul, ol",
-  ).each((_, el) => {
-    $(el).append("\n");
-  });
-  return ($("body").text() || $.root().text() || "")
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }

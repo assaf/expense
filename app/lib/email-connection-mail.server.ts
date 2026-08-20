@@ -58,22 +58,23 @@ export interface ConnectionEmailSummary {
 }
 
 /**
- * Recent emails in the account's Inbox, oldest first. The drain passes an
+ * Recent emails in a mailbox (by role), oldest first. The drain passes an
  * `afterIso` lookback window; already-evaluated emails are skipped by the
  * caller via the EmailProcessLog (idempotency), not by the query.
  */
-export async function inboxEmailSummaries(opts: {
+export async function mailboxSummaries(opts: {
   token: string;
+  role: string;
   afterIso: string;
   limit: number;
 }): Promise<ConnectionEmailSummary[]> {
-  const inboxId = await mailboxIdByRole(opts.token, "inbox");
+  const mailboxId = await mailboxIdByRole(opts.token, opts.role);
   const query = await jmapCall(opts.token, [
     [
       "Email/query",
       {
         accountId: (await jmapSessionForToken(opts.token)).mailAccountId,
-        filter: { inMailbox: inboxId, after: opts.afterIso },
+        filter: { inMailbox: mailboxId, after: opts.afterIso },
         sort: [{ property: "receivedAt", isAscending: true }],
         limit: opts.limit,
       },
@@ -113,6 +114,15 @@ export async function inboxEmailSummaries(opts: {
         : null,
     };
   });
+}
+
+/** Inbox summaries (role = "inbox"). Retained for the default adapter. */
+export function inboxEmailSummaries(opts: {
+  token: string;
+  afterIso: string;
+  limit: number;
+}): Promise<ConnectionEmailSummary[]> {
+  return mailboxSummaries({ ...opts, role: "inbox" });
 }
 
 // --- Raw email ----------------------------------------------------------------

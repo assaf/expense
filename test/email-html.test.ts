@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
-import { htmlToText } from "~/lib/receipt-render.server";
+import { htmlToText } from "~/lib/html-text";
 
 /**
  * HTML email fixtures. Each `.html` file in test/fixtures/emails/ is a
