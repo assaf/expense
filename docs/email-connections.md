@@ -158,6 +158,23 @@ appear in their Inbox; no SMTP, no identity, no submission. The expense
 - Trash already succeeded, so a delivery failure is logged and never
   fatal.
 
+### Loop guard (header-based)
+
+The app's own confirmations look like receipts ("Receipt" + a `$` total
+in the body), so without a guard a flow that re-scans a folder they
+land in would reprocess them in a feedback loop — 1 receipt → N
+expenses + N+ confirmations across drains.
+
+`buildRfc822Message` sets `X-Expense-Confirmation: 1` on **all** outbound
+app mail. Both inbound pipelines recognize it via
+`hasOwnConfirmationHeader` (case-insensitive) and skip + remove the
+email: the forward flow (`processUnprocessedReceipts`) destroys it
+before `processInboundEvent`; the connected flow
+(`processConnectionEmail`) logs + ignores it after fetch (a backstop
+behind the sender self-check). A real receipt never sets this header,
+so it can't be spoofed into the skip path. Header-based, not
+subject-based — no brittle regex to keep in sync with the wording.
+
 ## Receipt number in the description
 
 `parseReceiptRef` pulls a `#ref` (e.g. `#1718-6067`) from the subject
