@@ -836,35 +836,59 @@ export async function extractReceiptFromSource(opts: {
   let renderError = "";
 
   if (source.kind === "attachment") {
-    if (opts.localOnly) {
-      // Attachment receipts (PDF/image) need OCR or vision to extract —
-      // the connected flow skips them rather than calling the model. The
-      // email stays in the Inbox for a manual add.
-      return null;
-    }
     const { buffer, contentType, filename } = source;
-    // extractFromImage handles PDFs (rasterizes to PNG and prefers the
-    // text layer) and normalizes other images to a browser-displayable
-    // form; `stored` is the bytes saved as the receipt image.
-    const ocr = await deps.extractFromImage({
-      accountId: opts.accountId,
-      buffer,
-      mime: contentType || "application/octet-stream",
-      categories: context.categories,
-      reports: context.reports,
-      knownMerchants: context.knownMerchants,
-    });
-    extraction = ocr.result;
-    receiptImage = ocr.stored.buffer;
-    imageMime = ocr.stored.mime;
-    // The stored bytes are always displayable: PDFs and HEIC/BMP/TIFF
-    // inputs come back as PNG, so the stored name gets a .png extension.
-    originalName = /\.pdf$/i.test(filename)
-      ? filename.replace(/\.pdf$/i, ".png")
-      : imageMime === "image/png" &&
-          /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
-        ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
-        : filename;
+    if (opts.localOnly) {
+      // No model: PDFs with a text layer are extracted locally (pdf.js,
+      // no OCR, no vision). Image attachments + scanned PDFs (no text
+      // layer) are skipped — they need OCR/vision, and the connected flow
+      // is LLM-free. The email stays in the Inbox for a manual add.
+      if (!isPdf({ mime: contentType, originalName: filename })) return null;
+      const { extractPdfText } = await import("~/lib/receipt-ocr.server");
+      const pdfText = await extractPdfText(buffer);
+      const local =
+        pdfText.trim().length >= 20
+          ? (tryKnownMerchantExtraction(pdfText, context.knownMerchants) ??
+            (opts.ruleSender
+              ? tryRuleMerchantExtraction(pdfText, opts.ruleSender)
+              : null))
+          : null;
+      if (!local) return null; // no text layer, or no parseable total
+      extraction = local;
+      // Render the extracted text as a resvg text sheet (no Chromium, no
+      // model) so the expense has a readable receipt image.
+      try {
+        receiptImage = await deps.renderReceiptImage(pdfText, {
+          subject: email.subject,
+        });
+      } catch (err) {
+        renderError = err instanceof Error ? err.message : String(err);
+      }
+      imageMime = "image/png";
+      originalName = filename.replace(/\.pdf$/i, ".png");
+    } else {
+      // extractFromImage handles PDFs (rasterizes to PNG and prefers the
+      // text layer) and normalizes other images to a browser-displayable
+      // form; `stored` is the bytes saved as the receipt image.
+      const ocr = await deps.extractFromImage({
+        accountId: opts.accountId,
+        buffer,
+        mime: contentType || "application/octet-stream",
+        categories: context.categories,
+        reports: context.reports,
+        knownMerchants: context.knownMerchants,
+      });
+      extraction = ocr.result;
+      receiptImage = ocr.stored.buffer;
+      imageMime = ocr.stored.mime;
+      // The stored bytes are always displayable: PDFs and HEIC/BMP/TIFF
+      // inputs come back as PNG, so the stored name gets a .png extension.
+      originalName = /\.pdf$/i.test(filename)
+        ? filename.replace(/\.pdf$/i, ".png")
+        : imageMime === "image/png" &&
+            /\.(heic|heif|bmp|tiff?|avif)$/i.test(filename)
+          ? filename.replace(/\.(heic|heif|bmp|tiff?|avif)$/i, ".png")
+          : filename;
+    }
   } else {
     const bodyText = stripForwardedText(source.text).slice(0, 20_000);
     // Render the actual email with headless Chromium — the HTML part when
