@@ -20,7 +20,7 @@ import {
   inboxEmailSummaries,
   moveConnectionEmailToTrash,
   rawConnectionEmail,
-  sendConnectionEmail,
+  deliverConnectionEmailToInbox,
   type ConnectionEmailSummary,
   type RawConnectionEmail,
 } from "~/lib/email-connection-mail.server";
@@ -593,13 +593,15 @@ export async function drainEmailConnection(
   return result;
 }
 
-/** Send the confirmation email to the mailbox owner, from their mailbox. */
+/** Deliver the confirmation to the mailbox owner's own Inbox by writing it
+ * via JMAP (the API token can't submit/send, only write mail), so the
+ * owner sees it appear in their Inbox. */
 async function sendConnectionEmailToOwner(
   connection: EmailConnectionWithSecret,
   token: string,
   email: OwnerEmail,
 ): Promise<void> {
-  const ok = await sendConnectionEmail(
+  const ok = await deliverConnectionEmailToInbox(
     token,
     {
       to: connection.emailAddress,

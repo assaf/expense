@@ -227,73 +227,7 @@ export async function moveConnectionEmailToTrash(
   ]);
 }
 
-// --- Sending (as the user) ------------------------------------------------------
-
-interface ConnectionIdentity {
-  id: string;
-  name: string;
-  email: string;
-  saveSentToMailboxId: string;
-}
-
-/** The user's sending identities (Identity/get). */
-async function listConnectionIdentities(
-  token: string,
-): Promise<ConnectionIdentity[]> {
-  const responses = await jmapCall(
-    token,
-    [
-      [
-        "Identity/get",
-        { accountId: (await jmapSessionForToken(token)).mailAccountId },
-        "m0",
-      ],
-    ],
-    ["urn:ietf:params:jmap:submission"],
-  );
-  const list = (responses[0]![1] as { list?: unknown[] }).list ?? [];
-  return list
-    .map((i) => {
-      const identity = i as {
-        id: string;
-        name?: string;
-        email?: string;
-        saveSentToMailboxId?: string;
-      };
-      return {
-        id: identity.id,
-        name: identity.name ?? "",
-        email: identity.email ?? "",
-        saveSentToMailboxId: identity.saveSentToMailboxId ?? "",
-      };
-    })
-    .filter((i) => i.email);
-}
-
-function matchIdentity(
-  identities: ConnectionIdentity[],
-  address: string,
-): ConnectionIdentity | undefined {
-  const lower = address.toLowerCase();
-  return identities.find((i) => i.email.toLowerCase() === lower);
-}
-
-/** The JMAP send flow's collaborators — injectable so tests exercise the
- * identity→upload→import→submit sequence offline. */
-export interface ConnectionSendDeps {
-  listIdentities(token: string): Promise<ConnectionIdentity[]>;
-  uploadBlob(token: string, raw: Buffer): Promise<string>;
-  importEmail(
-    token: string,
-    blobId: string,
-    mailboxId: string,
-  ): Promise<string>;
-  submitEmail(
-    token: string,
-    identityId: string,
-    emailId: string,
-  ): Promise<void>;
-}
+// --- Inbox delivery (write a message via Email/import) --------
 
 async function uploadBlob(token: string, raw: Buffer): Promise<string> {
   const s = await jmapSessionForToken(token);
@@ -341,58 +275,25 @@ async function importEmail(
   return created.id;
 }
 
-async function submitEmail(
-  token: string,
-  identityId: string,
-  emailId: string,
-): Promise<void> {
-  await jmapCall(
-    token,
-    [
-      [
-        "EmailSubmission/set",
-        {
-          accountId: (await jmapSessionForToken(token)).mailAccountId,
-          create: { k1: { identityId, emailId } },
-        },
-        "m0",
-      ],
-    ],
-    ["urn:ietf:params:jmap:submission"],
-  );
-}
-
-const realConnectionSendDeps: ConnectionSendDeps = {
-  listIdentities: listConnectionIdentities,
-  uploadBlob,
-  importEmail,
-  submitEmail,
-};
-
 /**
- * Send an email from the user's own mailbox (their identity, matched to
- * `fromAddress`). Same sequence as the app's own FastMail send — upload
- * the raw MIME blob, import it into the identity's Sent mailbox, submit —
- * with the same one-retry-on-transient-submission-failure policy: a lost
- * confirmation makes the user think the receipt wasn't captured. Never
- * throws; returns false on failure (already logged + captured).
+ * Deliver an email straight into the account's Inbox by writing it via JMAP
+ * Email/import — no EmailSubmission, no Identity/get. FastMail API tokens
+ * can read/write mail but cannot submit (urn:ietf:params:jmap:submission
+ * is disallowed, HTTP 403), so a confirmation that goes to the mailbox
+ * owner (self) is written as an Inbox message instead of being sent.
+ * The owner sees it appear in their Inbox; the expense + Trash already
+ * succeeded, so a delivery failure is logged and never fatal.
  */
-export async function sendConnectionEmail(
+export async function deliverConnectionEmailToInbox(
   token: string,
   input: SendEmailInput,
   fromAddress: string,
-  deps: ConnectionSendDeps = realConnectionSendDeps,
 ): Promise<boolean> {
   try {
-    const identities = await deps.listIdentities(token);
-    const identity = matchIdentity(identities, fromAddress) ?? identities[0];
-    if (!identity) {
-      console.warn("[email-connections] send skipped: no identity found");
-      return false;
-    }
+    const inboxId = await mailboxIdByRole(token, "inbox");
     const raw = buildRfc822Message({
-      fromName: identity.name,
-      fromEmail: identity.email,
+      fromName: "",
+      fromEmail: fromAddress,
       to: input.to,
       subject: input.subject,
       html: input.html,
@@ -400,30 +301,16 @@ export async function sendConnectionEmail(
       inReplyTo: input.inReplyTo,
       attachments: input.attachments,
     });
-    const blobId = await deps.uploadBlob(token, raw);
-    const emailId = await deps.importEmail(
-      token,
-      blobId,
-      identity.saveSentToMailboxId,
-    );
-    try {
-      await deps.submitEmail(token, identity.id, emailId);
-    } catch (err) {
-      // Transient submission failure — retry once with the SAME emailId
-      // (the upload + Sent import already succeeded). See the rationale in
-      // fastmail.server.ts sendEmailViaJmap.
-      console.warn(
-        `[email-connections] submit failed, retrying once: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        { to: input.to, subject: input.subject },
-      );
-      await deps.submitEmail(token, identity.id, emailId);
-    }
+    const blobId = await uploadBlob(token, raw);
+    await importEmail(token, blobId, inboxId);
+    console.info("[email-connections] confirmation delivered to Inbox", {
+      to: input.to,
+      subject: input.subject,
+    });
     return true;
   } catch (err) {
-    captureWarning(
-      `[email-connections] send failed: ${
+    console.error(
+      `[email-connections] inbox delivery failed: ${
         err instanceof Error ? err.message : String(err)
       }`,
       { to: input.to, subject: input.subject },
