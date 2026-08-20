@@ -129,6 +129,16 @@ async function jmapApi(
     for (const key of ["notUpdated", "notCreated", "notDestroyed"] as const) {
       const failures = a[key];
       if (failures && Object.keys(failures).length > 0) {
+        // Destroying an already-removed object reports notFound in
+        // notDestroyed (a concurrent drain deleted it first). For an
+        // idempotent delete that is the desired end state, not a failure
+        // — skip it; any other notDestroyed reason still throws.
+        if (key === "notDestroyed") {
+          const hardFailures = Object.values(failures).filter(
+            (f) => (f as { type?: string }).type !== "notFound",
+          );
+          if (hardFailures.length === 0) continue;
+        }
         throw new Error(`JMAP ${name} ${key}: ${JSON.stringify(failures)}`);
       }
     }
