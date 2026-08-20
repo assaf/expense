@@ -459,6 +459,44 @@ describe("processUnprocessedReceipts", () => {
     expect(destroyed).toEqual([]);
   });
 
+  it("serializes concurrent drains — the second joins the first", async () => {
+    const id = "fm-single-flight";
+    const { adapter, downloaded } = recordingAdapter(
+      new Map([[id, rawEmailOf(id)]]),
+    );
+    const bridge = fastmailInboundDeps(adapter);
+    // Slow fetch so the two calls genuinely overlap.
+    const slowDeps: InboundDeps = {
+      ...bridge,
+      ...fakeDeps(),
+      fetchReceivedEmail: async (emailId) => {
+        await new Promise((r) => setTimeout(r, 50));
+        return bridge.fetchReceivedEmail(emailId);
+      },
+    };
+
+    const first = processUnprocessedReceipts({
+      adapter,
+      deps: slowDeps,
+    });
+    const second = processUnprocessedReceipts({
+      adapter,
+      deps: slowDeps,
+    });
+    const [r1, r2] = await Promise.all([first, second]);
+
+    // One drain ran for both callers: the email was fetched and destroyed
+    // once, and the second caller got the first's result.
+    expect(r1).toEqual({ processed: 1, failed: 0, destroyed: 1 });
+    expect(r2).toBe(r1);
+    expect(downloaded.filter((d) => d === id)).toHaveLength(1);
+
+    // Register the created expense so the afterEach cleanup removes it.
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = findReceipt(expenses, "Photo Shop");
+    if (created) usedExpenseIds.push(created.id);
+  });
+
   it("is idempotent — a re-fired push for the same email becomes a duplicate", async () => {
     const id = "fm-proc-4";
     const { adapter, marked, destroyed } = recordingAdapter(

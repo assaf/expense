@@ -275,9 +275,29 @@ function replyTypeFor(
  *
  * With no time budget pressure, drains the whole backlog: re-queries after
  * each batch (marked emails drop out) until empty, bounded by timeBudgetMs.
+ *
+ * Single-flight: concurrent calls (a burst of pushes, or the cron overlapping
+ * a push) serialize on this instance — the second caller joins the first
+ * drain instead of racing it, so the same email can never be listed by two
+ * drains at once. The lock is per-instance (Vercel may run several lambdas);
+ * cross-instance overlap is still possible and is handled silently by the
+ * notFound guards in rawEmail/destroyEmail.
  */
-export async function processUnprocessedReceipts(
+let drainInFlight: Promise<ProcessUnprocessedResult> | null = null;
+
+export function processUnprocessedReceipts(
   options: ProcessUnprocessedOptions = {},
+): Promise<ProcessUnprocessedResult> {
+  if (!drainInFlight) {
+    drainInFlight = runDrain(options).finally(() => {
+      drainInFlight = null;
+    });
+  }
+  return drainInFlight;
+}
+
+async function runDrain(
+  options: ProcessUnprocessedOptions,
 ): Promise<ProcessUnprocessedResult> {
   const adapter = options.adapter ?? realFastmailAdapter;
   const deps = options.deps ?? fastmailInboundDeps(adapter);
