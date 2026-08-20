@@ -662,6 +662,117 @@ describe("drainEmailConnection", () => {
     const drain = await drainEmailConnection(conn, { adapter, batchSize: 10 });
     expect(drain.evaluated).toBe(0);
   });
+
+  it("reaches fresh mail behind an all-seen front (cursor scan)", async () => {
+    // The catch-up drain used to stop at the first batch with no fresh
+    // mail — so ignored mail that stays in the Inbox (newsletters, self
+    // mail) built a wall in front of newer receipts, and the cron never
+    // reached them (the Shopify bill sat behind one). The cursor scan
+    // slides past all-seen batches instead of stopping.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    // A faithful paging adapter: respects afterIso + limit, per-email
+    // receivedAt, and hides trashed mail (like a real Inbox query).
+    const emails: Array<{
+      id: string;
+      from: string;
+      subject: string;
+      body: string;
+      receivedAt: string;
+    }> = [
+      {
+        id: "g1",
+        from: "newsletter@random.com",
+        subject: "Digest",
+        body: "nothing to see",
+        receivedAt: "2026-07-13T10:00:00.000Z",
+      },
+    ];
+    const trashed: string[] = [];
+    const adapter: ConnectionMailAdapter = {
+      inboxEmailSummaries: async (opts) =>
+        emails
+          .filter(
+            (e) => !trashed.includes(e.id) && e.receivedAt > opts.afterIso,
+          )
+          .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+          .slice(0, opts.limit)
+          .map((e) => ({
+            id: e.id,
+            receivedAt: e.receivedAt,
+            subject: e.subject,
+            from: e.from,
+          })),
+      rawEmail: async (id) => {
+        const e = emails.find((x) => x.id === id);
+        if (!e) throw new Error(`email ${id} not found`);
+        return {
+          id,
+          raw: Buffer.from(
+            [
+              `From: ${e.from}`,
+              "To: mailbox@example.com",
+              `Subject: ${e.subject}`,
+              `Date: ${new Date(e.receivedAt).toUTCString()}`,
+              `Message-ID: <${id}@example.com>`,
+              "Content-Type: text/plain; charset=utf-8",
+              "",
+              e.body,
+            ].join("\r\n"),
+          ),
+          receivedAt: e.receivedAt,
+          subject: e.subject,
+          from: e.from,
+          to: ["mailbox@example.com"],
+          messageId: `<${id}@example.com>`,
+        };
+      },
+      moveToTrash: async (id) => {
+        trashed.push(id);
+      },
+    };
+
+    // First drain: g1 is evaluated once (no rule → ignored, stays, seen).
+    const first = await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 1,
+    });
+    expect(first).toEqual({
+      evaluated: 1,
+      created: 0,
+      partial: 0,
+      ignored: 1,
+      failed: 0,
+    });
+
+    // A receipt arrives — NEWER than the seen wall in front of it.
+    emails.push({
+      id: "g2",
+      from: "Apple <no_reply@email.apple.com>",
+      subject: "Your receipt from Apple",
+      body: "MERCHANT: Apple\nTOTAL: 6.66",
+      receivedAt: "2026-07-14T11:00:00.000Z",
+    });
+
+    // batchSize 1: the first batch is the seen g1 — the cursor must scan
+    // past it and reach g2 (the old code stopped dead at g1).
+    const second = await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 1,
+    });
+    expect(second.evaluated).toBe(1);
+    expect(second.created + second.partial).toBe(1);
+    expect(trashed).toContain("g2");
+    const row = await logRow(conn.id, "g2");
+    expect(row?.outcome === "created" || row?.outcome === "partial").toBe(true);
+    const expenses = await readExpenses(conn.accountId);
+    const created = expenses.find(
+      (e) => e.type === "receipt" && e.amount?.toString() === "6.66",
+    );
+    expect(created).toBeDefined();
+    expect(created?.type === "receipt" && created.merchant).toBe("Apple");
+  });
 });
 
 // PostalMime sanity: the fake adapter's raw emails parse as expected.

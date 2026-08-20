@@ -571,8 +571,16 @@ export interface DrainResult {
 
 /**
  * Drain new Inbox mail for one connection: evaluate each unseen email,
- * create expenses for receipts, Trash + notify on success. Bounded by batch
- * size and a time budget; the daily cron re-runs it as the catch-up net.
+ * create expenses for receipts, Trash + notify on success. Bounded by a
+ * time budget; the daily cron re-runs it as the catch-up net.
+ *
+ * The scan is cursor-based over receivedAt: each batch advances the cursor
+ * past the newest email it returned, so a batch with no fresh mail just
+ * slides the window forward instead of stopping the drain. Without that,
+ * a front of already-evaluated mail (ignored newsletters, self mail that
+ * stays in the Inbox) blocks the catch-up from ever reaching newer mail —
+ * the Shopify bill sat behind a wall of seen email and was never reached
+ * by the cron.
  * Counters: receivedCount bumps per newly-evaluated email, processedCount
  * per created/partial.
  */
@@ -591,6 +599,7 @@ export async function drainEmailConnection(
 
   const lookbackMs = options.lookbackMs ?? 3 * 24 * 60 * 60 * 1000;
   const batchSize = options.batchSize ?? 10;
+  const budgetMs = options.timeBudgetMs ?? 45_000;
   const started = Date.now();
 
   const result: DrainResult = {
@@ -607,21 +616,39 @@ export async function drainEmailConnection(
       sendConnectionEmailToOwner(connection, token, email),
   };
 
-  while (true) {
-    const afterIso = new Date(Date.now() - lookbackMs).toISOString();
+  // Cursor over receivedAt: starts at the lookback floor, advances past
+  // each scanned batch. +1ms so the (exclusive) JMAP `after` filter always
+  // moves strictly forward regardless of same-timestamp batches.
+  let cursorMs = started - lookbackMs;
+  let afterIso = new Date(cursorMs).toISOString();
+
+  while (Date.now() - started <= budgetMs) {
     const summaries = await adapter.inboxEmailSummaries({
       afterIso,
       limit: batchSize,
     });
+    if (summaries.length === 0) break;
     // Skip already-evaluated emails (push + cron race, re-delivered mail).
     const fresh: ConnectionEmailSummary[] = [];
     for (const summary of summaries) {
       if (!(await seenEmail(connection.id, summary.id))) fresh.push(summary);
     }
-    if (fresh.length === 0) break;
+    // The batch's newest email (summaries are oldest-first); the cursor
+    // slides to just past it.
+    const newestMs = Date.parse(summaries[summaries.length - 1]!.receivedAt);
+    const nextMs = Number.isNaN(newestMs) ? cursorMs : newestMs + 1;
+
+    if (fresh.length === 0) {
+      // Nothing new in this batch: advance past it and keep scanning —
+      // newer mail may still be waiting behind this wall of seen email.
+      if (nextMs <= cursorMs) break; // no forward progress (defensive)
+      cursorMs = nextMs;
+      afterIso = new Date(cursorMs).toISOString();
+      continue;
+    }
 
     for (const summary of fresh) {
-      if (Date.now() - started > (options.timeBudgetMs ?? 45_000)) {
+      if (Date.now() - started > budgetMs) {
         console.warn("[email-connections] drain time budget reached", {
           connectionId: connection.id,
         });
@@ -657,6 +684,12 @@ export async function drainEmailConnection(
         from: summary.from,
         outcome: outcome.status,
       });
+    }
+    // Processed emails are either trashed (gone from the Inbox) or seen;
+    // slide the window past the batch so the next query doesn't re-serve it.
+    if (nextMs > cursorMs) {
+      cursorMs = nextMs;
+      afterIso = new Date(cursorMs).toISOString();
     }
   }
   return result;
