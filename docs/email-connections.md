@@ -5,9 +5,9 @@ their inbox — no forwarding, no manual entry. Distinct from
 [receipts-by-email](receipts-by-email.md) (forward receipts to a dedicated
 address); both coexist.
 
-**Status: phases 1–3 shipped (connect/verify/disconnect, per-connection
-push webhook + renewal cron, rules + processing pipeline). Phase 4
-(rule inference from an existing inbox) is planned.**
+**Status: all four phases shipped (connect/verify/disconnect, per-connection
+push webhook + renewal cron, rules + processing pipeline, rule inference
+from an existing inbox).**
 
 ## What exists today
 
@@ -92,10 +92,15 @@ push webhook + renewal cron, rules + processing pipeline). Phase 4
   Inbox query, raw RFC 5322 download, Trash move, and send (identity match
   → upload → import → submit, one retry on transient submission failure).
 
-## Planned (not built yet)
-
-1. **General-rule inference (phase 4)**: scan a connected inbox (read-only)
-   to propose general rules from senders with receipt-like history.
+- **Rule inference** (`app/lib/email-connection-infer.server.ts` +
+  `pnpm infer:rules`, i.e. `scripts/infer-email-rules.ts`): scan a
+  connected inbox read-only (last 90 days, up to 500 emails, subject +
+  preview only — no LLM, no full-body fetches) and score senders by
+  receipt-likeness with the local classifier. Candidates: a non-freemail
+  domain with ≥2 receipt-like emails and ≥50% ratio. The script prints a
+  table; `--apply` adds candidates as general rules (source = "inferred"),
+  idempotently. Deliberately operator-driven — never cron/webhook-wired,
+  because general rules affect every workspace.
 
 ## Safety decisions
 

@@ -47,6 +47,19 @@ export async function matchEmailRule(
   return rules.find((r) => ruleSenderMatches(r.sender, fromAddress));
 }
 
+/** The general rules (accountId = "") — the seed + anything inferred. */
+export async function listGeneralEmailRules(): Promise<EmailRuleRecord[]> {
+  const rows = await prisma.emailRule.findMany({
+    where: { accountId: "" },
+    orderBy: { sender: "asc" },
+  });
+  return rows.map((r) => ({
+    accountId: r.accountId,
+    sender: r.sender,
+    source: r.source,
+  }));
+}
+
 /** Add (or return the existing) rule for a sender pattern. */
 export async function addEmailRule(input: {
   accountId: string;
