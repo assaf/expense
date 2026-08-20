@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   matchKnownMerchant,
   parseReceiptAmount,
+  parseReceiptRef,
   tryKnownMerchantExtraction,
   tryRuleMerchantExtraction,
   type KnownMerchant,
@@ -233,5 +234,31 @@ describe("tryRuleMerchantExtraction", () => {
 
   it("returns null on empty text", () => {
     expect(tryRuleMerchantExtraction("", "apple.com")).toBeNull();
+  });
+});
+
+describe("parseReceiptRef", () => {
+  it("pulls a #ref from the subject", () => {
+    expect(parseReceiptRef("Your zai receipt [#1718-6067]", "")).toBe(
+      "#1718-6067",
+    );
+  });
+
+  it("pulls an order ref like #W123456", () => {
+    expect(parseReceiptRef("Your Amazon order #W123456", "")).toBe("#W123456");
+  });
+
+  it("falls back to the body when the subject has none", () => {
+    expect(parseReceiptRef("Receipt", "Order ref #99-AB1 shipped")).toBe(
+      "#99-AB1",
+    );
+  });
+
+  it("returns empty when no #ref anywhere", () => {
+    expect(parseReceiptRef("Thanks for your purchase", "Total $10")).toBe("");
+  });
+
+  it("ignores a bare #1 (too short to be a ref)", () => {
+    expect(parseReceiptRef("Item #1 in stock", "")).toBe("");
   });
 });

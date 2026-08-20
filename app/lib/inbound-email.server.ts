@@ -18,6 +18,7 @@ import {
   resolveExtraction,
   tryKnownMerchantExtraction,
   tryRuleMerchantExtraction,
+  parseReceiptRef,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -912,7 +913,10 @@ export async function extractReceiptFromSource(opts: {
           ? tryRuleMerchantExtraction(bodyText, opts.ruleSender)
           : null);
       if (!local) return null;
-      extraction = local;
+      // Tag the expense with the receipt/order number from the subject so
+      // the user can tell which expense came from which receipt email.
+      const ref = parseReceiptRef(email.subject, bodyText);
+      extraction = ref ? { ...local, description: ref } : local;
     } else {
       // Known-merchant skip: the body names a merchant the account has spent
       // with before and carries a parseable total — no model call needed.

@@ -277,6 +277,18 @@ function merchantForSender(sender: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/** Extract a receipt/order reference like "#1718-6067" from the subject
+ * (preferred) or body. Lets the connected flow tag each expense with the
+ * receipt number so the user can tell which expense came from which email.
+ * Returns "" when none is found. */
+const RECEIPT_REF_RE = /#([A-Za-z0-9][\w-]{2,})/;
+export function parseReceiptRef(subject: string, body: string): string {
+  const ms = RECEIPT_REF_RE.exec(subject ?? "");
+  if (ms) return `#${ms[1]}`;
+  const mb = RECEIPT_REF_RE.exec(body ?? "");
+  return mb ? `#${mb[1]}` : "";
+}
+
 /** Local extraction for a FIRST-TIME merchant matched by a general rule:
  * the merchant name comes from the rule sender domain (no prior expense
  * history needed), the total from parseReceiptAmount. Category is "" — the
