@@ -293,6 +293,25 @@ export function parseReceiptRef(subject: string, body: string): string {
   return mb ? `#${mb[1]}` : "";
 }
 
+/** The account/company name on a bill — Shopify bills say "Account billed
+ * <name>" followed by the account email (or a newline). The capture stops
+ * at an email-looking token or a newline; with no boundary the layout
+ * columns run together, so we capture nothing rather than guess. */
+const ACCOUNT_BILLED_RE =
+  /Account billed\s+(.{2,80}?)(?=\s+[^\s@]+@[^\s]+|\n)/i;
+export function parseAccountBilled(text: string): string {
+  return ACCOUNT_BILLED_RE.exec(text ?? "")?.[1]?.trim() ?? "";
+}
+
+/** The local-only expense description: the receipt/bill reference plus the
+ * billed account when present — e.g. "#576523939 — ZHED Media LLC" — so the
+ * user can tell which expense came from which bill. */
+export function composeLocalDescription(subject: string, text: string): string {
+  return [parseReceiptRef(subject, text), parseAccountBilled(text)]
+    .filter(Boolean)
+    .join(" — ");
+}
+
 /** Local extraction for a FIRST-TIME merchant matched by a general rule:
  * the merchant name comes from the rule sender domain (no prior expense
  * history needed), the total from parseReceiptAmount. Category is "" — the

@@ -368,7 +368,7 @@ describe("processConnectionEmail", () => {
           {
             from: "Apple <no_reply@email.apple.com>",
             subject: "Your receipt from Apple",
-            body: "App Store\nTotal: $19.99",
+            body: "App Store\nTotal: $19.99\nBill #77-001\nAccount billed ZHED Media LLC x@y.com",
           },
         ],
       ]),
@@ -399,6 +399,9 @@ describe("processConnectionEmail", () => {
     );
     expect(e?.type === "receipt" && e.merchant).toBe("Apple");
     expect(e?.type === "receipt" && e.amount?.toString()).toBe("19.99");
+    expect(e?.type === "receipt" && e.description).toBe(
+      "#77-001 — ZHED Media LLC",
+    );
   });
 
   it("skips a receipt whose total can't be parsed locally, leaves it in Inbox", async () => {

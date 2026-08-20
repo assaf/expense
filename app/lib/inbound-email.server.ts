@@ -18,7 +18,7 @@ import {
   resolveExtraction,
   tryKnownMerchantExtraction,
   tryRuleMerchantExtraction,
-  parseReceiptRef,
+  composeLocalDescription,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -854,7 +854,11 @@ export async function extractReceiptFromSource(opts: {
               : null))
           : null;
       if (!local) return null; // no text layer, or no parseable total
-      extraction = local;
+      // Same description tag as the body path: bill reference + billed
+      // account, parsed off the PDF text layer (e.g. "Bill #576523939 ...
+      // Account billed ZHED Media LLC <email>").
+      const description = composeLocalDescription(email.subject, pdfText);
+      extraction = description ? { ...local, description } : local;
       // Rasterize the ACTUAL PDF pages to a PNG (pdf.js, no Chromium, no
       // model) so the receipt image shows the real layout, not a flattened
       // text sheet.
@@ -941,10 +945,10 @@ export async function extractReceiptFromSource(opts: {
           ? tryRuleMerchantExtraction(bodyText, opts.ruleSender)
           : null);
       if (!local) return null;
-      // Tag the expense with the receipt/order number from the subject so
-      // the user can tell which expense came from which receipt email.
-      const ref = parseReceiptRef(email.subject, bodyText);
-      extraction = ref ? { ...local, description: ref } : local;
+      // Tag the expense with the receipt/bill reference + billed account
+      // so the user can tell which expense came from which receipt.
+      const description = composeLocalDescription(email.subject, bodyText);
+      extraction = description ? { ...local, description } : local;
     } else {
       // Known-merchant skip: the body names a merchant the account has spent
       // with before and carries a parseable total — no model call needed.

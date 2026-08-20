@@ -3,6 +3,8 @@ import {
   matchKnownMerchant,
   parseReceiptAmount,
   parseReceiptRef,
+  parseAccountBilled,
+  composeLocalDescription,
   tryKnownMerchantExtraction,
   tryRuleMerchantExtraction,
   type KnownMerchant,
@@ -277,5 +279,58 @@ describe("parseReceiptRef", () => {
 
   it("ignores a bare #1 (too short to be a ref)", () => {
     expect(parseReceiptRef("Item #1 in stock", "")).toBe("");
+  });
+});
+
+describe("parseAccountBilled", () => {
+  it("captures the name after 'Account billed', stopping at the email", () => {
+    // Shopify PDF text: the account name is followed by the account email.
+    expect(
+      parseAccountBilled(
+        "Total $15.00 Account billed ZHED Media LLC teaching@zoehong.com Assaf Arkin 1050 South Flower Street",
+      ),
+    ).toBe("ZHED Media LLC");
+  });
+
+  it("stops at a newline", () => {
+    expect(
+      parseAccountBilled("Account billed Acme Corp\nNext column $10.00"),
+    ).toBe("Acme Corp");
+  });
+
+  it("returns empty when absent or empty text", () => {
+    expect(parseAccountBilled("Total: $10.00")).toBe("");
+    expect(parseAccountBilled("")).toBe("");
+  });
+
+  it("captures nothing when no boundary follows (columns run together)", () => {
+    // No email/newline after the name — the capture would swallow the rest
+    // of the text; capture nothing rather than guess.
+    expect(
+      parseAccountBilled(
+        "Account billed Acme Corp Los Angeles United States Payment status",
+      ),
+    ).toBe("");
+  });
+});
+
+describe("composeLocalDescription", () => {
+  it("joins the bill ref and the billed account", () => {
+    expect(
+      composeLocalDescription(
+        "Aug 20, 2026 bill for Zoe Hong",
+        "Total $15.00 Bill #576523939 Account billed ZHED Media LLC teaching@x.com",
+      ),
+    ).toBe("#576523939 — ZHED Media LLC");
+  });
+
+  it("is just the ref when there is no account", () => {
+    expect(
+      composeLocalDescription("Your zai receipt [#1718-6067]", "Total $10"),
+    ).toBe("#1718-6067");
+  });
+
+  it("is empty when neither is present", () => {
+    expect(composeLocalDescription("Thanks", "Total $10.00")).toBe("");
   });
 });
