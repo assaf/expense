@@ -843,7 +843,8 @@ export async function extractReceiptFromSource(opts: {
       // layer) are skipped — they need OCR/vision, and the connected flow
       // is LLM-free. The email stays in the Inbox for a manual add.
       if (!isPdf({ mime: contentType, originalName: filename })) return null;
-      const { extractPdfText } = await import("~/lib/receipt-ocr.server");
+      const { extractPdfText, renderPdfToPng } =
+        await import("~/lib/receipt-ocr.server");
       const pdfText = await extractPdfText(buffer);
       const local =
         pdfText.trim().length >= 20
@@ -854,12 +855,11 @@ export async function extractReceiptFromSource(opts: {
           : null;
       if (!local) return null; // no text layer, or no parseable total
       extraction = local;
-      // Render the extracted text as a resvg text sheet (no Chromium, no
-      // model) so the expense has a readable receipt image.
+      // Rasterize the ACTUAL PDF pages to a PNG (pdf.js, no Chromium, no
+      // model) so the receipt image shows the real layout, not a flattened
+      // text sheet.
       try {
-        receiptImage = await deps.renderReceiptImage(pdfText, {
-          subject: email.subject,
-        });
+        receiptImage = await renderPdfToPng(buffer);
       } catch (err) {
         renderError = err instanceof Error ? err.message : String(err);
       }
