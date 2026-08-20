@@ -9,6 +9,7 @@ import {
   type RawEmail,
 } from "~/lib/fastmail.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
+import { isOwnConfirmationEmail } from "~/lib/email-classify";
 import { processInboundEvent } from "~/lib/inbound-email.server";
 import type {
   AttachmentMeta,
@@ -320,6 +321,24 @@ export async function processUnprocessedReceipts(
       await adapter.markProcessed(id);
       try {
         const data = await receiptEmailData(id, adapter);
+        // Loop guard: the app's own confirmation emails ("Receipt
+        // accepted:...") look like receipts and, if one is filed back
+        // into the Receipts folder, would reprocess on every drain,
+        // spawning duplicate expenses + confirmations. Skip + destroy
+        // them — they are the app's own output, not user receipts.
+        if (isOwnConfirmationEmail(data.subject)) {
+          console.info(
+            "[fastmail-inbound] skipping own confirmation (loop guard)",
+            {
+              id,
+              subject: data.subject,
+            },
+          );
+          await adapter.destroyEmail(id);
+          invalidateMimeCache(id);
+          destroyed++;
+          continue;
+        }
         const result = await processInboundEvent(data, guardedDeps);
         if (result.status === "error") {
           failed++;

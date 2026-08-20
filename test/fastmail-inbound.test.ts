@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearMimeCache,
   fastmailInboundDeps,
@@ -433,6 +433,53 @@ describe("processUnprocessedReceipts", () => {
 
     expect(result).toEqual({ processed: 0, failed: 1, destroyed: 0 });
     expect(destroyed).toEqual([]);
+  });
+
+  it("skips + destroys its own confirmation emails (loop guard)", async () => {
+    // The app's own confirmation, filed back into the Receipts folder —
+    // without the guard it looks like a receipt ("Receipt" + $10 in the
+    // body) and reprocesses on every drain, spawning dupes.
+    const id = "fm-conf-1";
+    const ownConfirmation: RawEmail = {
+      id,
+      raw: Buffer.from(
+        [
+          "From: receipts@labnotes.org",
+          "To: assaf@labnotes.org",
+          "Subject: 👍 Receipt accepted: $10.00 — Software — 2026 Business",
+          "Date: Tue, 15 Jul 2025 10:00:00 -0700",
+          "Message-ID: <fm-conf-1@labnotes.org>",
+          "MIME-Version: 1.0",
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          "Receipt accepted. Total: $10.00",
+        ].join("\r\n"),
+      ),
+      receivedAt: "2025-07-15T17:00:00Z",
+      subject: "👍 Receipt accepted: $10.00 — Software — 2026 Business",
+      from: "receipts@labnotes.org",
+      to: ["assaf@labnotes.org"],
+      messageId: "<fm-conf-1@labnotes.org>",
+    };
+    const { adapter, destroyed } = recordingAdapter(
+      new Map([[id, ownConfirmation]]),
+    );
+    const sendReply = vi.fn(async () => {});
+    const pipelineDeps: InboundDeps = {
+      ...fastmailInboundDeps(adapter),
+      ...fakeDeps(),
+      sendReply,
+    };
+
+    const result = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+
+    // Destroyed (removed) but NOT processed: no expense, no reply — loop broken.
+    expect(result).toEqual({ processed: 0, failed: 0, destroyed: 1 });
+    expect(destroyed).toEqual([id]);
+    expect(sendReply).not.toHaveBeenCalled();
   });
 
   it("skips silently when a concurrent drain already removed the email", async () => {
