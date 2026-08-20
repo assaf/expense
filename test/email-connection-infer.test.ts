@@ -93,6 +93,19 @@ describe("inferRuleCandidates", () => {
     expect(candidates).toEqual([]);
   });
 
+  it("passes the JMAP accountId on every method call", async () => {
+    jmap.state.entries = [
+      entry("a@shop.example", "Your order", "Total: $1.00"),
+    ];
+    await inferRuleCandidates("tok", OWNER);
+    for (const call of jmap.jmapCall.mock.calls) {
+      const [name, args] = call[1]![0] as [string, Record<string, unknown>];
+      if (name !== "PushSubscription/get") {
+        expect(args.accountId).toBe("acct-1");
+      }
+    }
+  });
+
   it("returns nothing on an empty inbox", async () => {
     const result = await inferRuleCandidates("tok", OWNER);
     expect(result).toEqual({ scanned: 0, candidates: [] });

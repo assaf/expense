@@ -32,7 +32,15 @@ interface MailboxList {
 
 async function mailboxIdByRole(token: string, role: string): Promise<string> {
   const responses = await jmapCall(token, [
-    ["Mailbox/get", { ids: null, properties: ["id", "role"] }, "m0"],
+    [
+      "Mailbox/get",
+      {
+        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        ids: null,
+        properties: ["id", "role"],
+      },
+      "m0",
+    ],
   ]);
   const args = responses[0]![1] as MailboxList;
   const box = args.list.find((b) => b.role === role);

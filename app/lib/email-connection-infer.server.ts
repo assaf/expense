@@ -62,7 +62,15 @@ interface EmailEntry {
 
 async function inboxMailboxId(token: string): Promise<string> {
   const responses = await jmapCall(token, [
-    ["Mailbox/get", { ids: null, properties: ["id", "role"] }, "m0"],
+    [
+      "Mailbox/get",
+      {
+        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        ids: null,
+        properties: ["id", "role"],
+      },
+      "m0",
+    ],
   ]);
   const list =
     (responses[0]![1] as { list?: Array<{ id: string; role?: string }> })
