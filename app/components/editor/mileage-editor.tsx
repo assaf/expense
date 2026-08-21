@@ -6,6 +6,7 @@ import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
 import { findDuplicates } from "~/lib/duplicates";
 import { escapeHtml } from "~/lib/escape";
+import { todayDate } from "~/lib/format";
 import {
   mileageAmount,
   mileageRateFor,
@@ -80,7 +81,10 @@ export function MileageEditor({ data }: { data: EditorData }) {
   );
   const [distanceMiles, setDistanceMiles] = useState(expense.distanceMiles);
   const [amount, setAmount] = useState(expense.amount);
-  const [date, setDate] = useState(expense.date);
+  // Create mode ships an empty date (the server can't know the user's
+  // timezone) — fall back to the browser's local today. Edit mode uses the
+  // stored date.
+  const [date, setDate] = useState(() => expense.date || todayDate());
   const [mileageType, setMileageType] = useState<MileageType>(
     expense.mileageType,
   );

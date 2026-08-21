@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Check,
@@ -88,9 +89,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     readAccountUsers(user.accountId),
     listEmailConnections(user.accountId),
   ]);
-  // A compact "current rate" line for Settings — the editor itself resolves
-  // the exact rate per trip (date + type), so the page only needs today's.
-  const currentRates = currentMileageRates(rates, todayDate());
+  // The "current rate" line is computed CLIENT-side from the browser's
+  // local today — the server runs UTC and must not guess the user's day.
+  // The rates table itself is passed through (timezone-independent).
   return {
     accountName: account?.name ?? "",
     inviteCode: account?.inviteCode ?? "",
@@ -102,7 +103,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     userEmail: user.email,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
-    currentRates,
+    rates,
     oauthSessions,
     members,
     emailConnections,
@@ -278,7 +279,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   const {
     categories,
     homeAddress,
-    currentRates,
+    rates,
     accountName,
     inviteCode,
     inboundSenders,
@@ -290,6 +291,16 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     emailAccountsConfigured,
     mcpUrl,
   } = loaderData;
+  // The "current rate" line depends on the browser's local today (the
+  // server runs UTC) — computed client-side after mount.
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    setToday(todayDate());
+  }, []);
+  const currentRates = useMemo(
+    () => (today ? currentMileageRates(rates, today) : null),
+    [today, rates],
+  );
   return (
     <main
       id="main-content"

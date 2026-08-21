@@ -231,6 +231,9 @@ export function DraftReview({
             const f = new FormData();
             f.set("intent", "complete");
             f.set("runId", run.id);
+            // The server runs UTC — the future-date ceiling must be the
+            // client's local today, computed in the browser.
+            f.set("today", todayDate());
             void fetcher.submit(f, { method: "post" });
           }}
           onCancel={() => setConfirmComplete(false)}

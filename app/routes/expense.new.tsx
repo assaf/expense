@@ -6,7 +6,6 @@ import {
   addReportAction,
   saveExpenseFromForm,
 } from "~/lib/expense-save.server";
-import { todayDate } from "~/lib/format";
 import { readDuplicateCandidates } from "~/lib/db/expenses";
 import { newExpenseShell } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -24,7 +23,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const type =
     url.searchParams.get("type") === "mileage" ? "mileage" : "receipt";
   const expense = newExpenseShell(type);
-  expense.date = todayDate();
+  // The date is deliberately NOT set here: the server runs in UTC (Vercel),
+  // so a server-computed "today" is tomorrow for a PST user after 4pm. The
+  // editor initializes an empty date from the browser's local timezone
+  // (receipt/mileage editors fall back to local today on create).
   // Existing expenses feed the live duplicate warning in the create editor.
   const [context, existing] = await Promise.all([
     loadEditorContext(user.accountId, expense),

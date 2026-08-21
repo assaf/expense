@@ -206,6 +206,9 @@ interface CompleteReconciliationResult {
 export async function completeReconciliationRun(
   accountId: string,
   runId: string,
+  /** The client's local today (YYYY-MM-DD) — the browser knows its own
+   * timezone; the server runs UTC. Used as the future-date ceiling. */
+  today?: string,
 ): Promise<
   | { error: string; result: null }
   | { error: null; result: CompleteReconciliationResult }
@@ -302,7 +305,7 @@ export async function completeReconciliationRun(
       }
 
       const draft = res.draft;
-      const dateError = validateDateNotFuture(draft.date);
+      const dateError = validateDateNotFuture(draft.date, today);
       if (dateError) {
         errors.push(`Row ${i + 1}: ${dateError}`);
         continue;

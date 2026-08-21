@@ -6,6 +6,7 @@ import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
 import { findDuplicates } from "~/lib/duplicates";
+import { todayDate } from "~/lib/format";
 import { imageVersion } from "~/lib/image-version";
 import { usePasteImage } from "~/lib/use-paste-image";
 import type { ReceiptExpense } from "~/lib/types";
@@ -43,7 +44,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
 
-  const [date, setDate] = useState(expense.date);
+  // Create mode ships an empty date (the server can't know the user's
+  // timezone) — fall back to the browser's local today, which is what the
+  // "new expense" form should default to. Edit mode uses the stored date.
+  const [date, setDate] = useState(() => expense.date || todayDate());
   const [merchant, setMerchant] = useState(expense.merchant);
   const [amount, setAmount] = useState(expense.amount);
   const [report, setReport] = useState(expense.report);

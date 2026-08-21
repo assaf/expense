@@ -308,6 +308,41 @@ describe("MCP endpoint", () => {
     expect(row!.imageFile).not.toBe("");
   });
 
+  it("dates capture_receipt in UTC when date is omitted and returns serverUtcNow", async () => {
+    const png = await sharp({
+      create: {
+        width: 40,
+        height: 20,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const captured = await modernCallTool(accessToken, "capture_receipt", {
+      imageData: png.toString("base64"),
+      mime: "image/png",
+      filename: "utc-default.png",
+      report: "2026 Test",
+    });
+    expect(captured.isError).toBe(false);
+    // The response carries the server's UTC instant so the client can
+    // resolve its own local date (server clock is UTC, client timezone
+    // varies).
+    const serverUtcNow = captured.payload.serverUtcNow as string;
+    expect(serverUtcNow).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect((captured.payload.resolved as { date: string }).date).toBe(
+      serverUtcNow.slice(0, 10),
+    );
+    const row = await testPrisma.expense.findFirst({
+      where: {
+        id: captured.payload.expenseId as string,
+        accountId: TEST_ACCOUNT_ID,
+      },
+    });
+    expect(row?.date).toBe(serverUtcNow.slice(0, 10));
+  });
+
   it("rejects header/body mismatch on modern requests", async () => {
     // The Mcp-Name header must mirror params.name on tools/call.
     const res = await mcpPost(

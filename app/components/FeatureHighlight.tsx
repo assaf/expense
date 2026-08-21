@@ -34,12 +34,16 @@ export type HighlightId =
   | "reconcile";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
- * empty strings — the matching highlights are excluded from the pool. */
+ * empty strings — the matching highlights are excluded from the pool.
+ * `mileageRate` is filled client-side from the browser's local today (the
+ * server runs UTC); `hasRates` (server-computable, timezone-independent)
+ * decides whether the mileage-rate highlight is eligible at all. */
 export interface HighlightData {
   inboundAddress: string;
   mcpUrl: string;
   inviteCode: string;
   mileageRate: string;
+  hasRates: boolean;
 }
 
 interface HighlightDef {
@@ -123,9 +127,13 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: (data) => (
       <>
         Rates update automatically from the IRS —{" "}
-        <span className="font-semibold text-gray-700 dark:text-gray-200">
-          ${data.mileageRate}/mi
-        </span>{" "}
+        {data.mileageRate ? (
+          <span className="font-semibold text-gray-700 dark:text-gray-200">
+            ${data.mileageRate}/mi
+          </span>
+        ) : (
+          "the rate for today"
+        )}{" "}
         for business right now. Classify each drive as business, charity, or
         medical and the right rate is applied.
       </>
@@ -187,7 +195,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   ];
   if (data.inboundAddress) pool.push("email");
   if (data.mcpUrl) pool.push("mcp");
-  if (data.mileageRate) pool.push("mileage-rate");
+  if (data.hasRates) pool.push("mileage-rate");
   if (data.inviteCode) pool.push("invite");
   return pool;
 }

@@ -33,12 +33,7 @@ import {
 } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
-import {
-  normalizeAmount,
-  sortExpenses,
-  summarizeBy,
-  todayDate,
-} from "~/lib/format";
+import { normalizeAmount, sortExpenses, summarizeBy } from "~/lib/format";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
   mimeForFile,
@@ -516,7 +511,9 @@ function createMcpServer(accountId: string): McpServer {
         date: z
           .string()
           .optional()
-          .describe("Expense date YYYY-MM-DD (defaults to today)."),
+          .describe(
+            "Expense date YYYY-MM-DD. When omitted the expense is dated today in UTC (the server's clock). Compute the user's local date from serverUtcNow in the response — e.g. a PST evening is already tomorrow in UTC — and pass an explicit date when it differs.",
+          ),
         report: z
           .string()
           .optional()
@@ -563,7 +560,9 @@ function createMcpServer(accountId: string): McpServer {
         date: z
           .string()
           .optional()
-          .describe("Trip date YYYY-MM-DD (defaults to today)."),
+          .describe(
+            "Trip date YYYY-MM-DD. When omitted the trip is dated today in UTC (the server's clock). Compute the user's local date from serverUtcNow in the response — e.g. a PST evening is already tomorrow in UTC — and pass an explicit date when it differs.",
+          ),
         type: z
           .enum(["business", "charity", "medical", "moving"])
           .optional()
@@ -1025,7 +1024,11 @@ async function captureReceipt(
     categories,
   );
   const amount = normalizeAmount(args.amount ?? extracted?.amount ?? "");
-  const date = args.date ?? todayDate();
+  // The server's clock is UTC (Vercel) — date omitted means UTC today, and
+  // serverUtcNow is returned so the client can resolve the user's local
+  // date (the client knows its own timezone; the server doesn't).
+  const serverUtcNow = new Date().toISOString();
+  const date = args.date ?? serverUtcNow.slice(0, 10);
   const report = args.report?.trim() ?? "";
   const inputError = await validateExpenseInputs(accountId, date, report);
   if (inputError) return fail(inputError);
@@ -1066,6 +1069,7 @@ async function captureReceipt(
     expenseId: expense.id,
     extracted,
     resolved: { merchant, amount, category, date, report },
+    serverUtcNow,
     ...(warning ? { warning } : {}),
   });
 }
@@ -1082,7 +1086,10 @@ async function logMileage(
     description?: string;
   },
 ): Promise<ToolResult> {
-  const date = args.date ?? todayDate();
+  // Server clock is UTC — date omitted means UTC today; serverUtcNow lets
+  // the client resolve its own local date.
+  const serverUtcNow = new Date().toISOString();
+  const date = args.date ?? serverUtcNow.slice(0, 10);
   const report = args.report?.trim() ?? "";
   const inputError = await validateExpenseInputs(accountId, date, report);
   if (inputError) return fail(inputError);

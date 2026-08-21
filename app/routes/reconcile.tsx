@@ -195,6 +195,7 @@ export async function action({ request }: Route.ActionArgs) {
     const res = await completeReconciliationRun(
       user.accountId,
       formString(form, "runId"),
+      formString(form, "today"),
     );
     if (res.error) {
       return Response.json({ error: res.error }, { status: 409 });

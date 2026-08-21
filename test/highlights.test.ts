@@ -10,6 +10,7 @@ const EMPTY: HighlightData = {
   mcpUrl: "",
   inviteCode: "",
   mileageRate: "",
+  hasRates: false,
 };
 
 const FULL: HighlightData = {
@@ -17,6 +18,7 @@ const FULL: HighlightData = {
   mcpUrl: "https://expense.example.com/mcp",
   inviteCode: "ABCD-EFGH",
   mileageRate: "0.70",
+  hasRates: true,
 };
 
 describe("feature highlights", () => {
@@ -40,7 +42,7 @@ describe("feature highlights", () => {
     expect(availableHighlights(EMPTY)).not.toContain("mcp");
   });
 
-  it("offers the IRS rate highlight only when a rate is published", () => {
+  it("offers the IRS rate highlight only when rates exist", () => {
     expect(availableHighlights(FULL)).toContain("mileage-rate");
     expect(availableHighlights(EMPTY)).not.toContain("mileage-rate");
   });

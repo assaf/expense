@@ -48,6 +48,7 @@ import {
   MILEAGE_TYPE_LABELS,
   currentMileageRates,
   formatRate,
+  type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { usePasteImage } from "~/lib/use-paste-image";
@@ -84,11 +85,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   // ALL expenses — including rows in closed reports — so a re-uploaded
   // receipt still warns when the original was already filed.
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
-  // The "current rate" tip: today's business rate (falls back to the most
-  // recent known period until the IRS publishes the next one).
-  const mileageRate = formatRate(
-    currentMileageRates(rates, todayDate())?.byType.business ?? "",
-  );
+  // The mileage-rate highlight is eligible when the account has rates; the
+  // actual rate is computed CLIENT-side from the browser's local today (the
+  // server runs UTC and must not guess the user's timezone).
   const reports = [...summarizeByReport(open, { includeUnassigned: true })]
     .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
     .toSorted((a, b) =>
@@ -105,12 +104,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     mcpUrl: new URL("/mcp", request.url).toString(),
     inviteCode: account?.inviteCode ?? "",
-    mileageRate,
+    // The rate is filled in client-side after mount (browser's local today);
+    // hasRates decides whether the mileage-rate highlight is eligible.
+    mileageRate: "",
+    hasRates: rates.length > 0,
   };
   return data(
     {
       mode: "app" as const,
       expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
+      rates,
       reports,
       highlight: { id: pickHighlight(highlightData), data: highlightData },
     },
@@ -174,7 +177,6 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     type: e.type,
     mileageType: e.type === "mileage" ? e.mileageType : "business",
     date: e.date,
-    future: Boolean(e.date) && e.date > todayDate(),
     amount: e.amount,
     category: e.category,
     report: e.report,
@@ -276,6 +278,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
   ) : (
     <ExpenseList
       expenses={loaderData.expenses}
+      rates={loaderData.rates}
       reports={loaderData.reports}
       highlight={loaderData.highlight}
     />
@@ -284,10 +287,12 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
 
 function ExpenseList({
   expenses,
+  rates,
   reports,
   highlight,
 }: {
   expenses: ReturnType<typeof toListItem>[];
+  rates: MileageRateEntry[];
   reports: { name: string; count: number; total: string }[];
   highlight: { id: HighlightId; data: HighlightData };
 }) {
@@ -295,6 +300,20 @@ function ExpenseList({
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  // "Today" in the browser's own timezone — the server runs UTC and must
+  // not guess the user's day, so everything that depends on it (the future
+  // badge, the mileage-rate tip) is computed client-side after mount.
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    setToday(todayDate());
+  }, []);
+  const mileageRate = useMemo(
+    () =>
+      today
+        ? formatRate(currentMileageRates(rates, today)?.byType.business ?? "")
+        : "",
+    [today, rates],
+  );
   // Id of the expense created just now — the create action redirects here
   // with `?new=<id>`; the row stays highlighted for three seconds.
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -585,6 +604,7 @@ function ExpenseList({
               <ExpenseRow
                 key={e.id}
                 expense={e}
+                today={today}
                 isNew={e.id === highlightId}
                 onDismiss={(otherIds) => dismissDuplicate(e.id, otherIds)}
                 onRemove={() => setConfirmDeleteId(e.id)}
@@ -594,7 +614,10 @@ function ExpenseList({
         </section>
       )}
 
-      <FeatureHighlight id={highlight.id} data={highlight.data} />
+      <FeatureHighlight
+        id={highlight.id}
+        data={{ ...highlight.data, mileageRate }}
+      />
 
       {confirmDeleteId ? (
         <ConfirmDialog
@@ -610,11 +633,15 @@ function ExpenseList({
 
 function ExpenseRow({
   expense,
+  today,
   isNew = false,
   onDismiss,
   onRemove,
 }: {
   expense: ReturnType<typeof toListItem>;
+  /** Browser-local today (null before mount — SSR renders without the
+   * badge; the server must not guess the user's timezone). */
+  today: string | null;
   isNew?: boolean;
   onDismiss: (otherIds: string[]) => void;
   onRemove: () => void;
@@ -622,6 +649,7 @@ function ExpenseRow({
   const to = `/expense/${expense.id}`;
   const rowRef = useRef<HTMLLIElement>(null);
   const dup = expense.duplicates[0];
+  const future = Boolean(today && expense.date && expense.date > today);
 
   // A newly added expense sorts near the top, but the list may have been
   // scrolled — bring the highlighted row into view.
@@ -650,7 +678,7 @@ function ExpenseRow({
         <Link
           to={to}
           className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}${expense.future ? ", future" : ""}`}
+          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}${future ? ", future" : ""}`}
         >
           <Thumbnail expense={expense} />
           <div className="min-w-0 flex-1">
@@ -679,7 +707,7 @@ function ExpenseRow({
               aria-hidden="true"
             >
               <span>{formatDate(expense.date)}</span>
-              {expense.future ? (
+              {future ? (
                 <span
                   className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-400"
                   title="Dated in the future"
