@@ -307,6 +307,9 @@ model EmailConnection {
   /// email-connection-push.server.ts).
   pushSubscriptionId String?
   pushExpiresAt     String?
+  /// Last time the user ran the inbox review scan (`/email-review`),
+  /// stamping the point after which the pending list is current.
+  reviewScannedAt String?
   createdAt     String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -351,9 +354,14 @@ model EmailProcessLog {
   fromAddress  String
   subject      String
   matched      Boolean
-  /// ignored | created | error
+  /// processing | pending-review | created | partial | ignored |
+  /// review-ignored | error
   outcome      String
   error        String?
+  /// JMAP receivedAt of the email (for the review list display + order).
+  receivedAt    String?
+  /// The raw From header ("Name <addr>") for the review list display.
+  fromDisplay   String?
   createdAt    String
 
   emailConnection EmailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)

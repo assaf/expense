@@ -14,6 +14,8 @@ import type { EmailConnectionRecord } from "~/lib/types";
 export interface EmailConnectionView extends EmailConnectionRecord {
   /** Expenses created from this connection's mail in the last 24h. */
   processedLast24h: number;
+  /** Receipts waiting on the review list (/email-review). */
+  pendingReview: number;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -30,9 +32,11 @@ function toView(
     lastPushAt: string | null;
     pushSubscriptionId: string | null;
     pushExpiresAt: string | null;
+    reviewScannedAt: string | null;
     createdAt: string;
   },
   processedLast24h: number,
+  pendingReview: number,
 ): EmailConnectionView {
   return {
     id: row.id,
@@ -45,8 +49,10 @@ function toView(
     lastPushAt: row.lastPushAt,
     pushSubscriptionId: row.pushSubscriptionId,
     pushExpiresAt: row.pushExpiresAt,
+    reviewScannedAt: row.reviewScannedAt,
     createdAt: row.createdAt,
     processedLast24h,
+    pendingReview,
   };
 }
 
@@ -61,6 +67,7 @@ const CONNECTION_SELECT = {
   lastPushAt: true,
   pushSubscriptionId: true,
   pushExpiresAt: true,
+  reviewScannedAt: true,
   createdAt: true,
 } as const;
 
@@ -75,19 +82,38 @@ export async function listEmailConnections(
   });
   if (rows.length === 0) return [];
   const since = new Date(Date.now() - DAY_MS).toISOString();
-  const counts = await prisma.emailProcessLog.groupBy({
-    by: ["connectionId"],
-    where: {
-      connectionId: { in: rows.map((r) => r.id) },
-      outcome: "created",
-      createdAt: { gte: since },
-    },
-    _count: { _all: true },
-  });
+  const [counts, pending] = await Promise.all([
+    prisma.emailProcessLog.groupBy({
+      by: ["connectionId"],
+      where: {
+        connectionId: { in: rows.map((r) => r.id) },
+        outcome: "created",
+        createdAt: { gte: since },
+      },
+      _count: { _all: true },
+    }),
+    prisma.emailProcessLog.groupBy({
+      by: ["connectionId"],
+      where: {
+        connectionId: { in: rows.map((r) => r.id) },
+        outcome: "pending-review",
+      },
+      _count: { _all: true },
+    }),
+  ]);
   const byConnection = new Map(
     counts.map((c) => [c.connectionId, c._count._all]),
   );
-  return rows.map((row) => toView(row, byConnection.get(row.id) ?? 0));
+  const byConnectionPending = new Map(
+    pending.map((c) => [c.connectionId, c._count._all]),
+  );
+  return rows.map((row) =>
+    toView(
+      row,
+      byConnection.get(row.id) ?? 0,
+      byConnectionPending.get(row.id) ?? 0,
+    ),
+  );
 }
 
 /**
@@ -123,6 +149,7 @@ function rowWithSecret(row: {
   lastPushAt: string | null;
   pushSubscriptionId: string | null;
   pushExpiresAt: string | null;
+  reviewScannedAt: string | null;
   createdAt: string;
   tokenEnc: string;
   jmapAccountId: string;
@@ -138,6 +165,7 @@ function rowWithSecret(row: {
     lastPushAt: row.lastPushAt,
     pushSubscriptionId: row.pushSubscriptionId,
     pushExpiresAt: row.pushExpiresAt,
+    reviewScannedAt: row.reviewScannedAt,
     createdAt: row.createdAt,
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
@@ -213,7 +241,7 @@ export async function createEmailConnection(input: {
     },
     select: CONNECTION_SELECT,
   });
-  return { ok: true, connection: toView(row, 0) };
+  return { ok: true, connection: toView(row, 0, 0) };
 }
 
 /**

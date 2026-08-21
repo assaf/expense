@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plug, PlugZap, Trash2 } from "lucide-react";
-import { useFetcher } from "react-router";
+import { ArrowRight, Plug, PlugZap, Trash2 } from "lucide-react";
+import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { formatShortDate } from "~/lib/format";
@@ -33,7 +33,14 @@ export function EmailAccountsSection({
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Connect an email account and receipts in it are imported automatically —
         the expense is added, the email is moved to Trash, and a reply with an
-        edit link lands in your inbox.
+        edit link lands in your inbox. Newly connected?{" "}
+        <Link
+          to={`/email-review?connection=${connections[0]?.id ?? ""}`}
+          className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+        >
+          Review your inbox
+        </Link>{" "}
+        to go through the receipts already there.
       </p>
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
         {configured ? (
@@ -85,18 +92,34 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
             </span>
           ) : null}
         </span>
-        <disconnectFetcher.Form method="post" className="contents">
-          <input type="hidden" name="intent" value="disconnectEmail" />
-          <input type="hidden" name="id" value={connection.id} />
-          <button
-            type="submit"
-            disabled={busy}
-            className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50"
-            aria-label={`Disconnect ${connection.emailAddress}`}
-          >
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </button>
-        </disconnectFetcher.Form>
+        <span className="flex shrink-0 items-center gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              to={`/email-review?connection=${connection.id}`}
+              aria-label={`Review inbox for ${connection.emailAddress}`}
+            >
+              Review{" "}
+              {connection.pendingReview > 0 ? (
+                <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                  {connection.pendingReview}
+                </span>
+              ) : null}
+              <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+          <disconnectFetcher.Form method="post" className="contents">
+            <input type="hidden" name="intent" value="disconnectEmail" />
+            <input type="hidden" name="id" value={connection.id} />
+            <button
+              type="submit"
+              disabled={busy}
+              className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50"
+              aria-label={`Disconnect ${connection.emailAddress}`}
+            >
+              <Trash2 aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </disconnectFetcher.Form>
+        </span>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">
         {connection.receivedCount} received · {connection.processedCount}{" "}

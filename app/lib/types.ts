@@ -270,6 +270,8 @@ export interface EmailConnectionRecord {
   lastPushAt: string | null;
   pushSubscriptionId: string | null;
   pushExpiresAt: string | null;
+  /** Last inbox review scan stamp (/email-review). */
+  reviewScannedAt: string | null;
   createdAt: string;
 }
 

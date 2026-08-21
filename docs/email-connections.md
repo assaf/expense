@@ -7,7 +7,7 @@ address); both coexist.
 
 **Status: all four phases shipped (connect/verify/disconnect, per-connection
 push webhook + renewal cron, rules + processing pipeline, rule inference
-from an existing inbox).**
+from an existing inbox), plus the inbox review flow (/email-review).**
 
 ## What exists today
 
@@ -183,6 +183,62 @@ subject-based — no brittle regex to keep in sync with the wording.
 (preferred) or body; the connected-flow local extraction sets it as the
 expense `description`, so each expense carries the receipt number it came
 from — the user can tell which expense maps to which receipt email.
+
+## Inbox review (/email-review)
+
+A freshly connected mailbox may already hold months of receipts — the
+review flow walks the user through them: scan the Inbox for receipt-like
+emails, show a list (received date, sender, subject), and let the user
+**process** each (→ expense, email to Trash, confirmation in their Inbox)
+or **ignore** it (drops off the list, email stays in the Inbox). Both
+actions require confirmation in the UI. Entry: the Review button on each
+connection row on the Email page (`/emails`), which shows the pending
+count; a never-scanned connection auto-scans on first visit.
+
+Implementation (`app/lib/email-review.server.ts`, route
+`app/routes/email-review.tsx`, UI `app/components/email-review.tsx`):
+
+- **Scan** (`scanConnectionInbox`): cursor over `receivedAt` (90-day
+  window, 45s budget — a big mailbox needs a second "Scan again", which
+  resumes). For each undecided email it fetches + parses the raw message
+  and runs the same local classifier as the pipeline
+  (`looksLikeReceiptEmail`); matches are upserted on `EmailProcessLog` as
+  `outcome = "pending-review"` with the receivedAt + full From header
+  (columns added for the list display). Non-receipts get NO row, so the
+  auto-pipeline still evaluates them later (a rule added after a scan is
+  not shadowed). Rows the pipeline already created/partial/processing,
+  rows the user review-ignored, and ignored rows with a decisive reason
+  (self / bounce / own confirmation) are skipped; everything else — no
+  rule, not a receipt locally, not extractable locally, pipeline errors —
+  is re-examined (recovering emails the pipeline couldn't handle is a
+  core purpose). `reviewScannedAt` on the connection row stamps that the
+  list is current.
+- **Process** (`processReviewItem` → `processConnectionEmail` with
+  `{ review: true }`): review mode is the auto-pipeline minus the rule
+  gate and the local receipt gate (the user's explicit choice replaces
+  them), with the model allowed (`localOnly: false`) so attachment
+  receipts and unparseable totals work. The claim flips the
+  pending-review row to `processing` in place (no insert race); success
+  logs created/partial, moves the email to Trash, and delivers the owner
+  confirmation ("You processed this email as an expense…"); failure
+  logs back to pending-review so the item stays on the list with the
+  error shown.
+- **Remember the sender** ("accept a new sender"): emails from senders
+  with no rule show a "New sender" badge; the process confirmation
+  offers a checkbox (default on) that adds a user rule
+  (`source = "review"`) — the sender's domain, or their exact address
+  for freemail providers (`reviewSenderRulePattern`, same policy as rule
+  inference). Skipped when any rule already covers the sender.
+- **Ignore** (`ignoreReviewItem`): flips the row to
+  `outcome = "review-ignored"` ("user ignored"). The email stays in the
+  Inbox untouched; the row keeps both the auto-pipeline and future scans
+  from re-offering it.
+
+Outcomes live on the existing `EmailProcessLog` row (one per email):
+`pending-review` (on the list), `review-ignored` (user said no),
+`created`/`partial` (processed), plus the pipeline's own values. The
+auto-drain's seenEmail check skips any logged email, so a pending or
+review-ignored row is never double-processed.
 
 ## Dev tooling
 

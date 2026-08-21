@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "~/components/ui/Button";
 
 /** Confirmation overlay for actions with real consequences. Deletion has no
@@ -15,6 +15,7 @@ export function ConfirmDialog({
   deleting,
   confirmLabel = "Delete",
   tone = "danger",
+  children,
 }: {
   message: string;
   onConfirm: () => void;
@@ -24,6 +25,9 @@ export function ConfirmDialog({
   confirmLabel?: string;
   /** "danger" (red, the delete default) or "primary" (ink). */
   tone?: "danger" | "primary";
+  /** Extra content between the message and the buttons (e.g. an opt-in
+   * checkbox). Rendered as a labeled region of the dialog. */
+  children?: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -92,6 +96,11 @@ export function ConfirmDialog({
         >
           {message}
         </p>
+        {children ? (
+          <div className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+            {children}
+          </div>
+        ) : null}
         <div className="flex justify-center gap-2">
           <Button
             ref={cancelRef}

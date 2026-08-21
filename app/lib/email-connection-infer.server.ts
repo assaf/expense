@@ -13,8 +13,10 @@ import { looksLikeReceiptEmail } from "~/lib/email-classify";
  */
 
 /** Mail domains that must never become rules (personal mail providers —
- * rules on them would import half the internet's forwarded mail). */
-const FREE_MAIL_DOMAINS = new Set([
+ * rules on them would import half the internet's forwarded mail). Exported
+ * for the review flow's sender-acceptance (same policy: a rule is the
+ * domain, or the exact address for freemail senders). */
+export const FREE_MAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
   "yahoo.com",

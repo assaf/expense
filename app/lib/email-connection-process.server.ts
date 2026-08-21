@@ -150,7 +150,7 @@ export type ConnectionDeps = Pick<
   | "renderTextEmail"
 >;
 
-function realExtractionDeps(): ConnectionDeps {
+export function realExtractionDeps(): ConnectionDeps {
   return {
     // The connected flow is LLM-free: ambiguous-attachment selection
     // never calls the model tiebreak (returns null -> falls through to
@@ -236,7 +236,14 @@ export function connectionInboundDeps(
 
 // --- Log + counters -------------------------------------------------------------
 
-type LogOutcome = "ignored" | "created" | "partial" | "error" | "processing";
+type LogOutcome =
+  | "ignored"
+  | "created"
+  | "partial"
+  | "error"
+  | "processing"
+  | "pending-review"
+  | "review-ignored";
 
 async function logEmailDecision(input: {
   connectionId: string;
@@ -358,6 +365,14 @@ export type ConnectionEmailResult =
  * Evaluate one Inbox email for a connected account. Content problems are
  * logged and returned, never thrown — only the drain's adapter failures
  * propagate (they stop the batch).
+ *
+ * `options.review` is the inbox-review flow (/email-review): the user
+ * explicitly chose this email, so the rule gate and the local receipt gate
+ * are skipped (their judgment is the gate) and the model is allowed
+ * (localOnly false) so attachment receipts and unparseable totals still
+ * work. The log row is already in `pending-review`; the claim flips it to
+ * `processing` in place instead of inserting, and a failure flips it back
+ * to `pending-review` so the item stays on the list for a retry.
  */
 export async function processConnectionEmail(
   connection: EmailConnectionWithSecret,
@@ -367,7 +382,9 @@ export async function processConnectionEmail(
     moveToTrash: (id: string) => Promise<void>;
     sendToOwner: (email: OwnerEmail) => Promise<void>;
   },
+  options: { review?: boolean } = {},
 ): Promise<ConnectionEmailResult> {
+  const review = options.review === true;
   const fromAddress = extractEmailAddress(summary.from ?? "");
   const log = (outcome: LogOutcome, matched: boolean, error?: string) =>
     logEmailDecision({
@@ -387,7 +404,23 @@ export async function processConnectionEmail(
   // the same email). The row is updated to the final outcome by `log`
   // below; bumpReceived is tied to the claim so the counter only moves
   // for the winning drain.
-  if (
+  //
+  // Review mode: the scan already inserted the row as `pending-review`.
+  // Claim by flipping it to `processing` in place — if zero rows update,
+  // another drain/click claimed it first (or it left the list).
+  if (review) {
+    const claimed = await prisma.emailProcessLog.updateMany({
+      where: {
+        connectionId: connection.id,
+        emailId: summary.id,
+        outcome: "pending-review",
+      },
+      data: { outcome: "processing", error: null },
+    });
+    if (claimed.count === 0) {
+      return { status: "ignored", reason: "already processed" };
+    }
+  } else if (
     !(await claimEmailForProcessing(
       connection.id,
       summary.id,
@@ -400,7 +433,10 @@ export async function processConnectionEmail(
   await bumpReceived(connection.id);
 
   // Our own notification emails (sent to self) must never be processed.
-  if (fromAddress === connection.emailAddress) {
+  // Skipped in review mode: the user chose a specific email — a receipt
+  // they forwarded to themselves is legitimate; the loop guard below still
+  // catches the app's own confirmations by header.
+  if (!review && fromAddress === connection.emailAddress) {
     await log("ignored", false, "self");
     return { status: "ignored", reason: "self" };
   }
@@ -411,9 +447,11 @@ export async function processConnectionEmail(
     return { status: "ignored", reason: "bounce" };
   }
 
-  // Rules decide what's even worth looking at.
+  // Rules decide what's even worth looking at — except in review mode,
+  // where the user's explicit choice replaces the rule gate. A matched
+  // rule still names a first-time merchant and sets the `matched` flag.
   const rule = await matchEmailRule(connection.accountId, summary.from ?? "");
-  if (!rule) {
+  if (!review && !rule) {
     await log("ignored", false);
     return { status: "ignored", reason: "no rule" };
   }
@@ -437,8 +475,10 @@ export async function processConnectionEmail(
     // LOCAL gate before any model call: marketing/shipping mail from a
     // rule-matched sender is filtered by regex only (no LLM per webhook).
     // The extraction that follows may use the model; its isReceipt verdict
-    // stays as the backstop.
+    // stays as the backstop. Skipped in review mode — the user's explicit
+    // choice is the gate; extraction still rejects non-receipts.
     if (
+      !review &&
       !looksLikeReceiptEmail({
         subject: summary.subject,
         bodyText: email.text ?? htmlToText(email.html ?? ""),
@@ -462,10 +502,20 @@ export async function processConnectionEmail(
       attachments,
       source: selected.source,
       deps,
-      localOnly: true,
-      ruleSender: rule.sender,
+      localOnly: !review,
+      ruleSender: rule?.sender,
     });
     if (!extracted) {
+      if (review) {
+        // Review mode: the user chose this email but nothing readable came
+        // out of it (not a receipt, no total, unreadable attachment). Stay
+        // on the list so they can retry or ignore; surface the reason.
+        await log("pending-review", true, "no receipt content");
+        return {
+          status: "error",
+          error: "We couldn't read a receipt from this email.",
+        };
+      }
       // Body receipt whose total couldn't be parsed locally, or an
       // attachment receipt — skip, leave in Inbox for manual review.
       await log("ignored", true, "not extractable locally");
@@ -506,8 +556,9 @@ export async function processConnectionEmail(
       ]
         .filter(Boolean)
         .join(" "),
-      intro:
-        "This email was imported automatically as an expense. Here's what we found:",
+      intro: review
+        ? "You processed this email as an expense. Here's what we found:"
+        : "This email was imported automatically as an expense. Here's what we found:",
       missing: saved.missing,
       reportStats: saved.reportStats,
     });
@@ -565,7 +616,14 @@ export async function processConnectionEmail(
       emailId: summary.id,
       err,
     });
-    await log("error", true, message);
+    if (review) {
+      // Review mode: keep the item on the list (outcome back to
+      // pending-review) so the user can retry or ignore; the error message
+      // is recorded on the row and surfaced in the UI.
+      await log("pending-review", true, message);
+    } else {
+      await log("error", true, message);
+    }
     return { status: "error", error: message };
   }
 }
@@ -721,8 +779,8 @@ export async function drainEmailConnection(
 
 /** Deliver the confirmation to the mailbox owner's own Inbox by writing it
  * via JMAP (the API token can't submit/send, only write mail), so the
- * owner sees it appear in their Inbox. */
-async function sendConnectionEmailToOwner(
+ * owner sees it appear in their Inbox. Exported for the review flow. */
+export async function sendConnectionEmailToOwner(
   connection: EmailConnectionWithSecret,
   token: string,
   email: OwnerEmail,
