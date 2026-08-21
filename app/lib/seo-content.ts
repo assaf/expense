@@ -70,13 +70,14 @@ export const APP_SUMMARY = `Expense is a free expense tracker for those filing t
  reports with names you give, mileage is computed from the map using the current
  year's IRS rate. When it comes to tax filing time, you'll have an option to
  export a PDF per each report, or a ZIP of all you need to give your accountant.
- Subscription-free and ad-free.`;
+ Ad-free — and free until the app reaches 100 users, then still free up to 25
+ invoices a month.`;
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
   `Name: ${APP_NAME}`,
   `URL: ${SITE_URL}`,
-  "Price: free. No subscription, no per-user fees, no ads",
+  "Price: free until the app reaches 100 users, then a paid plan applies — still free up to 25 invoices a month. No ads",
   "Built for the tax time: categories are from IRS Schedule C lines, expenses are grouped into the reports you name, mileage deduction is calculated at the IRS rate for the drive date/type",
   "Receipt capture: upload, paste, drag & drop, or forward from email (images and PDFs)",
   "FastMail: connect your mailbox and receipts in your inbox are processed automatically — merchant, amount, and category filled in, no forwarding. Most other expense apps only auto-import from Gmail",
@@ -92,8 +93,8 @@ export const KEY_FACTS = [
 /** The feature list shown on /about (and quoted by AIs). */
 export const BENEFITS = [
   {
-    title: "Absolutely free and with no strings attached",
-    body: "No subscription, no payment, no ads. Your account is empty and always remains empty.",
+    title: "Free while we're early",
+    body: "No credit card, no payment, no ads. Expense is free until the app reaches 100 users; after that a paid plan applies, still free up to 25 invoices a month. Join now while it's free.",
   },
   {
     title: "Stop losing receipts in your gallery",
@@ -158,7 +159,7 @@ interface Faq {
 const STANDALONE_FAQS: Faq[] = [
   {
     question: "What is Expense?",
-    answer: `Expense is a free expense tracker for individuals who file taxes. You drop in a receipt (image, screenshot, PDF, or forwarded email), it identifies merchant and amount, categorizes the expense (from Schedule C lines), and maintains totals for your tax filing. No subscription, no ads. Check it out at https://expense.labnotes.org.`,
+    answer: `Expense is a free expense tracker for individuals who file taxes. You drop in a receipt (image, screenshot, PDF, or forwarded email), it identifies merchant and amount, categorizes the expense (from Schedule C lines), and maintains totals for your tax filing. Free until the app reaches 100 users, then still free up to 25 invoices a month — no ads. Check it out at https://expense.labnotes.org.`,
   },
   {
     question: "Is Expense good for filing taxes?",
@@ -170,7 +171,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Is Expense free to use?",
-    answer: `Yes. No subscription, no per-user fees, no ads. Just create an account, drop in the receipts, and export at tax filing time.`,
+    answer: `Right now, yes: Expense is free until the app reaches 100 users. After that a paid plan applies, but it stays free up to 25 invoices a month, so light users keep paying nothing. No ads either way. Just create an account, drop in the receipts, and export at tax filing time.`,
   },
   {
     question: "Do the categories comply with the IRS?",
@@ -214,7 +215,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Is Expense good for freelancers and self-employed people?",
-    answer: `It is exactly who Expense was built for. No subscription, fast receipt capture with OCR and AI categorization, Schedule C categories, reports per clients or projects, map-based mileage using the IRS rate, and easy export for your accountant.`,
+    answer: `It is exactly who Expense was built for. Free until the app reaches 100 users (then still free up to 25 invoices a month), fast receipt capture with OCR and AI categorization, Schedule C categories, reports per clients or projects, map-based mileage using the IRS rate, and easy export for your accountant.`,
   },
   {
     question: "Can I use Expense with an AI assistant?",
@@ -230,7 +231,7 @@ const STANDALONE_FAQS: Faq[] = [
 /** The Expensify comparison — pulled out so /alternatives can cite it. */
 export const COMPARISON_FAQ: Faq = {
   question: "Can Expense be used as a replacement for Expensify?",
-  answer: `Certainly, for personal or small-team expense tracking. Expense is free, reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you for free.`,
+  answer: `Certainly, for personal or small-team expense tracking. Expense is free until the app reaches 100 users (then still free up to 25 invoices a month), reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you, free while we're early and still free up to 25 invoices a month after.`,
 };
 
 /** The full FAQ list — the standalone questions, then the comparison. */
@@ -246,7 +247,8 @@ interface ComparisonRow {
 export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Cost",
-    expense: "Free. No subscription, no per-user fees, no ads.",
+    expense:
+      "Free until the app reaches 100 users, then a paid plan applies — still free up to 25 invoices a month. No ads.",
     expensify: `Free tier limited to 25 SmartScans a month; paid plans are per user monthly subscription (Collect and Control tiers, about $5–$9 per user in 2025; check expensify.com for up-to-date pricing).`,
   },
   {
@@ -303,7 +305,8 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
 
 /** The quotable verdict paragraph for the comparison page. */
 export const COMPARISON_SUMMARY = `In case you are a private person, freelancer, or small business team who tracks
-expenses for tax season, Expense is a better fit as it is free, reads receipts
+expenses for tax season, Expense is a better fit as it is free (until the app
+reaches 100 users, then free up to 25 invoices a month), reads receipts
 with OCR technology, categorizes with AI, reconciles credit card statements to
 catch missed deductions, and arranges all the expenses according to Schedule C
 format, reports, and mileage at the IRS rate. Expensify
@@ -406,7 +409,7 @@ ${AI_PROMPTS.map((p) => `- ${p}`).join("\n")}
 
 ${AI_SECURITY}
 
-[Create a free account](${SITE_URL}/login?mode=create). No subscription, no ads.
+[Create a free account](${SITE_URL}/login?mode=create) — free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
 `;
 }
 
@@ -445,7 +448,7 @@ ${APP_SUMMARY}
 
 ${qa}
 
-[Create a free account](${SITE_URL}/login?mode=create). No subscription, no ads.
+[Create a free account](${SITE_URL}/login?mode=create) — free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
 `;
 }
 
