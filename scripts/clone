@@ -32,7 +32,7 @@ BACKUP_FILE="prisma/backup.sql"
 # 1. Pull production env from Vercel when .env.prod is missing.
 if [ ! -f .env.prod ]; then
   echo -e "\033[0;32mPulling production env from Vercel …\033[0m"
-  pnpx -y vercel@latest env pull --environment=production --yes .env.prod
+  vercel env pull --environment=production --yes .env.prod
 fi
 set -a
 source .env.prod
@@ -40,7 +40,7 @@ set +a
 PROD_DB_URL="${DATABASE_URL_UNPOOLED:-${DATABASE_URL:-}}"
 if [ -z "$PROD_DB_URL" ]; then
   echo -e "\033[0;31mNo DATABASE_URL_UNPOOLED in .env.prod — pull it with:\033[0m"
-  echo "  pnpx vercel env pull --environment=production --yes .env.prod"
+  echo "  vercel env pull --environment=production --yes .env.prod"
   exit 1
 fi
 

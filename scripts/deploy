@@ -12,10 +12,27 @@ set -eo pipefail
 
 PROD_DOMAIN="expense.labnotes.org"
 
+SKIP_TESTS=0
+SKIP_DB_SYNC=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-tests) SKIP_TESTS=1 ;;
+    --skip-db-sync) SKIP_DB_SYNC=1 ;;
+  esac
+done
+
+# The Vercel CLI is a global binary (see knip.json ignoreBinaries). pnpm's
+# dlx wrapper (`pnpx -y vercel@latest`) prompts interactively for esbuild's
+# build script and hangs a scripted deploy — use the global CLI directly.
+if ! command -v vercel >/dev/null 2>&1; then
+  echo "vercel CLI not found on PATH — install it first: brew install vercel-cli" >&2
+  exit 1
+fi
+
 echo -e "\033[0;32m--- Step 1: Check (fmt, lint, types) ---\033[0m"
 pnpm check
 
-if [ "$1" = "--skip-tests" ]; then
+if [ "$SKIP_TESTS" = "1" ]; then
   echo -e "\033[0;33m--- Step 2: Skipping tests ---\033[0m"
 else
   echo -e "\033[0;32m--- Step 2: Run tests ---\033[0m"
@@ -23,16 +40,20 @@ else
 fi
 
 echo -e "\033[0;32m--- Step 3: Sync production database schema ---\033[0m"
-pnpx -y vercel@latest env pull --environment=production --yes .env.prod.pull
+vercel env pull --environment=production --yes .env.prod.pull
 set -a
 source .env.prod.pull
 set +a
 export DATABASE_URL="$DATABASE_URL_UNPOOLED"
-pnpm prisma db push --accept-data-loss
+if [ "$SKIP_DB_SYNC" = "1" ]; then
+  echo -e "\033[0;33mSkipping prisma db push (--skip-db-sync) — verify schema drift separately with: pnpm prisma migrate diff --from-config-datasource prisma/schema.prisma --to-schema prisma/schema.prisma\033[0m"
+else
+  pnpm prisma db push --accept-data-loss
+fi
 
 echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
 DEPLOY_TMP=$(mktemp)
-pnpx -y vercel@latest deploy --prod --yes 2>&1 | tee "$DEPLOY_TMP"
+vercel deploy --prod --yes 2>&1 | tee "$DEPLOY_TMP"
 DEPLOY_OUTPUT=$(cat "$DEPLOY_TMP")
 rm "$DEPLOY_TMP"
 DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' | head -1 || true)
