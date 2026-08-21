@@ -1010,6 +1010,35 @@ describe("processInboundEvent (body receipt)", () => {
     expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
   });
 
+  it("suppresses the second confirmation when the same receipt was already imported recently", async () => {
+    // The cross-pipeline overlap: the inbox original is imported first
+    // (connected-account pipeline), then the user's forwarded copy (the
+    // receipts pipeline). Different emails, same receipt content — the
+    // second import still saves the expense but must NOT send a second
+    // confirmation (one response per receipt).
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () => receivedEmail({});
+    const first = await processInboundEvent(
+      eventData({ email_id: "email-1", message_id: "<msg-1@example.com>" }),
+      deps,
+    );
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(first));
+    expect(first).toMatchObject({ status: "created" });
+    expect(deps.sent).toHaveLength(1);
+
+    const second = await processInboundEvent(
+      eventData({ email_id: "email-2", message_id: "<msg-2@example.com>" }),
+      deps,
+    );
+    usedEmailIds.push("email-2");
+    usedExpenseIds.push(expenseIdOf(second));
+    expect(second).toMatchObject({ status: "created" });
+    // The receipt was imported (a second expense row), but the
+    // confirmation is suppressed — still exactly one response.
+    expect(deps.sent).toHaveLength(1);
+  });
+
   it("creates a partial expense and replies when merchant is missing", async () => {
     const deps = fakeDeps();
     const email = receivedEmail({

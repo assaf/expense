@@ -29,10 +29,11 @@ import {
   paragraph,
   SIMPLE_FOOTER,
 } from "~/lib/email-layout.server";
+import { captureWarning } from "~/lib/errors.server";
 import { escapeHtml } from "~/lib/escape";
 import { extractEmailAddress } from "~/lib/validation";
 import type { SendEmailOptions } from "~/lib/reply.server";
-import { upsertExpense } from "~/lib/db/expenses";
+import { upsertExpense, findRecentlyImportedMatch } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   findPendingSenderRow,
@@ -986,6 +987,9 @@ interface SavedExpense {
   report: string;
   reportStats?: ReportSummaryStats;
   receiptAttachment?: { content: string; filename: string };
+  /** A matching receipt was imported within the recent window (the other
+   * pipeline) — suppress this confirmation to avoid duplicate responses. */
+  recentMatch?: { id: string; createdAt: string };
 }
 
 /** Build and save the expense from extracted data (date always comes from
@@ -1049,6 +1053,18 @@ export async function saveExpenseFromExtraction(opts: {
     imageFile,
   );
 
+  // The same receipt already imported within the recent window — the
+  // connected-account pipeline imported the inbox original moments ago and
+  // this import is the user's forwarded copy (or vice versa). The caller
+  // suppresses its confirmation so the user gets one response per receipt.
+  const recentMatch = await findRecentlyImportedMatch(opts.accountId, {
+    merchant: expense.merchant,
+    amount: expense.amount,
+    date: expense.date,
+    description: expense.description,
+    excludeExpenseId: expense.id,
+  });
+
   // Compute report before/after stats when a report is assigned.
   let reportStats: ReportSummaryStats | undefined;
   if (report) {
@@ -1072,7 +1088,53 @@ export async function saveExpenseFromExtraction(opts: {
     report,
     reportStats,
     receiptAttachment,
+    recentMatch,
   };
+}
+
+/**
+ * Send the confirmation — or suppress it when the same receipt was already
+ * imported within the recent window by the other pipeline (the inbox
+ * original vs. the forwarded copy). The user gets one response per receipt;
+ * the suppression is logged and Sentry-alerted so a false match (two
+ * genuinely different receipts with the same merchant/amount/date and no
+ * description) is visible instead of silent.
+ */
+async function sendConfirmationOrSuppress(opts: {
+  deps: InboundDeps;
+  data: EmailReceivedData;
+  confirmation: { subject: string; html: string };
+  receiptAttachment?: { content: string; filename: string };
+  recentMatch?: { id: string; createdAt: string };
+}): Promise<void> {
+  if (opts.recentMatch) {
+    console.info(
+      "[inbound] confirmation suppressed — same receipt imported recently",
+      {
+        emailId: opts.data.email_id,
+        to: opts.data.from,
+        subject: opts.confirmation.subject,
+        matchedExpenseId: opts.recentMatch.id,
+        matchedAt: opts.recentMatch.createdAt,
+      },
+    );
+    captureWarning(
+      "[inbound] duplicate confirmation suppressed — same receipt imported recently",
+      {
+        emailId: opts.data.email_id,
+        to: opts.data.from,
+        subject: opts.confirmation.subject,
+        matchedExpenseId: opts.recentMatch.id,
+      },
+    );
+    return;
+  }
+  await opts.deps.sendReply({
+    ...replyEnvelope(opts.data),
+    subject: opts.confirmation.subject,
+    html: opts.confirmation.html,
+    attachments: opts.receiptAttachment ? [opts.receiptAttachment] : undefined,
+  });
 }
 
 export async function processInboundEvent(
@@ -1252,11 +1314,12 @@ export async function processInboundEvent(
         missing,
         reportStats,
       });
-      await deps.sendReply({
-        ...replyEnvelope(data),
-        subject: confirmation.subject,
-        html: confirmation.html,
-        attachments: receiptAttachment ? [receiptAttachment] : undefined,
+      await sendConfirmationOrSuppress({
+        deps,
+        data,
+        confirmation,
+        receiptAttachment,
+        recentMatch: saved.recentMatch,
       });
       await learnRuleFromForward(account.id, email, attachments, deps);
       await upsertInboundEmail({
@@ -1289,11 +1352,12 @@ export async function processInboundEvent(
       missing: [],
       reportStats,
     });
-    await deps.sendReply({
-      ...replyEnvelope(data),
-      subject: confirmation.subject,
-      html: confirmation.html,
-      attachments: receiptAttachment ? [receiptAttachment] : undefined,
+    await sendConfirmationOrSuppress({
+      deps,
+      data,
+      confirmation,
+      receiptAttachment,
+      recentMatch: saved.recentMatch,
     });
 
     await learnRuleFromForward(account.id, email, attachments, deps);

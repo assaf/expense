@@ -232,6 +232,59 @@ export async function upsertExpense(
   }
 }
 
+/**
+ * How long a recently-imported matching expense counts as "the same
+ * receipt" for confirmation dedup. Covers the cross-pipeline lag: the
+ * connected-account pipeline imports the inbox original within seconds of
+ * arrival, while the receipts-by-email pipeline finishes the user's forward
+ * minutes later (full OCR/LLM extraction). 30 minutes swallows both with
+ * margin without reaching back into unrelated history.
+ */
+const RECENT_MATCH_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * A matching receipt expense imported within RECENT_MATCH_WINDOW_MS — the
+ * inbox-original / forwarded-copy overlap between the connected-account
+ * pipeline and the receipts-by-email pipeline. The same receipt exists as
+ * two different emails (different from/to, different mailboxes), so each
+ * pipeline imports it independently; the second import's caller suppresses
+ * its confirmation so the user gets one response per receipt, not one per
+ * pipeline.
+ *
+ * Key: merchant + amount + date, plus description when the new import
+ * carries one (z.ai refs like "#1639-4741" distinguish two same-price
+ * receipts that would otherwise collide; charge notifications with an
+ * empty description match on the first three fields alone).
+ */
+export async function findRecentlyImportedMatch(
+  accountId: string,
+  opts: {
+    merchant: string;
+    amount: string;
+    date: string;
+    description: string;
+    excludeExpenseId: string;
+  },
+): Promise<{ id: string; createdAt: string } | undefined> {
+  if (!opts.merchant || !opts.amount || !opts.date) return undefined;
+  const row = await prisma.expense.findFirst({
+    where: {
+      accountId,
+      type: "receipt",
+      id: { not: opts.excludeExpenseId },
+      merchant: { equals: opts.merchant, mode: "insensitive" },
+      amount: opts.amount,
+      date: opts.date,
+      createdAt: {
+        gte: new Date(Date.now() - RECENT_MATCH_WINDOW_MS).toISOString(),
+      },
+      ...(opts.description ? { description: opts.description } : {}),
+    },
+    select: { id: true, createdAt: true },
+  });
+  return row ?? undefined;
+}
+
 export async function deleteExpense(
   id: string,
   accountId: string,

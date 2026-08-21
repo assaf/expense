@@ -16,7 +16,13 @@ keyword mark alone can't stop two concurrent drains (a push burst, or a
 push racing the cron) from both listing the same email before either
 marks it — the first drain to insert the "processing" row wins, and the
 other returns `concurrent`/`duplicate` without importing or replying
-(Aug 2026: duplicate confirmation emails from that race). Because
+(Aug 2026: duplicate confirmation emails from that race). A receipt
+that also exists in the owner's connected inbox (the auto-import
+pipeline) gets imported by both pipelines — the confirmation is then
+suppressed on the second import via `findRecentlyImportedMatch`
+(merchant+amount+date, plus description when present, within 30 min), so
+the user gets one response per receipt (Sentry: "duplicate confirmation
+suppressed"). Because
 the originals are destroyed, the stored receipt IMAGE is the only remaining
 source of a receipt's number — backfills read the refs off the expense
 images (e.g. the z.ai description backfill, Aug 2026). Error

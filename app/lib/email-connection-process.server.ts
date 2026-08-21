@@ -11,7 +11,7 @@ import {
   type InboundDeps,
   type ReceivedEmail,
 } from "~/lib/inbound-email.server";
-import { captureError } from "~/lib/errors.server";
+import { captureError, captureWarning } from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
 // Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
 // chromium) are lazy-loaded inside realExtractionDeps so importing this
@@ -511,13 +511,37 @@ export async function processConnectionEmail(
       missing: saved.missing,
       reportStats: saved.reportStats,
     });
-    await adapters.sendToOwner({
-      subject: confirmation.subject,
-      html: confirmation.html,
-      attachments: saved.receiptAttachment
-        ? [saved.receiptAttachment]
-        : undefined,
-    });
+    if (saved.recentMatch) {
+      // The same receipt was already imported within the recent window by
+      // the receipts-by-email pipeline (the forwarded copy) — the owner
+      // already got a confirmation. Suppress this one; log + alert so a
+      // false match stays visible.
+      console.info(
+        "[email-connections] confirmation suppressed — same receipt imported recently",
+        {
+          connectionId: connection.id,
+          emailId: summary.id,
+          matchedExpenseId: saved.recentMatch.id,
+          matchedAt: saved.recentMatch.createdAt,
+        },
+      );
+      captureWarning(
+        "[email-connections] duplicate confirmation suppressed — same receipt imported recently",
+        {
+          connectionId: connection.id,
+          emailId: summary.id,
+          matchedExpenseId: saved.recentMatch.id,
+        },
+      );
+    } else {
+      await adapters.sendToOwner({
+        subject: confirmation.subject,
+        html: confirmation.html,
+        attachments: saved.receiptAttachment
+          ? [saved.receiptAttachment]
+          : undefined,
+      });
+    }
 
     await log(
       saved.missing.length > 0 ? "partial" : "created",

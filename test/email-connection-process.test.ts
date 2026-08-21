@@ -8,6 +8,7 @@ import {
   connectionInboundDeps,
   type ConnectionDeps,
   type ConnectionMailAdapter,
+  type OwnerEmail,
 } from "~/lib/email-connection-process.server";
 import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
@@ -229,6 +230,63 @@ describe("processConnectionEmail", () => {
     expect(sent.subject).toContain("Receipt accepted");
     // Logged as partial (category unknown under local extraction).
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
+  });
+
+  it("suppresses the second confirmation when the same receipt was already imported recently", async () => {
+    // Cross-pipeline overlap: the same receipt exists in the Inbox AND as
+    // the user's forward to the receipts address. Both are imported (two
+    // different emails), but the owner must get one confirmation, not two.
+    await addEmailRule({
+      accountId: "",
+      sender: "dedupco.com",
+      source: "seed",
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "e1",
+          {
+            from: "DedupCo <no_reply@dedupco.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: DedupCo\nTOTAL: 4.56\nCATEGORY: office supplies",
+          },
+        ],
+        [
+          "e2",
+          {
+            from: "DedupCo <no_reply@dedupco.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: DedupCo\nTOTAL: 4.56\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const adapters = {
+      moveToTrash: (id: string) => adapter.moveToTrash(id),
+      sendToOwner: async (email: OwnerEmail) => {
+        await mocks.sendConnectionEmail(email);
+      },
+    };
+
+    const first = await processConnectionEmail(
+      conn,
+      summary("e1", "DedupCo <no_reply@dedupco.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      adapters,
+    );
+    expect(first.status).toBe("partial");
+    expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
+
+    const second = await processConnectionEmail(
+      conn,
+      summary("e2", "DedupCo <no_reply@dedupco.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      adapters,
+    );
+    expect(second.status).toBe("partial");
+    // The second import saved its own expense row but the confirmation is
+    // suppressed — still exactly one notification to the owner.
+    expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
   });
 
   it("ignores emails with no matching rule and leaves them in the Inbox", async () => {
