@@ -526,6 +526,28 @@ const realJmapSendDeps: JmapSendDeps = {
   submitEmail,
 };
 
+/**
+ * True when a submission failure is ambiguous — the request may have been
+ * processed by FastMail with only the response lost (fetch timeout, dropped
+ * connection). Retrying such a failure can deliver a second copy of the
+ * same message; explicit server rejections (HTTP/JMAP errors) are the only
+ * failures where the submission is known not to exist and a retry is safe.
+ */
+function isAmbiguousSubmitFailure(err: unknown): boolean {
+  if (err instanceof Error) {
+    const name = err.name ?? "";
+    if (name === "TimeoutError" || /abort|timed? ?out/i.test(err.message)) {
+      return true;
+    }
+    // fetch() network-level failure (connection refused/reset, DNS, …) —
+    // the request may or may not have reached FastMail.
+    if (err instanceof TypeError && /fetch failed/i.test(err.message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Build the RFC 5322 message bytes for a reply and send it from the
  * account via JMAP `EmailSubmission/set`. Returns false (after logging) on
  * any failure — callers must never fail because email did. */
@@ -559,20 +581,35 @@ export async function sendEmailViaJmap(
     try {
       await deps.submitEmail(chosen.id, emailId);
     } catch (err) {
-      // A transient submission failure (network blip, provider hiccup)
-      // would otherwise drop the reply forever — a lost confirmation makes
-      // the sender re-forward, which creates a duplicate expense. Retry once
-      // with the SAME emailId: the blob upload and Sent-mailbox import
-      // already succeeded, so only the submission repeats. If the first
-      // attempt landed and only the response was lost, this can deliver a
-      // duplicate email — the rarer and cheaper failure of the two.
-      console.warn(
-        `[email] submit failed, retrying once: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        { to: input.to, subject: input.subject },
-      );
-      await deps.submitEmail(chosen.id, emailId);
+      // A transient submission failure would otherwise drop the reply
+      // forever — a lost confirmation makes the sender re-forward, which
+      // creates a duplicate expense. Retry once with the SAME emailId: the
+      // blob upload and Sent-mailbox import already succeeded, so only the
+      // submission repeats.
+      //
+      // BUT the retry is only safe when the server explicitly rejected the
+      // request (an HTTP/JMAP error response means the submission is known
+      // NOT to exist). When the request timed out or the connection
+      // dropped, the first attempt may have landed with only the response
+      // lost — FastMail deletes EmailSubmission records after delivery, so
+      // there is no way to tell, and re-submitting the same email delivers
+      // a SECOND copy (observed in the wild: identical Message-IDs in the
+      // recipient's Inbox, one confirmation per submit). Those ambiguous
+      // failures are logged and NOT retried — the expense is already
+      // saved, and the more likely outcome is that the reply was delivered.
+      const message = err instanceof Error ? err.message : String(err);
+      if (isAmbiguousSubmitFailure(err)) {
+        console.warn(
+          `[email] submit outcome unknown (may already be delivered), NOT retrying: ${message}`,
+          { to: input.to, subject: input.subject },
+        );
+      } else {
+        console.warn(`[email] submit rejected, retrying once: ${message}`, {
+          to: input.to,
+          subject: input.subject,
+        });
+        await deps.submitEmail(chosen.id, emailId);
+      }
     }
     return true;
   } catch (err) {

@@ -261,6 +261,8 @@ function replyTypeFor(
       return "verify first";
     case "duplicate":
       return "none (duplicate)";
+    case "concurrent":
+      return "none (concurrent drain — another drain owns the reply)";
     case "self-reply":
       return "none (self-reply)";
     case "bounce":
@@ -342,6 +344,21 @@ export async function processUnprocessedReceipts(
         const result = await processInboundEvent(data, guardedDeps);
         if (result.status === "error") {
           failed++;
+          console.info("[fastmail-inbound] processed email", {
+            id,
+            subject: data.subject,
+            from: data.from,
+            status: result.status,
+            reply: replyTypeFor(result),
+          });
+          continue;
+        }
+        if (result.status === "concurrent") {
+          // Another drain won the claim and is importing this email right
+          // now — it sends the confirmation and destroys the email when
+          // done. Destroying it here would yank it out from under the
+          // winner mid-import (fetch fails, expense lost). Leave it alone.
+          processed++;
           console.info("[fastmail-inbound] processed email", {
             id,
             subject: data.subject,

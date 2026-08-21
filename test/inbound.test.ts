@@ -1051,10 +1051,43 @@ describe("processInboundEvent (body receipt)", () => {
     expect(first).toMatchObject({ status: "error" });
     expect(deps.sent).toHaveLength(1);
     // Resend retries after the route's non-2xx response: the pipeline
-    // re-runs and fails again, but the sender must not get a second,
-    // duplicate error email.
+    // re-runs, but the atomic claim short-circuits the already-failed
+    // email — no second import attempt, no second, duplicate error email.
     const second = await processInboundEvent(eventData(), deps);
-    expect(second).toMatchObject({ status: "error" });
+    expect(second).toMatchObject({ status: "duplicate" });
+    expect(deps.sent).toHaveLength(1);
+  });
+
+  it("lets a concurrent drain's import proceed without a second reply", async () => {
+    // Two drains race the same email: the first wins the atomic claim and
+    // imports; the second sees the "processing" row and stands down
+    // without replying (status "concurrent") — the duplicate-confirmation
+    // bug from webhook bursts. The winner's reply is the only one.
+    const deps = fakeDeps();
+    const email = receivedEmail({});
+    deps.fetchReceivedEmail = async () => email;
+    let releaseFetch: (() => void) | undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      deps.fetchReceivedEmail = async () => {
+        resolve();
+        await new Promise<void>((r) => (releaseFetch = r));
+        return email;
+      };
+    });
+
+    // Drain A starts processing (claims "processing", then blocks in fetch).
+    const winner = processInboundEvent(eventData(), deps);
+    await fetchStarted;
+    // Drain B runs while A is mid-import.
+    const loser = await processInboundEvent(eventData(), deps);
+    expect(loser).toMatchObject({ status: "concurrent" });
+    expect(deps.sent).toHaveLength(0);
+    releaseFetch!();
+    const winnerResult = await winner;
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(winnerResult));
+    expect(winnerResult).toMatchObject({ status: "created" });
+    // Exactly one confirmation for the email, not two.
     expect(deps.sent).toHaveLength(1);
   });
 

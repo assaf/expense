@@ -5,13 +5,18 @@ dedicated address (e.g. `receipts@labnotes.org`) into a folder — never the
 Inbox. FastMail pushes an encrypted RFC 8291 `StateChange` to
 `/api/inbound-push`; the handler drains the folder via
 `processUnprocessedReceipts` (`app/lib/inbound-fastmail.server.ts`): mark
-each email `$receipt-processed` **before** processing (the keyword is
-one-way, so a concurrent push/cron can't double-process; the `inbound_emails`
-row is the second idempotency guard), run the existing `processInboundEvent`
-through the FastMail MIME bridge (`InboundDeps` fetch/list/download
-collaborators backed by postal-mime — the JMAP email id is the idempotency
-key), and **destroy the email after any non-error result** (created /
-partial / duplicate / unknown / unverified sender / self-reply). Because
+each email `$receipt-processed` **before** processing, run the existing
+`processInboundEvent` through the FastMail MIME bridge (`InboundDeps`
+fetch/list/download collaborators backed by postal-mime — the JMAP email
+id is the idempotency key), and **destroy the email after any non-error
+result** (created / partial / duplicate / concurrent / unknown /
+unverified sender / self-reply). The `inbound_emails` row is the
+**atomic claim** (`claimInboundEmail`, createMany+skipDuplicates): the
+keyword mark alone can't stop two concurrent drains (a push burst, or a
+push racing the cron) from both listing the same email before either
+marks it — the first drain to insert the "processing" row wins, and the
+other returns `concurrent`/`duplicate` without importing or replying
+(Aug 2026: duplicate confirmation emails from that race). Because
 the originals are destroyed, the stored receipt IMAGE is the only remaining
 source of a receipt's number — backfills read the refs off the expense
 images (e.g. the z.ai description backfill, Aug 2026). Error

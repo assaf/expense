@@ -10,14 +10,6 @@ import type {
 
 // --- Inbound email ----------------------------------------------------------
 
-/** The stored row for a received email, or undefined when first seen. */
-export async function readInboundEmail(
-  emailId: string,
-): Promise<InboundEmailRecord | undefined> {
-  const row = await prisma.inboundEmail.findUnique({ where: { emailId } });
-  return (row ?? undefined) as InboundEmailRecord | undefined;
-}
-
 /** Create or update the audit row for a received email. */
 export async function upsertInboundEmail(input: {
   emailId: string;
@@ -38,6 +30,56 @@ export async function upsertInboundEmail(input: {
     },
     create: { ...input, createdAt: now, updatedAt: now },
   });
+}
+
+/**
+ * Atomically claim a received email for processing. Inserts the row with
+ * status "processing" via `createMany ... skipDuplicates` — when two
+ * concurrent drains (a burst of webhook pushes, or a push racing the daily
+ * cron) both list the same email before either marks it, exactly one wins
+ * the claim and the other gets `claimed: false` with the existing row.
+ * This closes the read-then-upsert race that let both drains import the
+ * same receipt and each send its own confirmation (duplicate replies).
+ *
+ * The row is updated to the final outcome (created/partial/error) by the
+ * pipeline. A drain that crashes mid-processing leaves a "processing" row
+ * and the email stays marked in the folder — the same recovery path as a
+ * crash after the keyword mark (the error reply / folder state is the
+ * recovery), and the price of never replying twice.
+ */
+export async function claimInboundEmail(input: {
+  emailId: string;
+  accountId: string;
+  subject: string;
+}): Promise<{
+  claimed: boolean;
+  existing: InboundEmailRecord | undefined;
+}> {
+  const now = new Date().toISOString();
+  const { count } = await prisma.inboundEmail.createMany({
+    data: [
+      {
+        emailId: input.emailId,
+        accountId: input.accountId,
+        subject: input.subject,
+        status: "processing",
+        error: "",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+  if (count > 0) return { claimed: true, existing: undefined };
+  // The row already exists — read it so the caller can decide how to
+  // treat the duplicate (already done, in flight, or previously failed).
+  const existing = await prisma.inboundEmail.findUnique({
+    where: { emailId: input.emailId },
+  });
+  return {
+    claimed: false,
+    existing: (existing ?? undefined) as InboundEmailRecord | undefined,
+  };
 }
 
 /**

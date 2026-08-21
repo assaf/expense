@@ -174,6 +174,48 @@ describe("sendEmailViaJmap", () => {
     expect(await sendEmailViaJmap(input, deps)).toBe(false);
   });
 
+  it("does NOT retry a timeout — the submit may have landed and a retry would deliver a second copy", async () => {
+    const submitEmail = vi.fn(async () => {
+      throw new Error("The operation was aborted due to timeout");
+    });
+    const { deps } = fakes([identity()], { submitEmail });
+
+    // Ambiguous failure: the first attempt may have been processed with
+    // only the response lost. Re-submitting the same email delivers a
+    // duplicate (observed: identical Message-IDs in the Inbox). The send
+    // is treated as successful — the expense is saved regardless.
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(submitEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT retry a dropped connection (fetch failed)", async () => {
+    const submitEmail = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const { deps } = fakes([identity()], { submitEmail });
+
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(submitEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries once when the server explicitly rejected the submission", async () => {
+    // An HTTP/JMAP error response means the submission is known not to
+    // exist — the retry is safe and cannot duplicate.
+    const submitEmail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("JMAP API failed: 502 Bad Gateway"))
+      .mockResolvedValueOnce(undefined);
+    const { deps } = fakes([identity()], { submitEmail });
+
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(submitEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns false when there are no identities", async () => {
+    const { deps } = fakes([]);
+    expect(await sendEmailViaJmap(input, deps)).toBe(false);
+  });
+
   it("returns false when listIdentities throws", async () => {
     const { deps } = fakes([], {
       listIdentities: vi.fn(async () => {

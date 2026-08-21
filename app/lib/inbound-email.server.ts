@@ -37,8 +37,8 @@ import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   findPendingSenderRow,
   findVerifiedSenderAccount,
-  readInboundEmail,
   upsertInboundEmail,
+  claimInboundEmail,
 } from "~/lib/db/inbound";
 import { addEmailRule } from "~/lib/db/email-rules";
 import { readReportSummary } from "~/lib/db/reports";
@@ -131,6 +131,7 @@ export type ProcessResult =
   | { status: "partial"; expenseId: string; missing: string[] }
   | { status: "error"; error: string }
   | { status: "duplicate" }
+  | { status: "concurrent" }
   | { status: "unknown-sender" }
   | { status: "unverified-sender" }
   | { status: "self-reply" }
@@ -1129,33 +1130,42 @@ export async function processInboundEvent(
   }
   const account = verified.account;
 
-  const existing = await readInboundEmail(data.email_id);
-  if (existing?.status === "created" || existing?.status === "partial") {
-    return { status: "duplicate" };
-  }
-  // Remember whether this email already failed once: the first failure
-  // emails the sender, but webhook retries (after the route's non-2xx
-  // response) must not send a second, duplicate error reply.
-  const previousStatus = existing?.status;
-  await upsertInboundEmail({
+  // Atomic claim: exactly one drain owns this email. A burst of webhook
+  // pushes (or a push racing the daily cron) can both list the same email
+  // before either marks it `$receipt-processed`; the first to insert the
+  // "processing" row wins, and every other drain skips without importing
+  // or replying — otherwise the same receipt gets two confirmations (and
+  // two import attempts).
+  const claim = await claimInboundEmail({
     emailId: data.email_id,
     accountId: account.id,
     subject,
-    status: "processing",
-    error: "",
   });
+  if (!claim.claimed) {
+    const existing = claim.existing;
+    if (existing?.status === "created" || existing?.status === "partial") {
+      return { status: "duplicate" };
+    }
+    if (existing?.status === "processing") {
+      // Another drain is importing this email right now — it sends the
+      // confirmation. Never import twice, never reply twice.
+      return { status: "concurrent" };
+    }
+    // "error" (or a vanished row): a previous run already failed and
+    // emailed the sender — the reply is the recovery path, so re-running
+    // the pipeline here would only re-send a second error email.
+    return { status: "duplicate" };
+  }
 
   const fail = async (
     error: string,
     paragraphs: string[],
   ): Promise<ProcessResult> => {
-    if (previousStatus !== "error") {
-      await deps.sendReply({
-        ...replyEnvelope(data),
-        subject: "⚠️ Receipt not imported — something went wrong",
-        html: replyHtml("Receipt not imported", paragraphs),
-      });
-    }
+    await deps.sendReply({
+      ...replyEnvelope(data),
+      subject: "⚠️ Receipt not imported — something went wrong",
+      html: replyHtml("Receipt not imported", paragraphs),
+    });
     await upsertInboundEmail({
       emailId: data.email_id,
       accountId: account.id,
