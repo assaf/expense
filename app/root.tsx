@@ -72,14 +72,23 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   return {
     user: user ? { id: user.id } : null,
-    // Clickjacking defense: no page may render inside a frame (covers the
-    // OAuth consent page and every other HTML document — the root headers
-    // merge into all matched routes). HSTS is set by the platform: Vercel
-    // emits strict-transport-security for production domains.
-    headers: {
-      "X-Frame-Options": "DENY",
-      "Content-Security-Policy": "frame-ancestors 'none'",
-    },
+    // Clickjacking denial is a real HTTP header from the route's headers()
+    // export below — never from this loader data object.
+  };
+}
+
+/**
+ * Clickjacking defense on every HTML response: no page may render inside a
+ * frame. The loader's `headers` key is inert loader data — only this
+ * function emits real HTTP headers; React Router merges them with the
+ * child route's headers() (e.g. the marketing Cache-Control). HSTS is set
+ * by the platform: Vercel emits strict-transport-security for production
+ * domains.
+ */
+export function headers(): HeadersInit {
+  return {
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
   };
 }
 

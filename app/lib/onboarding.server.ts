@@ -120,6 +120,15 @@ export async function completeOnboarding(input: {
     accountId = existing.accountId;
   } else {
     validateSignup(email, input.password);
+    // The token proves control of mailboxAddress ONLY — a new account's
+    // login email must be that address, or emailVerifiedAt would be stamped
+    // for an identity the token never verified (signup squatting / a
+    // verification-gate bypass). Other addresses go through regular signup.
+    if (email !== mailboxAddress) {
+      throw new Error(
+        `No Expense account exists for ${email}, and the token only verifies ${mailboxAddress}. Use the address from your token, or create an account with email verification instead.`,
+      );
+    }
     if (existing) {
       const outcome = await deleteUnverifiedUser(email);
       if (outcome.status !== "replaced") {

@@ -26,18 +26,30 @@ const PRIVATE_HOSTS = [
   "255.255.255.255",
   "fe80::1",
   "fd00::1",
+  "fc00::",
   "::1",
   "[::1]",
   "0:0:0:0:0:0:0:1",
+  "::",
+  "ff02::1",
   "::ffff:127.0.0.1",
   "::ffff:10.0.0.1",
+  // IPv4-mapped IPv6 in hex / full form — the same private addresses
+  // spelled differently (regression: these bypassed the old regex guard).
+  "::ffff:a00:1",
+  "[::ffff:c0a8:101]",
+  "0:0:0:0:0:ffff:7f00:1",
+  "::ffff:ac10:1",
 ];
 
 const PUBLIC_HOSTS = [
   "example.com",
+  "fcc.gov", // regression: the old fc/fd prefix check blocked real hosts
+  "fdic.gov",
   "8.8.8.8",
   "93.184.216.34",
   "2001:4860:4860::8888",
+  "::ffff:8.8.8.8", // mapped to a PUBLIC v4 address must stay allowed
 ];
 
 describe("isPrivateHost", () => {

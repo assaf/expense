@@ -7,9 +7,12 @@ import { Input } from "~/components/ui/Input";
 import {
   createAccountWithUser,
   EmailNotVerifiedError,
+  guardAnonymousAction,
   isAuthenticated,
   joinAccountWithInviteCode,
   login,
+  recordAnonymousAttempt,
+  rejectCrossSitePost,
   resendAccountVerification,
 } from "~/lib/auth.server";
 import { pageMeta } from "~/lib/seo-content";
@@ -51,6 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  rejectCrossSitePost(request);
   const form = await request.formData();
   const mode = formString(form, "mode") as Mode;
   const url = new URL(request.url);
@@ -59,6 +63,13 @@ export async function action({ request }: Route.ActionArgs) {
   const password = formString(form, "password");
   // Absolute origin for the verification link in the emailed message.
   const origin = new URL(request.url).origin;
+
+  // Signup/join/resend are anonymous work (scrypt + verification emails) —
+  // cap them per IP, independent of outcome (sign-in keeps its per-email
+  // lockout). Five attempts inside 15 minutes lock the IP.
+  if (mode === "create" || mode === "join" || mode === "resend-verification") {
+    await guardAnonymousAction(request);
+  }
 
   try {
     if (mode === "create") {
@@ -102,6 +113,7 @@ export async function action({ request }: Route.ActionArgs) {
     const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
+    await recordAnonymousAttempt(request);
     const message =
       error instanceof Error ? error.message : "Something went wrong";
     console.warn("Auth failed (%s): %s", mode, message);

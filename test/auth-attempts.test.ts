@@ -7,6 +7,10 @@ import {
   nextFailureState,
   type AuthAttemptState,
 } from "~/lib/db/auth-attempts";
+import {
+  guardAnonymousAction,
+  recordAnonymousAttempt,
+} from "~/lib/auth.server";
 
 /**
  * Window/threshold rules for the brute-force lockout (see auth-attempts.ts):
@@ -88,5 +92,26 @@ describe("isLocked", () => {
       lockedUntil: new Date(T0 + AUTH_LOCK_MS).toISOString(),
     };
     expect(isLocked(active, T0)).toBe(true);
+  });
+});
+
+describe("anonymous-action per-IP throttle", () => {
+  // A unique client IP per test keeps the counter isolated from parallel
+  // files sharing the test database.
+  function ipRequest(ip: string): Request {
+    return new Request("http://expense.test/login", {
+      headers: { "x-forwarded-for": ip },
+    });
+  }
+
+  it("locks the IP after the threshold of attempts", async () => {
+    const req = ipRequest("203.0.113.77");
+    for (let i = 0; i < AUTH_THRESHOLD; i += 1) {
+      await guardAnonymousAction(req);
+      await recordAnonymousAttempt(req);
+    }
+    await expect(guardAnonymousAction(req)).rejects.toThrow(
+      /too many failed attempts/i,
+    );
   });
 });

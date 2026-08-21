@@ -173,6 +173,60 @@ async function guardLockout(key: string): Promise<void> {
 }
 
 /**
+ * Reject a state-changing POST whose Origin is another site (login CSRF).
+ * SameSite=Lax stops cross-site POSTs from CARRYING the session cookie,
+ * but the browser still processes a Set-Cookie on the response — so the
+ * session-creating actions (login, signup, onboarding, reset-request) must
+ * verify the request actually came from this app. Requests without an
+ * Origin header (curl, server-to-server) are allowed: they carry no
+ * ambient cookies, so they can't be CSRF.
+ */
+export function rejectCrossSitePost(request: Request): void {
+  const origin = request.headers.get("Origin");
+  if (!origin) return;
+  let originUrl: URL;
+  try {
+    originUrl = new URL(origin);
+  } catch {
+    // Unparseable Origin — treat as foreign rather than guess.
+    throw new Response("Cross-site request blocked", { status: 403 });
+  }
+  if (originUrl.origin !== new URL(request.url).origin) {
+    throw new Response("Cross-site request blocked", { status: 403 });
+  }
+}
+
+/** The client IP for per-IP throttling. x-forwarded-for is set by Vercel's
+ * proxy; take the leftmost (original) entry. */
+function clientIp(request: Request): string {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+}
+
+/**
+ * Per-IP guard for the unauthenticated signup/join/resend/reset-request
+ * actions (sign-in keeps its stronger per-email lockout). Every attempt
+ * counts — a bound on the scrypt derivations and verification emails an
+ * anonymous caller can force, not just on failed guesses. Five attempts
+ * inside 15 minutes lock the IP for 15 minutes. The key is scoped to the
+ * path as well as the IP, so a burst against one endpoint doesn't starve
+ * another (and test files posting to different endpoints don't share a
+ * key).
+ */
+export async function guardAnonymousAction(request: Request): Promise<void> {
+  await guardLockout(
+    `anon:${clientIp(request)}:${new URL(request.url).pathname}`,
+  );
+}
+
+/** Count one anonymous attempt (call after guardAnonymousAction, success or
+ * failure — the cap is on work, not on outcomes). */
+export async function recordAnonymousAttempt(request: Request): Promise<void> {
+  await recordFailureBestEffort(
+    `anon:${clientIp(request)}:${new URL(request.url).pathname}`,
+  );
+}
+
+/**
  * Validate credentials and, on success, return the Set-Cookie header value
  * for the session. Throws on invalid credentials or an unverified email
  * (EmailNotVerifiedError). Pass the result to

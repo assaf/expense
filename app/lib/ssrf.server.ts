@@ -28,22 +28,34 @@ const MAX_REDIRECTS = 3;
 /** True when a hostname (literal or name) points at a private, loopback,
  * link-local, or otherwise non-routable address. Hostnames that are not
  * literal IPs return false here — `isPrivateUrl` resolves those and checks
- * every resulting address. */
+ * every resulting address. IPv6 literals are fully parsed (not regex
+ * matched), so every spelling of a private range is caught: `::ffff:a00:1`
+ * is IPv4-mapped 10.0.0.1 and must be blocked the same as the dotted form. */
 export function isPrivateHost(hostname: string): boolean {
   let h = hostname.toLowerCase().replace(/\.$/, "");
   if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1); // "[::1]"
   if (h === "localhost" || h === "localhost.localdomain") return true;
-  if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true; // IPv6 loopback
-  if (h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd")) {
-    return true; // IPv6 link-local / unique-local
+  if (isIP(h) === 4) {
+    const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return true; // fail closed: unparseable literal
+    return isPrivateIpv4(
+      Number(m[1]),
+      Number(m[2]),
+      Number(m[3]),
+      Number(m[4]),
+    );
   }
-  // IPv4-mapped IPv6 (::ffff:127.0.0.1) — check the embedded address.
-  const mapped = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  const ipv4 = (mapped ? mapped[1] : h).match(
-    /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/,
-  );
-  if (!ipv4) return false;
-  const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+  if (isIP(h) === 6) {
+    return isPrivateIpv6(h);
+  }
+  // Not an IP literal — hostnames are checked by resolving every A/AAAA
+  // record in isPrivateUrl. (A plain name can never be "private" itself;
+  // this also stops the old fc/fd prefix check from blocking legitimate
+  // hosts like fcc.gov.)
+  return false;
+}
+
+function isPrivateIpv4(a: number, b: number, c: number, d: number): boolean {
   return (
     a === 10 ||
     a === 127 ||
@@ -53,6 +65,80 @@ export function isPrivateHost(hostname: string): boolean {
     (a === 192 && b === 168) ||
     a >= 224
   );
+}
+
+/** Parse an IPv6 literal into its 8 groups of 16 bits (handles `::`
+ * compression and a dotted-decimal IPv4 tail). null when unparseable —
+ * callers fail closed. */
+function ipv6Groups(addr: string): number[] | null {
+  let s = addr.toLowerCase();
+  let tail: number[] = [];
+  const lastColon = s.lastIndexOf(":");
+  const lastPart = s.slice(lastColon + 1);
+  if (lastPart.includes(".")) {
+    const m = lastPart.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) return null;
+    tail = [
+      (Number(m[1]) << 8) | Number(m[2]),
+      (Number(m[3]) << 8) | Number(m[4]),
+    ];
+    s = s.slice(0, lastColon); // drop the trailing ":" too
+  }
+  const parts = s.split("::");
+  if (parts.length > 2) return null;
+  const head = parts[0] ? parts[0].split(":") : [];
+  const tailHex = parts[1] ? parts[1].split(":") : [];
+  const headGroups = head.map((g) => (g ? parseInt(g, 16) : NaN));
+  const tailGroups = tailHex.map((g) => (g ? parseInt(g, 16) : NaN));
+  if (headGroups.some(Number.isNaN) || tailGroups.some(Number.isNaN)) {
+    return null;
+  }
+  if (parts.length === 1) {
+    const all = [...headGroups, ...tailGroups, ...tail];
+    return all.length === 8 ? all : null;
+  }
+  const zeros = 8 - headGroups.length - tailGroups.length - tail.length;
+  if (zeros < 0) return null;
+  return [...headGroups, ...new Array(zeros).fill(0), ...tailGroups, ...tail];
+}
+
+/** Private/reserved IPv6 ranges, on the canonical 8-group form:
+ * unspecified (::), loopback (::1), IPv4-mapped (::ffff:a.b.c.d — the
+ * embedded address is checked with the IPv4 rules), link-local (fe80::/10),
+ * unique-local (fc00::/7), site-local (fec0::/10), and multicast (ff00::/8).
+ * Anything unparseable is treated as private (fail closed). */
+function isPrivateIpv6(h: string): boolean {
+  const g = ipv6Groups(h);
+  if (!g) return true;
+  if (g.every((x) => x === 0)) return true; // ::
+  if (
+    g[0] === 0 &&
+    g[1] === 0 &&
+    g[2] === 0 &&
+    g[3] === 0 &&
+    g[4] === 0 &&
+    g[5] === 0 &&
+    g[6] === 0 &&
+    g[7] === 1
+  ) {
+    return true; // ::1
+  }
+  if (
+    g[0] === 0 &&
+    g[1] === 0 &&
+    g[2] === 0 &&
+    g[3] === 0 &&
+    g[4] === 0 &&
+    g[5] === 0xffff
+  ) {
+    // IPv4-mapped (dotted or hex form) — check the embedded IPv4.
+    return isPrivateIpv4(g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff);
+  }
+  if ((g[0] & 0xffc0) === 0xfe80) return true; // link-local
+  if ((g[0] & 0xfe00) === 0xfc00) return true; // unique-local (fc/fd)
+  if ((g[0] & 0xffc0) === 0xfec0) return true; // site-local
+  if ((g[0] & 0xff00) === 0xff00) return true; // multicast
+  return false;
 }
 
 /**
@@ -109,6 +195,13 @@ export async function fetchPublicUrl(
     if (await isPrivateUrl(current, lookupFn)) {
       throw new SsrfError("Blocked: private or unresolvable host");
     }
+    // Note: built-in fetch re-resolves the hostname, so a hostile DNS could
+    // in theory answer public here and private during the fetch (rebinding
+    // TOCTOU). Every record is checked up front and IP literals have no DNS
+    // at all; fully closing the window would require pinning the connection
+    // to the checked address with a custom TLS agent. On Vercel, function
+    // egress cannot reach private ranges anyway — this guard is
+    // defense-in-depth for self-hosted instances.
     let res: Response;
     try {
       res = await fetch(current, {

@@ -108,6 +108,42 @@ describe("Access control", () => {
     await page.close();
   });
 
+  it("denies framing on every page with real HTTP headers", async () => {
+    const page = await openPage();
+    const res = await page.request.get("http://localhost:5199/login");
+    expect(res.headers()["x-frame-options"]).toBe("DENY");
+    expect(res.headers()["content-security-policy"]).toContain(
+      "frame-ancestors",
+    );
+    await page.close();
+  });
+
+  it("blocks cross-site POSTs to the auth actions (login CSRF)", async () => {
+    const page = await openPage();
+    // A foreign Origin must be rejected outright, even with valid creds.
+    // React Router's own action-origin check rejects it with 400 before
+    // the route runs (Origin host vs request host); the action-only
+    // /sign-out route bypasses that framework check, so our
+    // rejectCrossSitePost answers 403 there.
+    const foreign = await page.request.post("http://localhost:5199/login", {
+      form: { mode: "signin", email: TEST_EMAIL, password: TEST_PASSWORD },
+      headers: { origin: "https://evil.example" },
+    });
+    expect(foreign.status()).toBe(400);
+    const foreignSignOut = await page.request.post(
+      "http://localhost:5199/sign-out",
+      { headers: { origin: "https://evil.example" } },
+    );
+    expect(foreignSignOut.status()).toBe(403);
+
+    // A request with no Origin header (curl, same-origin fetch) still works.
+    const plain = await page.request.post("http://localhost:5199/login", {
+      form: { mode: "signin", email: TEST_EMAIL, password: TEST_PASSWORD },
+    });
+    expect(plain.status()).toBe(200);
+    await page.close();
+  });
+
   it("navigates from the landing footer to public pages without a login redirect", async () => {
     // Client-side Link clicks fetch /<page>.data — the root loader must
     // recognize those as the public page, or every footer link bounces

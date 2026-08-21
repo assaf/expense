@@ -54,6 +54,33 @@ instead" on the sign-up flow, /login?mode=create).
 - The user still sets a password: sessions expire after 30 days; the token
   is stored AES-256-GCM encrypted as usual.
 
+## Discovery surfaces (how users hear about connecting)
+
+The feature is promoted in the public marketing copy (`app/lib/seo-content.ts`
+— single source; renders /, /about, /faq, /alternatives + their .md mirrors
+and llms.txt) and with in-app nudges:
+
+- **Sign-up flow** (`/login?mode=create`): blue "Connect your FastMail
+  account" button under an "or" divider.
+- **Landing page**: hero line ("Have a FastMail account? Connect it…") and a
+  "Connect your FastMail account" feature card.
+- **FAQ**: "Does Expense work with FastMail?" — the "only support Gmail"
+  positioning lives in the FAQ, the /alternatives "Email import" comparison
+  row, and the /about benefit + KEY_FACTS.
+- **Home page highlight** (`FeatureHighlight`): the `connect-email` highlight
+  is in the rotation ONLY while the account has no connected mailbox
+  (`HighlightData.hasEmailConnection`), and `pickHighlight(data, boost)`
+  triples its odds until connected (the loader boosts it) — so unconnected
+  accounts see the nudge within a few visits while the rotation still varies.
+- **Empty state** (`_index.tsx`): new accounts with no expenses and no
+  connection get the connect suggestion under the "Nothing here yet" copy.
+- **Signup success screen** ("Check your email", `login.tsx`): mentions
+  connecting FastMail once signed in.
+- **/emails**: accounts using receipts-by-email (verified senders) but no
+  connection see a callout suggesting they connect instead of forwarding.
+- **Welcome panel** (`WelcomePanel`, gated by the `welcomePending` setting):
+  shown after onboarding completes; dismiss persists via the setting.
+
 ## What exists today
 
 - **Model** (`prisma/schema.prisma`): `EmailConnection` — one row per

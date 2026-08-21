@@ -262,6 +262,25 @@ describe("FastMail onboarding", () => {
     ).rejects.toThrow("Enter a valid email address");
   });
 
+  it("refuses to create an account for an email the token did not verify", async () => {
+    // The token proves control of the mailbox only — an arbitrary typed
+    // email must never get emailVerifiedAt stamped (signup squatting).
+    const mailbox = "token.owner@example.com";
+    const otherEmail = "someone.else@example.com";
+    mockToken(mailbox);
+    await expect(
+      completeOnboarding({
+        token: "fmu1-tok",
+        email: otherEmail,
+        password: PASSWORD,
+      }),
+    ).rejects.toThrow(/only verifies/);
+    const user = await testPrisma.user.findUnique({
+      where: { email: otherEmail },
+    });
+    expect(user).toBeNull();
+  });
+
   it("classifies the token's address as none / verified / unverified", async () => {
     const fresh = `fresh-${ulid().toLowerCase()}@example.com`;
     mockToken(fresh);

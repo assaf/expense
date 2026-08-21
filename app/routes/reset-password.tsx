@@ -3,6 +3,9 @@ import { Link, data } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import {
+  guardAnonymousAction,
+  recordAnonymousAttempt,
+  rejectCrossSitePost,
   requestPasswordReset,
   resetPasswordWithToken,
 } from "~/lib/auth.server";
@@ -42,12 +45,16 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  rejectCrossSitePost(request);
   const form = await request.formData();
   const intent = formString(form, "intent");
 
   if (intent === "request") {
+    // Anonymous work (an email send per request) — cap per IP like signup.
+    await guardAnonymousAction(request);
     const email = formString(form, "email").trim().toLowerCase();
     if (!isEmail(email)) {
+      await recordAnonymousAttempt(request);
       return data({
         view: "request",
         error: "Enter a valid email address",
@@ -55,6 +62,7 @@ export async function action({ request }: Route.ActionArgs) {
     }
     // Always the same outcome, whether or not the account exists.
     await requestPasswordReset(email, new URL(request.url).origin);
+    await recordAnonymousAttempt(request);
     return data({ view: "requested" } satisfies ActionData);
   }
 

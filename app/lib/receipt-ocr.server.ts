@@ -287,6 +287,21 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
     for (let i = 1; i <= pages; i++) {
       const page = await doc.getPage(i);
       const viewport = page.getViewport({ scale: 2 });
+      // A crafted MediaBox can declare a huge page (e.g. 20000x20000 pt →
+      // a multi-GB canvas allocation). The input byte cap doesn't bound the
+      // decoded geometry, so clamp it here — mirroring sharp's
+      // limitInputPixels — before createCanvas eagerly allocates.
+      const MAX_PDF_RENDER_PX = 4000;
+      const MAX_PDF_RENDER_PIXELS = 8_000_000;
+      if (
+        viewport.width > MAX_PDF_RENDER_PX ||
+        viewport.height > MAX_PDF_RENDER_PX ||
+        viewport.width * viewport.height > MAX_PDF_RENDER_PIXELS
+      ) {
+        throw new Error(
+          `PDF page is too large to render (${Math.round(viewport.width)}x${Math.round(viewport.height)}px)`,
+        );
+      }
       const canvas = createCanvas(viewport.width, viewport.height);
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
