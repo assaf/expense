@@ -349,3 +349,72 @@ export async function resendUserVerification(
   await setUserVerificationToken(userId, token);
   return { token };
 }
+
+/** Store the current password-reset token for a user (sha256 at rest) with
+ * a fresh sent-at time. Mirrors setUserVerificationToken. */
+export async function setUserPasswordResetToken(
+  userId: string,
+  rawToken: string,
+): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      passwordResetTokenHash: hashToken(rawToken),
+      passwordResetSentAt: new Date().toISOString(),
+    },
+  });
+}
+
+/** Outcome of submitting a password-reset link. */
+export type PasswordResetOutcome =
+  | { status: "reset"; email: string }
+  | { status: "expired"; email: string }
+  | { status: "invalid" };
+
+/** Consume an emailed password-reset token: set the new password hash and
+ * clear the token (single-use — a replayed link reports invalid). 7-day
+ * TTL, mirroring the account-verification link; a stale token is cleared
+ * on first use so it can't be retried. */
+export async function resetUserPasswordWithToken(
+  rawToken: string,
+  passwordHash: string,
+): Promise<PasswordResetOutcome> {
+  if (!rawToken) return { status: "invalid" };
+  const row = await prisma.user.findFirst({
+    where: { passwordResetTokenHash: hashToken(rawToken) },
+  });
+  if (!row) return { status: "invalid" };
+  const sentAt = row.passwordResetSentAt;
+  if (!sentAt || Date.now() - Date.parse(sentAt) > VERIFICATION_TTL_MS) {
+    await prisma.user.update({
+      where: { id: row.id },
+      data: { passwordResetTokenHash: null, passwordResetSentAt: null },
+    });
+    return { status: "expired", email: row.email };
+  }
+  await prisma.user.update({
+    where: { id: row.id },
+    data: {
+      passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetSentAt: null,
+    },
+  });
+  return { status: "reset", email: row.email };
+}
+
+/** Has a reset email for this user been sent within the once-a-day resend
+ * window? The request path skips re-sending (and re-minting) while one is
+ * still fresh. */
+export async function passwordResetRecentlySent(
+  userId: string,
+): Promise<boolean> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { passwordResetSentAt: true },
+  });
+  return Boolean(
+    row?.passwordResetSentAt &&
+    Date.now() - Date.parse(row.passwordResetSentAt) < VERIFICATION_RESEND_MS,
+  );
+}

@@ -27,6 +27,7 @@ import {
 } from "~/components/FeatureHighlight";
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
+import { WelcomePanel } from "~/components/WelcomePanel";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Input } from "~/components/ui/Input";
@@ -60,6 +61,8 @@ import { readMileageRates } from "~/lib/db/seed";
 import {
   dismissDuplicatePair,
   readDuplicateDismissals,
+  readSettings,
+  writeSettings,
 } from "~/lib/db/settings";
 import type { Expense } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -71,13 +74,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     return data({ mode: "landing" as const });
   }
   const user = await requireUser(request);
-  const [expenses, dismissed, allReports, rates, account] = await Promise.all([
-    readExpenses(user.accountId),
-    readDuplicateDismissals(user.accountId),
-    readReports(user.accountId),
-    readMileageRates(),
-    readAccount(user.accountId),
-  ]);
+  const [expenses, dismissed, allReports, rates, account, settings] =
+    await Promise.all([
+      readExpenses(user.accountId),
+      readDuplicateDismissals(user.accountId),
+      readReports(user.accountId),
+      readMileageRates(),
+      readAccount(user.accountId),
+      readSettings(user.accountId),
+    ]);
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
@@ -116,6 +121,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
       rates,
       reports,
+      welcomePending: settings.welcomePending,
       highlight: { id: pickHighlight(highlightData), data: highlightData },
     },
     {
@@ -166,6 +172,12 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "delete") {
     await deleteExpense(formString(form, "id"), user.accountId);
+    return null;
+  }
+
+  if (intent === "welcomeDone") {
+    const settings = await readSettings(user.accountId);
+    await writeSettings(user.accountId, { ...settings, welcomePending: false });
     return null;
   }
 
@@ -281,6 +293,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
       expenses={loaderData.expenses}
       rates={loaderData.rates}
       reports={loaderData.reports}
+      welcomePending={loaderData.welcomePending}
       highlight={loaderData.highlight}
     />
   );
@@ -290,11 +303,13 @@ function ExpenseList({
   expenses,
   rates,
   reports,
+  welcomePending,
   highlight,
 }: {
   expenses: ReturnType<typeof toListItem>[];
   rates: MileageRateEntry[];
   reports: { name: string; count: number; total: string }[];
+  welcomePending: boolean;
   highlight: { id: HighlightId; data: HighlightData };
 }) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
@@ -489,6 +504,10 @@ function ExpenseList({
           </Button>
         </nav>
       </header>
+
+      {welcomePending ? (
+        <WelcomePanel inboundAddress={highlight.data.inboundAddress} />
+      ) : null}
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-0.5 sm:gap-2">

@@ -309,6 +309,55 @@ export async function verifyInboundSenderAddress(
 }
 
 /**
+ * Claim the account's login email as a VERIFIED receipts-by-email sender
+ * without an emailed link — used by FastMail onboarding, where a valid
+ * JMAP API token has already proven mailbox control (the same proof the
+ * link click provides). Creates the sender row when missing, then claims
+ * the address exclusively with the same transaction as the link click.
+ * `claimedByOther` means the address is already verified for a different
+ * account — the caller must not touch it (and must not treat it as fatal).
+ */
+export async function verifyInboundSenderDirect(
+  accountId: string,
+  address: string,
+): Promise<{ verified: boolean; claimedByOther: boolean }> {
+  const normalized = extractEmailAddress(address);
+  if (!normalized || !isEmail(normalized)) {
+    return { verified: false, claimedByOther: false };
+  }
+  const now = new Date().toISOString();
+  await prisma.inboundSender.upsert({
+    where: { accountId_address: { accountId, address: normalized } },
+    create: { accountId, address: normalized, createdAt: now },
+    update: {},
+  });
+  try {
+    await prisma.$transaction([
+      // The primary key on address makes a second verified claim impossible.
+      prisma.inboundSenderVerification.create({
+        data: { address: normalized, accountId, verifiedAt: now },
+      }),
+      // The address is now exclusively this account's — drop rivals' pending rows.
+      prisma.inboundSender.deleteMany({
+        where: { address: normalized, accountId: { not: accountId } },
+      }),
+      // No emailed token to consume — the proof was the JMAP session.
+      prisma.inboundSender.updateMany({
+        where: { accountId, address: normalized },
+        data: { verificationTokenHash: null, verificationSentAt: null },
+      }),
+    ]);
+    return { verified: true, claimedByOther: false };
+  } catch (err) {
+    // P2002 — another account verified the address first (race).
+    if ((err as { code?: string } | null)?.code === "P2002") {
+      return { verified: false, claimedByOther: true };
+    }
+    throw err;
+  }
+}
+
+/**
  * Guarantee the account's login email is a sender row (the "default"
  * receipts-by-email address). Creates it pending when missing and mints a
  * verification token; called on signup, join, and every sign-in. A token is

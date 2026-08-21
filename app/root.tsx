@@ -57,6 +57,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     path === "/" ||
     path === "/_" ||
     path.startsWith("/login") ||
+    path.startsWith("/onboarding") ||
+    path.startsWith("/reset-password") ||
     path.startsWith("/receipts-email-verify") ||
     path.startsWith("/verify-email") ||
     PUBLIC_PAGES.has(path);

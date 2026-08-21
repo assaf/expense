@@ -7,7 +7,52 @@ address); both coexist.
 
 **Status: all four phases shipped (connect/verify/disconnect, per-connection
 push webhook + renewal cron, rules + processing pipeline, rule inference
-from an existing inbox), plus the inbox review flow (/email-review).**
+from an existing inbox), plus the inbox review flow (/email-review), plus
+the first-run FastMail onboarding (/onboarding).**
+
+## FastMail onboarding (/onboarding)
+
+First-run flow for users who connect their own mailbox instead of signing
+up with email + verification link (entry: "Connect a FastMail account
+instead" on /login).
+
+- **Token = mailbox control = email verification.** The step-1 form pastes
+  a FastMail API token; `verifyJmapToken` proves it live against
+  `jmap/session`, which also reveals the account's address — no typing.
+  Step 2 sets a password (new account) or enters the existing account's
+  password (attach). On success `emailVerifiedAt` is stamped WITHOUT an
+  emailed link: a valid token is strictly stronger proof than a
+  click-through link. Session cookie + redirect into `/email-review` with
+  `?onboarding=1` (the "Finish setup" CTA lands on the expense list, which
+  shows a one-time welcome panel — the flow flags the account via the
+  `welcomePending` setting; other accounts never see it).
+- **Login email claimed as a VERIFIED sender.** The same proof claims the
+  address as a verified receipts-by-email sender
+  (`verifyInboundSenderDirect` in `app/lib/db/inbound.ts` — same exclusive
+  claim transaction as the link click, no token), so forwarding from the
+  address works immediately and `login()`'s `ensureDefaultSender` finds the
+  row already verified and skips its email.
+- **Account matching** (`app/lib/onboarding.server.ts`): step 2 asks for
+  the EMAIL + PASSWORD the user signs in with, and the mailbox connects to
+  THAT account. No account for the entered email → create one (name
+  derived from the email local part, numeric suffix on collision,
+  `emailVerifiedAt` stamped — the token proves mailbox control); verified
+  account → sign in (`login()`, so lockout/rehash apply) and attach; stale
+  unverified signup → replaced via `deleteUnverifiedUser`. The token's own
+  address only PRE-FILLS the email field — a mailbox address that happens
+  to own an account the user can't authenticate to (e.g. a bootstrap
+  account) must not block attaching to the user's real account. The
+  receipts-by-email sender is claimed as verified only when the account
+  email equals the mailbox address (the token proves control of the
+  mailbox, not of other addresses). A mailbox already claimed by another
+  workspace refuses with the standard error and any half-created account
+  is rolled back. The step-1 resolution (`verifyOnboardingToken`) reports
+  none/verified/unverified so the UI picks the right copy.
+  Attach can still dead-end when the user doesn't know their account
+  password — the attach step links to `/reset-password?email=…`, so
+  mailbox control (the token) plus the emailed link recovers the account.
+- The user still sets a password: sessions expire after 30 days; the token
+  is stored AES-256-GCM encrypted as usual.
 
 ## What exists today
 

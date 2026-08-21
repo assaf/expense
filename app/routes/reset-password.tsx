@@ -1,0 +1,235 @@
+import { AlertCircle, KeyRound, MailCheck, ReceiptText } from "lucide-react";
+import { Link, data } from "react-router";
+import { Button } from "~/components/ui/Button";
+import { Input } from "~/components/ui/Input";
+import {
+  requestPasswordReset,
+  resetPasswordWithToken,
+} from "~/lib/auth.server";
+import {
+  formString,
+  isEmail,
+  MAX_PASSWORD_LENGTH,
+  unknownIntent,
+} from "~/lib/validation";
+import type { Route } from "./+types/reset-password";
+
+/**
+ * Password recovery: request an emailed single-use link, then set a new
+ * password with it. Public (the token IS the credential — the root loader
+ * treats it like /verify-email). Entry points: the "Forgot password?"
+ * links on /login and the attach step of /onboarding.
+ */
+
+type ActionData =
+  | { view: "request"; error?: string }
+  | { view: "requested" }
+  | { view: "reset"; token: string; email: string; error?: string }
+  | { view: "done"; email: string };
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  return {
+    // ?token= prefills the reset form (emailed link); ?email= prefills the
+    // request form (onboarding's attach step links here with it).
+    token: url.searchParams.get("token") ?? "",
+    email: url.searchParams.get("email") ?? "",
+  };
+}
+
+export function meta(): Route.MetaDescriptors {
+  return [{ title: "Reset password — Expense" }];
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const form = await request.formData();
+  const intent = formString(form, "intent");
+
+  if (intent === "request") {
+    const email = formString(form, "email").trim().toLowerCase();
+    if (!isEmail(email)) {
+      return data({
+        view: "request",
+        error: "Enter a valid email address",
+      } satisfies ActionData);
+    }
+    // Always the same outcome, whether or not the account exists.
+    await requestPasswordReset(email, new URL(request.url).origin);
+    return data({ view: "requested" } satisfies ActionData);
+  }
+
+  if (intent === "reset") {
+    const token = formString(form, "token");
+    const email = formString(form, "email").trim().toLowerCase();
+    const password = formString(form, "password");
+    try {
+      const result = await resetPasswordWithToken(token, password);
+      return data({ view: "done", email: result.email } satisfies ActionData);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Something went wrong";
+      return data({
+        view: "reset",
+        token,
+        email,
+        error: message,
+      } satisfies ActionData);
+    }
+  }
+
+  return unknownIntent();
+}
+
+export default function ResetPasswordPage({
+  loaderData,
+  actionData,
+}: Route.ComponentProps) {
+  const state: ActionData =
+    actionData ??
+    (loaderData.token
+      ? { view: "reset", token: loaderData.token, email: loaderData.email }
+      : { view: "request" });
+  const error = "error" in state ? state.error : null;
+
+  return (
+    <main
+      id="main-content"
+      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
+    >
+      <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900">
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
+          </div>
+          <h1 className="text-xl font-bold">
+            {state.view === "done"
+              ? "Password set"
+              : state.view === "reset"
+                ? "Set a new password"
+                : state.view === "requested"
+                  ? "Check your inbox"
+                  : "Reset your password"}
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {state.view === "request"
+              ? "We'll email a single-use link to set a new one."
+              : state.view === "requested"
+                ? "If an account exists for that email, a reset link is on its way. It expires in 7 days."
+                : state.view === "reset"
+                  ? "Choose a new password for this account."
+                  : `Password updated for ${state.email}.`}
+          </p>
+        </div>
+
+        {state.view === "request" ? (
+          <form method="post" className="flex flex-col gap-4">
+            <input type="hidden" name="intent" value="request" />
+            <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+              Email
+              <Input
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                defaultValue={loaderData.email}
+                required
+                invalid={!!error}
+                aria-invalid={error ? true : undefined}
+              />
+            </label>
+            {error ? (
+              <p
+                role="alert"
+                className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400"
+              >
+                <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" size="lg" className="mt-2 w-full">
+              Email a reset link
+            </Button>
+            <div className="flex items-center justify-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
+              <Link
+                to="/login"
+                className="text-gray-500 dark:text-gray-400 hover:underline"
+              >
+                Back to sign in
+              </Link>
+            </div>
+          </form>
+        ) : null}
+
+        {state.view === "requested" ? (
+          <div className="flex flex-col items-center gap-2 text-sm">
+            <MailCheck
+              aria-hidden="true"
+              className="h-8 w-8 text-green-600 dark:text-green-400"
+            />
+            <Link
+              to="/login"
+              className="mt-2 font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Back to sign in
+            </Link>
+          </div>
+        ) : null}
+
+        {state.view === "reset" ? (
+          <form method="post" className="flex flex-col gap-4">
+            <input type="hidden" name="intent" value="reset" />
+            <input type="hidden" name="token" value={state.token} />
+            <input type="hidden" name="email" value={state.email} />
+            <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+              New password
+              <Input
+                type="password"
+                name="password"
+                maxLength={MAX_PASSWORD_LENGTH}
+                autoComplete="new-password"
+                required
+                invalid={!!error}
+                aria-invalid={error ? true : undefined}
+              />
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              At least 8 characters. The link is single-use and expires in 7
+              days.
+            </p>
+            {error ? (
+              <p
+                role="alert"
+                className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400"
+              >
+                <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+                {error}
+              </p>
+            ) : null}
+            <Button type="submit" size="lg" className="mt-2 w-full">
+              <KeyRound aria-hidden="true" className="h-4 w-4" /> Set password
+            </Button>
+            <div className="flex items-center justify-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
+              <Link
+                to="/reset-password"
+                className="text-gray-500 dark:text-gray-400 hover:underline"
+              >
+                Link not working? Request a new one
+              </Link>
+            </div>
+          </form>
+        ) : null}
+
+        {state.view === "done" ? (
+          <div className="flex flex-col items-center gap-2 text-sm">
+            <Link
+              to="/login"
+              className="mt-2 font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Sign in with your new password
+            </Link>
+          </div>
+        ) : null}
+      </div>
+    </main>
+  );
+}

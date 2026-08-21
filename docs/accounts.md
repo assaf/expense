@@ -17,11 +17,22 @@ reads and writes are scoped — see `app/lib/db/`).
   sha256 of the token at rest on `users.verificationTokenHash`, 7-day TTL,
   resend button on the login page, rate-limited to once a day) — the user
   can't sign in until it's clicked (`login` throws EmailNotVerifiedError).
+  **Exception — FastMail onboarding (`/onboarding`)**: a valid FastMail API
+  token proves mailbox control (stronger than a link click), so the
+  resolved address is stamped `emailVerifiedAt` without an emailed link —
+  see docs/email-connections.md → FastMail onboarding.
   Re-signing up with the same email while the account is still unverified
   deletes the throwaway account and its old link (`deleteUnverifiedUser`)
   and starts fresh. Users created before this requirement (and the
   APP_EMAIL bootstrap user) are grandfathered as verified (`emailVerifiedAt`
   backfilled by the migration / `scripts/migrate-prod`).
+- **Password recovery** (`/reset-password`, public): "Forgot password?"
+  on the login page and on the onboarding attach step emails a single-use
+  reset link (7-day TTL, once-a-day resend, sha256 of the token at rest on
+  `users.passwordResetTokenHash`). The request always reports the same
+  outcome (no account enumeration); unverified accounts are skipped (their
+  verification link is the recovery). The token is consumed on use, and the
+  password contract matches signup (`validateSignup` rules).
 - **Bootstrap**: on an empty database, the first account + user are
   created from `APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing). On
   existing pre-email databases, `initStore` backfills the bootstrap

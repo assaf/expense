@@ -1,5 +1,5 @@
 import { AlertCircle, MailCheck, ReceiptText } from "lucide-react";
-import { redirect, useFetcher, useSearchParams } from "react-router";
+import { Link, redirect, useFetcher, useSearchParams } from "react-router";
 import { useState } from "react";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
@@ -260,6 +260,14 @@ export default function LoginPage() {
               mode === "signin" ? "current-password" : "new-password"
             }
           />
+          {mode === "signin" ? (
+            <Link
+              to="/reset-password"
+              className="-mt-2 self-end text-xs text-gray-500 dark:text-gray-400 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          ) : null}
 
           {error && (
             <p
@@ -303,6 +311,12 @@ export default function LoginPage() {
         <div className="mt-6 flex flex-col items-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
           {mode === "signin" ? (
             <>
+              <Link
+                to="/onboarding"
+                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Connect a FastMail account instead — no verification email
+              </Link>
               <button
                 type="button"
                 className="font-medium text-blue-600 dark:text-blue-400 hover:underline"

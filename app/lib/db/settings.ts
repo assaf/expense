@@ -21,6 +21,7 @@ export async function readSettings(accountId: string): Promise<Settings> {
   settings.homeAddress = kv["homeAddress"] ?? "";
   settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
   settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
+  settings.welcomePending = kv["welcomePending"] === "1";
   settingsCache.set(accountId, settings);
   return settings;
 }
@@ -40,6 +41,11 @@ export async function writeSettings(
       accountId,
       key: "homeLng",
       value: settings.homeLng === null ? "" : String(settings.homeLng),
+    },
+    {
+      accountId,
+      key: "welcomePending",
+      value: settings.welcomePending ? "1" : "",
     },
   ];
   await prisma.$transaction([

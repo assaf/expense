@@ -1,4 +1,4 @@
-import { ArrowLeft, Inbox } from "lucide-react";
+import { ArrowLeft, ArrowRight, Inbox } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { ReviewInbox } from "~/components/email-review";
@@ -27,13 +27,14 @@ export const config = { maxDuration: 60 };
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const connectionId =
-    new URL(request.url).searchParams.get("connection") ?? "";
+  const url = new URL(request.url);
+  const onboarding = url.searchParams.get("onboarding") === "1";
+  const connectionId = url.searchParams.get("connection") ?? "";
   const connection = connectionId
     ? await readEmailConnection(user.accountId, connectionId)
     : undefined;
   if (!connection) {
-    return { connection: null, items: [], scannedAt: null };
+    return { connection: null, items: [], scannedAt: null, onboarding };
   }
   const [items, rules] = await Promise.all([
     listReviewItems(connection.id),
@@ -51,6 +52,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       rulePattern: reviewSenderRulePattern(item.fromAddress),
     })),
     scannedAt: connection.reviewScannedAt,
+    onboarding,
   };
 }
 
@@ -117,7 +119,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
-  const { connection, items, scannedAt } = loaderData;
+  const { connection, items, scannedAt, onboarding } = loaderData;
   if (!connection) {
     return (
       <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
@@ -150,11 +152,21 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
         <h1 className="flex items-center gap-2 text-2xl font-bold">
           <Inbox aria-hidden="true" className="h-6 w-6" /> Review inbox
         </h1>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/emails">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to email
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {onboarding ? (
+            <Button asChild size="sm">
+              <Link to="/">
+                Finish setup{" "}
+                <ArrowRight aria-hidden="true" className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/emails">
+              <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to email
+            </Link>
+          </Button>
+        </div>
       </header>
       <p className="-mt-3 mb-6 text-sm text-gray-500 dark:text-gray-400">
         Receipts found in{" "}

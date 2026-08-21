@@ -8,7 +8,10 @@ import {
   verifyPassword,
 } from "./passwords";
 import { sendAccountVerificationEmail } from "./account-verification.server";
-import { sendVerificationEmail } from "./sender-verification.server";
+import { sendVerificationEmail as sendSenderVerificationEmail } from "./sender-verification.server";
+import { sendVerificationEmail as sendPasswordResetEmail } from "./verification-email.server";
+import { escapeHtml } from "./escape";
+import { paragraph } from "./email-layout.server";
 import {
   createAccount,
   createUser,
@@ -17,8 +20,11 @@ import {
   findUserByEmail,
   findUserById,
   getPasswordHash,
+  passwordResetRecentlySent,
   readAccount,
   resendUserVerification,
+  resetUserPasswordWithToken,
+  setUserPasswordResetToken,
   setUserVerificationToken,
   type ReplaceUnverifiedOutcome,
   updateUserPasswordHash,
@@ -106,6 +112,14 @@ async function commitUserSession(userId: string): Promise<string> {
   const session = await sessionStorage.getSession();
   session.set("userId", userId);
   return sessionStorage.commitSession(session);
+}
+
+/** Exposed for FastMail onboarding: mint a session cookie for a freshly
+ * created VERIFIED user without going through the login path (the login
+ * path re-verifies credentials; the onboarding token already proved
+ * mailbox control and the password was set in the same step). */
+export async function createSessionCookie(userId: string): Promise<string> {
+  return commitUserSession(userId);
 }
 
 /** Login failed because the account's email hasn't been verified yet. The
@@ -361,6 +375,79 @@ export async function resendAccountVerification(
 }
 
 /**
+ * Email a single-use password-reset link for a verified account. The
+ * response is the same whether or not the account exists (no account
+ * enumeration); a reset already sent within the last day is not re-sent
+ * (the recipient checks their inbox). Unverified accounts are skipped —
+ * they can't sign in anyway (the verification link is the recovery).
+ * Never throws: email failures are logged inside the send path.
+ */
+export async function requestPasswordReset(
+  email: string,
+  origin?: string,
+): Promise<void> {
+  await initStore();
+  const user = await findUserByEmail(email.trim().toLowerCase());
+  if (!user?.emailVerifiedAt) return;
+  if (await passwordResetRecentlySent(user.id)) return;
+  const token = generateOpaqueToken();
+  await setUserPasswordResetToken(user.id, token);
+  const account = await readAccount(user.accountId);
+  await sendPasswordResetEmail({
+    to: user.email,
+    token,
+    origin,
+    subject: "Reset your Expense password",
+    verifyPath: "/reset-password",
+    buttonLabel: "Set a new password",
+    body: [
+      paragraph(
+        `We got a request to reset the password for <b>${escapeHtml(user.email)}</b> on <b>${escapeHtml(account?.name ?? user.email)}</b>.`,
+      ),
+      paragraph(
+        "Click below to choose a new password. The link is single-use and expires in 7 days.",
+      ),
+    ],
+    closingNote:
+      "If you didn't request this, you can ignore this email — your password stays the same.",
+  });
+}
+
+/**
+ * Set a new password with the token from a reset email. Single-use, 7-day
+ * TTL; the token is consumed regardless so a stale link can't be replayed.
+ * Throws Error with a user-facing message on an invalid/expired token or a
+ * password that fails the signup rules.
+ */
+export async function resetPasswordWithToken(
+  rawToken: string,
+  password: string,
+): Promise<{ email: string }> {
+  await initStore();
+  // Same password contract as signup — check BEFORE the token is consumed,
+  // so a bad password doesn't burn a live link.
+  if (password.length < 8) {
+    throw new Error("Password must be at least 8 characters");
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    throw new Error(
+      `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
+    );
+  }
+  const outcome = await resetUserPasswordWithToken(
+    rawToken,
+    await hashPassword(password),
+  );
+  if (outcome.status === "invalid") {
+    throw new Error("This reset link is no longer valid — request a new one.");
+  }
+  if (outcome.status === "expired") {
+    throw new Error("This reset link has expired — request a new one.");
+  }
+  return { email: outcome.email };
+}
+
+/**
  * The user's login email is their default receipts-by-email sender. Make
  * sure the sender row exists and email a verification link when one is owed
  * (freshly added, or the last one is stale). Receipts only start flowing
@@ -382,7 +469,7 @@ async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
     }
     if (!token) return;
     const account = await readAccount(user.accountId);
-    await sendVerificationEmail({
+    await sendSenderVerificationEmail({
       to: user.email,
       token,
       origin,
@@ -397,7 +484,10 @@ async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
   }
 }
 
-function validateSignup(email: string, password: string): void {
+/** Shared signup validation: email format + password length bounds. The
+ * FastMail onboarding flow reuses this for the create step, so the
+ * password contract is identical to email signup. */
+export function validateSignup(email: string, password: string): void {
   if (!isEmail(email)) {
     throw new Error("Enter a valid email address");
   }

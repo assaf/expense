@@ -56,6 +56,10 @@ model User {
   /// sha256 of the current verification token in the emailed link.
   verificationTokenHash String?
   verificationSentAt    String?
+  /// sha256 of the current password-reset token in the emailed link
+  /// (single-use, 7-day TTL, once-a-day resend — see auth.server.ts).
+  passwordResetTokenHash String?
+  passwordResetSentAt    String?
   createdAt             String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
