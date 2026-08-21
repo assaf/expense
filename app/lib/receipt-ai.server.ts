@@ -267,6 +267,7 @@ const MERCHANT_BY_SENDER: Record<string, string> = {
   "shopify.com": "Shopify",
   "conservice.com": "Conservice",
   "spectrum.com": "Spectrum",
+  "spectrum.net": "Spectrum",
   "verizonwireless.com": "Verizon Wireless",
 };
 

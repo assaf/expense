@@ -35,5 +35,8 @@ export const GENERAL_EMAIL_RULES: GeneralEmailRuleSeed[] = [
   { sender: "shopify.com", note: "Shopify subscription bills" },
   { sender: "conservice.com", note: "Conservice utility statements" },
   { sender: "spectrum.com", note: "Spectrum internet/cable bills" },
+  // Spectrum billing notices also arrive from spectrum.net (a separate
+  // TLD, not a subdomain — needs its own rule).
+  { sender: "spectrum.net", note: "Spectrum billing notices" },
   { sender: "verizonwireless.com", note: "Verizon Wireless phone bills" },
 ];
