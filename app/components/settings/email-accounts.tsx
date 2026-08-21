@@ -7,7 +7,7 @@ import { formatShortDate } from "~/lib/format";
 import type { EmailConnectionView } from "~/lib/db/email-connections";
 
 /**
- * Settings → Email accounts: connect a user's own mailbox for automatic
+ * Email page → Email accounts: connect a user's own mailbox for automatic
  * expense import. Today FastMail-only (JMAP): the connect flow walks the
  * user through generating an API token in FastMail, verifies it live, and
  * stores it encrypted. Each connected mailbox shows its health stats

@@ -9,6 +9,7 @@ import {
   X,
   BadgeCheck,
   ListChecks,
+  Mail,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import {
@@ -474,6 +475,11 @@ function ExpenseList({
           <Button asChild variant="ghost" size="sm">
             <Link to="/export">
               <Download aria-hidden="true" className="h-4 w-4" /> Reports
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/emails">
+              <Mail aria-hidden="true" className="h-4 w-4" /> Email
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">

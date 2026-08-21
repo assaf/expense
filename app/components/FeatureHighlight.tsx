@@ -88,11 +88,11 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
           {data.inboundAddress}
         </span>{" "}
         and it is added automatically — PDF and image attachments supported.
-        Only emails from verified sender addresses are imported; add yours in
-        Settings.
+        Only emails from verified sender addresses are imported; add yours on
+        the Email page.
       </>
     ),
-    cta: { label: "Manage email addresses", to: "/settings#receipts-by-email" },
+    cta: { label: "Manage email addresses", to: "/emails" },
   },
   mcp: {
     icon: Bot,
@@ -146,11 +146,11 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Create as many reports as you need and export any of them as a PDF.
-        Close the ones you have filed, or delete ones you no longer use — all
-        from Settings.
+        Close the ones you have filed, or delete ones you no longer use — all on
+        the Reports page.
       </>
     ),
-    cta: { label: "Manage reports", to: "/settings#reports" },
+    cta: { label: "Manage reports", to: "/export" },
   },
   invite: {
     icon: Users,

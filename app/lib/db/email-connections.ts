@@ -3,7 +3,7 @@ import prisma from "~/lib/prisma.server";
 import type { EmailConnectionRecord } from "~/lib/types";
 
 /**
- * Connected email accounts (Settings → Email accounts): a user's own
+ * Connected email accounts (Email page → Email accounts): a user's own
  * mailbox linked for automatic expense import. One row per mailbox —
  * emailAddress is globally unique so two workspaces can never race to
  * process (and trash) the same email. API tokens are stored encrypted
@@ -254,7 +254,7 @@ export async function touchEmailConnectionPush(id: string): Promise<void> {
   });
 }
 
-/** Set/clear the needs-attention state shown in Settings. */
+/** Set/clear the needs-attention state shown on the Email page. */
 export async function setEmailConnectionStatus(
   id: string,
   status: "active" | "error",

@@ -65,12 +65,14 @@ body {
   }
 }
 
-.settings-page :target > h2 {
+.settings-page :target > h2,
+.emails-page :target > h2 {
   animation: target-flash 3s ease-out forwards;
   border-radius: 4px;
 }
 
-.dark .settings-page :target > h2 {
+.dark .settings-page :target > h2,
+.dark .emails-page :target > h2 {
   animation: target-flash-dark 3s ease-out forwards;
 }
 

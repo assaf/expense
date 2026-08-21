@@ -193,7 +193,7 @@ describe("email connections store", () => {
     expect(row!.pushExpiresAt).toBe("2030-01-01T00:00:00.000Z");
     expect(row!.status).toBe("error");
     expect(row!.lastPushAt).not.toBeNull();
-    // And the view (Settings) surfaces the error status.
+    // And the view (Email page) surfaces the error status.
     const view = (await listEmailConnections(TEST_ACCOUNT_ID))[0]!;
     expect(view.status).toBe("error");
   });

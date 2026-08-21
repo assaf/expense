@@ -100,6 +100,17 @@ default | `deepseek` | `tesseract`), and `RECEIPT_VISION_MAX_WIDTH` (default
 call; see `docs/extraction.md`). All optional — receipts stop arriving when
 the FastMail vars are unset, but the app keeps working.
 
+**Timezones**: the server runs UTC (Vercel) and never computes a
+user-facing "today". Web forms default dates from the browser's own
+timezone; the dashboard future-badge and mileage-rate lines are computed
+client-side after mount; reconciliation sends its local `today` with the
+complete request (the future-date ceiling). The MCP tools
+(`capture_receipt`, `log_mileage`) are timezone-agnostic by design:
+omitting `date` stores today's UTC date, and every response carries
+`serverUtcNow` (ISO UTC) so the client — which knows its own timezone —
+resolves the user's local date and passes an explicit `date` when it
+differs.
+
 The **FastMail JMAP push reader** (the receipts source — reads
 forwarded receipts directly from a FastMail folder and discards them) adds: `FASTMAIL_TOKEN` (JMAP API token — full mail
 access, treat as a password; shareable with the inbox project), `PUSH_PRIVATE_KEY`

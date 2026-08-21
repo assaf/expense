@@ -84,23 +84,7 @@ describe("Settings", () => {
     await expect(section.getByText("otheruser@example.com")).toHaveCount(0);
   });
 
-  it("shows the sign-in email as a pending receipts-by-email sender", async () => {
-    // The login email is auto-added as the account's default sender on
-    // sign-in — pending until its verification link is clicked.
-    const section = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Receipts by email" }),
-    });
-    await expect(section.getByText("testuser@example.com")).toBeVisible();
-    await expect(section.getByText("Your sign-in email")).toBeVisible();
-    await expect(section.getByText("Awaiting verification")).toBeVisible();
-    // The default sender row can't be removed.
-    await expect(
-      section.getByRole("button", { name: /Remove testuser@example.com/ }),
-    ).toHaveCount(0);
-  });
-
   it("category counts exclude expenses in closed reports", async () => {
-    // Close "2027 Test" through the API — one of Development's expenses
     // lives in it — then verify the category count on Settings drops.
     await testPrisma.report.updateMany({
       where: { accountId: TEST_ACCOUNT_ID, name: "2027 Test" },
@@ -133,25 +117,6 @@ describe("Settings", () => {
     await expect(section.locator('input[name="homeAddress"]')).toHaveValue(
       "123 Test St, Testing, CA",
     );
-  });
-
-  it("adds a sender as pending and reports the verification email", async () => {
-    const page = await goto("/settings");
-    const section = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Receipts by email" }),
-    });
-    await section
-      .locator('input[type="email"][name="address"]')
-      .fill("extra@example.com");
-    await section.getByRole("button", { name: "Add address" }).click();
-    await expect(
-      section.getByText("extra@example.com", { exact: true }),
-    ).toBeVisible();
-    await expect(section.getByText("Awaiting verification")).toHaveCount(2);
-    await expect(
-      section.getByText(/Verification email sent to extra@example.com/),
-    ).toBeVisible();
-    await page.close();
   });
 
   it("lists categories alphabetically", async () => {

@@ -33,6 +33,7 @@ pnpm build && pnpm start   # prod build + serve on :3000
 
 ## Gotchas (current-state rules)
 
+- **Timezone**: the server runs UTC (Vercel) — never compute a user-facing "today" server-side (`todayDate()` in a loader/action is a bug: PST evenings get tomorrow). Client code owns all timezone math: forms default dates from `todayDate()` in the browser; dashboard future-badge/rate lines are computed post-mount; reconciliation sends its local `today` with the complete request. MCP tools store UTC-today when `date` is omitted and return `serverUtcNow` for the client to convert. No server timezone config exists — keep it that way.
 - **Completeness badge**: incomplete when missing date/amount/merchant/category/report (image NOT a factor); mileage needs 2+ route addresses. Display-only, no save gate.
 - **Pooler caps**: runtime uses transaction pooler (port 6543, per-instance `max: 2`, 30s user cache); DDL uses `DATABASE_URL_UNPOOLED` (5432). Never push `pool_size` above 80% of `max_connections` — see the `(EMAXCONN)` incident in `docs/operations.md`.
 - **Auth**: rows scoped by `accountId` (full isolation); email verification gates sign-in (7-day TTL, resend 1/day); `APP_EMAIL` bootstrap for empty DBs; every loader/action calls `requireUser(request)`.

@@ -1339,7 +1339,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(result).toMatchObject({ status: "unverified-sender" });
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("not verified");
-    expect(deps.sent[0]!.html).toContain("Settings");
+    expect(deps.sent[0]!.html).toContain("Receipts by email");
     const expenses = await readExpenses(TEST_ACCOUNT_ID);
     expect(
       expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),

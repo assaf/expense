@@ -12,16 +12,9 @@ import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { AgentsSection } from "~/components/settings/agents-section";
-import { EmailAccountsSection } from "~/components/settings/email-accounts";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
-import {
-  AddSenderForm,
-  SenderRow,
-} from "~/components/settings/receipts-by-email";
 import { requireUser } from "~/lib/auth.server";
-import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { geocode } from "~/lib/maps.server";
-import { sendVerificationEmail } from "~/lib/sender-verification.server";
 import {
   readAccount,
   readAccountUsers,
@@ -33,19 +26,7 @@ import {
   removeCategory,
   renameCategory,
 } from "~/lib/db/categories";
-import {
-  addInboundSender,
-  listInboundSenders,
-  removeInboundSender,
-  resendInboundSenderVerification,
-} from "~/lib/db/inbound";
 import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
-import {
-  createEmailConnection,
-  listEmailConnections,
-  readEmailConnection,
-  removeEmailConnection,
-} from "~/lib/db/email-connections";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
@@ -58,37 +39,20 @@ import {
   periodLabel,
 } from "~/lib/mileage-rates";
 import { formString, unknownIntent } from "~/lib/validation";
-import { verifyJmapToken } from "~/lib/jmap.server";
-import {
-  decryptSecret,
-  encryptSecret,
-  isTokenCryptoConfigured,
-} from "~/lib/token-crypto.server";
-import { destroyConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import type { Route } from "./+types/settings";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const account = await readAccount(user.accountId);
-  const [
-    categories,
-    settings,
-    inboundSenders,
-    categoryCounts,
-    oauthSessions,
-    rates,
-    members,
-    emailConnections,
-  ] = await Promise.all([
-    readCategories(user.accountId),
-    readSettings(user.accountId),
-    listInboundSenders(user.accountId),
-    readCategoryCounts(user.accountId),
-    listUserOAuthSessions(user.id),
-    readMileageRates(),
-    readAccountUsers(user.accountId),
-    listEmailConnections(user.accountId),
-  ]);
+  const [categories, settings, categoryCounts, oauthSessions, rates, members] =
+    await Promise.all([
+      readCategories(user.accountId),
+      readSettings(user.accountId),
+      readCategoryCounts(user.accountId),
+      listUserOAuthSessions(user.id),
+      readMileageRates(),
+      readAccountUsers(user.accountId),
+    ]);
   // The "current rate" line is computed CLIENT-side from the browser's
   // local today — the server runs UTC and must not guess the user's day.
   // The rates table itself is passed through (timezone-independent).
@@ -100,14 +64,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       count: categoryCounts.get(c.name) ?? 0,
     })),
     homeAddress: settings.homeAddress,
-    inboundSenders,
     userEmail: user.email,
-    inboundAddress: INBOUND_EMAIL_ADDRESS,
     rates,
     oauthSessions,
     members,
-    emailConnections,
-    emailAccountsConfigured: isTokenCryptoConfigured(),
     mcpUrl: new URL("/mcp", request.url).toString(),
   };
 }
@@ -140,114 +100,6 @@ export async function action({ request }: Route.ActionArgs) {
         formString(form, "newName"),
       );
       return Response.json(result);
-    }
-    case "addInboundSender": {
-      const result = await addInboundSender(
-        user.accountId,
-        formString(form, "address"),
-      );
-      if (!result.ok) return Response.json(result);
-      // New/updated sender → email its verification link so receipts start
-      // flowing once the mailbox owner clicks it. `token: null` means the
-      // address was already verified for this account — nothing to send.
-      if (result.token) {
-        const account = await readAccount(user.accountId);
-        await sendVerificationEmail({
-          to: result.address,
-          token: result.token,
-          origin: new URL(request.url).origin,
-          accountName: account?.name ?? "",
-        });
-      }
-      return Response.json({ ok: true, address: result.address });
-    }
-    case "resendInboundSenderVerification": {
-      const result = await resendInboundSenderVerification(
-        user.accountId,
-        formString(form, "address"),
-      );
-      if (!result.ok) return Response.json(result);
-      const account = await readAccount(user.accountId);
-      await sendVerificationEmail({
-        to: result.address,
-        token: result.token,
-        origin: new URL(request.url).origin,
-        accountName: account?.name ?? "",
-      });
-      return Response.json({ ok: true, address: result.address });
-    }
-    case "removeInboundSender": {
-      await removeInboundSender(user.accountId, formString(form, "address"));
-      break;
-    }
-    case "connectEmail": {
-      if (!isTokenCryptoConfigured()) {
-        return Response.json(
-          {
-            ok: false,
-            error:
-              "Email account connections are not configured on this deployment.",
-          },
-          { status: 503 },
-        );
-      }
-      const token = formString(form, "token").trim();
-      if (!token) {
-        return Response.json({
-          ok: false,
-          error: "Paste your API token first.",
-        });
-      }
-      const verification = await verifyJmapToken(token);
-      if (!verification.ok) {
-        return Response.json({ ok: false, error: verification.message });
-      }
-      const result = await createEmailConnection({
-        accountId: user.accountId,
-        provider: "fastmail",
-        emailAddress: verification.info.username,
-        jmapAccountId: verification.info.mailAccountId,
-        tokenEnc: encryptSecret(token),
-      });
-      if (!result.ok) return Response.json(result);
-      console.info("[email-connections] connected", {
-        accountId: user.accountId,
-        address: result.connection.emailAddress,
-      });
-      return Response.json({
-        ok: true,
-        address: result.connection.emailAddress,
-      });
-    }
-    case "disconnectEmail": {
-      const id = formString(form, "id");
-      const connection = await readEmailConnection(user.accountId, id);
-      if (connection) {
-        // Best effort: tear down the server-side push subscription with
-        // the user's token. A failure (revoked token, FastMail down) still
-        // disconnects — the orphaned subscription dies at expiry and its
-        // pushes hit the webhook's unknown-connection path.
-        try {
-          const token = decryptSecret(connection.tokenEnc);
-          if (connection.pushSubscriptionId) {
-            await destroyConnectionPushSubscription(
-              token,
-              connection.pushSubscriptionId,
-            );
-          }
-        } catch (err) {
-          console.warn("[email-connections] subscription teardown failed", {
-            id: connection.id,
-            err,
-          });
-        }
-      }
-      const removed = await removeEmailConnection(user.accountId, id);
-      console.info("[email-connections] disconnected", {
-        accountId: user.accountId,
-        removed,
-      });
-      return Response.json({ ok: true });
     }
     case "disconnectOAuthClient": {
       const clientId = formString(form, "clientId");
@@ -282,13 +134,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     rates,
     accountName,
     inviteCode,
-    inboundSenders,
     userEmail,
-    inboundAddress,
     oauthSessions,
     members,
-    emailConnections,
-    emailAccountsConfigured,
     mcpUrl,
   } = loaderData;
   // The "current rate" line depends on the browser's local today (the
@@ -456,64 +304,6 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Button>
         </Form>
       </section>
-
-      <section id="receipts-by-email" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Receipts by email</h2>
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Forward receipt emails to the address below and they are parsed
-          (merchant, amount, category) and added automatically. The expense date
-          is the date of the forwarded email.
-        </p>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-          {inboundAddress ? (
-            <div className="mb-4">
-              <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Forward receipts to
-              </div>
-              <div className="font-mono text-lg font-semibold">
-                {inboundAddress}
-              </div>
-            </div>
-          ) : (
-            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-              Set the INBOUND_EMAIL_ADDRESS environment variable to show the
-              forwarding address here.
-            </p>
-          )}
-          <div className="mb-3">
-            <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-              Sender addresses
-            </div>
-            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-              Receipts are imported only from <b>verified</b> addresses. Adding
-              an address sends a verification link to that inbox. Once the link
-              is clicked, the address is locked to your account — no one else
-              can claim it — and receipts start importing.
-            </p>
-            <ul className="flex flex-col gap-1">
-              {inboundSenders.length === 0 ? (
-                <li className="text-sm text-gray-500 dark:text-gray-400">
-                  None yet.
-                </li>
-              ) : (
-                inboundSenders.map((sender) => (
-                  <SenderRow
-                    key={sender.address}
-                    sender={sender}
-                    isDefault={sender.address === userEmail}
-                  />
-                ))
-              )}
-            </ul>
-          </div>
-          <AddSenderForm />
-        </div>
-      </section>
-
-      <EmailAccountsSection
-        connections={emailConnections}
-        configured={emailAccountsConfigured}
-      />
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
 

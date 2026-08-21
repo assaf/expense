@@ -1,6 +1,6 @@
 /**
  * JMAP client for user-supplied API tokens (connected email accounts —
- * Settings → Email accounts). FastMail today; the session handshake is the
+ * Email page → Email accounts). FastMail today; the session handshake is the
  * same for any JMAP provider, only the endpoint differs.
  *
  * Distinct from fastmail.server.ts, which is the app's OWN FastMail mailbox

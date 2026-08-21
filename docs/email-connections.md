@@ -19,7 +19,7 @@ from an existing inbox).**
   connection + JMAP email id), the audit/health log and the source of the
   "processed in the last 24 hours" stat.
 - **Token handling**: the user generates a FastMail API token (Settings →
-  Privacy & Security → API tokens), pastes it in Settings → Email accounts.
+  Privacy & Security → API tokens), pastes it on the Email page.
   We verify it live against `https://api.fastmail.com/jmap/session`
   (`app/lib/jmap.server.ts` — distinguishes invalid token / no mail scope /
   network), then store it **AES-256-GCM encrypted**
@@ -45,14 +45,14 @@ from an existing inbox).**
   daily 13:00 UTC): renew every connection's subscription (recreate within
   7 days of the 30-day expiry — recreation triggers a fresh
   PushVerification). A failure (revoked token, FastMail error) flags the
-  connection `status=error` → "Needs attention" in Settings; a successful
+  connection `status=error` → "Needs attention" on the Email page; a successful
   renewal clears it.
 - **Disconnect** also destroys the server-side subscription (best effort —
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI**: `app/components/settings/email-accounts.tsx` — step-by-step
   FastMail instructions with the direct new-token link, connect form,
   connection rows with stats (received / processed / last 24h / last
-  webhook), disconnect.
+  webhook), disconnect. Rendered on the Email page (`app/routes/emails.tsx`).
 - **Stats counters**: `receivedCount` / `processedCount` / `lastPushAt` are
   incremented by the processing pipeline (phase 3); `processedLast24h` is
   computed from `EmailProcessLog` rows with `outcome = "created"`.

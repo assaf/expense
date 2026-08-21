@@ -1175,7 +1175,7 @@ export async function processInboundEvent(
         subject: "⚠️ Receipt not imported — sender not verified yet",
         html: replyHtml("Receipt not imported — verify this address first", [
           `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} from <b>${escapeHtml(data.from)}</b>, but this address hasn't been verified yet, so receipts from it are not imported.`,
-          "Check the inbox of that address for the verification email we sent, or open the app and go to <b>Settings → Receipts by email</b> to resend it. Then forward the receipt again.",
+          "Check the inbox of that address for the verification email we sent, or open the app and go to <b>Email → Receipts by email</b> to resend it. Then forward the receipt again.",
         ]),
       });
       return { status: "unverified-sender" };
@@ -1185,7 +1185,7 @@ export async function processInboundEvent(
       subject: "⚠️ Receipt not imported — sender not recognized",
       html: replyHtml("Receipt not imported", [
         `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} but the sender address <b>${escapeHtml(data.from)}</b> is not set up to import receipts.`,
-        "Open the app, go to <b>Settings → Receipts by email</b>, and add this address to the list of allowed senders. Then forward the receipt again.",
+        "Open the app, go to <b>Email → Receipts by email</b>, and add this address to the list of allowed senders. Then forward the receipt again.",
       ]),
     });
     return { status: "unknown-sender" };

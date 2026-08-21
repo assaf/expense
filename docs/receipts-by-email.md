@@ -85,7 +85,7 @@ Env: `FASTMAIL_TOKEN`,
 folder), `INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL is
 `<PUBLIC_URL>/api/inbound-push` — set it in prod or verification fails).
 
-- **Verification + exclusivity**: adding an address (Settings → Receipts by
+- **Verification + exclusivity**: adding an address (Email page → Receipts by
   email, or auto-added at signup/join/login) puts it in `inbound_senders` as
   **pending** and emails a verification link to it (single-use token hashed
   in `verificationTokenHash`, 7-day TTL, resent on demand or when stale
@@ -97,7 +97,7 @@ folder), `INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL 
   > fails. Removing a sender deletes both rows and frees the address. The
   > user's login email is always ensured as a sender (`ensureInboundSenderForUser`
   > on signup/join/login, auto-emailing a verification link when owed) — it
-  > shows in Settings as "Your sign-in email" and can't be removed. The
+  > shows on the Email page as "Your sign-in email" and can't be removed. The
   > pipeline replies "verify first" (status `unverified-sender`) when the
   > From address has a row but no verification.
 - The expense date is the **original forwarded email's date** (quoted

@@ -72,7 +72,7 @@ function copyFor(
               that ago.
             </p>
             <p>
-              Sign in to Expense, go to <b>Settings → Receipts by email</b>, and
+              Sign in to Expense, go to <b>Email → Receipts by email</b>, and
               click <b>Resend email</b> next to{" "}
               <b className="font-mono">{outcome.address}</b>.
             </p>
@@ -89,7 +89,7 @@ function copyFor(
               sent at all.
             </p>
             <p>
-              Sign in to Expense, go to <b>Settings → Receipts by email</b>, and
+              Sign in to Expense, go to <b>Email → Receipts by email</b>, and
               click <b>Resend email</b> to get a fresh link.
             </p>
           </>
