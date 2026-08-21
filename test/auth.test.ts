@@ -101,9 +101,8 @@ describe("Access control", () => {
     await expect(
       page.getByRole("link", { name: "Create your account" }).first(),
     ).toHaveAttribute("href", "/login?mode=create");
-    await expect(
-      page.getByRole("link", { name: /GitHub/ }).first(),
-    ).toHaveAttribute("href", "https://github.com/assaf/expense");
+    // No GitHub link anywhere on the marketing site.
+    await expect(page.getByRole("link", { name: /GitHub/ })).toHaveCount(0);
     // The app itself stays behind the session.
     await expect(page.getByText("Test Store")).not.toBeVisible();
     await page.close();

@@ -56,7 +56,6 @@ export function pageMeta(
 
 export const SITE_URL = "https://expense.labnotes.org";
 export const APP_NAME = "Expense";
-export const GITHUB_URL = "https://github.com/assaf/expense";
 export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
 
@@ -142,7 +141,7 @@ export const BENEFITS = [
   },
   {
     title: "Your data belongs to you",
-    body: "No ads, no data selling and even the source code is publicly available on GitHub if you want to host your own instance.",
+    body: "No ads, no data selling. Your expenses stay in your account, and you can export and leave anytime.",
   },
 ];
 
@@ -211,7 +210,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Where is my expense data stored?",
-    answer: `On your account only. Expense doesn't serve ads, it doesn't sell your data; receipts and expenses are restricted to your account, and exported as PDF or ZIP anytime you wish. The code is public on GitHub if you want to check the details of implementation.`,
+    answer: `On your account only. Expense doesn't serve ads, it doesn't sell your data; receipts and expenses are restricted to your account, and exported as PDF or ZIP anytime you wish.`,
   },
   {
     question: "Is Expense good for freelancers and self-employed people?",
@@ -424,7 +423,7 @@ ${benefits}
 
 ${facts}
 
-Built by ${AUTHOR_NAME} (${BLOG_URL}). Code: ${GITHUB_URL}.
+Built by ${AUTHOR_NAME} (${BLOG_URL}).
 `;
 }
 
