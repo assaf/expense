@@ -80,6 +80,7 @@ export const KEY_FACTS = [
   "Price: free. No subscription, no per-user fees, no ads",
   "Built for the tax time: categories are from IRS Schedule C lines, expenses are grouped into the reports you name, mileage deduction is calculated at the IRS rate for the drive date/type",
   "Receipt capture: upload, paste, drag & drop, or forward from email (images and PDFs)",
+  "FastMail: connect your mailbox and receipts in your inbox are processed automatically — merchant, amount, and category filled in, no forwarding. Most other expense apps only auto-import from Gmail",
   "The OCR finds a merchant and amount, an LLM categorizes the receipt and you just save it",
   "Export: a PDF per report with the receipts attached or a ZIP with everything (CSV plus all the receipt images)",
   "Reconciliation: upload a bank statement (PDF, CSV, QFX/OFX, Excel) to match charges against your logged expenses and catch deductions you missed",
@@ -102,6 +103,10 @@ export const BENEFITS = [
   {
     title: "Email receipts effortless",
     body: "Send an email receipt to your account and an expense will be automatically recorded, dated based on the original email for accuracy.",
+  },
+  {
+    title: "Connect your FastMail account",
+    body: "Connect your FastMail mailbox and every receipt that lands in your inbox is processed automatically — merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense works with FastMail.",
   },
   {
     title: "Get ready with your deductions on time",
@@ -179,6 +184,10 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I add receipts by email?",
     answer: `Yes. Just forward a receipt email to it, and an expense will be created based on it, including the receipt date from the original email. Only the approved senders are added to the account, and forwarding the same email twice is impossible.`,
+  },
+  {
+    question: "Does Expense work with FastMail?",
+    answer: `Yes — and it's a big reason people pick Expense over other apps. Connect your FastMail mailbox and receipts that land in your inbox are processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense supports FastMail natively. (Forwarding receipt emails still works from any provider.)`,
   },
   {
     question: "How do I export expenses for my accountant?",

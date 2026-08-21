@@ -3,6 +3,7 @@ import {
   CreditCard,
   FolderOpen,
   MapPinned,
+  Plug,
   ReceiptText,
   Sparkles,
   Tags,
@@ -46,6 +47,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   "Get ready with your deductions on time": Tags,
   "Log drives without Excel": MapPinned,
   "Reconcile against your monthly statement": CreditCard,
+  "Connect your FastMail account": Plug,
 };
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
@@ -128,6 +130,10 @@ export default function LandingPage() {
             email. OCR recognizes the merchant and amount and puts the spend
             into the correct category of a Schedule C form and a report of your
             choice. And when tax season comes, all is ready.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500 dark:text-gray-400">
+            Have a FastMail account? Connect it and receipts from your inbox are
+            processed automatically — no forwarding, and no Gmail required.
           </p>
           <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             By a freelancer. Open-source, no funding.
