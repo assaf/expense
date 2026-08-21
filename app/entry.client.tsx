@@ -10,6 +10,9 @@ if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN as string,
     environment: "production",
+    // Same release the build uploaded sourcemaps for (injected at build
+    // time by vite.config from VERCEL_GIT_COMMIT_SHA).
+    release: (import.meta.env.VITE_SENTRY_RELEASE as string) || undefined,
     integrations: [browserTracingIntegration()],
     tracesSampleRate: 0.2,
     // Browser errors are mostly ours; don't blow up the quota with noise.

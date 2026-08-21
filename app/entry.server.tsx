@@ -22,6 +22,8 @@ if (process.env.VERCEL_ENV === "production") {
       dsn:
         process.env.SENTRY_DSN ??
         "https://c5f9e74db2e043db855cecb9eba20fcb@o510761.ingest.us.sentry.io/4511850854940672",
+      // Matches the release the build created (sourcemaps, release health).
+      release: process.env.VERCEL_GIT_COMMIT_SHA || undefined,
 
       dataCollection: {
         // To disable sending user data and HTTP bodies, uncomment the lines below:
