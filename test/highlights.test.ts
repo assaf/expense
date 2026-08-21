@@ -11,6 +11,7 @@ const EMPTY: HighlightData = {
   inviteCode: "",
   mileageRate: "",
   hasRates: false,
+  hasEmailConnection: false,
 };
 
 const FULL: HighlightData = {
@@ -19,6 +20,7 @@ const FULL: HighlightData = {
   inviteCode: "ABCD-EFGH",
   mileageRate: "0.70",
   hasRates: true,
+  hasEmailConnection: true,
 };
 
 describe("feature highlights", () => {
@@ -26,10 +28,16 @@ describe("feature highlights", () => {
     expect(availableHighlights(EMPTY).sort()).toEqual([
       "capture",
       "categories",
+      "connect-email",
       "mileage-location",
       "reconcile",
       "reports",
     ]);
+  });
+
+  it("offers the connect-email highlight only when no mailbox is connected", () => {
+    expect(availableHighlights(EMPTY)).toContain("connect-email");
+    expect(availableHighlights(FULL)).not.toContain("connect-email");
   });
 
   it("offers the email highlight only when an inbound address is configured", () => {

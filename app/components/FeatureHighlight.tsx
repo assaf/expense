@@ -5,6 +5,7 @@ import {
   Fuel,
   Mail,
   MapPinned,
+  Plug,
   ReceiptText,
   Tags,
   Users,
@@ -25,6 +26,7 @@ import { Button } from "~/components/ui/Button";
 export type HighlightId =
   | "capture"
   | "categories"
+  | "connect-email"
   | "email"
   | "mcp"
   | "mileage-location"
@@ -37,13 +39,16 @@ export type HighlightId =
  * empty strings — the matching highlights are excluded from the pool.
  * `mileageRate` is filled client-side from the browser's local today (the
  * server runs UTC); `hasRates` (server-computable, timezone-independent)
- * decides whether the mileage-rate highlight is eligible at all. */
+ * decides whether the mileage-rate highlight is eligible at all.
+ * `hasEmailConnection` (no connected mailbox for the account) gates the
+ * connect-email highlight. */
 export interface HighlightData {
   inboundAddress: string;
   mcpUrl: string;
   inviteCode: string;
   mileageRate: string;
   hasRates: boolean;
+  hasEmailConnection: boolean;
 }
 
 interface HighlightDef {
@@ -77,6 +82,18 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       </>
     ),
     cta: { label: "Manage categories", to: "/settings#categories" },
+  },
+  "connect-email": {
+    icon: Plug,
+    title: "Your inbox, processed automatically",
+    body: () => (
+      <>
+        Connect your FastMail account and receipts landing in your inbox are
+        processed for you — merchant, amount, and category filled in, no
+        forwarding needed.
+      </>
+    ),
+    cta: { label: "Connect your email account", to: "/emails" },
   },
   email: {
     icon: Mail,
@@ -193,6 +210,8 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reports",
     "reconcile",
   ];
+  // Only suggest connecting a mailbox when the account hasn't connected one.
+  if (!data.hasEmailConnection) pool.push("connect-email");
   if (data.inboundAddress) pool.push("email");
   if (data.mcpUrl) pool.push("mcp");
   if (data.hasRates) pool.push("mileage-rate");

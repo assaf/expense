@@ -56,6 +56,7 @@ import { SITE_URL } from "~/lib/seo-content";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { readAccount } from "~/lib/db/accounts";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
+import { listEmailConnections } from "~/lib/db/email-connections";
 import { readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import {
@@ -74,15 +75,23 @@ export async function loader({ request }: Route.LoaderArgs) {
     return data({ mode: "landing" as const });
   }
   const user = await requireUser(request);
-  const [expenses, dismissed, allReports, rates, account, settings] =
-    await Promise.all([
-      readExpenses(user.accountId),
-      readDuplicateDismissals(user.accountId),
-      readReports(user.accountId),
-      readMileageRates(),
-      readAccount(user.accountId),
-      readSettings(user.accountId),
-    ]);
+  const [
+    expenses,
+    dismissed,
+    allReports,
+    rates,
+    account,
+    settings,
+    emailConnections,
+  ] = await Promise.all([
+    readExpenses(user.accountId),
+    readDuplicateDismissals(user.accountId),
+    readReports(user.accountId),
+    readMileageRates(),
+    readAccount(user.accountId),
+    readSettings(user.accountId),
+    listEmailConnections(user.accountId),
+  ]);
   // Closed reports stay off the home page: no summary card, no expenses.
   const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
   const open = expenses.filter((e) => !closed.has(e.report));
@@ -114,6 +123,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     // hasRates decides whether the mileage-rate highlight is eligible.
     mileageRate: "",
     hasRates: rates.length > 0,
+    // The connect-email highlight is eligible only while the account has no
+    // connected mailbox.
+    hasEmailConnection: emailConnections.length > 0,
   };
   return data(
     {
