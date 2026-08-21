@@ -56,10 +56,12 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 // --- Adapter (the mailbox operations; injectable for tests) -------------------
 
 export interface ConnectionMailAdapter {
-  /** Recent Inbox emails, oldest first. */
+  /** Recent Inbox emails — the drain's lookback query (oldest first) or
+   * the review scan's newest-first batch (pass `descending`). */
   inboxEmailSummaries(opts: {
-    afterIso: string;
+    afterIso?: string;
     limit: number;
+    descending?: boolean;
   }): Promise<ConnectionEmailSummary[]>;
   /** Full RFC 5322 source of one email. */
   rawEmail(id: string): Promise<RawConnectionEmail>;

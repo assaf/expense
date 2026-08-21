@@ -754,7 +754,8 @@ describe("drainEmailConnection", () => {
       inboxEmailSummaries: async (opts) =>
         emails
           .filter(
-            (e) => !trashed.includes(e.id) && e.receivedAt > opts.afterIso,
+            (e) =>
+              !trashed.includes(e.id) && e.receivedAt > (opts.afterIso ?? ""),
           )
           .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
           .slice(0, opts.limit)

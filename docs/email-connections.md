@@ -198,9 +198,12 @@ count; a never-scanned connection auto-scans on first visit.
 Implementation (`app/lib/email-review.server.ts`, route
 `app/routes/email-review.tsx`, UI `app/components/email-review.tsx`):
 
-- **Scan** (`scanConnectionInbox`): cursor over `receivedAt` (90-day
-  window, 45s budget — a big mailbox needs a second "Scan again", which
-  resumes). For each undecided email it fetches + parses the raw message
+- **Scan** (`scanConnectionInbox`): one bounded batch — the 50 most
+  recent Inbox emails (newest first, 45s defensive budget). Deliberately
+  capped so a scan stays short (a handful of fetches) and can't be
+  hammered into downloading a whole backlog; email older than the most
+  recent 50 isn't offered by review (rule-matched senders are still caught
+  by the auto-drain). For each undecided email it fetches + parses the raw message
   and runs the same local classifier as the pipeline
   (`looksLikeReceiptEmail`); matches are upserted on `EmailProcessLog` as
   `outcome = "pending-review"` with the receivedAt + full From header

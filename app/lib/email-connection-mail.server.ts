@@ -57,15 +57,20 @@ export interface ConnectionEmailSummary {
 }
 
 /**
- * Recent emails in a mailbox (by role), oldest first. The drain passes an
- * `afterIso` lookback window; already-evaluated emails are skipped by the
- * caller via the EmailProcessLog (idempotency), not by the query.
+ * Recent emails in a mailbox (by role). The drain passes an `afterIso`
+ * lookback window (oldest first); the review scan passes `descending`
+ * instead to take the most recent emails first. Already-evaluated emails
+ * are skipped by the caller via the EmailProcessLog (idempotency), not by
+ * the query.
  */
 export async function mailboxSummaries(opts: {
   token: string;
   role: string;
-  afterIso: string;
+  /** Lower bound on receivedAt (exclusive) — the drain's lookback window. */
+  afterIso?: string;
   limit: number;
+  /** Newest-first (default: oldest-first — the drain's cursor contract). */
+  descending?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
   const mailboxId = await mailboxIdByRole(opts.token, opts.role);
   const query = await jmapCall(opts.token, [
@@ -73,8 +78,11 @@ export async function mailboxSummaries(opts: {
       "Email/query",
       {
         accountId: (await jmapSessionForToken(opts.token)).mailAccountId,
-        filter: { inMailbox: mailboxId, after: opts.afterIso },
-        sort: [{ property: "receivedAt", isAscending: true }],
+        filter: {
+          inMailbox: mailboxId,
+          ...(opts.afterIso ? { after: opts.afterIso } : {}),
+        },
+        sort: [{ property: "receivedAt", isAscending: !opts.descending }],
         limit: opts.limit,
       },
       "m0",
@@ -118,8 +126,9 @@ export async function mailboxSummaries(opts: {
 /** Inbox summaries (role = "inbox"). Retained for the default adapter. */
 export function inboxEmailSummaries(opts: {
   token: string;
-  afterIso: string;
+  afterIso?: string;
   limit: number;
+  descending?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
   return mailboxSummaries({ ...opts, role: "inbox" });
 }

@@ -50,6 +50,7 @@ interface ScanResult {
     added: number;
     pending: number;
     finished: boolean;
+    atCap: boolean;
   };
   error?: string;
 }
@@ -75,6 +76,7 @@ export function ReviewInbox({
   const scanError = scanData && !scanData.ok ? scanData.error : undefined;
   const scanTimedOut =
     scanData?.ok && scanData.result && !scanData.result.finished;
+  const scanAtCap = scanData?.ok && scanData.result?.atCap === true;
   const autoScanFired = useRef(false);
 
   // A freshly connected account (never scanned) walks the inbox right away —
@@ -137,6 +139,14 @@ export function ReviewInbox({
             scan again to continue
           </button>
           .
+        </p>
+      ) : null}
+
+      {!scanning && scanAtCap ? (
+        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+          Receipts are scanned from your 50 most recent emails — older mail
+          isn't included. Forward older receipts to your receipts address or add
+          them manually.
         </p>
       ) : null}
 

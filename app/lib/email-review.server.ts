@@ -47,11 +47,16 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * undecided or recoverable rows).
  */
 
-/** How long a single scan looks back (the "initial backlog" window). */
-const REVIEW_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
+/** The scan examines at most this many of the most recent Inbox emails per
+ * pass — deliberately bounded: a scan stays short (a handful of fetches)
+ * and can't be hammered into downloading a whole backlog. Email older than
+ * the most recent 50 isn't offered by review; rule-matched senders are
+ * still caught by the auto-drain. */
+const SCAN_MAX_EMAILS = 50;
 
 /** Max time one scan request spends before returning partial results
- * (Vercel's 60s ceiling; the scan is user-driven, not a cron). */
+ * (defensive — 50 fetches is normally seconds; this catches a slow
+ * mailbox/network). */
 const REVIEW_BUDGET_MS = 45_000;
 
 /** Ignored-row reasons that mean "definitely not a receipt" — the scan
@@ -103,27 +108,29 @@ export interface ScanResult {
   added: number;
   /** Total waiting on the list now. */
   pending: number;
-  /** True when the whole window was consumed; false means the time budget
-   * hit — run the scan again to continue. */
+  /** True when the batch was fully examined; false means the time budget
+   * hit mid-batch — run the scan again to continue. */
   finished: boolean;
+  /** True when the mailbox had at least SCAN_MAX_EMAILS recent emails, so
+   * the list may be missing older receipts (the scan is capped by design). */
+  atCap: boolean;
 }
 
 export interface ScanOptions {
   /** Mailbox operations; defaults to the real JMAP adapter (user token). */
   adapter?: ConnectionMailAdapter;
   extractionDeps?: ConnectionDeps;
-  /** Lookback window (default REVIEW_LOOKBACK_MS). */
-  lookbackMs?: number;
   /** Time budget before stopping (default REVIEW_BUDGET_MS). */
   budgetMs?: number;
 }
 
 /**
  * Scan a connected inbox for receipt-like emails and add them to the
- * review list (rows with outcome pending-review). Cursor-based over
- * receivedAt like the drain; re-scanning resumes where the window starts
- * and skips decided rows, so "scan again" after a budget timeout just
- * continues. Stamps reviewScannedAt so the page knows the list is current.
+ * review list (rows with outcome pending-review). One bounded batch: the
+ * 50 most recent Inbox emails (newest first) are examined; already-decided
+ * rows are skipped without a fetch. Stamps reviewScannedAt so the page
+ * knows the list is current. A re-scan re-examines the same 50 (cheap —
+ * decided rows skip) and picks up mail that arrived since.
  */
 export async function scanConnectionInbox(
   connection: EmailConnectionWithSecret,
@@ -138,126 +145,109 @@ export async function scanConnectionInbox(
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);
 
-  const lookbackMs = options.lookbackMs ?? REVIEW_LOOKBACK_MS;
   const budgetMs = options.budgetMs ?? REVIEW_BUDGET_MS;
   const started = Date.now();
   let scanned = 0;
   let added = 0;
 
-  // Cursor over receivedAt, like the drain: oldest-first batches, window
-  // slides past each batch so a front of decided mail never blocks the
-  // catch-up. +1ms keeps the exclusive JMAP `after` filter moving.
-  let cursorMs = started - lookbackMs;
-  let afterIso = new Date(cursorMs).toISOString();
+  const summaries = await adapter.inboxEmailSummaries({
+    limit: SCAN_MAX_EMAILS,
+    descending: true,
+  });
 
-  while (Date.now() - started <= budgetMs) {
-    const summaries = await adapter.inboxEmailSummaries({
-      afterIso,
-      limit: 10,
-    });
-    if (summaries.length === 0) break;
+  // Load existing decisions for the batch in one query.
+  const rows = await prisma.emailProcessLog.findMany({
+    where: {
+      connectionId: connection.id,
+      emailId: { in: summaries.map((s) => s.id) },
+    },
+    select: { emailId: true, outcome: true, error: true },
+  });
+  const byId = new Map(rows.map((r) => [r.emailId, r]));
 
-    const newestMs = Date.parse(summaries[summaries.length - 1]!.receivedAt);
-    const nextMs = Number.isNaN(newestMs) ? cursorMs : newestMs + 1;
-
-    // Load existing decisions for this batch in one query.
-    const rows = await prisma.emailProcessLog.findMany({
-      where: {
-        connectionId: connection.id,
-        emailId: { in: summaries.map((s) => s.id) },
-      },
-      select: { emailId: true, outcome: true, error: true },
-    });
-    const byId = new Map(rows.map((r) => [r.emailId, r]));
-
-    const candidates: ConnectionEmailSummary[] = [];
-    for (const summary of summaries) {
-      const row = byId.get(summary.id);
-      if (row) {
-        // Already decided (created/partial/processing/pending-review/
-        // review-ignored) or definitively not a receipt → skip.
-        if (row.outcome !== "ignored" && row.outcome !== "error") continue;
-        if (
-          row.outcome === "ignored" &&
-          IGNORED_SKIP_REASONS.has(row.error ?? "")
-        ) {
-          continue;
-        }
-      }
-      candidates.push(summary);
-    }
-
-    for (const summary of candidates) {
-      if (Date.now() - started > budgetMs) break;
-      scanned++;
-      const email = await deps.fetchReceivedEmail(summary.id);
-      const bodyText = email.text ?? htmlToText(email.html ?? "");
+  const candidates: ConnectionEmailSummary[] = [];
+  for (const summary of summaries) {
+    const row = byId.get(summary.id);
+    if (row) {
+      // Already decided (created/partial/processing/pending-review/
+      // review-ignored) or definitively not a receipt → skip.
+      if (row.outcome !== "ignored" && row.outcome !== "error") continue;
       if (
-        !looksLikeReceiptEmail({
-          subject: summary.subject,
-          bodyText,
-        })
+        row.outcome === "ignored" &&
+        IGNORED_SKIP_REASONS.has(row.error ?? "")
       ) {
-        continue; // not a receipt — no row, the next scan re-checks
+        continue;
       }
-      const fromAddress = extractEmailAddress(summary.from ?? "");
-      const now = new Date().toISOString();
-      // Mark the email as pending-review, but only when it is still
-      // recoverable (no row, or ignored/error): a drain that processed it
-      // between our row-read and this write owns the decision — flipping a
-      // created/processing row back to pending-review would re-offer an
-      // already-imported receipt and risk a duplicate expense. The create
-      // path's P2002 means someone else claimed it meanwhile: skip.
-      const flipped = await prisma.emailProcessLog.updateMany({
-        where: {
-          connectionId: connection.id,
-          emailId: summary.id,
-          outcome: { in: ["ignored", "error"] },
-        },
-        data: {
-          outcome: "pending-review",
-          matched: false,
-          error: null,
-          receivedAt: summary.receivedAt,
-          fromDisplay: summary.from,
-          fromAddress,
-          subject: summary.subject.slice(0, 500),
-        },
-      });
-      if (flipped.count === 0) {
-        try {
-          await prisma.emailProcessLog.create({
-            data: {
-              connectionId: connection.id,
-              emailId: summary.id,
-              fromAddress,
-              fromDisplay: summary.from,
-              subject: summary.subject.slice(0, 500),
-              matched: false,
-              outcome: "pending-review",
-              receivedAt: summary.receivedAt,
-              createdAt: now,
-            },
-          });
-        } catch (err) {
-          if (
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2002"
-          ) {
-            continue; // a drain claimed this email meanwhile — its call
-          }
-          throw err;
-        }
-      }
-      added++;
     }
-
-    if (nextMs <= cursorMs) break; // no forward progress (defensive)
-    cursorMs = nextMs;
-    afterIso = new Date(cursorMs).toISOString();
+    candidates.push(summary);
   }
 
-  // The list is now current through this scan's window.
+  for (const summary of candidates) {
+    if (Date.now() - started > budgetMs) break;
+    scanned++;
+    const email = await deps.fetchReceivedEmail(summary.id);
+    const bodyText = email.text ?? htmlToText(email.html ?? "");
+    if (
+      !looksLikeReceiptEmail({
+        subject: summary.subject,
+        bodyText,
+      })
+    ) {
+      continue; // not a receipt — no row, the next scan re-checks
+    }
+    const fromAddress = extractEmailAddress(summary.from ?? "");
+    const now = new Date().toISOString();
+    // Mark the email as pending-review, but only when it is still
+    // recoverable (no row, or ignored/error): a drain that processed it
+    // between our row-read and this write owns the decision — flipping a
+    // created/processing row back to pending-review would re-offer an
+    // already-imported receipt and risk a duplicate expense. The create
+    // path's P2002 means someone else claimed it meanwhile: skip.
+    const flipped = await prisma.emailProcessLog.updateMany({
+      where: {
+        connectionId: connection.id,
+        emailId: summary.id,
+        outcome: { in: ["ignored", "error"] },
+      },
+      data: {
+        outcome: "pending-review",
+        matched: false,
+        error: null,
+        receivedAt: summary.receivedAt,
+        fromDisplay: summary.from,
+        fromAddress,
+        subject: summary.subject.slice(0, 500),
+      },
+    });
+    if (flipped.count === 0) {
+      try {
+        await prisma.emailProcessLog.create({
+          data: {
+            connectionId: connection.id,
+            emailId: summary.id,
+            fromAddress,
+            fromDisplay: summary.from,
+            subject: summary.subject.slice(0, 500),
+            matched: false,
+            outcome: "pending-review",
+            receivedAt: summary.receivedAt,
+            createdAt: now,
+          },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
+        ) {
+          continue; // a drain claimed this email meanwhile — its call
+        }
+        throw err;
+      }
+    }
+    added++;
+  }
+
+  // The list is now current through this scan's batch.
   await prisma.emailConnection.update({
     where: { id: connection.id },
     data: { reviewScannedAt: new Date().toISOString() },
@@ -268,6 +258,7 @@ export async function scanConnectionInbox(
     added,
     pending,
     finished: Date.now() - started <= budgetMs,
+    atCap: summaries.length >= SCAN_MAX_EMAILS,
   };
 }
 

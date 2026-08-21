@@ -98,14 +98,31 @@ function fakeExtractionDeps(): ConnectionDeps {
   };
 }
 
-/** A fake mailbox adapter over an in-memory set of raw RFC 822 emails. */
+/** A fake mailbox adapter over an in-memory set of raw RFC 822 emails.
+ * Honours the `limit`/`descending` query shape so the scan's bounded-batch
+ * behaviour is testable, and records every query call. */
 function fakeAdapter(
   emails: Map<string, { from: string; subject: string; body: string }>,
 ) {
   const trashed: string[] = [];
+  const queries: Array<{
+    afterIso?: string;
+    limit: number;
+    descending?: boolean;
+  }> = [];
   const adapter = {
-    inboxEmailSummaries: async () =>
-      [...emails.entries()].map(([id, e]) => summary(id, e.from, e.subject)),
+    inboxEmailSummaries: async (opts: {
+      afterIso?: string;
+      limit: number;
+      descending?: boolean;
+    }) => {
+      queries.push(opts);
+      let list = [...emails.entries()].map(([id, e]) =>
+        summary(id, e.from, e.subject),
+      );
+      list = list.slice(0, opts.limit);
+      return list;
+    },
     rawEmail: async (id: string) => {
       const e = emails.get(id);
       if (!e) throw new Error(`email ${id} not found`);
@@ -135,7 +152,7 @@ function fakeAdapter(
       trashed.push(id);
     },
   };
-  return { adapter, trashed };
+  return { adapter, trashed, queries };
 }
 
 async function cleanupConnection() {
@@ -218,7 +235,7 @@ describe("scanConnectionInbox", () => {
   });
 
   it("adds receipt-like emails to the review list with display data", async () => {
-    const { adapter } = fakeAdapter(
+    const { adapter, queries } = fakeAdapter(
       new Map([
         [
           "e1",
@@ -256,6 +273,9 @@ describe("scanConnectionInbox", () => {
     expect(result.added).toBe(2);
     expect(result.pending).toBe(2);
     expect(result.finished).toBe(true);
+    expect(result.atCap).toBe(false); // small mailbox — everything was scanned
+    // One bounded query: the 50 most recent emails, newest first.
+    expect(queries).toEqual([{ limit: 50, descending: true }]);
 
     const items = await listReviewItems(conn.id);
     const byId = new Map(items.map((i) => [i.emailId, i]));
@@ -476,6 +496,35 @@ describe("scanConnectionInbox", () => {
     // The upsert flipped both rows to pending-review.
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("pending-review");
     expect((await logRow(conn.id, "e2"))?.outcome).toBe("pending-review");
+  });
+
+  it("examines at most 50 emails per scan pass", async () => {
+    // 60 receipt-like emails — the adapter honors the limit, so only the
+    // most recent 50 are examined; the scan stays bounded and fast.
+    const emails = new Map<
+      string,
+      { from: string; subject: string; body: string }
+    >();
+    for (let i = 0; i < 60; i++) {
+      emails.set(`e${i}`, {
+        from: `Sender ${i} <noreply@store${i}.example>`,
+        subject: "Your receipt",
+        body: `MERCHANT: Store ${i}\nTOTAL: ${i + 1}.00`,
+      });
+    }
+    const { adapter, queries } = fakeAdapter(emails);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(queries).toEqual([{ limit: 50, descending: true }]);
+    expect(result.scanned).toBe(50);
+    expect(result.added).toBe(50);
+    expect(result.pending).toBe(50);
+    expect(result.atCap).toBe(true); // mailbox has more — older mail not offered
   });
 });
 
