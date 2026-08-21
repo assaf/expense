@@ -312,6 +312,25 @@ export function composeLocalDescription(subject: string, text: string): string {
     .join(" — ");
 }
 
+/** Local-only extraction chain shared by the body and PDF-text paths of
+ * the connected flow: prefer a known merchant (a repeat), else name a
+ * first-time merchant from the rule sender. Null when no total parses
+ * locally — the caller skips (the email stays in the Inbox). On success
+ * the description carries the receipt/bill reference + billed account. */
+export function tryLocalExtraction(
+  text: string,
+  subject: string,
+  known: ReadonlyMap<string, KnownMerchant>,
+  ruleSender?: string,
+): ExtractionResult | null {
+  const local =
+    tryKnownMerchantExtraction(text, known) ??
+    (ruleSender ? tryRuleMerchantExtraction(text, ruleSender) : null);
+  if (!local) return null;
+  const description = composeLocalDescription(subject, text);
+  return description ? { ...local, description } : local;
+}
+
 /** Local extraction for a FIRST-TIME merchant matched by a general rule:
  * the merchant name comes from the rule sender domain (no prior expense
  * history needed), the total from parseReceiptAmount. Category is "" — the

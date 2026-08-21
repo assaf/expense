@@ -17,8 +17,7 @@ import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
   resolveExtraction,
   tryKnownMerchantExtraction,
-  tryRuleMerchantExtraction,
-  composeLocalDescription,
+  tryLocalExtraction,
 } from "~/lib/receipt-ai.server";
 import type {
   AttachmentCandidate,
@@ -846,19 +845,18 @@ export async function extractReceiptFromSource(opts: {
       const { extractPdfText, renderPdfToPng } =
         await import("~/lib/receipt-ocr.server");
       const pdfText = await extractPdfText(buffer);
+      // Text layer must exist (scanned PDFs are skipped — they need OCR).
       const local =
         pdfText.trim().length >= 20
-          ? (tryKnownMerchantExtraction(pdfText, context.knownMerchants) ??
-            (opts.ruleSender
-              ? tryRuleMerchantExtraction(pdfText, opts.ruleSender)
-              : null))
+          ? tryLocalExtraction(
+              pdfText,
+              email.subject,
+              context.knownMerchants,
+              opts.ruleSender,
+            )
           : null;
       if (!local) return null; // no text layer, or no parseable total
-      // Same description tag as the body path: bill reference + billed
-      // account, parsed off the PDF text layer (e.g. "Bill #576523939 ...
-      // Account billed ZHED Media LLC <email>").
-      const description = composeLocalDescription(email.subject, pdfText);
-      extraction = description ? { ...local, description } : local;
+      extraction = local;
       // Rasterize the ACTUAL PDF pages to a PNG (pdf.js, no Chromium, no
       // model) so the receipt image shows the real layout, not a flattened
       // text sheet.
@@ -939,16 +937,14 @@ export async function extractReceiptFromSource(opts: {
     if (opts.localOnly) {
       // No model: prefer a known merchant (repeat), else the rule sender.
       // Null when no total parses locally -> caller skips (stays in Inbox).
-      const local =
-        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
-        (opts.ruleSender
-          ? tryRuleMerchantExtraction(bodyText, opts.ruleSender)
-          : null);
+      const local = tryLocalExtraction(
+        bodyText,
+        email.subject,
+        context.knownMerchants,
+        opts.ruleSender,
+      );
       if (!local) return null;
-      // Tag the expense with the receipt/bill reference + billed account
-      // so the user can tell which expense came from which receipt.
-      const description = composeLocalDescription(email.subject, bodyText);
-      extraction = description ? { ...local, description } : local;
+      extraction = local;
     } else {
       // Known-merchant skip: the body names a merchant the account has spent
       // with before and carries a parseable total — no model call needed.
