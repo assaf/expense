@@ -83,11 +83,29 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     () =>
       isNew
         ? findDuplicates(
-            { ...expense, date, merchant, amount, report, category },
+            {
+              ...expense,
+              date,
+              merchant,
+              amount,
+              report,
+              category,
+              description,
+            },
             data.existing,
           )
         : [],
-    [isNew, expense, date, merchant, amount, report, category, data.existing],
+    [
+      isNew,
+      expense,
+      date,
+      merchant,
+      amount,
+      report,
+      category,
+      description,
+      data.existing,
+    ],
   );
 
   // Create mode: a file carried from the home page (paste/upload) becomes the

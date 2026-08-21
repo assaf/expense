@@ -182,9 +182,12 @@ describe("Duplicate detection", () => {
   it("warns in the create editor and turns Save into 'Save anyway'", async () => {
     await nav("/expense/new");
     // The new receipt starts with today's date; filling merchant + amount
-    // makes it look exactly like the seeded BannerCo receipt.
+    // + the seeded row's category makes it look exactly like the seeded
+    // BannerCo receipt (category/report/description are
+    // equal-unless-different, so the category must agree).
     await page.fill('input[list="merchants"]', "BannerCo");
     await page.fill('input[type="number"]', "8.75");
+    await page.getByLabel("Category").selectOption({ label: "Testing" });
     await expect(
       page.getByText(/This looks like a duplicate of BannerCo/),
     ).toBeVisible();
@@ -201,6 +204,15 @@ describe("Duplicate detection", () => {
       0,
     );
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    // A differing category ("both empty or the same") also breaks the pair.
+    await page.fill('input[type="number"]', "8.75");
+    await page
+      .getByLabel("Category")
+      .selectOption({ label: "Office Supplies" });
+    await expect(
+      page.getByText(/This looks like a duplicate of BannerCo/),
+    ).toHaveCount(0);
   });
 
   it("mileage delete asks for confirmation too", async () => {

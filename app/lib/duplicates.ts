@@ -6,7 +6,11 @@ import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
  * Duplicate detection for the expense list and the create editor.
  *
  * Two expenses are duplicates when they describe the same entry:
- *  - receipts: same date + same merchant + same amount to the cent
+ *  - receipts: same date + same merchant + same amount to the cent, and the
+ *    category, report, and description agree — each field matches when both
+ *    are empty or when the values are the same. A difference in any of the
+ *    three (e.g. one categorized, one not; different receipt numbers in the
+ *    description) means the entries are not duplicates.
  *  - mileage:  same date + same ordered route + same distance
  *
  * The same-date requirement is what keeps recurring charges (a monthly
@@ -123,8 +127,16 @@ function receiptKey(
   if (!merchant) return null;
   const amount = parseAmount(e.amount);
   if (amount === null) return null;
+  // Category/report/description are equal-unless-different: both empty or
+  // the same value matches, any difference splits the pair. Category and
+  // report compare normalized (case/whitespace-insensitive, like the
+  // merchant); description compares exactly after trimming — receipt
+  // numbers and account names are case-sensitive data.
+  const category = normalizeMerchant(e.category);
+  const report = normalizeMerchant(e.report);
+  const description = e.description.trim();
   return {
-    key: `receipt|${e.date}|${merchant}|${amount.toString()}`,
+    key: `receipt|${e.date}|${merchant}|${amount.toString()}|${category}|${report}|${description}`,
     reason: "same-date-merchant-amount",
   };
 }

@@ -127,6 +127,62 @@ describe("Receipt duplicates", () => {
     ]);
     expect(matches).toHaveLength(0);
   });
+
+  it("treats category, report, and description as equal-unless-different", () => {
+    // Both empty → still duplicates.
+    const bare = makeReceipt({
+      id: "old",
+      category: "",
+      report: "",
+      description: "",
+    });
+    expect(
+      findDuplicates(
+        makeReceipt({ id: "new", category: "", report: "", description: "" }),
+        [bare],
+      ),
+    ).toHaveLength(1);
+    // Identical values → duplicates.
+    expect(
+      findDuplicates(makeReceipt({ id: "new" }), [makeReceipt()]),
+    ).toHaveLength(1);
+    // Any difference — including one side empty — breaks the pair.
+    expect(
+      findDuplicates(makeReceipt({ id: "new", category: "Software" }), [
+        makeReceipt(),
+      ]),
+    ).toHaveLength(0);
+    expect(
+      findDuplicates(makeReceipt({ id: "new", report: "Other" }), [
+        makeReceipt(),
+      ]),
+    ).toHaveLength(0);
+    expect(
+      findDuplicates(makeReceipt({ id: "new", description: "#99-001" }), [
+        makeReceipt(),
+      ]),
+    ).toHaveLength(0);
+    expect(
+      findDuplicates(makeReceipt({ id: "new", description: "#99-001" }), [
+        makeReceipt({ id: "old", description: "#99-002" }),
+      ]),
+    ).toHaveLength(0);
+  });
+
+  it("compares category and report case-insensitively, description exactly", () => {
+    expect(
+      findDuplicates(
+        makeReceipt({ id: "new", category: " testing ", report: "2026 test" }),
+        [makeReceipt()],
+      ),
+    ).toHaveLength(1);
+    expect(
+      findDuplicates(
+        makeReceipt({ id: "new", description: "#99-001 — ZHED media LLC" }),
+        [makeReceipt({ id: "old", description: "#99-001 — ZHED Media LLC" })],
+      ),
+    ).toHaveLength(0);
+  });
 });
 
 describe("Mileage duplicates", () => {
