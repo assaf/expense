@@ -15,6 +15,7 @@ export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
+  composeLocalDescription,
   resolveExtraction,
   tryKnownMerchantExtraction,
   tryLocalExtraction,
@@ -950,14 +951,23 @@ export async function extractReceiptFromSource(opts: {
     } else {
       // Known-merchant skip: the body names a merchant the account has spent
       // with before and carries a parseable total — no model call needed.
-      extraction =
-        tryKnownMerchantExtraction(bodyText, context.knownMerchants) ??
-        (await deps.extractReceipt({
-          accountId: opts.accountId,
-          text: bodyText,
-          categories: context.categories,
-          reports: context.reports,
-        }));
+      // The description is composed locally too (bill ref, billed account,
+      // Apple plan name) — the skip must not lose the receipt's own context.
+      const skipped = tryKnownMerchantExtraction(
+        bodyText,
+        context.knownMerchants,
+      );
+      extraction = skipped
+        ? {
+            ...skipped,
+            description: composeLocalDescription(email.subject, bodyText),
+          }
+        : await deps.extractReceipt({
+            accountId: opts.accountId,
+            text: bodyText,
+            categories: context.categories,
+            reports: context.reports,
+          });
     }
     if (renderError) {
       console.error("[inbound] email receipt render failed:", renderError);

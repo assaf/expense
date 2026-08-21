@@ -304,13 +304,52 @@ export function parseAccountBilled(text: string): string {
   return ACCOUNT_BILLED_RE.exec(text ?? "")?.[1]?.trim() ?? "";
 }
 
+/** Apple subscription renewal line: "Renews <Month> <day>[,] <year>" —
+ * "Renews September 12, 2026" or "Renews September 11,2026". One-time
+ * App Store purchases have no renewal line. */
+const APPLE_RENEWS_RE =
+  /^\s*Renews\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4}/i;
+
+/** The product/plan line on an Apple subscription receipt: the non-empty
+ * line immediately above the "Renews <Month> <year>" line — e.g. "iCloud+
+ * with 2 TB (Monthly)" or "Viki Pass Standard (Monthly)". Apple's renewal
+ * emails name the plan there; returns "" when there is no renewal line
+ * (one-time purchases) or the text doesn't parse. */
+export function parseApplePlanName(text: string): string {
+  const lines = (text ?? "").split(/\r?\n/);
+  const renews = lines.findIndex((line) => APPLE_RENEWS_RE.test(line));
+  if (renews < 1) return "";
+  for (let i = renews - 1; i >= 0; i--) {
+    const line = lines[i]!.trim();
+    if (line) return line.replace(/\s+/g, " ");
+  }
+  return "";
+}
+
+/** Apple receipt markers: the subject "Your receipt from Apple"/"invoice
+ * from Apple", or in the body "Apple Account:", "Apple Card", or the
+ * "© 2026 Apple Inc." footer. Gates the Apple plan-name extraction so a
+ * non-Apple receipt with a "Renews" line never picks it up by accident. */
+export function isAppleReceipt(subject: string, text: string): boolean {
+  const haystack = `${subject ?? ""}\n${text ?? ""}`;
+  return (
+    /(?:receipt|invoice).{0,25}apple/i.test(haystack) ||
+    /apple account:|apple card|©\s*\d{4}\s+apple inc\.?/i.test(haystack)
+  );
+}
+
 /** The local-only expense description: the receipt/bill reference plus the
  * billed account when present — e.g. "#576523939 — ZHED Media LLC" — so the
- * user can tell which expense came from which bill. */
+ * user can tell which expense came from which bill. Apple receipts carry
+ * neither (their order id has no "#", and there is no "Account billed"
+ * line), so for those the product/plan name is added instead. */
 export function composeLocalDescription(subject: string, text: string): string {
-  return [parseReceiptRef(subject, text), parseAccountBilled(text)]
-    .filter(Boolean)
-    .join(" — ");
+  const parts = [parseReceiptRef(subject, text), parseAccountBilled(text)];
+  if (isAppleReceipt(subject, text)) {
+    const plan = parseApplePlanName(text);
+    if (plan) parts.push(plan);
+  }
+  return parts.filter(Boolean).join(" — ");
 }
 
 /** Local-only extraction chain shared by the body and PDF-text paths of
@@ -387,7 +426,7 @@ class DeepSeekError extends Error {
 const SYSTEM_PROMPT = `You extract receipt data for a personal expense tracker. Given receipt text or a receipt image, return JSON with exactly these fields:
 - "is_receipt": true when the content is a receipt, invoice, order confirmation, or payment confirmation that shows a total amount; otherwise false
 - "merchant": the merchant or vendor name (the business the money was paid to), or "" if unknown
-- "description": a short description of the purchase (e.g. "Team lunch", "Printer paper"), or "" if unknown
+- "description": a short description of the purchase (e.g. "Team lunch", "Printer paper"), or "" if unknown. For app-store, subscription, or online-service receipts, name the purchased product, app, or plan — e.g. for an Apple App Store receipt write the app name like "Viki Pass Standard (Monthly)" or "iCloud+ 200GB", not just "Apple"
 - "amount": the total amount paid as a plain decimal string like "42.50" — no currency symbols, no commas, no text; "" if unknown
 - "currency": ISO 4217 currency code (e.g. "USD", "EUR"); "USD" if unclear
 - "category": a suggested category — only set this if you are at least 80% confident it is correct; otherwise ""

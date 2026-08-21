@@ -11,6 +11,7 @@ import { pdfImageName } from "~/lib/images.server";
 import { RECEIPT_OCR_MODE, RECEIPT_VISION_MAX_WIDTH } from "~/lib/env";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
+  composeLocalDescription,
   extractReceipt,
   isVisionUnsupportedError,
   resolveExtraction,
@@ -405,7 +406,15 @@ export async function extractFromImage(input: {
     const known = input.knownMerchants;
     const skipped = known ? tryKnownMerchantExtraction(pdfText, known) : null;
     const result =
-      skipped ??
+      (skipped
+        ? {
+            ...skipped,
+            // The skip must not lose the receipt's own context (bill ref,
+            // billed account, Apple plan name). No subject here — the body
+            // text alone carries the Apple markers.
+            description: composeLocalDescription("", pdfText),
+          }
+        : null) ??
       (pdfText.trim().length >= 20
         ? await extractReceipt({
             accountId: input.accountId,

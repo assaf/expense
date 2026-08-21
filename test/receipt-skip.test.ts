@@ -4,6 +4,8 @@ import {
   parseReceiptAmount,
   parseReceiptRef,
   parseAccountBilled,
+  parseApplePlanName,
+  isAppleReceipt,
   composeLocalDescription,
   tryKnownMerchantExtraction,
   tryRuleMerchantExtraction,
@@ -331,6 +333,74 @@ describe("composeLocalDescription", () => {
   });
 
   it("is empty when neither is present", () => {
+    expect(composeLocalDescription("Thanks", "Total $10.00")).toBe("");
+  });
+});
+
+describe("parseApplePlanName", () => {
+  it("names the plan line above the Renews line (iCloud fixture layout)", () => {
+    expect(
+      parseApplePlanName(
+        "Receipt\n\nAugust 12, 2026\n\nOrder ID:\nMX9SJHB66B\n\nApple Account:\nREDACTED\n\n  iCloud\niCloud+ with 2 TB (Monthly)\n\nRenews September 12, 2026\n\n  $9.99\n\nBilling and Payment",
+      ),
+    ).toBe("iCloud+ with 2 TB (Monthly)");
+  });
+
+  it("collapses run-together spaces (Viki screenshot layout)", () => {
+    expect(
+      parseApplePlanName(
+        "Asian Dramas, Movies,    TV    $7.99\nViki  Pass Standard (Monthly)\nRenews September 11,2026",
+      ),
+    ).toBe("Viki Pass Standard (Monthly)");
+  });
+
+  it("returns empty when there is no renewal line (one-time purchase)", () => {
+    expect(
+      parseApplePlanName(
+        "Procreate\nPhoto & Video\n$12.99\nBilling and Payment",
+      ),
+    ).toBe("");
+  });
+
+  it("returns empty for empty text", () => {
+    expect(parseApplePlanName("")).toBe("");
+  });
+});
+
+describe("isAppleReceipt", () => {
+  it("matches the forwarded receipt subject", () => {
+    expect(
+      isAppleReceipt("Fwd: Your receipt from Apple.", "Receipt\n$9.99"),
+    ).toBe(true);
+  });
+
+  it("matches the Apple Account body marker", () => {
+    expect(
+      isAppleReceipt("Receipt", "Apple Account: someone@x.com\n$9.99"),
+    ).toBe(true);
+  });
+
+  it("does not match a non-Apple receipt with a Renews line", () => {
+    expect(
+      isAppleReceipt(
+        "Your invoice from Gym",
+        "Renews September 1, 2026\n$50.00",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("composeLocalDescription (Apple)", () => {
+  it("adds the plan name for an Apple receipt", () => {
+    expect(
+      composeLocalDescription(
+        "Fwd: Your receipt from Apple.",
+        "Receipt\n\niCloud+ with 2 TB (Monthly)\n\nRenews September 12, 2026\n\n$9.99\n\nApple Account: someone@x.com",
+      ),
+    ).toBe("iCloud+ with 2 TB (Monthly)");
+  });
+
+  it("leaves non-Apple descriptions unchanged", () => {
     expect(composeLocalDescription("Thanks", "Total $10.00")).toBe("");
   });
 });
