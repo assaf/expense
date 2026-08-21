@@ -367,12 +367,12 @@ describe("FastMail onboarding UI", () => {
     return page;
   }
 
-  it("links from the login page into the FastMail flow", async () => {
+  it("links from the sign-up flow into the FastMail onboarding", async () => {
     await seedTestData();
     const page = await openPage();
-    await page.goto("/login", { waitUntil: "load" });
+    await page.goto("/login?mode=create", { waitUntil: "load" });
     await page
-      .getByRole("link", { name: /Connect a FastMail account instead/ })
+      .getByRole("link", { name: /Connect your FastMail account/ })
       .click();
     await pwExpect(page).toHaveURL(/\/onboarding/);
     await pwExpect(

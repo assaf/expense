@@ -308,15 +308,29 @@ export default function LoginPage() {
           </Button>
         </fetcher.Form>
 
+        {mode === "create" ? (
+          <div className="mt-4">
+            <div
+              aria-hidden="true"
+              className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500"
+            >
+              <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              or
+              <span className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+            </div>
+            <Button
+              asChild
+              size="lg"
+              className="mt-3 w-full border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 dark:border-blue-600 dark:bg-blue-600 dark:text-white dark:hover:border-blue-700 dark:hover:bg-blue-700"
+            >
+              <Link to="/onboarding">Connect your FastMail account</Link>
+            </Button>
+          </div>
+        ) : null}
+
         <div className="mt-6 flex flex-col items-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
           {mode === "signin" ? (
             <>
-              <Link
-                to="/onboarding"
-                className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Connect a FastMail account instead — no verification email
-              </Link>
               <button
                 type="button"
                 className="font-medium text-blue-600 dark:text-blue-400 hover:underline"

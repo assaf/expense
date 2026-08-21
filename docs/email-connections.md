@@ -14,7 +14,7 @@ the first-run FastMail onboarding (/onboarding).**
 
 First-run flow for users who connect their own mailbox instead of signing
 up with email + verification link (entry: "Connect a FastMail account
-instead" on /login).
+instead" on the sign-up flow, /login?mode=create).
 
 - **Token = mailbox control = email verification.** The step-1 form pastes
   a FastMail API token; `verifyJmapToken` proves it live against

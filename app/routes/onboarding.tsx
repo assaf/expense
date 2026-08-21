@@ -129,7 +129,7 @@ export default function OnboardingPage({
                   ? `The mailbox ${email} already has an Expense account — but you can connect it to whichever account you sign in with.`
                   : `We found your address from the token: ${email}. Set a password to finish.`
                 : ""
-              : "No verification email needed — your token proves you own the mailbox."}
+              : "We automatically import and process your expenses from your inbox — no manual forwarding. Your token proves you own the mailbox, so there's no verification email."}
           </p>
           <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
             Step {stepTwo ? 2 : 1} of 2
