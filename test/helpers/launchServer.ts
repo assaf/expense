@@ -21,6 +21,12 @@ export async function launchServer(): Promise<string> {
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
     DATABASE_URL: "postgres://assaf@localhost/expense_test",
+    // Fixed key (same value as vitest.main.config.ts `test.env`) so the Email
+    // page renders the connected-accounts UI deterministically. The spawned
+    // server doesn't inherit vitest's test.env — globalSetup runs in the main
+    // process — and CI has no .env, so without this the section would show
+    // "not configured" there and "configured" locally.
+    EMAIL_TOKEN_ENCRYPTION_KEY: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
     // Never call live services from the test server — the suite mocks them.
     // Empty values also win over `loadEnvFile(".env")`, which never
     // overrides existing vars, so a developer's real keys can't leak in.
