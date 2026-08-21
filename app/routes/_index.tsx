@@ -650,7 +650,7 @@ function ExpenseRow({
         <Link
           to={to}
           className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}${expense.future ? ", scheduled" : ""}`}
+          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}${expense.future ? ", future" : ""}`}
         >
           <Thumbnail expense={expense} />
           <div className="min-w-0 flex-1">
@@ -682,9 +682,9 @@ function ExpenseRow({
               {expense.future ? (
                 <span
                   className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-400"
-                  title="Dated in the future — e.g. an invoice not yet due"
+                  title="Dated in the future"
                 >
-                  Scheduled
+                  Future
                 </span>
               ) : null}
               {expense.reconciled ? (
