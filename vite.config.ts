@@ -61,6 +61,11 @@ export default defineConfig((config) => ({
         project: "expense",
         authToken: process.env.SENTRY_AUTH_TOKEN,
         telemetry: false,
+        // Release name for sourcemaps + release health. Vercel provides the
+        // commit SHA at build time; SENTRY_RELEASE overrides if ever needed.
+        // Without this, the upload ran with `--release undefined`.
+        release:
+          process.env.SENTRY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA,
       },
       config,
     ),
