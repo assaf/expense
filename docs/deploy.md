@@ -33,3 +33,23 @@ Deployment → Deployment Checks. Requires `VERCEL_TOKEN`,
 `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
 `SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
 it stable.
+
+## `./scripts/deploy` notes
+
+The script requires the **global Vercel CLI** (`brew install vercel-cli`;
+knip's `ignoreBinaries` already treats it as global). Do NOT revert to
+`pnpx -y vercel@latest`: pnpm 10 blocks esbuild's build script with an
+interactive "Choose which packages to build" prompt that hangs scripted
+deploys (this forced raw `vercel deploy` workarounds that bypassed the
+test gate — Aug 2026).
+
+Flags (any order): `--skip-tests`, `--skip-db-sync`. The latter skips
+`prisma db push` — Prisma 7's AI-agent consent guard refuses `db push
+--accept-data-loss` when it detects an agent (even for a verified no-op
+run), so agent-driven deploys should pass `--skip-db-sync` and verify
+schema drift separately:
+`pnpm prisma migrate diff --from-config-datasource prisma/schema.prisma --to-schema prisma/schema.prisma`
+(with `DATABASE_URL=$DATABASE_URL_UNPOOLED` from `.env.prod.pull`).
+
+Sentry releases/sourcemaps work through this script because it sources
+`.env.prod.pull` (see `docs/operations.md` → `SENTRY_AUTH_TOKEN`).

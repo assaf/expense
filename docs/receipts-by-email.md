@@ -11,7 +11,10 @@ row is the second idempotency guard), run the existing `processInboundEvent`
 through the FastMail MIME bridge (`InboundDeps` fetch/list/download
 collaborators backed by postal-mime — the JMAP email id is the idempotency
 key), and **destroy the email after any non-error result** (created /
-partial / duplicate / unknown / unverified sender / self-reply). Error
+partial / duplicate / unknown / unverified sender / self-reply). Because
+the originals are destroyed, the stored receipt IMAGE is the only remaining
+source of a receipt's number — backfills read the refs off the expense
+images (e.g. the z.ai description backfill, Aug 2026). Error
 results stay in the folder, marked, and are skipped next run; the
 pipeline's reply email is the recovery path. The daily cron
 (`/api/inbound-cron`, `0 12 * * *`) renews the ~30-day push subscription

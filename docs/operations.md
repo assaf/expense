@@ -168,12 +168,19 @@ server errors only ever reached Sentry locally this way). The post-deploy smoke
 check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
 production deployment boots with it false. Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
-`SENTRY_AUTH_TOKEN` (optional) is read by the vite plugin (`sentryReactRouter`
-in `vite.config.ts`) to create releases + upload sourcemaps at build time;
-without it every build warns "No auth token provided" and stack traces arrive
-without source maps (errors still report — the DSN works). Generate a token in
-Sentry → Settings → Auth Tokens with `org:read`, `project:read`,
-`project:write`, `project:releases:write` and add it to Vercel.
+`SENTRY_AUTH_TOKEN` is now SET (organization token, Vercel production env —
+create at Sentry → org settings → Auth Tokens). It lets the vite plugin
+(`sentryReactRouter` in `vite.config.ts`) create releases + upload
+sourcemaps at build time. Releases are named after `VERCEL_GIT_COMMIT_SHA`
+(override with `SENTRY_RELEASE`); client events get the same release via
+`VITE_SENTRY_RELEASE`, injected at build time by `vite.config.ts`, and the
+server reads `VERCEL_GIT_COMMIT_SHA` at runtime — so release health and
+"resolved in next release" work. TRAP: `sentryReactRouter` forwards the
+`release` option as an OBJECT (`release: { name }`); a bare string is
+spread into char indices and the name is silently lost (`--release
+undefined`). Without the token, every build warns "No auth token provided"
+and stack traces arrive without source maps (errors still report — the DSN
+works).
 `app/lib/errors.server.ts` holds the capture helpers — `captureError`
 (console.error + Sentry.captureException), `captureErrorOnce` (deduped by
 error identity, for the SSR double-report paths), and `captureWarning`
