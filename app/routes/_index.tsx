@@ -174,6 +174,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
     type: e.type,
     mileageType: e.type === "mileage" ? e.mileageType : "business",
     date: e.date,
+    future: Boolean(e.date) && e.date > todayDate(),
     amount: e.amount,
     category: e.category,
     report: e.report,
@@ -649,7 +650,7 @@ function ExpenseRow({
         <Link
           to={to}
           className="flex items-center gap-4 p-3 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}`}
+          aria-label={`${expense.type === "receipt" ? expense.merchant || "No merchant" : MILEAGE_TYPE_LABELS[expense.mileageType]}, ${expense.description ? expense.description + ", " : ""}${formatAmount(expense.amount)}, ${formatDate(expense.date)}${!expense.complete ? ", incomplete" : ""}${expense.reconciled ? ", reconciled" : ""}${expense.future ? ", scheduled" : ""}`}
         >
           <Thumbnail expense={expense} />
           <div className="min-w-0 flex-1">
@@ -678,6 +679,14 @@ function ExpenseRow({
               aria-hidden="true"
             >
               <span>{formatDate(expense.date)}</span>
+              {expense.future ? (
+                <span
+                  className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-400"
+                  title="Dated in the future — e.g. an invoice not yet due"
+                >
+                  Scheduled
+                </span>
+              ) : null}
               {expense.reconciled ? (
                 <span
                   className="flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400"

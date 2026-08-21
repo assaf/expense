@@ -513,6 +513,9 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
     });
     expect(row?.date).toBe("2099-12-31");
+    // The list flags future-dated expenses so they don't read as normal
+    // rows — a "Scheduled" pill next to the date.
+    await expect(page.getByText("Scheduled").first()).toBeVisible();
     await testPrisma.expense.deleteMany({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
     });
