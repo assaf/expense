@@ -3,6 +3,7 @@ import {
   availableHighlights,
   pickHighlight,
   type HighlightData,
+  type HighlightId,
 } from "~/components/FeatureHighlight";
 
 const EMPTY: HighlightData = {
@@ -65,5 +66,24 @@ describe("feature highlights", () => {
       expect(availableHighlights(EMPTY)).toContain(pickHighlight(EMPTY));
       expect(availableHighlights(FULL)).toContain(pickHighlight(FULL));
     }
+  });
+
+  it("boost triples the odds for a pool member and is ignored otherwise", () => {
+    const unconnectedPool = availableHighlights(EMPTY); // includes connect-email
+    const connectedPool = availableHighlights(FULL); // does not
+    const seen: HighlightId[] = [];
+    for (let i = 0; i < 200; i++) {
+      const boosted = pickHighlight(EMPTY, "connect-email");
+      seen.push(boosted);
+      expect(unconnectedPool).toContain(boosted);
+      // Boosting an id outside the pool is a no-op.
+      expect(connectedPool).toContain(pickHighlight(FULL, "connect-email"));
+    }
+    const connectShare =
+      seen.filter((h) => h === "connect-email").length / seen.length;
+    // 3 copies out of (pool size + 2) — roughly 3x the base share. A wide
+    // window keeps the assertion robust against random noise.
+    const baseShare = 1 / unconnectedPool.length;
+    expect(connectShare).toBeGreaterThan(baseShare * 2);
   });
 });

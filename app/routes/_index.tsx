@@ -134,7 +134,17 @@ export async function loader({ request }: Route.LoaderArgs) {
       rates,
       reports,
       welcomePending: settings.welcomePending,
-      highlight: { id: pickHighlight(highlightData), data: highlightData },
+      hasEmailConnection: emailConnections.length > 0,
+      // While the account has no connected mailbox, boost the connect-email
+      // highlight so the nudge shows up within a few visits (the rotation
+      // still varies the rest).
+      highlight: {
+        id: pickHighlight(
+          highlightData,
+          emailConnections.length > 0 ? undefined : "connect-email",
+        ),
+        data: highlightData,
+      },
     },
     {
       headers: {
@@ -306,6 +316,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
       rates={loaderData.rates}
       reports={loaderData.reports}
       welcomePending={loaderData.welcomePending}
+      hasEmailConnection={loaderData.hasEmailConnection}
       highlight={loaderData.highlight}
     />
   );
@@ -316,12 +327,14 @@ function ExpenseList({
   rates,
   reports,
   welcomePending,
+  hasEmailConnection,
   highlight,
 }: {
   expenses: ReturnType<typeof toListItem>[];
   rates: MileageRateEntry[];
   reports: { name: string; count: number; total: string }[];
   welcomePending: boolean;
+  hasEmailConnection: boolean;
   highlight: { id: HighlightId; data: HighlightData };
 }) {
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
@@ -626,8 +639,16 @@ function ExpenseList({
 
       {expenses.length === 0 ? (
         <EmptyState>
-          Nothing here yet. Add your first receipt or log a drive — it takes
-          under a minute.
+          <p>
+            Nothing here yet. Add your first receipt or log a drive — it takes
+            under a minute.
+          </p>
+          {!hasEmailConnection ? (
+            <p className="mt-2 text-sm">
+              Or connect your FastMail account and receipts from your inbox are
+              added automatically — no forwarding.
+            </p>
+          ) : null}
         </EmptyState>
       ) : filtered.length === 0 ? (
         <EmptyState className="p-10">

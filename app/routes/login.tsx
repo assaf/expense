@@ -166,6 +166,10 @@ export default function LoginPage() {
               <b className="font-mono">{pendingEmail}</b>. Click it to activate
               your account, then sign in.
             </p>
+            <p>
+              Once you're in, connect your FastMail account and receipts from
+              your inbox are imported automatically — no forwarding.
+            </p>
             <p>Can't find it? Check spam, or resend below.</p>
           </div>
           <Button

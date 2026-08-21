@@ -219,6 +219,13 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
           (merchant, amount, category) and added automatically. The expense date
           is the date of the forwarded email.
         </p>
+        {emailConnections.length === 0 && inboundSenders.length > 0 ? (
+          <p className="mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
+            Forwarding works — but connect your FastMail account above and
+            receipts landing in your inbox are processed automatically, no
+            forwarding needed.
+          </p>
+        ) : null}
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
           {inboundAddress ? (
             <div className="mb-4">

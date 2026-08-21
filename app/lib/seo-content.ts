@@ -264,6 +264,13 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
       "SmartScan receipt OCR limited in the free tier according to corporate policies.",
   },
   {
+    aspect: "Email import",
+    expense:
+      "Forward receipt emails from any provider, or connect a FastMail mailbox and receipts landing in your inbox are imported automatically — no forwarding. Most other expense apps only auto-import from Gmail.",
+    expensify:
+      "Email receipts are scanned via SmartScan, limited in the free tier.",
+  },
+  {
     aspect: "Filing taxes",
     expense:
       "Schedule C-based categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",

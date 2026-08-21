@@ -219,10 +219,19 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   return pool;
 }
 
-/** Pick one highlight at random from the ones the current data can render. */
-export function pickHighlight(data: HighlightData): HighlightId {
+/** Pick one highlight at random from the ones the current data can render.
+ * `boost` triples the odds for that id (it gets two extra pool entries) —
+ * used to nudge unconnected accounts toward the connect-email highlight
+ * while still keeping the rotation. Ignored when the boosted id isn't in
+ * the pool. */
+export function pickHighlight(
+  data: HighlightData,
+  boost?: HighlightId,
+): HighlightId {
   const pool = availableHighlights(data);
-  return pool[Math.floor(Math.random() * pool.length)]!;
+  const weighted =
+    boost && pool.includes(boost) ? [...pool, boost, boost] : pool;
+  return weighted[Math.floor(Math.random() * weighted.length)]!;
 }
 
 export function FeatureHighlight({
