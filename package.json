@@ -54,7 +54,7 @@
     "isbot": "^5.2.1",
     "kbar": "^1.0.0",
     "leaflet": "^1.9.4",
-    "lucide-react": "^1.32.0",
+    "lucide-react": "^1.33.0",
     "pdfjs-dist": "^6.2.108",
     "pdfkit": "^0.19.1",
     "portless": "^0.15.5",
