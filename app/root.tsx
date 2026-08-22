@@ -11,7 +11,9 @@ import {
   useRouteLoaderData,
 } from "react-router";
 import "~/global.css";
+import { CommandMenu } from "~/components/command-palette";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
+import { readReports } from "~/lib/db/reports";
 import type { Route } from "./+types/root";
 
 /** Inline script that runs before first paint — applies the `dark` class
@@ -70,8 +72,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   } else {
     user = await requireUser(request);
   }
+  // Report names feed the palette's export submenu (same 5-min cache the
+  // export page uses — acceptable per-navigation cost).
+  const reportNames = user
+    ? (await readReports(user.accountId)).map((r) => r.name)
+    : [];
   return {
     user: user ? { id: user.id } : null,
+    reportNames,
     // Clickjacking denial is a real HTTP header from the route's headers()
     // export below — never from this loader data object.
   };
@@ -130,7 +138,7 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
-  const { user } = useRouteLoaderData<typeof loader>("root") ?? {};
+  const { user, reportNames } = useRouteLoaderData<typeof loader>("root") ?? {};
   useEffect(() => {
     if (!user) return;
     // Link this session's pageviews/events to the signed-in user. Safe even
@@ -176,6 +184,7 @@ export default function App() {
           </div>
         ) : null}
         <Outlet />
+        {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
         <ScrollRestoration />
         <Scripts />
       </body>

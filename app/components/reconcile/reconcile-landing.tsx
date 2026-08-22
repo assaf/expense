@@ -1,15 +1,38 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, X } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
+import {
+  consumeCommandRequest,
+  onCommandRequest,
+  type CommandRequest,
+} from "~/lib/command-requests";
 import { formatDate } from "~/lib/format";
 import type { ReconciliationRunRecord } from "~/lib/types";
 
 export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const fetcher = useFetcher();
   const navigate = useNavigate();
   const busy = fetcher.state !== "idle";
+
+  // Handle a one-shot palette "upload reconcile statement" request that may
+  // have arrived before this page mounted — mount-time consume makes it
+  // strictly one-shot. Only this kind is consumed; other kinds stay pending
+  // for the page that handles them. Only refs are referenced, so `[]` deps
+  // are complete.
+  useEffect(() => {
+    const handle = (request: CommandRequest) => {
+      if (request.kind !== "upload-reconcile") return;
+      consumeCommandRequest();
+      fileInputRef.current?.click();
+    };
+    const unsubscribe = onCommandRequest(handle);
+    const pending = consumeCommandRequest();
+    if (pending) handle(pending);
+    return unsubscribe;
+  }, []);
   const error =
     fetcher.data && "error" in fetcher.data ? fetcher.data.error : null;
   const uploaded =
@@ -45,6 +68,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
               Statement file
             </span>
             <input
+              ref={fileInputRef}
               type="file"
               name="file"
               accept=".csv,.qfx,.ofx,.qbo,.xlsx,.pdf,text/csv,application/pdf"

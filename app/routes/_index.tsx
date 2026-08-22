@@ -28,6 +28,11 @@ import {
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
 import { WelcomePanel } from "~/components/WelcomePanel";
+import {
+  consumeCommandRequest,
+  onCommandRequest,
+  type CommandRequest,
+} from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Input } from "~/components/ui/Input";
@@ -361,9 +366,34 @@ function ExpenseList({
   const [searchParams, setSearchParams] = useSearchParams();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const navigate = useNavigate();
   const fetcher = useFetcher();
+
+  // Handle one-shot palette requests this page owns (open the receipt file
+  // picker / focus the search box). Only handled kinds are consumed — an
+  // upload-reconcile request fired from here must survive for the reconcile
+  // page, which mounts after the palette navigates. setState setters and
+  // refs are stable, so `[]` deps are exhaustive.
+  useEffect(() => {
+    const handle = (request: CommandRequest) => {
+      if (request.kind === "upload-expense") {
+        consumeCommandRequest();
+        fileRef.current?.click();
+      } else if (request.kind === "search-expenses") {
+        consumeCommandRequest();
+        setSelectedReport(null);
+        setQuery(request.query);
+        setDebouncedQuery(request.query);
+        searchRef.current?.focus();
+      }
+    };
+    const pending = consumeCommandRequest();
+    if (pending) handle(pending);
+    const unsubscribe = onCommandRequest(handle);
+    return unsubscribe;
+  }, []);
 
   // Consume `?new=<id>` from the create redirect: start the highlight and
   // drop the query param so a reload doesn't re-highlight (replace keeps it
@@ -567,6 +597,7 @@ function ExpenseList({
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
           />
           <Input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
