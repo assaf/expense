@@ -101,11 +101,24 @@ export const CRON_SECRET = env.CRON_SECRET ?? "";
  * account in Settings is disabled (the token can't be stored safely). */
 export const EMAIL_TOKEN_ENCRYPTION_KEY = env.EMAIL_TOKEN_ENCRYPTION_KEY ?? "";
 
-/** DeepSeek API key — parses receipt text and (when supported) OCRs images. */
-export const DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY ?? "";
-
-/** DeepSeek model id (default: deepseek-v4-flash). */
-export const DEEPSEEK_MODEL = env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+/**
+ * LLM provider for receipt extraction (OpenAI-compatible). Point
+ * `LLM_BASE_URL` at any compatible endpoint — DeepSeek's API by default,
+ * OpenRouter (`https://openrouter.ai/api/v1`), or any other provider.
+ * `LLM_API_KEY`/`LLM_MODEL`/`LLM_MAX_TOKENS` override the key, model, and
+ * output-token cap; the legacy `DEEPSEEK_API_KEY`/`DEEPSEEK_MODEL` names
+ * are still honored as fallbacks so existing deployments keep working.
+ * DeepSeek-only request params (e.g. `thinking`) are emitted only when the
+ * endpoint is DeepSeek's.
+ */
+export const LLM_BASE_URL = (
+  env.LLM_BASE_URL ?? "https://api.deepseek.com"
+).replace(/\/+$/, "");
+export const LLM_API_KEY = env.LLM_API_KEY ?? "";
+export const LLM_MODEL = env.LLM_MODEL ?? "deepseek-v4-flash";
+const llmMaxTokens = Number(env.LLM_MAX_TOKENS ?? 500);
+export const LLM_MAX_TOKENS =
+  Number.isFinite(llmMaxTokens) && llmMaxTokens > 0 ? llmMaxTokens : 500;
 
 /**
  * OCR backend for image/scanned receipts:

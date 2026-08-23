@@ -93,7 +93,13 @@ must be set before the first connection, and the cron runs daily at 13:00
 UTC (vercel.json) after the receipts cron at 12:00.
 
 Receipts-by-email adds optional vars: `INBOUND_EMAIL_ADDRESS`,
-`DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-v4-flash`),
+`LLM_API_KEY`, `LLM_MODEL` (default `deepseek-v4-flash`), `LLM_BASE_URL`
+(default `https://api.deepseek.com` — any OpenAI-compatible endpoint,
+e.g. OpenRouter `https://openrouter.ai/api/v1`), `LLM_MAX_TOKENS` (default
+500), plus the legacy `DEEPSEEK_API_KEY`/`DEEPSEEK_MODEL` names, which are
+still honored as fallbacks. DeepSeek-only request params (e.g. `thinking`)
+are emitted only against the DeepSeek endpoint, so pointing `LLM_BASE_URL`
+at another provider needs no code change,
 `RECEIPT_OCR_MODE` (`auto`
 default | `deepseek` | `tesseract`), and `RECEIPT_VISION_MAX_WIDTH` (default
 768, clamped 384–1536 — the downscale applied before the DeepSeek vision

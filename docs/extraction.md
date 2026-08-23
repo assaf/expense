@@ -38,7 +38,12 @@ and the MCP `capture_receipt` tool. All extraction lives in
   under-recognized; the stored/displayed image is untouched.
 - `RECEIPT_OCR_MODE` (`auto` | `deepseek` | `tesseract`) — vision-first vs
   local-OCR-only.
-- `DEEPSEEK_MODEL` (default `deepseek-v4-flash`).
+- `LLM_MODEL` (default `deepseek-v4-flash`; legacy `DEEPSEEK_MODEL` still
+  honored) — the extraction model. `LLM_BASE_URL`/`LLM_API_KEY` point the
+  OpenAI-compatible client at any provider (default DeepSeek; e.g.
+  OpenRouter). `LLM_MAX_TOKENS` (default 500) caps the model's output —
+  raise it when switching to a reasoning model, whose chain-of-thought
+  tokens count against the cap.
 
 ## Tesseract
 

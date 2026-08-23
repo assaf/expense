@@ -168,12 +168,6 @@ if (!hasDatabase()) {
 # .env (project root, gitignored)
 DATABASE_URL=postgres://assaf@localhost/expense_dev   # include the local user
 SESSION_SECRET=…         # signs the session cookie (random hex)
-APP_EMAIL=…           # bootstrap: first account's email (empty DB only)
-APP_PASSWORD=…           # bootstrap: first account's password (empty DB only)
-# Receipts by email (all optional):
-# INBOUND_EMAIL_ADDRESS=receipts@example.com   # forwarding + reply sender
-# DEEPSEEK_API_KEY=sk-…          RECEIPT_OCR_MODE=auto
-# FASTMAIL_TOKEN=…  PUSH_PRIVATE_KEY=…  PUSH_AUTH=…  CRON_SECRET=…  PUBLIC_URL=…
 ```
 
 On an empty database the first account + user are bootstrapped from

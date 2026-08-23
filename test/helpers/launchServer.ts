@@ -27,10 +27,6 @@ export async function launchServer(): Promise<string> {
     // process — and CI has no .env, so without this the section would show
     // "not configured" there and "configured" locally.
     EMAIL_TOKEN_ENCRYPTION_KEY: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
-    // Never call live services from the test server — the suite mocks them.
-    // Empty values also win over `loadEnvFile(".env")`, which never
-    // overrides existing vars, so a developer's real keys can't leak in.
-    DEEPSEEK_API_KEY: "",
     // PUBLIC_URL would otherwise leak from .env into the test server and
     // change the OAuth metadata issuer to the production origin — tests
     // assert on the request/forwarded origin instead.

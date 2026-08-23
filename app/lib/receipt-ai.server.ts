@@ -4,12 +4,19 @@ import {
   writeCachedExtraction,
 } from "~/lib/db/extraction-cache";
 import { normalizeMerchant } from "~/lib/duplicates";
-import { DEEPSEEK_API_KEY, DEEPSEEK_MODEL } from "~/lib/env";
+import {
+  LLM_API_KEY,
+  LLM_BASE_URL,
+  LLM_MAX_TOKENS,
+  LLM_MODEL,
+} from "~/lib/env";
 import { normalizeAmount } from "~/lib/format";
 
 /**
- * Receipt data extraction via the DeepSeek API (OpenAI-compatible chat
- * completions, base URL https://api.deepseek.com, model deepseek-v4-flash).
+ * Receipt data extraction via an OpenAI-compatible chat-completions API —
+ * DeepSeek by default (base URL + key + model configurable via env; see
+ * env.ts). DeepSeek-only request params are emitted only against the
+ * DeepSeek endpoint, so pointing LLM_BASE_URL at any other provider works.
  *
  * Two modes:
  *  - text input: receipt text extracted from the email body / PDF text layer /
@@ -413,7 +420,7 @@ export interface ExtractionResult {
   notes: string;
 }
 
-class DeepSeekError extends Error {
+class LLMError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -481,8 +488,8 @@ async function chatCompletion(
     maxTokens?: number;
   } = {},
 ): Promise<string> {
-  if (!DEEPSEEK_API_KEY) {
-    throw new DeepSeekError("DEEPSEEK_API_KEY is not configured", 500, "");
+  if (!LLM_API_KEY) {
+    throw new LLMError("LLM_API_KEY is not configured", 500, "");
   }
   const last = messages[messages.length - 1]!;
   let content: unknown = last.content;
@@ -497,26 +504,32 @@ async function chatCompletion(
       },
     ];
   }
+  // DeepSeek-specific: JSON mode + disabled thinking. Other providers get
+  // JSON mode too (OpenAI-compatible), but no `thinking` param.
+  const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
+  const providerLabel = isDeepSeek
+    ? "DeepSeek"
+    : new URL(LLM_BASE_URL).hostname;
   const body = {
-    model: DEEPSEEK_MODEL,
+    model: LLM_MODEL,
     messages: [...messages.slice(0, -1), { role: "user", content }],
     ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-    thinking: { type: "disabled" },
+    ...(isDeepSeek ? { thinking: { type: "disabled" } } : {}),
     temperature: 0.1,
-    max_tokens: opts.maxTokens ?? 500,
+    max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
   };
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      Authorization: `Bearer ${LLM_API_KEY}`,
     },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new DeepSeekError(
-      `DeepSeek API ${res.status}: ${text.slice(0, 500)}`,
+    throw new LLMError(
+      `${providerLabel} API ${res.status}: ${text.slice(0, 500)}`,
       res.status,
       text,
     );
@@ -526,7 +539,7 @@ async function chatCompletion(
   };
   const contentStr = data.choices?.[0]?.message?.content ?? "";
   if (!contentStr)
-    throw new DeepSeekError("DeepSeek returned empty content", 502, "");
+    throw new LLMError(`${providerLabel} returned empty content`, 502, "");
   return contentStr;
 }
 
@@ -541,7 +554,7 @@ export function parseJsonObject(raw: string): Record<string, unknown> {
   try {
     return JSON.parse(s) as Record<string, unknown>;
   } catch {
-    throw new DeepSeekError(
+    throw new LLMError(
       "DeepSeek returned invalid JSON",
       502,
       raw.slice(0, 500),
@@ -753,7 +766,7 @@ export function resolveExtraction(
 
 /** True when the hosted API rejected the request because it can't read images. */
 export function isVisionUnsupportedError(err: unknown): boolean {
-  if (!(err instanceof DeepSeekError)) return false;
+  if (!(err instanceof LLMError)) return false;
   if (err.status !== 400 && err.status !== 422) return false;
   return /image|vision|content.?type|unsupported|not supported|multimodal/i.test(
     err.message,

@@ -22,7 +22,7 @@ and `.env` with `DATABASE_URL`. Point the driver elsewhere with
 `demo:run` authenticates with an OAuth access token issued straight to the
 store for the demo user — the same token type a browser sign-in produces.
 `capture_receipt` passes merchant/amount/date overrides so the move is
-deterministic without a DeepSeek key; with `DEEPSEEK_API_KEY` set, the real
+deterministic without a DeepSeek key; with `LLM_API_KEY` set, the real
 OCR extraction runs instead.
 
 The seeded account makes each move land:
