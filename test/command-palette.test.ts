@@ -95,19 +95,30 @@ describe("Command palette", () => {
     page = await goto("/");
     // Shortcuts fire only when focus is outside form fields.
     await blurFocus(page);
-    const seq = async (...keys: string[]) => {
-      for (const k of keys) await page.keyboard.press(k);
+    // kbar's chained shortcuts (["g", "r"] etc.) complete silently — the
+    // palette does not open on "g" alone, so the navigation itself is the
+    // success signal. A keypress can land in the brief window before kbar
+    // binds its listener after hydration (a no-op, like the Cmd+K tests'
+    // open-wait), so retry the whole chord until the URL moves.
+    const navVia = async (urlGlob: string, ...keys: string[]) => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await blurFocus(page);
+        await page.keyboard.press("g");
+        for (const k of keys) await page.keyboard.press(k);
+        const moved = await page.waitForURL(urlGlob, { timeout: 2500 }).then(
+          () => true,
+          () => false,
+        );
+        if (moved) return;
+      }
+      await page.waitForURL(urlGlob); // fail with the standard timeout
     };
-    await seq("g", "r");
-    await page.waitForURL("**/export");
-    await seq("g", "m");
-    await page.waitForURL("**/emails");
-    await seq("g", "f");
-    await page.waitForURL("**/reconcile");
-    await seq("g", "s");
-    await page.waitForURL("**/settings");
-    await seq("g", "e");
-    await page.waitForURL("**/");
+
+    await navVia("**/export", "r");
+    await navVia("**/emails", "m");
+    await navVia("**/reconcile", "f");
+    await navVia("**/settings", "s");
+    await navVia("**/", "e");
   });
 
   it("uses single-key shortcuts for editors, search, and uploads", async () => {
