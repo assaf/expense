@@ -35,6 +35,12 @@ export default defineConfig({
       // tokens (production value lives only in Vercel env).
       EMAIL_TOKEN_ENCRYPTION_KEY:
         "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+      // Hermetic LLM config: receipt-ai tests stub fetch and capture the
+      // request body. A distinct vision model proves the image path uses
+      // the override; the DeepSeek base URL exercises the `thinking` param.
+      LLM_API_KEY: "test-llm-key",
+      LLM_BASE_URL: "https://api.deepseek.com",
+      LLM_VISION_MODEL: "vision-test-model",
     },
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,

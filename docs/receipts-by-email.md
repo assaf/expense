@@ -112,10 +112,11 @@ folder), `INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL` (the push URL 
   fallback for any browser failure.
 - PDF attachments are stored as rendered PNGs; the stored image is always
   browser-displayable (HEIC/BMP/TIFF → PNG via sharp).
-- The hosted DeepSeek API is text-only today — image OCR falls back to
-  tesseract.js (CDN worker/lang at runtime). `RECEIPT_OCR_MODE=deepseek`
-  forces vision-only. Don't expect image input to work until DeepSeek ships
-  it on the hosted API.
+- `RECEIPT_OCR_MODE` defaults to `auto`: local tesseract.js OCR first
+  (CDN worker/lang at runtime), falling back to the hosted vision model
+  (`LLM_VISION_MODEL`, DeepSeek's `deepseek-v4-flash-vision-exp`) when the
+  OCR text can't name a total — e.g. photocopied receipts. `deepseek` forces
+  vision-only; `tesseract` forces local-only.
 - Extraction is LLM-cheap by design: an email body or PDF text layer naming a merchant
   the account spent with in the last 90 days, with a parseable total,
   skips the model entirely (stored category/report + deterministic amount

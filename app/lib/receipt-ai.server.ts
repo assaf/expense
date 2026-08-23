@@ -8,6 +8,8 @@ import {
   LLM_API_KEY,
   LLM_BASE_URL,
   LLM_MAX_TOKENS,
+  LLM_VISION_MAX_TOKENS,
+  LLM_VISION_MODEL,
   LLM_MODEL,
 } from "~/lib/env";
 import { normalizeAmount } from "~/lib/format";
@@ -486,6 +488,13 @@ async function chatCompletion(
     image?: { buffer: Buffer; mime: string };
     /** Output token cap — per call site, sized to that call's real answer. */
     maxTokens?: number;
+
+    /** Model override — vision calls use `LLM_VISION_MODEL` (a reasoning
+     * model may differ from the text model). Defaults to `LLM_MODEL`. */
+    model?: string;
+    /** False suppresses the DeepSeek `thinking` param — the vision-exp
+     * model rejects it outright ("cannot use null as iterable"). */
+    thinking?: boolean;
   } = {},
 ): Promise<string> {
   if (!LLM_API_KEY) {
@@ -505,16 +514,20 @@ async function chatCompletion(
     ];
   }
   // DeepSeek-specific: JSON mode + disabled thinking. Other providers get
-  // JSON mode too (OpenAI-compatible), but no `thinking` param.
+  // JSON mode too (OpenAI-compatible), but no `thinking` param. Vision
+  // calls opt out (`thinking: false`): the vision model is a reasoning
+  // model that rejects the param.
   const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
   const providerLabel = isDeepSeek
     ? "DeepSeek"
     : new URL(LLM_BASE_URL).hostname;
   const body = {
-    model: LLM_MODEL,
+    model: opts.model ?? LLM_MODEL,
     messages: [...messages.slice(0, -1), { role: "user", content }],
     ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-    ...(isDeepSeek ? { thinking: { type: "disabled" } } : {}),
+    ...(isDeepSeek && opts.thinking !== false
+      ? { thinking: { type: "disabled" } }
+      : {}),
     temperature: 0.1,
     max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
   };
@@ -601,8 +614,14 @@ export async function extractReceipt(
   ];
   const raw = await chatCompletion(messages, {
     json: true,
-    maxTokens: 400,
-    ...(input.image ? { image: input.image } : {}),
+    maxTokens: input.image ? LLM_VISION_MAX_TOKENS : 400,
+    ...(input.image
+      ? {
+          image: input.image,
+          model: LLM_VISION_MODEL,
+          thinking: false,
+        }
+      : {}),
   });
   const result = buildExtractionResult(raw);
   if (cacheKey) {

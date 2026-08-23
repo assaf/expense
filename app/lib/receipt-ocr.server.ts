@@ -18,7 +18,7 @@ import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   composeLocalDescription,
   extractReceipt,
-  isVisionUnsupportedError,
+  parseReceiptAmount,
   resolveExtraction,
   tryKnownMerchantExtraction,
   type KnownMerchant,
@@ -517,36 +517,66 @@ export async function extractFromImage(input: {
   const stored = await toBrowserImage(input.buffer, input.mime);
   let result: ExtractionResult | null = null;
   let text = "";
-  if (RECEIPT_OCR_MODE !== "tesseract") {
-    try {
-      // Vision tokens scale with pixels² and receipts are text-heavy — send
-      // a downscaled copy (the stored/displayed image stays at
-      // STORED_IMAGE_MAX_WIDTH). resizeIfWider returns null when the image
-      // already fits or isn't decodable; the original is used then.
-      const visionBuffer =
-        (await resizeIfWider(stored.buffer, RECEIPT_VISION_MAX_WIDTH)) ??
-        stored.buffer;
-      result = await extractReceipt({
-        accountId: input.accountId,
-        image: { buffer: visionBuffer, mime: stored.mime },
-        categories: input.categories,
-        reports: input.reports,
-      });
-    } catch (err) {
-      if (RECEIPT_OCR_MODE === "deepseek" || !isVisionUnsupportedError(err)) {
-        throw err;
-      }
-      // Vision not supported by the hosted API — fall back to local OCR.
-    }
-  }
-  if (!result) {
-    text = await ocrImage(stored.buffer);
-    result = await extractReceipt({
+  // The vision call uses a downscaled copy: vision tokens scale with
+  // pixels² and receipts are text-heavy (see RECEIPT_VISION_MAX_WIDTH).
+  // resizeIfWider returns null when the image already fits or isn't
+  // decodable; the original is used then.
+  const visionExtraction = async (): Promise<ExtractionResult> => {
+    const visionBuffer =
+      (await resizeIfWider(stored.buffer, RECEIPT_VISION_MAX_WIDTH)) ??
+      stored.buffer;
+    return extractReceipt({
       accountId: input.accountId,
-      text,
+      image: { buffer: visionBuffer, mime: stored.mime },
       categories: input.categories,
       reports: input.reports,
     });
+  };
+  if (RECEIPT_OCR_MODE === "deepseek") {
+    result = await visionExtraction();
+  } else {
+    // Local OCR is the cheap path — extract from it whenever the text has
+    // enough structure to name a total (same floor as the PDF path). In
+    // "auto" the vision model is the fallback for OCR that comes up empty
+    // or weak: photocopies, glare, skew — the cases tesseract can't read.
+    text = await ocrImage(stored.buffer);
+    const usableOcr =
+      text.trim().length >= 20 && parseReceiptAmount(text) !== null;
+    if (RECEIPT_OCR_MODE === "tesseract" || usableOcr) {
+      result = await extractReceipt({
+        accountId: input.accountId,
+        text,
+        categories: input.categories,
+        reports: input.reports,
+      });
+    }
+    const solid =
+      result !== null &&
+      result.isReceipt &&
+      result.amount !== "" &&
+      result.merchant !== "";
+    if (RECEIPT_OCR_MODE === "auto" && !solid) {
+      try {
+        result = await visionExtraction();
+      } catch (err) {
+        if (result) {
+          // Vision is best-effort — a provider error keeps the OCR outcome
+          // (a weak result beats a failed capture).
+          console.error(
+            "[receipt-ocr] vision fallback failed; keeping OCR result",
+            err,
+          );
+        } else {
+          throw err;
+        }
+      }
+    }
+  }
+  if (!result) {
+    // Unreachable: every mode above either sets a result or throws (deepseek
+    // and auto rethrow when nothing else produced one). Guards the non-null
+    // return contract for callers.
+    throw new Error("[receipt-ocr] extraction produced no result");
   }
   return { result, text, stored };
 }

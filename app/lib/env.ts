@@ -121,8 +121,24 @@ export const LLM_MAX_TOKENS =
   Number.isFinite(llmMaxTokens) && llmMaxTokens > 0 ? llmMaxTokens : 500;
 
 /**
+ * Model for image/receipt vision calls (OpenAI-compatible). Defaults to
+ * `LLM_MODEL`; DeepSeek's hosted vision model is
+ * `deepseek-v4-flash-vision-exp` — an experimental reasoning model that
+ * rejects the `thinking` param and needs a larger output cap than the text
+ * paths (it burns budget in `reasoning_content` before answering).
+ */
+export const LLM_VISION_MODEL = env.LLM_VISION_MODEL || LLM_MODEL;
+const llmVisionMaxTokens = Number(env.LLM_VISION_MAX_TOKENS ?? 1500);
+export const LLM_VISION_MAX_TOKENS =
+  Number.isFinite(llmVisionMaxTokens) && llmVisionMaxTokens > 0
+    ? llmVisionMaxTokens
+    : 1500;
+
+/**
  * OCR backend for image/scanned receipts:
- *  - "auto"     try DeepSeek vision first, fall back to local tesseract OCR
+ *  - "auto"     local tesseract OCR first (cheap); the vision model is the
+ *               fallback when the OCR text is empty or too weak to name a
+ *               total (photocopies, glare, skew)
  *  - "deepseek" DeepSeek vision only (errors are reported back)
  *  - "tesseract"local OCR only
  */
