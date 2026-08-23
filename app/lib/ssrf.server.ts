@@ -55,7 +55,7 @@ export function isPrivateHost(hostname: string): boolean {
   return false;
 }
 
-function isPrivateIpv4(a: number, b: number, c: number, d: number): boolean {
+function isPrivateIpv4(a: number, b: number, _c: number, _d: number): boolean {
   return (
     a === 10 ||
     a === 127 ||
@@ -99,7 +99,12 @@ function ipv6Groups(addr: string): number[] | null {
   }
   const zeros = 8 - headGroups.length - tailGroups.length - tail.length;
   if (zeros < 0) return null;
-  return [...headGroups, ...new Array(zeros).fill(0), ...tailGroups, ...tail];
+  return [
+    ...headGroups,
+    ...Array.from<number>({ length: zeros }).fill(0),
+    ...tailGroups,
+    ...tail,
+  ];
 }
 
 /** Private/reserved IPv6 ranges, on the canonical 8-group form:

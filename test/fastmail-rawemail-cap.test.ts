@@ -40,7 +40,7 @@ const EMAIL_GET = {
 
 /** Stub fetch: session answered once; every other URL consumes the queue.
  * Response instances pass through untouched (needed for streamed bodies). */
-function stubFetch(queue: Array<unknown | Response>): void {
+function stubFetch(queue: Array<{} | Response>): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL) => {
