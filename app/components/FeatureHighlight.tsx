@@ -223,15 +223,16 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
  * `boost` triples the odds for that id (it gets two extra pool entries) —
  * used to nudge unconnected accounts toward the connect-email highlight
  * while still keeping the rotation. Ignored when the boosted id isn't in
- * the pool. */
+ * the pool. `random` is injectable so tests can be deterministic. */
 export function pickHighlight(
   data: HighlightData,
   boost?: HighlightId,
+  random: () => number = Math.random,
 ): HighlightId {
   const pool = availableHighlights(data);
   const weighted =
     boost && pool.includes(boost) ? [...pool, boost, boost] : pool;
-  return weighted[Math.floor(Math.random() * weighted.length)]!;
+  return weighted[Math.floor(random() * weighted.length)]!;
 }
 
 export function FeatureHighlight({

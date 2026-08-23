@@ -71,19 +71,35 @@ describe("feature highlights", () => {
   it("boost triples the odds for a pool member and is ignored otherwise", () => {
     const unconnectedPool = availableHighlights(EMPTY); // includes connect-email
     const connectedPool = availableHighlights(FULL); // does not
+    // Deterministic RNG: the odds test must never depend on the ambient
+    // randomness of Math.random (a 200-trial share can land ~2.6σ low — this
+    // flaked in CI at 0.285 vs a 0.333 threshold). Seeded, it always passes.
+    const random = mulberry32(0x5eed);
     const seen: HighlightId[] = [];
     for (let i = 0; i < 200; i++) {
-      const boosted = pickHighlight(EMPTY, "connect-email");
+      const boosted = pickHighlight(EMPTY, "connect-email", random);
       seen.push(boosted);
       expect(unconnectedPool).toContain(boosted);
       // Boosting an id outside the pool is a no-op.
-      expect(connectedPool).toContain(pickHighlight(FULL, "connect-email"));
+      expect(connectedPool).toContain(
+        pickHighlight(FULL, "connect-email", random),
+      );
     }
     const connectShare =
       seen.filter((h) => h === "connect-email").length / seen.length;
-    // 3 copies out of (pool size + 2) — roughly 3x the base share. A wide
-    // window keeps the assertion robust against random noise.
+    // 3 copies out of (pool size + 2) — roughly 3x the base share.
     const baseShare = 1 / unconnectedPool.length;
     expect(connectShare).toBeGreaterThan(baseShare * 2);
   });
 });
+
+/** Deterministic PRNG (mulberry32) for seeding the highlight odds test. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
