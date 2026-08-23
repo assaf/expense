@@ -10,6 +10,7 @@ import {
   extractExpenseDate,
   scoreAttachment,
   pickReceiptAttachment,
+  selectReceiptSource,
   fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
 import { isPrivateHost } from "~/lib/ssrf.server";
@@ -460,6 +461,70 @@ describe("Attachment selection", () => {
         "",
       ),
     );
+  });
+
+  it("treats extension-less octet-stream attachments as non-candidates", () => {
+    // Phones attach screenshots with UUID filenames and no declared type —
+    // metadata scoring can't see them; the byte sniff in selectReceiptSource
+    // is the fallback.
+    expect(
+      scoreAttachment(
+        attachment({
+          filename: "0066D362-DE2C-4CC4-8381-AC007567BEA0",
+          content_type: "application/octet-stream",
+          size: 546388,
+        }),
+        "",
+      ),
+    ).toBe(-Infinity);
+  });
+
+  it("selectReceiptSource sniffs an unscored octet-stream attachment", async () => {
+    const png = Buffer.concat([
+      Buffer.from("89504e470d0a1a0a", "hex"),
+      Buffer.alloc(32, 0),
+    ]);
+    const atts = [
+      attachment({
+        id: "phone-shot",
+        filename: "0066D362-DE2C-4CC4-8381-AC007567BEA0",
+        content_type: "application/octet-stream",
+        size: 546388,
+      }),
+    ];
+    const deps = {
+      downloadAttachment: async () => png,
+      classifyAttachment: async () => null,
+    } as unknown as InboundDeps;
+    const { source } = await selectReceiptSource(
+      receivedEmail({ subject: "", text: "", html: null }),
+      atts,
+      deps,
+    );
+    expect(source?.kind).toBe("attachment");
+    if (source?.kind !== "attachment") throw new Error("expected attachment");
+    expect(source.buffer.equals(png)).toBe(true);
+  });
+
+  it("does not sniff an unscored non-image attachment", async () => {
+    const text = Buffer.from("just some text, not a receipt", "utf8");
+    const atts = [
+      attachment({
+        filename: "notes.txt",
+        content_type: "text/plain",
+        size: 100,
+      }),
+    ];
+    const deps = {
+      downloadAttachment: async () => text,
+      classifyAttachment: async () => null,
+    } as unknown as InboundDeps;
+    const { source } = await selectReceiptSource(
+      receivedEmail({ subject: "", text: "", html: null }),
+      atts,
+      deps,
+    );
+    expect(source).toBeNull();
   });
 });
 

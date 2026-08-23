@@ -63,10 +63,40 @@ const IMAGE_EXTENSIONS = [
 
 const IMAGE_NAME_RE = new RegExp(`\\.(${IMAGE_EXTENSIONS.join("|")})$`, "i");
 
-/** True when the input is an image — by mime or filename. */
+/** Sniff the real image mime from the leading bytes — "image/png",
+ * "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/tiff",
+ * "image/heic" or "image/avif". Null when the bytes aren't a known image.
+ * Covers attachments served as application/octet-stream (phones attach
+ * screenshots with UUID filenames and no declared type). */
+export function detectImageMime(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null;
+  const hex = buffer.subarray(0, 4).toString("hex");
+  if (hex === "89504e47") return "image/png";
+  if (hex.startsWith("ffd8ff")) return "image/jpeg";
+  if (buffer.subarray(0, 4).toString("latin1").startsWith("GIF8"))
+    return "image/gif";
+  if (
+    buffer.subarray(0, 4).toString("latin1") === "RIFF" &&
+    buffer.subarray(8, 12).toString("latin1") === "WEBP"
+  )
+    return "image/webp";
+  if (buffer.subarray(0, 2).toString("latin1") === "BM") return "image/bmp";
+  const tiffHex = buffer.subarray(0, 4).toString("hex");
+  if (tiffHex === "49492a00" || tiffHex === "4d4d002a") return "image/tiff";
+  if (buffer.subarray(4, 8).toString("latin1") === "ftyp") {
+    const brand = buffer.subarray(8, 12).toString("latin1");
+    if (["heic", "heix", "hevc", "hevx", "mif1", "msf1"].includes(brand))
+      return "image/heic";
+    if (["avif", "avis"].includes(brand)) return "image/avif";
+  }
+  return null;
+}
+
+/** True when the input is an image — by mime, filename, or magic bytes. */
 export function isImage(input: {
   mime?: string;
   originalName?: string;
+  buffer?: Buffer;
 }): boolean {
   if (
     input.mime !== undefined &&
@@ -78,6 +108,9 @@ export function isImage(input: {
     input.originalName !== undefined &&
     IMAGE_NAME_RE.test(input.originalName)
   ) {
+    return true;
+  }
+  if (input.buffer !== undefined && detectImageMime(input.buffer) !== null) {
     return true;
   }
   return false;

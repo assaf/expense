@@ -820,6 +820,34 @@ export async function selectReceiptSource(
     }
   }
   if (!source) {
+    // Metadata scoring missed every attachment (e.g. a phone screenshot
+    // served as application/octet-stream with a UUID filename and no
+    // extension). Sniff the best unscored candidate before falling back to
+    // the body: prefer an attachment-disposition part, largest first. At
+    // most one download — if it isn't an image/PDF by magic bytes, the
+    // body path below decides.
+    const unscored = attachments
+      .filter((meta) => !isPdfMeta(meta) && !isImageMeta(meta))
+      .sort(
+        (a, b) =>
+          Number(b.content_disposition?.toLowerCase() === "attachment") -
+            Number(a.content_disposition?.toLowerCase() === "attachment") ||
+          (b.size ?? 0) - (a.size ?? 0),
+      );
+    const candidate = unscored[0];
+    if (candidate && (candidate.size ?? 0) > 0) {
+      const buffer = await deps.downloadAttachment(candidate);
+      if (isPdf({ buffer }) || isImage({ buffer })) {
+        source = {
+          kind: "attachment",
+          buffer,
+          contentType: candidate.content_type ?? "",
+          filename: candidate.filename,
+        };
+      }
+    }
+  }
+  if (!source) {
     const bodyText = (email.text || htmlToText(email.html ?? "")).trim();
     if (bodyText) source = { kind: "body", text: bodyText };
   }

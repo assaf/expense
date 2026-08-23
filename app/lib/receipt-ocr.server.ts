@@ -5,7 +5,7 @@ import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFPageProxy } from "pdfjs-dist";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-import { isPdf } from "~/lib/file-types";
+import { detectImageMime, isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import {
   pdfImageName,
@@ -65,15 +65,23 @@ async function normalizeImage(buffer: Buffer): Promise<Buffer> {
  * Convert an attachment image to a browser-friendly format for OCR + storage:
  * HEIC/BMP/TIFF/AVIF → PNG (tesseract can't read them); JPEG/PNG/WebP pass
  * through downscaled to the storage cap. JPEG is returned without re-encoding
- * — it has no alpha, so flatten is a no-op, and saveImage's normalizer
- * (normalizeStoredImage, same width cap) handles storage without a second
- * lossy pass. PNG/WebP are flattened onto white here because OCR sees this
- * buffer before storage does.
+ * (no alpha, so flatten is a no-op; saveImage's normalizer handles storage).
+ * Declared mimes that aren't image types (e.g. application/octet-stream from
+ * a phone attachment) are sniffed from the bytes first, so the stored receipt
+ * serves with a displayable mime and the vision data-URL is valid.
  */
 async function toBrowserImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ buffer: Buffer; mime: string }> {
+  // Attachments often arrive as application/octet-stream with a UUID
+  // filename (no extension to sniff). Recover the real image type from the
+  // bytes so the stored receipt serves with a displayable mime and the
+  // vision data-URL is valid.
+  if (!mime.toLowerCase().startsWith("image/")) {
+    const sniffed = detectImageMime(buffer);
+    if (sniffed) mime = sniffed;
+  }
   const resized = await resizeIfWider(buffer, STORED_IMAGE_MAX_WIDTH);
   if (resized === null) return { buffer, mime }; // not decodable — pass through
   if (

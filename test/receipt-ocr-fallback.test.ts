@@ -204,6 +204,20 @@ describe("receipt OCR-first fallback (auto)", () => {
     expect(result.isReceipt).toBe(false); // weak text result preserved
   });
 
+  it("stores octet-stream images with a displayable mime", async () => {
+    // Phones attach screenshots as application/octet-stream with a UUID
+    // filename — the bytes are sniffed so the stored receipt renders.
+    mockOcr("ACME CAFE\nTOTAL $12.50");
+
+    const { stored } = await extractFromImage({
+      accountId: "ocr-fallback-g",
+      buffer: RECEIPT_PNG,
+      mime: "application/octet-stream",
+    });
+
+    expect(stored.mime).toBe("image/png");
+  });
+
   it("rethrows when vision fails and OCR produced nothing", async () => {
     mockOcr("");
     failOn = { 0: true }; // the vision call fails
