@@ -547,11 +547,11 @@ describe("processUnprocessedReceipts", () => {
     usedEmailIds.push(id);
   });
 
-  it("suppresses a second reply to the same sender within one drain", async () => {
-    // Loop guard: the reply circuit breaker must cap replies per sender per
-    // drain, so a runaway mail (a bounce or autoresponder variant that slips
-    // past the guards) can't fill the Sent folder. Two unknown-sender emails
-    // in one drain → exactly one "sender not recognized" reply.
+  it("sends no replies for unknown senders within one drain", async () => {
+    // Loop guard: unknown senders never get a reply (the From header is
+    // attacker-controlled), so a runaway mail — bounce or autoresponder
+    // variant that slips past the guards — can neither fill the Sent folder
+    // nor amplify. Two unknown-sender emails in one drain → zero replies.
     const sent: { to: string; subject: string }[] = [];
     const { adapter, destroyed } = recordingAdapter(
       new Map([
@@ -574,8 +574,7 @@ describe("processUnprocessedReceipts", () => {
     });
 
     expect(result).toEqual({ processed: 2, failed: 0, destroyed: 2 });
-    expect(sent).toHaveLength(1); // duplicate reply suppressed
-    expect(sent[0]!.subject).toContain("sender not recognized");
+    expect(sent).toHaveLength(0); // unknown senders get no reply at all
     expect(destroyed).toHaveLength(2);
   });
 

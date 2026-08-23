@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import prisma from "~/lib/prisma.server";
 import {
   AUTH_LOCK_MS,
   AUTH_THRESHOLD,
   AUTH_WINDOW_MS,
   isLocked,
   nextFailureState,
+  recordAuthFailure,
+  sweepExpiredRows,
   type AuthAttemptState,
 } from "~/lib/db/auth-attempts";
 import {
@@ -104,14 +107,60 @@ describe("anonymous-action per-IP throttle", () => {
     });
   }
 
-  it("locks the IP after the threshold of attempts", async () => {
-    const req = ipRequest("203.0.113.77");
+  it("keeps the sign-in scope on its own budget (sign-in failures don't starve signup/join/resend)", async () => {
+    const req = ipRequest("203.0.113.78");
     for (let i = 0; i < AUTH_THRESHOLD; i += 1) {
-      await guardAnonymousAction(req);
-      await recordAnonymousAttempt(req);
+      await guardAnonymousAction(req, "signin");
+      await recordAnonymousAttempt(req, "signin");
     }
-    await expect(guardAnonymousAction(req)).rejects.toThrow(
+    // The sign-in scope is exhausted…
+    await expect(guardAnonymousAction(req, "signin")).rejects.toThrow(
       /too many failed attempts/i,
     );
+    // …but the unscoped (signup/join/resend) budget for the same IP is
+    // untouched — the two throttling domains must not share a counter.
+    await expect(guardAnonymousAction(req)).resolves.toBeUndefined();
+  });
+});
+
+async function countKey(key: string): Promise<number> {
+  return prisma.authAttempt.count({ where: { key } });
+}
+
+describe("sweepExpiredRows", () => {
+  const T0 = Date.parse("2026-02-01T00:00:00Z");
+  const TEST_KEYS = ["sweep:stale", "sweep:locked", "sweep:fresh"];
+
+  it("deletes elapsed-window rows but keeps fresh rows and active locks", async () => {
+    // One failure at T0 (window starts, not locked)…
+    await recordAuthFailure("sweep:stale", OPTIONS, T0);
+    // Five failures at T0 — locks until T0 + lockMs…
+    for (let i = 0; i < AUTH_THRESHOLD; i += 1) {
+      await recordAuthFailure("sweep:locked", OPTIONS, T0);
+    }
+    // A fresh failure just before the second sweep (its window is new).
+    const T_FRESH = T0 + AUTH_WINDOW_MS;
+    await recordAuthFailure("sweep:fresh", OPTIONS, T_FRESH);
+
+    // Mid-window sweep (T0 + 1s): nothing is expired yet — stale's window
+    // is 1s old, locked is still locking, fresh is brand new.
+    await sweepExpiredRows(T0 + 1_000, AUTH_WINDOW_MS);
+    for (const key of TEST_KEYS) {
+      expect(await countKey(key)).toBe(1);
+    }
+
+    // Sweep one minute after the window elapsed for the T0 rows (T0 + 16min):
+    // stale (elapsed, unlocked) and locked (its T0 + 15min lock has expired)
+    // are swept; fresh — created at T0 + 15min, so 1 minute into its window
+    // — is kept.
+    await sweepExpiredRows(T0 + AUTH_WINDOW_MS + 60_000, AUTH_WINDOW_MS);
+    expect(await countKey("sweep:stale")).toBe(0);
+    expect(await countKey("sweep:locked")).toBe(0);
+    expect(await countKey("sweep:fresh")).toBe(1);
+
+    // Cleanup — never leave rows behind for other tests.
+    await prisma.authAttempt.deleteMany({
+      where: { key: { in: TEST_KEYS } },
+    });
   });
 });

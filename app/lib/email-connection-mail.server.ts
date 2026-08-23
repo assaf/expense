@@ -7,9 +7,11 @@ import {
   jmapCall,
   jmapSessionForToken,
   jmapUploadBlob,
+  MAX_EMAIL_BYTES,
   REQUEST_TIMEOUT_MS,
   type JmapTokenInfo,
 } from "~/lib/jmap.server";
+import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
  * Mail operations on a CONNECTED email account, all authenticated as the
@@ -197,7 +199,11 @@ export async function rawConnectionEmail(
   }
   return {
     id,
-    raw: Buffer.from(await res.arrayBuffer()),
+    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
+      throw new Error(
+        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
+      );
+    }),
     receivedAt: email.receivedAt ?? new Date().toISOString(),
     subject: email.subject ?? "",
     from: formatAddress(email.from?.[0]),

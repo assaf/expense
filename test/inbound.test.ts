@@ -1147,15 +1147,17 @@ describe("processInboundEvent (body receipt)", () => {
     ).toBe(false);
   });
 
-  it("rejects unknown senders with a reply and no expense", async () => {
+  it("drops unknown senders without replying and creates no expense", async () => {
+    // The From header is attacker-controlled at SMTP time — replying to it
+    // would let anyone use the app's mailbox as a mail amplifier. Unknown
+    // senders are dropped silently.
     const deps = fakeDeps();
     const result = await processInboundEvent(
       eventData({ from: "Stranger <stranger@evil.com>" }),
       deps,
     );
     expect(result).toMatchObject({ status: "unknown-sender" });
-    expect(deps.sent).toHaveLength(1);
-    expect(deps.sent[0]!.subject).toContain("sender not recognized");
+    expect(deps.sent).toHaveLength(0);
     const expenses = await readExpenses(TEST_ACCOUNT_ID);
     expect(
       expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),

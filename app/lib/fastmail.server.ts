@@ -12,9 +12,11 @@ import {
   formatAddress,
   jmapBatch,
   jmapUploadBlob,
+  MAX_EMAIL_BYTES,
   REQUEST_TIMEOUT_MS,
   type JmapCapability,
 } from "~/lib/jmap.server";
+import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -213,7 +215,11 @@ export async function rawEmail(id: string): Promise<RawEmail> {
   }
   return {
     id,
-    raw: Buffer.from(await res.arrayBuffer()),
+    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
+      throw new Error(
+        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
+      );
+    }),
     receivedAt: email.receivedAt ?? new Date().toISOString(),
     subject: email.subject ?? "",
     from: formatAddress(email.from?.[0]),

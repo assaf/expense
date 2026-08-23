@@ -19,6 +19,11 @@ const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
  * purpose). */
 
 export const REQUEST_TIMEOUT_MS = 30_000;
+/** Hard cap on a downloaded RFC 5322 email blob (both transports). Bounds
+ * the memory PostalMime needs to parse the message and every attachment it
+ * decodes — the upload path caps receipts at 15MB; the email path must not
+ * be looser. Oversized mail is skipped by the drain (left in place). */
+export const MAX_EMAIL_BYTES = 15_000_000;
 
 /** Format a JMAP address participant as "Name <email>" (bare email when
  * there is no name; null when there is no address at all). Shared by both

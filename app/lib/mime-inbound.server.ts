@@ -1,5 +1,6 @@
 import PostalMime from "postal-mime";
 import type { Email as ParsedEmail } from "postal-mime";
+import { MAX_EMAIL_BYTES } from "~/lib/jmap.server";
 import type {
   AttachmentMeta,
   InboundDeps,
@@ -180,7 +181,16 @@ export function mimeFetchDeps(
       const { email } = await parsed(m[1]!);
       const attachment = email.attachments[Number(m[2]!)];
       if (!attachment) throw new Error(`Attachment ${meta.id} not found`);
-      return toBytes(attachment.content);
+      // Defensive per-attachment cap: the raw blob is already capped at
+      // MAX_EMAIL_BYTES, but PostalMime decodes eagerly — check the decoded
+      // size too so oversized parts never reach sharp/pdf.js/OCR.
+      const content = toBytes(attachment.content);
+      if (content.byteLength > MAX_EMAIL_BYTES) {
+        throw new Error(
+          `Attachment ${meta.id} too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
+        );
+      }
+      return content;
     },
   };
 }

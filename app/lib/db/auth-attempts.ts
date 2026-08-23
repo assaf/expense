@@ -123,7 +123,43 @@ export async function recordAuthFailure(
       updatedAt: new Date(now).toISOString(),
     },
   });
+  // Opportunistic sweep (best-effort, ~every 100th write): rows are only
+  // ever deleted on a successful login, so without this an attacker can
+  // grow auth_attempts unboundedly with unique keys (distinct emails or
+  // rotated IPs). A row is dead when its window elapsed AND it is not
+  // currently locking — nextFailureState would reset it anyway.
+  writesSinceSweep += 1;
+  if (writesSinceSweep >= SWEEP_EVERY_WRITES) {
+    writesSinceSweep = 0;
+    try {
+      await sweepExpiredRows(now, options.windowMs);
+    } catch (err) {
+      // Maintenance must never break the auth path.
+      console.warn("[auth] auth_attempts sweep failed:", err);
+    }
+  }
   return next;
+}
+
+/** Writes between opportunistic sweeps of expired auth_attempts rows. */
+const SWEEP_EVERY_WRITES = 100;
+let writesSinceSweep = 0;
+
+/** Delete rows whose window has fully elapsed and that are not currently
+ * locking a key (lockedUntil in the future keeps the row — it is active).
+ * Best-effort table hygiene: bounds storage growth from anonymous abuse. */
+export async function sweepExpiredRows(
+  now: number,
+  windowMs: number,
+): Promise<void> {
+  const windowCutoff = new Date(now - windowMs).toISOString();
+  const nowIso = new Date(now).toISOString();
+  await prisma.authAttempt.deleteMany({
+    where: {
+      windowStart: { lt: windowCutoff },
+      OR: [{ lockedUntil: null }, { lockedUntil: { lt: nowIso } }],
+    },
+  });
 }
 
 /** Clear the key's failure state (called after a successful login/join). */

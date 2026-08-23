@@ -201,28 +201,39 @@ export function rejectCrossSitePost(request: Request): void {
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 }
-
 /**
- * Per-IP guard for the unauthenticated signup/join/resend/reset-request
- * actions (sign-in keeps its stronger per-email lockout). Every attempt
- * counts — a bound on the scrypt derivations and verification emails an
- * anonymous caller can force, not just on failed guesses. Five attempts
- * inside 15 minutes lock the IP for 15 minutes. The key is scoped to the
- * path as well as the IP, so a burst against one endpoint doesn't starve
- * another (and test files posting to different endpoints don't share a
- * key).
+ * Per-IP guard for unauthenticated actions (signup/join/resend, and —
+ * with scope "signin" — the sign-in path, which otherwise has no per-IP
+ * bound and lets one IP force unlimited scrypt derivations or trip the
+ * per-email lockout of any account). Every attempt counts: five inside 15
+ * minutes lock the IP for 15 minutes. The key is scoped to the path AND
+ * the scope, so a burst against signin never starves signup/join/resend.
  */
-export async function guardAnonymousAction(request: Request): Promise<void> {
+export async function guardAnonymousAction(
+  request: Request,
+  scope = "",
+): Promise<void> {
+  const ip = clientIp(request);
+  // No client IP (direct server-to-server calls, the test suite's forked
+  // server): the per-IP throttle has nothing to key on, and the per-email
+  // lockout still guards the account. Production requests always carry
+  // x-forwarded-for via Vercel's proxy, so the throttle applies there.
+  if (!ip) return;
   await guardLockout(
-    `anon:${clientIp(request)}:${new URL(request.url).pathname}`,
+    `anon:${ip}:${new URL(request.url).pathname}${scope ? `:${scope}` : ""}`,
   );
 }
 
 /** Count one anonymous attempt (call after guardAnonymousAction, success or
  * failure — the cap is on work, not on outcomes). */
-export async function recordAnonymousAttempt(request: Request): Promise<void> {
+export async function recordAnonymousAttempt(
+  request: Request,
+  scope = "",
+): Promise<void> {
+  const ip = clientIp(request);
+  if (!ip) return;
   await recordFailureBestEffort(
-    `anon:${clientIp(request)}:${new URL(request.url).pathname}`,
+    `anon:${ip}:${new URL(request.url).pathname}${scope ? `:${scope}` : ""}`,
   );
 }
 

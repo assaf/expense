@@ -66,7 +66,15 @@ export async function action({ request }: Route.ActionArgs) {
   // Absolute origin for the verification link in the emailed message.
   const origin = new URL(request.url).origin;
 
-  // Signup/join/resend are anonymous work (scrypt + verification emails) —
+  // cap them per IP, independent of outcome. Sign-in keeps its per-email
+  // lockout AND gets its own per-IP throttle (scope "signin"): without it
+  // one IP could force unlimited scrypt derivations, and the per-email
+  // lockout would be remotely triggerable by any 5 requests.
+  if (mode === "create" || mode === "join" || mode === "resend-verification") {
+    await guardAnonymousAction(request);
+  } else {
+    await guardAnonymousAction(request, "signin");
+  }
   // cap them per IP, independent of outcome (sign-in keeps its per-email
   // lockout). Five attempts inside 15 minutes lock the IP.
   if (mode === "create" || mode === "join" || mode === "resend-verification") {
@@ -115,7 +123,9 @@ export async function action({ request }: Route.ActionArgs) {
     const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
-    await recordAnonymousAttempt(request);
+    // Count under the same scope the guard used — signin failures must not
+    // consume the signup/join/resend budget for this IP (and vice versa).
+    await recordAnonymousAttempt(request, mode === "signin" ? "signin" : "");
     const message =
       error instanceof Error ? error.message : "Something went wrong";
     console.warn("Auth failed (%s): %s", mode, message);

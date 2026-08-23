@@ -10,7 +10,7 @@ import type {
   RenderTextEmailOptions,
 } from "~/lib/email-render.server";
 import { htmlToText } from "~/lib/html-text";
-import { fetchPublicUrl } from "~/lib/ssrf.server";
+import { fetchPublicUrl, readBodyLimited } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
@@ -1216,13 +1216,15 @@ export async function processInboundEvent(
       });
       return { status: "unverified-sender" };
     }
-    await deps.sendReply({
-      ...replyEnvelope(data),
-      subject: "⚠️ Receipt not imported — sender not recognized",
-      html: replyHtml("Receipt not imported", [
-        `We received your email${subject ? ` “${escapeHtml(subject)}”` : ""} but the sender address <b>${escapeHtml(data.from)}</b> is not set up to import receipts.`,
-        "Open the app, go to <b>Email → Receipts by email</b>, and add this address to the list of allowed senders. Then forward the receipt again.",
-      ]),
+    // Unknown senders get NO reply: the From header is attacker-controlled at
+    // SMTP time, so replying would let anyone use the app's mailbox as an
+    // unauthenticated mail amplifier against arbitrary addresses. Log the
+    // drop and move on — the owner sees nothing and the sender learns
+    // nothing (verification flow exists for addresses the owner adds).
+    console.info("[inbound] dropped mail from unrecognized sender", {
+      emailId: data.email_id,
+      from: data.from,
+      subject,
     });
     return { status: "unknown-sender" };
   }
@@ -1466,8 +1468,14 @@ export async function fetchRemoteImageImpl(
   if (Number(res.headers.get("content-length") ?? 0) > REMOTE_IMAGE_MAX_BYTES) {
     return null;
   }
-  const buffer = Buffer.from(await res.arrayBuffer());
-  if (buffer.length === 0 || buffer.length > REMOTE_IMAGE_MAX_BYTES) {
+  // Stream with a hard cap — the cap must hold DURING the read, not after
+  // arrayBuffer() has already committed the full body (readBodyLimited
+  // cancels the stream past the limit). A slow-dripping or chunked server
+  // response can't force unbounded buffering.
+  const buffer = await readBodyLimited(res, REMOTE_IMAGE_MAX_BYTES).catch(
+    () => null,
+  );
+  if (!buffer || buffer.length === 0) {
     return null;
   }
   return { buffer, mime: type || "image/png" };
