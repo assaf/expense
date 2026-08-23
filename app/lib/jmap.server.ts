@@ -13,8 +13,11 @@ const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
 
 /** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts — the
  * app's own mailbox — and this module's per-token client) abort hung
- * requests with it; only constants/helpers are shared between them, never
- * the clients themselves (their error contracts differ on purpose). */
+ * requests with it. The batch-POST/error-walk core (`jmapBatch`,
+ * `jmapUploadBlob`) is also shared; the session loading and error
+ * classification stay per-client (their error contracts differ on
+ * purpose). */
+
 export const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Format a JMAP address participant as "Name <email>" (bare email when
@@ -153,21 +156,23 @@ interface ApiResponse {
 export type JmapCapability = "urn:ietf:params:jmap:submission";
 
 /**
- * POST a batch of JMAP method calls with a user token; throws on the first
- * per-call error — including per-object /set failures surfaced via
- * notUpdated/notCreated/notDestroyed (the FastMail gotcha the app's own
- * client, fastmail.server.ts, documents).
+ * POST a batch of JMAP method calls; throws on the first per-call error —
+ * including per-object /set failures surfaced via notUpdated/notCreated/
+ * notDestroyed (the FastMail gotcha). Shared core behind both clients:
+ * `jmapCall` (per-token, strict) and fastmail.server.ts's app-mailbox
+ * client (which passes `tolerateNotFoundDestroy` for idempotent deletes).
  */
-export async function jmapCall(
-  token: string,
+export async function jmapBatch(
+  apiUrl: string,
+  authorization: string,
   methodCalls: unknown[][],
   capabilities: JmapCapability[] = [],
+  opts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<[string, unknown, string][]> {
-  const s = await jmapSessionForToken(token);
-  const res = await fetch(s.apiUrl, {
+  const res = await fetch(apiUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: authorization,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -196,9 +201,61 @@ export async function jmapCall(
     for (const key of ["notUpdated", "notCreated", "notDestroyed"] as const) {
       const failures = a[key];
       if (failures && Object.keys(failures).length > 0) {
+        // Destroying an already-removed object reports notFound in
+        // notDestroyed (a concurrent drain deleted it first). For an
+        // idempotent delete that is the desired end state, not a failure
+        // — skip it; any other notDestroyed reason still throws.
+        if (key === "notDestroyed" && opts.tolerateNotFoundDestroy) {
+          const hardFailures = Object.values(failures).filter(
+            (f) => (f as { type?: string }).type !== "notFound",
+          );
+          if (hardFailures.length === 0) continue;
+        }
         throw new Error(`JMAP ${name} ${key}: ${JSON.stringify(failures)}`);
       }
     }
   }
   return j.methodResponses;
+}
+
+/** Upload a raw RFC 5322 message blob; returns the blobId. Shared by both
+ * send flows (fastmail.server.ts's EmailSubmission path and the connected
+ * account's Inbox-write path). */
+export async function jmapUploadBlob(
+  uploadUrl: string,
+  mailAccountId: string,
+  authorization: string,
+  raw: Buffer,
+): Promise<string> {
+  const url = uploadUrl.replace("{accountId}", mailAccountId);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: authorization,
+      "Content-Type": "message/rfc822",
+    },
+    body: new Uint8Array(raw),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`upload failed: ${res.status} ${await res.text()}`);
+  }
+  const j = (await res.json()) as { blobId?: string };
+  if (!j.blobId) throw new Error("upload missing blobId");
+  return j.blobId;
+}
+
+/**
+ * POST a batch of JMAP method calls with a user token; throws on the first
+ * per-call error — including per-object /set failures surfaced via
+ * notUpdated/notCreated/notDestroyed (the FastMail gotcha the app's own
+ * client, fastmail.server.ts, documents).
+ */
+export async function jmapCall(
+  token: string,
+  methodCalls: unknown[][],
+  capabilities: JmapCapability[] = [],
+): Promise<[string, unknown, string][]> {
+  const s = await jmapSessionForToken(token);
+  return jmapBatch(s.apiUrl, `Bearer ${token}`, methodCalls, capabilities);
 }

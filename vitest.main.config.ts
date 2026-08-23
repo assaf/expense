@@ -21,6 +21,13 @@ export default defineConfig({
       "test/escape.test.ts",
       "test/file-types.test.ts",
       "test/validation.test.ts",
+      "test/email-classify.test.ts",
+      "test/email-mime.test.ts",
+      "test/format.test.ts",
+      "test/duplicates.test.ts",
+      "test/excel.test.ts",
+      "test/statements.test.ts",
+      "test/receipt-pdf.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

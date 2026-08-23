@@ -65,7 +65,7 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
               <li key={id}>
                 <Link
                   to={`/expense/${id}`}
-                  className="underline hover:text-green-900"
+                  className="underline hover:text-green-900 dark:hover:text-green-400"
                 >
                   New expense
                 </Link>
@@ -102,7 +102,7 @@ function SkippedList({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex items-center gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:text-gray-100"
+        className="flex items-center gap-1 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
       >
         <ChevronDown
           aria-hidden="true"

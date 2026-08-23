@@ -73,7 +73,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
               name="file"
               accept=".csv,.qfx,.ofx,.qbo,.xlsx,.pdf,text/csv,application/pdf"
               onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 dark:bg-gray-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 dark:text-gray-200 hover:file:bg-gray-200 dark:bg-gray-600"
+              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 dark:file:bg-gray-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 dark:file:text-gray-200 hover:file:bg-gray-200 dark:hover:file:bg-gray-500"
             />
           </label>
           <div className="flex items-center gap-3">
@@ -143,7 +143,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                     <li key={run.id}>
                       <Link
                         to={`/reconcile?run=${run.id}`}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 transition-colors hover:border-gray-300 dark:border-gray-600"
+                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-600"
                       >
                         <div className="min-w-0">
                           <div className="truncate font-medium">

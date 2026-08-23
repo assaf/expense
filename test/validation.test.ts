@@ -7,6 +7,8 @@ import {
   unknownIntent,
   validateDate,
   validateDateNotFuture,
+  badRequest,
+  notFound,
 } from "~/lib/validation";
 
 describe("isEmail", () => {
@@ -136,6 +138,24 @@ describe("unknownIntent", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toContain("Unknown intent");
+  });
+});
+
+describe("badRequest", () => {
+  it("returns the error message in a 400 JSON envelope", async () => {
+    const res = badRequest("nope");
+    expect(res.status).toBe(400);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    await expect(res.json()).resolves.toEqual({ error: "nope" });
+  });
+});
+
+describe("notFound", () => {
+  it("returns a 404 JSON envelope", async () => {
+    const res = notFound();
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    await expect(res.json()).resolves.toEqual({ error: "Not found" });
   });
 });
 

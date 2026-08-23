@@ -115,7 +115,7 @@ export function MarketingCta({
       >
         {heading}
       </h2>
-      <p className="mx-auto mt-3 max-w-md text-gray-300 dark:text-gray-700 dark:text-gray-200">
+      <p className="mx-auto mt-3 max-w-md text-gray-700 dark:text-gray-200">
         {body}
       </p>
       <div
@@ -127,7 +127,7 @@ export function MarketingCta({
         <Button
           asChild
           size="lg"
-          className="w-full bg-white dark:bg-gray-800 text-ink hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-700 sm:w-auto"
+          className="w-full bg-white dark:bg-gray-700 text-ink hover:bg-gray-100 dark:hover:bg-gray-800 sm:w-auto"
         >
           <Link to="/login?mode=create">{primaryLabel}</Link>
         </Button>

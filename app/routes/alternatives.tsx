@@ -102,11 +102,11 @@ export default function AlternativesPage() {
           Which one should you choose?
         </h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-gray-800 p-5">
-            <h3 className="font-semibold text-blue-900">
+          <div className="rounded-xl border border-blue-200 dark:border-gray-700 bg-blue-50 dark:bg-gray-800 p-5">
+            <h3 className="font-semibold text-blue-900 dark:text-blue-300">
               Choose {APP_NAME} if…
             </h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-blue-900/80">
+            <p className="mt-1.5 text-sm leading-relaxed text-blue-900/80 dark:text-blue-300/80">
               You track your own expenses for yourself, your side projects, or
               small team, and you need these expenses prepared for tax season
               without any typing of receipts.

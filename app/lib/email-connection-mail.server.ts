@@ -1,14 +1,15 @@
 import {
-  formatAddress,
-  jmapCall,
-  jmapSessionForToken,
-  REQUEST_TIMEOUT_MS,
-  type JmapTokenInfo,
-} from "~/lib/jmap.server";
-import {
   buildRfc822Message,
   type SendEmailInput,
 } from "~/lib/email-mime.server";
+import {
+  formatAddress,
+  jmapCall,
+  jmapSessionForToken,
+  jmapUploadBlob,
+  REQUEST_TIMEOUT_MS,
+  type JmapTokenInfo,
+} from "~/lib/jmap.server";
 
 /**
  * Mail operations on a CONNECTED email account, all authenticated as the
@@ -230,28 +231,6 @@ export async function moveConnectionEmailToTrash(
   ]);
 }
 
-// --- Inbox delivery (write a message via Email/import) --------
-
-async function uploadBlob(token: string, raw: Buffer): Promise<string> {
-  const s = await jmapSessionForToken(token);
-  const url = s.uploadUrl.replace("{accountId}", s.mailAccountId);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "message/rfc822",
-    },
-    body: new Uint8Array(raw),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`upload failed: ${res.status} ${await res.text()}`);
-  }
-  const j = (await res.json()) as { blobId?: string };
-  if (!j.blobId) throw new Error("upload missing blobId");
-  return j.blobId;
-}
-
 async function importEmail(
   token: string,
   blobId: string,
@@ -304,7 +283,12 @@ export async function deliverConnectionEmailToInbox(
       inReplyTo: input.inReplyTo,
       attachments: input.attachments,
     });
-    const blobId = await uploadBlob(token, raw);
+    const blobId = await jmapUploadBlob(
+      (await jmapSessionForToken(token)).uploadUrl,
+      (await jmapSessionForToken(token)).mailAccountId,
+      `Bearer ${token}`,
+      raw,
+    );
     await importEmail(token, blobId, inboxId);
     console.info("[email-connections] confirmation delivered to Inbox", {
       to: input.to,

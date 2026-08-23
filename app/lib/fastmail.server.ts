@@ -8,7 +8,13 @@ import {
   buildRfc822Message,
   type SendEmailInput,
 } from "~/lib/email-mime.server";
-import { formatAddress, REQUEST_TIMEOUT_MS } from "~/lib/jmap.server";
+import {
+  formatAddress,
+  jmapBatch,
+  jmapUploadBlob,
+  REQUEST_TIMEOUT_MS,
+  type JmapCapability,
+} from "~/lib/jmap.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -78,72 +84,24 @@ async function jmapSession(): Promise<Session> {
   return sessionPromise;
 }
 
-interface ApiResponse {
-  methodResponses: [string, unknown, string][];
-}
-
-/** Extra JMAP capabilities beyond core + mail (e.g. submission for sending). */
-type JmapCapability = "urn:ietf:params:jmap:submission";
-
 /**
  * POST a batch of method calls; throws on the first per-call error.
- * `capabilities` adds to the standard core + mail capabilities.
+ * `capabilities` adds to the standard core + mail capabilities. Thin
+ * adapter over the shared `jmapBatch` core (jmap.server.ts) with this
+ * client's idempotent-delete tolerance.
  */
 async function jmapApi(
   methodCalls: unknown[][],
   capabilities: JmapCapability[] = [],
 ): Promise<[string, unknown, string][]> {
   const s = await jmapSession();
-  const res = await fetch(s.apiUrl, {
-    method: "POST",
-    headers: {
-      ...bearer(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      using: [
-        "urn:ietf:params:jmap:core",
-        "urn:ietf:params:jmap:mail",
-        ...capabilities,
-      ],
-      methodCalls,
-    }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`JMAP API failed: ${res.status} ${await res.text()}`);
-  }
-  const j = (await res.json()) as ApiResponse;
-  for (const [name, args] of j.methodResponses) {
-    if (name === "error") {
-      throw new Error(`JMAP ${name} error: ${JSON.stringify(args)}`);
-    }
-    // A /set or /import call can "succeed" while individual objects fail
-    // (notUpdated/notCreated/notDestroyed). Fastmail reports invalid keyword
-    // paths this way — surface it instead of silently dropping work.
-    const a = args as {
-      notUpdated?: Record<string, unknown>;
-      notCreated?: Record<string, unknown>;
-      notDestroyed?: Record<string, unknown>;
-    };
-    for (const key of ["notUpdated", "notCreated", "notDestroyed"] as const) {
-      const failures = a[key];
-      if (failures && Object.keys(failures).length > 0) {
-        // Destroying an already-removed object reports notFound in
-        // notDestroyed (a concurrent drain deleted it first). For an
-        // idempotent delete that is the desired end state, not a failure
-        // — skip it; any other notDestroyed reason still throws.
-        if (key === "notDestroyed") {
-          const hardFailures = Object.values(failures).filter(
-            (f) => (f as { type?: string }).type !== "notFound",
-          );
-          if (hardFailures.length === 0) continue;
-        }
-        throw new Error(`JMAP ${name} ${key}: ${JSON.stringify(failures)}`);
-      }
-    }
-  }
-  return j.methodResponses;
+  return jmapBatch(
+    s.apiUrl,
+    `Bearer ${FASTMAIL_TOKEN}`,
+    methodCalls,
+    capabilities,
+    { tolerateNotFoundDestroy: true },
+  );
 }
 
 /** Unwrap the args of the first method response. */
@@ -442,25 +400,16 @@ function matchIdentity(
   );
 }
 
-/** Upload a raw RFC 5322 message blob; returns the blobId. */
+/** Upload a raw RFC 5322 message blob; returns the blobId. Thin adapter
+ * over the shared `jmapUploadBlob` (jmap.server.ts). */
 async function uploadBlob(raw: Buffer): Promise<string> {
   const s = await jmapSession();
-  const url = s.uploadUrl.replace("{accountId}", s.accountId);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      ...bearer(),
-      "Content-Type": "message/rfc822",
-    },
-    body: new Uint8Array(raw),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`upload failed: ${res.status} ${await res.text()}`);
-  }
-  const j = (await res.json()) as { blobId?: string };
-  if (!j.blobId) throw new Error("upload missing blobId");
-  return j.blobId;
+  return jmapUploadBlob(
+    s.uploadUrl,
+    s.accountId,
+    `Bearer ${FASTMAIL_TOKEN}`,
+    raw,
+  );
 }
 
 /** Import a sent message into the given mailbox (the identity's Sent box). */
