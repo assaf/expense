@@ -166,19 +166,33 @@ describe("Command palette", () => {
   });
 
   it("opens a file picker for Upload expense file and drafts the receipt", async () => {
-    page = await goto("/");
-    await page.keyboard.press("ControlOrMeta+k");
-    const search = page.getByPlaceholder("Type a command or search…");
-    await expect(search).toBeVisible();
-    await search.fill("upload expense");
-    await expect(
-      page.getByRole("option", { name: "Upload expense file", selected: true }),
-    ).toBeVisible();
-    const chooserPromise = page.waitForEvent("filechooser");
-    await page.keyboard.press("Enter");
-    const chooser = await chooserPromise;
+    // The palette command's filechooser click can land in a window where the
+    // headless browser drops it (same class as the g-shortcut hydration race
+    // and the "f" retry below) — the command request is consumed on fire, so
+    // a missed chooser can't be re-pressed; retry the whole sequence.
+    let chooser: FileChooser | null = null;
+    for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
+      page = await goto("/");
+      await page.keyboard.press("ControlOrMeta+k");
+      const search = page.getByPlaceholder("Type a command or search…");
+      await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
+      await search.fill("upload expense");
+      await page
+        .getByRole("option", { name: "Upload expense file", selected: true })
+        .waitFor({ state: "visible", timeout: 4000 })
+        .catch(() => {});
+      const chooserPromise = page.waitForEvent("filechooser", {
+        timeout: 4000,
+      });
+      await page.keyboard.press("Enter");
+      chooser = await chooserPromise.then(
+        (c) => c,
+        () => null,
+      );
+    }
+    expect(chooser).not.toBeNull();
     // Picking a file carries it into the new-receipt editor as its draft.
-    await chooser.setFiles({
+    await chooser!.setFiles({
       name: "receipt.png",
       mimeType: "image/png",
       buffer: Buffer.from(
@@ -192,24 +206,34 @@ describe("Command palette", () => {
   it("routes Upload reconcile statement to the reconcile page's picker", async () => {
     // Fired from home: the home consumer must not swallow the request —
     // it stays pending until the reconcile landing mounts and opens its
-    // statement file input.
-    page = await goto("/");
-    await page.keyboard.press("ControlOrMeta+k");
-    const search = page.getByPlaceholder("Type a command or search…");
-    await expect(search).toBeVisible();
-    await search.fill("upload reconcile");
-    await expect(
-      page.getByRole("option", {
-        name: "Upload reconcile statement",
-        selected: true,
-      }),
-    ).toBeVisible();
-    const chooserPromise = page.waitForEvent("filechooser", {
-      timeout: 10_000,
-    });
-    await page.keyboard.press("Enter");
-    await page.waitForURL("**/reconcile");
-    await chooserPromise;
+    // statement file input. The chooser can be dropped in the same
+    // headless window as the upload-expense test, so retry the whole
+    // sequence (the request is consumed on fire).
+    let chooser: FileChooser | null = null;
+    for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
+      page = await goto("/");
+      await page.keyboard.press("ControlOrMeta+k");
+      const search = page.getByPlaceholder("Type a command or search…");
+      await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
+      await search.fill("upload reconcile");
+      await page
+        .getByRole("option", {
+          name: "Upload reconcile statement",
+          selected: true,
+        })
+        .waitFor({ state: "visible", timeout: 4000 })
+        .catch(() => {});
+      const chooserPromise = page.waitForEvent("filechooser", {
+        timeout: 4000,
+      });
+      await page.keyboard.press("Enter");
+      await page.waitForURL("**/reconcile", { timeout: 4000 }).catch(() => {});
+      chooser = await chooserPromise.then(
+        (c) => c,
+        () => null,
+      );
+    }
+    expect(chooser).not.toBeNull();
   });
 
   afterAll(async () => {

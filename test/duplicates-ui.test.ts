@@ -115,7 +115,15 @@ describe("Duplicate detection", () => {
   });
 
   it("'Not a duplicate' dismisses the pair for good", async () => {
-    await page.getByRole("button", { name: "Not a duplicate" }).first().click();
+    // Scope to the DupCorp A banner: all seeded dup rows share date AND
+    // createdAt, so list order is a DB tie-break and an unscoped first()
+    // can land on the DupCorp B banner, dismissing the wrong pair.
+    await page
+      .locator("li")
+      .filter({ hasText: "Possible duplicate of DupCorp A" })
+      .getByRole("button", { name: "Not a duplicate" })
+      .first()
+      .click();
     await expect(page.getByText(/Possible duplicate of DupCorp A/)).toHaveCount(
       0,
     );
@@ -136,7 +144,14 @@ describe("Duplicate detection", () => {
   });
 
   it("'View' opens the other side of the pair", async () => {
-    await page.getByRole("link", { name: "View" }).first().click();
+    // Pair B is untouched (the dismiss test scoped to pair A), so its
+    // banner's View link is the deterministic target for the URL assertion.
+    await page
+      .locator("li")
+      .filter({ hasText: "Possible duplicate of DupCorp B" })
+      .getByRole("link", { name: "View" })
+      .first()
+      .click();
     await page.waitForURL(/\/expense\/dup-b[12]$/);
     await nav("/");
   });
