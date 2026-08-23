@@ -1,17 +1,6 @@
-import { cva } from "class-variance-authority";
 import type { ComponentProps } from "react";
+import { inputVariants } from "~/components/ui/Input";
 import { cn } from "~/lib/cn";
-
-const textareaVariants = cva(
-  "rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:border-blue-400 dark:focus:ring-blue-400",
-  {
-    variants: {
-      invalid: {
-        true: "border-red-400 focus:border-red-400 focus:ring-red-400",
-      },
-    },
-  },
-);
 
 interface TextareaProps extends ComponentProps<"textarea"> {
   invalid?: boolean;
@@ -21,7 +10,7 @@ interface TextareaProps extends ComponentProps<"textarea"> {
 export function Textarea({ className, invalid, ...props }: TextareaProps) {
   return (
     <textarea
-      className={cn(textareaVariants({ invalid }), className)}
+      className={cn(inputVariants({ invalid }), className)}
       aria-invalid={invalid || undefined}
       {...props}
     />

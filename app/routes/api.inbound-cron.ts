@@ -1,8 +1,8 @@
 import * as Sentry from "@sentry/react-router";
-import { CRON_SECRET, FASTMAIL_TOKEN } from "~/lib/env";
+import { FASTMAIL_TOKEN } from "~/lib/env";
 import { ensureSubscription } from "~/lib/fastmail-push.server";
 import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
-import { safeEqual } from "~/lib/passwords";
+import { assertCronSecret } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.inbound-cron";
 
 /**
@@ -27,13 +27,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       { status: 503 },
     );
   }
-  const secret = CRON_SECRET;
-  if (
-    !secret ||
-    !safeEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`)
-  ) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const denied = assertCronSecret(request);
+  if (denied) return denied;
 
   try {
     // Sentry cron monitor: a missed check-in (cron stops firing, the drain

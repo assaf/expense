@@ -1,14 +1,16 @@
-import { ArrowLeft, FileArchive, FileDown, Lock, Plus } from "lucide-react";
+import { FileArchive, FileDown, Lock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, redirect, useFetcher } from "react-router";
+import { redirect, useFetcher } from "react-router";
+import { AddNameForm } from "~/components/AddNameForm";
+import { PageShell } from "~/components/PageShell";
 import {
   RemoveButton,
   RenameButton,
   RenameForm,
 } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
-import { Input } from "~/components/ui/Input";
 import { requireUser } from "~/lib/auth.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { countLabel, formatAmount } from "~/lib/format";
 import {
   addReport,
@@ -32,9 +34,7 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   switch (intent) {
     case "addReport": {
@@ -72,19 +72,10 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
   const open = reports.filter((r) => !r.closed);
 
   return (
-    <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <FileDown aria-hidden="true" className="h-6 w-6" /> Reports
-        </h1>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
-            expenses
-          </Link>
-        </Button>
-      </header>
-
+    <PageShell
+      icon={<FileDown aria-hidden="true" className="h-6 w-6" />}
+      title="Reports"
+    >
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Open reports</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
@@ -127,7 +118,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           </a>
         </Button>
       </section>
-    </main>
+    </PageShell>
   );
 }
 
@@ -243,26 +234,7 @@ function ReportRow({ report }: { report: ReportSummary }) {
 // --- Add report form -------------------------------------------------------
 
 function AddReportForm() {
-  const fetcher = useFetcher<{
-    ok: boolean;
-    name?: string;
-    error?: string;
-  }>();
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
-
-  useEffect(() => {
-    const { data } = fetcher;
-    if (!data) return;
-    if (data.ok && data.name) {
-      setDraft("");
-      setError(null);
-      setAnnouncement(`Added ${data.name}`);
-    } else if (data.error) {
-      setError(data.error);
-    }
-  }, [fetcher.data]);
 
   useEffect(() => {
     if (!announcement) return;
@@ -275,33 +247,11 @@ function AddReportForm() {
       <div className="sr-only" role="status" aria-live="polite">
         {announcement}
       </div>
-      <fetcher.Form method="post" className="flex items-center gap-2">
-        <input type="hidden" name="intent" value="addReport" />
-        <Input
-          type="text"
-          name="name"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setError(null);
-          }}
-          placeholder="New report name"
-          aria-invalid={error ? true : undefined}
-          invalid={!!error}
-          className="flex-1"
-        />
-        <Button
-          type="submit"
-          size="md"
-          variant="secondary"
-          disabled={!draft.trim()}
-        >
-          <Plus aria-hidden="true" className="h-4 w-4" /> Add
-        </Button>
-      </fetcher.Form>
-      {error ? (
-        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
-      ) : null}
+      <AddNameForm
+        intent="addReport"
+        placeholder="New report name"
+        onAdded={(name) => setAnnouncement(`Added ${name}`)}
+      />
     </section>
   );
 }

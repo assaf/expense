@@ -8,7 +8,8 @@ import {
 } from "~/lib/expense-save.server";
 import { readDuplicateCandidates } from "~/lib/db/expenses";
 import { newExpenseShell } from "~/lib/types";
-import { formString, unknownIntent } from "~/lib/validation";
+import { badRequest, unknownIntent } from "~/lib/validation";
+import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/expense.new";
 
 /**
@@ -41,9 +42,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
   if (intent === "addReport") return addReportAction(form, user.accountId);
 
   if (intent !== "save") {
@@ -51,8 +50,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const result = await saveExpenseFromForm(form, user.accountId, null);
-  if (result.error)
-    return Response.json({ error: result.error }, { status: 400 });
+  if (result.error) return badRequest(result.error);
   // Carry the new expense's id home so the list can highlight it briefly.
   return redirect(`/?new=${result.id}`);
 }

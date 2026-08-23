@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BadgeCheck, ChevronDown, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { DraftReview } from "./reconcile-review";
 import type { ReconciliationRunRecord } from "~/lib/types";
 
@@ -41,7 +42,7 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
   const skipped = run.skipped;
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-6">
+      <Card variant="green" className="p-6">
         <h2 className="mb-1 flex items-center gap-2 font-semibold text-green-800 dark:text-green-300">
           <BadgeCheck aria-hidden="true" className="h-5 w-5" /> Reconciled
         </h2>
@@ -73,7 +74,7 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
           </ul>
         ) : null}
         {skipped.length > 0 ? <SkippedList skipped={skipped} /> : null}
-      </section>
+      </Card>
       <div>
         <Button asChild variant="secondary">
           <Link to="/reconcile">

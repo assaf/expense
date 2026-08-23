@@ -2,17 +2,16 @@ import {
   deleteImage,
   imageResponseHeaders,
   readImage,
-  readUploadedFile,
-  saveImage,
-  uploadErrorMessage,
 } from "~/lib/images.server";
 import { requireUser } from "~/lib/auth.server";
 import { captureWarning } from "~/lib/errors.server";
 import {
   extractUploadedReceiptFields,
-  prepareUploadedReceipt,
+  prepareUploadOr400,
+  readUploadOr400,
 } from "~/lib/receipt-ocr.server";
-import { formString, unknownIntent } from "~/lib/validation";
+import { formString, notFound, unknownIntent } from "~/lib/validation";
+import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.expense";
 
 /** OCR + extraction can take ~10-15s (DeepSeek, or tesseract on first run). */
@@ -28,9 +27,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const url = new URL(request.url);
   const key = url.searchParams.get("draftKey");
-  if (!key) return new Response("Not found", { status: 404 });
+  if (!key) return notFound();
   const image = await readImage(user.accountId, key);
-  if (!image) return new Response("Not found", { status: 404 });
+  if (!image) return notFound();
   return new Response(image.buffer as BodyInit, {
     headers: imageResponseHeaders(
       image.mime || "image/png",
@@ -47,43 +46,26 @@ export async function loader({ request }: Route.LoaderArgs) {
  * expense, and Cancel deletes it.
  */
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   if (intent === "draft-upload") {
-    const uploaded = await readUploadedFile(form);
-    if (!uploaded.ok) {
-      return Response.json(
-        { error: uploadErrorMessage(uploaded.error) },
-        { status: 400 },
-      );
-    }
-    // PDFs are rasterized to PNG before they can be displayed or stored (the
-    // editor renders receipts as <img>). The draft is saved immediately —
-    // OCR never blocks the upload, so a slow scan or timeout can't prevent
-    // it (the editor runs a separate "ocr" request for the fields, for
-    // images and PDFs alike). Only an unreadable PDF fails the upload.
-    const prepared = await prepareUploadedReceipt(uploaded, "draft-upload");
-    if (prepared === null) {
-      return Response.json(
-        { error: "Couldn't read that PDF." },
-        { status: 400 },
-      );
-    }
-    const saved = await saveImage(
+    // The draft is saved immediately — OCR never blocks the upload, so a
+    // slow scan or timeout can't prevent it (the editor runs a separate
+    // "ocr" request for the fields, for images and PDFs alike). Only an
+    // unreadable PDF fails the upload.
+    const saved = await prepareUploadOr400(
+      form,
       user.accountId,
-      prepared.buffer,
-      prepared.mime,
-      prepared.originalName,
+      "draft-upload",
     );
+    if (saved instanceof Response) return saved;
     // No expense row is created — the draft is just a stored blob; the
     // editor's "ocr" request extracts and pre-fills the fields.
     return Response.json({
       ok: true,
       draftKey: saved.filename,
       mime: saved.mime,
-      originalName: prepared.originalName,
+      originalName: saved.originalName,
     });
   }
 
@@ -101,13 +83,8 @@ export async function action({ request }: Route.ActionArgs) {
     // A failure only loses the fields — the draft or image is already
     // stored — so the response is always ok. "draft-ocr" is the legacy
     // name; both work.
-    const uploaded = await readUploadedFile(form);
-    if (!uploaded.ok) {
-      return Response.json(
-        { error: uploadErrorMessage(uploaded.error) },
-        { status: 400 },
-      );
-    }
+    const uploaded = await readUploadOr400(form);
+    if (uploaded instanceof Response) return uploaded;
     const { buffer, mime } = uploaded;
     try {
       const ocr = await extractUploadedReceiptFields(

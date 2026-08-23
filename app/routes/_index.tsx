@@ -11,7 +11,7 @@ import {
   ListChecks,
   Mail,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   data,
   Link,
@@ -34,13 +34,16 @@ import {
   type CommandRequest,
 } from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
-import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { EmptyState } from "~/components/ui/EmptyState";
+import { imageVersion } from "~/lib/image-version";
 import { isComplete } from "~/lib/completeness";
 import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import type { DuplicateMatch } from "~/lib/duplicates";
-import { imageVersion } from "~/lib/image-version";
+import { isReceiptFile } from "~/lib/file-types";
+import { useDropTarget } from "~/lib/use-drop-target";
 import {
   countLabel,
   formatAmount,
@@ -345,7 +348,11 @@ function ExpenseList({
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [dragOver, setDragOver] = useState(false);
+  const drop = useDropTarget({
+    accepts: isReceiptFile,
+    onFile: uploadImage,
+    message: "Receipt file detected — drop to upload",
+  });
   // "Today" in the browser's own timezone — the server runs UTC and must
   // not guess the user's day, so everything that depends on it (the future
   // badge, the mileage-rate tip) is computed client-side after mount.
@@ -367,7 +374,6 @@ function ExpenseList({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const dragDepth = useRef(0);
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
@@ -479,58 +485,18 @@ function ExpenseList({
     setDebouncedQuery("");
   }
 
-  /** The file types the drop zone accepts — matches the upload input. */
-  function isReceiptFile(file: File): boolean {
-    return (
-      file.type.startsWith("image/") ||
-      file.type === "application/pdf" ||
-      /\.pdf$/i.test(file.name)
-    );
-  }
-
-  // dragenter/dragleave fire for every child element crossed, so track depth
-  // instead of toggling on each event — prevents the highlight from flickering.
-  function onDragEnter(e: DragEvent<HTMLElement>) {
-    e.preventDefault();
-    dragDepth.current += 1;
-    setDragOver(true);
-  }
-
-  function onDragOver(e: DragEvent<HTMLElement>) {
-    // preventDefault is required to turn the drag into a drop target.
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  }
-
-  function onDragLeave(e: DragEvent<HTMLElement>) {
-    e.preventDefault();
-    dragDepth.current -= 1;
-    if (dragDepth.current <= 0) {
-      dragDepth.current = 0;
-      setDragOver(false);
-    }
-  }
-
-  function onDrop(e: DragEvent<HTMLElement>) {
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && isReceiptFile(file)) uploadImage(file);
-  }
-
   return (
     <main
       id="main-content"
-      className={`mx-auto max-w-4xl px-4 py-8 ${dragOver ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500" : ""}`}
-      onDragEnter={onDragEnter}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      className={`mx-auto max-w-4xl px-4 py-8 ${drop.over ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500" : ""}`}
+      onDragEnter={drop.onDragEnter}
+      onDragOver={drop.onDragOver}
+      onDragLeave={drop.onDragLeave}
+      onDrop={drop.onDrop}
       aria-label="Expense list — drag a receipt image anywhere to upload"
     >
       <div className="sr-only" role="status" aria-live="polite">
-        {dragOver ? "Receipt file detected — drop to upload" : ""}
+        {drop.message}
       </div>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1>
@@ -797,26 +763,25 @@ function ExpenseRow({
             >
               <span>{formatDate(expense.date)}</span>
               {future ? (
-                <span
-                  className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/60 dark:text-blue-400"
-                  title="Dated in the future"
-                >
+                <Badge tone="blue" title="Dated in the future">
                   Future
-                </span>
+                </Badge>
               ) : null}
               {expense.reconciled ? (
-                <span
-                  className="flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400"
+                <Badge
+                  tone="green"
+                  icon={
+                    <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />
+                  }
                   title="Matched against a credit card statement"
                 >
-                  <BadgeCheck aria-hidden="true" className="h-3.5 w-3.5" />{" "}
                   Reconciled
-                </span>
+                </Badge>
               ) : null}
               {expense.category ? (
-                <span className="rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs">
+                <Badge tone="gray" square>
                   {expense.category}
-                </span>
+                </Badge>
               ) : null}
               {expense.report ? <span>{expense.report}</span> : null}
               {!expense.complete ? (
@@ -887,7 +852,7 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600 dark:text-gray-300">
+          <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600">
             <ReceiptText aria-hidden="true" className="h-6 w-6" />
           </div>
         )}

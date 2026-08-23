@@ -1,6 +1,6 @@
 import { ulid } from "ulid";
 import prisma from "~/lib/prisma.server";
-import { extractEmailAddress } from "~/lib/validation";
+import { EMAIL_SHAPE_RE, extractEmailAddress } from "~/lib/validation";
 
 /**
  * Email rules — which senders a connected account auto-imports. General
@@ -68,7 +68,7 @@ export async function addEmailRule(input: {
 }): Promise<AddEmailRuleResult> {
   const sender = input.sender.trim().toLowerCase();
   const valid = sender.includes("@")
-    ? /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(sender)
+    ? EMAIL_SHAPE_RE.test(sender)
     : /^[a-z0-9.-]+\.[a-z]{2,}$/.test(sender);
   if (!valid) {
     return { ok: false, error: `"${sender}" is not an address or domain.` };

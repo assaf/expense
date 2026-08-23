@@ -1,5 +1,3 @@
-import PostalMime from "postal-mime";
-import type { Email as ParsedEmail } from "postal-mime";
 import {
   destroyEmail,
   isEmailNotFoundError,
@@ -8,14 +6,17 @@ import {
   unprocessedReceiptIds,
   type RawEmail,
 } from "~/lib/fastmail.server";
+import {
+  createMimeInboundCache,
+  headerRecord,
+  mimeFetchDeps,
+} from "~/lib/mime-inbound.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
 import { hasOwnConfirmationHeader } from "~/lib/email-classify";
 import { processInboundEvent } from "~/lib/inbound-email.server";
 import type {
-  AttachmentMeta,
   EmailReceivedData,
   InboundDeps,
-  ReceivedEmail,
 } from "~/lib/inbound-email.server";
 import {
   classifyReceiptAttachment,
@@ -68,126 +69,33 @@ const realFastmailAdapter: FastmailAdapter = {
 //
 // fetchReceivedEmail + listAttachments + downloadAttachment are called
 // repeatedly for the same email (and fetch+list run concurrently in the
-// pipeline), so the raw download and MIME parse are memoized per email id.
-// Entries expire after PARSE_TTL_MS and the cache is size-capped; destroyed
-// emails are invalidated immediately.
+// pipeline), so the raw download and MIME parse are memoized per email id
+// in the shared mime-inbound module (TTL + LRU live there). Destroyed
+// emails are invalidated immediately below.
 
-interface ParsedEntry {
-  raw: RawEmail;
-  email: ParsedEmail;
-  fetchedAt: number;
-}
-
-const parseCache = new Map<string, Promise<ParsedEntry>>();
-const PARSE_TTL_MS = 10 * 60_000;
-const PARSE_CACHE_MAX = 20;
-
-function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
-  return Buffer.from(content as ArrayBuffer);
-}
-
-async function parsedEmail(
-  id: string,
-  adapter: FastmailAdapter,
-): Promise<ParsedEntry> {
-  const existing = parseCache.get(id);
-  if (existing) {
-    const entry = await existing;
-    if (Date.now() - entry.fetchedAt < PARSE_TTL_MS) return entry;
-    parseCache.delete(id);
-  }
-  const promise = (async () => {
-    const raw = await adapter.rawEmail(id);
-    const email = await PostalMime.parse(raw.raw);
-    return { raw, email, fetchedAt: Date.now() };
-  })();
-  if (parseCache.size >= PARSE_CACHE_MAX) {
-    const oldest = parseCache.keys().next().value;
-    if (oldest !== undefined) parseCache.delete(oldest);
-  }
-  parseCache.set(id, promise);
-  return promise;
-}
+const mimeCache = createMimeInboundCache();
 
 /** Drop cached MIME for a destroyed email so its blob is never re-downloaded. */
 function invalidateMimeCache(id: string): void {
-  parseCache.delete(id);
+  mimeCache.invalidate(id);
 }
 
 /** Clear the whole parse cache (test hook; also used after setup changes). */
 export function clearMimeCache(): void {
-  parseCache.clear();
+  mimeCache.clear();
 }
 
 // --- InboundDeps over FastMail ----------------------------------------------
-
-function headerRecord(headers: ParsedEmail["headers"]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const h of headers) out[h.key] = h.value;
-  return out;
-}
-
-/** Fastmail `contentId` may carry angle brackets; HTML references use `cid:` without them. */
-function normalizeContentId(contentId: string | undefined): string | null {
-  if (!contentId) return null;
-  return contentId.replace(/^<|>$/g, "");
-}
-
-/** Attachment metadata for one MIME part; `id` encodes `emailId:index` so
- * downloadAttachment can resolve the blob without a second JMAP call. */
-function attachmentMeta(
-  emailId: string,
-  attachment: ParsedEmail["attachments"][number],
-  index: number,
-): AttachmentMeta {
-  return {
-    id: `${emailId}:${index}`,
-    filename: attachment.filename ?? `attachment-${index + 1}`,
-    size: toBytes(attachment.content).byteLength,
-    content_type: attachment.mimeType,
-    content_disposition: attachment.disposition,
-    content_id: normalizeContentId(attachment.contentId),
-    download_url: null,
-    expires_at: null,
-  };
-}
 
 /** Build the `InboundDeps` collaborators that the pipeline needs from JMAP;
  * every other collaborator is the standard implementation. */
 export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
   return {
-    fetchReceivedEmail: async (emailId): Promise<ReceivedEmail> => {
-      const { raw, email } = await parsedEmail(emailId, adapter);
-      return {
-        id: emailId,
-        from: raw.from ?? "",
-        to: raw.to,
-        subject: email.subject ?? raw.subject,
-        html: email.html ?? null,
-        text: email.text ?? null,
-        headers: headerRecord(email.headers),
-        created_at: raw.receivedAt,
-        message_id: email.messageId ?? raw.messageId,
-      };
-    },
-    listAttachments: async (emailId): Promise<AttachmentMeta[]> => {
-      const { email } = await parsedEmail(emailId, adapter);
-      return email.attachments.map((a, index) =>
-        attachmentMeta(emailId, a, index),
-      );
-    },
-    downloadAttachment: async (meta): Promise<Buffer> => {
-      const m = /^(.+):(\d+)$/.exec(meta.id ?? "");
-      if (!m) {
-        throw new Error(
-          `Cannot resolve attachment "${meta.id}" — not produced by FastMail`,
-        );
-      }
-      const { email } = await parsedEmail(m[1]!, adapter);
-      const attachment = email.attachments[Number(m[2]!)];
-      if (!attachment) throw new Error(`Attachment ${meta.id} not found`);
-      return toBytes(attachment.content);
-    },
+    ...mimeFetchDeps(mimeCache, adapter, {
+      // The FastMail transport keys the cache by the raw JMAP id.
+      cacheKey: (emailId) => emailId,
+      foreignAttachmentSuffix: "not produced by FastMail",
+    }),
     classifyAttachment: classifyReceiptAttachment,
     extractReceipt,
     extractFromImage,
@@ -211,7 +119,7 @@ export async function receiptEmailData(
   id: string,
   adapter: FastmailAdapter = realFastmailAdapter,
 ): Promise<EmailReceivedData> {
-  const { raw, email } = await parsedEmail(id, adapter);
+  const { raw, email } = await mimeCache.parsedEmail(id, id, adapter);
   return {
     email_id: id,
     created_at: raw.receivedAt,

@@ -83,6 +83,70 @@ export function pushUrl(): string {
   return `${PUBLIC_URL.replace(/\/+$/, "")}/api/inbound-push`;
 }
 
+const MAX_BODY_BYTES = 1024 * 1024; // a push payload is a few KB
+
+export interface FastMailPushOptions {
+  /**
+   * Extra env values this webhook additionally needs — e.g. FASTMAIL_TOKEN
+   * on /api/inbound-push (the subscription renewal path uses it). Any unset
+   * value makes the route bail with the not-configured 503.
+   */
+  requiredEnv?: Array<string | undefined>;
+  /** Log context tag for the decrypt-failure warning, e.g. "[inbound-push]". */
+  logTag: string;
+}
+
+/**
+ * Shared preamble for the FastMail JMAP push webhooks (public — decryption
+ * success is itself the auth): config gate (503), method check (405),
+ * body cap (413), then RFC 8291 decryption (400 on failure). Returns the
+ * Response to bail with, or the decrypted payload.
+ */
+export async function readFastMailPush(
+  request: Request,
+  opts: FastMailPushOptions,
+): Promise<Response | PushPayload> {
+  if (!PUSH_PRIVATE_KEY || !PUSH_AUTH || opts.requiredEnv?.some((v) => !v)) {
+    return Response.json(
+      { error: "FastMail push is not configured on this deployment" },
+      { status: 503 },
+    );
+  }
+  if (request.method !== "POST") {
+    return Response.json({ error: "method not allowed" }, { status: 405 });
+  }
+  const body = Buffer.from(await request.arrayBuffer());
+  if (body.byteLength > MAX_BODY_BYTES) {
+    return Response.json({ error: "body too large" }, { status: 413 });
+  }
+  try {
+    return decryptPushBody(body, PUSH_PRIVATE_KEY, PUSH_AUTH);
+  } catch (err) {
+    console.warn(`${opts.logTag} decrypt failed:`, err);
+    return Response.json({ error: "decrypt failed" }, { status: 400 });
+  }
+}
+
+export interface PushVerification {
+  pushSubscriptionId: string;
+  verificationCode: string;
+}
+
+/** Narrow the PushVerification fields out of a decrypted payload;
+ * undefined when either field is missing or not a string. */
+export function pushVerificationOf(
+  payload: PushPayload,
+): PushVerification | undefined {
+  const { pushSubscriptionId, verificationCode } = payload;
+  if (
+    typeof pushSubscriptionId !== "string" ||
+    typeof verificationCode !== "string"
+  ) {
+    return undefined;
+  }
+  return { pushSubscriptionId, verificationCode };
+}
+
 const SUBSCRIPTION_LIFETIME_DAYS = 30;
 const RENEW_WITHIN_DAYS = 7;
 

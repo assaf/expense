@@ -1,4 +1,4 @@
-import { CRON_SECRET, PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
+import { PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
@@ -6,7 +6,7 @@ import {
   listAllEmailConnections,
   setEmailConnectionStatus,
 } from "~/lib/db/email-connections";
-import { safeEqual } from "~/lib/passwords";
+import { assertCronSecret } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.email-connections-cron";
 
 /**
@@ -25,13 +25,8 @@ import type { Route } from "./+types/api.email-connections-cron";
 export const config = { maxDuration: 60 };
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const secret = CRON_SECRET;
-  if (
-    !secret ||
-    !safeEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`)
-  ) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const denied = assertCronSecret(request);
+  if (denied) return denied;
   if (!PUSH_PRIVATE_KEY || !PUSH_AUTH || !isTokenCryptoConfigured()) {
     return Response.json(
       {

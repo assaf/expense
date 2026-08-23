@@ -8,6 +8,7 @@ import {
   buildRfc822Message,
   type SendEmailInput,
 } from "~/lib/email-mime.server";
+import { formatAddress, REQUEST_TIMEOUT_MS } from "~/lib/jmap.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -23,7 +24,6 @@ import {
  */
 
 const SESSION_URL = "https://api.fastmail.com/jmap/session";
-const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Keyword marking an email as already processed (one-way on Fastmail — it
  * can be set but not removed, so mark-before-process is the idempotency
@@ -210,13 +210,6 @@ export interface RawEmail {
   to: string[];
   /** Message-ID header, if present. */
   messageId: string;
-}
-
-function formatAddress(
-  a?: { name?: string; email?: string } | null,
-): string | null {
-  if (!a?.email) return null;
-  return a.name ? `${a.name} <${a.email}>` : a.email;
 }
 
 /**

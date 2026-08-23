@@ -1,9 +1,9 @@
 import { ulid } from "ulid";
 import prisma from "~/lib/prisma.server";
 import { renameImageToConvention, saveImage } from "~/lib/images.server";
-import { parseAmount } from "~/lib/money";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { validateDateNotFuture } from "~/lib/validation";
+import { hasAmount } from "~/lib/completeness";
 import { expenseData } from "~/lib/db/expenses";
 import type { Prisma } from "prisma/generated";
 import type {
@@ -319,8 +319,7 @@ export async function completeReconciliationRun(
         );
         continue;
       }
-      const amount = parseAmount(draft.amount);
-      if (!amount || amount.isZero()) {
+      if (!hasAmount(draft.amount)) {
         errors.push(`Row ${i + 1}: the amount is invalid.`);
         continue;
       }

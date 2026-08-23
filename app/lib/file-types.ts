@@ -82,3 +82,14 @@ export function isImage(input: {
   }
   return false;
 }
+
+/** True when a dropped/pasted/uploaded file matches the upload input —
+ * any image mime, or a PDF by mime or filename. Client-side counterpart
+ * to the server's isImage/isPdf checks; used by the drag-drop targets. */
+export function isReceiptFile(file: File): boolean {
+  return (
+    file.type.startsWith("image/") ||
+    file.type === "application/pdf" ||
+    isPdfName(file.name)
+  );
+}

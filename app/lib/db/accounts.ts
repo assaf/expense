@@ -6,8 +6,8 @@ import {
 } from "~/lib/passwords";
 import prisma from "~/lib/prisma.server";
 import {
+  cachedRead,
   createCache,
-  isTest,
   VERIFICATION_RESEND_MS,
   VERIFICATION_TTL_MS,
 } from "~/lib/db/shared";
@@ -22,13 +22,10 @@ import type { Account, User } from "~/lib/types";
 const accountCache = createCache<Account>(300_000);
 
 export async function readAccount(id: string): Promise<Account | undefined> {
-  if (!isTest) {
-    const cached = accountCache.get(id);
-    if (cached !== undefined) return cached;
-  }
-  const row = await prisma.account.findUnique({ where: { id } });
-  if (row) accountCache.set(id, row);
-  return row ?? undefined;
+  return cachedRead(accountCache, id, async () => {
+    const row = await prisma.account.findUnique({ where: { id } });
+    return row ?? undefined;
+  });
 }
 
 /** One member of an account, as shown in Settings — never secrets. */
@@ -207,12 +204,18 @@ export async function findUserByEmail(
 const userCache = createCache<User>(30_000);
 
 export async function findUserById(id: string): Promise<User | undefined> {
-  const cached = userCache.get(id);
-  if (cached !== undefined) return cached;
-  const row = await prisma.user.findUnique({ where: { id } });
-  const user = row ? rowToUser(row) : undefined;
-  if (user) userCache.set(id, user);
-  return user;
+  return cachedRead(
+    userCache,
+    id,
+    async () => {
+      const row = await prisma.user.findUnique({ where: { id } });
+      return row ? rowToUser(row) : undefined;
+    },
+    // Unlike the other caches, the user cache keeps serving under VITEST —
+    // every request re-resolves the session user, and tests count on the
+    // same connection-churn relief production gets.
+    { evenInTests: true },
+  );
 }
 
 /** The stored password hash for a user (never exposed on the User type). */

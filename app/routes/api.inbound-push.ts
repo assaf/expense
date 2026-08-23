@@ -1,5 +1,8 @@
-import { FASTMAIL_TOKEN, PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
-import { decryptPushBody } from "~/lib/fastmail-push.server";
+import { FASTMAIL_TOKEN } from "~/lib/env";
+import {
+  pushVerificationOf,
+  readFastMailPush,
+} from "~/lib/fastmail-push.server";
 import { setVerificationCode } from "~/lib/fastmail.server";
 import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
 import type { Route } from "./+types/api.inbound-push";
@@ -21,43 +24,25 @@ import type { Route } from "./+types/api.inbound-push";
 // Vercel: the receipt pipeline (blob download + OCR + LLM) needs the full budget.
 export const config = { maxDuration: 60 };
 
-const MAX_BODY_BYTES = 1024 * 1024; // a push payload is a few KB
-
 export async function action({ request }: Route.ActionArgs) {
-  if (!FASTMAIL_TOKEN || !PUSH_PRIVATE_KEY || !PUSH_AUTH) {
-    return Response.json(
-      { error: "FastMail push is not configured on this deployment" },
-      { status: 503 },
-    );
-  }
-  if (request.method !== "POST") {
-    return Response.json({ error: "method not allowed" }, { status: 405 });
-  }
-
-  const body = Buffer.from(await request.arrayBuffer());
-  if (body.byteLength > MAX_BODY_BYTES) {
-    return Response.json({ error: "body too large" }, { status: 413 });
-  }
-
-  let payload: { "@type": string; [key: string]: unknown };
-  try {
-    payload = decryptPushBody(body, PUSH_PRIVATE_KEY, PUSH_AUTH);
-  } catch (err) {
-    console.warn("[inbound-push] decrypt failed:", err);
-    return Response.json({ error: "decrypt failed" }, { status: 400 });
-  }
+  const payload = await readFastMailPush(request, {
+    // Inbound pushes also renew the subscription (daily cron), which needs
+    // the FastMail API token beyond the shared push keys.
+    requiredEnv: [FASTMAIL_TOKEN],
+    logTag: "[inbound-push]",
+  });
+  if (payload instanceof Response) return payload;
 
   const type = payload["@type"];
 
   if (type === "PushVerification") {
-    const id =
-      typeof payload["pushSubscriptionId"] === "string"
-        ? payload["pushSubscriptionId"]
-        : "";
-    const code =
-      typeof payload["verificationCode"] === "string"
-        ? payload["verificationCode"]
-        : "";
+    // Absent fields degrade to empty strings, as the old typeof narrowing
+    // did — the echo simply fails downstream.
+    const { pushSubscriptionId: id, verificationCode: code } =
+      pushVerificationOf(payload) ?? {
+        pushSubscriptionId: "",
+        verificationCode: "",
+      };
     try {
       await setVerificationCode(id, code);
       console.info("[inbound-push] verified subscription", { id });

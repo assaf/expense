@@ -1,20 +1,19 @@
 import {
   deleteImage,
   imageResponseHeaders,
-  readUploadedFile,
   renameImageToConvention,
-  saveImage,
-  uploadErrorMessage,
 } from "~/lib/images.server";
-import { prepareUploadedReceipt } from "~/lib/receipt-ocr.server";
-import { requireUser } from "~/lib/auth.server";
+import { prepareUploadOr400 } from "~/lib/receipt-ocr.server";
 import {
   readExpense,
   readExpenseImage,
   upsertExpense,
 } from "~/lib/db/expenses";
 import { imageVersion } from "~/lib/image-version";
-import { formString, unknownIntent } from "~/lib/validation";
+import { unknownIntent } from "~/lib/validation";
+import { notFound } from "~/lib/validation";
+import { requireIntent } from "~/lib/route-helpers.server";
+import { requireUser } from "~/lib/auth.server";
 import type { Route } from "./+types/expense.$id.image";
 
 /**
@@ -33,7 +32,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // null blob read.
   const row = await readExpenseImage(params.id, user.accountId);
   if (!row || row.type !== "receipt" || !row.imageFile || !row.blobData) {
-    return new Response("Not found", { status: 404 });
+    return notFound();
   }
 
   // Validators: blob bytes are written once and never mutated in place — a
@@ -86,13 +85,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 /** Replace or clear the receipt image without reloading the editor. */
 export async function action({ request, params }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  const { user, form, intent } = await requireIntent(request);
   const expense = await readExpense(params.id, user.accountId);
-  if (!expense || expense.type !== "receipt") {
-    return Response.json({ error: "Not found" }, { status: 404 });
-  }
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  if (!expense || expense.type !== "receipt") return notFound();
 
   if (intent === "delete") {
     if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
@@ -105,33 +100,19 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === "upload") {
-    const uploaded = await readUploadedFile(form);
-    if (!uploaded.ok) {
-      return Response.json(
-        { error: uploadErrorMessage(uploaded.error) },
-        { status: 400 },
-      );
-    }
     // PDFs are rasterized to PNG before storage: receipts are always
     // displayed as images, and the thumbnail/export pipelines assume the
     // stored bytes are decodable by sharp. Only an unreadable PDF fails.
-    const prepared = await prepareUploadedReceipt(uploaded, "image-upload");
-    if (prepared === null) {
-      return Response.json(
-        { error: "Couldn't read that PDF." },
-        { status: 400 },
-      );
-    }
-    const { filename, mime: storedMime } = await saveImage(
+    const saved = await prepareUploadOr400(
+      form,
       user.accountId,
-      prepared.buffer,
-      prepared.mime,
-      prepared.originalName,
+      "image-upload",
     );
+    if (saved instanceof Response) return saved;
     if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
-    expense.imageFile = filename;
-    expense.imageMime = storedMime;
-    expense.originalName = prepared.originalName;
+    expense.imageFile = saved.filename;
+    expense.imageMime = saved.mime;
+    expense.originalName = saved.originalName;
     expense.updatedAt = new Date().toISOString();
     // Rename to convention immediately if date+report already set.
     const renamed = await renameImageToConvention(

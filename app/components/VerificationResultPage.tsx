@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock3, ReceiptText, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
+import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
 
 /**
  * Shared shell for the two public verification-link landing pages
@@ -40,32 +41,27 @@ export function VerificationResultPage({
       <CheckCircle2 aria-hidden="true" className="h-6 w-6 text-green-600" />
     );
   return (
-    <main
-      id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
-    >
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 text-center shadow-sm">
-        <div className="mb-4 flex items-center justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-900">
-            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
-          </div>
-        </div>
-        <div className="mb-3 flex items-center justify-center gap-2">
-          {icon}
-          <h1 className="text-lg font-bold">{title}</h1>
-        </div>
-        <div className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
-          {body}
-        </div>
-        <div className="mt-6 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
-          <a
-            href="/login"
-            className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            Sign in to Expense
-          </a>
-        </div>
+    <AuthCard center>
+      <div className="mb-4 flex items-center justify-center">
+        <AuthTile>
+          <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
+        </AuthTile>
       </div>
-    </main>
+      <div className="mb-3 flex items-center justify-center gap-2">
+        {icon}
+        <h1 className="text-lg font-bold">{title}</h1>
+      </div>
+      <div className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
+        {body}
+      </div>
+      <div className="mt-6 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
+        <a
+          href="/login"
+          className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+        >
+          Sign in to Expense
+        </a>
+      </div>
+    </AuthCard>
   );
 }

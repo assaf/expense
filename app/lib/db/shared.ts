@@ -32,6 +32,53 @@ export function createCache<T>(ttlMs: number): CacheStore<T> {
   };
 }
 
+/**
+ * Read-through cache access: return the cached value when present, else run
+ * `loader`, store, and return its result. Replaces the copy-pasted
+ * `if (!isTest) { … get … } … set` choreography in the domain modules.
+ *
+ * An `undefined` loader result is deliberately NOT stored — a failed lookup
+ * must keep querying until it succeeds (see findUserById / readAccount).
+ */
+export async function cachedRead<T>(
+  cache: CacheStore<T>,
+  key: string,
+  loader: () => Promise<T>,
+  { evenInTests = false }: { evenInTests?: boolean } = {},
+): Promise<T> {
+  if (!isTest || evenInTests) {
+    const cached = cache.get(key);
+    if (cached !== undefined) return cached;
+  }
+  const value = await loader();
+  if (value !== undefined) cache.set(key, value);
+  return value;
+}
+
+/** Invalidate one cache entry. Pass a pending mutation to invalidate only
+ * after it settles, passing its result through — replaces the copy-pasted
+ * `.then((r) => { cache.delete(key); return r; })` blocks. Like those
+ * blocks, a rejected mutation leaves the stale entry in place. */
+export function bust<T>(cache: CacheStore<T>, key: string): void;
+export function bust<T, R>(
+  cache: CacheStore<T>,
+  key: string,
+  mutation: Promise<R>,
+): Promise<R>;
+export function bust<T, R>(
+  cache: CacheStore<T>,
+  key: string,
+  mutation?: Promise<R>,
+): Promise<R> | void {
+  if (mutation) {
+    return mutation.then((r) => {
+      cache.delete(key);
+      return r;
+    });
+  }
+  cache.delete(key);
+}
+
 /** Verification links (account signup + receipts-by-email sender) expire
  * 7 days after the email is sent. */
 export const VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;

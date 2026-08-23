@@ -1,6 +1,6 @@
 import prisma from "~/lib/prisma.server";
 import { summarizeByReport } from "~/lib/format";
-import { createCache, isTest } from "~/lib/db/shared";
+import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
 import { deleteReceiptImages, readExpenses } from "~/lib/db/expenses";
 import type { Report } from "~/lib/types";
@@ -12,18 +12,14 @@ import type { Report } from "~/lib/types";
 const reportsCache = createCache<Report[]>(300_000);
 
 export async function readReports(accountId: string): Promise<Report[]> {
-  if (!isTest) {
-    const cached = reportsCache.get(accountId);
-    if (cached !== undefined) return cached;
-  }
-  const rows = await prisma.report.findMany({
-    where: { accountId, name: { not: "" } },
-    orderBy: { id: "asc" },
-    select: { name: true, closed: true },
+  return cachedRead(reportsCache, accountId, async () => {
+    const rows = await prisma.report.findMany({
+      where: { accountId, name: { not: "" } },
+      orderBy: { id: "asc" },
+      select: { name: true, closed: true },
+    });
+    return rows.map((r) => ({ name: r.name, closed: r.closed }));
   });
-  const reports = rows.map((r) => ({ name: r.name, closed: r.closed }));
-  reportsCache.set(accountId, reports);
-  return reports;
 }
 
 /**
@@ -147,10 +143,11 @@ export function addReport(
   accountId: string,
   name: string,
 ): Promise<NamedResult> {
-  return addNamedRow(prisma.report, "report", accountId, name).then((r) => {
-    reportsCache.delete(accountId);
-    return r;
-  });
+  return bust(
+    reportsCache,
+    accountId,
+    addNamedRow(prisma.report, "report", accountId, name),
+  );
 }
 
 /**
@@ -173,7 +170,7 @@ export async function removeReport(
     prisma.expense.deleteMany({ where: { accountId, report: name } }),
     prisma.report.deleteMany({ where: { accountId, name } }),
   ]);
-  reportsCache.delete(accountId);
+  bust(reportsCache, accountId);
 }
 
 /**
@@ -187,17 +184,11 @@ export function renameReport(
   name: string,
   newName: string,
 ): Promise<NamedResult> {
-  return renameNamedRow(
-    prisma.report,
-    "report",
-    "report",
+  return bust(
+    reportsCache,
     accountId,
-    name,
-    newName,
-  ).then((r) => {
-    reportsCache.delete(accountId);
-    return r;
-  });
+    renameNamedRow(prisma.report, "report", "report", accountId, name, newName),
+  );
 }
 
 /** Mark a report closed (or reopen it). Closed reports delete with confirmation. */
@@ -210,5 +201,5 @@ export async function setReportClosed(
     where: { accountId, name },
     data: { closed },
   });
-  reportsCache.delete(accountId);
+  bust(reportsCache, accountId);
 }

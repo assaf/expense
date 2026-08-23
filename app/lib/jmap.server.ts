@@ -10,7 +10,22 @@
  */
 
 const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
-const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts — the
+ * app's own mailbox — and this module's per-token client) abort hung
+ * requests with it; only constants/helpers are shared between them, never
+ * the clients themselves (their error contracts differ on purpose). */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+/** Format a JMAP address participant as "Name <email>" (bare email when
+ * there is no name; null when there is no address at all). Shared by both
+ * raw-email readers. */
+export function formatAddress(
+  a?: { name?: string; email?: string } | null,
+): string | null {
+  if (!a?.email) return null;
+  return a.name ? `${a.name} <${a.email}>` : a.email;
+}
 
 /** What "verify this token" resolved to. */
 export interface JmapTokenInfo {

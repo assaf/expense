@@ -11,7 +11,6 @@ import type {
 } from "~/lib/email-render.server";
 import { htmlToText } from "~/lib/html-text";
 import { fetchPublicUrl } from "~/lib/ssrf.server";
-export { isPrivateHost } from "~/lib/ssrf.server";
 import { isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
@@ -290,6 +289,25 @@ function isEmlMeta(meta: AttachmentMeta): boolean {
   );
 }
 
+/** Download a small .eml attachment (the embedded original message) as
+ * UTF-8 text. Null when there is none, it is empty, or it is >= 1 MB —
+ * beyond that it is not worth parsing for quoted headers. The text is
+ * capped at 100k chars; the headers the callers want live at the top.
+ * Shared by the bounce reader, the receipt-date reader, and the
+ * forwarded-sender reader. */
+async function readSmallEmlAttachment(
+  attachments: AttachmentMeta[],
+  deps: Pick<InboundDeps, "downloadAttachment">,
+): Promise<string | null> {
+  const eml = attachments.find(isEmlMeta);
+  if (!eml || eml.size === 0 || (eml.size ?? Infinity) >= 1_000_000) {
+    return null;
+  }
+  return (await deps.downloadAttachment(eml))
+    .toString("utf8")
+    .slice(0, 100_000);
+}
+
 /**
  * Heuristic score: PDFs and images are candidates; logos/signatures (tiny,
  * inline, or named) are penalized; inline images referenced by the HTML
@@ -515,6 +533,26 @@ export function confirmationEmail(opts: ConfirmationEmailOptions): {
   });
   return { subject, html: confirmationHtml(opts, subject) };
 }
+/** The free-text notes under a confirmation's summary: the extraction's own
+ * notes plus caveats (non-USD amount, body-render failure). Empty pieces
+ * drop out. Shared by both pipelines' confirmation builders. */
+export function confirmationNotes(opts: {
+  notes?: string | null;
+  currency?: string | null;
+  renderError?: string | null;
+}): string {
+  return [
+    opts.notes,
+    opts.currency && opts.currency !== "USD"
+      ? `Amount is in ${opts.currency} — the app assumes USD.`
+      : "",
+    opts.renderError
+      ? `The email body could not be rendered as a receipt image (${opts.renderError}). You can attach a photo in the app.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 // --- Bounce / auto-reply detection ------------------------------------------
 //
@@ -610,12 +648,9 @@ async function bounceRecipient(
     if (m) return cleanBounceAddress(m[1]!);
   }
   // The embedded original message carries the To header of the failed send.
-  const eml = attachments.find(isEmlMeta);
-  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
-    try {
-      const text = (await deps.downloadAttachment(eml))
-        .toString("utf8")
-        .slice(0, 100_000);
+  try {
+    const text = await readSmallEmlAttachment(attachments, deps);
+    if (text) {
       const to = /^[ \t]*To:[ \t]*(.+)$/im.exec(text);
       if (to) {
         const addr = /<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/i.exec(
@@ -623,9 +658,9 @@ async function bounceRecipient(
         );
         if (addr) return cleanBounceAddress(addr[1]!);
       }
-    } catch {
-      // Best effort — a broken attachment must not fail the drain.
     }
+  } catch {
+    // Best effort — a broken attachment must not fail the drain.
   }
   return null;
 }
@@ -682,17 +717,12 @@ async function originalForwardedSender(
   attachments: AttachmentMeta[],
   deps: Pick<InboundDeps, "downloadAttachment">,
 ): Promise<string | null> {
-  const eml = attachments.find(isEmlMeta);
-  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
-    const text = (await deps.downloadAttachment(eml))
-      .toString("utf8")
-      .slice(0, 100_000);
-    const match = text.match(FORWARD_FROM_RE);
-    if (match) return domainOf(match[1]!);
-  }
+  const emlText = await readSmallEmlAttachment(attachments, deps);
+  const emlMatch = emlText?.match(FORWARD_FROM_RE);
+  if (emlMatch) return domainOf(emlMatch[1]!);
   const body = email.text || htmlToText(email.html ?? "");
-  const match = body.match(FORWARD_FROM_RE);
-  if (match) return domainOf(match[1]!);
+  const bodyMatch = body.match(FORWARD_FROM_RE);
+  if (bodyMatch) return domainOf(bodyMatch[1]!);
   return null;
 }
 
@@ -743,14 +773,10 @@ export async function selectReceiptSource(
   deps: InboundDeps,
 ): Promise<SelectedReceiptSource> {
   // Original email date: forwarded-quote → .eml → received header.
-  const eml = attachments.find(isEmlMeta);
-  let emlText: string | undefined;
-  if (eml && eml.size !== 0 && (eml.size ?? Infinity) < 1_000_000) {
-    emlText = (await deps.downloadAttachment(eml))
-      .toString("utf8")
-      .slice(0, 100_000);
-  }
-  const expenseDate = extractExpenseDate(email, emlText);
+  const expenseDate = extractExpenseDate(
+    email,
+    (await readSmallEmlAttachment(attachments, deps)) ?? undefined,
+  );
 
   // Pick the receipt: best attachment, LLM tiebreak, else the email body.
   const pick = pickReceiptAttachment(attachments, email.html ?? "");
@@ -1310,17 +1336,11 @@ export async function processInboundEvent(
         category,
         report,
         description: extraction.description,
-        notes: [
-          extraction.notes,
-          extraction.currency && extraction.currency !== "USD"
-            ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
-            : "",
-          renderError
-            ? `The email body could not be rendered as a receipt image (${renderError}). You can attach a photo in the app.`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" "),
+        notes: confirmationNotes({
+          notes: extraction.notes,
+          currency: extraction.currency,
+          renderError,
+        }),
         missing,
         reportStats,
       });
@@ -1351,14 +1371,10 @@ export async function processInboundEvent(
       category,
       report,
       description: extraction.description,
-      notes: [
-        extraction.notes,
-        extraction.currency && extraction.currency !== "USD"
-          ? `Amount is in ${extraction.currency} \u2014 the app assumes USD.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
+      notes: confirmationNotes({
+        notes: extraction.notes,
+        currency: extraction.currency,
+      }),
       missing: [],
       reportStats,
     });

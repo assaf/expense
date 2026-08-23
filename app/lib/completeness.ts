@@ -2,7 +2,7 @@ import type { Expense } from "~/lib/types";
 import { parseAmount } from "~/lib/money";
 
 /** A non-zero monetary amount is required for completeness (0 / empty = incomplete). */
-function hasAmount(amount: string): boolean {
+export function hasAmount(amount: string): boolean {
   const d = parseAmount(amount);
   return d !== null && !d.isZero();
 }
@@ -33,8 +33,14 @@ export function isMileageComplete(
     e.category.trim() &&
     e.report.trim() &&
     hasAmount(e.amount) &&
-    e.locations.filter((l) => l.address.trim()).length >= 2,
+    hasEnoughStops(e.locations),
   );
+}
+
+/** A trip needs at least two non-empty stop addresses (shared by the
+ * completeness check and MCP logMileage validation). */
+export function hasEnoughStops(locations: Array<{ address: string }>): boolean {
+  return locations.filter((l) => l.address.trim()).length >= 2;
 }
 
 export function isComplete(e: Expense): boolean {

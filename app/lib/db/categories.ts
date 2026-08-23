@@ -1,5 +1,5 @@
 import prisma from "~/lib/prisma.server";
-import { createCache, isTest } from "~/lib/db/shared";
+import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
 import type { Category } from "~/lib/types";
 
@@ -7,20 +7,16 @@ import type { Category } from "~/lib/types";
 const categoriesCache = createCache<Category[]>(300_000);
 
 export async function readCategories(accountId: string): Promise<Category[]> {
-  if (!isTest) {
-    const cached = categoriesCache.get(accountId);
-    if (cached !== undefined) return cached;
-  }
-  const rows = await prisma.category.findMany({
-    where: { accountId, name: { not: "" } },
-    select: { name: true },
+  return cachedRead(categoriesCache, accountId, async () => {
+    const rows = await prisma.category.findMany({
+      where: { accountId, name: { not: "" } },
+      select: { name: true },
+    });
+    return rows
+      .map((c) => c.name)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+      .map((name) => ({ name }));
   });
-  const categories = rows
-    .map((c) => c.name)
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
-    .map((name) => ({ name }));
-  categoriesCache.set(accountId, categories);
-  return categories;
 }
 
 /**
@@ -32,17 +28,18 @@ export function renameCategory(
   name: string,
   newName: string,
 ): Promise<NamedResult> {
-  return renameNamedRow(
-    prisma.category,
-    "category",
-    "category",
+  return bust(
+    categoriesCache,
     accountId,
-    name,
-    newName,
-  ).then((r) => {
-    categoriesCache.delete(accountId);
-    return r;
-  });
+    renameNamedRow(
+      prisma.category,
+      "category",
+      "category",
+      accountId,
+      name,
+      newName,
+    ),
+  );
 }
 
 /**
@@ -53,10 +50,11 @@ export function addCategory(
   accountId: string,
   name: string,
 ): Promise<NamedResult> {
-  return addNamedRow(prisma.category, "category", accountId, name).then((r) => {
-    categoriesCache.delete(accountId);
-    return r;
-  });
+  return bust(
+    categoriesCache,
+    accountId,
+    addNamedRow(prisma.category, "category", accountId, name),
+  );
 }
 
 export async function removeCategory(
@@ -64,5 +62,5 @@ export async function removeCategory(
   name: string,
 ): Promise<void> {
   await prisma.category.deleteMany({ where: { accountId, name } });
-  categoriesCache.delete(accountId);
+  bust(categoriesCache, accountId);
 }

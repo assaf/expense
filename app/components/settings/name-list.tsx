@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
+import { AddNameForm } from "~/components/AddNameForm";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { countLabel } from "~/lib/format";
@@ -30,29 +31,12 @@ export function NameList<T extends { name: string }>({
   /** Full row content for every item in the list. */
   renderItem: (item: T) => ReactNode;
 }) {
-  const fetcher = useFetcher<{ ok: boolean; name?: string; error?: string }>();
   const [flashName, setFlashName] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const flashRef = useRef<HTMLLIElement | null>(null);
 
-  // A new entry landed (fetcher, no page navigation): flash it and clear
-  // the add input. A rejected add (duplicate) shows its error inline. The
-  // loader revalidation has already added the row by the time this runs,
-  // so the flash ref is available on the next render.
-  useEffect(() => {
-    const { data } = fetcher;
-    if (!data) return;
-    if (data.ok && data.name) {
-      setFlashName(data.name);
-      setError(null);
-      setDraft("");
-    } else if (data.error) {
-      setError(data.error);
-    }
-  }, [fetcher.data]);
-
-  // Time-box the flash and bring the new row into view.
+  // A new entry landed (the add fetcher, no page navigation): flash it.
+  // The loader revalidation has already added the row by the time this
+  // runs, so the flash ref is available on the next render.
   useEffect(() => {
     if (!flashName) return;
     flashRef.current?.scrollIntoView({
@@ -96,33 +80,11 @@ export function NameList<T extends { name: string }>({
           ))
         )}
       </ul>
-      <fetcher.Form method="post" className="flex items-center gap-2">
-        <input type="hidden" name="intent" value={addIntent} />
-        <Input
-          type="text"
-          name="name"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setError(null);
-          }}
-          placeholder={addPlaceholder}
-          aria-invalid={error ? true : undefined}
-          invalid={!!error}
-          className="flex-1"
-        />
-        <Button
-          type="submit"
-          size="md"
-          variant="secondary"
-          disabled={!draft.trim()}
-        >
-          <Plus aria-hidden="true" className="h-4 w-4" /> Add
-        </Button>
-      </fetcher.Form>
-      {error ? (
-        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
-      ) : null}
+      <AddNameForm
+        intent={addIntent}
+        placeholder={addPlaceholder}
+        onAdded={(name) => setFlashName(name)}
+      />
     </section>
   );
 }

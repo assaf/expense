@@ -1,19 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  MapPin,
-  LogOut,
-  RefreshCw,
-  Settings,
-} from "lucide-react";
-import { Form, Link, redirect } from "react-router";
+import { Check, MapPin, LogOut, RefreshCw, Settings } from "lucide-react";
+import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Badge } from "~/components/ui/Badge";
+import { PageShell } from "~/components/PageShell";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
 import { requireUser } from "~/lib/auth.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { geocode } from "~/lib/maps.server";
 import {
   readAccount,
@@ -77,9 +73,7 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   switch (intent) {
     case "regenerateCode":
@@ -150,21 +144,11 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     [today, rates],
   );
   return (
-    <main
-      id="main-content"
-      className="settings-page mx-auto max-w-2xl px-4 py-8"
+    <PageShell
+      className="settings-page"
+      icon={<Settings aria-hidden="true" className="h-6 w-6" />}
+      title="Settings"
     >
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Settings aria-hidden="true" className="h-6 w-6" /> Settings
-        </h1>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
-            expenses
-          </Link>
-        </Button>
-      </header>
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-semibold">Account</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
@@ -213,9 +197,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                       {member.email}
                     </span>
                     {member.email === userEmail ? (
-                      <span className="shrink-0 rounded-full bg-blue-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
+                      <Badge tone="blue" className="shrink-0">
                         You
-                      </span>
+                      </Badge>
                     ) : null}
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
@@ -223,13 +207,17 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                       Joined {formatShortDate(member.createdAt)}
                     </span>
                     {member.emailVerifiedAt ? (
-                      <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-                        <Check aria-hidden="true" className="h-3 w-3" /> Active
-                      </span>
+                      <Badge
+                        tone="green"
+                        className="shrink-0"
+                        icon={<Check aria-hidden="true" className="h-3 w-3" />}
+                      >
+                        Active
+                      </Badge>
                     ) : (
-                      <span className="shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                      <Badge tone="amber" className="shrink-0">
                         Waiting to verify
-                      </span>
+                      </Badge>
                     )}
                   </span>
                 </li>
@@ -321,6 +309,6 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Form>
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

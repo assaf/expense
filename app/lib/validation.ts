@@ -27,14 +27,33 @@ export function unknownIntent(): Response {
   return Response.json({ error: "Unknown intent." }, { status: 400 });
 }
 
+/** JSON error envelope ({ error }, 400) shared by every route so the shape
+ * can't drift apart. Callers return it directly. Lives here (not
+ * route-helpers.server) so lightweight routes — webhooks whose tests mock
+ * ~/lib/env narrowly — don't pull in the auth/Prisma module graph. */
+export function badRequest(error: string): Response {
+  return Response.json({ error }, { status: 400 });
+}
+
+/** JSON 404 envelope. Loader/action callers throw it — React Router renders
+ * the nearest error boundary, which never reads the body text, so the JSON
+ * shape only matters to API-style routes that return it directly. */
+export function notFound(): Response {
+  return Response.json({ error: "Not found" }, { status: 404 });
+}
+
 /**
  * Pragmatic email check: non-empty local part, @, dotted domain, no spaces.
  * Not RFC-complete (no IDN/quoting rules) — good enough to keep typos and
  * junk out of the login identity, which is all this app needs.
  */
+/** Address shape only (no 254-char cap) — shared by isEmail and the
+ * sender-rule matcher, which intentionally accept longer addresses. */
+export const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export function isEmail(input: string): boolean {
   const email = input.trim().toLowerCase();
-  return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+  return email.length <= 254 && EMAIL_SHAPE_RE.test(email);
 }
 
 /** "Name <a@b.com>" → "a@b.com" (trimmed, lowercased). Shared by the inbound

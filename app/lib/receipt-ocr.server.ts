@@ -7,7 +7,12 @@ import type { PDFPageProxy } from "pdfjs-dist";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
-import { pdfImageName } from "~/lib/images.server";
+import {
+  pdfImageName,
+  readUploadedFile,
+  saveImage,
+  uploadErrorMessage,
+} from "~/lib/images.server";
 import { RECEIPT_OCR_MODE, RECEIPT_VISION_MAX_WIDTH } from "~/lib/env";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
@@ -384,6 +389,61 @@ export async function prepareUploadedReceipt(
     console.warn(`[${logTag}] PDF render failed:`, err);
     return null;
   }
+}
+
+/**
+ * Read an uploaded receipt file from the form's `file` field, returning the
+ * routes' shared 400 on rejection. The common prefix of every
+ * upload-consuming intent (draft upload, image replace, OCR).
+ */
+export async function readUploadOr400(
+  form: FormData,
+): Promise<Response | { buffer: Buffer; mime: string; originalName: string }> {
+  const uploaded = await readUploadedFile(form);
+  if (!uploaded.ok) {
+    return Response.json(
+      { error: uploadErrorMessage(uploaded.error) },
+      { status: 400 },
+    );
+  }
+  return {
+    buffer: uploaded.buffer,
+    mime: uploaded.mime,
+    originalName: uploaded.originalName,
+  };
+}
+
+/**
+ * Full upload-to-storage preamble for intents that persist receipt bytes:
+ * readUploadOr400, PDF rasterization (an unreadable PDF is the shared
+ * "Couldn't read that PDF." 400), then saveImage. Both persisting call
+ * sites consume the result identically (filename/mime/originalName), so
+ * storage lives here; OCR-only intents stop at readUploadOr400 instead.
+ */
+export async function prepareUploadOr400(
+  form: FormData,
+  accountId: string,
+  logTag: string,
+): Promise<
+  Response | { filename: string; mime: string; originalName: string }
+> {
+  const uploaded = await readUploadOr400(form);
+  if (uploaded instanceof Response) return uploaded;
+  const prepared = await prepareUploadedReceipt(uploaded, logTag);
+  if (prepared === null) {
+    return Response.json({ error: "Couldn't read that PDF." }, { status: 400 });
+  }
+  const saved = await saveImage(
+    accountId,
+    prepared.buffer,
+    prepared.mime,
+    prepared.originalName,
+  );
+  return {
+    filename: saved.filename,
+    mime: saved.mime,
+    originalName: prepared.originalName,
+  };
 }
 
 /**

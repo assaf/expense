@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Trash2, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
+import { isReceiptFile } from "~/lib/file-types";
 import { findDuplicates } from "~/lib/duplicates";
 import { todayDate } from "~/lib/format";
 import { imageVersion } from "~/lib/image-version";
 import { usePasteImage } from "~/lib/use-paste-image";
+import { useDropTarget } from "~/lib/use-drop-target";
 import type { ReceiptExpense } from "~/lib/types";
 import {
   ClosedReportBanner,
@@ -71,10 +73,14 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<"convert" | "ocr" | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  const drop = useDropTarget({
+    enabled: !reportClosed,
+    accepts: isReceiptFile,
+    onFile: (file) => void replaceImage(file),
+    message: "Receipt file detected — drop to replace",
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
-  const dragDepth = useRef(0);
 
   const complete = useMemo(
     () => isComplete({ ...expense, date, merchant, amount, report, category }),
@@ -282,52 +288,6 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   // Paste an image anywhere to replace the receipt image.
   usePasteImage(replaceImage);
 
-  /** The file types the drop zone accepts — matches the upload input. */
-  function isReceiptFile(file: File): boolean {
-    return (
-      file.type.startsWith("image/") ||
-      file.type === "application/pdf" ||
-      /\.pdf$/i.test(file.name)
-    );
-  }
-
-  // dragenter/dragleave fire for every child element crossed, so track depth
-  // instead of toggling on each event — prevents the highlight from
-  // flickering. Closed reports are read-only: no highlight, and the drop is
-  // left to the browser's default (which ignores it).
-  function onDragEnter(e: DragEvent<HTMLElement>) {
-    if (reportClosed) return;
-    e.preventDefault();
-    dragDepth.current += 1;
-    setDragOver(true);
-  }
-
-  function onDragOver(e: DragEvent<HTMLElement>) {
-    if (reportClosed) return;
-    // preventDefault is required to turn the drag into a drop target.
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  }
-
-  function onDragLeave(e: DragEvent<HTMLElement>) {
-    if (reportClosed) return;
-    e.preventDefault();
-    dragDepth.current -= 1;
-    if (dragDepth.current <= 0) {
-      dragDepth.current = 0;
-      setDragOver(false);
-    }
-  }
-
-  function onDrop(e: DragEvent<HTMLElement>) {
-    if (reportClosed) return;
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && isReceiptFile(file)) void replaceImage(file);
-  }
-
   function onSave() {
     const form = new FormData();
     form.set("intent", "save");
@@ -369,10 +329,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       nav={data.nav}
       dimmed={!!transition}
       onBack={isNew ? onCancel : undefined}
-      drop={{ over: dragOver, onDragEnter, onDragOver, onDragLeave, onDrop }}
+      drop={drop}
     >
       <div className="sr-only" role="status" aria-live="polite">
-        {dragOver ? "Receipt file detected — drop to replace" : ""}
+        {drop.message}
       </div>
       <ErrorBanner error={error} />
       {reportClosed ? <ClosedReportBanner /> : null}

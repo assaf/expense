@@ -11,13 +11,14 @@ import {
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
 import { readReports } from "~/lib/db/reports";
-import { formString, unknownIntent } from "~/lib/validation";
+import { badRequest, notFound, unknownIntent } from "~/lib/validation";
+import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/expense.$id";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const expense = await readExpense(params.id, user.accountId);
-  if (!expense) throw new Response("Not found", { status: 404 });
+  if (!expense) throw notFound();
   // Editor context (reports, categories, merchants, home, rate) and the
   // prev/next neighbours for the ← → arrows — two targeted queries instead
   // of loading every expense.
@@ -42,11 +43,9 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  const user = await requireUser(request);
+  const { user, form, intent } = await requireIntent(request);
   const existing = await readExpense(params.id, user.accountId);
-  if (!existing) throw new Response("Not found", { status: 404 });
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  if (!existing) throw notFound();
 
   if (intent === "delete") {
     await deleteExpense(params.id, user.accountId);
@@ -63,15 +62,13 @@ export async function action({ request, params }: Route.ActionArgs) {
         (r) => r.name === existing.report && r.closed,
       );
       if (closed) {
-        return Response.json(
-          { error: "This expense is in a closed report and cannot be edited." },
-          { status: 400 },
+        return badRequest(
+          "This expense is in a closed report and cannot be edited.",
         );
       }
     }
     const result = await saveExpenseFromForm(form, user.accountId, existing);
-    if (result.error)
-      return Response.json({ error: result.error }, { status: 400 });
+    if (result.error) return badRequest(result.error);
     return redirect("/");
   }
 

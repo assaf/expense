@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { BadgeCheck, Loader2, Plus } from "lucide-react";
 import { Link, useFetcher } from "react-router";
+import { SelectField } from "~/components/editor/editor-shared";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
@@ -370,7 +372,7 @@ function MatchedRowCard({
   const decision = useRowDecision(runId, row.index);
   const { busy, submit } = decision;
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-green-200 dark:border-green-800 bg-green-50/50 p-3">
+    <Card variant="green" className="flex flex-wrap items-center gap-3 p-3">
       <RowFacts row={row} />
       <div className="flex shrink-0 flex-col items-end gap-1">
         {candidate ? (
@@ -414,7 +416,7 @@ function MatchedRowCard({
         categories={categories}
         className="basis-full"
       />
-    </div>
+    </Card>
   );
 }
 
@@ -438,7 +440,7 @@ function ReviewRowCard({
   const candidates = match?.status === "review" ? match.candidates : [];
 
   return (
-    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50 p-3">
+    <Card variant="amber" className="p-3">
       <div className="flex flex-wrap items-center gap-3">
         <RowFacts row={row} />
         <div className="flex shrink-0 items-center gap-2">
@@ -516,7 +518,7 @@ function ReviewRowCard({
         categories={categories}
         className="mt-2"
       />
-    </div>
+    </Card>
   );
 }
 
@@ -525,7 +527,7 @@ function ReviewRowCard({
 function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
   const { busy, submit } = useRowDecision(runId, row.index);
   return (
-    <div className="rounded-xl border border-blue-200 dark:border-gray-600 bg-blue-50/50 dark:bg-blue-900/50 p-3">
+    <Card variant="blue" className="p-3">
       <div className="flex items-center gap-3">
         <RowFacts row={row} />
         <div className="flex shrink-0 items-center gap-2 text-sm">
@@ -542,7 +544,7 @@ function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
           </button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -616,20 +618,14 @@ function NewExpenseForm({
           ))}
         </Select>
       </Field>
-      <Field label="Category" className="min-w-36">
-        <Select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="h-9"
-        >
-          <option value="">—</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <SelectField
+        label="Category"
+        value={category}
+        onChange={setCategory}
+        options={categories}
+        className="min-w-36"
+        selectClassName="h-9"
+      />
       <Field label="Description" className="min-w-48 flex-1">
         <Input
           value={description}

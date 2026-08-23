@@ -10,7 +10,9 @@ import {
   X,
 } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
+import { useNameAdd } from "~/components/AddNameForm";
 import { PageShell, type DropTarget } from "~/components/PageShell";
+import { Alert } from "~/components/ui/Alert";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
@@ -135,26 +137,35 @@ export function Shell({
   );
 }
 
-function SelectField({
+/** A labeled single select with an em-dash empty option; a current value
+ * missing from the options is prepended so it still shows. */
+export function SelectField({
   label,
   value,
   onChange,
   options,
   disabled,
+  className,
+  selectClassName,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
   disabled?: boolean;
+  /** Extra classes for the Field wrapper (e.g. grid sizing). */
+  className?: string;
+  /** Extra classes for the underlying Select (e.g. h-9). */
+  selectClassName?: string;
 }) {
   const opts =
     value && !options.includes(value) ? [value, ...options] : options;
   return (
-    <Field label={label}>
+    <Field label={label} className={className}>
       <Select
         value={value}
         disabled={disabled}
+        className={selectClassName}
         onChange={(e) => onChange(e.target.value)}
       >
         <option value="">—</option>
@@ -209,14 +220,7 @@ export function useEditorFlow() {
  * when there is no error. */
 export function ErrorBanner({ error }: { error: string }) {
   if (!error) return null;
-  return (
-    <p
-      role="alert"
-      className="mb-4 rounded-lg bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-400"
-    >
-      {error}
-    </p>
-  );
+  return <Alert className="mb-4 text-red-700 dark:text-red-400">{error}</Alert>;
 }
 
 /**
@@ -347,41 +351,24 @@ function ReportField({
   reports: string[];
   disabled?: boolean;
 }) {
-  const fetcher = useFetcher<{ ok: boolean; name?: string; error?: string }>();
-  const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // A created report becomes the selection and closes the input; a rejected
-  // add (empty or duplicate name) keeps the input open with its error.
-  useEffect(() => {
-    const { data } = fetcher;
-    if (!data) return;
-    if (data.ok && data.name) {
-      onChange(data.name);
+  const { draft, updateDraft, error, submit, reset } = useNameAdd({
+    intent: "addReport",
+    onAdded: (name) => {
+      onChange(name);
       setCreating(false);
-      setDraft("");
-      setError(null);
-    } else if (data.error) {
-      setError(data.error);
-    }
-  }, [fetcher.data, onChange]);
+    },
+  });
+  const [creating, setCreating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Focus the name input as soon as the inline form opens.
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
-  const submit = () => {
-    const name = draft.trim();
-    if (!name) return;
-    void fetcher.submit({ intent: "addReport", name }, { method: "post" });
-  };
   const cancel = () => {
     setCreating(false);
-    setDraft("");
-    setError(null);
+    reset();
   };
 
   if (creating) {
@@ -392,10 +379,7 @@ function ReportField({
             ref={inputRef}
             type="text"
             value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setError(null);
-            }}
+            onChange={(e) => updateDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -439,7 +423,7 @@ function ReportField({
         onChange={(e) => {
           if (e.target.value === NEW_REPORT) {
             setCreating(true);
-            setError(null);
+            reset();
           } else {
             onChange(e.target.value);
           }
@@ -536,7 +520,7 @@ export function EditorActions({
   if (readOnly) return null;
   return (
     <div className="mt-8 flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4">
-      {onDelete && !readOnly ? (
+      {onDelete ? (
         <Button
           type="button"
           variant="danger"

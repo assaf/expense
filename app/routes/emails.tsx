@@ -1,12 +1,13 @@
-import { ArrowLeft, Mail } from "lucide-react";
-import { Link, redirect } from "react-router";
-import { Button } from "~/components/ui/Button";
+import { Mail } from "lucide-react";
+import { redirect } from "react-router";
+import { PageShell } from "~/components/PageShell";
 import { EmailAccountsSection } from "~/components/settings/email-accounts";
 import {
   AddSenderForm,
   SenderRow,
 } from "~/components/settings/receipts-by-email";
 import { requireUser } from "~/lib/auth.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { sendVerificationEmail } from "~/lib/sender-verification.server";
 import { readAccount } from "~/lib/db/accounts";
@@ -62,9 +63,7 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   switch (intent) {
     case "addInboundSender": {
@@ -190,18 +189,11 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
     emailAccountsConfigured,
   } = loaderData;
   return (
-    <main id="main-content" className="emails-page mx-auto max-w-2xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Mail aria-hidden="true" className="h-6 w-6" /> Email
-        </h1>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
-            expenses
-          </Link>
-        </Button>
-      </header>
+    <PageShell
+      className="emails-page"
+      icon={<Mail aria-hidden="true" className="h-6 w-6" />}
+      title="Email"
+    >
       <p className="-mt-3 mb-6 text-sm text-gray-500 dark:text-gray-400">
         How receipts get into Expense by email: connect your mailbox for
         automatic import, or forward receipts to a dedicated address.
@@ -271,6 +263,6 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
           <AddSenderForm />
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

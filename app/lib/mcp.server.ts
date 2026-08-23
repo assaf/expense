@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import Decimal from "decimal.js";
+import { hasEnoughStops } from "~/lib/completeness";
 import {
   isOAuthToken,
   issueTokenPair,
@@ -915,6 +916,26 @@ function serializeExpense(e: Expense) {
   };
 }
 
+/** Shared prelude of the two write tools: resolve the expense date
+ * (omitted means UTC today) and the trimmed report, then validate both.
+ * Returns the fail payload instead of values when validation rejects the
+ * input. serverUtcNow comes back so the client can resolve the user's local
+ * date (the client knows its timezone; the server runs UTC). */
+async function validatedExpenseInput(
+  accountId: string,
+  args: { date?: string; report?: string },
+): Promise<
+  | { ok: true; date: string; report: string; serverUtcNow: string }
+  | { ok: false; result: ToolResult }
+> {
+  const serverUtcNow = new Date().toISOString();
+  const date = args.date ?? serverUtcNow.slice(0, 10);
+  const report = args.report?.trim() ?? "";
+  const inputError = await validateExpenseInputs(accountId, date, report);
+  if (inputError) return { ok: false, result: fail(inputError) };
+  return { ok: true, date, report, serverUtcNow };
+}
+
 /**
  * Capture a receipt: decode the input, run the app's extraction pipeline
  * (DeepSeek vision/OCR, falling back to tesseract; category resolved from
@@ -1024,14 +1045,9 @@ async function captureReceipt(
     categories,
   );
   const amount = normalizeAmount(args.amount ?? extracted?.amount ?? "");
-  // The server's clock is UTC (Vercel) — date omitted means UTC today, and
-  // serverUtcNow is returned so the client can resolve the user's local
-  // date (the client knows its own timezone; the server doesn't).
-  const serverUtcNow = new Date().toISOString();
-  const date = args.date ?? serverUtcNow.slice(0, 10);
-  const report = args.report?.trim() ?? "";
-  const inputError = await validateExpenseInputs(accountId, date, report);
-  if (inputError) return fail(inputError);
+  const input = await validatedExpenseInput(accountId, args);
+  if (!input.ok) return input.result;
+  const { date, report, serverUtcNow } = input;
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
   const expense: ReceiptExpense = {
@@ -1086,20 +1102,16 @@ async function logMileage(
     description?: string;
   },
 ): Promise<ToolResult> {
-  // Server clock is UTC — date omitted means UTC today; serverUtcNow lets
-  // the client resolve its own local date.
-  const serverUtcNow = new Date().toISOString();
-  const date = args.date ?? serverUtcNow.slice(0, 10);
-  const report = args.report?.trim() ?? "";
-  const inputError = await validateExpenseInputs(accountId, date, report);
-  if (inputError) return fail(inputError);
+  const input = await validatedExpenseInput(accountId, args);
+  if (!input.ok) return input.result;
+  const { date, report } = input;
 
   const stops: Location[] = args.locations.map((l) =>
     typeof l === "string"
       ? { address: l, lat: null, lng: null }
       : { address: l.address, lat: l.lat ?? null, lng: l.lng ?? null },
   );
-  if (stops.filter((s) => s.address.trim() !== "").length < 2) {
+  if (!hasEnoughStops(stops)) {
     return fail("A trip needs at least two stops.");
   }
 

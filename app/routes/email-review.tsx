@@ -1,8 +1,10 @@
-import { ArrowLeft, ArrowRight, Inbox } from "lucide-react";
+import { ArrowRight, Inbox } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { PageShell } from "~/components/PageShell";
 import { ReviewInbox } from "~/components/email-review";
 import { requireUser } from "~/lib/auth.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { readEmailConnection } from "~/lib/db/email-connections";
 import {
   ignoreReviewItem,
@@ -61,9 +63,7 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
   const connectionId = formString(form, "connectionId");
 
   // Every action is scoped to a connection the user owns.
@@ -122,17 +122,12 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
   const { connection, items, scannedAt, onboarding } = loaderData;
   if (!connection) {
     return (
-      <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Inbox aria-hidden="true" className="h-6 w-6" /> Review inbox
-          </h1>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/emails">
-              <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to email
-            </Link>
-          </Button>
-        </header>
+      <PageShell
+        backTo="/emails"
+        backLabel="Back to email"
+        icon={<Inbox aria-hidden="true" className="h-6 w-6" />}
+        title="Review inbox"
+      >
         <p className="text-sm text-gray-500 dark:text-gray-400">
           No email connection selected.{" "}
           <Link
@@ -142,32 +137,26 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
             Connect an email account first.
           </Link>
         </p>
-      </main>
+      </PageShell>
     );
   }
 
   return (
-    <main id="main-content" className="mx-auto max-w-2xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Inbox aria-hidden="true" className="h-6 w-6" /> Review inbox
-        </h1>
-        <div className="flex items-center gap-2">
-          {onboarding ? (
-            <Button asChild size="sm">
-              <Link to="/">
-                Finish setup{" "}
-                <ArrowRight aria-hidden="true" className="h-4 w-4" />
-              </Link>
-            </Button>
-          ) : null}
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/emails">
-              <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to email
+    <PageShell
+      backTo="/emails"
+      backLabel="Back to email"
+      icon={<Inbox aria-hidden="true" className="h-6 w-6" />}
+      title="Review inbox"
+      headerRight={
+        onboarding ? (
+          <Button asChild size="sm">
+            <Link to="/">
+              Finish setup <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </Button>
-        </div>
-      </header>
+        ) : null
+      }
+    >
       <p className="-mt-3 mb-6 text-sm text-gray-500 dark:text-gray-400">
         Receipts found in{" "}
         <span className="font-mono">{connection.emailAddress}</span>. Process
@@ -179,6 +168,6 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
         items={items}
         scannedAt={scannedAt}
       />
-    </main>
+    </PageShell>
   );
 }

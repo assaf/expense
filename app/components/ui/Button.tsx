@@ -19,13 +19,11 @@ const buttonVariants = cva(
           "bg-white text-ink border border-gray-300 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:hover:bg-gray-700",
         ghost: "text-ink hover:bg-gray-100 dark:hover:bg-gray-800",
         danger: "bg-red-600 text-white hover:bg-red-700 dark:hover:bg-red-500",
-        link: "text-blue-600 underline-offset-4 hover:underline dark:text-blue-400",
       },
       size: {
         sm: "h-8 px-3 text-sm",
         md: "h-10 px-4 text-sm",
         lg: "h-12 px-6 text-base",
-        icon: "h-9 w-9",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },

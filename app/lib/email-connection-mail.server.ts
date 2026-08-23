@@ -1,6 +1,8 @@
 import {
+  formatAddress,
   jmapCall,
   jmapSessionForToken,
+  REQUEST_TIMEOUT_MS,
   type JmapTokenInfo,
 } from "~/lib/jmap.server";
 import {
@@ -20,8 +22,6 @@ import {
  * `using` capabilities drive everything; the mail account id is only
  * needed for Mailbox/Email calls that require it explicitly.
  */
-
-const REQUEST_TIMEOUT_MS = 30_000;
 
 // --- Mailboxes ---------------------------------------------------------------
 
@@ -143,11 +143,6 @@ export interface RawConnectionEmail {
   from: string | null;
   to: string[];
   messageId: string;
-}
-
-function formatAddress(a?: { name?: string; email?: string }): string | null {
-  if (!a?.email) return null;
-  return a.name ? `${a.name} <${a.email}>` : a.email;
 }
 
 /** The full RFC 5322 source of an email (blob download), plus metadata. */

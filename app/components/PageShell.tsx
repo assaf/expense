@@ -1,6 +1,7 @@
 import type { DragEvent, ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowLeft } from "lucide-react";
+import { Button } from "~/components/ui/Button";
 
 /**
  * Optional drag-and-drop target for the page shell: while a file is dragged
@@ -16,46 +17,92 @@ export type DropTarget = {
   onDragLeave: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
 };
-
 /**
- * Shared page chrome: an optional Back link/button + a page title, inside
- * the standard max-w-2xl container. Used by Settings, Export, and the
- * expense editor shell.
+ * Shared page chrome inside the standard centered container, in one of two
+ * layouts:
+ * - Editor shell (default): an optional Back link/button row above the page
+ *   title, with optional headerRight content beside it.
+ * - Standalone pages (pass `icon`): Settings, Export, Emails, Reconcile and
+ *   the inbox review page render a single toolbar row — icon + title on the
+ *   left, actions and a ghost Back button on the right.
  */
 export function PageShell({
+  icon,
   title,
   backTo = "/",
+  backLabel = "Back to expenses",
   onBack,
   headerRight,
+  className,
+  maxWidth = "max-w-2xl",
   dimmed,
   drop,
   children,
 }: {
-  title: string;
-  /** Where the Back link goes (default: the home page). */
+  /** Optional icon at the start of the h1; passing it selects the toolbar
+   * layout described above. The editor shell omits it. */
+  icon?: ReactNode;
+  /** Page heading. */
+  title: ReactNode;
+  /** Where the Back control goes (default: the home page). */
   backTo?: string;
+  /** Toolbar-layout Back label (default: "Back to expenses"). */
+  backLabel?: string;
   /** When set, renders a Back button that calls this instead of a link. */
   onBack?: () => void;
   /** Optional content on the right side of the header row (e.g. editor nav). */
   headerRight?: ReactNode;
+  /** Extra classes on the <main> element (e.g. page hooks like settings-page). */
+  className?: string;
+  /** Max-width utility for the container (default: max-w-2xl). */
+  maxWidth?: string;
   /** Fade the content while a save/cancel navigation is in flight. */
   dimmed?: boolean;
   /** Drag-and-drop target handlers + outline (receipt editor). */
   drop?: DropTarget;
   children: ReactNode;
 }) {
+  const dropHandlers = drop
+    ? {
+        onDragEnter: drop.onDragEnter,
+        onDragOver: drop.onDragOver,
+        onDragLeave: drop.onDragLeave,
+        onDrop: drop.onDrop,
+      }
+    : {};
+  const containerClass = [className, "mx-auto", maxWidth, "px-4 py-8"]
+    .filter(Boolean)
+    .join(" ");
+
+  // Toolbar layout (`icon` set): the standalone pages put the titled heading
+  // and their actions on one wrapping row. Static — no dim transition.
+  if (icon) {
+    return (
+      <main id="main-content" className={containerClass} {...dropHandlers}>
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            {icon}
+            {title}
+          </h1>
+          <div className="flex items-center gap-2">
+            {headerRight ?? null}
+            <Button asChild variant="ghost" size="sm">
+              <Link to={backTo}>
+                <ArrowLeft aria-hidden="true" className="h-4 w-4" /> {backLabel}
+              </Link>
+            </Button>
+          </div>
+        </header>
+        {children}
+      </main>
+    );
+  }
+
   return (
     <main
       id="main-content"
-      className={`mx-auto max-w-2xl px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400" : ""}`}
-      {...(drop
-        ? {
-            onDragEnter: drop.onDragEnter,
-            onDragOver: drop.onDragOver,
-            onDragLeave: drop.onDragLeave,
-            onDrop: drop.onDrop,
-          }
-        : {})}
+      className={`mx-auto ${maxWidth} px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400" : ""}`}
+      {...dropHandlers}
     >
       <div className="mb-4 flex items-center justify-between">
         {onBack ? (

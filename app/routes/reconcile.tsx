@@ -1,11 +1,12 @@
 import { hash } from "node:crypto";
-import { ArrowLeft, ListChecks } from "lucide-react";
-import { Link, redirect } from "react-router";
+import { ListChecks } from "lucide-react";
+import { redirect } from "react-router";
 import { ulid } from "ulid";
-import { Button } from "~/components/ui/Button";
+import { PageShell } from "~/components/PageShell";
 import { Landing } from "~/components/reconcile/reconcile-landing";
 import { RunPage } from "~/components/reconcile/reconcile-run";
 import { requireUser } from "~/lib/auth.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { formatDate } from "~/lib/format";
 import {
   matchStatementRows,
@@ -74,9 +75,7 @@ export function meta(): Route.MetaDescriptors {
  *    existing is ever deleted.
  */
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   if (intent === "upload") {
     const file = form.get("file");
@@ -214,18 +213,11 @@ export async function action({ request }: Route.ActionArgs) {
 export default function ReconcilePage({ loaderData }: Route.ComponentProps) {
   const run = loaderData.run;
   return (
-    <main id="main-content" className="mx-auto max-w-4xl px-4 py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <ListChecks aria-hidden="true" className="h-6 w-6" /> Reconcile
-        </h1>
-        <Button asChild variant="ghost" size="sm">
-          <Link to="/">
-            <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back to
-            expenses
-          </Link>
-        </Button>
-      </header>
+    <PageShell
+      maxWidth="max-w-4xl"
+      icon={<ListChecks aria-hidden="true" className="h-6 w-6" />}
+      title="Reconcile"
+    >
       {run ? (
         <RunPage
           run={run}
@@ -235,6 +227,6 @@ export default function ReconcilePage({ loaderData }: Route.ComponentProps) {
       ) : (
         <Landing runs={loaderData.runs} />
       )}
-    </main>
+    </PageShell>
   );
 }

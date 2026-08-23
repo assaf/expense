@@ -10,6 +10,7 @@ import {
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { Badge } from "~/components/ui/Badge";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { formatShortDate } from "~/lib/format";
 
@@ -238,9 +239,12 @@ function ReviewRow({
               {senderLabel(item)}
             </span>
             {!item.hasRule ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/40 px-2 py-0.5 text-xs font-medium text-purple-700 dark:text-purple-300">
-                <Sparkles aria-hidden="true" className="h-3 w-3" /> New sender
-              </span>
+              <Badge
+                tone="purple"
+                icon={<Sparkles aria-hidden="true" className="h-3 w-3" />}
+              >
+                New sender
+              </Badge>
             ) : null}
             <span className="text-xs text-gray-400 dark:text-gray-500">
               {formatShortDate(item.receivedAt)}

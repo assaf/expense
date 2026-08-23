@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Plus, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
 import type { InboundSenderRecord } from "~/lib/types";
 
@@ -26,18 +27,22 @@ export function SenderRow({
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-sm">{sender.address}</span>
           {isDefault ? (
-            <span className="shrink-0 rounded-full bg-blue-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
+            <Badge tone="blue" className="shrink-0">
               Your sign-in email
-            </span>
+            </Badge>
           ) : null}
           {sender.verified ? (
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-green-100 dark:bg-green-900/60 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
-              <Check aria-hidden="true" className="h-3 w-3" /> Verified
-            </span>
+            <Badge
+              tone="green"
+              className="shrink-0"
+              icon={<Check aria-hidden="true" className="h-3 w-3" />}
+            >
+              Verified
+            </Badge>
           ) : (
-            <span className="shrink-0 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+            <Badge tone="amber" className="shrink-0">
               Awaiting verification
-            </span>
+            </Badge>
           )}
         </span>
         <div className="flex shrink-0 items-center gap-2">

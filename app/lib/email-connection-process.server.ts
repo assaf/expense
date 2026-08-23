@@ -1,16 +1,17 @@
-import PostalMime from "postal-mime";
-import type { Email as ParsedEmail } from "postal-mime";
 import {
   confirmationEmail,
+  confirmationNotes,
   isDeliveryNotification,
   looksLikeBounce,
   extractReceiptFromSource,
   saveExpenseFromExtraction,
   selectReceiptSource,
-  type AttachmentMeta,
   type InboundDeps,
-  type ReceivedEmail,
 } from "~/lib/inbound-email.server";
+import {
+  createMimeInboundCache,
+  mimeFetchDeps,
+} from "~/lib/mime-inbound.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
 // Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
@@ -70,74 +71,14 @@ export interface ConnectionMailAdapter {
 }
 
 // --- MIME parse (per connection + email id) ------------------------------------
+//
+// fetchReceivedEmail + listAttachments + downloadAttachment are memoized per
+// `${connectionId}:${emailId}` in the shared mime-inbound module (TTL + LRU
+// live there). The cache is dropped per email after it moves to Trash.
 
-interface ParsedEntry {
-  raw: RawConnectionEmail;
-  email: ParsedEmail;
-  fetchedAt: number;
-}
-
-const parseCache = new Map<string, Promise<ParsedEntry>>();
-const PARSE_TTL_MS = 10 * 60_000;
-const PARSE_CACHE_MAX = 20;
-
-async function parsedEmail(
-  key: string,
-  adapter: ConnectionMailAdapter,
-  emailId: string,
-): Promise<ParsedEntry> {
-  const existing = parseCache.get(key);
-  if (existing) {
-    const entry = await existing;
-    if (Date.now() - entry.fetchedAt < PARSE_TTL_MS) return entry;
-    parseCache.delete(key);
-  }
-  const promise = (async () => {
-    const raw = await adapter.rawEmail(emailId);
-    const email = await PostalMime.parse(raw.raw);
-    return { raw, email, fetchedAt: Date.now() };
-  })();
-  if (parseCache.size >= PARSE_CACHE_MAX) {
-    const oldest = parseCache.keys().next().value;
-    if (oldest !== undefined) parseCache.delete(oldest);
-  }
-  parseCache.set(key, promise);
-  return promise;
-}
+const mimeCache = createMimeInboundCache();
 
 // --- InboundDeps over the connection mailbox -----------------------------------
-
-function headerRecord(headers: ParsedEmail["headers"]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const h of headers) out[h.key] = h.value;
-  return out;
-}
-
-function normalizeContentId(contentId: string | undefined): string | null {
-  if (!contentId) return null;
-  return contentId.replace(/^<|>$/g, "");
-}
-
-function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
-  return Buffer.from(content as ArrayBuffer);
-}
-
-function attachmentMeta(
-  emailId: string,
-  attachment: ParsedEmail["attachments"][number],
-  index: number,
-): AttachmentMeta {
-  return {
-    id: `${emailId}:${index}`,
-    filename: attachment.filename ?? `attachment-${index + 1}`,
-    size: toBytes(attachment.content).byteLength,
-    content_type: attachment.mimeType,
-    content_disposition: attachment.disposition,
-    content_id: normalizeContentId(attachment.contentId),
-    download_url: null,
-    expires_at: null,
-  };
-}
 
 /** The extraction/render collaborators the pipeline needs on top of the
  * adapter (tests inject fakes; the real ones come from receipt-ai/-ocr/
@@ -184,50 +125,12 @@ export function connectionInboundDeps(
   extractionDeps: ConnectionDeps,
 ): InboundDeps {
   return {
-    fetchReceivedEmail: async (emailId): Promise<ReceivedEmail> => {
-      const { raw, email } = await parsedEmail(
-        `${connectionId}:${emailId}`,
-        adapter,
-        emailId,
-      );
-      return {
-        id: emailId,
-        from: raw.from ?? "",
-        to: raw.to,
-        subject: email.subject ?? raw.subject,
-        html: email.html ?? null,
-        text: email.text ?? null,
-        headers: headerRecord(email.headers),
-        created_at: raw.receivedAt,
-        message_id: email.messageId ?? raw.messageId,
-      };
-    },
-    listAttachments: async (emailId): Promise<AttachmentMeta[]> => {
-      const { email } = await parsedEmail(
-        `${connectionId}:${emailId}`,
-        adapter,
-        emailId,
-      );
-      return email.attachments.map((a, index) =>
-        attachmentMeta(emailId, a, index),
-      );
-    },
-    downloadAttachment: async (meta): Promise<Buffer> => {
-      const m = /^(.+):(\d+)$/.exec(meta.id ?? "");
-      if (!m) {
-        throw new Error(
-          `Cannot resolve attachment "${meta.id}" — not produced by the connection adapter`,
-        );
-      }
-      const { email } = await parsedEmail(
-        `${connectionId}:${m[1]}`,
-        adapter,
-        m[1]!,
-      );
-      const attachment = email.attachments[Number(m[2])];
-      if (!attachment) throw new Error(`Attachment ${meta.id} not found`);
-      return toBytes(attachment.content);
-    },
+    ...mimeFetchDeps(mimeCache, adapter, {
+      // Cache keys are namespaced per connection — one shared cache serves
+      // every connected account in the process.
+      cacheKey: (emailId) => `${connectionId}:${emailId}`,
+      foreignAttachmentSuffix: "not produced by the connection adapter",
+    }),
     ...extractionDeps,
     sendReply: async () => {
       // The connected pipeline never replies to senders; its notification
@@ -282,7 +185,6 @@ async function logEmailDecision(input: {
   });
 }
 
-/** Has this connection already evaluated this email? */
 /** Atomically claim an email for processing by inserting its log row
  * with outcome "processing" BEFORE any work runs. Returns true if this
  * caller won the claim (inserted), false if another concurrent drain
@@ -537,7 +439,7 @@ export async function processConnectionEmail(
     // A Trash failure keeps the email in the Inbox — the log row prevents
     // a duplicate expense on the next drain, and the user still has the mail.
     await adapters.moveToTrash(summary.id);
-    parseCache.delete(`${connection.id}:${summary.id}`);
+    mimeCache.invalidate(`${connection.id}:${summary.id}`);
 
     const confirmation = confirmationEmail({
       expenseId: saved.expenseId,
@@ -547,17 +449,11 @@ export async function processConnectionEmail(
       category: saved.category,
       report: saved.report,
       description: extracted.extraction.description,
-      notes: [
-        extracted.extraction.notes,
-        extracted.extraction.currency && extracted.extraction.currency !== "USD"
-          ? `Amount is in ${extracted.extraction.currency} — the app assumes USD.`
-          : "",
-        extracted.renderError
-          ? `The email body could not be rendered as a receipt image (${extracted.renderError}). You can attach a photo in the app.`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
+      notes: confirmationNotes({
+        notes: extracted.extraction.notes,
+        currency: extracted.extraction.currency,
+        renderError: extracted.renderError,
+      }),
       intro: review
         ? "You processed this email as an expense. Here's what we found:"
         : "This email was imported automatically as an expense. Here's what we found:",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Plug, PlugZap, Trash2 } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
 import { formatShortDate } from "~/lib/format";
 import type { EmailConnectionView } from "~/lib/db/email-connections";
@@ -83,13 +84,13 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
           <span className="truncate font-mono text-sm">
             {connection.emailAddress}
           </span>
-          <span className="shrink-0 rounded-full bg-blue-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400 capitalize">
+          <Badge tone="blue" className="shrink-0 capitalize">
             {connection.provider}
-          </span>
+          </Badge>
           {connection.status === "error" ? (
-            <span className="shrink-0 rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400">
+            <Badge tone="red" className="shrink-0">
               Needs attention
-            </span>
+            </Badge>
           ) : null}
         </span>
         <span className="flex shrink-0 items-center gap-2">

@@ -1,29 +1,26 @@
 import { ulid } from "ulid";
 import prisma from "~/lib/prisma.server";
 import { duplicatePairKey } from "~/lib/duplicates";
-import { createCache, isTest } from "~/lib/db/shared";
+import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { DEFAULT_SETTINGS, type Settings } from "~/lib/types";
 
 /** Per-account cache for settings — 5-minute TTL. */
 const settingsCache = createCache<Settings>(300_000);
 
 export async function readSettings(accountId: string): Promise<Settings> {
-  if (!isTest) {
-    const cached = settingsCache.get(accountId);
-    if (cached !== undefined) return cached;
-  }
-  const rows = await prisma.settings.findMany({ where: { accountId } });
-  const settings: Settings = { ...DEFAULT_SETTINGS };
-  const kv: Record<string, string> = {};
-  for (const row of rows) {
-    if (row.key) kv[row.key] = row.value;
-  }
-  settings.homeAddress = kv["homeAddress"] ?? "";
-  settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
-  settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
-  settings.welcomePending = kv["welcomePending"] === "1";
-  settingsCache.set(accountId, settings);
-  return settings;
+  return cachedRead(settingsCache, accountId, async () => {
+    const rows = await prisma.settings.findMany({ where: { accountId } });
+    const settings: Settings = { ...DEFAULT_SETTINGS };
+    const kv: Record<string, string> = {};
+    for (const row of rows) {
+      if (row.key) kv[row.key] = row.value;
+    }
+    settings.homeAddress = kv["homeAddress"] ?? "";
+    settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
+    settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
+    settings.welcomePending = kv["welcomePending"] === "1";
+    return settings;
+  });
 }
 
 export async function writeSettings(
@@ -52,7 +49,7 @@ export async function writeSettings(
     prisma.settings.deleteMany({ where: { accountId } }),
     prisma.settings.createMany({ data: rows }),
   ]);
-  settingsCache.delete(accountId);
+  bust(settingsCache, accountId);
 }
 
 /**

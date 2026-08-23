@@ -10,9 +10,9 @@ import {
   extractExpenseDate,
   scoreAttachment,
   pickReceiptAttachment,
-  isPrivateHost,
   fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
+import { isPrivateHost } from "~/lib/ssrf.server";
 import { matchCategory } from "~/lib/receipt-ai.server";
 import type {
   InboundDeps,
