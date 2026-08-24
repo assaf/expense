@@ -46,8 +46,7 @@ globalThis.pdfjsWorker = pdfjsWorker;
  * below. Images are normalized (HEIC/webp→png, alpha flattened, downscaled)
  * and extracted with the RECEIPT_OCR_MODE backend:
  *  - "auto" (default): DeepSeek vision first — no local OCR CPU on the happy
- *    path — tesseract only when the model can't name a total + merchant or
- *    the provider errors
+ *    path — tesseract only when the provider errors
  *  - "deepseek": DeepSeek vision only
  *  - "tesseract": local OCR only (tesseract.js, worker/core/lang fetched from
  *    a CDN at runtime — safe for serverless bundles)
@@ -559,48 +558,24 @@ export async function extractFromImage(input: {
       });
     }
   } else {
-    // "auto" — the LLM reads the image first: no local OCR CPU on the
-    // happy path, and the vision model is the better reader for
-    // photocopies, glare, skew. Tesseract runs only when the model can't
-    // name a total + merchant or the provider errors.
+    // "auto" — the LLM reads the image; tesseract runs only when the
+    // provider errors. The model is the better reader for photocopies,
+    // glare, and skew, so a weak vision result stands rather than
+    // spending local OCR CPU on a rescue it would likely miss anyway.
     try {
       result = await visionExtraction();
     } catch (err) {
       console.error("[receipt-ocr] vision failed; falling back to OCR", err);
-    }
-    const solid =
-      result !== null &&
-      result.isReceipt &&
-      result.amount !== "" &&
-      result.merchant !== "";
-    if (!solid) {
       text = await ocrImage(stored.buffer);
       const usableOcr =
         text.trim().length >= 20 && parseReceiptAmount(text) !== null;
       if (usableOcr) {
-        try {
-          const ocrResult = await extractReceipt({
-            accountId: input.accountId,
-            text,
-            categories: input.categories,
-            reports: input.reports,
-          });
-          // A solid OCR read wins; otherwise the vision result stands —
-          // it saw the whole image, OCR is best-effort at this point.
-          if (
-            (ocrResult.isReceipt &&
-              ocrResult.amount !== "" &&
-              ocrResult.merchant !== "") ||
-            !result?.isReceipt
-          ) {
-            result = ocrResult;
-          }
-        } catch (err) {
-          console.error(
-            "[receipt-ocr] OCR extraction failed; keeping vision result",
-            err,
-          );
-        }
+        result = await extractReceipt({
+          accountId: input.accountId,
+          text,
+          categories: input.categories,
+          reports: input.reports,
+        });
       }
     }
   }

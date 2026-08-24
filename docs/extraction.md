@@ -39,11 +39,10 @@ and the MCP `capture_receipt` tool. All extraction lives in
   capped provider-side. Raise if dense receipts come back under-recognized;
   the stored/displayed image is untouched.
 - `RECEIPT_OCR_MODE` (`auto` default | `deepseek` | `tesseract`) — `auto`
-  reads the image with the vision model first (no local OCR CPU on the
-  happy path; the model is also the better reader for photocopies, glare,
-  skew) and falls back to tesseract only when the model can't name a
-  total + merchant or the provider errors; `deepseek` is vision-only;
-  `tesseract` is local-only.
+  reads the image with the vision model (no local OCR CPU; the model is
+  also the better reader for photocopies, glare, skew) and runs tesseract
+  only when the provider errors — a weak vision result stands;
+  `deepseek` is vision-only; `tesseract` is local-only.
 - `LLM_MODEL` (default `deepseek-v4-flash`; legacy `DEEPSEEK_MODEL` still
   honored) — the text-extraction model. `LLM_VISION_MODEL` (defaults to
   `LLM_MODEL`) is used for image calls — DeepSeek's hosted vision model is

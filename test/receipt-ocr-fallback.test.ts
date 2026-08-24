@@ -11,11 +11,11 @@ import { extractFromImage } from "~/lib/receipt-ocr.server";
 
 /**
  * Vision-first fallback contract for image receipts. "auto" reads the image
- * with the LLM first — no local OCR CPU on the happy path — and runs
- * tesseract only when the model can't name a total + merchant or the
- * provider errors: photocopies/glare/skew are the vision cases anyway. The
- * LLM is stubbed: the request body's user content is a plain string for text
- * calls, an array with an image_url for vision calls.
+ * with the LLM — no local OCR CPU — and runs tesseract only when the
+ * provider errors: photocopies/glare/skew are the vision cases anyway, so a
+ * weak vision result stands. The LLM is stubbed: the request body's user
+ * content is a plain string for text calls, an array with an image_url for
+ * vision calls.
  */
 
 const createWorkerMock = vi.mocked(createWorker);
@@ -122,9 +122,10 @@ describe("receipt vision-first fallback (auto)", () => {
     expect(result.amount).toBe("12.50");
   });
 
-  it("falls back to OCR when the vision extraction is weak", async () => {
-    // The model reads the image but decides it isn't a receipt — the OCR
-    // text names a total, so its solid extraction gets the final say.
+  it("keeps a weak vision verdict without running OCR", async () => {
+    // The model reads the image but decides it isn't a receipt — no OCR
+    // rescue, even though tesseract would have named a total: CPU only on
+    // provider error.
     mockOcr("ACME CAFE\nTOTAL $12.50");
     vi.stubGlobal("fetch", async (_url: unknown, init: { body?: string }) => {
       const body = JSON.parse(init?.body ?? "{}") as {
@@ -136,15 +137,10 @@ describe("receipt vision-first fallback (auto)", () => {
         text: image ? null : (user.content as string),
         image,
       });
-      if (image) {
-        return new Response(
-          answer({ is_receipt: false, merchant: "", amount: "" }),
-          { status: 200 },
-        );
-      }
-      return new Response(answer({ merchant: "OcrCorp", amount: "12.50" }), {
-        status: 200,
-      });
+      return new Response(
+        answer({ is_receipt: false, merchant: "", amount: "" }),
+        { status: 200 },
+      );
     });
 
     const { result } = await extractFromImage({
@@ -153,17 +149,18 @@ describe("receipt vision-first fallback (auto)", () => {
       mime: "image/png",
     });
 
-    expect(llmCalls).toHaveLength(2);
+    expect(llmCalls).toHaveLength(1);
     expect(llmCalls[0]!.image).toBe(true);
-    expect(llmCalls[1]!.image).toBe(false);
-    expect(result.merchant).toBe("OcrCorp");
+    expect(createWorkerMock).not.toHaveBeenCalled();
+    expect(result.isReceipt).toBe(false);
+    expect(result.merchant).toBe("");
   });
 
-  it("keeps the weak vision result when OCR comes back empty", async () => {
+  it("keeps a weak vision receipt without running OCR", async () => {
     // The model saw a receipt but couldn't name a total+merchant (a
-    // photocopy); tesseract finds nothing either — the weak vision result
-    // stands rather than failing the capture.
-    mockOcr("");
+    // photocopy) — tesseract would likely miss it too, so the weak result
+    // stands rather than spending CPU or failing the capture.
+    mockOcr("ACME CAFE\nTOTAL $12.50"); // tesseract WOULD have read it
     vi.stubGlobal("fetch", async (_url: unknown, init: { body?: string }) => {
       const body = JSON.parse(init?.body ?? "{}") as {
         messages: Array<{ content: unknown }>;
@@ -189,46 +186,6 @@ describe("receipt vision-first fallback (auto)", () => {
     expect(llmCalls).toHaveLength(1);
     expect(createWorkerMock).not.toHaveBeenCalled();
     expect(result.isReceipt).toBe(true);
-    expect(result.merchant).toBe("");
-  });
-
-  it("keeps the weak vision result when the OCR extraction is weak too", async () => {
-    // Vision: a receipt, but no total read. OCR text parses a total, yet
-    // its extraction denies a receipt — the vision verdict (it saw the
-    // image) wins over the weaker OCR one.
-    mockOcr("ACME CAFE\nTOTAL $12.50");
-    vi.stubGlobal("fetch", async (_url: unknown, init: { body?: string }) => {
-      const body = JSON.parse(init?.body ?? "{}") as {
-        messages: Array<{ content: unknown }>;
-      };
-      const user = body.messages.at(-1)!;
-      const image = Array.isArray(user.content);
-      llmCalls.push({
-        text: image ? null : (user.content as string),
-        image,
-      });
-      if (image) {
-        return new Response(
-          answer({ merchant: "", amount: "", confidence: "low" }),
-          { status: 200 },
-        );
-      }
-      return new Response(
-        answer({ is_receipt: false, merchant: "", amount: "" }),
-        { status: 200 },
-      );
-    });
-
-    const { result } = await extractFromImage({
-      accountId: "ocr-fallback-e",
-      buffer: RECEIPT_PNG,
-      mime: "image/png",
-    });
-
-    expect(llmCalls).toHaveLength(2);
-    expect(llmCalls[0]!.image).toBe(true);
-    expect(llmCalls[1]!.image).toBe(false); // OCR was attempted
-    expect(result.isReceipt).toBe(true); // vision verdict kept
     expect(result.merchant).toBe("");
   });
 

@@ -101,7 +101,7 @@ still honored as fallbacks. DeepSeek-only request params (e.g. `thinking`)
 are emitted only against the DeepSeek endpoint, so pointing `LLM_BASE_URL`
 at another provider needs no code change,
 `RECEIPT_OCR_MODE` (`auto`
-default — vision first, tesseract fallback | `deepseek` | `tesseract`),
+default — vision first, tesseract only on provider error | `deepseek` | `tesseract`),
 `LLM_VISION_MODEL` (defaults to
 `LLM_MODEL`; DeepSeek's is `deepseek-v4-flash-vision-exp`),
 `LLM_VISION_MAX_TOKENS` (default 1500), and `RECEIPT_VISION_MAX_WIDTH` (default
