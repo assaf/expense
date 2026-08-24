@@ -40,12 +40,14 @@ globalThis.pdfjsWorker = pdfjsWorker;
 /**
  * OCR + PDF handling for receipt attachments.
  *
+›
  * PDFs get their text layer extracted with pdf.js; when that comes back empty
- * (scanned PDF) the pages are rasterized to a PNG and OCR'd. Images are
- * normalized (HEIC/webp→png, alpha flattened, downscaled) and then OCR'd.
- *
- * OCR backend is selected by RECEIPT_OCR_MODE:
- *  - "auto" (default): try DeepSeek vision first, fall back to tesseract
+ * (scanned PDF) the pages are rasterized to a PNG and read by the image path
+ * below. Images are normalized (HEIC/webp→png, alpha flattened, downscaled)
+ * and extracted with the RECEIPT_OCR_MODE backend:
+ *  - "auto" (default): DeepSeek vision first — no local OCR CPU on the happy
+ *    path — tesseract only when the model can't name a total + merchant or
+ *    the provider errors
  *  - "deepseek": DeepSeek vision only
  *  - "tesseract": local OCR only (tesseract.js, worker/core/lang fetched from
  *    a CDN at runtime — safe for serverless bundles)
@@ -542,15 +544,13 @@ export async function extractFromImage(input: {
   };
   if (RECEIPT_OCR_MODE === "deepseek") {
     result = await visionExtraction();
-  } else {
-    // Local OCR is the cheap path — extract from it whenever the text has
-    // enough structure to name a total (same floor as the PDF path). In
-    // "auto" the vision model is the fallback for OCR that comes up empty
-    // or weak: photocopies, glare, skew — the cases tesseract can't read.
+  } else if (RECEIPT_OCR_MODE === "tesseract") {
+    // Local OCR only: extract whenever the text has enough structure to
+    // name a total (same floor as the PDF path).
     text = await ocrImage(stored.buffer);
     const usableOcr =
       text.trim().length >= 20 && parseReceiptAmount(text) !== null;
-    if (RECEIPT_OCR_MODE === "tesseract" || usableOcr) {
+    if (usableOcr) {
       result = await extractReceipt({
         accountId: input.accountId,
         text,
@@ -558,24 +558,48 @@ export async function extractFromImage(input: {
         reports: input.reports,
       });
     }
+  } else {
+    // "auto" — the LLM reads the image first: no local OCR CPU on the
+    // happy path, and the vision model is the better reader for
+    // photocopies, glare, skew. Tesseract runs only when the model can't
+    // name a total + merchant or the provider errors.
+    try {
+      result = await visionExtraction();
+    } catch (err) {
+      console.error("[receipt-ocr] vision failed; falling back to OCR", err);
+    }
     const solid =
       result !== null &&
       result.isReceipt &&
       result.amount !== "" &&
       result.merchant !== "";
-    if (RECEIPT_OCR_MODE === "auto" && !solid) {
-      try {
-        result = await visionExtraction();
-      } catch (err) {
-        if (result) {
-          // Vision is best-effort — a provider error keeps the OCR outcome
-          // (a weak result beats a failed capture).
+    if (!solid) {
+      text = await ocrImage(stored.buffer);
+      const usableOcr =
+        text.trim().length >= 20 && parseReceiptAmount(text) !== null;
+      if (usableOcr) {
+        try {
+          const ocrResult = await extractReceipt({
+            accountId: input.accountId,
+            text,
+            categories: input.categories,
+            reports: input.reports,
+          });
+          // A solid OCR read wins; otherwise the vision result stands —
+          // it saw the whole image, OCR is best-effort at this point.
+          if (
+            (ocrResult.isReceipt &&
+              ocrResult.amount !== "" &&
+              ocrResult.merchant !== "") ||
+            !result?.isReceipt
+          ) {
+            result = ocrResult;
+          }
+        } catch (err) {
           console.error(
-            "[receipt-ocr] vision fallback failed; keeping OCR result",
+            "[receipt-ocr] OCR extraction failed; keeping vision result",
             err,
           );
-        } else {
-          throw err;
         }
       }
     }

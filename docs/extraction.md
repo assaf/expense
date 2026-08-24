@@ -33,19 +33,24 @@ and the MCP `capture_receipt` tool. All extraction lives in
 ## Cost knobs (all env-tunable)
 
 - `RECEIPT_VISION_MAX_WIDTH` (default 768, clamped 384–1536) — the normalized
-  1024px image is downscaled before the vision call; image tokens scale with
-  pixels², so 768 ≈ 44% fewer than 1024. Raise if dense receipts come back
-  under-recognized; the stored/displayed image is untouched.
+  image is downscaled before the vision call. DeepSeek auto-resizes image
+  input to ~800×800 and caps each image at 384 tokens, so this cuts request
+  bandwidth (base64 payload), not billed tokens — image cost is already
+  capped provider-side. Raise if dense receipts come back under-recognized;
+  the stored/displayed image is untouched.
 - `RECEIPT_OCR_MODE` (`auto` default | `deepseek` | `tesseract`) — `auto`
-  runs local tesseract OCR first (cheap) and falls back to the vision model
-  only when the OCR text is empty or too weak to name a total (photocopies,
-  glare, skew); `deepseek` is vision-only; `tesseract` is local-only.
+  reads the image with the vision model first (no local OCR CPU on the
+  happy path; the model is also the better reader for photocopies, glare,
+  skew) and falls back to tesseract only when the model can't name a
+  total + merchant or the provider errors; `deepseek` is vision-only;
+  `tesseract` is local-only.
 - `LLM_MODEL` (default `deepseek-v4-flash`; legacy `DEEPSEEK_MODEL` still
   honored) — the text-extraction model. `LLM_VISION_MODEL` (defaults to
   `LLM_MODEL`) is used for image calls — DeepSeek's hosted vision model is
   `deepseek-v4-flash-vision-exp` (experimental; a reasoning model, so image
-  calls also use `LLM_VISION_MAX_TOKENS`, default 1500, and skip the
-  `thinking` param the text models accept). `LLM_BASE_URL`/`LLM_API_KEY` point the
+  calls also use `LLM_VISION_MAX_TOKENS`, default 1500, and send the same
+  `thinking: disabled` the text models get — leaving it off burns the
+  output budget on reasoning_content). `LLM_BASE_URL`/`LLM_API_KEY` point the
   OpenAI-compatible client at any provider (default DeepSeek; e.g.
   OpenRouter). `LLM_MAX_TOKENS` (default 500) caps the model's output —
   raise it when switching to a reasoning model, whose chain-of-thought

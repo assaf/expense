@@ -463,16 +463,37 @@ function limitReceiptText(text: string): string {
   return `${head}\n\n… (middle truncated) …\n\n${tail}`;
 }
 
+const MAX_CONTEXT_LIST_CHARS = 800;
+
+/** An account's existing category/report names, capped at a character
+ * budget — with many names the tail adds tokens without improving the
+ * match. Keeps whole names (never truncates mid-name) and says how many
+ * were dropped. */
+function capNameList(names: string[]): string {
+  const kept: string[] = [];
+  let len = 0;
+  for (const name of names) {
+    const add = kept.length ? 2 + name.length : name.length; // ", " separator
+    if (len + add > MAX_CONTEXT_LIST_CHARS && kept.length > 0) break;
+    kept.push(name);
+    len += add;
+  }
+  const omitted = names.length - kept.length;
+  return omitted > 0
+    ? `${kept.join(", ")}… (${omitted} more omitted)`
+    : kept.join(", ");
+}
+
 function buildUserPrompt(input: ExtractionInput): string {
   const lines: string[] = [];
   if (input.categories && input.categories.length > 0) {
     lines.push(
-      `Existing categories — pick the closest match for "category" or use "": ${input.categories.join(", ")}`,
+      `Existing categories — pick the closest match for "category" or use "": ${capNameList(input.categories)}`,
     );
   }
   if (input.reports && input.reports.length > 0) {
     lines.push(
-      `Existing reports — pick the closest match for "report" or use "": ${input.reports.join(", ")}`,
+      `Existing reports — pick the closest match for "report" or use "": ${capNameList(input.reports)}`,
     );
   }
   lines.push("Receipt content:", limitReceiptText(input.text ?? ""));
@@ -492,8 +513,8 @@ async function chatCompletion(
     /** Model override — vision calls use `LLM_VISION_MODEL` (a reasoning
      * model may differ from the text model). Defaults to `LLM_MODEL`. */
     model?: string;
-    /** False suppresses the DeepSeek `thinking` param — the vision-exp
-     * model rejects it outright ("cannot use null as iterable"). */
+    /** False suppresses the DeepSeek `thinking` param for providers that
+     * reject it; the default emits `{ type: "disabled" }` (DeepSeek only). */
     thinking?: boolean;
   } = {},
 ): Promise<string> {
@@ -514,9 +535,9 @@ async function chatCompletion(
     ];
   }
   // DeepSeek-specific: JSON mode + disabled thinking. Other providers get
-  // JSON mode too (OpenAI-compatible), but no `thinking` param. Vision
-  // calls opt out (`thinking: false`): the vision model is a reasoning
-  // model that rejects the param.
+  // JSON mode too (OpenAI-compatible), but no `thinking` param. Disabling
+  // thinking matters for the vision-exp reasoning model — with it on, the
+  // budget burns on reasoning_content (empty content at low max_tokens).
   const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
   const providerLabel = isDeepSeek
     ? "DeepSeek"
@@ -619,7 +640,6 @@ export async function extractReceipt(
       ? {
           image: input.image,
           model: LLM_VISION_MODEL,
-          thinking: false,
         }
       : {}),
   });

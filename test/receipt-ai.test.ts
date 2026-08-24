@@ -11,8 +11,9 @@ import { extractReceipt } from "~/lib/receipt-ai.server";
  * LLM request-shape contract for receipt extraction. The fetch is stubbed
  * and the outgoing body captured, so this pins what the app actually sends:
  * text extraction goes to the text model with DeepSeek's `thinking`
- * disabled, while image extraction goes to the vision model override with
- * NO `thinking` param (the vision model rejects it) and the larger output
+ * disabled, and image extraction goes to the vision model override with the
+ * same disabled thinking (the vision model is a reasoning model — leaving
+ * it on burns the output budget on reasoning_content) and the larger output
  * cap (it burns budget in reasoning before answering). A real JSON answer
  * is returned so the result is parsed too.
  *
@@ -70,7 +71,7 @@ describe("receipt extraction LLM request shape", () => {
     expect(result.isReceipt).toBe(true);
   });
 
-  it("sends image extraction to the vision model without thinking", async () => {
+  it("sends image extraction to the vision model with thinking disabled", async () => {
     const result = await extractReceipt({
       accountId: "llm-shape-test",
       image: {
@@ -82,7 +83,7 @@ describe("receipt extraction LLM request shape", () => {
     expect(lastBody).not.toBeNull();
     expect(lastBody!.model).toBe(LLM_VISION_MODEL);
     expect(lastBody!.model).toBe("vision-test-model");
-    expect(lastBody!.thinking).toBeUndefined();
+    expect(lastBody!.thinking).toEqual({ type: "disabled" });
     expect(lastBody!.max_tokens).toBe(LLM_VISION_MAX_TOKENS);
     // Image path: the user message carries text + a base64 data-URL image.
     const user = lastBody!.messages.at(-1)!;
