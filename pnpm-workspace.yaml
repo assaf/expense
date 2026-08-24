@@ -30,4 +30,5 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
 patchedDependencies:
+  pdfkit@0.20.0: patches/pdfkit@0.20.0.patch
   tesseract.js@7.0.0: patches/tesseract.js@7.0.0.patch

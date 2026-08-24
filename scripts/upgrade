@@ -36,5 +36,5 @@ git gc --prune=now || echo
 echo -e "\033[32m  Checking for outdated dependencies …\033[0m"
 pnpm outdated
 
-terminal-notifier -sound default  -title "$0" -message "Done!"
+terminal-notifier -group "scripts.upgrade" -sound default  -title "$0" -message "Done!" -contentImage "public/icon-512.png"
 exit 0
