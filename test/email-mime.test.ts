@@ -91,6 +91,25 @@ describe("buildRfc822Message", () => {
     expect(decoded.toString()).toBe("fake-image-bytes");
   });
 
+  it("declares the attachment's contentType when provided", () => {
+    const raw = buildRfc822Message({
+      fromName: "Expense",
+      fromEmail: "receipts@labnotes.org",
+      to: "assaf@arkin.me",
+      subject: "Receipt",
+      html: "<p>hi</p>",
+      attachments: [
+        {
+          content: Buffer.from("png-bytes").toString("base64"),
+          filename: "photo.png",
+          contentType: "image/png",
+        },
+      ],
+    });
+    const text = raw.toString("utf8");
+    expect(text).toMatch(/Content-Type: image\/png; name="photo\.png"/);
+  });
+
   it("uses CRLF line endings throughout", () => {
     const raw = buildRfc822Message({
       fromName: "Expense",

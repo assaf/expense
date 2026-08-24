@@ -127,16 +127,26 @@ function fakeDeps(): InboundDeps & {
   sent: {
     subject: string;
     html: string;
+    text?: string;
     to: string;
-    attachments?: { content: string; filename: string }[];
+    attachments?: {
+      content: string;
+      filename: string;
+      contentType?: string;
+    }[];
   }[];
   downloads: AttachmentMeta[];
 } {
   const sent: {
     subject: string;
     html: string;
+    text?: string;
     to: string;
-    attachments?: { content: string; filename: string }[];
+    attachments?: {
+      content: string;
+      filename: string;
+      contentType?: string;
+    }[];
   }[] = [];
   const downloads: AttachmentMeta[] = [];
   const deps: InboundDeps = {
@@ -163,6 +173,7 @@ function fakeDeps(): InboundDeps & {
         subject: input.subject,
         html: input.html,
         to: input.to,
+        ...(input.text ? { text: input.text } : {}),
         ...(input.attachments?.length
           ? { attachments: input.attachments }
           : {}),
@@ -751,19 +762,23 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.imageFile).not.toBe("");
     expect(created.imageMime).toBe("image/jpeg"); // body render stored as JPEG
     usedExpenseIds.push(expenseIdOf(result));
-    // Successful imports send a confirmation email.
+    // Successful imports send a confirmation email with the ORIGINAL body
+    // text quoted below the details (attachment only for image sources —
+    // never inline in the body).
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
       "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
-    // … attaching the stored receipt image (attachment only — never inline
-    // in the body).
     const confirmation = deps.sent[0]!;
-    expect(confirmation.attachments).toHaveLength(1);
-    const att = confirmation.attachments![0]!;
-    expect(att.content.length).toBeGreaterThan(100);
+    // A body receipt carries no attachment — the original text is quoted.
+    expect(confirmation.attachments).toBeUndefined();
+    expect(confirmation.html).toContain("Original receipt");
+    expect(confirmation.html).toContain("MERCHANT: Amazon");
     expect(confirmation.html).not.toContain("cid:");
     expect(confirmation.html).not.toContain("<img");
+    // The plain-text alternative quotes the original with ">" prefixes.
+    expect(confirmation.text).toContain("> MERCHANT: Amazon");
+    expect(confirmation.text).toContain("> TOTAL: 42.50");
   });
 
   it("shows the extracted description as a field and saves it on the expense", async () => {
@@ -1138,10 +1153,10 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("needs attention");
     expect(deps.sent[0]!.html).toContain("merchant");
-    // The partial confirmation still attaches the rendered receipt image
-    // (attachment only — never inline in the body).
+    // A body receipt: no attachment — the original text is quoted instead.
     const partial = deps.sent[0]!;
-    expect(partial.attachments).toHaveLength(1);
+    expect(partial.attachments).toBeUndefined();
+    expect(partial.html).toContain("Original receipt");
     expect(partial.html).not.toContain("cid:");
     expect(partial.html).not.toContain("<img");
   });
@@ -1598,6 +1613,11 @@ describe("processInboundEvent (attachments)", () => {
     expect(created.date).toBe("2026-06-20"); // no forward block → header date
     // Logo was downloaded? No — only the chosen attachment is downloaded.
     expect(deps.downloads.map((m) => m.id)).toEqual(["att-pdf"]);
+    // The confirmation attaches the ORIGINAL PDF, not the rendered image.
+    const pdfConfirmation = deps.sent[0]!;
+    expect(pdfConfirmation.attachments).toHaveLength(1);
+    expect(pdfConfirmation.attachments![0]!.filename).toBe("invoice.pdf");
+    expect(pdfConfirmation.html).not.toContain("Original receipt");
   });
 
   it("creates an expense from an image attachment via OCR", async () => {
@@ -1627,5 +1647,46 @@ describe("processInboundEvent (attachments)", () => {
     expect(created.merchant).toBe("Photo Shop");
     expect(created.amount).toBe("5.00");
     expect(created.imageFile).not.toBe("");
+    // The confirmation attaches the ORIGINAL image file (the fake download
+    // returns PNG bytes for the jpg-named attachment, so the sniffed type
+    // wins over the declared one).
+    const confirmation = deps.sent[0]!;
+    expect(confirmation.attachments).toHaveLength(1);
+    const att = confirmation.attachments![0]!;
+    expect(att.filename).toBe("photo.jpg");
+    expect(att.contentType).toBe("image/png");
+    expect(att.content).toBe(TINY_PNG.toString("base64"));
+    expect(confirmation.html).not.toContain("Original receipt");
+  });
+
+  it("attaches the original image with a sniffed content type when the declared type is octet-stream", async () => {
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ text: null, html: null });
+    deps.listAttachments = async () => [
+      attachment({
+        id: "att-screenshot",
+        filename: "receipt.png",
+        size: 500_000,
+        content_type: "application/octet-stream",
+        content_disposition: "attachment",
+      }),
+    ];
+    const result = await processInboundEvent(
+      eventData({ email_id: "email-shot", subject: "Fwd: Screenshot" }),
+      deps,
+    );
+    usedEmailIds.push("email-shot");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    // The original bytes are attached under their original filename, with
+    // the sniffed (real) image type instead of octet-stream.
+    const confirmation = deps.sent[0]!;
+    expect(confirmation.attachments).toHaveLength(1);
+    const att = confirmation.attachments![0]!;
+    expect(att.filename).toBe("receipt.png");
+    expect(att.contentType).toBe("image/png");
+    expect(att.content).toBe(TINY_PNG.toString("base64"));
+    expect(confirmation.html).not.toContain("Original receipt");
   });
 });

@@ -19,8 +19,9 @@ export interface SendEmailInput {
   text?: string;
   /** Original message's id — sets In-Reply-To + References (threading). */
   inReplyTo?: string;
-  /** File attachments; `content` is base64. */
-  attachments?: { content: string; filename: string }[];
+  /** File attachments; `content` is base64. `contentType` overrides the
+   * default `application/octet-stream` (images/PDFs get their real type). */
+  attachments?: { content: string; filename: string; contentType?: string }[];
 }
 
 export interface OutboundMessageInput extends SendEmailInput {
@@ -114,7 +115,7 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
       body.push(
         header(
           "Content-Type",
-          `application/octet-stream; name=${JSON.stringify(att.filename)}`,
+          `${att.contentType ?? "application/octet-stream"}; name=${JSON.stringify(att.filename)}`,
         ),
       );
       body.push(

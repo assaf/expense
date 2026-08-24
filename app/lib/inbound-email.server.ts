@@ -11,7 +11,7 @@ import type {
 } from "~/lib/email-render.server";
 import { htmlToText } from "~/lib/html-text";
 import { fetchPublicUrl, readBodyLimited } from "~/lib/ssrf.server";
-import { isImage, isPdf } from "~/lib/file-types";
+import { detectImageMime, isImage, isPdf } from "~/lib/file-types";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import {
   composeLocalDescription,
@@ -420,9 +420,22 @@ export function pickReceiptAttachment(
   return { index: top.index, score: top.score, ambiguous };
 }
 
-/** The receipt image to embed in the confirmation reply: base64 content for
- * The receipt image attached to the confirmation reply (base64 content +
- * filename). undefined when the import produced no stored image. */
+/** The content type to declare for the reply's original-receipt attachment:
+ * sniffed from the bytes first (the declared type can be a bogus
+ * application/octet-stream for a screenshot), the declared media type
+ * otherwise. */
+function replyAttachmentContentType(buffer: Buffer, declared: string): string {
+  if (isPdf({ buffer })) return "application/pdf";
+  const sniffed = detectImageMime(buffer);
+  if (sniffed) return sniffed;
+  return /^(image\/|application\/pdf)/i.test(declared)
+    ? declared
+    : "application/octet-stream";
+}
+
+/** The stored receipt image as a base64 attachment (the connected
+ * pipeline's owner-inbox confirmation). undefined when the import produced
+ * no stored image. */
 async function receiptImageAttachment(
   accountId: string,
   imageFile: string,
@@ -457,6 +470,10 @@ function replyHtml(title: string, paragraphs: string[]): string {
     footer: SIMPLE_FOOTER,
   });
 }
+
+/** Longest original-receipt text quoted in a confirmation reply — the
+ * parsed email body can be a whole thread; a receipt is never this big. */
+const QUOTED_ORIGINAL_MAX_CHARS = 4000;
 
 /** The fields extracted for a receipt, with a dash for any blank value. */
 function fieldRow(label: string, value: string): string {
@@ -518,6 +535,10 @@ export interface ConfirmationEmailOptions {
     before: { count: number; total: string };
     after: { count: number; total: string };
   };
+  /** The original receipt text (a body-source receipt) to quote below the
+   * details. The connected pipeline doesn't pass it — the original email
+   * already sits in the owner's Inbox. */
+  quotedOriginal?: string;
 }
 
 /** Build the confirmation email for a receipt import (partial or complete). */
@@ -552,6 +573,18 @@ function confirmationHtml(
       `<p style="margin:8px 0;color:#6b7280;font-size:13px">${escapeHtml(opts.notes)}</p>`,
     );
   }
+  if (opts.quotedOriginal) {
+    // The original receipt, quoted verbatim below the details so the
+    // sender can compare. Line breaks preserved; truncated for sanity.
+    const truncated = opts.quotedOriginal.length > QUOTED_ORIGINAL_MAX_CHARS;
+    const quoted = truncated
+      ? opts.quotedOriginal.slice(0, QUOTED_ORIGINAL_MAX_CHARS)
+      : opts.quotedOriginal;
+    blocks.push(
+      `<div style="margin:16px 0 4px;font-size:13px;font-weight:600;color:#374151">Original receipt</div>`,
+      `<blockquote style="margin:0;padding:10px 14px;border-left:3px solid #d1d5db;background:#f9fafb;color:#374151;font-size:13px;line-height:1.5;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${escapeHtml(quoted)}${truncated ? `<div style="margin-top:8px;color:#9ca3af">… receipt text truncated</div>` : ""}</blockquote>`,
+    );
+  }
   if (editUrl) {
     blocks.push(
       `<p style="margin:16px 0 0"><a href="${escapeHtml(editUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Edit this receipt</a></p>`,
@@ -565,12 +598,56 @@ function confirmationHtml(
   });
 }
 
-/** The subject and HTML for a confirmation reply, so the subject line and
- * the in-body heading always match. Exported for the connected-account
- * pipeline, which sends the same confirmation to the mailbox owner. */
+/** The plain-text alternative for a confirmation: the same fields as the
+ * HTML, then the original receipt quoted with ">" prefixes (the email
+ * convention for quoted text). */
+function confirmationText(opts: ConfirmationEmailOptions): string {
+  const rows = [
+    ["Date", formatDate(opts.date, { long: true })],
+    ["Merchant", opts.merchant],
+    ["Amount", opts.amount ? formatAmount(opts.amount) : ""],
+    ["Category", opts.category],
+    ["Report", opts.report],
+    ...(opts.description
+      ? ([["Description", opts.description]] as [string, string][])
+      : []),
+  ]
+    .map(([label, value]) => `${label}: ${value || "\u2014"}`)
+    .join("\n");
+
+  const parts = [
+    opts.intro ?? "Thanks for forwarding your receipt. Here's what we found:",
+    rows,
+  ];
+  if (opts.missing.length > 0) {
+    parts.push(
+      `These fields couldn't be determined: ${opts.missing.join(", ")}.`,
+    );
+  }
+  if (opts.notes) parts.push(opts.notes);
+  if (opts.quotedOriginal) {
+    const truncated = opts.quotedOriginal.length > QUOTED_ORIGINAL_MAX_CHARS;
+    const quoted = truncated
+      ? opts.quotedOriginal.slice(0, QUOTED_ORIGINAL_MAX_CHARS)
+      : opts.quotedOriginal;
+    parts.push(
+      `Original receipt:\n${quoted
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n")}${truncated ? "\n> … receipt text truncated" : ""}`,
+    );
+  }
+  return parts.join("\n\n");
+}
+
+/** The subject, HTML, and plain-text for a confirmation reply, so the
+ * subject line and the in-body heading always match. Exported for the
+ * connected-account pipeline, which sends the same confirmation to the
+ * mailbox owner. */
 export function confirmationEmail(opts: ConfirmationEmailOptions): {
   subject: string;
   html: string;
+  text: string;
 } {
   const subject = confirmationSubject({
     amount: opts.amount,
@@ -578,7 +655,11 @@ export function confirmationEmail(opts: ConfirmationEmailOptions): {
     report: opts.report,
     missing: opts.missing,
   });
-  return { subject, html: confirmationHtml(opts, subject) };
+  return {
+    subject,
+    html: confirmationHtml(opts, subject),
+    text: confirmationText(opts),
+  };
 }
 /** The free-text notes under a confirmation's summary: the extraction's own
  * notes plus caveats (non-USD amount, body-render failure). Empty pieces
@@ -1097,6 +1178,17 @@ interface SavedExpense {
   category: string;
   report: string;
   reportStats?: ReportSummaryStats;
+  /** The original receipt file (image/PDF attachment source) to attach to
+   * the confirmation reply — the sender's file, not the rendered image. */
+  originalAttachment?: {
+    content: string;
+    filename: string;
+    contentType?: string;
+  };
+  /** The original email body text (body source) to quote in the reply. */
+  originalText?: string;
+  /** The stored receipt image as an attachment (used by the connected
+   * pipeline's owner-inbox confirmation). */
   receiptAttachment?: { content: string; filename: string };
   /** A matching receipt was imported within the recent window (the other
    * pipeline) — suppress this confirmation to avoid duplicate responses. */
@@ -1112,6 +1204,10 @@ export async function saveExpenseFromExtraction(opts: {
   receiptImage: Buffer | null;
   imageMime: string;
   originalName: string;
+  /** What the receipt was in the incoming email — the reply carries the
+   * original: quoted text for a body source, the original file for an
+   * attachment source. */
+  originalSource: ReceiptSource;
 }): Promise<SavedExpense> {
   const { extraction, receiptImage } = opts;
   const missing: string[] = [];
@@ -1158,11 +1254,31 @@ export async function saveExpenseFromExtraction(opts: {
   };
   await upsertExpense(expense, opts.accountId);
 
-  // The receipt image for the confirmation email (base64 attachment).
+  // The stored receipt image for the connected pipeline's owner-inbox
+  // confirmation (base64 attachment); the sender reply below uses the
+  // original source instead.
   const receiptAttachment = await receiptImageAttachment(
     opts.accountId,
     imageFile,
   );
+
+  // The original receipt for the confirmation email: the original file
+  // (image/PDF attachment source) to attach, or the original body text to
+  // quote below the details (body source). The stored image is the
+  // processed/rendered form — the reply carries what the sender actually
+  // forwarded.
+  let originalAttachment: SavedExpense["originalAttachment"];
+  let originalText: SavedExpense["originalText"];
+  if (opts.originalSource.kind === "attachment") {
+    const { buffer, contentType, filename } = opts.originalSource;
+    originalAttachment = {
+      content: buffer.toString("base64"),
+      filename,
+      contentType: replyAttachmentContentType(buffer, contentType),
+    };
+  } else {
+    originalText = opts.originalSource.text;
+  }
 
   // The same receipt already imported within the recent window — the
   // connected-account pipeline imported the inbox original moments ago and
@@ -1198,6 +1314,8 @@ export async function saveExpenseFromExtraction(opts: {
     category,
     report,
     reportStats,
+    originalAttachment,
+    originalText,
     receiptAttachment,
     recentMatch,
   };
@@ -1214,8 +1332,14 @@ export async function saveExpenseFromExtraction(opts: {
 async function sendConfirmationOrSuppress(opts: {
   deps: InboundDeps;
   data: EmailReceivedData;
-  confirmation: { subject: string; html: string };
-  receiptAttachment?: { content: string; filename: string };
+  confirmation: { subject: string; html: string; text: string };
+  /** The original receipt file (image/PDF source) — attached instead of
+   * the stored rendered image. */
+  originalAttachment?: {
+    content: string;
+    filename: string;
+    contentType?: string;
+  };
   recentMatch?: { id: string; createdAt: string };
 }): Promise<void> {
   if (opts.recentMatch) {
@@ -1244,7 +1368,10 @@ async function sendConfirmationOrSuppress(opts: {
     ...replyEnvelope(opts.data),
     subject: opts.confirmation.subject,
     html: opts.confirmation.html,
-    attachments: opts.receiptAttachment ? [opts.receiptAttachment] : undefined,
+    text: opts.confirmation.text,
+    attachments: opts.originalAttachment
+      ? [opts.originalAttachment]
+      : undefined,
   });
 }
 
@@ -1395,12 +1522,12 @@ export async function processInboundEvent(
       receiptImage: extracted.receiptImage,
       imageMime: extracted.imageMime,
       originalName: extracted.originalName,
+      originalSource: selected.source,
     });
     const { missing, category, report } = saved;
     const expenseDate = selected.expenseDate;
     const extraction = extracted.extraction;
     const renderError = extracted.renderError;
-    const receiptAttachment = saved.receiptAttachment;
     const reportStats = saved.reportStats;
     const expenseId = saved.expenseId;
 
@@ -1420,12 +1547,13 @@ export async function processInboundEvent(
         }),
         missing,
         reportStats,
+        quotedOriginal: saved.originalText,
       });
       await sendConfirmationOrSuppress({
         deps,
         data,
         confirmation,
-        receiptAttachment,
+        originalAttachment: saved.originalAttachment,
         recentMatch: saved.recentMatch,
       });
       await learnRuleFromForward(account.id, email, attachments, deps);
@@ -1454,12 +1582,13 @@ export async function processInboundEvent(
       }),
       missing: [],
       reportStats,
+      quotedOriginal: saved.originalText,
     });
     await sendConfirmationOrSuppress({
       deps,
       data,
       confirmation,
-      receiptAttachment,
+      originalAttachment: saved.originalAttachment,
       recentMatch: saved.recentMatch,
     });
 

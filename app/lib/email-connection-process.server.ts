@@ -433,6 +433,7 @@ export async function processConnectionEmail(
       receiptImage: extracted.receiptImage,
       imageMime: extracted.imageMime,
       originalName: extracted.originalName,
+      originalSource: selected.source,
     });
 
     // Success (complete or partial): move to Trash, notify the owner.

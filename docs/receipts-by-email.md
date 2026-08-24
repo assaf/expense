@@ -39,7 +39,14 @@ identity's Sent mailbox → submit; the submit step retries once on a
 transient failure, reusing the same email id — the blob/Sent import
 doesn't repeat) when `FASTMAIL_TOKEN` has send
 permission; without it the send is skipped with a warning. The
-self-reply guard compares the incoming
+confirmation reply carries the **original receipt**, not the stored
+rendered image: a body-text receipt is quoted verbatim below the details
+(both the HTML blockquote and the plain-text part, ">"-prefixed, capped
+at 4000 chars); an image/PDF attachment source is attached as the
+original file under its original filename with a byte-sniffed content
+type (`replyAttachmentContentType` — the declared `application/octet-stream`
+for screenshots is corrected from the bytes). The self-reply guard
+compares the incoming
 From against the outbound address, so forwarded replies can't loop.
 **Bounces and autoresponders are dropped silently** (never imported,
 never answered): a cheap pre-fetch check matches DSN subject lines
