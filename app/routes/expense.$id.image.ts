@@ -1,9 +1,4 @@
-import {
-  deleteImage,
-  imageResponseHeaders,
-  renameImageToConvention,
-} from "~/lib/images.server";
-import { prepareUploadOr400 } from "~/lib/receipt-ocr.server";
+import { deleteImage, imageResponseHeaders } from "~/lib/images.server";
 import {
   readExpense,
   readExpenseImage,
@@ -83,9 +78,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   });
 }
 
-/** Replace or clear the receipt image without reloading the editor. */
+/** Clear the stored receipt image (the editor's remove button). Image
+ * replacements are drafts attached on Save — see saveExpenseFromForm. */
 export async function action({ request, params }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+  const { user, intent } = await requireIntent(request);
   const expense = await readExpense(params.id, user.accountId);
   if (!expense || expense.type !== "receipt") return notFound();
 
@@ -97,43 +93,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     expense.updatedAt = new Date().toISOString();
     await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, imageFile: "" });
-  }
-
-  if (intent === "upload") {
-    // PDFs are rasterized to PNG before storage: receipts are always
-    // displayed as images, and the thumbnail/export pipelines assume the
-    // stored bytes are decodable by sharp. Only an unreadable PDF fails.
-    const saved = await prepareUploadOr400(
-      form,
-      user.accountId,
-      "image-upload",
-    );
-    if (saved instanceof Response) return saved;
-    if (expense.imageFile) await deleteImage(user.accountId, expense.imageFile);
-    expense.imageFile = saved.filename;
-    expense.imageMime = saved.mime;
-    expense.originalName = saved.originalName;
-    expense.updatedAt = new Date().toISOString();
-    // Rename to convention immediately if date+report already set.
-    const renamed = await renameImageToConvention(
-      user.accountId,
-      expense.imageFile,
-      expense.date,
-      expense.report,
-      expense.originalName,
-      expense.imageMime,
-    );
-    expense.imageFile = renamed;
-    await upsertExpense(expense, user.accountId);
-    return Response.json({
-      ok: true,
-      imageFile: renamed,
-      // The content version the client renders into its image URL — the
-      // editor needs the new updatedAt (its loader isn't revalidated by the
-      // action), or its `?v=` would keep the old value and the URL would
-      // stay stale-cached.
-      updatedAt: expense.updatedAt,
-    });
   }
 
   return unknownIntent();

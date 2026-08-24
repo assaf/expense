@@ -1,5 +1,5 @@
 import { normalizeAmount } from "~/lib/format";
-import { renameImageToConvention } from "~/lib/images.server";
+import { deleteImage, renameImageToConvention } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
 import { addReport, findOpenReport } from "~/lib/db/reports";
@@ -130,6 +130,7 @@ export async function saveExpenseFromForm(
     return { error: null, id: expense.id };
   }
 
+  const draftKey = formString(form, "draftKey");
   const receipt: ReceiptExpense = {
     ...(existing && existing.type === "receipt"
       ? existing
@@ -140,18 +141,33 @@ export async function saveExpenseFromForm(
     description,
     amount,
     merchant: formString(form, "merchant").trim(),
-    // Create mode: a draft image (held by /api/expense) becomes the
-    // expense's image; the convention rename below moves it into the
-    // dated/report-named key. Edit mode keeps the stored image fields.
-    ...(existing
-      ? {}
-      : {
-          imageFile: formString(form, "draftKey"),
+    // A draft image (held by /api/expense) becomes the expense's image on
+    // save — in create mode it's the uploaded receipt, in edit mode it's a
+    // replacement held locally until Save (the editor shows the new file
+    // without touching the row, so a reload still shows the original). The
+    // convention rename below moves it into the dated/report-named key.
+    // Without a draft, edit keeps the stored image fields and create stays
+    // imageless.
+    ...(draftKey || !existing
+      ? {
+          imageFile: draftKey,
           imageMime: formString(form, "draftMime"),
           originalName: formString(form, "draftOriginalName"),
-        }),
+        }
+      : {}),
     updatedAt: now,
   };
+  if (
+    existing &&
+    existing.type === "receipt" &&
+    draftKey &&
+    existing.imageFile &&
+    existing.imageFile !== draftKey
+  ) {
+    // The replacement is a new blob (the draft); the old stored image is
+    // orphaned once the row points at the new key — drop it.
+    await deleteImage(accountId, existing.imageFile);
+  }
   if (receipt.imageFile) {
     receipt.imageFile = await renameImageToConvention(
       accountId,

@@ -612,8 +612,9 @@ describe("Expense CRUD", () => {
     await main.dispatchEvent("dragleave", { dataTransfer: drag });
     await expect(main).not.toHaveClass(/outline-dashed/);
 
-    // Dropping a receipt image replaces the image (one POST to the image
-    // route) and re-reads the fields (one POST to /api/expense).
+    // Dropping a receipt image on edit: the new image is held as a draft —
+    // it shows in the editor (blob preview) and re-reads the fields, but
+    // nothing is written to the row until Save.
     const png = await tinyPng();
     const drop = await page.evaluateHandle(() => new DataTransfer());
     await drop.evaluate(
@@ -624,10 +625,10 @@ describe("Expense CRUD", () => {
       },
       [...png],
     );
-    const replace = page.waitForResponse(
+    // draft-upload then ocr — both hit /api/expense in that order.
+    const draft = page.waitForResponse(
       (r) =>
-        r.url().includes(`/expense/${expense.id}/image`) &&
-        r.request().method() === "POST",
+        r.url().includes("/api/expense") && r.request().method() === "POST",
       { timeout: 30_000 },
     );
     const ocr = page.waitForResponse(
@@ -636,10 +637,47 @@ describe("Expense CRUD", () => {
       { timeout: 30_000 },
     );
     await main.dispatchEvent("drop", { dataTransfer: drop });
-    expect((await replace).ok()).toBeTruthy();
+    expect((await draft).ok()).toBeTruthy();
     expect((await ocr).ok()).toBeTruthy();
 
-    // The image is stored and attached to the expense row.
+    // The new image renders as the draft preview…
+    await expect(page.locator("img")).toBeVisible();
+    // …but the expense row is untouched — reloading still shows the
+    // original (imageless) expense.
+    expect(
+      (
+        await testPrisma.expense.findUniqueOrThrow({
+          where: { id: expense.id },
+        })
+      ).imageFile,
+    ).toBe("");
+    await page.reload({ waitUntil: "load" });
+    await expect(page.locator("img")).toHaveCount(0);
+
+    // All data fields are present before and after the drop — the notice
+    // stays down.
+    await expect(page.getByText("Incomplete")).toHaveCount(0);
+
+    // Dropping again and saving attaches the draft to the row.
+    const main2 = page.locator("main#main-content");
+    const drop2 = await page.evaluateHandle(() => new DataTransfer());
+    await drop2.evaluate(
+      (dt, bytes) => {
+        dt.items.add(
+          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
+        );
+      },
+      [...png],
+    );
+    const draft2 = page.waitForResponse(
+      (r) =>
+        r.url().includes("/api/expense") && r.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    await main2.dispatchEvent("drop", { dataTransfer: drop2 });
+    expect((await draft2).ok()).toBeTruthy();
+    await expect(page.locator("img")).toBeVisible();
+    await page.getByRole("button", { name: "Save" }).click();
     await expect
       .poll(
         async () =>
@@ -651,10 +689,6 @@ describe("Expense CRUD", () => {
         { timeout: 15_000 },
       )
       .not.toBe("");
-    await expect(page.locator("img")).toBeVisible();
-    // All data fields are present before and after the drop — the notice
-    // stays down.
-    await expect(page.getByText("Incomplete")).toHaveCount(0);
 
     // Leave the database as we found it.
     const stored = (

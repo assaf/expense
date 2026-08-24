@@ -132,7 +132,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     }
   }, []);
 
-  async function uploadDraft(file: File) {
+  async function uploadDraft(
+    file: File,
+    fill: "empty-only" | "override" = "empty-only",
+  ) {
     // Images render straight from a blob URL. PDFs can't (an <img> can't
     // display a PDF), so their preview is the rasterized PNG served from
     // storage once the upload completes.
@@ -181,7 +184,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       // typed yet — a slow response arriving after the user started editing
       // must not overwrite what they wrote.
       setDraftStage("ocr");
-      fillFields(await ocrFile(file), "empty-only");
+      fillFields(await ocrFile(file), fill);
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
@@ -250,39 +253,16 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
 
   /** Cancel without saving: drop any draft image, then leave the editor. */
   function onCancel() {
-    if (isNew && draft) void deleteDraftBlob(draft.key);
+    if (draft) void deleteDraftBlob(draft.key);
     doCancel();
   }
 
+  // A dropped/picked/pasted receipt. Create mode holds it as a draft and
+  // attaches it on Save. Edit mode does the same — the new image shows in
+  // the editor but the row keeps its stored image until Save, so a reload
+  // still shows the original. OCR re-reads the fields either way.
   async function replaceImage(file: File) {
-    if (isNew) {
-      await uploadDraft(file);
-      return;
-    }
-    const form = new FormData();
-    form.set("intent", "upload");
-    form.set("file", file);
-    const res = await fetch(`/expense/${expense.id}/image`, {
-      method: "POST",
-      body: form,
-    });
-    // The action returns the new content version (its updatedAt is not
-    // revalidated by the action) — render it into the image URL so a
-    // replaced image gets a fresh, content-keyed URL instead of a stale
-    // cache hit.
-    const json = (await res.json()) as {
-      ok?: boolean;
-      imageFile?: string;
-      updatedAt?: string;
-    };
-    if (json.ok && json.updatedAt && json.imageFile) {
-      setImageSrcVersion(
-        imageVersion({ updatedAt: json.updatedAt, imageFile: json.imageFile }),
-      );
-    }
-    setHasImage(true);
-    // Re-read the new receipt's fields so the form matches the image.
-    fillFields(await ocrFile(file), "override");
+    await uploadDraft(file, isNew ? "empty-only" : "override");
   }
 
   // Paste an image anywhere to replace the receipt image.
@@ -297,12 +277,13 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     form.set("report", report);
     form.set("category", category);
     form.set("description", description);
-    if (isNew) {
-      form.set("type", "receipt");
-      form.set("draftKey", draft?.key ?? "");
-      form.set("draftMime", draft?.mime ?? "");
-      form.set("draftOriginalName", draft?.originalName ?? "");
-    }
+    if (isNew) form.set("type", "receipt");
+    // A pending draft (create: the uploaded receipt; edit: a replacement
+    // held locally) is attached by the save action. Edit without one sends
+    // empty keys — the stored image is kept.
+    form.set("draftKey", draft?.key ?? "");
+    form.set("draftMime", draft?.mime ?? "");
+    form.set("draftOriginalName", draft?.originalName ?? "");
     void fetcher.submit(form, { method: "post" });
   }
 
@@ -314,6 +295,16 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   function onDelete() {
     submitDelete(fetcher);
   }
+
+  // The visible receipt image: a pending draft (create: the uploaded
+  // receipt; edit: a replacement held until Save) wins over the stored
+  // image; edit falls back to the stored image; create has none.
+  const imageSrc =
+    draftPreview ??
+    (isNew
+      ? ""
+      : `/expense/${expense.id}/image?v=${encodeURIComponent(imageSrcVersion)}`);
+  const showImage = Boolean(draftPreview || (!isNew && hasImage));
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
@@ -368,14 +359,16 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                 </Button>
               </>
             ) : null}
-            {(isNew ? !!draftPreview : hasImage) && !reportClosed ? (
+            {showImage && !reportClosed ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 aria-label="Remove receipt image"
                 onClick={async () => {
-                  if (isNew) {
+                  if (draft) {
+                    // A pending replacement — dropping it shows the stored
+                    // image again (or none, in create mode).
                     await removeDraft();
                     return;
                   }
@@ -396,7 +389,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
             ) : null}
           </span>
         </div>
-        {(isNew ? draftPreview : hasImage) ? (
+        {showImage ? (
           <button
             type="button"
             onClick={() => setLightbox(true)}
@@ -405,20 +398,14 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
           >
             <img
               key={imageSrcVersion}
-              src={
-                isNew
-                  ? (draftPreview ?? "")
-                  : `/expense/${expense.id}/image?v=${encodeURIComponent(
-                      imageSrcVersion,
-                    )}`
-              }
+              src={imageSrc}
               alt="Receipt"
               className="min-h-53 max-h-120 w-full object-cover object-top"
             />
           </button>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-500 dark:text-gray-400">
-            {isNew && drafting && !draftPreview ? (
+            {drafting && !draftPreview ? (
               <span className="flex items-center gap-2">
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />{" "}
                 Preparing your receipt…
@@ -432,7 +419,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
             {draftError}
           </p>
-        ) : isNew && drafting ? (
+        ) : drafting ? (
           <DraftProgress stage={draftStage} />
         ) : (
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -493,15 +480,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         readOnly={reportClosed}
       />
 
-      {lightbox && (isNew ? draftPreview : hasImage) ? (
+      {lightbox && showImage ? (
         <Lightbox
-          src={
-            isNew
-              ? (draftPreview ?? "")
-              : `/expense/${expense.id}/image?v=${encodeURIComponent(
-                  imageSrcVersion,
-                )}`
-          }
+          src={imageSrc}
           onClose={() => {
             setLightbox(false);
             amountRef.current?.focus();
