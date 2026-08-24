@@ -176,7 +176,54 @@ export interface InboundDeps {
 
 // --- Date -------------------------------------------------------------------
 
-/** Parse an RFC 2822 / human date string into YYYY-MM-DD (UTC). Null if invalid or in the future. */
+/** Named-zone offsets V8 parses in Date strings (US zones; V8 knows these
+ * abbreviations but not their UTC offsets). Hours east of UTC. */
+const NAMED_ZONE_OFFSET_HOURS: Record<string, number> = {
+  UT: 0,
+  UTC: 0,
+  GMT: 0,
+  EST: -5,
+  EDT: -4,
+  CST: -6,
+  CDT: -5,
+  MST: -7,
+  MDT: -6,
+  PST: -8,
+  PDT: -7,
+};
+
+/** The UTC offset the date string itself names, in ms: an RFC 2822/ISO
+ * numeric zone ("-0700", "+05:30"), "Z"/"z", or a named US zone ("PDT").
+ * Null when the string carries no explicit zone (naive). */
+function zoneOffsetMs(s: string): number | null {
+  const numeric = s.match(/([+-]\d{2}:?\d{2}|Z|z)\s*(?:\([^)]*\))?\s*$/);
+  if (numeric) {
+    const zone = numeric[1]!;
+    if (zone === "Z" || zone === "z") return 0;
+    const sign = zone.startsWith("-") ? -1 : 1;
+    const digits = zone.replace(/\D/g, "").padEnd(4, "0");
+    const hours = Number(digits.slice(0, 2));
+    const minutes = Number(digits.slice(2, 4));
+    return sign * (hours * 60 + minutes) * 60_000;
+  }
+  const named = s.match(
+    /\b(UT|UTC|GMT|EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b\s*$/i,
+  );
+  if (named) {
+    const key = named[1]!.toUpperCase();
+    return NAMED_ZONE_OFFSET_HOURS[key]! * 3_600_000;
+  }
+  return null;
+}
+
+/**
+ * Parse an RFC 2822 / human date string into YYYY-MM-DD, in the timezone the
+ * string itself names — the sender's local date, which is what a receipt
+ * means. The UTC calendar date of the same instant can be the next (or
+ * previous) day for evening sends in negative offsets (17:08 PDT on Aug 23
+ * is 00:08 UTC Aug 24). Naive strings (no zone) keep the UTC interpretation.
+ * Null if invalid or in the future.
+ */
 export function parseDateString(s: string): string | null {
   let clean = s.trim();
   if (!clean) return null;
@@ -185,7 +232,7 @@ export function parseDateString(s: string): string | null {
   const t = Date.parse(clean);
   if (!Number.isFinite(t)) return null;
   if (t > Date.now() + 24 * 3600 * 1000) return null; // future → invalid
-  return new Date(t).toISOString().slice(0, 10);
+  return new Date(t + (zoneOffsetMs(clean) ?? 0)).toISOString().slice(0, 10);
 }
 
 /**

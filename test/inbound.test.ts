@@ -261,6 +261,27 @@ describe("Date extraction", () => {
     expect(parseDateString("Jan 1 2100")).toBeNull();
   });
 
+  it("returns the date in the zone the string names, not UTC", () => {
+    // 17:08 PDT on Jul 12 is 00:08 UTC Jul 13 — the receipt's date is the
+    // sender's local date (Jul 12), which is what the expense must carry.
+    expect(parseDateString("Sun, 12 Jul 2026 17:08:10 -0700")).toBe(
+      "2026-07-12",
+    );
+    expect(parseDateString("2026-07-12T17:08:10-07:00")).toBe("2026-07-12");
+    expect(parseDateString("June 5, 2026 10:12:33 PDT")).toBe("2026-06-05");
+    // Morning in +0530 is still the previous day in UTC.
+    expect(parseDateString("Sun, 12 Jul 2026 01:30:00 +0530")).toBe(
+      "2026-07-12",
+    );
+    // Explicit UTC stays UTC.
+    expect(parseDateString("Sun, 12 Jul 2026 17:08:10 Z")).toBe("2026-07-12");
+    expect(parseDateString("Sun, 12 Jul 2026 17:08:10 +0000")).toBe(
+      "2026-07-12",
+    );
+    // No zone → UTC interpretation preserved.
+    expect(parseDateString("Tue, Jun 2, 2026 at 3:14 PM")).toBe("2026-06-02");
+  });
+
   it("extracts the forwarded message date (Apple/Gmail style)", () => {
     const text = [
       "Begin forwarded message:",
