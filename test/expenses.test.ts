@@ -671,23 +671,52 @@ describe("Expense CRUD", () => {
     }
   });
 
-  it("hides the Incomplete notice once every necessary field is present", async () => {
+  it("shows the Incomplete notice only while editing, not when creating", async () => {
+    // Create mode: a fresh expense is expected to be missing fields — the
+    // badge is reserved for editing, where it flags what to fill in.
     await page.goto("/expense/new", { waitUntil: "load" });
-
-    // Fresh editor: date is prefilled, the rest is missing — incomplete.
-    await expect(page.getByText("Incomplete")).toBeVisible();
-
-    // Filling the data fields clears the notice — the receipt image is not
-    // a completeness factor, so no draft upload is needed.
-    await page.getByLabel("Amount").fill("12.34");
-    await page.locator("input[list='merchants']").fill("Drag Test Store");
-    await page.getByLabel("Category").selectOption({ label: "Testing" });
-    await page.getByLabel("Report").selectOption({ label: "2026 Test" });
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
-    // Emptying a field brings the notice back.
-    await page.getByLabel("Amount").fill("");
-    await expect(page.getByText("Incomplete")).toBeVisible();
+    // Edit mode on an incomplete expense: the badge tells you what to fill.
+    const id = ulid();
+    const now = new Date().toISOString();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-07-15",
+        report: "",
+        category: "",
+        description: "",
+        amount: null,
+        merchant: "",
+        imageFile: "",
+        imageMime: "",
+        originalName: "",
+        locations: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    try {
+      await page.goto(`/expense/${id}`, { waitUntil: "load" });
+      await expect(page.getByText("Incomplete")).toBeVisible();
+
+      // Filling the data fields clears the notice — the receipt image is
+      // not a completeness factor, so no draft upload is needed.
+      await page.getByLabel("Amount").fill("12.34");
+      await page.locator("input[list='merchants']").fill("Drag Test Store");
+      await page.getByLabel("Category").selectOption({ label: "Testing" });
+      await page.getByLabel("Report").selectOption({ label: "2026 Test" });
+      await expect(page.getByText("Incomplete")).toHaveCount(0);
+
+      // Emptying a field brings the notice back (still editing).
+      await page.getByLabel("Amount").fill("");
+      await expect(page.getByText("Incomplete")).toBeVisible();
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+    }
   });
 
   afterAll(async () => {

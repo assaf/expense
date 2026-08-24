@@ -482,7 +482,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       />
 
       <EditorActions
-        complete={complete}
+        // Create mode: a fresh expense is expected to be incomplete — the
+        // badge only means something while editing an existing row.
+        complete={isNew ? true : complete}
         saving={fetcher.state !== "idle" || drafting}
         onCancel={onCancel}
         onSave={() => doSave(onSave)}

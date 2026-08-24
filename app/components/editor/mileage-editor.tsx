@@ -618,7 +618,9 @@ export function MileageEditor({ data }: { data: EditorData }) {
       />
 
       <EditorActions
-        complete={complete}
+        // Create mode: a fresh expense is expected to be incomplete — the
+        // badge only means something while editing an existing row.
+        complete={isNew ? true : complete}
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}
         onSave={() => void onSave()}
