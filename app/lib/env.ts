@@ -114,8 +114,9 @@ export const EMAIL_TOKEN_ENCRYPTION_KEY = env.EMAIL_TOKEN_ENCRYPTION_KEY ?? "";
 export const LLM_BASE_URL = (
   env.LLM_BASE_URL ?? "https://api.deepseek.com"
 ).replace(/\/+$/, "");
-export const LLM_API_KEY = env.LLM_API_KEY ?? "";
-export const LLM_MODEL = env.LLM_MODEL ?? "deepseek-v4-flash";
+export const LLM_API_KEY = env.LLM_API_KEY ?? env.DEEPSEEK_API_KEY ?? "";
+export const LLM_MODEL =
+  env.LLM_MODEL ?? env.DEEPSEEK_MODEL ?? "deepseek-v4-flash";
 const llmMaxTokens = Number(env.LLM_MAX_TOKENS ?? 500);
 export const LLM_MAX_TOKENS =
   Number.isFinite(llmMaxTokens) && llmMaxTokens > 0 ? llmMaxTokens : 500;
@@ -123,9 +124,9 @@ export const LLM_MAX_TOKENS =
 /**
  * Model for image/receipt vision calls (OpenAI-compatible). Defaults to
  * `LLM_MODEL`; DeepSeek's hosted vision model is
- * `deepseek-v4-flash-vision-exp` — an experimental reasoning model that
- * rejects the `thinking` param and needs a larger output cap than the text
- * paths (it burns budget in `reasoning_content` before answering).
+ * `deepseek-v4-flash-vision-exp` — accepts `thinking: {type:"disabled"}`
+ * (halves output tokens + latency, probed live) and needs a larger output
+ * cap than the text paths.
  */
 export const LLM_VISION_MODEL = env.LLM_VISION_MODEL || LLM_MODEL;
 const llmVisionMaxTokens = Number(env.LLM_VISION_MAX_TOKENS ?? 1500);

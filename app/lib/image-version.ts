@@ -15,8 +15,12 @@
  * compares the rendered `v` against the current row to decide the TTL).
  */
 export function imageVersion(expense: {
-  updatedAt: string;
+  updatedAt: string | Date;
   imageFile: string;
 }): string {
-  return `${expense.updatedAt}-${expense.imageFile}`;
+  const updatedAt =
+    expense.updatedAt instanceof Date
+      ? expense.updatedAt.toISOString()
+      : expense.updatedAt;
+  return `${updatedAt}-${expense.imageFile}`;
 }

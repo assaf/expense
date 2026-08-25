@@ -282,7 +282,7 @@ export async function findRecentlyImportedMatch(
     },
     select: { id: true, createdAt: true },
   });
-  return row ?? undefined;
+  return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
 }
 
 export async function deleteExpense(
@@ -306,7 +306,9 @@ export async function readPriorMerchants(accountId: string): Promise<string[]> {
   });
   return grouped
     .sort((a, b) =>
-      (b._max.createdAt ?? "").localeCompare(a._max.createdAt ?? ""),
+      (b._max.createdAt?.toISOString() ?? "").localeCompare(
+        a._max.createdAt?.toISOString() ?? "",
+      ),
     )
     .map((g) => g.merchant);
 }
@@ -357,25 +359,31 @@ export async function readKnownMerchants(
     if (!m) {
       m = {
         display: row.merchant.trim(),
-        latestAt: row.createdAt,
+        latestAt: row.createdAt.toISOString(),
         category: null,
         report: null,
       };
       byMerchant.set(key, m);
     }
     // Display name: the newest row's spelling wins.
-    if (row.createdAt > m.latestAt) {
-      m.latestAt = row.createdAt;
+    if (row.createdAt.toISOString() > m.latestAt) {
+      m.latestAt = row.createdAt.toISOString();
       m.display = row.merchant.trim();
     }
     // Per-field newest non-empty value wins — a field is inherited from
     // its own newest expense, even when the overall-newest row left it
     // empty.
-    if (row.category && (!m.category || row.createdAt > m.category.at)) {
-      m.category = { value: row.category, at: row.createdAt };
+    if (
+      row.category &&
+      (!m.category || row.createdAt.toISOString() > m.category.at)
+    ) {
+      m.category = { value: row.category, at: row.createdAt.toISOString() };
     }
-    if (row.report && (!m.report || row.createdAt > m.report.at)) {
-      m.report = { value: row.report, at: row.createdAt };
+    if (
+      row.report &&
+      (!m.report || row.createdAt.toISOString() > m.report.at)
+    ) {
+      m.report = { value: row.report, at: row.createdAt.toISOString() };
     }
   }
   const out = new Map<string, KnownMerchant>();
@@ -459,9 +467,9 @@ function expenseBase(row: {
   category: string | null;
   description: string | null;
   amount: Prisma.Decimal | null;
-  reconciledAt: string | null;
-  createdAt: string;
-  updatedAt: string | null;
+  reconciledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date | null;
 }): {
   id: string;
   date: string;
@@ -482,9 +490,9 @@ function expenseBase(row: {
     // Decimal → 2-dp string (the domain's "" means no amount). toFixed(2) is
     // a lossless pad: numeric(10,2) already stores exactly two digits.
     amount: row.amount?.toFixed(2) ?? "",
-    reconciledAt: row.reconciledAt ?? "",
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt ?? row.createdAt,
+    reconciledAt: row.reconciledAt?.toISOString() ?? "",
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt?.toISOString() ?? row.createdAt.toISOString(),
   };
 }
 
@@ -504,9 +512,9 @@ function rowToExpense(row: {
   mileageType: string;
   locations: unknown;
   route: unknown;
-  reconciledAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  reconciledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }): Expense {
   const base = {
     ...expenseBase(row),

@@ -24,7 +24,7 @@ const accountCache = createCache<Account>(300_000);
 export async function readAccount(id: string): Promise<Account | undefined> {
   return cachedRead(accountCache, id, async () => {
     const row = await prisma.account.findUnique({ where: { id } });
-    return row ?? undefined;
+    return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
   });
 }
 
@@ -44,11 +44,16 @@ interface AccountMember {
 export async function readAccountUsers(
   accountId: string,
 ): Promise<AccountMember[]> {
-  return prisma.user.findMany({
+  const rows = await prisma.user.findMany({
     where: { accountId },
     select: { email: true, emailVerifiedAt: true, createdAt: true },
     orderBy: { createdAt: "asc" },
   });
+  return rows.map((row) => ({
+    email: row.email,
+    emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 /**
@@ -72,8 +77,8 @@ export async function readBootstrapUser(): Promise<User | undefined> {
     id: first.id,
     accountId: first.accountId,
     email: first.email,
-    emailVerifiedAt: first.emailVerifiedAt ?? null,
-    createdAt: first.createdAt,
+    emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
+    createdAt: first.createdAt.toISOString(),
   };
 }
 
@@ -103,7 +108,7 @@ export async function findAccountByInviteCode(
   inviteCode: string,
 ): Promise<Account | undefined> {
   const row = await prisma.account.findUnique({ where: { inviteCode } });
-  return row ?? undefined;
+  return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
 }
 
 /** Replace an account's invite code with a fresh one; returns the new code. */
@@ -174,15 +179,15 @@ function rowToUser(row: {
   id: string;
   accountId: string;
   email: string;
-  emailVerifiedAt: string | null;
-  createdAt: string;
+  emailVerifiedAt: Date | null;
+  createdAt: Date;
 }): User {
   return {
     id: row.id,
     accountId: row.accountId,
     email: row.email,
-    emailVerifiedAt: row.emailVerifiedAt ?? null,
-    createdAt: row.createdAt,
+    emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -279,7 +284,7 @@ export async function verifyUserEmailAddress(
     return { status: "already-verified", email: row.email };
   }
   const sentAt = row.verificationSentAt;
-  if (!sentAt || Date.now() - Date.parse(sentAt) > VERIFICATION_TTL_MS) {
+  if (!sentAt || Date.now() - sentAt.getTime() > VERIFICATION_TTL_MS) {
     return { status: "expired", email: row.email };
   }
   await prisma.user.update({
@@ -344,7 +349,7 @@ export async function resendUserVerification(
   if (!row || row.emailVerifiedAt) return { status: "already-verified" };
   if (
     row.verificationSentAt &&
-    Date.now() - Date.parse(row.verificationSentAt) < VERIFICATION_RESEND_MS
+    Date.now() - row.verificationSentAt.getTime() < VERIFICATION_RESEND_MS
   ) {
     return { status: "rate-limited" };
   }
@@ -388,7 +393,7 @@ export async function resetUserPasswordWithToken(
   });
   if (!row) return { status: "invalid" };
   const sentAt = row.passwordResetSentAt;
-  if (!sentAt || Date.now() - Date.parse(sentAt) > VERIFICATION_TTL_MS) {
+  if (!sentAt || Date.now() - sentAt.getTime() > VERIFICATION_TTL_MS) {
     await prisma.user.update({
       where: { id: row.id },
       data: { passwordResetTokenHash: null, passwordResetSentAt: null },
@@ -418,6 +423,6 @@ export async function passwordResetRecentlySent(
   });
   return Boolean(
     row?.passwordResetSentAt &&
-    Date.now() - Date.parse(row.passwordResetSentAt) < VERIFICATION_RESEND_MS,
+    Date.now() - row.passwordResetSentAt.getTime() < VERIFICATION_RESEND_MS,
   );
 }

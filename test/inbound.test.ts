@@ -781,6 +781,30 @@ describe("processInboundEvent (body receipt)", () => {
     expect(confirmation.text).toContain("> TOTAL: 42.50");
   });
 
+  it("truncates a very long quoted original in the confirmation", async () => {
+    const deps = fakeDeps();
+    // ~10k chars of body — far past the 4000-char quote cap.
+    const longBody = [
+      "MERCHANT: Amazon",
+      "TOTAL: 42.50",
+      "CATEGORY: office supplies",
+      "",
+      "Order details:",
+      ...Array.from({ length: 300 }, (_, i) => `line ${i}: ${"x".repeat(30)}`),
+    ].join("\n");
+    deps.fetchReceivedEmail = async () => receivedEmail({ text: longBody });
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "created" });
+    const confirmation = deps.sent[0]!;
+    // Both renderers flag the truncation…
+    expect(confirmation.html).toContain("… receipt text truncated");
+    expect(confirmation.text).toContain("> … receipt text truncated");
+    // …and the quote is capped, not the whole body.
+    expect(confirmation.text).not.toContain("line 299:");
+  });
+
   it("shows the extracted description as a field and saves it on the expense", async () => {
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () =>

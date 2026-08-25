@@ -100,7 +100,10 @@ export async function findVerifiedSenderAccount(
     where: { id: verification.accountId },
   });
   if (!account) return undefined;
-  return { account, verifiedAt: verification.verifiedAt };
+  return {
+    account: { ...account, createdAt: account.createdAt.toISOString() },
+    verifiedAt: verification.verifiedAt.toISOString(),
+  };
 }
 
 /**
@@ -140,9 +143,9 @@ export async function listInboundSenders(
     accountId: r.accountId,
     address: r.address,
     verified: byAddress.has(r.address),
-    verifiedAt: byAddress.get(r.address)?.verifiedAt ?? null,
-    verificationSentAt: r.verificationSentAt,
-    createdAt: r.createdAt,
+    verifiedAt: byAddress.get(r.address)?.verifiedAt?.toISOString() ?? null,
+    verificationSentAt: r.verificationSentAt?.toISOString() ?? null,
+    createdAt: r.createdAt.toISOString(),
   }));
 }
 
@@ -256,9 +259,7 @@ export async function verifyInboundSenderAddress(
     where: { verificationTokenHash: hashToken(rawToken) },
   });
   if (!row) return { status: "invalid" };
-  const sentAt = row.verificationSentAt
-    ? Date.parse(row.verificationSentAt)
-    : 0;
+  const sentAt = row.verificationSentAt ? row.verificationSentAt.getTime() : 0;
   if (!Number.isFinite(sentAt) || Date.now() - sentAt > VERIFICATION_TTL_MS) {
     return { status: "expired", address: row.address };
   }
@@ -392,7 +393,7 @@ export async function ensureInboundSenderForUser(
   });
   if (existing?.verificationTokenHash) {
     const sentAt = existing.verificationSentAt
-      ? Date.parse(existing.verificationSentAt)
+      ? existing.verificationSentAt.getTime()
       : 0;
     if (
       Number.isFinite(sentAt) &&

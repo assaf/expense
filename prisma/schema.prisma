@@ -22,7 +22,7 @@ model Account {
   id         String     @id
   name       String     @unique
   inviteCode String     @unique
-  createdAt  String
+  createdAt  DateTime
 
   users         User[]
   expenses      Expense[]
@@ -52,15 +52,15 @@ model User {
   /// When the emailed verification link was clicked — null means the
   /// account can't sign in until the email is verified. Legacy rows (created
   /// before email verification was required) were backfilled at migration.
-  emailVerifiedAt       String?
+  emailVerifiedAt       DateTime?
   /// sha256 of the current verification token in the emailed link.
   verificationTokenHash String?
-  verificationSentAt    String?
+  verificationSentAt    DateTime?
   /// sha256 of the current password-reset token in the emailed link
   /// (single-use, 7-day TTL, once-a-day resend — see auth.server.ts).
   passwordResetTokenHash String?
-  passwordResetSentAt    String?
-  createdAt             String
+  passwordResetSentAt    DateTime?
+  createdAt             DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -93,12 +93,12 @@ model Expense {
   /// (see ReconciliationRun). Null until the user completes a
   /// reconciliation — set only by the reconciliation flow, never by a
   /// normal save (expenseData deliberately omits it).
-  reconciledAt      String?
+  reconciledAt      DateTime?
   /// The reconciliation run that marked this expense reconciled. Deleting
   /// the run keeps reconciledAt but drops the link (SetNull).
   reconciledInRunId String?
-  createdAt    String
-  updatedAt    String
+  createdAt    DateTime
+  updatedAt    DateTime
   accountId    String
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -130,8 +130,8 @@ model ReconciliationRun {
   createdCount Int
   skipped      Json // [{ line, raw, reason }] — unparseable lines
   data         Json // { rows, matches, decisions, completed? }
-  createdAt    String
-  completedAt  String?
+  createdAt    DateTime
+  completedAt  DateTime?
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   expenses Expense[] @relation("runExpenses")
@@ -195,7 +195,7 @@ model MileageRate {
   startDate String // YYYY-MM-DD, inclusive
   endDate   String // YYYY-MM-DD, inclusive; "" = open-ended
   rate      Decimal @db.Decimal(5, 3)
-  createdAt String
+  createdAt DateTime
 
   @@index([type, startDate])
   @@map("mileage_rates")
@@ -238,8 +238,8 @@ model InboundEmail {
   subject   String
   status    String // processing | created | partial | error
   error     String
-  createdAt String
-  updatedAt String
+  createdAt DateTime
+  updatedAt DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -257,8 +257,8 @@ model InboundSender {
   accountId            String
   address              String // normalized lowercase
   verificationTokenHash String? // sha256 of the token in the emailed link
-  verificationSentAt   String?
-  createdAt            String
+  verificationSentAt   DateTime?
+  createdAt            DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -276,7 +276,7 @@ model InboundSender {
 model InboundSenderVerification {
   address    String @id // normalized lowercase
   accountId  String
-  verifiedAt String
+  verifiedAt DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
@@ -305,16 +305,16 @@ model EmailConnection {
   status        String  @default("active")
   receivedCount Int     @default(0)
   processedCount Int    @default(0)
-  lastPushAt    String?
+  lastPushAt    DateTime?
   /// FastMail PushSubscription id for this connection (renewed by the
   /// daily cron; deviceClientId `expense-conn-<id>` — see
   /// email-connection-push.server.ts).
   pushSubscriptionId String?
-  pushExpiresAt     String?
+  pushExpiresAt     DateTime?
   /// Last time the user ran the inbox review scan (`/email-review`),
   /// stamping the point after which the pending list is current.
-  reviewScannedAt String?
-  createdAt     String
+  reviewScannedAt DateTime?
+  createdAt     DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
   processLog EmailProcessLog[]
@@ -334,7 +334,7 @@ model EmailRule {
   sender    String
   /// seed (general) | forward (learned from a user forward) | inferred
   source    String
-  createdAt String
+  createdAt DateTime
 
   // No Account relation ON PURPOSE: general rules use accountId = "" (no
   // matching row), like the global MileageRate table. Orphaned user rules
@@ -363,10 +363,10 @@ model EmailProcessLog {
   outcome      String
   error        String?
   /// JMAP receivedAt of the email (for the review list display + order).
-  receivedAt    String?
+  receivedAt    DateTime?
   /// The raw From header ("Name <addr>") for the review list display.
   fromDisplay   String?
-  createdAt    String
+  createdAt    DateTime
 
   emailConnection EmailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
@@ -383,7 +383,7 @@ model OAuthClient {
   name        String
   redirectUris String  // JSON array of allowed redirect URIs
   authMethod  String // "none" | "client_secret_basic"
-  createdAt   String
+  createdAt   DateTime
 
   codes    OAuthCode[]
   tokens   OAuthToken[]
@@ -397,7 +397,7 @@ model OAuthClient {
 model OAuthConsent {
   userId    String
   clientId  String
-  grantedAt String
+  grantedAt DateTime
 
   client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -413,9 +413,9 @@ model OAuthCode {
   clientId    String
   challenge   String // S256 PKCE challenge (base64url of sha256(verifier))
   redirectUri String
-  expiresAt   String
+  expiresAt   DateTime
   used        Boolean  @default(false)
-  createdAt   String
+  createdAt   DateTime
 
   client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -431,9 +431,9 @@ model OAuthToken {
   clientId  String
   type      String // "access" | "refresh"
   scope     String // "" — no scopes defined yet
-  expiresAt String
-  revokedAt String?
-  createdAt String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime
 
   client OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -451,9 +451,9 @@ model OAuthToken {
 model AuthAttempt {
   key         String  @id
   failures    Int
-  windowStart String // ISO — the counter resets when this is older than the window
-  lockedUntil String? // ISO — null when not locked
-  updatedAt   String
+  windowStart DateTime // the counter resets when this is older than the window
+  lockedUntil DateTime? // null when not locked
+  updatedAt   DateTime
 
   @@map("auth_attempts")
 }
@@ -469,7 +469,7 @@ model ReceiptExtraction {
   accountId String
   hash      String // sha256 hex of the input (image bytes or text)
   result    Json // ExtractionResult
-  createdAt String // ISO
+  createdAt DateTime
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 

@@ -5,8 +5,8 @@ import { goto } from "./helpers/launchBrowser";
 
 // The Email page (/emails) holds both email features: connected email
 // accounts (auto-import) and receipts-by-email (forward-to address, verified
-// senders). The test server has no EMAIL_TOKEN_ENCRYPTION_KEY, so the
-// connected-accounts section shows its unconfigured message.
+// senders). The test server pins EMAIL_TOKEN_ENCRYPTION_KEY (launchServer),
+// so the connected-accounts section renders the connect form.
 describe("Email", () => {
   let page: Page;
 

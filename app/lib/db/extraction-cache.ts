@@ -45,7 +45,7 @@ export async function readCachedExtraction(
     where: { accountId_hash: { accountId, hash } },
   });
   if (!row) return null;
-  if (Date.now() - Date.parse(row.createdAt) > TTL_MS) {
+  if (Date.now() - row.createdAt.getTime() > TTL_MS) {
     await prisma.receiptExtraction
       .delete({ where: { accountId_hash: { accountId, hash } } })
       .catch(() => {});

@@ -195,10 +195,19 @@ async function ensureBootstrapUser(): Promise<User> {
         first.email,
         email,
       );
-      return { ...first, email };
+      return {
+        ...first,
+        email,
+        emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
+        createdAt: first.createdAt.toISOString(),
+      };
     }
   }
-  return first;
+  return {
+    ...first,
+    emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
+    createdAt: first.createdAt.toISOString(),
+  };
 }
 
 /** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */

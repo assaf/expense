@@ -122,7 +122,7 @@ export async function consumeOAuthCode(
     clientId: row.clientId,
     challenge: row.challenge,
     redirectUri: row.redirectUri,
-    expiresAt: row.expiresAt,
+    expiresAt: row.expiresAt.toISOString(),
   };
 }
 
@@ -203,12 +203,20 @@ export async function listUserOAuthSessions(userId: string): Promise<
     if (!row) continue;
     const own = tokens.filter((t) => t.clientId === consent.clientId);
     const lastUsedAt = own.reduce<string | null>(
-      (latest, t) => (t.createdAt > (latest ?? "") ? t.createdAt : latest),
+      (latest, t) =>
+        t.createdAt.toISOString() > (latest ?? "")
+          ? t.createdAt.toISOString()
+          : latest,
       null,
     );
-    const active = own.filter((t) => t.revokedAt === null && t.expiresAt > now);
+    const active = own.filter(
+      (t) => t.revokedAt === null && t.expiresAt.toISOString() > now,
+    );
     const expiresAt = active.reduce<string | null>(
-      (latest, t) => (t.expiresAt > (latest ?? "") ? t.expiresAt : latest),
+      (latest, t) =>
+        t.expiresAt.toISOString() > (latest ?? "")
+          ? t.expiresAt.toISOString()
+          : latest,
       null,
     );
     out.push({ client: oauthClientFromRow(row), lastUsedAt, expiresAt });
@@ -244,7 +252,7 @@ function oauthClientFromRow(row: {
   name: string;
   redirectUris: string;
   authMethod: string;
-  createdAt: string;
+  createdAt: Date;
 }): OAuthClientRecord {
   let redirectUris: string[] = [];
   try {
@@ -262,7 +270,7 @@ function oauthClientFromRow(row: {
     redirectUris,
     authMethod:
       row.authMethod === "client_secret_basic" ? "client_secret_basic" : "none",
-    createdAt: row.createdAt,
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
@@ -272,9 +280,9 @@ function oauthTokenFromRow(row: {
   clientId: string;
   type: string;
   scope: string;
-  expiresAt: string;
-  revokedAt: string | null;
-  createdAt: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  createdAt: Date;
 }): OAuthTokenRecord {
   return {
     tokenHash: row.tokenHash,
@@ -282,8 +290,8 @@ function oauthTokenFromRow(row: {
     clientId: row.clientId,
     type: row.type === "refresh" ? "refresh" : "access",
     scope: row.scope,
-    expiresAt: row.expiresAt,
-    revokedAt: row.revokedAt,
-    createdAt: row.createdAt,
+    expiresAt: row.expiresAt.toISOString(),
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
   };
 }

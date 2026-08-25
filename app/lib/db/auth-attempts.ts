@@ -84,8 +84,8 @@ async function readState(key: string): Promise<AuthAttemptState | null> {
   return row
     ? {
         failures: row.failures,
-        windowStart: row.windowStart,
-        lockedUntil: row.lockedUntil,
+        windowStart: row.windowStart.toISOString(),
+        lockedUntil: row.lockedUntil?.toISOString() ?? null,
       }
     : null;
 }

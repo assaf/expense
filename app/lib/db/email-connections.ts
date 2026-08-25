@@ -29,11 +29,11 @@ function toView(
     status: string;
     receivedCount: number;
     processedCount: number;
-    lastPushAt: string | null;
+    lastPushAt: Date | null;
     pushSubscriptionId: string | null;
-    pushExpiresAt: string | null;
-    reviewScannedAt: string | null;
-    createdAt: string;
+    pushExpiresAt: Date | null;
+    reviewScannedAt: Date | null;
+    createdAt: Date;
   },
   processedLast24h: number,
   pendingReview: number,
@@ -46,11 +46,11 @@ function toView(
     status: row.status,
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
-    lastPushAt: row.lastPushAt,
+    lastPushAt: row.lastPushAt?.toISOString() ?? null,
     pushSubscriptionId: row.pushSubscriptionId,
-    pushExpiresAt: row.pushExpiresAt,
-    reviewScannedAt: row.reviewScannedAt,
-    createdAt: row.createdAt,
+    pushExpiresAt: row.pushExpiresAt?.toISOString() ?? null,
+    reviewScannedAt: row.reviewScannedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
     processedLast24h,
     pendingReview,
   };
@@ -146,11 +146,11 @@ function rowWithSecret(row: {
   status: string;
   receivedCount: number;
   processedCount: number;
-  lastPushAt: string | null;
+  lastPushAt: Date | null;
   pushSubscriptionId: string | null;
-  pushExpiresAt: string | null;
-  reviewScannedAt: string | null;
-  createdAt: string;
+  pushExpiresAt: Date | null;
+  reviewScannedAt: Date | null;
+  createdAt: Date;
   tokenEnc: string;
   jmapAccountId: string;
 }): EmailConnectionWithSecret {
@@ -162,11 +162,11 @@ function rowWithSecret(row: {
     status: row.status,
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
-    lastPushAt: row.lastPushAt,
+    lastPushAt: row.lastPushAt?.toISOString() ?? null,
     pushSubscriptionId: row.pushSubscriptionId,
-    pushExpiresAt: row.pushExpiresAt,
-    reviewScannedAt: row.reviewScannedAt,
-    createdAt: row.createdAt,
+    pushExpiresAt: row.pushExpiresAt?.toISOString() ?? null,
+    reviewScannedAt: row.reviewScannedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
   };

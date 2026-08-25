@@ -128,6 +128,11 @@ jobs:
       # Runs the real tesseract OCR round-trip in test/pdf-ocr.test.ts
       # (downloads eng.traineddata from a CDN; skipped locally by default).
       RUN_OCR_TESTS: "1"
+      # Defense-in-depth: launchServer already pins this for the spawned
+      # server, but CI has no .env — keep the /emails page on the configured
+      # branch even if the pin ever regresses (Aug 2026 flake, see
+      # docs/../commit 014a9c6f).
+      EMAIL_TOKEN_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
     steps:
       - uses: actions/checkout@v7
 

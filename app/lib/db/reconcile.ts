@@ -42,8 +42,8 @@ function runToRecord(row: {
   createdCount: number;
   skipped: unknown;
   data: unknown;
-  createdAt: string;
-  completedAt: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
 }): ReconciliationRunRecord {
   const skipped = Array.isArray(row.skipped)
     ? (row.skipped as SkippedLine[])
@@ -65,8 +65,8 @@ function runToRecord(row: {
     createdCount: row.createdCount,
     skipped,
     data,
-    createdAt: row.createdAt,
-    completedAt: row.completedAt,
+    createdAt: row.createdAt.toISOString(),
+    completedAt: row.completedAt?.toISOString() ?? null,
   };
 }
 

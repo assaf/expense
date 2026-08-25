@@ -1,6 +1,4 @@
 import {
-  confirmationEmail,
-  confirmationNotes,
   isDeliveryNotification,
   looksLikeBounce,
   extractReceiptFromSource,
@@ -8,6 +6,10 @@ import {
   selectReceiptSource,
   type InboundDeps,
 } from "~/lib/inbound-email.server";
+import {
+  confirmationEmail,
+  confirmationNotes,
+} from "~/lib/email-confirmation.server";
 import {
   createMimeInboundCache,
   mimeFetchDeps,

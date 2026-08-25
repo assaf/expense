@@ -186,12 +186,15 @@ describe("Duplicate detection", () => {
     await expect(page.getByText(/Possible duplicate of DupCorp B/)).toHaveCount(
       0,
     );
-    await expect(
+    // Both sides of the pair are visually identical (same merchant, amount,
+    // date, category, and banner), and the seeded rows share createdAt, so
+    // list order is a DB tie-break — first() may hit either row. Assert the
+    // pair is halved, not which specific side survived.
+    const [b1, b2] = await Promise.all([
       testPrisma.expense.findUnique({ where: { id: PAIR_B[0]! } }),
-    ).resolves.toBeNull();
-    expect(
-      await testPrisma.expense.findUnique({ where: { id: PAIR_B[1]! } }),
-    ).not.toBeNull();
+      testPrisma.expense.findUnique({ where: { id: PAIR_B[1]! } }),
+    ]);
+    expect([b1, b2].filter(Boolean)).toHaveLength(1);
   });
 
   it("warns in the create editor and turns Save into 'Save anyway'", async () => {

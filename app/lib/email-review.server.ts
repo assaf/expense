@@ -293,7 +293,7 @@ export async function listReviewItems(
   });
   return rows.map((r) => ({
     emailId: r.emailId,
-    receivedAt: r.receivedAt ?? "",
+    receivedAt: r.receivedAt?.toISOString() ?? "",
     fromAddress: r.fromAddress,
     fromDisplay: r.fromDisplay,
     subject: r.subject,
@@ -371,7 +371,7 @@ export async function processReviewItem(input: {
   };
   const summary: ConnectionEmailSummary = {
     id: emailId,
-    receivedAt: row.receivedAt ?? new Date().toISOString(),
+    receivedAt: row.receivedAt?.toISOString() ?? new Date().toISOString(),
     subject: row.subject,
     from: row.fromDisplay ?? row.fromAddress,
   };
