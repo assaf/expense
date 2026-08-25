@@ -5,23 +5,22 @@
     "test/**/*.ts",
     "test/**/*.tsx",
     "scripts/**/*.ts",
+    ".react-router/types/**/*",
     "prisma/**/*.ts",
-    ".react-router/types/**/*"
+    "prisma.config.ts"
   ],
-  "exclude": ["build", "node_modules", "public", "prisma/generated"],
+  "exclude": ["build", "node_modules", "public"],
   "compilerOptions": {
     "esModuleInterop": true,
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2025", "ESNext.TypedArrays"],
-    "module": "ES2022",
+    "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "paths": {
       "~/*": ["./app/*"],
       "~/test/*": ["./test/*"],
-      "prisma/generated": ["./prisma/generated/client"],
-      "prisma/generated/models": ["./prisma/generated/models"],
       "+types/*": ["./.react-router/types/*"]
     },
     "resolveJsonModule": true,

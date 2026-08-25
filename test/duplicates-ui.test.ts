@@ -133,9 +133,9 @@ describe("Duplicate detection", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
     expect(row).not.toBeNull();
-    expect(duplicatePairKey(row!.expenseAId, row!.expenseBId)).toBe(
-      duplicatePairKey(PAIR_A[0]!, PAIR_A[1]!),
-    );
+    expect(
+      duplicatePairKey(row!.expenseAId as string, row!.expenseBId as string),
+    ).toBe(duplicatePairKey(PAIR_A[0]!, PAIR_A[1]!));
     // Survives a reload: the warning never nags again.
     await page.reload({ waitUntil: "load" });
     await expect(page.getByText(/Possible duplicate of DupCorp A/)).toHaveCount(

@@ -44,12 +44,10 @@ deploys (this forced raw `vercel deploy` workarounds that bypassed the
 test gate; Aug 2026).
 
 Flags (any order): `--skip-tests`, `--skip-db-sync`. The latter skips
-`prisma db push`: Prisma 7's AI-agent consent guard refuses `db push
---accept-data-loss` when it detects an agent (even for a verified no-op
-run), so agent-driven deploys should pass `--skip-db-sync` and verify
+`prisma db update`. Agent-driven deploys that skip the sync can verify
 schema drift separately:
-`pnpm prisma migrate diff --from-config-datasource prisma/schema.prisma --to-schema prisma/schema.prisma`
-(with `DATABASE_URL=$DATABASE_URL_UNPOOLED` from `.env.prod.pull`).
+`pnpm prisma db verify` (with `DATABASE_URL=$DATABASE_URL_UNPOOLED` from
+`.env.prod.pull`).
 
 Sentry releases/sourcemaps work through this script because it sources
 `.env.prod.pull` (see `docs/operations.md` → `SENTRY_AUTH_TOKEN`).

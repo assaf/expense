@@ -1,11 +1,12 @@
 import { ulid } from "ulid";
-import prisma from "~/lib/prisma.server";
+import { and, or } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { asJson, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { renameImageToConvention, saveImage } from "~/lib/images.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { validateDateNotFuture } from "~/lib/validation";
 import { hasAmount } from "~/lib/completeness";
 import { expenseData } from "~/lib/db/expenses";
-import type { Prisma } from "prisma/generated";
 import type {
   NewExpenseDraft,
   ReceiptExpense,
@@ -42,8 +43,8 @@ function runToRecord(row: {
   createdCount: number;
   skipped: unknown;
   data: unknown;
-  createdAt: Date;
-  completedAt: Date | null;
+  createdAt: string;
+  completedAt: string | null;
 }): ReconciliationRunRecord {
   const skipped = Array.isArray(row.skipped)
     ? (row.skipped as SkippedLine[])
@@ -65,8 +66,8 @@ function runToRecord(row: {
     createdCount: row.createdCount,
     skipped,
     data,
-    createdAt: row.createdAt.toISOString(),
-    completedAt: row.completedAt?.toISOString() ?? null,
+    createdAt: toIso(row.createdAt),
+    completedAt: toIsoOrNull(row.completedAt),
   };
 }
 
@@ -82,20 +83,18 @@ export async function createReconciliationRun(
     matches: input.matches,
     decisions: {},
   };
-  const row = await prisma.reconciliationRun.create({
-    data: {
-      id: input.id,
-      accountId,
-      fileName: input.fileName,
-      fileHash: input.fileHash,
-      status: "draft",
-      rowCount: input.rows.length,
-      matchedCount: 0,
-      createdCount: 0,
-      skipped: input.skipped as unknown as Prisma.InputJsonValue,
-      data: data as unknown as Prisma.InputJsonValue,
-      createdAt: new Date().toISOString(),
-    },
+  const row = await db.orm.public.ReconciliationRun.create({
+    id: input.id,
+    accountId,
+    fileName: input.fileName,
+    fileHash: input.fileHash,
+    status: "draft",
+    rowCount: input.rows.length,
+    matchedCount: 0,
+    createdCount: 0,
+    skipped: asJson(input.skipped),
+    data: asJson(data),
+    createdAt: fromIso(new Date().toISOString()),
   });
   return runToRecord(row);
 }
@@ -104,9 +103,9 @@ export async function readReconciliationRun(
   accountId: string,
   id: string,
 ): Promise<ReconciliationRunRecord | undefined> {
-  const row = await prisma.reconciliationRun.findFirst({
-    where: { id, accountId },
-  });
+  const row = await db.orm.public.ReconciliationRun.where((r) =>
+    and(r.id.eq(id), r.accountId.eq(accountId)),
+  ).first();
   return row ? runToRecord(row) : undefined;
 }
 
@@ -117,10 +116,15 @@ export async function findReconciliationRunByHash(
   accountId: string,
   fileHash: string,
 ): Promise<ReconciliationRunRecord | undefined> {
-  const row = await prisma.reconciliationRun.findFirst({
-    where: { accountId, fileHash, status: { in: ["draft", "completed"] } },
-    orderBy: { createdAt: "desc" },
-  });
+  const row = await db.orm.public.ReconciliationRun.where((r) =>
+    and(
+      r.accountId.eq(accountId),
+      r.fileHash.eq(fileHash),
+      or(r.status.eq("draft"), r.status.eq("completed")),
+    ),
+  )
+    .orderBy((r) => r.createdAt.desc())
+    .first();
   return row ? runToRecord(row) : undefined;
 }
 
@@ -131,14 +135,19 @@ export async function listReconciliationRuns(
   accountId: string,
 ): Promise<ReconciliationRunRecord[]> {
   const staleCutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  await prisma.reconciliationRun.deleteMany({
-    where: { accountId, status: "draft", createdAt: { lt: staleCutoff } },
-  });
-  const rows = await prisma.reconciliationRun.findMany({
-    where: { accountId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  await db.orm.public.ReconciliationRun.where((r) =>
+    and(
+      r.accountId.eq(accountId),
+      r.status.eq("draft"),
+      r.createdAt.lt(fromIso(staleCutoff)),
+    ),
+  ).deleteAll();
+  const rows = await db.orm.public.ReconciliationRun.where((r) =>
+    r.accountId.eq(accountId),
+  )
+    .orderBy((r) => r.createdAt.desc())
+    .limit(20)
+    .all();
   return rows.map(runToRecord);
 }
 
@@ -151,10 +160,11 @@ export async function updateReconciliationDecision(
   rowIndex: number,
   decision: ReconciliationDecision | null,
 ): Promise<boolean> {
-  const run = await prisma.reconciliationRun.findFirst({
-    where: { id: runId, accountId, status: "draft" },
-    select: { data: true },
-  });
+  const run = await db.orm.public.ReconciliationRun.where((r) =>
+    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+  )
+    .select("data")
+    .first();
   if (!run) return false;
   const data = run.data as unknown as ReconciliationRunData;
   const key = String(rowIndex);
@@ -163,10 +173,9 @@ export async function updateReconciliationDecision(
   } else {
     data.decisions[key] = decision;
   }
-  await prisma.reconciliationRun.updateMany({
-    where: { id: runId, accountId, status: "draft" },
-    data: { data: data as unknown as Prisma.InputJsonValue },
-  });
+  await db.orm.public.ReconciliationRun.where((r) =>
+    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+  ).updateAll({ data: asJson(data) });
   return true;
 }
 
@@ -176,11 +185,13 @@ export async function discardReconciliationRun(
   accountId: string,
   runId: string,
 ): Promise<boolean> {
-  const res = await prisma.reconciliationRun.updateMany({
-    where: { id: runId, accountId, status: "draft" },
-    data: { status: "discarded", completedAt: new Date().toISOString() },
+  const res = await db.orm.public.ReconciliationRun.where((r) =>
+    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+  ).updateAll({
+    status: "discarded",
+    completedAt: fromIso(new Date().toISOString()),
   });
-  return res.count > 0;
+  return res.length > 0;
 }
 
 interface CompleteReconciliationResult {
@@ -279,7 +290,7 @@ export async function completeReconciliationRun(
     }
   }
 
-  const outcome = await prisma.$transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     let matched = 0;
     let created = 0;
     const errors: string[] = [];
@@ -288,13 +299,19 @@ export async function completeReconciliationRun(
     for (const [i, res] of resolutions) {
       if (res.kind === "match") {
         // The expense must still exist, belong to this account, and not be
-        // reconciled already (updateMany with reconciledAt: null makes the
+        // reconciled already (the reconciledAt-null predicate makes the
         // claim atomic, so a concurrent completion can't double-mark).
-        const updated = await tx.expense.updateMany({
-          where: { id: res.expenseId, accountId, reconciledAt: null },
-          data: { reconciledAt: now, reconciledInRunId: runId },
+        const updated = await tx.orm.public.Expense.where((e) =>
+          and(
+            e.id.eq(res.expenseId),
+            e.accountId.eq(accountId),
+            e.reconciledAt.isNull(),
+          ),
+        ).updateAll({
+          reconciledAt: fromIso(now),
+          reconciledInRunId: runId,
         });
-        if (updated.count === 1) {
+        if (updated.length === 1) {
           matched++;
         } else {
           errors.push(
@@ -310,9 +327,13 @@ export async function completeReconciliationRun(
         errors.push(`Row ${i + 1}: ${dateError}`);
         continue;
       }
-      const report = await tx.report.findFirst({
-        where: { accountId, name: draft.report, closed: false },
-      });
+      const report = await tx.orm.public.Report.where((r) =>
+        and(
+          r.accountId.eq(accountId),
+          r.name.eq(draft.report),
+          r.closed.eq(false),
+        ),
+      ).first();
       if (!report) {
         errors.push(
           `Row ${i + 1}: report “${draft.report}” is missing or closed.`,
@@ -355,13 +376,11 @@ export async function completeReconciliationRun(
         expense.originalName,
         expense.imageMime,
       );
-      await tx.expense.create({
-        data: {
-          ...expenseData(expense),
-          accountId,
-          reconciledAt: now,
-          reconciledInRunId: runId,
-        },
+      await tx.orm.public.Expense.create({
+        ...expenseData(expense),
+        accountId,
+        reconciledAt: fromIso(now),
+        reconciledInRunId: runId,
       });
       createdExpenseIds.push(expense.id);
       created++;
@@ -371,15 +390,12 @@ export async function completeReconciliationRun(
       ...data,
       completed: { matched, created, errors, createdExpenseIds },
     };
-    await tx.reconciliationRun.update({
-      where: { id: runId },
-      data: {
-        status: "completed",
-        completedAt: now,
-        matchedCount: matched,
-        createdCount: created,
-        data: completedData as unknown as Prisma.InputJsonValue,
-      },
+    await tx.orm.public.ReconciliationRun.where({ id: runId }).update({
+      status: "completed",
+      completedAt: fromIso(now),
+      matchedCount: matched,
+      createdCount: created,
+      data: asJson(completedData),
     });
     return { matched, created, errors, createdExpenseIds };
   });

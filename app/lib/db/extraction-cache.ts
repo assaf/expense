@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { ulid } from "ulid";
 
-import type { Prisma } from "prisma/generated";
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { asJson, fromIso, toIso } from "~/lib/db/wire";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 
 /**
@@ -41,13 +43,15 @@ export async function readCachedExtraction(
   accountId: string,
   hash: string,
 ): Promise<ExtractionResult | null> {
-  const row = await prisma.receiptExtraction.findUnique({
-    where: { accountId_hash: { accountId, hash } },
-  });
+  const row = await db.orm.public.ReceiptExtraction.where((r) =>
+    and(r.accountId.eq(accountId), r.hash.eq(hash)),
+  ).first();
   if (!row) return null;
-  if (Date.now() - row.createdAt.getTime() > TTL_MS) {
-    await prisma.receiptExtraction
-      .delete({ where: { accountId_hash: { accountId, hash } } })
+  if (Date.now() - Date.parse(toIso(row.createdAt)) > TTL_MS) {
+    await db.orm.public.ReceiptExtraction.where((r) =>
+      and(r.accountId.eq(accountId), r.hash.eq(hash)),
+    )
+      .delete()
       .catch(() => {});
     return null;
   }
@@ -61,18 +65,31 @@ export async function writeCachedExtraction(
   hash: string,
   result: ExtractionResult,
 ): Promise<void> {
-  const json = result as unknown as Prisma.InputJsonValue;
+  const json = asJson(result);
   const now = new Date().toISOString();
-  await prisma.$transaction([
-    prisma.receiptExtraction.deleteMany({
-      where: { accountId, createdAt: { lt: expiredBefore(now) } },
-    }),
-    prisma.receiptExtraction.upsert({
-      where: { accountId_hash: { accountId, hash } },
-      create: { accountId, hash, result: json, createdAt: now },
-      update: { result: json, createdAt: now },
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.ReceiptExtraction.where((r) =>
+      and(
+        r.accountId.eq(accountId),
+        r.createdAt.lt(fromIso(expiredBefore(now))),
+      ),
+    ).deleteAll();
+    // The (accountId, hash) uniqueness is a unique index, not a
+    // constraint upsert's conflictOn can target, so refresh in place and
+    // create only when the row is absent.
+    const updated = await tx.orm.public.ReceiptExtraction.where((r) =>
+      and(r.accountId.eq(accountId), r.hash.eq(hash)),
+    ).updateAll({ result: json, createdAt: fromIso(now) });
+    if (updated.length === 0) {
+      await tx.orm.public.ReceiptExtraction.create({
+        id: ulid(),
+        accountId,
+        hash,
+        result: json,
+        createdAt: fromIso(now),
+      });
+    }
+  });
 }
 
 function expiredBefore(nowIso: string): string {

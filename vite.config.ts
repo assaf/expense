@@ -19,7 +19,6 @@ export default defineConfig((config) => {
         "build/**",
         "node_modules/**",
         "data-test/**",
-        "prisma/generated/**",
         "test/fixtures/**",
       ],
       printWidth: 80,
@@ -34,7 +33,6 @@ export default defineConfig((config) => {
         "build/**",
         "node_modules/**",
         "data-test/**",
-        "prisma/generated/**",
         "test/fixtures/**",
         // tsgolint overflows on vite config generics; tsc checks it cleanly.
         "vite.config.ts",
@@ -82,10 +80,6 @@ export default defineConfig((config) => {
       alias: [
         { find: "~", replacement: resolve("app") },
         { find: "~/test", replacement: resolve("test") },
-        {
-          find: "prisma/generated",
-          replacement: resolve("prisma/generated/client"),
-        },
         { find: "+types", replacement: resolve(".react-router/types") },
       ],
     },

@@ -133,9 +133,9 @@ directory listings: [`docs/mcp-directories.md`](docs/mcp-directories.md).
 
 ## State
 
-The storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the only
-source of truth; the client is built to `prisma/generated` with `pnpm
-build:prisma`). `DATABASE_URL` is required upon launch (otherwise the app will
+The storage is Postgres-only via **Prisma 8** (`prisma/contract.prisma` is
+the source of truth; `pnpm build:prisma` emits the contract artifacts the
+runtime reads). `DATABASE_URL` is required upon launch (otherwise the app will
 crash with an error). Image blobs are stored inside Postgres BYTEA
 (`image_blobs`) in production and development; there is no additional storage
 service.
@@ -151,9 +151,9 @@ All reads/writes are done via `app/lib/database.ts` (Prisma queries scoped by
 `accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
 `imageBlob`). Image blobs are kept in `images/{accountId}/...` pathnames on all
 backends. They are namespaced per account, so two accounts can never have a
-name conflict. Schema changes: edit `prisma/schema.prisma`, then run
-`prisma migrate dev --name …` locally and `pnpm db:push` (or `pnpm db:migrate`)
-before deploy.
+name conflict. Schema changes: edit `prisma/contract.prisma`, run
+`pnpm build:prisma` (contract emit), then `pnpm db:push` locally and on
+deploy (see `docs/deploy.md`).
 
 ## Quick start
 

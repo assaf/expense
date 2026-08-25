@@ -1,4 +1,7 @@
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
+import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import { extractEmailAddress, isEmail } from "~/lib/validation";
 import { VERIFICATION_RESEND_MS, VERIFICATION_TTL_MS } from "~/lib/db/shared";
@@ -19,22 +22,21 @@ export async function upsertInboundEmail(input: {
   error: string;
 }): Promise<void> {
   const now = new Date().toISOString();
-  await prisma.inboundEmail.upsert({
-    where: { emailId: input.emailId },
+  await db.orm.public.InboundEmail.upsert({
+    create: { ...input, createdAt: fromIso(now), updatedAt: fromIso(now) },
     update: {
       accountId: input.accountId,
       subject: input.subject,
       status: input.status,
       error: input.error,
-      updatedAt: now,
+      updatedAt: fromIso(now),
     },
-    create: { ...input, createdAt: now, updatedAt: now },
   });
 }
 
 /**
  * Atomically claim a received email for processing. Inserts the row with
- * status "processing" via `createMany ... skipDuplicates`: when two
+ * status "processing" and lets the primary key break the tie: when two
  * concurrent drains (a burst of webhook pushes, or a push racing the daily
  * cron) both list the same email before either marks it, exactly one wins
  * the claim and the other gets `claimed: false` with the existing row.
@@ -56,25 +58,24 @@ export async function claimInboundEmail(input: {
   existing: InboundEmailRecord | undefined;
 }> {
   const now = new Date().toISOString();
-  const { count } = await prisma.inboundEmail.createMany({
-    data: [
-      {
-        emailId: input.emailId,
-        accountId: input.accountId,
-        subject: input.subject,
-        status: "processing",
-        error: "",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-  if (count > 0) return { claimed: true, existing: undefined };
+  try {
+    await db.orm.public.InboundEmail.create({
+      emailId: input.emailId,
+      accountId: input.accountId,
+      subject: input.subject,
+      status: "processing",
+      error: "",
+      createdAt: fromIso(now),
+      updatedAt: fromIso(now),
+    });
+    return { claimed: true, existing: undefined };
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
   // The row already exists; read it so the caller can decide how to
   // treat the duplicate (already done, in flight, or previously failed).
-  const existing = await prisma.inboundEmail.findUnique({
-    where: { emailId: input.emailId },
+  const existing = await db.orm.public.InboundEmail.first({
+    emailId: input.emailId,
   });
   return {
     claimed: false,
@@ -92,17 +93,22 @@ export async function findVerifiedSenderAccount(
 ): Promise<{ account: Account; verifiedAt: string } | undefined> {
   const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
-  const verification = await prisma.inboundSenderVerification.findUnique({
-    where: { address },
+  const verification = await db.orm.public.InboundSenderVerification.first({
+    address,
   });
   if (!verification) return undefined;
-  const account = await prisma.account.findUnique({
-    where: { id: verification.accountId },
+  const account = await db.orm.public.Account.first({
+    id: verification.accountId,
   });
   if (!account) return undefined;
   return {
-    account: { ...account, createdAt: account.createdAt.toISOString() },
-    verifiedAt: verification.verifiedAt.toISOString(),
+    account: {
+      id: account.id,
+      name: account.name,
+      inviteCode: account.inviteCode,
+      createdAt: toIso(account.createdAt),
+    },
+    verifiedAt: toIso(verification.verifiedAt),
   };
 }
 
@@ -115,11 +121,12 @@ export async function findPendingSenderRow(
 ): Promise<{ accountId: string; address: string } | undefined> {
   const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
-  const row = await prisma.inboundSender.findFirst({
-    where: { address },
-    orderBy: [{ createdAt: "asc" }, { accountId: "asc" }],
-    select: { accountId: true, address: true },
-  });
+  const row = await db.orm.public.InboundSender.where((s) =>
+    s.address.eq(address),
+  )
+    .orderBy([(s) => s.createdAt.asc(), (s) => s.accountId.asc()])
+    .select("accountId", "address")
+    .first();
   return row ?? undefined;
 }
 
@@ -131,21 +138,22 @@ export async function findPendingSenderRow(
 export async function listInboundSenders(
   accountId: string,
 ): Promise<InboundSenderRecord[]> {
-  const rows = await prisma.inboundSender.findMany({
-    where: { accountId },
-    orderBy: [{ createdAt: "asc" }, { address: "asc" }],
-  });
-  const verifications = await prisma.inboundSenderVerification.findMany({
-    where: { accountId },
-  });
+  const rows = await db.orm.public.InboundSender.where((s) =>
+    s.accountId.eq(accountId),
+  )
+    .orderBy([(s) => s.createdAt.asc(), (s) => s.address.asc()])
+    .all();
+  const verifications = await db.orm.public.InboundSenderVerification.where(
+    (v) => v.accountId.eq(accountId),
+  ).all();
   const byAddress = new Map(verifications.map((v) => [v.address, v]));
   return rows.map((r) => ({
     accountId: r.accountId,
     address: r.address,
     verified: byAddress.has(r.address),
-    verifiedAt: byAddress.get(r.address)?.verifiedAt?.toISOString() ?? null,
-    verificationSentAt: r.verificationSentAt?.toISOString() ?? null,
-    createdAt: r.createdAt.toISOString(),
+    verifiedAt: toIsoOrNull(byAddress.get(r.address)?.verifiedAt ?? null),
+    verificationSentAt: toIsoOrNull(r.verificationSentAt),
+    createdAt: toIso(r.createdAt),
   }));
 }
 
@@ -168,8 +176,8 @@ export async function addInboundSender(
   if (!normalized || !isEmail(normalized)) {
     return { ok: false, error: "Enter a valid email address" };
   }
-  const verification = await prisma.inboundSenderVerification.findUnique({
-    where: { address: normalized },
+  const verification = await db.orm.public.InboundSenderVerification.first({
+    address: normalized,
   });
   if (verification && verification.accountId !== accountId) {
     return {
@@ -195,8 +203,8 @@ export async function resendInboundSenderVerification(
 > {
   const normalized = extractEmailAddress(address);
   if (!normalized) return { ok: false, error: "Enter a valid email address" };
-  const verification = await prisma.inboundSenderVerification.findUnique({
-    where: { address: normalized },
+  const verification = await db.orm.public.InboundSenderVerification.first({
+    address: normalized,
   });
   if (verification) {
     return {
@@ -217,14 +225,14 @@ export async function removeInboundSender(
   address: string,
 ): Promise<void> {
   const normalized = extractEmailAddress(address);
-  await prisma.$transaction([
-    prisma.inboundSender.deleteMany({
-      where: { accountId, address: normalized },
-    }),
-    prisma.inboundSenderVerification.deleteMany({
-      where: { accountId, address: normalized },
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.InboundSender.where((s) =>
+      and(s.accountId.eq(accountId), s.address.eq(normalized)),
+    ).deleteAll();
+    await tx.orm.public.InboundSenderVerification.where((v) =>
+      and(v.accountId.eq(accountId), v.address.eq(normalized)),
+    ).deleteAll();
+  });
 }
 
 /** The outcome of clicking a verification link (see verifyInboundSenderAddress). */
@@ -255,43 +263,38 @@ export async function verifyInboundSenderAddress(
   rawToken: string,
 ): Promise<VerifySenderOutcome> {
   if (!rawToken) return { status: "invalid" };
-  const row = await prisma.inboundSender.findFirst({
-    where: { verificationTokenHash: hashToken(rawToken) },
-  });
+  const row = await db.orm.public.InboundSender.where((s) =>
+    s.verificationTokenHash.eq(hashToken(rawToken)),
+  ).first();
   if (!row) return { status: "invalid" };
-  const sentAt = row.verificationSentAt ? row.verificationSentAt.getTime() : 0;
+  const sentAt = row.verificationSentAt
+    ? Date.parse(toIso(row.verificationSentAt))
+    : 0;
   if (!Number.isFinite(sentAt) || Date.now() - sentAt > VERIFICATION_TTL_MS) {
     return { status: "expired", address: row.address };
   }
-  const account = await prisma.account.findUnique({
-    where: { id: row.accountId },
-  });
+  const account = await db.orm.public.Account.first({ id: row.accountId });
   const accountName = account?.name ?? "";
   try {
-    await prisma.$transaction([
+    await db.transaction(async (tx) => {
       // The primary key on address makes a second verified claim impossible.
-      prisma.inboundSenderVerification.create({
-        data: {
-          address: row.address,
-          accountId: row.accountId,
-          verifiedAt: new Date().toISOString(),
-        },
-      }),
+      await tx.orm.public.InboundSenderVerification.create({
+        address: row.address,
+        accountId: row.accountId,
+        verifiedAt: fromIso(new Date().toISOString()),
+      });
       // The address is now exclusively this account's; drop rivals' pending rows.
-      prisma.inboundSender.deleteMany({
-        where: { address: row.address, accountId: { not: row.accountId } },
-      }),
+      await tx.orm.public.InboundSender.where((s) =>
+        and(s.address.eq(row.address), s.accountId.neq(row.accountId)),
+      ).deleteAll();
       // Consume the token.
-      prisma.inboundSender.update({
-        where: {
-          accountId_address: { accountId: row.accountId, address: row.address },
-        },
-        data: { verificationTokenHash: null },
-      }),
-    ]);
+      await tx.orm.public.InboundSender.where((s) =>
+        and(s.accountId.eq(row.accountId), s.address.eq(row.address)),
+      ).update({ verificationTokenHash: null });
+    });
   } catch (err) {
-    // P2002: another account verified the address first (race).
-    if ((err as { code?: string } | null)?.code === "P2002") {
+    // 23505: another account verified the address first (race).
+    if (isUniqueViolation(err)) {
       return {
         status: "already-verified",
         address: row.address,
@@ -327,31 +330,36 @@ export async function verifyInboundSenderDirect(
     return { verified: false, claimedByOther: false };
   }
   const now = new Date().toISOString();
-  await prisma.inboundSender.upsert({
-    where: { accountId_address: { accountId, address: normalized } },
-    create: { accountId, address: normalized, createdAt: now },
+  await db.orm.public.InboundSender.upsert({
+    create: {
+      accountId,
+      address: normalized,
+      createdAt: fromIso(now),
+    },
     update: {},
+    conflictOn: { accountId, address: normalized },
   });
   try {
-    await prisma.$transaction([
+    await db.transaction(async (tx) => {
       // The primary key on address makes a second verified claim impossible.
-      prisma.inboundSenderVerification.create({
-        data: { address: normalized, accountId, verifiedAt: now },
-      }),
+      await tx.orm.public.InboundSenderVerification.create({
+        address: normalized,
+        accountId,
+        verifiedAt: fromIso(now),
+      });
       // The address is now exclusively this account's; drop rivals' pending rows.
-      prisma.inboundSender.deleteMany({
-        where: { address: normalized, accountId: { not: accountId } },
-      }),
+      await tx.orm.public.InboundSender.where((s) =>
+        and(s.address.eq(normalized), s.accountId.neq(accountId)),
+      ).deleteAll();
       // No emailed token to consume; the proof was the JMAP session.
-      prisma.inboundSender.updateMany({
-        where: { accountId, address: normalized },
-        data: { verificationTokenHash: null, verificationSentAt: null },
-      }),
-    ]);
+      await tx.orm.public.InboundSender.where((s) =>
+        and(s.accountId.eq(accountId), s.address.eq(normalized)),
+      ).updateAll({ verificationTokenHash: null, verificationSentAt: null });
+    });
     return { verified: true, claimedByOther: false };
   } catch (err) {
-    // P2002: another account verified the address first (race).
-    if ((err as { code?: string } | null)?.code === "P2002") {
+    // 23505: another account verified the address first (race).
+    if (isUniqueViolation(err)) {
       return { verified: false, claimedByOther: true };
     }
     throw err;
@@ -378,8 +386,8 @@ export async function ensureInboundSenderForUser(
 }> {
   const address = extractEmailAddress(email);
   if (!address) return { token: null, verified: false, claimedByOther: false };
-  const verification = await prisma.inboundSenderVerification.findUnique({
-    where: { address },
+  const verification = await db.orm.public.InboundSenderVerification.first({
+    address,
   });
   if (verification) {
     return {
@@ -388,12 +396,12 @@ export async function ensureInboundSenderForUser(
       claimedByOther: verification.accountId !== accountId,
     };
   }
-  const existing = await prisma.inboundSender.findUnique({
-    where: { accountId_address: { accountId, address } },
-  });
+  const existing = await db.orm.public.InboundSender.where((s) =>
+    and(s.accountId.eq(accountId), s.address.eq(address)),
+  ).first();
   if (existing?.verificationTokenHash) {
     const sentAt = existing.verificationSentAt
-      ? existing.verificationSentAt.getTime()
+      ? Date.parse(toIso(existing.verificationSentAt))
       : 0;
     if (
       Number.isFinite(sentAt) &&
@@ -419,19 +427,19 @@ async function mintSenderToken(
 ): Promise<string> {
   const token = generateOpaqueToken();
   const now = new Date().toISOString();
-  await prisma.inboundSender.upsert({
-    where: { accountId_address: { accountId, address } },
-    update: {
-      verificationTokenHash: hashToken(token),
-      verificationSentAt: now,
-    },
+  await db.orm.public.InboundSender.upsert({
     create: {
       accountId,
       address,
       verificationTokenHash: hashToken(token),
-      verificationSentAt: now,
-      createdAt: now,
+      verificationSentAt: fromIso(now),
+      createdAt: fromIso(now),
     },
+    update: {
+      verificationTokenHash: hashToken(token),
+      verificationSentAt: fromIso(now),
+    },
+    conflictOn: { accountId, address },
   });
   return token;
 }

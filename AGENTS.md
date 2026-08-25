@@ -1,6 +1,6 @@
 # Agent guide — Expense
 
-Personal expense tracker (receipts + mileage). React Router v8 framework mode, Tailwind v4, Postgres via **Prisma** (`prisma/schema.prisma` = source of truth; client in `app/lib/prisma.server.ts`). Reads/writes go through per-domain modules in `app/lib/db/` (file map: `docs/files.md`); receipt images in Postgres BYTEA (`app/lib/images.server.ts`); no runtime DDL. Deployed to Vercel + Supabase (project ref `ldtqjzfftjbzcvgktgbt`, us-west-2; push to `main` auto-deploys).
+Personal expense tracker (receipts + mileage). React Router v8 framework mode, Tailwind v4, Postgres via **Prisma 8** (contract-first: `prisma/contract.prisma` = source of truth, emitted to `prisma/contract.json` + `contract.d.ts` by `prisma contract emit`; runtime client in `app/lib/prisma.server.ts`, query lanes `db.orm.public.<Model>` / `db.sql`). Reads/writes go through per-domain modules in `app/lib/db/` (file map: `docs/files.md`); receipt images in Postgres BYTEA (`app/lib/images.server.ts`); no runtime DDL. Deployed to Vercel + Supabase (project ref `ldtqjzfftjbzcvgktgbt`, us-west-2; push to `main` auto-deploys).
 
 **Before deploying, touching DB config, or changing env vars: read [`docs/operations.md`](docs/operations.md)**; env contracts, secrets, Supabase pooler URLs, `sslmode`, DDL (`DATABASE_URL_UNPOOLED`) vs runtime URLs.
 
@@ -8,10 +8,10 @@ Personal expense tracker (receipts + mileage). React Router v8 framework mode, T
 
 ```sh
 pnpm dev            # dev server
-pnpm check          # prisma generate + typegen + oxfmt/oxlint/tsc — run before committing
+pnpm check          # prisma contract emit + typegen + oxfmt/oxlint/tsc — run before committing
 pnpm test           # force-resets expense_test + suite (needs local Postgres: brew services start postgresql@18)
-pnpm db:push        # sync dev DB to schema.prisma
-pnpm db:migrate     # apply prisma/migrations (deploy)
+pnpm db:push        # sync dev DB to the contract (prisma db update)
+pnpm db:migrate     # apply planned migrations (prisma db migrate)
 pnpm build && pnpm start   # prod build + serve on :3000
 ```
 

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Recreate the throwaway test database (expense_test) from the Prisma 8
+# contract: drop the public schema, then `prisma db init` creates every
+# table/index/FK additively and signs the marker. Replaces the v7
+# `prisma db push --force-reset` flow.
+
+set -eo pipefail
+
+TEST_DB_URL="postgres://assaf@localhost/expense_test"
+
+psql "$TEST_DB_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+DATABASE_URL="$TEST_DB_URL" pnpm exec prisma db init --quiet

@@ -83,7 +83,7 @@ and llms.txt) and with in-app nudges:
 
 ## What exists today
 
-- **Model** (`prisma/schema.prisma`): `EmailConnection`, one row per
+- **Model** (`prisma/contract.prisma`): `EmailConnection`, one row per
   connected mailbox, scoped to the workspace (`accountId`) but with
   `emailAddress` **globally unique**: one mailbox feeds exactly one
   workspace, so two accounts can never race to process (and trash) the same

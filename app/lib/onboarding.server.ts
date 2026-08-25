@@ -10,7 +10,7 @@ import { initStore } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
 import { verifyJmapToken } from "~/lib/jmap.server";
 import { hashPassword } from "~/lib/passwords";
-import prisma from "~/lib/prisma.server";
+import { db } from "~/lib/prisma.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { createSessionCookie, login, validateSignup } from "~/lib/auth.server";
 import type { Account } from "~/lib/types";
@@ -171,7 +171,9 @@ export async function completeOnboarding(input: {
       // back the half-onboarded account. It is brand new (one user, no
       // expenses), and the account delete cascades the user, sender rows,
       // and default categories.
-      await prisma.account.delete({ where: { id: accountId } }).catch(() => {});
+      await db.orm.public.Account.where({ id: accountId })
+        .delete()
+        .catch(() => {});
     }
     throw new Error(created.error);
   }

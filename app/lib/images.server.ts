@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { ulid } from "ulid";
-import { Prisma } from "prisma/generated";
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { normalizeStoredImage, resizeToJpeg } from "~/lib/image-normalize";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
@@ -86,10 +87,11 @@ export function bareName(storedKey: string, accountId: string): string {
 }
 
 async function pgExists(accountId: string, key: string): Promise<boolean> {
-  const row = await prisma.imageBlob.findFirst({
-    where: { accountId, key },
-    select: { key: true },
-  });
+  const row = await db.orm.public.ImageBlob.where((b) =>
+    and(b.accountId.eq(accountId), b.key.eq(key)),
+  )
+    .select("key")
+    .first();
   return row !== null;
 }
 
@@ -254,21 +256,18 @@ export async function saveImage(
   );
   for (let attempt = 0; ; attempt++) {
     try {
-      await prisma.imageBlob.create({
-        data: {
-          accountId,
-          key: namespacedKey(accountId, name),
-          mime: storedMime,
-          data: new Uint8Array(storedBuffer),
-          thumbnail: thumbnail ? new Uint8Array(thumbnail) : undefined,
-        },
+      await db.orm.public.ImageBlob.create({
+        accountId,
+        key: namespacedKey(accountId, name),
+        mime: storedMime,
+        data: new Uint8Array(storedBuffer),
+        ...(thumbnail ? { thumbnail: new Uint8Array(thumbnail) } : {}),
       });
       return { filename: namespacedKey(accountId, name), mime: storedMime };
     } catch (error) {
-      const isDuplicate =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002";
-      if (!isDuplicate || attempt >= MAX_NAME_ATTEMPTS) throw error;
+      if (!isUniqueViolation(error) || attempt >= MAX_NAME_ATTEMPTS) {
+        throw error;
+      }
       name = `${randomUUID()}${ext}`;
     }
   }
@@ -295,10 +294,9 @@ export async function renameImageToConvention(
     pgExists(accountId, key),
   );
   const to = namespacedKey(accountId, name);
-  await prisma.imageBlob.updateMany({
-    where: { accountId, key: currentFile },
-    data: { key: to },
-  });
+  await db.orm.public.ImageBlob.where((b) =>
+    and(b.accountId.eq(accountId), b.key.eq(currentFile)),
+  ).updateAll({ key: to });
   return to;
 }
 
@@ -308,10 +306,11 @@ export async function readImage(
 ): Promise<{ buffer: Buffer; mime: string; thumbnail: Buffer | null } | null> {
   if (!filename) return null;
 
-  const row = await prisma.imageBlob.findFirst({
-    where: { accountId, key: filename },
-    select: { data: true, mime: true, thumbnail: true },
-  });
+  const row = await db.orm.public.ImageBlob.where((b) =>
+    and(b.accountId.eq(accountId), b.key.eq(filename)),
+  )
+    .select("data", "mime", "thumbnail")
+    .first();
   if (!row) return null;
   return {
     buffer: Buffer.from(row.data),
@@ -325,7 +324,11 @@ export async function deleteImage(
   filename: string,
 ): Promise<void> {
   if (!filename) return;
-  await prisma.imageBlob
-    .deleteMany({ where: { accountId, key: filename } })
-    .catch(() => {});
+  try {
+    await db.orm.public.ImageBlob.where((b) =>
+      and(b.accountId.eq(accountId), b.key.eq(filename)),
+    ).deleteAll();
+  } catch {
+    // best-effort: the row may already be gone
+  }
 }

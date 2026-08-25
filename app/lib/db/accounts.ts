@@ -1,10 +1,11 @@
 import { ulid } from "ulid";
+import { db } from "~/lib/prisma.server";
+import { fromIso, fromIsoOrNull, toIso, toIsoOrNull } from "~/lib/db/wire";
 import {
   generateInviteCode,
   generateOpaqueToken,
   hashToken,
 } from "~/lib/passwords";
-import prisma from "~/lib/prisma.server";
 import {
   cachedRead,
   createCache,
@@ -23,8 +24,15 @@ const accountCache = createCache<Account>(300_000);
 
 export async function readAccount(id: string): Promise<Account | undefined> {
   return cachedRead(accountCache, id, async () => {
-    const row = await prisma.account.findUnique({ where: { id } });
-    return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
+    const row = await db.orm.public.Account.first({ id });
+    return row
+      ? {
+          id: row.id,
+          name: row.name,
+          inviteCode: row.inviteCode,
+          createdAt: toIso(row.createdAt),
+        }
+      : undefined;
   });
 }
 
@@ -44,15 +52,14 @@ interface AccountMember {
 export async function readAccountUsers(
   accountId: string,
 ): Promise<AccountMember[]> {
-  const rows = await prisma.user.findMany({
-    where: { accountId },
-    select: { email: true, emailVerifiedAt: true, createdAt: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = await db.orm.public.User.where((u) => u.accountId.eq(accountId))
+    .select("email", "emailVerifiedAt", "createdAt")
+    .orderBy((u) => u.createdAt.asc())
+    .all();
   return rows.map((row) => ({
     email: row.email,
-    emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
+    emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
+    createdAt: toIso(row.createdAt),
   }));
 }
 
@@ -62,23 +69,22 @@ export async function readAccountUsers(
  */
 export async function readBootstrapUser(): Promise<User | undefined> {
   await initStore();
-  const first = await prisma.user.findFirst({
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      accountId: true,
-      email: true,
-      emailVerifiedAt: true,
-      createdAt: true,
-    },
-  });
+  const first = await db.orm.public.User.select(
+    "id",
+    "accountId",
+    "email",
+    "emailVerifiedAt",
+    "createdAt",
+  )
+    .orderBy([(u) => u.createdAt.asc(), (u) => u.id.asc()])
+    .first();
   if (!first) return undefined;
   return {
     id: first.id,
     accountId: first.accountId,
     email: first.email,
-    emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
-    createdAt: first.createdAt.toISOString(),
+    emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
+    createdAt: toIso(first.createdAt),
   };
 }
 
@@ -87,7 +93,9 @@ export async function createAccount(name: string): Promise<Account> {
   const clean = name.trim();
   if (!clean) throw new Error("Account name is required");
   await initStore();
-  const clash = await prisma.account.findUnique({ where: { name: clean } });
+  const clash = await db.orm.public.Account.where((a) =>
+    a.name.eq(clean),
+  ).first();
   if (clash) throw new Error("An account with that name already exists");
   const account: Account = {
     id: ulid(),
@@ -97,26 +105,37 @@ export async function createAccount(name: string): Promise<Account> {
   };
   // The account is created with the IRS Schedule C default categories so
   // receipts can be categorized immediately.
-  await prisma.$transaction([
-    prisma.account.create({ data: account }),
-    seedDefaultCategories(account.id),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.Account.create({
+      ...account,
+      createdAt: fromIso(account.createdAt),
+    });
+    await seedDefaultCategories(tx, account.id);
+  });
   return account;
 }
 
 export async function findAccountByInviteCode(
   inviteCode: string,
 ): Promise<Account | undefined> {
-  const row = await prisma.account.findUnique({ where: { inviteCode } });
-  return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
+  const row = await db.orm.public.Account.where((a) =>
+    a.inviteCode.eq(inviteCode),
+  ).first();
+  return row
+    ? {
+        id: row.id,
+        name: row.name,
+        inviteCode: row.inviteCode,
+        createdAt: toIso(row.createdAt),
+      }
+    : undefined;
 }
 
 /** Replace an account's invite code with a fresh one; returns the new code. */
 export async function regenerateInviteCode(accountId: string): Promise<string> {
   const code = generateInviteCode();
-  await prisma.account.update({
-    where: { id: accountId },
-    data: { inviteCode: code },
+  await db.orm.public.Account.where({ id: accountId }).update({
+    inviteCode: code,
   });
   accountCache.delete(accountId);
   return code;
@@ -139,7 +158,9 @@ export async function createUser(input: {
   await initStore();
   const email = input.email.trim().toLowerCase();
   if (!email) throw new Error("Email is required");
-  const clash = await prisma.user.findUnique({ where: { email } });
+  const clash = await db.orm.public.User.where((u) =>
+    u.email.eq(email),
+  ).first();
   if (clash) throw new Error("That email is already in use");
   const user: User = {
     id: ulid(),
@@ -150,54 +171,66 @@ export async function createUser(input: {
   };
   // The registering email becomes an allowed "receipts by email" sender by
   // default; the account can remove it or add more addresses in Settings.
-  await prisma.$transaction([
-    prisma.user.create({
-      data: {
-        ...user,
-        passwordHash: input.passwordHash,
-        verificationTokenHash: input.verificationTokenHash ?? null,
-        verificationSentAt: input.verificationSentAt ?? null,
-      },
-    }),
-    prisma.inboundSender.createMany({
-      data: [
-        {
-          accountId: input.accountId,
-          address: email,
-          createdAt: user.createdAt,
-        },
-      ],
-      skipDuplicates: true,
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.User.create({
+      id: user.id,
+      accountId: user.accountId,
+      email: user.email,
+      passwordHash: input.passwordHash,
+      emailVerifiedAt: fromIsoOrNull(user.emailVerifiedAt),
+      verificationTokenHash: input.verificationTokenHash ?? null,
+      verificationSentAt: fromIsoOrNull(input.verificationSentAt ?? null),
+      createdAt: fromIso(user.createdAt),
+    });
+    const existing = await tx.orm.public.InboundSender.where((s) =>
+      s.accountId.eq(input.accountId),
+    )
+      .select("address")
+      .all();
+    if (!existing.some((s) => s.address === email)) {
+      await tx.orm.public.InboundSender.create({
+        accountId: input.accountId,
+        address: email,
+        createdAt: fromIso(user.createdAt),
+      });
+    }
+  });
   return user;
 }
 
-/** Map a Prisma user row to the domain User shape (the password hash and
+/** Map a user row to the domain User shape (the password hash and
  * verification token columns are deliberately never exposed). */
 function rowToUser(row: {
   id: string;
   accountId: string;
   email: string;
-  emailVerifiedAt: Date | null;
-  createdAt: Date;
+  emailVerifiedAt: string | null;
+  createdAt: string;
 }): User {
   return {
     id: row.id,
     accountId: row.accountId,
     email: row.email,
-    emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
+    emailVerifiedAt: row.emailVerifiedAt,
+    createdAt: row.createdAt,
   };
 }
 
 export async function findUserByEmail(
   email: string,
 ): Promise<User | undefined> {
-  const row = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
-  });
-  return row ? rowToUser(row) : undefined;
+  const row = await db.orm.public.User.where((u) =>
+    u.email.eq(email.trim().toLowerCase()),
+  ).first();
+  return row
+    ? rowToUser({
+        id: row.id,
+        accountId: row.accountId,
+        email: row.email,
+        emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
+        createdAt: toIso(row.createdAt),
+      })
+    : undefined;
 }
 
 /** Short-lived in-process cache for findUserById. Every request re-resolves
@@ -213,8 +246,16 @@ export async function findUserById(id: string): Promise<User | undefined> {
     userCache,
     id,
     async () => {
-      const row = await prisma.user.findUnique({ where: { id } });
-      return row ? rowToUser(row) : undefined;
+      const row = await db.orm.public.User.first({ id });
+      return row
+        ? rowToUser({
+            id: row.id,
+            accountId: row.accountId,
+            email: row.email,
+            emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
+            createdAt: toIso(row.createdAt),
+          })
+        : undefined;
     },
     // Unlike the other caches, the user cache keeps serving under VITEST:
     // every request re-resolves the session user, and tests count on the
@@ -225,10 +266,9 @@ export async function findUserById(id: string): Promise<User | undefined> {
 
 /** The stored password hash for a user (never exposed on the User type). */
 export async function getPasswordHash(userId: string): Promise<string> {
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { passwordHash: true },
-  });
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("passwordHash")
+    .first();
   return row?.passwordHash ?? "";
 }
 
@@ -239,10 +279,7 @@ export async function updateUserPasswordHash(
   userId: string,
   passwordHash: string,
 ): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash },
-  });
+  await db.orm.public.User.where({ id: userId }).update({ passwordHash });
 }
 
 /** Store the current verification token for a user (sha256 at rest) with a
@@ -251,12 +288,9 @@ export async function setUserVerificationToken(
   userId: string,
   rawToken: string,
 ): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      verificationTokenHash: hashToken(rawToken),
-      verificationSentAt: new Date().toISOString(),
-    },
+  await db.orm.public.User.where({ id: userId }).update({
+    verificationTokenHash: hashToken(rawToken),
+    verificationSentAt: fromIso(new Date().toISOString()),
   });
 }
 
@@ -276,20 +310,19 @@ export async function verifyUserEmailAddress(
   rawToken: string,
 ): Promise<VerifyEmailOutcome> {
   if (!rawToken) return { status: "invalid" };
-  const row = await prisma.user.findFirst({
-    where: { verificationTokenHash: hashToken(rawToken) },
-  });
+  const row = await db.orm.public.User.where((u) =>
+    u.verificationTokenHash.eq(hashToken(rawToken)),
+  ).first();
   if (!row) return { status: "invalid" };
   if (row.emailVerifiedAt) {
     return { status: "already-verified", email: row.email };
   }
   const sentAt = row.verificationSentAt;
-  if (!sentAt || Date.now() - sentAt.getTime() > VERIFICATION_TTL_MS) {
+  if (!sentAt || Date.now() - Date.parse(toIso(sentAt)) > VERIFICATION_TTL_MS) {
     return { status: "expired", email: row.email };
   }
-  await prisma.user.update({
-    where: { id: row.id },
-    data: { emailVerifiedAt: new Date().toISOString() },
+  await db.orm.public.User.where({ id: row.id }).update({
+    emailVerifiedAt: fromIso(new Date().toISOString()),
   });
   return { status: "verified", email: row.email };
 }
@@ -311,25 +344,27 @@ export async function deleteUnverifiedUser(
   const user = await findUserByEmail(email);
   if (!user) return { status: "no-user" };
   if (user.emailVerifiedAt) return { status: "verified" };
-  const accountUserCount = await prisma.user.count({
-    where: { accountId: user.accountId },
-  });
-  if (accountUserCount <= 1) {
+  const { count } = await db.orm.public.User.where((u) =>
+    u.accountId.eq(user.accountId),
+  ).aggregate((a) => ({ count: a.count() }));
+  if (count <= 1) {
     // The throwaway account holds only this user; drop it (cascades the
     // user and every account-scoped row).
-    await prisma.account.delete({ where: { id: user.accountId } });
+    await db.orm.public.Account.where({ id: user.accountId }).delete();
   } else {
     // The user joined an existing account: drop just the user and its
     // receipts-by-email sender rows (the address claim is abandoned too).
-    await prisma.$transaction([
-      prisma.user.delete({ where: { id: user.id } }),
-      prisma.inboundSender.deleteMany({
-        where: { accountId: user.accountId, address: email },
-      }),
-      prisma.inboundSenderVerification.deleteMany({
-        where: { address: email },
-      }),
-    ]);
+    await db.transaction(async (tx) => {
+      await tx.orm.public.User.where({ id: user.id }).delete();
+      await tx.orm.public.InboundSender.where((s) =>
+        s.accountId.eq(user.accountId),
+      )
+        .where((s) => s.address.eq(email))
+        .deleteAll();
+      await tx.orm.public.InboundSenderVerification.where((s) =>
+        s.address.eq(email),
+      ).deleteAll();
+    });
   }
   return { status: "replaced" };
 }
@@ -342,14 +377,14 @@ export async function resendUserVerification(
 ): Promise<
   { token: string } | { status: "already-verified" | "rate-limited" }
 > {
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { emailVerifiedAt: true, verificationSentAt: true },
-  });
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("emailVerifiedAt", "verificationSentAt")
+    .first();
   if (!row || row.emailVerifiedAt) return { status: "already-verified" };
   if (
     row.verificationSentAt &&
-    Date.now() - row.verificationSentAt.getTime() < VERIFICATION_RESEND_MS
+    Date.now() - Date.parse(toIso(row.verificationSentAt)) <
+      VERIFICATION_RESEND_MS
   ) {
     return { status: "rate-limited" };
   }
@@ -364,12 +399,9 @@ export async function setUserPasswordResetToken(
   userId: string,
   rawToken: string,
 ): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      passwordResetTokenHash: hashToken(rawToken),
-      passwordResetSentAt: new Date().toISOString(),
-    },
+  await db.orm.public.User.where({ id: userId }).update({
+    passwordResetTokenHash: hashToken(rawToken),
+    passwordResetSentAt: fromIso(new Date().toISOString()),
   });
 }
 
@@ -388,25 +420,22 @@ export async function resetUserPasswordWithToken(
   passwordHash: string,
 ): Promise<PasswordResetOutcome> {
   if (!rawToken) return { status: "invalid" };
-  const row = await prisma.user.findFirst({
-    where: { passwordResetTokenHash: hashToken(rawToken) },
-  });
+  const row = await db.orm.public.User.where((u) =>
+    u.passwordResetTokenHash.eq(hashToken(rawToken)),
+  ).first();
   if (!row) return { status: "invalid" };
   const sentAt = row.passwordResetSentAt;
-  if (!sentAt || Date.now() - sentAt.getTime() > VERIFICATION_TTL_MS) {
-    await prisma.user.update({
-      where: { id: row.id },
-      data: { passwordResetTokenHash: null, passwordResetSentAt: null },
+  if (!sentAt || Date.now() - Date.parse(toIso(sentAt)) > VERIFICATION_TTL_MS) {
+    await db.orm.public.User.where({ id: row.id }).update({
+      passwordResetTokenHash: null,
+      passwordResetSentAt: null,
     });
     return { status: "expired", email: row.email };
   }
-  await prisma.user.update({
-    where: { id: row.id },
-    data: {
-      passwordHash,
-      passwordResetTokenHash: null,
-      passwordResetSentAt: null,
-    },
+  await db.orm.public.User.where({ id: row.id }).update({
+    passwordHash,
+    passwordResetTokenHash: null,
+    passwordResetSentAt: null,
   });
   return { status: "reset", email: row.email };
 }
@@ -417,12 +446,12 @@ export async function resetUserPasswordWithToken(
 export async function passwordResetRecentlySent(
   userId: string,
 ): Promise<boolean> {
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { passwordResetSentAt: true },
-  });
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("passwordResetSentAt")
+    .first();
   return Boolean(
     row?.passwordResetSentAt &&
-    Date.now() - row.passwordResetSentAt.getTime() < VERIFICATION_RESEND_MS,
+    Date.now() - Date.parse(toIso(row.passwordResetSentAt)) <
+      VERIFICATION_RESEND_MS,
   );
 }

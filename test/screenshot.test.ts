@@ -442,7 +442,9 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
         where: { accountId: ACCOUNT, merchant: "Sweetgreen" },
         select: { id: true },
       });
-      await page.goto(`/expense/${sweetgreen.id}`, { waitUntil: "load" });
+      await page.goto(`/expense/${sweetgreen.id as string}`, {
+        waitUntil: "load",
+      });
       await page.waitForFunction(() => "__reactRouterContext" in window);
       await page.waitForFunction(() =>
         [...document.querySelectorAll("img")].every((img) => img.complete),

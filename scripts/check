@@ -2,8 +2,8 @@
 
 set -eo pipefail
 
-echo -e "\033[0;32m--- Generate Prisma client ---\033[0m"
-prisma generate
+echo -e "\033[0;32m--- Emit Prisma contract ---\033[0m"
+prisma contract emit
 
 echo -e "\033[0;32m--- Generate types for route modules ---\033[0m"
 react-router typegen

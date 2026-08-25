@@ -1,4 +1,4 @@
-import prisma from "~/lib/prisma.server";
+import { db } from "~/lib/prisma.server";
 import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
 import type { Category } from "~/lib/types";
@@ -8,12 +8,14 @@ const categoriesCache = createCache<Category[]>(300_000);
 
 export async function readCategories(accountId: string): Promise<Category[]> {
   return cachedRead(categoriesCache, accountId, async () => {
-    const rows = await prisma.category.findMany({
-      where: { accountId, name: { not: "" } },
-      select: { name: true },
-    });
+    const rows = await db.orm.public.Category.where((c) =>
+      c.accountId.eq(accountId),
+    )
+      .select("name")
+      .all();
     return rows
       .map((c) => c.name)
+      .filter((name) => name !== "")
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
       .map((name) => ({ name }));
   });
@@ -32,7 +34,7 @@ export function renameCategory(
     categoriesCache,
     accountId,
     renameNamedRow(
-      prisma.category,
+      db.orm.public.Category,
       "category",
       "category",
       accountId,
@@ -53,7 +55,7 @@ export function addCategory(
   return bust(
     categoriesCache,
     accountId,
-    addNamedRow(prisma.category, "category", accountId, name),
+    addNamedRow(db.orm.public.Category, "category", accountId, name),
   );
 }
 
@@ -61,6 +63,6 @@ export async function removeCategory(
   accountId: string,
   name: string,
 ): Promise<void> {
-  await prisma.category.deleteMany({ where: { accountId, name } });
+  await db.orm.public.Category.where({ accountId, name }).deleteAll();
   bust(categoriesCache, accountId);
 }

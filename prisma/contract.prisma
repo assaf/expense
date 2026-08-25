@@ -1,0 +1,342 @@
+// use prisma-next
+// Contract inferred from the live database schema. Edit as needed, then run `prisma contract emit`.
+
+model Account {
+  id                         String                       @id(map: "accounts_pkey")
+  name                       String
+  inviteCode                 String
+  createdAt                  TimestampString(3)
+  categories                 Category[]
+  duplicateDismissals        DuplicateDismissal[]
+  emailConnections           EmailConnection[]
+  expenses                   Expense[]
+  imageBlobs                 ImageBlob[]
+  inboundEmails              InboundEmail[]
+  inboundSenderVerifications InboundSenderVerification[]
+  inboundSenders             InboundSender[]
+  receiptExtractions         ReceiptExtraction[]
+  reconciliationRuns         ReconciliationRun[]
+  reports                    Report[]
+  settings                   Settings[]
+  users                      User[]
+
+  @@index([inviteCode], map: "accounts_inviteCode_key", unique: true)
+  @@index([name], map: "accounts_name_key", unique: true)
+  @@map("accounts")
+}
+
+model AuthAttempt {
+  key         String        @id(map: "auth_attempts_pkey")
+  failures    Int
+  windowStart TimestampString(3)
+  lockedUntil TimestampString(3)?
+  updatedAt   TimestampString(3)
+
+  @@map("auth_attempts")
+}
+
+model Category {
+  id        BigInt   @id(map: "categories_pkey") @default(autoincrement())
+  name      String
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "categories_accountId_fkey", index: false)
+
+  @@index([accountId, name], map: "categories_accountId_name_key", unique: true)
+  @@map("categories")
+}
+
+model ReconciliationRun {
+  id           String        @id(map: "reconciliation_runs_pkey")
+  accountId    String
+  fileName     String
+  fileHash     String
+  status       String
+  rowCount     Int
+  matchedCount Int
+  createdCount Int
+  skipped      Jsonb
+  data         Jsonb
+  createdAt    TimestampString(3)
+  completedAt  TimestampString(3)?
+  expenses     Expense[]
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reconciliation_runs_accountId_fkey", index: false)
+
+  @@index([accountId, fileHash], map: "reconciliation_runs_accountId_fileHash_idx")
+  @@index([accountId, status], map: "reconciliation_runs_accountId_status_idx")
+  @@map("reconciliation_runs")
+}
+
+model Expense {
+  id                                     String                @id(map: "expenses_pkey")
+  _type                                  String                @map("type")
+  date                                   String
+  report                                 String
+  category                               String
+  description                            String
+  amount                                 Numeric(10, 2)?
+  merchant                               String
+  imageFile                              String
+  imageMime                              String
+  originalName                           String
+  distanceMiles                          Numeric(10, 2)?
+  locations                              Jsonb
+  createdAt                              TimestampString(3)
+  updatedAt                              TimestampString(3)
+  accountId                              String
+  route                                  Jsonb?
+  mileageType                            String                @default("business")
+  reconciledAt                           TimestampString(3)?
+  reconciledInRunId                      String?
+  dismissedAsA                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseAId_fkey")
+  dismissedAsB                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseBId_fkey")
+  account                                Account              @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "expenses_accountId_fkey", index: false)
+  reconciliationRun                      ReconciliationRun?   @relation(fields: [reconciledInRunId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "expenses_reconciledInRunId_fkey", index: false)
+
+  @@map("expenses")
+}
+
+model DuplicateDismissal {
+  id         String   @id(map: "duplicate_dismissals_pkey")
+  expenseAId String
+  expenseBId String
+  accountId  String
+  account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "duplicate_dismissals_accountId_fkey", index: false)
+  expenseA   Expense @relation(name: "duplicate_dismissals_expenseAId_fkey", fields: [expenseAId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "duplicate_dismissals_expenseAId_fkey", index: false)
+  expenseB   Expense @relation(name: "duplicate_dismissals_expenseBId_fkey", fields: [expenseBId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "duplicate_dismissals_expenseBId_fkey", index: false)
+
+  @@index([accountId, expenseAId, expenseBId], map: "duplicate_dismissals_accountId_expenseAId_expenseBId_key", unique: true)
+  @@map("duplicate_dismissals")
+}
+
+model EmailConnection {
+  id                 String            @id(map: "email_connections_pkey")
+  accountId          String
+  provider           String
+  emailAddress       String
+  jmapAccountId      String
+  tokenEnc           String
+  status             String            @default("active")
+  receivedCount      Int               @default(0)
+  processedCount     Int               @default(0)
+  lastPushAt         TimestampString(3)?
+  pushSubscriptionId String?
+  pushExpiresAt      TimestampString(3)?
+  createdAt          TimestampString(3)
+  reviewScannedAt    TimestampString(3)?
+  emailProcessLogs   EmailProcessLog[]
+  account            Account          @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_connections_accountId_fkey", index: false)
+
+  @@index([emailAddress], map: "email_connections_emailAddress_key", unique: true)
+  @@map("email_connections")
+}
+
+model EmailProcessLog {
+  id           BigInt           @id(map: "email_process_log_pkey") @default(autoincrement())
+  connectionId String
+  emailId      String
+  fromAddress  String
+  subject      String
+  matched      Boolean
+  outcome      String
+  error        String?
+  createdAt    TimestampString(3)
+  fromDisplay  String?
+  receivedAt   TimestampString(3)?
+  connection   EmailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_process_log_connectionId_fkey", index: false)
+
+  @@index([connectionId, createdAt], map: "email_process_log_connectionId_createdAt_idx")
+  @@index([connectionId, emailId], map: "email_process_log_connectionId_emailId_key", unique: true)
+  @@map("email_process_log")
+}
+
+model EmailRule {
+  id        String       @id(map: "email_rules_pkey")
+  accountId String
+  sender    String
+  source    String
+  createdAt TimestampString(3)
+
+  @@index([accountId, sender], map: "email_rules_accountId_sender_key", unique: true)
+  @@index([sender], map: "email_rules_sender_idx")
+  @@map("email_rules")
+}
+
+model ImageBlob {
+  key       String
+  mime      String
+  data      Bytes
+  accountId String
+  thumbnail Bytes?
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "image_blobs_accountId_fkey", index: false)
+
+  @@id([accountId, key], map: "image_blobs_pkey")
+  @@map("image_blobs")
+}
+
+model InboundEmail {
+  emailId   String       @id(map: "inbound_emails_pkey")
+  accountId String
+  subject   String
+  status    String
+  error     String
+  createdAt TimestampString(3)
+  updatedAt TimestampString(3)
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_emails_accountId_fkey", index: false)
+
+  @@map("inbound_emails")
+}
+
+model InboundSenderVerification {
+  address    String       @id(map: "inbound_sender_verifications_pkey")
+  accountId  String
+  verifiedAt TimestampString(3)
+  account    Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_sender_verifications_accountId_fkey", index: false)
+
+  @@map("inbound_sender_verifications")
+}
+
+model InboundSender {
+  accountId             String
+  address               String
+  createdAt             TimestampString(3)
+  verificationSentAt    TimestampString(3)?
+  verificationTokenHash String?
+  account               Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_senders_accountId_fkey", index: false)
+
+  @@id([accountId, address], map: "inbound_senders_pkey")
+  @@index([address], map: "inbound_senders_address_idx")
+  @@map("inbound_senders")
+}
+
+model MileageRate {
+  id        BigInt        @id(map: "mileage_rates_pkey") @default(autoincrement())
+  _type     String        @map("type")
+  startDate String
+  endDate   String
+  rate      Numeric(5, 3)
+  createdAt TimestampString(3)
+
+  @@index([_type, startDate], map: "mileage_rates_type_startDate_idx")
+  @@map("mileage_rates")
+}
+
+model OAuthClient {
+  id            String          @id(map: "oauth_clients_pkey")
+  secretHash    String?
+  name          String
+  redirectUris  String
+  authMethod    String
+  createdAt     TimestampString(3)
+  oauthCodes    OAuthCode[]
+  oauthConsents OAuthConsent[]
+  oauthTokens   OAuthToken[]
+
+  @@index([secretHash], map: "oauth_clients_secretHash_key", unique: true)
+  @@map("oauth_clients")
+}
+
+model OAuthCode {
+  id          String       @id(map: "oauth_codes_pkey")
+  userId      String
+  clientId    String
+  challenge   String
+  redirectUri String
+  expiresAt   TimestampString(3)
+  used        Boolean      @default(false)
+  createdAt   TimestampString(3)
+  client      OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_codes_clientId_fkey")
+
+  @@index([clientId], map: "oauth_codes_clientId_idx")
+  @@map("oauth_codes")
+}
+
+model OAuthConsent {
+  userId    String
+  clientId  String
+  grantedAt TimestampString(3)
+  client    OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_consents_clientId_fkey", index: false)
+
+  @@id([userId, clientId], map: "oauth_consents_pkey")
+  @@map("oauth_consents")
+}
+
+model OAuthToken {
+  tokenHash String        @id(map: "oauth_tokens_pkey")
+  userId    String
+  clientId  String
+  _type     String        @map("type")
+  scope     String
+  expiresAt TimestampString(3)
+  revokedAt TimestampString(3)?
+  createdAt TimestampString(3)
+  client    OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_tokens_clientId_fkey")
+
+  @@index([clientId], map: "oauth_tokens_clientId_idx")
+  @@index([userId], map: "oauth_tokens_userId_idx")
+  @@map("oauth_tokens")
+}
+
+model LegacyPrismaMigrations {
+  @@control(tolerated)
+  id                VarChar(36)  @id(map: "_prisma_migrations_pkey")
+  checksum          VarChar(64)
+  finishedAt        TimestamptzString? @map("finished_at")
+  migrationName     VarChar(255) @map("migration_name")
+  logs              String?
+  rolledBackAt      TimestamptzString? @map("rolled_back_at")
+  startedAt         TimestamptzString  @default(now()) @map("started_at")
+  appliedStepsCount Int          @default(0) @map("applied_steps_count")
+
+  @@map("_prisma_migrations")
+}
+
+model ReceiptExtraction {
+  id        String       @id(map: "receipt_extractions_pkey")
+  accountId String
+  hash      String
+  result    Jsonb
+  createdAt TimestampString(3)
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "receipt_extractions_accountId_fkey", index: false)
+
+  @@index([accountId, hash], map: "receipt_extractions_accountId_hash_key", unique: true)
+  @@index([createdAt], map: "receipt_extractions_createdAt_idx")
+  @@map("receipt_extractions")
+}
+
+model Report {
+  id        BigInt   @id(map: "reports_pkey") @default(autoincrement())
+  name      String
+  accountId String
+  closed    Boolean  @default(false)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reports_accountId_fkey", index: false)
+
+  @@index([accountId, name], map: "reports_accountId_name_key", unique: true)
+  @@map("reports")
+}
+
+model Settings {
+  key       String
+  value     String
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "settings_accountId_fkey", index: false)
+
+  @@id([accountId, key], map: "settings_pkey")
+  @@map("settings")
+}
+
+model User {
+  id                     String        @id(map: "users_pkey")
+  accountId              String
+  email                  String
+  passwordHash           String
+  createdAt              TimestampString(3)
+  emailVerifiedAt        TimestampString(3)?
+  verificationSentAt     TimestampString(3)?
+  verificationTokenHash  String?
+  passwordResetSentAt    TimestampString(3)?
+  passwordResetTokenHash String?
+  account                Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
+
+  @@index([email], map: "users_email_key", unique: true)
+  @@map("users")
+}

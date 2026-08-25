@@ -68,35 +68,46 @@ database still exists as a rollback fallback.
 
 ### Column type changes: the cast rule (learned 2026-08-24)
 
-`prisma db push` **cannot** convert a `text` column to a timestamp type: it
-reports "No cast exists, the column would be dropped and recreated" and
-refuses, but CI's migrate-db job runs with `--accept-data-loss`, which
+`prisma db update` (Prisma 8) **cannot** convert a `text` column to a
+timestamp type: it reports that the column would be dropped and recreated
+and asks for destructive consent, and CI's migrate-db job grants it, which
 would drop the column and its data on prod. The test suite never catches
-this (`db push --force-reset` recreates the schema with no data). Note
-also: `prisma/migrations/` is history only (prod's `_prisma_migrations`
-table is stale); `prisma migrate deploy` must never run against prod. The
-operative path is db push (CI migrate-db + `scripts/deploy`).
+this (the test reset recreates the schema with no data). The operative
+schema path is `prisma db update` (CI migrate-db + `scripts/deploy`);
+there is no `prisma/migrations` history anymore (the v7 history was
+retired with the Prisma 8 migration; prod's `_prisma_migrations` table is
+a tolerated leftover, declared as `LegacyPrismaMigrations` with
+`@@control(tolerated)` in the contract).
 
 Procedure for a type change (e.g. String → DateTime):
 
-1. Edit `prisma/schema.prisma` (watch trailing `//` comments: a scripted
-   regex anchored to line ends silently skips commented fields).
+1. Edit `prisma/contract.prisma`, then `pnpm build:prisma` (contract
+   emit) so `contract.json`/`contract.d.ts` match.
 2. Hand-write rerun-safe SQL and apply it to dev AND prod FIRST (psql on
    `DATABASE_URL_UNPOOLED`, swap `sslmode=no-verify` → `require`):
    `ALTER TABLE "t" ALTER COLUMN "c" TYPE TIMESTAMPTZ USING ("c"::timestamptz);`
    Check for cast-breaking values (e.g. `''`) on both databases first.
-3. Then `pnpm db:push` (dev), then the same `db push --accept-data-loss`
-   against prod with `DATABASE_URL_UNPOOLED`, which normalizes timestamptz →
-   Prisma's native `timestamp(3)` (that conversion db push CAN do,
-   data-preserving) and makes the next CI migrate-db a no-op.
-4. Apply the ALTER to prod BEFORE pushing the code, or CI's db push hits
-   the no-cast refusal and the deploy fails.
+3. Then `pnpm db:push` (dev), then the same `db update --confirm <dbname>`
+   against prod with `DATABASE_URL_UNPOOLED`, which normalizes timestamptz
+   → the contract's `TimestampString(3)` (that conversion db update CAN
+   do, data-preserving) and makes the next CI migrate-db a no-op.
+4. Apply the ALTER to prod BEFORE pushing the code, or CI's db update
+   sees a data-losing plan and the deploy fails.
 
-Prisma notes: Postgres `DateTime` = `timestamp(3)` without time zone
-(fine; all writes are UTC ISO strings, the server runs UTC); the app's
-domain layer keeps ISO strings, converting `Date → toISOString()` in the
-db-layer mappers (`app/lib/db/*`); calendar dates (`Expense.date`,
-`MileageRate.startDate/endDate`) stay String on purpose.
+Prisma 8 notes: every timestamp column is `TimestampString(3)` — a
+pass-through string codec, chosen deliberately because the Temporal
+codecs need the `Temporal` global (not on current Node/Vercel runtimes).
+Reads arrive as Postgres wire text (`"2026-08-25 22:21:25.534"`) and
+`app/lib/db/wire.ts` converts to the domain's UTC ISO strings
+(`toIso`/`fromIso`); numeric columns read/write as exact decimal strings
+(`numeric(10,2)` always carries two decimals on the wire); the `type`
+columns are named `_type` in the contract (PSL reserved word) and the
+db-layer mappers translate. Postgres errors surface as structured Prisma
+envelopes with the SQLSTATE on `err.cause` — use the helpers in
+`app/lib/db/pg-errors.ts`, never a top-level `err.code === "23505"`
+check. Upsert's `conflictOn` only targets primary keys and unique
+constraints (not unique indexes): for `(accountId, hash)`-style unique
+indexes, update-where + create-if-missing (see `extraction-cache.ts`).
 
 ---
 

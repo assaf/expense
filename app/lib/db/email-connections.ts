@@ -1,5 +1,7 @@
 import { ulid } from "ulid";
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type { EmailConnectionRecord } from "~/lib/types";
 
 /**
@@ -20,6 +22,23 @@ export interface EmailConnectionView extends EmailConnectionRecord {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The connection columns every caller of this module reads (never the
+ * token ciphertext). */
+const CONNECTION_FIELDS = [
+  "id",
+  "accountId",
+  "provider",
+  "emailAddress",
+  "status",
+  "receivedCount",
+  "processedCount",
+  "lastPushAt",
+  "pushSubscriptionId",
+  "pushExpiresAt",
+  "reviewScannedAt",
+  "createdAt",
+] as const;
+
 function toView(
   row: {
     id: string;
@@ -29,11 +48,11 @@ function toView(
     status: string;
     receivedCount: number;
     processedCount: number;
-    lastPushAt: Date | null;
+    lastPushAt: string | null;
     pushSubscriptionId: string | null;
-    pushExpiresAt: Date | null;
-    reviewScannedAt: Date | null;
-    createdAt: Date;
+    pushExpiresAt: string | null;
+    reviewScannedAt: string | null;
+    createdAt: string;
   },
   processedLast24h: number,
   pendingReview: number,
@@ -46,66 +65,48 @@ function toView(
     status: row.status,
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
-    lastPushAt: row.lastPushAt?.toISOString() ?? null,
+    lastPushAt: toIsoOrNull(row.lastPushAt),
     pushSubscriptionId: row.pushSubscriptionId,
-    pushExpiresAt: row.pushExpiresAt?.toISOString() ?? null,
-    reviewScannedAt: row.reviewScannedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
+    pushExpiresAt: toIsoOrNull(row.pushExpiresAt),
+    reviewScannedAt: toIsoOrNull(row.reviewScannedAt),
+    createdAt: toIso(row.createdAt),
     processedLast24h,
     pendingReview,
   };
 }
 
-const CONNECTION_SELECT = {
-  id: true,
-  accountId: true,
-  provider: true,
-  emailAddress: true,
-  status: true,
-  receivedCount: true,
-  processedCount: true,
-  lastPushAt: true,
-  pushSubscriptionId: true,
-  pushExpiresAt: true,
-  reviewScannedAt: true,
-  createdAt: true,
-} as const;
-
 /** All connections for a workspace, with the processed-last-24h stat. */
 export async function listEmailConnections(
   accountId: string,
 ): Promise<EmailConnectionView[]> {
-  const rows = await prisma.emailConnection.findMany({
-    where: { accountId },
-    select: CONNECTION_SELECT,
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = await db.orm.public.EmailConnection.where((c) =>
+    c.accountId.eq(accountId),
+  )
+    .select(...CONNECTION_FIELDS)
+    .orderBy((c) => c.createdAt.asc())
+    .all();
   if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const [counts, pending] = await Promise.all([
-    prisma.emailProcessLog.groupBy({
-      by: ["connectionId"],
-      where: {
-        connectionId: { in: rows.map((r) => r.id) },
-        outcome: "created",
-        createdAt: { gte: since },
-      },
-      _count: { _all: true },
-    }),
-    prisma.emailProcessLog.groupBy({
-      by: ["connectionId"],
-      where: {
-        connectionId: { in: rows.map((r) => r.id) },
-        outcome: "pending-review",
-      },
-      _count: { _all: true },
-    }),
+    db.orm.public.EmailProcessLog.where((l) =>
+      and(
+        l.connectionId.in(ids),
+        l.outcome.eq("created"),
+        l.createdAt.gte(fromIso(since)),
+      ),
+    )
+      .groupBy("connectionId")
+      .aggregate((a) => ({ count: a.count() })),
+    db.orm.public.EmailProcessLog.where((l) =>
+      and(l.connectionId.in(ids), l.outcome.eq("pending-review")),
+    )
+      .groupBy("connectionId")
+      .aggregate((a) => ({ count: a.count() })),
   ]);
-  const byConnection = new Map(
-    counts.map((c) => [c.connectionId, c._count._all]),
-  );
+  const byConnection = new Map(counts.map((c) => [c.connectionId, c.count]));
   const byConnectionPending = new Map(
-    pending.map((c) => [c.connectionId, c._count._all]),
+    pending.map((c) => [c.connectionId, c.count]),
   );
   return rows.map((row) =>
     toView(
@@ -124,10 +125,11 @@ export async function listEmailConnections(
 export async function findEmailConnectionByAddress(
   emailAddress: string,
 ): Promise<{ accountId: string } | undefined> {
-  const row = await prisma.emailConnection.findUnique({
-    where: { emailAddress: emailAddress.trim().toLowerCase() },
-    select: { accountId: true },
-  });
+  const row = await db.orm.public.EmailConnection.where((c) =>
+    c.emailAddress.eq(emailAddress.trim().toLowerCase()),
+  )
+    .select("accountId")
+    .first();
   return row ?? undefined;
 }
 
@@ -146,11 +148,11 @@ function rowWithSecret(row: {
   status: string;
   receivedCount: number;
   processedCount: number;
-  lastPushAt: Date | null;
+  lastPushAt: string | null;
   pushSubscriptionId: string | null;
-  pushExpiresAt: Date | null;
-  reviewScannedAt: Date | null;
-  createdAt: Date;
+  pushExpiresAt: string | null;
+  reviewScannedAt: string | null;
+  createdAt: string;
   tokenEnc: string;
   jmapAccountId: string;
 }): EmailConnectionWithSecret {
@@ -162,11 +164,11 @@ function rowWithSecret(row: {
     status: row.status,
     receivedCount: row.receivedCount,
     processedCount: row.processedCount,
-    lastPushAt: row.lastPushAt?.toISOString() ?? null,
+    lastPushAt: toIsoOrNull(row.lastPushAt),
     pushSubscriptionId: row.pushSubscriptionId,
-    pushExpiresAt: row.pushExpiresAt?.toISOString() ?? null,
-    reviewScannedAt: row.reviewScannedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
+    pushExpiresAt: toIsoOrNull(row.pushExpiresAt),
+    reviewScannedAt: toIsoOrNull(row.reviewScannedAt),
+    createdAt: toIso(row.createdAt),
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
   };
@@ -177,9 +179,9 @@ export async function readEmailConnection(
   accountId: string,
   id: string,
 ): Promise<EmailConnectionWithSecret | undefined> {
-  const row = await prisma.emailConnection.findFirst({
-    where: { id, accountId },
-  });
+  const row = await db.orm.public.EmailConnection.where((c) =>
+    and(c.id.eq(id), c.accountId.eq(accountId)),
+  ).first();
   return row ? rowWithSecret(row) : undefined;
 }
 
@@ -187,7 +189,7 @@ export async function readEmailConnection(
 export async function readEmailConnectionById(
   id: string,
 ): Promise<EmailConnectionWithSecret | undefined> {
-  const row = await prisma.emailConnection.findUnique({ where: { id } });
+  const row = await db.orm.public.EmailConnection.first({ id });
   return row ? rowWithSecret(row) : undefined;
 }
 
@@ -195,9 +197,9 @@ export async function readEmailConnectionById(
 export async function listAllEmailConnections(): Promise<
   EmailConnectionWithSecret[]
 > {
-  const rows = await prisma.emailConnection.findMany({
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = await db.orm.public.EmailConnection.orderBy((c) =>
+    c.createdAt.asc(),
+  ).all();
   return rows.map(rowWithSecret);
 }
 
@@ -228,20 +230,37 @@ export async function createEmailConnection(input: {
           : `${address} is already connected to another workspace.`,
     };
   }
-  const row = await prisma.emailConnection.create({
-    data: {
-      id: ulid(),
-      accountId: input.accountId,
-      provider: input.provider,
-      emailAddress: address,
-      jmapAccountId: input.jmapAccountId,
-      tokenEnc: input.tokenEnc,
-      status: "active",
-      createdAt: new Date().toISOString(),
-    },
-    select: CONNECTION_SELECT,
+  const row = await db.orm.public.EmailConnection.create({
+    id: ulid(),
+    accountId: input.accountId,
+    provider: input.provider,
+    emailAddress: address,
+    jmapAccountId: input.jmapAccountId,
+    tokenEnc: input.tokenEnc,
+    status: "active",
+    createdAt: fromIso(new Date().toISOString()),
   });
-  return { ok: true, connection: toView(row, 0, 0) };
+  return {
+    ok: true,
+    connection: toView(
+      {
+        id: row.id,
+        accountId: row.accountId,
+        provider: row.provider,
+        emailAddress: row.emailAddress,
+        status: row.status,
+        receivedCount: row.receivedCount,
+        processedCount: row.processedCount,
+        lastPushAt: row.lastPushAt,
+        pushSubscriptionId: row.pushSubscriptionId,
+        pushExpiresAt: row.pushExpiresAt,
+        reviewScannedAt: row.reviewScannedAt,
+        createdAt: row.createdAt,
+      },
+      0,
+      0,
+    ),
+  };
 }
 
 /**
@@ -253,12 +272,13 @@ export async function removeEmailConnection(
   accountId: string,
   id: string,
 ): Promise<boolean> {
-  const row = await prisma.emailConnection.findFirst({
-    where: { id, accountId },
-    select: { id: true },
-  });
+  const row = await db.orm.public.EmailConnection.where((c) =>
+    and(c.id.eq(id), c.accountId.eq(accountId)),
+  )
+    .select("id")
+    .first();
   if (!row) return false;
-  await prisma.emailConnection.delete({ where: { id } });
+  await db.orm.public.EmailConnection.where({ id }).delete();
   return true;
 }
 
@@ -268,17 +288,16 @@ export async function saveEmailConnectionSubscription(
   subscriptionId: string,
   expiresAt: string,
 ): Promise<void> {
-  await prisma.emailConnection.update({
-    where: { id },
-    data: { pushSubscriptionId: subscriptionId, pushExpiresAt: expiresAt },
+  await db.orm.public.EmailConnection.where({ id }).update({
+    pushSubscriptionId: subscriptionId,
+    pushExpiresAt: fromIso(expiresAt),
   });
 }
 
 /** A push arrived: stamp lastPushAt (the "last handled webhook" stat). */
 export async function touchEmailConnectionPush(id: string): Promise<void> {
-  await prisma.emailConnection.update({
-    where: { id },
-    data: { lastPushAt: new Date().toISOString() },
+  await db.orm.public.EmailConnection.where({ id }).update({
+    lastPushAt: fromIso(new Date().toISOString()),
   });
 }
 
@@ -287,5 +306,5 @@ export async function setEmailConnectionStatus(
   id: string,
   status: "active" | "error",
 ): Promise<void> {
-  await prisma.emailConnection.update({ where: { id }, data: { status } });
+  await db.orm.public.EmailConnection.where({ id }).update({ status });
 }

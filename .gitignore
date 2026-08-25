@@ -8,7 +8,6 @@ build/
 
 # Prisma
 generated/
-prisma/generated/
 prisma/backup.sql
 
 # Test artifacts

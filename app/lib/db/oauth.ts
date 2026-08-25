@@ -1,4 +1,6 @@
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type {
   OAuthClientRecord,
   OAuthCodeRecord,
@@ -27,15 +29,13 @@ export async function registerOAuthClient(input: {
     authMethod: input.authMethod,
     createdAt: new Date().toISOString(),
   };
-  await prisma.oAuthClient.create({
-    data: {
-      id: client.id,
-      secretHash: client.secretHash,
-      name: client.name,
-      redirectUris: JSON.stringify(client.redirectUris),
-      authMethod: client.authMethod,
-      createdAt: client.createdAt,
-    },
+  await db.orm.public.OAuthClient.create({
+    id: client.id,
+    secretHash: client.secretHash,
+    name: client.name,
+    redirectUris: JSON.stringify(client.redirectUris),
+    authMethod: client.authMethod,
+    createdAt: fromIso(client.createdAt),
   });
   return client;
 }
@@ -44,7 +44,7 @@ export async function registerOAuthClient(input: {
 export async function findOAuthClient(
   clientId: string,
 ): Promise<OAuthClientRecord | undefined> {
-  const row = await prisma.oAuthClient.findUnique({ where: { id: clientId } });
+  const row = await db.orm.public.OAuthClient.first({ id: clientId });
   if (!row) return undefined;
   return oauthClientFromRow(row);
 }
@@ -54,14 +54,14 @@ export async function saveOAuthConsent(
   userId: string,
   clientId: string,
 ): Promise<void> {
-  await prisma.oAuthConsent.upsert({
-    where: { userId_clientId: { userId, clientId } },
-    update: { grantedAt: new Date().toISOString() },
+  await db.orm.public.OAuthConsent.upsert({
+    update: { grantedAt: fromIso(new Date().toISOString()) },
     create: {
       userId,
       clientId,
-      grantedAt: new Date().toISOString(),
+      grantedAt: fromIso(new Date().toISOString()),
     },
+    conflictOn: { userId, clientId },
   });
 }
 
@@ -70,10 +70,11 @@ export async function hasOAuthConsent(
   userId: string,
   clientId: string,
 ): Promise<boolean> {
-  const row = await prisma.oAuthConsent.findUnique({
-    where: { userId_clientId: { userId, clientId } },
-    select: { userId: true },
-  });
+  const row = await db.orm.public.OAuthConsent.where((c) =>
+    and(c.userId.eq(userId), c.clientId.eq(clientId)),
+  )
+    .select("userId")
+    .first();
   return row !== null;
 }
 
@@ -86,12 +87,11 @@ export async function createOAuthCode(input: {
   redirectUri: string;
   expiresAt: string;
 }): Promise<void> {
-  await prisma.oAuthCode.create({
-    data: {
-      ...input,
-      used: false,
-      createdAt: new Date().toISOString(),
-    },
+  await db.orm.public.OAuthCode.create({
+    ...input,
+    expiresAt: fromIso(input.expiresAt),
+    used: false,
+    createdAt: fromIso(new Date().toISOString()),
   });
 }
 
@@ -104,17 +104,17 @@ export async function consumeOAuthCode(
   id: string,
   clientId: string,
 ): Promise<OAuthCodeRecord | undefined> {
-  const claimed = await prisma.oAuthCode.updateMany({
-    where: {
-      id,
-      clientId,
-      used: false,
-      expiresAt: { gt: new Date().toISOString() },
-    },
-    data: { used: true },
-  });
-  if (claimed.count === 0) return undefined;
-  const row = await prisma.oAuthCode.findUnique({ where: { id } });
+  const now = new Date().toISOString();
+  const claimed = await db.orm.public.OAuthCode.where((c) =>
+    and(
+      c.id.eq(id),
+      c.clientId.eq(clientId),
+      c.used.eq(false),
+      c.expiresAt.gt(fromIso(now)),
+    ),
+  ).updateAll({ used: true });
+  if (claimed.length === 0) return undefined;
+  const row = await db.orm.public.OAuthCode.first({ id });
   if (!row) return undefined;
   return {
     id: row.id,
@@ -122,7 +122,7 @@ export async function consumeOAuthCode(
     clientId: row.clientId,
     challenge: row.challenge,
     redirectUri: row.redirectUri,
-    expiresAt: row.expiresAt.toISOString(),
+    expiresAt: toIso(row.expiresAt),
   };
 }
 
@@ -136,32 +136,40 @@ export async function createOAuthToken(input: {
   expiresAt: string;
 }): Promise<void> {
   const now = new Date().toISOString();
-  await prisma.$transaction([
-    prisma.oAuthCode.deleteMany({ where: { expiresAt: { lt: now } } }),
-    prisma.oAuthToken.deleteMany({
-      where: { expiresAt: { lt: now }, revokedAt: null },
-    }),
-    prisma.oAuthToken.create({
-      data: { ...input, revokedAt: null, createdAt: now },
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.OAuthCode.where((c) =>
+      c.expiresAt.lt(fromIso(now)),
+    ).deleteAll();
+    await tx.orm.public.OAuthToken.where((t) =>
+      and(t.expiresAt.lt(fromIso(now)), t.revokedAt.isNull()),
+    ).deleteAll();
+    await tx.orm.public.OAuthToken.create({
+      tokenHash: input.tokenHash,
+      userId: input.userId,
+      clientId: input.clientId,
+      _type: input.type,
+      scope: input.scope,
+      expiresAt: fromIso(input.expiresAt),
+      revokedAt: null,
+      createdAt: fromIso(now),
+    });
+  });
 }
 
 /** Look up a token by its stored hash. */
 export async function findOAuthToken(
   tokenHash: string,
 ): Promise<OAuthTokenRecord | undefined> {
-  const row = await prisma.oAuthToken.findUnique({ where: { tokenHash } });
+  const row = await db.orm.public.OAuthToken.first({ tokenHash });
   if (!row) return undefined;
   return oauthTokenFromRow(row);
 }
 
 /** Mark a token revoked (refresh rotation, disconnect, revocation endpoint). */
 export async function revokeOAuthToken(tokenHash: string): Promise<void> {
-  await prisma.oAuthToken.updateMany({
-    where: { tokenHash, revokedAt: null },
-    data: { revokedAt: new Date().toISOString() },
-  });
+  await db.orm.public.OAuthToken.where((t) =>
+    and(t.tokenHash.eq(tokenHash), t.revokedAt.isNull()),
+  ).updateAll({ revokedAt: fromIso(new Date().toISOString()) });
 }
 
 /**
@@ -179,17 +187,18 @@ export async function listUserOAuthSessions(userId: string): Promise<
     expiresAt: string | null;
   }[]
 > {
-  const consents = await prisma.oAuthConsent.findMany({
-    where: { userId },
-    orderBy: { grantedAt: "desc" },
-    select: { clientId: true },
-  });
+  const consents = await db.orm.public.OAuthConsent.where((c) =>
+    c.userId.eq(userId),
+  )
+    .orderBy((c) => c.grantedAt.desc())
+    .select("clientId")
+    .all();
   if (consents.length === 0) return [];
   const [clients, tokens] = await Promise.all([
-    prisma.oAuthClient.findMany({
-      where: { id: { in: consents.map((c) => c.clientId) } },
-    }),
-    prisma.oAuthToken.findMany({ where: { userId } }),
+    db.orm.public.OAuthClient.where((c) =>
+      c.id.in(consents.map((x) => x.clientId)),
+    ).all(),
+    db.orm.public.OAuthToken.where((t) => t.userId.eq(userId)).all(),
   ]);
   const clientById = new Map(clients.map((c) => [c.id, c]));
   const now = new Date().toISOString();
@@ -204,19 +213,15 @@ export async function listUserOAuthSessions(userId: string): Promise<
     const own = tokens.filter((t) => t.clientId === consent.clientId);
     const lastUsedAt = own.reduce<string | null>(
       (latest, t) =>
-        t.createdAt.toISOString() > (latest ?? "")
-          ? t.createdAt.toISOString()
-          : latest,
+        toIso(t.createdAt) > (latest ?? "") ? toIso(t.createdAt) : latest,
       null,
     );
     const active = own.filter(
-      (t) => t.revokedAt === null && t.expiresAt.toISOString() > now,
+      (t) => t.revokedAt === null && toIso(t.expiresAt) > now,
     );
     const expiresAt = active.reduce<string | null>(
       (latest, t) =>
-        t.expiresAt.toISOString() > (latest ?? "")
-          ? t.expiresAt.toISOString()
-          : latest,
+        toIso(t.expiresAt) > (latest ?? "") ? toIso(t.expiresAt) : latest,
       null,
     );
     out.push({ client: oauthClientFromRow(row), lastUsedAt, expiresAt });
@@ -226,7 +231,7 @@ export async function listUserOAuthSessions(userId: string): Promise<
 
 /** Delete a registered OAuth client entirely (cascades codes/tokens/consents). */
 export async function deleteOAuthClient(clientId: string): Promise<void> {
-  await prisma.oAuthClient.deleteMany({ where: { id: clientId } });
+  await db.orm.public.OAuthClient.where((c) => c.id.eq(clientId)).deleteAll();
 }
 
 /**
@@ -237,13 +242,14 @@ export async function disconnectOAuthClient(
   userId: string,
   clientId: string,
 ): Promise<void> {
-  await prisma.$transaction([
-    prisma.oAuthToken.updateMany({
-      where: { userId, clientId, revokedAt: null },
-      data: { revokedAt: new Date().toISOString() },
-    }),
-    prisma.oAuthConsent.deleteMany({ where: { userId, clientId } }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.OAuthToken.where((t) =>
+      and(t.userId.eq(userId), t.clientId.eq(clientId), t.revokedAt.isNull()),
+    ).updateAll({ revokedAt: fromIso(new Date().toISOString()) });
+    await tx.orm.public.OAuthConsent.where((c) =>
+      and(c.userId.eq(userId), c.clientId.eq(clientId)),
+    ).deleteAll();
+  });
 }
 
 function oauthClientFromRow(row: {
@@ -252,7 +258,7 @@ function oauthClientFromRow(row: {
   name: string;
   redirectUris: string;
   authMethod: string;
-  createdAt: Date;
+  createdAt: string;
 }): OAuthClientRecord {
   let redirectUris: string[] = [];
   try {
@@ -270,7 +276,7 @@ function oauthClientFromRow(row: {
     redirectUris,
     authMethod:
       row.authMethod === "client_secret_basic" ? "client_secret_basic" : "none",
-    createdAt: row.createdAt.toISOString(),
+    createdAt: toIso(row.createdAt),
   };
 }
 
@@ -278,20 +284,20 @@ function oauthTokenFromRow(row: {
   tokenHash: string;
   userId: string;
   clientId: string;
-  type: string;
+  _type: string;
   scope: string;
-  expiresAt: Date;
-  revokedAt: Date | null;
-  createdAt: Date;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string;
 }): OAuthTokenRecord {
   return {
     tokenHash: row.tokenHash,
     userId: row.userId,
     clientId: row.clientId,
-    type: row.type === "refresh" ? "refresh" : "access",
+    type: row._type === "refresh" ? "refresh" : "access",
     scope: row.scope,
-    expiresAt: row.expiresAt.toISOString(),
-    revokedAt: row.revokedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
+    expiresAt: toIso(row.expiresAt),
+    revokedAt: toIsoOrNull(row.revokedAt),
+    createdAt: toIso(row.createdAt),
   };
 }

@@ -4,7 +4,6 @@ import {
   readCachedExtraction,
   writeCachedExtraction,
 } from "~/lib/db/extraction-cache";
-import type { Prisma } from "prisma/generated";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import {
   TEST_ACCOUNT_ID,
@@ -87,7 +86,7 @@ describe("extraction cache store", () => {
       data: {
         accountId: TEST_ACCOUNT_ID,
         hash: key,
-        result: result as unknown as Prisma.InputJsonValue,
+        result: result as unknown as Record<string, unknown>,
         createdAt: "2020-01-01T00:00:00.000Z",
       },
     });

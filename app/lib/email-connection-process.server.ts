@@ -34,8 +34,10 @@ import {
   hasOwnConfirmationHeader,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
-import prisma from "~/lib/prisma.server";
-import { Prisma } from "prisma/generated";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
+import { fromIso } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -162,19 +164,18 @@ async function logEmailDecision(input: {
   error?: string;
 }): Promise<void> {
   const now = new Date().toISOString();
-  await prisma.emailProcessLog.upsert({
-    where: {
-      connectionId_emailId: {
-        connectionId: input.connectionId,
-        emailId: input.emailId,
-      },
-    },
-    update: {
-      matched: input.matched,
-      outcome: input.outcome,
-      error: input.error ?? null,
-    },
-    create: {
+  // The (connectionId, emailId) uniqueness is a unique index, not a
+  // constraint Prisma 8's upsert conflictOn can target, so update the
+  // claimed row in place; the defensive create covers a row that vanished.
+  const updated = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(input.connectionId), l.emailId.eq(input.emailId)),
+  ).updateAll({
+    matched: input.matched,
+    outcome: input.outcome,
+    error: input.error ?? null,
+  });
+  if (updated.length === 0) {
+    await db.orm.public.EmailProcessLog.create({
       connectionId: input.connectionId,
       emailId: input.emailId,
       fromAddress: input.fromAddress,
@@ -182,9 +183,9 @@ async function logEmailDecision(input: {
       matched: input.matched,
       outcome: input.outcome,
       error: input.error ?? null,
-      createdAt: now,
-    },
-  });
+      createdAt: fromIso(now),
+    });
+  }
 }
 
 /** Atomically claim an email for processing by inserting its log row
@@ -201,24 +202,19 @@ async function claimEmailForProcessing(
   subject: string,
 ): Promise<boolean> {
   try {
-    await prisma.emailProcessLog.create({
-      data: {
-        connectionId,
-        emailId,
-        fromAddress,
-        subject: subject.slice(0, 500),
-        matched: false,
-        outcome: "processing",
-        error: null,
-        createdAt: new Date().toISOString(),
-      },
+    await db.orm.public.EmailProcessLog.create({
+      connectionId,
+      emailId,
+      fromAddress,
+      subject: subject.slice(0, 500),
+      matched: false,
+      outcome: "processing",
+      error: null,
+      createdAt: fromIso(new Date().toISOString()),
     });
     return true;
   } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === "P2002"
-    ) {
+    if (isUniqueViolation(err)) {
       return false;
     }
     throw err;
@@ -229,27 +225,34 @@ async function seenEmail(
   connectionId: string,
   emailId: string,
 ): Promise<boolean> {
-  const row = await prisma.emailProcessLog.findUnique({
-    where: {
-      connectionId_emailId: { connectionId, emailId },
-    },
-    select: { outcome: true },
-  });
+  const row = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.emailId.eq(emailId)),
+  )
+    .select("outcome")
+    .first();
   return row !== null;
 }
 
+/** Prisma 8 has no atomic increment in the ORM lane; read then bump. A
+ * lost update only undercounts a stat, never loses data. */
+async function bumpCounter(
+  connectionId: string,
+  field: "receivedCount" | "processedCount",
+): Promise<void> {
+  const row = await db.orm.public.EmailConnection.where({ id: connectionId })
+    .select(field)
+    .first();
+  await db.orm.public.EmailConnection.where({ id: connectionId }).update({
+    [field]: (row?.[field] ?? 0) + 1,
+  } as { receivedCount?: number; processedCount?: number });
+}
+
 async function bumpReceived(connectionId: string): Promise<void> {
-  await prisma.emailConnection.update({
-    where: { id: connectionId },
-    data: { receivedCount: { increment: 1 } },
-  });
+  await bumpCounter(connectionId, "receivedCount");
 }
 
 async function bumpProcessed(connectionId: string): Promise<void> {
-  await prisma.emailConnection.update({
-    where: { id: connectionId },
-    data: { processedCount: { increment: 1 } },
-  });
+  await bumpCounter(connectionId, "processedCount");
 }
 
 // --- Per-email processing ---------------------------------------------------------
@@ -315,15 +318,14 @@ export async function processConnectionEmail(
   // Claim by flipping it to `processing` in place; if zero rows update,
   // another drain/click claimed it first (or it left the list).
   if (review) {
-    const claimed = await prisma.emailProcessLog.updateMany({
-      where: {
-        connectionId: connection.id,
-        emailId: summary.id,
-        outcome: "pending-review",
-      },
-      data: { outcome: "processing", error: null },
-    });
-    if (claimed.count === 0) {
+    const claimed = await db.orm.public.EmailProcessLog.where((l) =>
+      and(
+        l.connectionId.eq(connection.id),
+        l.emailId.eq(summary.id),
+        l.outcome.eq("pending-review"),
+      ),
+    ).updateAll({ outcome: "processing", error: null });
+    if (claimed.length === 0) {
       return { status: "ignored", reason: "already processed" };
     }
   } else if (

@@ -198,7 +198,7 @@ curl -s https://expense.example.com/mcp \
   configuration, oauth-protected-resource): discovery metadata.
 - `app/routes/oauth.{register,authorize,token,revoke}.ts(x)`: the OAuth
   endpoints; `oauth.authorize` renders the consent page.
-- `prisma/schema.prisma`: `ApiToken` and the OAuth models (`OAuthClient`,
+- `prisma/contract.prisma`: `ApiToken` and the OAuth models (`OAuthClient`,
   `OAuthConsent`, `OAuthCode`, `OAuthToken`).
 - `app/routes/settings.tsx` → **Agents & API (MCP)**: connected apps with
   per-token delete and full disconnect, endpoint URL.

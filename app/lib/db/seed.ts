@@ -4,10 +4,11 @@ import { GENERAL_EMAIL_RULES } from "~/data/email-rules";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
-import prisma from "~/lib/prisma.server";
+import { all } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { asNumericOf, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { isEmail } from "~/lib/validation";
 import { isTest } from "~/lib/db/shared";
-import type { Prisma } from "prisma/generated";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import type { MileageType, User } from "~/lib/types";
 
@@ -19,17 +20,12 @@ import type { MileageType, User } from "~/lib/types";
  * duplicate-pair dismissals out of the settings blob, and sync the global
  * IRS mileage-rate master table from app/data/mileage-rates.ts.
  *
- * There is no runtime DDL: schema changes go through `prisma migrate` /
- * `pnpm db:push`; this only seeds data.
+ * There is no runtime DDL: schema changes go through the migration flow
+ * (docs/operations.md); this only seeds data.
  */
 
-/** The subset of Prisma delegates that carry legacy accountId "" rows. */
-interface AccountAdopter {
-  updateMany(args: {
-    where: { accountId: string };
-    data: { accountId: string };
-  }): Promise<unknown>;
-}
+/** The query surface shared by db and an open db.transaction callback. */
+type Tx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 let ready: Promise<void> | undefined;
 
@@ -40,18 +36,20 @@ export async function initStore(): Promise<void> {
     ready = (async () => {
       const bootstrap = await ensureBootstrapUser();
       // Adopt single-user era rows (accountId "") into the bootstrap account.
-      const adopters: AccountAdopter[] = [
-        prisma.expense,
-        prisma.report,
-        prisma.category,
-        prisma.settings,
-      ];
-      for (const model of adopters) {
-        await model.updateMany({
-          where: { accountId: "" },
-          data: { accountId: bootstrap.accountId },
+      await db.transaction(async (tx) => {
+        await tx.orm.public.Expense.where((m) => m.accountId.eq("")).updateAll({
+          accountId: bootstrap.accountId,
         });
-      }
+        await tx.orm.public.Report.where((m) => m.accountId.eq("")).updateAll({
+          accountId: bootstrap.accountId,
+        });
+        await tx.orm.public.Category.where((m) => m.accountId.eq("")).updateAll(
+          { accountId: bootstrap.accountId },
+        );
+        await tx.orm.public.Settings.where((m) => m.accountId.eq("")).updateAll(
+          { accountId: bootstrap.accountId },
+        );
+      });
       await syncMileageRates();
       await syncGeneralEmailRules();
     })().catch((error) => {
@@ -70,19 +68,25 @@ export async function initStore(): Promise<void> {
  * applies it. Diff-based, so an unchanged seed is a no-op on every boot.
  */
 async function syncMileageRates(): Promise<void> {
-  const have = (await prisma.mileageRate.findMany()).map(rateRowToEntry);
+  const have = (await db.orm.public.MileageRate.all()).map(rateRowToEntry);
   const want = MILEAGE_RATES.map((r) => ({ ...r })).sort(byTypeThenStart);
   const same =
     have.length === want.length &&
     have.every((h, i) => rateEntryEquals(h, want[i]!));
   if (same) return;
   const now = new Date().toISOString();
-  await prisma.$transaction([
-    prisma.mileageRate.deleteMany({}),
-    prisma.mileageRate.createMany({
-      data: want.map((r) => ({ ...r, createdAt: now })),
-    }),
-  ]);
+  await db.transaction(async (tx) => {
+    await tx.orm.public.MileageRate.where(() => all()).deleteAll();
+    await tx.orm.public.MileageRate.createAll(
+      want.map((r) => ({
+        _type: r.type,
+        startDate: r.startDate,
+        endDate: r.endDate,
+        rate: asNumericOf<5, 3>(r.rate),
+        createdAt: fromIso(now),
+      })),
+    );
+  });
   console.warn(
     "[initStore] Synced IRS mileage rates: %d rows (was %d)",
     want.length,
@@ -98,21 +102,22 @@ async function syncMileageRates(): Promise<void> {
  * touched: the sync only adds/updates rows whose sender is in the seed.
  */
 async function syncGeneralEmailRules(): Promise<void> {
-  const general = await prisma.emailRule.findMany({ where: { accountId: "" } });
+  const general = await db.orm.public.EmailRule.where((r) =>
+    r.accountId.eq(""),
+  ).all();
   const known = new Set(general.map((r) => r.sender));
   const missing = GENERAL_EMAIL_RULES.filter((r) => !known.has(r.sender));
   if (missing.length === 0) return;
   const now = new Date().toISOString();
-  await prisma.emailRule.createMany({
-    data: missing.map((r) => ({
+  await db.orm.public.EmailRule.createAll(
+    missing.map((r) => ({
       id: ulid(),
       accountId: "",
       sender: r.sender,
       source: "seed",
-      createdAt: now,
+      createdAt: fromIso(now),
     })),
-    skipDuplicates: true,
-  });
+  );
   console.warn(
     "[initStore] Synced general email rules: +%d (was %d)",
     missing.length,
@@ -121,16 +126,19 @@ async function syncGeneralEmailRules(): Promise<void> {
 }
 
 function rateRowToEntry(row: {
-  type: string;
+  _type: string;
   startDate: string;
   endDate: string;
-  rate: Prisma.Decimal;
+  rate: string;
 }): MileageRateEntry {
   return {
-    type: row.type as MileageType,
+    type: row._type as MileageType,
     startDate: row.startDate,
     endDate: row.endDate,
-    rate: row.rate.toString(),
+    // numeric(5,3) wire text keeps trailing zeros ("0.140"); the domain
+    // value is the plain number string ("0.14"), matching the old
+    // Prisma.Decimal.toString() behavior callers expect.
+    rate: row.rate.replace(/0+$/, "").replace(/\.$/, ""),
   };
 }
 
@@ -167,9 +175,10 @@ export async function readMileageRates(): Promise<MileageRateEntry[]> {
     return mileageRatesCache.data;
   }
   await initStore();
-  const rows = await prisma.mileageRate.findMany({
-    orderBy: [{ startDate: "desc" }, { type: "asc" }],
-  });
+  const rows = await db.orm.public.MileageRate.orderBy([
+    (m) => m.startDate.desc(),
+    (m) => m._type.asc(),
+  ]).all();
   const data = rows.map(rateRowToEntry);
   mileageRatesCache = {
     data,
@@ -179,34 +188,38 @@ export async function readMileageRates(): Promise<MileageRateEntry[]> {
 }
 
 async function ensureBootstrapUser(): Promise<User> {
-  const first = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  const first = await db.orm.public.User.orderBy((u) =>
+    u.createdAt.asc(),
+  ).first();
   if (!first) return bootstrapUser();
 
   const email = APP_EMAIL.trim().toLowerCase();
   if (email && !isEmail(first.email)) {
-    const taken = await prisma.user.findUnique({ where: { email } });
+    const taken = await db.orm.public.User.where((u) =>
+      u.email.eq(email),
+    ).first();
     if (!taken) {
-      await prisma.user.update({
-        where: { id: first.id },
-        data: { email },
-      });
+      await db.orm.public.User.where({ id: first.id }).update({ email });
       console.warn(
         "[initStore] Backfilled bootstrap user email from APP_EMAIL: %s → %s",
         first.email,
         email,
       );
       return {
-        ...first,
+        id: first.id,
+        accountId: first.accountId,
         email,
-        emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
-        createdAt: first.createdAt.toISOString(),
+        emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
+        createdAt: toIso(first.createdAt),
       };
     }
   }
   return {
-    ...first,
-    emailVerifiedAt: first.emailVerifiedAt?.toISOString() ?? null,
-    createdAt: first.createdAt.toISOString(),
+    id: first.id,
+    accountId: first.accountId,
+    email: first.email,
+    emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
+    createdAt: toIso(first.createdAt),
   };
 }
 
@@ -230,43 +243,47 @@ async function bootstrapUser(): Promise<User> {
   const now = new Date().toISOString();
   const accountId = ulid();
   const userId = ulid();
-  await prisma.$transaction([
-    prisma.account.create({
-      data: {
-        id: accountId,
-        name: email,
-        inviteCode: generateInviteCode(),
-        createdAt: now,
-      },
-    }),
-    prisma.user.create({
-      data: {
-        id: userId,
-        accountId,
-        email,
-        passwordHash: await hashPassword(APP_PASSWORD),
-        // The operator's bootstrap account needs no email verification
-        // (it is created from APP_EMAIL/APP_PASSWORD, not a signup form).
-        emailVerifiedAt: now,
-        createdAt: now,
-      },
-    }),
+  await db.transaction(async (tx) => {
+    await tx.orm.public.Account.create({
+      id: accountId,
+      name: email,
+      inviteCode: generateInviteCode(),
+      createdAt: fromIso(now),
+    });
+    await tx.orm.public.User.create({
+      id: userId,
+      accountId,
+      email,
+      passwordHash: await hashPassword(APP_PASSWORD),
+      // The operator's bootstrap account needs no email verification
+      // (it is created from APP_EMAIL/APP_PASSWORD, not a signup form).
+      emailVerifiedAt: fromIso(now),
+      createdAt: fromIso(now),
+    });
     // The bootstrap email is also an allowed "receipts by email" sender.
-    prisma.inboundSender.createMany({
-      data: [{ accountId, address: email, createdAt: now }],
-      skipDuplicates: true,
-    }),
-    seedDefaultCategories(accountId),
-  ]);
+    const existing = await tx.orm.public.InboundSender.where((s) =>
+      s.accountId.eq(accountId),
+    )
+      .select("address")
+      .all();
+    if (!existing.some((s) => s.address === email)) {
+      await tx.orm.public.InboundSender.create({
+        accountId,
+        address: email,
+        createdAt: fromIso(now),
+      });
+    }
+    await seedDefaultCategories(tx, accountId);
+  });
   return { id: userId, accountId, email, emailVerifiedAt: now, createdAt: now };
 }
 
 /** Seed a new account with the IRS Schedule C default categories. */
-export function seedDefaultCategories(
+export async function seedDefaultCategories(
+  tx: Tx,
   accountId: string,
-): Prisma.PrismaPromise<{ count: number }> {
-  return prisma.category.createMany({
-    data: DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
-    skipDuplicates: true,
-  });
+): Promise<void> {
+  await tx.orm.public.Category.createAll(
+    DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
+  );
 }

@@ -1,6 +1,8 @@
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { asJson, asNumeric, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { normalizeMerchant } from "~/lib/duplicates";
-import { deleteImage } from "~/lib/images.server";
+import { deleteImage, readImage } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import type { KnownMerchant } from "~/lib/receipt-ai.server";
 import {
@@ -12,12 +14,13 @@ import {
   type MileageExpense,
   type ReceiptExpense,
 } from "~/lib/types";
-import type { Prisma } from "prisma/generated";
 
 // --- Expenses --------------------------------------------------------------
 
 export async function readExpenses(accountId: string): Promise<Expense[]> {
-  const rows = await prisma.expense.findMany({ where: { accountId } });
+  const rows = await db.orm.public.Expense.where((e) =>
+    e.accountId.eq(accountId),
+  ).all();
   return rows.map(rowToExpense);
 }
 
@@ -25,18 +28,19 @@ export async function readExpense(
   id: string,
   accountId: string,
 ): Promise<Expense | undefined> {
-  const row = await prisma.expense.findFirst({
-    where: { id, accountId },
-  });
+  const row = await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(id), e.accountId.eq(accountId)),
+  ).first();
   return row ? rowToExpense(row) : undefined;
 }
 
-/** Expense row plus its image blob in one round trip, for the image serving
- * route: the home list requests one image per receipt, and two sequential
- * queries per tile (expense, then blob) doubled the DB round trips. The
- * LEFT JOIN is on the expense's namespaced `imageFile` key, so `blobMime` /
- * `blobData` / `thumbnail` are null when the expense has no image (or its
- * blob row is missing); callers 404 on that, same as a null blob read. */
+/** Expense row plus its image blob, for the image serving route: the home
+ * list requests one image per receipt, and two sequential queries per tile
+ * (expense, then blob) doubled the DB round trips. Prisma 8 has no raw-SQL
+ * lane yet, so the old single LEFT JOIN became two queries (the blob key
+ * comes from the expense row); the blob columns are null when the expense
+ * has no image (or its blob row is missing); callers 404 on that, same as
+ * a null blob read. */
 export type ExpenseImageRow = {
   type: string;
   imageFile: string;
@@ -51,16 +55,30 @@ export async function readExpenseImage(
   id: string,
   accountId: string,
 ): Promise<ExpenseImageRow | undefined> {
-  const rows = await prisma.$queryRaw<ExpenseImageRow[]>`
-    SELECT e."type", e."imageFile", e."imageMime", e."updatedAt",
-           b."mime" AS "blobMime", b."data" AS "blobData", b."thumbnail"
-    FROM "expenses" e
-    LEFT JOIN "image_blobs" b
-      ON b."accountId" = e."accountId" AND b."key" = e."imageFile"
-    WHERE e."id" = ${id} AND e."accountId" = ${accountId}
-    LIMIT 1
-  `;
-  return rows[0];
+  const expense = await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(id), e.accountId.eq(accountId)),
+  )
+    .select("_type", "imageFile", "imageMime", "updatedAt")
+    .first();
+  if (!expense) return undefined;
+  const base: ExpenseImageRow = {
+    type: expense._type,
+    imageFile: expense.imageFile,
+    imageMime: expense.imageMime,
+    updatedAt: toIso(expense.updatedAt),
+    blobMime: null,
+    blobData: null,
+    thumbnail: null,
+  };
+  if (!expense.imageFile) return base;
+  const blob = await readImage(accountId, expense.imageFile);
+  if (!blob) return base;
+  return {
+    ...base,
+    blobMime: blob.mime,
+    blobData: new Uint8Array(blob.buffer),
+    thumbnail: blob.thumbnail ? new Uint8Array(blob.thumbnail) : null,
+  };
 }
 
 /**
@@ -81,74 +99,80 @@ export async function readNeighborIds(
     // Prev: the expense with the closest *newer* date (date > this one,
     // ordered ascending, so the smallest gap forward in time = the one just
     // before in a newest-first list).
-    const prev = await prisma.expense.findFirst({
-      where: {
-        accountId,
-        date: { gt: expense.date },
-        id: { not: expense.id },
-      },
-      orderBy: { date: "asc" },
-      select: { id: true },
-    });
+    const prev = await db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        e.date.gt(expense.date),
+        e.id.neq(expense.id),
+      ),
+    )
+      .orderBy((e) => e.date.asc())
+      .select("id")
+      .first();
     prevId = prev?.id ?? null;
 
     // Next: the expense with the closest *older* date (date < this one,
     // ordered descending).
-    const next = await prisma.expense.findFirst({
-      where: {
-        accountId,
-        date: { lt: expense.date },
-        id: { not: expense.id },
-      },
-      orderBy: { date: "desc" },
-      select: { id: true },
-    });
+    const next = await db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        e.date.lt(expense.date),
+        e.id.neq(expense.id),
+      ),
+    )
+      .orderBy((e) => e.date.desc())
+      .select("id")
+      .first();
     if (next) {
       nextId = next.id;
     } else {
       // No older dated expense; fall back to the first undated row.
-      const firstUndated = await prisma.expense.findFirst({
-        where: { accountId, date: "", id: { not: expense.id } },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
-      });
+      const firstUndated = await db.orm.public.Expense.where((e) =>
+        and(e.accountId.eq(accountId), e.date.eq(""), e.id.neq(expense.id)),
+      )
+        .orderBy((e) => e.createdAt.desc())
+        .select("id")
+        .first();
       nextId = firstUndated?.id ?? null;
     }
   } else {
     // Undated expense: prev is the closest newer undated, or the oldest
     // dated row when this is the first undated.
-    const prevUndated = await prisma.expense.findFirst({
-      where: {
-        accountId,
-        date: "",
-        createdAt: { gt: expense.createdAt },
-        id: { not: expense.id },
-      },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
+    const prevUndated = await db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        e.date.eq(""),
+        e.createdAt.gt(fromIso(expense.createdAt)),
+        e.id.neq(expense.id),
+      ),
+    )
+      .orderBy((e) => e.createdAt.asc())
+      .select("id")
+      .first();
     if (prevUndated) {
       prevId = prevUndated.id;
     } else {
-      const oldestDated = await prisma.expense.findFirst({
-        where: { accountId, date: { not: "" }, id: { not: expense.id } },
-        orderBy: { date: "asc" },
-        select: { id: true },
-      });
+      const oldestDated = await db.orm.public.Expense.where((e) =>
+        and(e.accountId.eq(accountId), e.date.neq(""), e.id.neq(expense.id)),
+      )
+        .orderBy((e) => e.date.asc())
+        .select("id")
+        .first();
       prevId = oldestDated?.id ?? null;
     }
 
     // Next: closest older undated (createdAt < this one, ordered desc).
-    const nextUndated = await prisma.expense.findFirst({
-      where: {
-        accountId,
-        date: "",
-        createdAt: { lt: expense.createdAt },
-        id: { not: expense.id },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    });
+    const nextUndated = await db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        e.date.eq(""),
+        e.createdAt.lt(fromIso(expense.createdAt)),
+        e.id.neq(expense.id),
+      ),
+    )
+      .orderBy((e) => e.createdAt.desc())
+      .select("id")
+      .first();
     nextId = nextUndated?.id ?? null;
   }
 
@@ -165,31 +189,32 @@ export async function readNeighborIds(
 export async function readDuplicateCandidates(
   accountId: string,
 ): Promise<Expense[]> {
-  const rows = await prisma.expense.findMany({
-    where: { accountId },
-    select: {
-      id: true,
-      type: true,
-      date: true,
-      merchant: true,
-      amount: true,
-      distanceMiles: true,
-      locations: true,
-      report: true,
-      category: true,
-      description: true,
-      reconciledAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const rows = await db.orm.public.Expense.where((e) =>
+    e.accountId.eq(accountId),
+  )
+    .select(
+      "id",
+      "_type",
+      "date",
+      "merchant",
+      "amount",
+      "distanceMiles",
+      "locations",
+      "report",
+      "category",
+      "description",
+      "reconciledAt",
+      "createdAt",
+      "updatedAt",
+    )
+    .orderBy((e) => e.createdAt.asc())
+    .all();
   return rows.map((r) => {
     const base = {
       ...expenseBase(r),
-      type: r.type as Expense["type"],
+      type: r._type as Expense["type"],
     };
-    if (r.type === "receipt") {
+    if (r._type === "receipt") {
       return {
         ...base,
         type: "receipt" as const,
@@ -207,7 +232,7 @@ export async function readDuplicateCandidates(
         typeof r.locations === "string"
           ? (JSON.parse(r.locations) as Location[])
           : ((r.locations as unknown as Location[]) ?? []),
-      distanceMiles: r.distanceMiles?.toFixed(2) ?? "",
+      distanceMiles: r.distanceMiles ?? "",
       route: EMPTY_ROUTE,
     };
   });
@@ -223,12 +248,11 @@ export async function upsertExpense(
   // takeover of another account's row (that would be a unique-id conflict
   // on create, exactly like the old whole-table rewrite).
   const data = { ...expenseData(expense), accountId };
-  const updated = await prisma.expense.updateMany({
-    where: { id: expense.id, accountId },
-    data,
-  });
-  if (updated.count === 0) {
-    await prisma.expense.create({ data });
+  const updated = await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(expense.id), e.accountId.eq(accountId)),
+  ).updateAll(data);
+  if (updated.length === 0) {
+    await db.orm.public.Expense.create(data);
   }
 }
 
@@ -267,49 +291,58 @@ export async function findRecentlyImportedMatch(
   },
 ): Promise<{ id: string; createdAt: string } | undefined> {
   if (!opts.merchant || !opts.amount || !opts.date) return undefined;
-  const row = await prisma.expense.findFirst({
-    where: {
-      accountId,
-      type: "receipt",
-      id: { not: opts.excludeExpenseId },
-      merchant: { equals: opts.merchant, mode: "insensitive" },
-      amount: opts.amount,
-      date: opts.date,
-      createdAt: {
-        gte: new Date(Date.now() - RECENT_MATCH_WINDOW_MS).toISOString(),
-      },
-      ...(opts.description ? { description: opts.description } : {}),
-    },
-    select: { id: true, createdAt: true },
-  });
-  return row ? { ...row, createdAt: row.createdAt.toISOString() } : undefined;
+  const row = await db.orm.public.Expense.where((e) =>
+    and(
+      e.accountId.eq(accountId),
+      e._type.eq("receipt"),
+      e.id.neq(opts.excludeExpenseId),
+      e.merchant.ilike(escapeLikePattern(opts.merchant)),
+      e.amount.eq(asNumeric(opts.amount)),
+      e.date.eq(opts.date),
+      e.createdAt.gte(
+        fromIso(new Date(Date.now() - RECENT_MATCH_WINDOW_MS).toISOString()),
+      ),
+      ...(opts.description ? [e.description.eq(opts.description)] : []),
+    ),
+  )
+    .select("id", "createdAt")
+    .first();
+  return row ? { id: row.id, createdAt: toIso(row.createdAt) } : undefined;
+}
+
+/** Escape LIKE/ILIKE wildcards so the pattern matches the literal text. */
+function escapeLikePattern(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 export async function deleteExpense(
   id: string,
   accountId: string,
 ): Promise<void> {
-  const target = await prisma.expense.findFirst({
-    where: { id, accountId },
-    select: { type: true, imageFile: true },
-  });
-  if (target) await deleteReceiptImages(accountId, [target]);
-  await prisma.expense.deleteMany({ where: { id, accountId } });
+  const target = await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(id), e.accountId.eq(accountId)),
+  )
+    .select("_type", "imageFile")
+    .first();
+  if (target) {
+    await deleteReceiptImages(accountId, [
+      { type: target._type, imageFile: target.imageFile },
+    ]);
+  }
+  await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(id), e.accountId.eq(accountId)),
+  ).deleteAll();
 }
 
 /** Distinct merchant names previously used, most-recent first. */
 export async function readPriorMerchants(accountId: string): Promise<string[]> {
-  const grouped = await prisma.expense.groupBy({
-    by: ["merchant"],
-    where: { accountId, type: "receipt", merchant: { not: "" } },
-    _max: { createdAt: true },
-  });
+  const grouped = await db.orm.public.Expense.where((e) =>
+    and(e.accountId.eq(accountId), e._type.eq("receipt"), e.merchant.neq("")),
+  )
+    .groupBy("merchant")
+    .aggregate((a) => ({ last: a.max("createdAt") }));
   return grouped
-    .sort((a, b) =>
-      (b._max.createdAt?.toISOString() ?? "").localeCompare(
-        a._max.createdAt?.toISOString() ?? "",
-      ),
-    )
+    .sort((a, b) => (b.last ?? "").localeCompare(a.last ?? ""))
     .map((g) => g.merchant);
 }
 
@@ -334,15 +367,16 @@ function ninetyDaysAgo(): string {
 export async function readKnownMerchants(
   accountId: string,
 ): Promise<Map<string, KnownMerchant>> {
-  const rows = await prisma.expense.findMany({
-    where: {
-      accountId,
-      type: "receipt",
-      merchant: { not: "" },
-      createdAt: { gte: ninetyDaysAgo() },
-    },
-    select: { merchant: true, category: true, report: true, createdAt: true },
-  });
+  const rows = await db.orm.public.Expense.where((e) =>
+    and(
+      e.accountId.eq(accountId),
+      e._type.eq("receipt"),
+      e.merchant.neq(""),
+      e.createdAt.gte(fromIso(ninetyDaysAgo())),
+    ),
+  )
+    .select("merchant", "category", "report", "createdAt")
+    .all();
   const byMerchant = new Map<
     string,
     {
@@ -355,35 +389,30 @@ export async function readKnownMerchants(
   for (const row of rows) {
     const key = normalizeMerchant(row.merchant);
     if (!key) continue;
+    const createdAt = toIso(row.createdAt);
     let m = byMerchant.get(key);
     if (!m) {
       m = {
         display: row.merchant.trim(),
-        latestAt: row.createdAt.toISOString(),
+        latestAt: createdAt,
         category: null,
         report: null,
       };
       byMerchant.set(key, m);
     }
     // Display name: the newest row's spelling wins.
-    if (row.createdAt.toISOString() > m.latestAt) {
-      m.latestAt = row.createdAt.toISOString();
+    if (createdAt > m.latestAt) {
+      m.latestAt = createdAt;
       m.display = row.merchant.trim();
     }
     // Per-field newest non-empty value wins: a field is inherited from
     // its own newest expense, even when the overall-newest row left it
     // empty.
-    if (
-      row.category &&
-      (!m.category || row.createdAt.toISOString() > m.category.at)
-    ) {
-      m.category = { value: row.category, at: row.createdAt.toISOString() };
+    if (row.category && (!m.category || createdAt > m.category.at)) {
+      m.category = { value: row.category, at: createdAt };
     }
-    if (
-      row.report &&
-      (!m.report || row.createdAt.toISOString() > m.report.at)
-    ) {
-      m.report = { value: row.report, at: row.createdAt.toISOString() };
+    if (row.report && (!m.report || createdAt > m.report.at)) {
+      m.report = { value: row.report, at: createdAt };
     }
   }
   const out = new Map<string, KnownMerchant>();
@@ -412,22 +441,25 @@ export async function deleteReceiptImages(
   }
 }
 
+/** The typed create input for the Expense collection. */
+export type ExpenseWrite = Parameters<
+  (typeof db)["orm"]["public"]["Expense"]["create"]
+>[0];
+
 /** Expense fields for create/update, split by type. */
-export function expenseData(
-  e: Expense,
-): Omit<Prisma.ExpenseCreateManyInput, "accountId"> {
+export function expenseData(e: Expense): ExpenseWrite {
   const common = {
     id: e.id,
-    type: e.type,
+    _type: e.type,
     date: e.date,
     report: e.report,
     category: e.category,
     description: e.description,
     // "" is the domain's "no amount" sentinel → NULL (nullable Decimal).
-    amount: e.amount === "" ? null : e.amount,
+    amount: e.amount === "" ? null : asNumeric(e.amount),
     mileageType: e.type === "mileage" ? e.mileageType : "business",
-    createdAt: e.createdAt,
-    updatedAt: e.updatedAt,
+    createdAt: fromIso(e.createdAt),
+    updatedAt: fromIso(e.updatedAt),
     // reconciledAt / reconciledInRunId are deliberately absent: they are
     // managed ONLY by the reconciliation flow. A normal save never writes
     // them, so editing an expense can't wipe its reconciled status.
@@ -441,7 +473,7 @@ export function expenseData(
       originalName: e.originalName,
       distanceMiles: null,
       locations: [],
-      route: undefined,
+      route: null,
     };
   }
   return {
@@ -450,15 +482,15 @@ export function expenseData(
     imageFile: "",
     imageMime: "",
     originalName: "",
-    distanceMiles: e.distanceMiles === "" ? null : e.distanceMiles,
-    locations: e.locations as unknown as Prisma.InputJsonValue,
-    route: e.route as unknown as Prisma.InputJsonValue,
+    distanceMiles: e.distanceMiles === "" ? null : asNumeric(e.distanceMiles),
+    locations: asJson(e.locations),
+    route: e.route === null ? null : asJson(e.route),
   };
 }
 
 /** The base Expense fields shared by the full row mapping and the thin
  * duplicate-candidate mapping: the same null→"" defaults and the same
- * Decimal→2-dp conversion, so a change to one can't silently drift from
+ * numeric-string handling, so a change to one can't silently drift from
  * the other. "" is the domain's "no value" sentinel throughout. */
 function expenseBase(row: {
   id: string;
@@ -466,10 +498,10 @@ function expenseBase(row: {
   report: string | null;
   category: string | null;
   description: string | null;
-  amount: Prisma.Decimal | null;
-  reconciledAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date | null;
+  amount: string | null;
+  reconciledAt: string | null;
+  createdAt: string;
+  updatedAt: string | null;
 }): {
   id: string;
   date: string;
@@ -487,38 +519,38 @@ function expenseBase(row: {
     report: row.report ?? "",
     category: row.category ?? "",
     description: row.description ?? "",
-    // Decimal → 2-dp string (the domain's "" means no amount). toFixed(2) is
-    // a lossless pad: numeric(10,2) already stores exactly two digits.
-    amount: row.amount?.toFixed(2) ?? "",
-    reconciledAt: row.reconciledAt?.toISOString() ?? "",
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt?.toISOString() ?? row.createdAt.toISOString(),
+    // numeric(10,2) wire text already carries exactly two decimals, so the
+    // string is the 2-dp domain value as-is.
+    amount: row.amount ?? "",
+    reconciledAt: toIsoOrNull(row.reconciledAt) ?? "",
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIsoOrNull(row.updatedAt) ?? toIso(row.createdAt),
   };
 }
 
 function rowToExpense(row: {
   id: string;
-  type: string;
+  _type: string;
   date: string;
   report: string;
   category: string;
   description: string;
-  amount: Prisma.Decimal | null;
+  amount: string | null;
   merchant: string;
   imageFile: string;
   imageMime: string;
   originalName: string;
-  distanceMiles: Prisma.Decimal | null;
+  distanceMiles: string | null;
   mileageType: string;
   locations: unknown;
   route: unknown;
-  reconciledAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  reconciledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }): Expense {
   const base = {
     ...expenseBase(row),
-    type: row.type as Expense["type"],
+    type: row._type as Expense["type"],
   };
   if (base.type === "receipt") {
     const receipt: ReceiptExpense = {
@@ -537,7 +569,7 @@ function rowToExpense(row: {
     // Legacy rows predate the type column; they are business trips.
     mileageType: isMileageType(row.mileageType) ? row.mileageType : "business",
     locations: parseLocations(row.locations),
-    distanceMiles: row.distanceMiles?.toFixed(2) ?? "",
+    distanceMiles: row.distanceMiles ?? "",
     route: parseRoute(row.route),
   };
   return mileage;

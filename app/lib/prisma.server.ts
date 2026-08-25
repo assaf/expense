@@ -1,11 +1,15 @@
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "prisma/generated";
+import { Pool } from "pg";
+import postgres from "@prisma/orm-postgres/runtime";
+import type { Contract } from "../../prisma/contract.d";
+import contractJson from "../../prisma/contract.json" with { type: "json" };
 import { DATABASE_URL } from "~/lib/env";
 
 /**
- * Prisma client (driver adapter over node-postgres). The single database
- * connection for the app; the schema comes from prisma/schema.prisma
- * (see `pnpm db:push` / `prisma migrate`), so there is no runtime DDL.
+ * Prisma 8 client (contract-first runtime). The contract lives at
+ * prisma/contract.prisma; `prisma contract emit` writes contract.json +
+ * contract.d.ts, and this module binds the runtime to a pg pool.
+ * Queries go through `db.orm.<Model>` (typed ORM lane) or `db.sql.<table>`
+ * (SQL builder lane); `db.transaction(fn)` replaces `$transaction`.
  */
 
 if (!DATABASE_URL) {
@@ -23,17 +27,19 @@ if (!DATABASE_URL) {
  * therefore carry `?sslmode=no-verify` (encrypt-only, matching the pooler's
  * long-standing behavior); local dev/test URLs omit it → no TLS.
  *
- * Serverless: every Vercel instance opens its own node-postgres pool, so a
- * burst of concurrent requests multiplies connections per request. Prod
- * connects through Supabase's TRANSACTION-mode pooler (port 6543), which
- * shares ONE small backend pool across all clients: connections are
- * checked out only for the duration of a query/transaction, so serverless
- * instances stop holding dedicated slots. Keep the per-instance pool small
+ * Serverless: every Vercel instance opens its own pg pool, so a burst of
+ * concurrent requests multiplies connections per request. Prod connects
+ * through Supabase's TRANSACTION-mode pooler (port 6543), which shares ONE
+ * small backend pool across all clients. Keep the per-instance pool small
  * and release idle connections fast; the pooler's `pool_size` in the
- * Supabase dashboard must stay ≤ 80% of the DB's `max_connections` (see
- * AGENTS.md "Database connections") or bursts fail with `(EMAXCONN)`.
+ * Supabase dashboard must stay ≤ 80% of the DB's `max_connections`
+ * (see docs/operations.md) or bursts fail with `(EMAXCONN)`.
+ *
+ * The pool is passed to the runtime via `pg:` (the façade's own `url` +
+ * `poolOptions` shape only tunes timeouts, not `max`); db.close() does NOT
+ * own this pool, so server code can rely on it living for the process.
  */
-const adapter = new PrismaPg({
+const pool = new Pool({
   connectionString: DATABASE_URL,
   max: 2,
   idleTimeoutMillis: 4_000,
@@ -41,8 +47,11 @@ const adapter = new PrismaPg({
   allowExitOnIdle: true,
 });
 
-export default new PrismaClient({
-  adapter,
-  errorFormat: "pretty",
-  log: ["error"],
+const db = postgres<Contract>({
+  contractJson,
+  pg: pool,
+  // Only log errors; match the old client's `log: ["error"]`.
+  // (Prisma 8 surfaces middleware/telemetry separately; keep it off.)
 });
+export { db };
+export default db;

@@ -24,7 +24,7 @@ import {
 import { extractReceipt } from "../app/lib/receipt-ai.server";
 import { readEmailConnectionById } from "../app/lib/db/email-connections";
 import { decryptSecret } from "../app/lib/token-crypto.server";
-import prisma from "../app/lib/prisma.server";
+import { db } from "../app/lib/prisma.server";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -91,28 +91,23 @@ async function main(): Promise<void> {
   );
 
   // Show the freshly-created expenses so the result is visible.
-  const expenses = await prisma.expense.findMany({
-    where: { accountId: connection.accountId },
-    orderBy: { createdAt: "desc" },
-    take: result.created + result.partial,
-    select: {
-      id: true,
-      merchant: true,
-      amount: true,
-      category: true,
-      createdAt: true,
-    },
-  });
+  const expenses = await db.orm.public.Expense.where((e) =>
+    e.accountId.eq(connection.accountId),
+  )
+    .orderBy((e) => e.createdAt.desc())
+    .limit(result.created + result.partial)
+    .select("id", "merchant", "amount", "category", "createdAt")
+    .all();
   if (expenses.length > 0) {
     console.info("\nRecent expenses:");
     for (const e of expenses) {
       console.info(
-        `  ${e.merchant || "(unknown)"}  $${e.amount?.toString() ?? "?"}  [${e.category || "no category"}]  ${e.id}`,
+        `  ${e.merchant || "(unknown)"}  $${e.amount ?? "?"}  [${e.category || "no category"}]  ${e.id}`,
       );
     }
   }
 
-  await prisma.$disconnect();
+  await db.close();
 }
 
 main().catch((err) => {

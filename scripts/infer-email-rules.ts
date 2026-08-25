@@ -18,7 +18,7 @@ import { inferRuleCandidates } from "../app/lib/email-connection-infer.server";
 import { readEmailConnectionById } from "../app/lib/db/email-connections";
 import { addEmailRule, listGeneralEmailRules } from "../app/lib/db/email-rules";
 import { decryptSecret } from "../app/lib/token-crypto.server";
-import prisma from "../app/lib/prisma.server";
+import { db } from "../app/lib/prisma.server";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -91,4 +91,4 @@ main()
     console.error(err);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => db.close());

@@ -1,4 +1,6 @@
-import prisma from "~/lib/prisma.server";
+import { and, or } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { fromIso, fromIsoOrNull, toIso, toIsoOrNull } from "~/lib/db/wire";
 
 /**
  * Brute-force lockout state (Postgres `auth_attempts` table). Sign-in and
@@ -80,12 +82,12 @@ export function nextFailureState(
 
 /** The stored row for a key, or null. */
 async function readState(key: string): Promise<AuthAttemptState | null> {
-  const row = await prisma.authAttempt.findUnique({ where: { key } });
+  const row = await db.orm.public.AuthAttempt.first({ key });
   return row
     ? {
         failures: row.failures,
-        windowStart: row.windowStart.toISOString(),
-        lockedUntil: row.lockedUntil?.toISOString() ?? null,
+        windowStart: toIso(row.windowStart),
+        lockedUntil: toIsoOrNull(row.lockedUntil),
       }
     : null;
 }
@@ -107,20 +109,19 @@ export async function recordAuthFailure(
 ): Promise<AuthAttemptState> {
   const state = await readState(key);
   const next = nextFailureState(state, now, options);
-  await prisma.authAttempt.upsert({
-    where: { key },
+  await db.orm.public.AuthAttempt.upsert({
     create: {
       key,
       failures: next.failures,
-      windowStart: next.windowStart,
-      lockedUntil: next.lockedUntil,
-      updatedAt: new Date(now).toISOString(),
+      windowStart: fromIso(next.windowStart),
+      lockedUntil: fromIsoOrNull(next.lockedUntil),
+      updatedAt: fromIso(new Date(now).toISOString()),
     },
     update: {
       failures: next.failures,
-      windowStart: next.windowStart,
-      lockedUntil: next.lockedUntil,
-      updatedAt: new Date(now).toISOString(),
+      windowStart: fromIso(next.windowStart),
+      lockedUntil: fromIsoOrNull(next.lockedUntil),
+      updatedAt: fromIso(new Date(now).toISOString()),
     },
   });
   // Opportunistic sweep (best-effort, ~every 100th write): rows are only
@@ -154,15 +155,15 @@ export async function sweepExpiredRows(
 ): Promise<void> {
   const windowCutoff = new Date(now - windowMs).toISOString();
   const nowIso = new Date(now).toISOString();
-  await prisma.authAttempt.deleteMany({
-    where: {
-      windowStart: { lt: windowCutoff },
-      OR: [{ lockedUntil: null }, { lockedUntil: { lt: nowIso } }],
-    },
-  });
+  await db.orm.public.AuthAttempt.where((a) =>
+    and(
+      a.windowStart.lt(fromIso(windowCutoff)),
+      or(a.lockedUntil.isNull(), a.lockedUntil.lt(fromIso(nowIso))),
+    ),
+  ).deleteAll();
 }
 
 /** Clear the key's failure state (called after a successful login/join). */
 export async function clearAuthFailures(key: string): Promise<void> {
-  await prisma.authAttempt.deleteMany({ where: { key } });
+  await db.orm.public.AuthAttempt.where({ key }).deleteAll();
 }

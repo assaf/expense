@@ -6,25 +6,18 @@
  * keys cascade, so deleting accounts wipes everything.
  */
 import { ulid } from "ulid";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "prisma/generated";
+import { legacyClient, makeTestClient } from "./legacyClient";
+import { TEST_DB_URL } from "./seedTestDataUrls";
 import { hashPassword } from "~/lib/passwords";
 
-export const TEST_DB_URL = "postgres://assaf@localhost/expense_test";
-
 /**
- * Test-only Prisma client pinned to expense_test; never inherits the
+ * Test-only v7-shaped client pinned to expense_test; never inherits the
  * process DATABASE_URL (which may point at the dev database).
  */
-export const testPrisma = new PrismaClient({
-  adapter: new PrismaPg({
-    connectionString: TEST_DB_URL,
-    max: 2,
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 10_000,
-    allowExitOnIdle: true,
-  }),
-});
+const testDb = makeTestClient();
+export const testPrisma = legacyClient(testDb.client, testDb.disconnect);
+
+export { TEST_DB_URL };
 
 /** Test account: the default login (testuser) belongs here. */
 export const TEST_ACCOUNT_ID = "acct_test1";

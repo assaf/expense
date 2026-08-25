@@ -124,7 +124,10 @@ describe("anonymous-action per-IP throttle", () => {
 });
 
 async function countKey(key: string): Promise<number> {
-  return prisma.authAttempt.count({ where: { key } });
+  const { count } = await prisma.orm.public.AuthAttempt.where((a) =>
+    a.key.eq(key),
+  ).aggregate((agg) => ({ count: agg.count() }));
+  return count;
 }
 
 describe("sweepExpiredRows", () => {
@@ -159,8 +162,8 @@ describe("sweepExpiredRows", () => {
     expect(await countKey("sweep:fresh")).toBe(1);
 
     // Cleanup: never leave rows behind for other tests.
-    await prisma.authAttempt.deleteMany({
-      where: { key: { in: TEST_KEYS } },
-    });
+    await prisma.orm.public.AuthAttempt.where((a) =>
+      a.key.in(TEST_KEYS),
+    ).deleteAll();
   });
 });

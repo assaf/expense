@@ -68,35 +68,19 @@ echo -e "\033[0;32mRestoring into $LOCAL_DB_URL …\033[0m"
 psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE;"
 psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f "$BACKUP_FILE" >/dev/null
 
-# 5. Apply the latest schema to the local database. The prod dump reflects
+# 5. Apply the latest contract to the local database. The prod dump reflects
 #    prod's schema, which lags the repo whenever new tables/columns haven't
-#    been deployed yet (e.g. reconciliation_runs). db push is additive and
-#    non-destructive. DATABASE_URL is overridden because sourcing .env.prod
-#    above left it pointing at prod. Never push schema to prod from here.
+#    been deployed yet. db update is additive and non-destructive, and
+#    advances the contract marker. DATABASE_URL is overridden because
+#    sourcing .env.prod above left it pointing at prod. Never push schema to
+#    prod from here.
 echo -e "\033[0;32mApplying the latest schema to the local database …\033[0m"
 DATABASE_URL="$LOCAL_DB_URL" pnpm db:push
-
-# 6. Reconcile the migration history. Prod applies schema changes with
-#    `prisma db push`, which never records them in _prisma_migrations, so a
-#    fresh prod dump reports those migrations as "not yet applied", and the
-#    next `prisma migrate dev` would try to re-apply (or reset) them. Mark
-#    every migration in prisma/migrations that the dump didn't record as
-#    applied; the schema is already at the latest after step 5.
-echo -e "\033[0;32mSyncing migration history …\033[0m"
-APPLIED=$(psql "$LOCAL_DB_URL" -tAc "SELECT migration_name FROM _prisma_migrations;" 2>/dev/null || true)
-for MIGRATION in prisma/migrations/*/; do
-  NAME=$(basename "$MIGRATION")
-  if ! grep -qxF "$NAME" <<<"$APPLIED"; then
-    echo "  marking $NAME as applied"
-    DATABASE_URL="$LOCAL_DB_URL" pnpm prisma migrate resolve --applied "$NAME" >/dev/null
-  fi
-done
 
 echo -e "\033[0;32mClone complete.\033[0m"
 echo "  - Local login uses prod credentials (APP_EMAIL / APP_PASSWORD in .env)."
 echo "  - Receipt images are in image_blobs and come with the clone."
-echo "  - Local schema synced to the latest (prisma db push) with the"
-echo "    migration history reconciled — prisma migrate status is up to date."
+echo "  - Local schema synced to the latest contract (prisma db update)."
 
 # 7. Open the local site (dev server must be running: pnpm dev).
 open "https://expense.localhost"

@@ -145,8 +145,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The build imports prisma/generated (gitignored); pnpm check generates
-      # it in the parallel check job, but each job is a fresh checkout.
+      # Emit the contract artifacts (contract.json/d.ts are committed, but
+      # re-emitting keeps the build honest about drift on a fresh checkout.
       - run: pnpm build:prisma
 
       # Playwright browsers are not installed by pnpm install; the E2E tests
@@ -169,7 +169,7 @@ jobs:
     name: Migrate prod DB
     runs-on: ubuntu-latest
     # 2m, not 1m: the job must fit checkout + pnpm self-installer + node
-    # setup + pnpm install + prisma db push, and a cold runner eats ~55s on
+    # setup + pnpm install + prisma db update, and a cold runner eats ~55s on
     # the setup alone (the pnpm/action-setup self-installer alone took 27s
     # on 2026-08-06, killing a 1m job before db push could start).
     timeout-minutes: 2
@@ -194,12 +194,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The same schema sync scripts/deploy runs, minus the Vercel env pull,
-      # preflight baseline, and one-time conversions (all no-ops on the
-      # baselined prod DB): just prisma db push → migrate resolve. No psql
-      # needed, which keeps the job inside its 2-minute budget.
+      # The same schema sync scripts/deploy runs (prisma 8 contract-first):
+      # db update diffs the live DB against the emitted contract and applies
+      # the gap, writing the contract marker. Destructive consent is granted
+      # non-interactively for the Supabase database name. No psql needed,
+      # which keeps the job inside its 2-minute budget.
       - name: Sync the production database schema
         run: |
-          pnpm prisma db push --accept-data-loss
+          DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
+          pnpm prisma db update --no-interactive --confirm "$DB_NAME"
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}

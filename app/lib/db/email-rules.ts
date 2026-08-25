@@ -1,5 +1,7 @@
 import { ulid } from "ulid";
-import prisma from "~/lib/prisma.server";
+import { and, or } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { fromIso } from "~/lib/db/wire";
 import { EMAIL_SHAPE_RE, extractEmailAddress } from "~/lib/validation";
 
 /**
@@ -41,18 +43,17 @@ export async function matchEmailRule(
   if (!fromAddress.includes("@")) return undefined;
   // General rules first, then the workspace's own, so a user rule can't be
   // shadowed, but the order only matters for reporting anyway.
-  const rules = await prisma.emailRule.findMany({
-    where: { OR: [{ accountId: "" }, { accountId }] },
-  });
+  const rules = await db.orm.public.EmailRule.where((r) =>
+    or(r.accountId.eq(""), r.accountId.eq(accountId)),
+  ).all();
   return rules.find((r) => ruleSenderMatches(r.sender, fromAddress));
 }
 
 /** The general rules (accountId = ""): the seed + anything inferred. */
 export async function listGeneralEmailRules(): Promise<EmailRuleRecord[]> {
-  const rows = await prisma.emailRule.findMany({
-    where: { accountId: "" },
-    orderBy: { sender: "asc" },
-  });
+  const rows = await db.orm.public.EmailRule.where((r) => r.accountId.eq(""))
+    .orderBy((r) => r.sender.asc())
+    .all();
   return rows.map((r) => ({
     accountId: r.accountId,
     sender: r.sender,
@@ -73,9 +74,9 @@ export async function addEmailRule(input: {
   if (!valid) {
     return { ok: false, error: `"${sender}" is not an address or domain.` };
   }
-  const existing = await prisma.emailRule.findUnique({
-    where: { accountId_sender: { accountId: input.accountId, sender } },
-  });
+  const existing = await db.orm.public.EmailRule.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).first();
   if (existing) {
     return {
       ok: true,
@@ -86,14 +87,12 @@ export async function addEmailRule(input: {
       },
     };
   }
-  await prisma.emailRule.create({
-    data: {
-      id: ulid(),
-      accountId: input.accountId,
-      sender,
-      source: input.source,
-      createdAt: new Date().toISOString(),
-    },
+  await db.orm.public.EmailRule.create({
+    id: ulid(),
+    accountId: input.accountId,
+    sender,
+    source: input.source,
+    createdAt: fromIso(new Date().toISOString()),
   });
   return {
     ok: true,

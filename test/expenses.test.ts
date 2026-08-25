@@ -343,8 +343,8 @@ describe("Expense CRUD", () => {
     expect(draft).not.toBeNull();
     expect(draft!.mime).toBe("image/jpeg");
     expect(
-      startsWithMagic(draft!.data, JPEG_MAGIC) ||
-        startsWithMagic(draft!.data, PNG_MAGIC),
+      startsWithMagic(draft!.data as Uint8Array, JPEG_MAGIC) ||
+        startsWithMagic(draft!.data as Uint8Array, PNG_MAGIC),
     ).toBe(true);
     // No expense row is written by the upload itself.
     expect(
@@ -381,7 +381,7 @@ describe("Expense CRUD", () => {
       select: { data: true },
     });
     expect(stored).not.toBeNull();
-    expect(startsWithMagic(stored!.data, JPEG_MAGIC)).toBe(true);
+    expect(startsWithMagic(stored!.data as Uint8Array, JPEG_MAGIC)).toBe(true);
 
     // Leave the database as we found it.
     if (created) {
@@ -592,7 +592,9 @@ describe("Expense CRUD", () => {
     const expense = await testPrisma.expense.findFirstOrThrow({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Test Store" },
     });
-    await page.goto(`/expense/${expense.id}`, { waitUntil: "load" });
+    await page.goto(`/expense/${expense.id as string}`, {
+      waitUntil: "load",
+    });
     const main = page.locator("main#main-content");
 
     // The seeded expense has every data field (no image), and the notice

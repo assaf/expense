@@ -1,4 +1,5 @@
-import prisma from "~/lib/prisma.server";
+import { and } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
 import { summarizeByReport } from "~/lib/format";
 import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
@@ -13,11 +14,12 @@ const reportsCache = createCache<Report[]>(300_000);
 
 export async function readReports(accountId: string): Promise<Report[]> {
   return cachedRead(reportsCache, accountId, async () => {
-    const rows = await prisma.report.findMany({
-      where: { accountId, name: { not: "" } },
-      orderBy: { id: "asc" },
-      select: { name: true, closed: true },
-    });
+    const rows = await db.orm.public.Report.where((r) =>
+      and(r.accountId.eq(accountId), r.name.neq("")),
+    )
+      .orderBy((r) => r.id.asc())
+      .select("name", "closed")
+      .all();
     return rows.map((r) => ({ name: r.name, closed: r.closed }));
   });
 }
@@ -31,21 +33,20 @@ export async function readCategoryCounts(
   accountId: string,
 ): Promise<Map<string, number>> {
   const [groups, reports] = await Promise.all([
-    prisma.expense.groupBy({
-      by: ["category", "report"],
-      where: { accountId, category: { not: "" } },
-      _count: { _all: true },
-    }),
-    prisma.report.findMany({
-      where: { accountId },
-      select: { name: true, closed: true },
-    }),
+    db.orm.public.Expense.where((e) =>
+      and(e.accountId.eq(accountId), e.category.neq("")),
+    )
+      .groupBy("category", "report")
+      .aggregate((agg) => ({ count: agg.count() })),
+    db.orm.public.Report.where((r) => r.accountId.eq(accountId))
+      .select("name", "closed")
+      .all(),
   ]);
   const closed = new Set(reports.filter((r) => r.closed).map((r) => r.name));
   const counts = new Map<string, number>();
   for (const g of groups) {
     if (closed.has(g.report)) continue;
-    counts.set(g.category, (counts.get(g.category) ?? 0) + g._count._all);
+    counts.set(g.category, (counts.get(g.category) ?? 0) + g.count);
   }
   return counts;
 }
@@ -114,7 +115,7 @@ export async function readReportSummaries(
 }
 
 /**
- * Single-report aggregate (count + exact total) via a targeted Prisma query
+ * Single-report aggregate (count + exact total) via a targeted query
  * (cheaper than loading every expense). Returns null when the report has no
  * expenses (or the report name is blank).
  */
@@ -123,15 +124,13 @@ export async function readReportSummary(
   reportName: string,
 ): Promise<{ count: number; total: string } | null> {
   if (!reportName) return null;
-  const agg = await prisma.expense.aggregate({
-    _count: true,
-    _sum: { amount: true },
-    where: { accountId, report: reportName },
-  });
-  if (agg._count === 0) return null;
+  const agg = await db.orm.public.Expense.where((e) =>
+    and(e.accountId.eq(accountId), e.report.eq(reportName)),
+  ).aggregate((a) => ({ count: a.count(), sum: a.sum("amount") }));
+  if (agg.count === 0) return null;
   return {
-    count: agg._count,
-    total: agg._sum.amount?.toFixed(2) ?? "0.00",
+    count: agg.count,
+    total: agg.sum === null ? "0.00" : Number(agg.sum).toFixed(2),
   };
 }
 
@@ -146,7 +145,7 @@ export function addReport(
   return bust(
     reportsCache,
     accountId,
-    addNamedRow(prisma.report, "report", accountId, name),
+    addNamedRow(db.orm.public.Report, "report", accountId, name),
   );
 }
 
@@ -161,15 +160,23 @@ export async function removeReport(
   name: string,
 ): Promise<void> {
   if (!name.trim()) return;
-  const removed = await prisma.expense.findMany({
-    where: { accountId, report: name },
-    select: { type: true, imageFile: true },
+  const removed = await db.orm.public.Expense.where((e) =>
+    and(e.accountId.eq(accountId), e.report.eq(name)),
+  )
+    .select("_type", "imageFile")
+    .all();
+  await deleteReceiptImages(
+    accountId,
+    removed.map((r) => ({ type: r._type, imageFile: r.imageFile })),
+  );
+  await db.transaction(async (tx) => {
+    await tx.orm.public.Expense.where((e) =>
+      and(e.accountId.eq(accountId), e.report.eq(name)),
+    ).deleteAll();
+    await tx.orm.public.Report.where((r) =>
+      and(r.accountId.eq(accountId), r.name.eq(name)),
+    ).deleteAll();
   });
-  await deleteReceiptImages(accountId, removed);
-  await prisma.$transaction([
-    prisma.expense.deleteMany({ where: { accountId, report: name } }),
-    prisma.report.deleteMany({ where: { accountId, name } }),
-  ]);
   bust(reportsCache, accountId);
 }
 
@@ -187,7 +194,14 @@ export function renameReport(
   return bust(
     reportsCache,
     accountId,
-    renameNamedRow(prisma.report, "report", "report", accountId, name, newName),
+    renameNamedRow(
+      db.orm.public.Report,
+      "report",
+      "report",
+      accountId,
+      name,
+      newName,
+    ),
   );
 }
 
@@ -197,9 +211,8 @@ export async function setReportClosed(
   name: string,
   closed: boolean,
 ): Promise<void> {
-  await prisma.report.updateMany({
-    where: { accountId, name },
-    data: { closed },
-  });
+  await db.orm.public.Report.where((r) =>
+    and(r.accountId.eq(accountId), r.name.eq(name)),
+  ).updateAll({ closed });
   bust(reportsCache, accountId);
 }

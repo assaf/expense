@@ -1,9 +1,13 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["vitest.noglobal.config.ts"],
+  "ignore": [
+    "vitest.noglobal.config.ts",
+    "prisma/contract.prisma",
+    "migrations/**",
+    "scripts/check-dark-mode.mjs"
+  ],
   "ignoreBinaries": ["cloc"],
   "ignoreDependencies": [
-    "@prisma/client",
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend"
   ]

@@ -24,8 +24,8 @@ import { normalizeAmount } from "~/lib/format";
  *  - text input: receipt text extracted from the email body / PDF text layer /
  *    OCR output → structured JSON
  *  - image input: the receipt image is sent as a data URL so a vision-capable
- *    model can OCR + extract in one step. The hosted API may reject images
- *    (see isVisionUnsupportedError); callers fall back to tesseract OCR.
+ *    model can OCR + extract in one step. The hosted API may reject images;
+ *    callers fall back to tesseract OCR.
  *
  * JSON mode (`response_format: { type: "json_object" }`) is used and thinking
  * mode is disabled so extraction stays fast and cheap.
@@ -838,15 +838,6 @@ export function resolveExtraction(
       context.reports,
     ),
   };
-}
-
-/** True when the hosted API rejected the request because it can't read images. */
-export function isVisionUnsupportedError(err: unknown): boolean {
-  if (!(err instanceof LLMError)) return false;
-  if (err.status !== 400 && err.status !== 422) return false;
-  return /image|vision|content.?type|unsupported|not supported|multimodal/i.test(
-    err.message,
-  );
 }
 
 export interface AttachmentCandidate {

@@ -231,7 +231,7 @@ describe("Access control", () => {
     });
     expect(row?.passwordHash).toMatch(/^\$scrypt\$N=65536,r=8,p=1\$/);
     await expect(
-      verifyPassword(TEST_PASSWORD, row?.passwordHash ?? ""),
+      verifyPassword(TEST_PASSWORD, (row?.passwordHash ?? "") as string),
     ).resolves.toBe(true);
   });
 
@@ -519,7 +519,7 @@ describe("Access control", () => {
     const deadline = performance.now() + timeoutMs;
     while (performance.now() < deadline) {
       const row = await testPrisma.authAttempt.findUnique({ where: { key } });
-      if (row && row.failures >= minFailures) return;
+      if (row && (row.failures as number) >= minFailures) return;
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error(
@@ -646,5 +646,5 @@ async function otherExpenseId(): Promise<string> {
     select: { id: true },
   });
   if (!row) throw new Error("No isolation expense seeded");
-  return row.id;
+  return row.id as string;
 }

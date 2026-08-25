@@ -566,8 +566,8 @@ describe("Mileage expense", () => {
       where: { accountId: TEST_ACCOUNT_ID, type: "mileage" },
       orderBy: { createdAt: "desc" },
     });
-    expect(saved?.distanceMiles?.toFixed(2)).toBe("10.00");
-    expect(saved?.amount?.toFixed(2)).toBe("7.00");
+    expect(saved?.distanceMiles ?? "").toBe("10.00");
+    expect(saved?.amount ?? "").toBe("7.00");
     const locations = saved?.locations as {
       address: string;
       lat: number | null;
@@ -587,7 +587,9 @@ describe("Mileage expense", () => {
 
     // Reopening the saved expense renders that saved route on load (the
     // blue line draws from the stored geometry, no recompute needed).
-    await page.goto(`/expense/${saved!.id}`, { waitUntil: "load" });
+    await page.goto(`/expense/${saved!.id as string}`, {
+      waitUntil: "load",
+    });
     await expect
       .poll(() =>
         page.locator(".leaflet-overlay-pane path[stroke='#2563eb']").count(),

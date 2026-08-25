@@ -23,8 +23,10 @@ import {
   rawConnectionEmail,
   type ConnectionEmailSummary,
 } from "~/lib/email-connection-mail.server";
-import prisma from "~/lib/prisma.server";
-import { Prisma } from "prisma/generated";
+import { and, or } from "@prisma/orm-postgres/orm-client";
+import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
+import { fromIso, toIso } from "~/lib/db/wire";
 import { captureError } from "~/lib/errors.server";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -84,10 +86,11 @@ export function reviewSenderRulePattern(address: string): string {
 export async function rulesForReview(
   accountId: string,
 ): Promise<Array<{ sender: string }>> {
-  const rows = await prisma.emailRule.findMany({
-    where: { OR: [{ accountId: "" }, { accountId }] },
-    select: { sender: true },
-  });
+  const rows = await db.orm.public.EmailRule.where((r) =>
+    or(r.accountId.eq(""), r.accountId.eq(accountId)),
+  )
+    .select("sender")
+    .all();
   return rows;
 }
 
@@ -156,13 +159,14 @@ export async function scanConnectionInbox(
   });
 
   // Load existing decisions for the batch in one query.
-  const rows = await prisma.emailProcessLog.findMany({
-    where: {
-      connectionId: connection.id,
-      emailId: { in: summaries.map((s) => s.id) },
-    },
-    select: { emailId: true, outcome: true, error: true },
-  });
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connection.id),
+      l.emailId.in(summaries.map((s) => s.id)),
+    ),
+  )
+    .select("emailId", "outcome", "error")
+    .all();
   const byId = new Map(rows.map((r) => [r.emailId, r]));
 
   const candidates: ConnectionEmailSummary[] = [];
@@ -203,42 +207,36 @@ export async function scanConnectionInbox(
     // created/processing row back to pending-review would re-offer an
     // already-imported receipt and risk a duplicate expense. The create
     // path's P2002 means someone else claimed it meanwhile: skip.
-    const flipped = await prisma.emailProcessLog.updateMany({
-      where: {
-        connectionId: connection.id,
-        emailId: summary.id,
-        outcome: { in: ["ignored", "error"] },
-      },
-      data: {
-        outcome: "pending-review",
-        matched: false,
-        error: null,
-        receivedAt: summary.receivedAt,
-        fromDisplay: summary.from,
-        fromAddress,
-        subject: summary.subject.slice(0, 500),
-      },
+    const flipped = await db.orm.public.EmailProcessLog.where((l) =>
+      and(
+        l.connectionId.eq(connection.id),
+        l.emailId.eq(summary.id),
+        or(l.outcome.eq("ignored"), l.outcome.eq("error")),
+      ),
+    ).updateAll({
+      outcome: "pending-review",
+      matched: false,
+      error: null,
+      receivedAt: fromIso(summary.receivedAt),
+      fromDisplay: summary.from,
+      fromAddress,
+      subject: summary.subject.slice(0, 500),
     });
-    if (flipped.count === 0) {
+    if (flipped.length === 0) {
       try {
-        await prisma.emailProcessLog.create({
-          data: {
-            connectionId: connection.id,
-            emailId: summary.id,
-            fromAddress,
-            fromDisplay: summary.from,
-            subject: summary.subject.slice(0, 500),
-            matched: false,
-            outcome: "pending-review",
-            receivedAt: summary.receivedAt,
-            createdAt: now,
-          },
+        await db.orm.public.EmailProcessLog.create({
+          connectionId: connection.id,
+          emailId: summary.id,
+          fromAddress,
+          fromDisplay: summary.from,
+          subject: summary.subject.slice(0, 500),
+          matched: false,
+          outcome: "pending-review",
+          receivedAt: fromIso(summary.receivedAt),
+          createdAt: fromIso(now),
         });
       } catch (err) {
-        if (
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === "P2002"
-        ) {
+        if (isUniqueViolation(err)) {
           continue; // a drain claimed this email meanwhile; its call
         }
         throw err;
@@ -248,9 +246,8 @@ export async function scanConnectionInbox(
   }
 
   // The list is now current through this scan's batch.
-  await prisma.emailConnection.update({
-    where: { id: connection.id },
-    data: { reviewScannedAt: new Date().toISOString() },
+  await db.orm.public.EmailConnection.where({ id: connection.id }).update({
+    reviewScannedAt: fromIso(new Date().toISOString()),
   });
   const pending = await countPendingReview(connection.id);
   return {
@@ -279,21 +276,22 @@ export interface ReviewItem {
 export async function listReviewItems(
   connectionId: string,
 ): Promise<ReviewItem[]> {
-  const rows = await prisma.emailProcessLog.findMany({
-    where: { connectionId, outcome: "pending-review" },
-    select: {
-      emailId: true,
-      receivedAt: true,
-      fromAddress: true,
-      fromDisplay: true,
-      subject: true,
-      error: true,
-    },
-    orderBy: { receivedAt: "desc" },
-  });
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
+  )
+    .select(
+      "emailId",
+      "receivedAt",
+      "fromAddress",
+      "fromDisplay",
+      "subject",
+      "error",
+    )
+    .orderBy((l) => l.receivedAt.desc())
+    .all();
   return rows.map((r) => ({
     emailId: r.emailId,
-    receivedAt: r.receivedAt?.toISOString() ?? "",
+    receivedAt: r.receivedAt === null ? "" : toIso(r.receivedAt),
     fromAddress: r.fromAddress,
     fromDisplay: r.fromDisplay,
     subject: r.subject,
@@ -303,9 +301,10 @@ export async function listReviewItems(
 
 /** How many emails are waiting on the review list. */
 async function countPendingReview(connectionId: string): Promise<number> {
-  return prisma.emailProcessLog.count({
-    where: { connectionId, outcome: "pending-review" },
-  });
+  const { count } = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
+  ).aggregate((a) => ({ count: a.count() }));
+  return count;
 }
 
 // --- Per-item actions -----------------------------------------------------------
@@ -318,11 +317,14 @@ export async function ignoreReviewItem(
   connectionId: string,
   emailId: string,
 ): Promise<boolean> {
-  const updated = await prisma.emailProcessLog.updateMany({
-    where: { connectionId, emailId, outcome: "pending-review" },
-    data: { outcome: "review-ignored", error: "user ignored" },
-  });
-  return updated.count > 0;
+  const updated = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      l.emailId.eq(emailId),
+      l.outcome.eq("pending-review"),
+    ),
+  ).updateAll({ outcome: "review-ignored", error: "user ignored" });
+  return updated.length > 0;
 }
 
 export type ReviewProcessResult =
@@ -348,17 +350,11 @@ export async function processReviewItem(input: {
   extractionDeps?: ConnectionDeps;
 }): Promise<ReviewProcessResult> {
   const { connection, emailId, acceptSender } = input;
-  const row = await prisma.emailProcessLog.findUnique({
-    where: {
-      connectionId_emailId: { connectionId: connection.id, emailId },
-    },
-    select: {
-      receivedAt: true,
-      fromAddress: true,
-      fromDisplay: true,
-      subject: true,
-    },
-  });
+  const row = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connection.id), l.emailId.eq(emailId)),
+  )
+    .select("receivedAt", "fromAddress", "fromDisplay", "subject")
+    .first();
   if (!row) {
     return { ok: false, error: "This email is not on the review list." };
   }
@@ -371,7 +367,10 @@ export async function processReviewItem(input: {
   };
   const summary: ConnectionEmailSummary = {
     id: emailId,
-    receivedAt: row.receivedAt?.toISOString() ?? new Date().toISOString(),
+    receivedAt:
+      row.receivedAt === null
+        ? new Date().toISOString()
+        : toIso(row.receivedAt),
     subject: row.subject,
     from: row.fromDisplay ?? row.fromAddress,
   };
@@ -395,9 +394,15 @@ export async function processReviewItem(input: {
   switch (outcome.status) {
     case "created":
     case "partial": {
-      await prisma.emailConnection.update({
-        where: { id: connection.id },
-        data: { processedCount: { increment: 1 } },
+      // Prisma 8 has no atomic increment in the ORM lane; read then bump.
+      // A lost update only undercounts a stat, never loses data.
+      const current = await db.orm.public.EmailConnection.where({
+        id: connection.id,
+      })
+        .select("processedCount")
+        .first();
+      await db.orm.public.EmailConnection.where({ id: connection.id }).update({
+        processedCount: (current?.processedCount ?? 0) + 1,
       });
       if (acceptSender) {
         const fromAddress = extractEmailAddress(
