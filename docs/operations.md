@@ -66,6 +66,38 @@ Vercel Neon integration (which set `DATABASE_URL`, `PGHOST`, `POSTGRES_URL`,
 `NEON_*`, …) was disconnected in Aug 2026 — don't re-add it. The abandoned Neon
 database still exists as a rollback fallback.
 
+### Column type changes — the cast rule (learned 2026-08-24)
+
+`prisma db push` **cannot** convert a `text` column to a timestamp type: it
+reports "No cast exists, the column would be dropped and recreated" and
+refuses — but CI's migrate-db job runs with `--accept-data-loss`, which
+would drop the column and its data on prod. The test suite never catches
+this (`db push --force-reset` recreates the schema with no data). Note
+also: `prisma/migrations/` is history only — prod's `_prisma_migrations`
+table is stale; `prisma migrate deploy` must never run against prod. The
+operative path is db push (CI migrate-db + `scripts/deploy`).
+
+Procedure for a type change (e.g. String → DateTime):
+
+1. Edit `prisma/schema.prisma` (watch trailing `//` comments — a scripted
+   regex anchored to line ends silently skips commented fields).
+2. Hand-write rerun-safe SQL and apply it to dev AND prod FIRST (psql on
+   `DATABASE_URL_UNPOOLED`, swap `sslmode=no-verify` → `require`):
+   `ALTER TABLE "t" ALTER COLUMN "c" TYPE TIMESTAMPTZ USING ("c"::timestamptz);`
+   Check for cast-breaking values (e.g. `''`) on both databases first.
+3. Then `pnpm db:push` (dev), then the same `db push --accept-data-loss`
+   against prod with `DATABASE_URL_UNPOOLED` — it normalizes timestamptz →
+   Prisma's native `timestamp(3)` (that conversion db push CAN do,
+   data-preserving) and makes the next CI migrate-db a no-op.
+4. Apply the ALTER to prod BEFORE pushing the code, or CI's db push hits
+   the no-cast refusal and the deploy fails.
+
+Prisma notes: Postgres `DateTime` = `timestamp(3)` without time zone
+(fine — all writes are UTC ISO strings, the server runs UTC); the app's
+domain layer keeps ISO strings, converting `Date → toISOString()` in the
+db-layer mappers (`app/lib/db/*`); calendar dates (`Expense.date`,
+`MileageRate.startDate/endDate`) stay String on purpose.
+
 ---
 
 ## Secrets
