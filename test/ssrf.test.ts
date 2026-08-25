@@ -34,7 +34,7 @@ const PRIVATE_HOSTS = [
   "ff02::1",
   "::ffff:127.0.0.1",
   "::ffff:10.0.0.1",
-  // IPv4-mapped IPv6 in hex / full form — the same private addresses
+  // IPv4-mapped IPv6 in hex / full form: the same private addresses
   // spelled differently (regression: these bypassed the old regex guard).
   "::ffff:a00:1",
   "[::ffff:c0a8:101]",
@@ -143,7 +143,7 @@ describe("fetchPublicUrl", () => {
             ? input.href
             : input.url;
       if (url.startsWith("https://public.example/receipt.png")) {
-        // Public first hop redirects into a private address — must block.
+        // Public first hop redirects into a private address; must block.
         return new Response(null, {
           status: 302,
           headers: { location: "http://127.0.0.1/receipt.png" },

@@ -72,7 +72,7 @@ describe("MCP OAuth", () => {
 
   /**
    * Run the authorize flow in the browser. The consent page always appears
-   * (the GET never issues codes silently) — we click Allow/Deny and expect
+   * (the GET never issues codes silently), so we click Allow/Deny and expect
    * the redirect back to the callback with a code or error.
    */
   async function runAuthorize(
@@ -133,7 +133,7 @@ describe("MCP OAuth", () => {
     return { status: res.status, json };
   }
 
-  /** 2025-era handshake (served statelessly — no session id is issued). */
+  /** 2025-era handshake, served statelessly (no session id is issued). */
   async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
@@ -233,7 +233,7 @@ describe("MCP OAuth", () => {
     const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
 
     await runAuthorize(page, authorizeUrl(clientId, verifier), "approve");
-    // A second connection must show the consent page again — the authorize
+    // A second connection must show the consent page again: the authorize
     // GET never issues a code without an Allow click, so a link or image
     // request from an attacker page can't silently mint a code for an
     // already-approved client (consent-CSRF).
@@ -283,7 +283,7 @@ describe("MCP OAuth", () => {
     const clientId = await registerClient("oauth-test-pkce");
     const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
 
-    // Fresh authorize (consent was granted above for this client? no — new
+    // Fresh authorize (consent was granted above for this client? No: new
     // client, so approve again), then exchange with a wrong verifier.
     const verifier = generateCodeVerifier();
     const redirected = await runAuthorize(
@@ -303,7 +303,7 @@ describe("MCP OAuth", () => {
     expect(wrong.status).toBe(400);
     expect(wrong.json.error).toBe("invalid_grant");
 
-    // The code was consumed by the failed attempt? No — PKCE fails before
+    // The code was consumed by the failed attempt? No: PKCE fails before
     // issue, but the code was claimed (single-use). Reuse must fail either way.
     const reuse = await exchangeCode({
       grant_type: "authorization_code",
@@ -402,8 +402,8 @@ describe("MCP OAuth", () => {
     });
     expect(denied.status).toBe(401);
 
-    // Revoking the access token does NOT revoke the refresh token (RFC 7009)
-    // — the refresh grant still works.
+    // Revoking the access token does NOT revoke the refresh token (RFC 7009):
+    // the refresh grant still works.
     const stillAlive = await exchangeCode({
       grant_type: "refresh_token",
       refresh_token: refreshToken,

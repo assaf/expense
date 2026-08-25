@@ -21,7 +21,7 @@ interface ImportMetaEnv {
   SSR: boolean;
   /** Sentry client DSN (build-time; server uses process.env.SENTRY_DSN). */
   VITE_SENTRY_DSN?: string;
-  /** Deploy commit SHA, injected by vite.config — tags client events with
+  /** Deploy commit SHA, injected by vite.config; tags client events with
    * the release the sourcemaps were uploaded to. */
   VITE_SENTRY_RELEASE?: string;
 }

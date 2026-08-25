@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createECDH, randomBytes } from "node:crypto";
 
 /**
- * ensureConnectionPushSubscription — the per-connection renewal logic.
+ * ensureConnectionPushSubscription: the per-connection renewal logic.
  * The JMAP transport (jmapCall) and the DB write are mocked; the token
  * decryption is real (EMAIL_TOKEN_ENCRYPTION_KEY from the vitest env).
  */
@@ -13,7 +13,7 @@ vi.mock("~/lib/env", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import("~/lib/env")>()),
     PUBLIC_URL: "https://expense.test",
-    // CI has no .env — generate fixed push keys so p256dhFromPrivate works.
+    // CI has no .env; generate fixed push keys so p256dhFromPrivate works.
     PUSH_PRIVATE_KEY: push.getPrivateKey("base64url"),
     PUSH_AUTH: randomBytes(16).toString("base64url"),
   };

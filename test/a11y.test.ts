@@ -5,7 +5,7 @@ import { goto } from "./helpers/launchBrowser";
 import { seedTestData } from "./helpers/seedTestData";
 
 /**
- * Accessibility smoke tests — keyboard interaction, ARIA attributes,
+ * Accessibility smoke tests: keyboard interaction, ARIA attributes,
  * focus management, and page-level landmarks. These are the behaviors
  * most likely to regress from a refactor and hardest to catch in code
  * review.
@@ -92,12 +92,12 @@ describe("Accessibility", () => {
 
     it("Enter does NOT save an incomplete receipt", async () => {
       editor = await goto("/expense/new");
-      // Only fill the merchant — leave amount, date empty.
+      // Only fill the merchant; leave amount, date empty.
       await editor.locator("input[list='merchants']").fill("Incomplete One");
       // Focus the merchant field (not the amount which has autofocus) so
       // Enter doesn't trigger a datalist selection.
       await editor.locator("input[list='merchants']").press("Enter");
-      // Should still be on the editor — incomplete form won't submit.
+      // Should still be on the editor: an incomplete form won't submit.
       expect(new URL(editor.url()).pathname).toBe("/expense/new");
       await editor.close();
     });
@@ -135,8 +135,8 @@ describe("Accessibility", () => {
       await editor.getByRole("button", { name: "Delete" }).click();
       const dialog = editor.locator('[role="dialog"]');
       await expect(dialog).toBeVisible();
-      // Focus should be inside the dialog — the Cancel button gets it first
-      // (least destructive action). Wait for the focus-trap effect to fire.
+      // Focus should be inside the dialog (the Cancel button gets it first
+      // as the least destructive action). Wait for the focus-trap effect to fire.
       await editor.waitForTimeout(100);
       await expect(
         dialog.getByRole("button", { name: "Cancel" }),

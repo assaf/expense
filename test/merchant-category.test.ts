@@ -50,7 +50,7 @@ describe("resolveCategory", () => {
   });
 
   it("maps the suggestion onto an existing category name", () => {
-    // The model said "Office" — the account's closest category wins.
+    // The model said "Office", so the account's closest category wins.
     expect(
       resolveCategory("New Store", "Office", knownMerchants, existing),
     ).toBe("Office Supplies");

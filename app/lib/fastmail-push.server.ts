@@ -20,7 +20,7 @@ import {
  * Decryption success is itself authentication on the push endpoint: only a
  * sender holding our public key can produce a decryptable payload. The
  * public key is derivable from PUSH_PRIVATE_KEY and is stored in the
- * Fastmail subscription — keep both env vars private.
+ * Fastmail subscription, so keep both env vars private.
  */
 
 export function b64url(buffer: Buffer): string {
@@ -87,7 +87,7 @@ const MAX_BODY_BYTES = 1024 * 1024; // a push payload is a few KB
 
 export interface FastMailPushOptions {
   /**
-   * Extra env values this webhook additionally needs — e.g. FASTMAIL_TOKEN
+   * Extra env values this webhook additionally needs, e.g. FASTMAIL_TOKEN
    * on /api/inbound-push (the subscription renewal path uses it). Any unset
    * value makes the route bail with the not-configured 503.
    */
@@ -97,7 +97,7 @@ export interface FastMailPushOptions {
 }
 
 /**
- * Shared preamble for the FastMail JMAP push webhooks (public — decryption
+ * Shared preamble for the FastMail JMAP push webhooks (public; decryption
  * success is itself the auth): config gate (503), method check (405),
  * body cap (413), then RFC 8291 decryption (400 on failure). Returns the
  * Response to bail with, or the decrypted payload.

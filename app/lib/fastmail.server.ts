@@ -21,7 +21,7 @@ import { readBodyLimited } from "~/lib/ssrf.server";
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
  *
- * Ported from the inbox project (lib/jmap.ts) — same hard-won details:
+ * Ported from the inbox project (lib/jmap.ts) with the same hard-won details:
  *  - per-object /set failures come back in `notUpdated`/`notCreated`/
  *    `notDestroyed`, not as a method `error`, and are surfaced as throws
  *  - Fastmail keywords are `$`-prefixed (`$seen`, not RFC `\seen`)
@@ -33,7 +33,7 @@ import { readBodyLimited } from "~/lib/ssrf.server";
 
 const SESSION_URL = "https://api.fastmail.com/jmap/session";
 
-/** Keyword marking an email as already processed (one-way on Fastmail — it
+/** Keyword marking an email as already processed (one-way on Fastmail: it
  * can be set but not removed, so mark-before-process is the idempotency
  * pattern; the inbound_emails table is the second, DB-level guard). */
 const RECEIPT_PROCESSED_KEYWORD = "$receipt-processed";
@@ -228,7 +228,7 @@ export async function rawEmail(id: string): Promise<RawEmail> {
   };
 }
 
-/** True when an Email/get miss means the email is already gone — a
+/** True when an Email/get miss means the email is already gone: a
  * concurrent drain destroyed it between listing and fetching. The drain
  * treats that as the desired end state, not an error (EXPENSE-K). */
 export function isEmailNotFoundError(err: unknown): boolean {
@@ -238,7 +238,7 @@ export function isEmailNotFoundError(err: unknown): boolean {
 /**
  * Query receipt emails in the Receipts folder that have not been processed
  * yet (oldest first). `inMailbox` scopes the query to the folder the rule
- * files into — the Inbox never sees these.
+ * files into; the Inbox never sees these.
  */
 export async function unprocessedReceiptIds(limit: number): Promise<string[]> {
   const s = await jmapSession();
@@ -386,7 +386,7 @@ async function listIdentities(): Promise<FastmailIdentity[]> {
 
 /**
  * The identity for an address: exact match first, then a Fastmail wildcard
- * identity (`*@domain`) — receipts@labnotes.org matches `*@labnotes.org`.
+ * identity (`*@domain`): receipts@labnotes.org matches `*@labnotes.org`.
  */
 function matchIdentity(
   identities: FastmailIdentity[],
@@ -456,7 +456,7 @@ async function submitEmail(identityId: string, emailId: string): Promise<void> {
   );
 }
 
-/** The JMAP send flow's collaborators — injectable so tests exercise the
+/** The JMAP send flow's collaborators, injectable so tests exercise the
  * whole identity→upload→import→submit sequence offline. `fromAddress`
  * overrides the receipts address when provided. */
 export interface JmapSendDeps {
@@ -475,7 +475,7 @@ const realJmapSendDeps: JmapSendDeps = {
 };
 
 /**
- * True when a submission failure is ambiguous — the request may have been
+ * True when a submission failure is ambiguous: the request may have been
  * processed by FastMail with only the response lost (fetch timeout, dropped
  * connection). Retrying such a failure can deliver a second copy of the
  * same message; explicit server rejections (HTTP/JMAP errors) are the only
@@ -487,7 +487,7 @@ function isAmbiguousSubmitFailure(err: unknown): boolean {
     if (name === "TimeoutError" || /abort|timed? ?out/i.test(err.message)) {
       return true;
     }
-    // fetch() network-level failure (connection refused/reset, DNS, …) —
+    // fetch() network-level failure (connection refused/reset, DNS, …);
     // the request may or may not have reached FastMail.
     if (err instanceof TypeError && /fetch failed/i.test(err.message)) {
       return true;
@@ -498,7 +498,7 @@ function isAmbiguousSubmitFailure(err: unknown): boolean {
 
 /** Build the RFC 5322 message bytes for a reply and send it from the
  * account via JMAP `EmailSubmission/set`. Returns false (after logging) on
- * any failure — callers must never fail because email did. */
+ * any failure; callers must never fail because email did. */
 export async function sendEmailViaJmap(
   input: SendEmailInput,
   deps: JmapSendDeps = realJmapSendDeps,
@@ -530,7 +530,7 @@ export async function sendEmailViaJmap(
       await deps.submitEmail(chosen.id, emailId);
     } catch (err) {
       // A transient submission failure would otherwise drop the reply
-      // forever — a lost confirmation makes the sender re-forward, which
+      // forever: a lost confirmation makes the sender re-forward, which
       // creates a duplicate expense. Retry once with the SAME emailId: the
       // blob upload and Sent-mailbox import already succeeded, so only the
       // submission repeats.
@@ -539,12 +539,12 @@ export async function sendEmailViaJmap(
       // request (an HTTP/JMAP error response means the submission is known
       // NOT to exist). When the request timed out or the connection
       // dropped, the first attempt may have landed with only the response
-      // lost — FastMail deletes EmailSubmission records after delivery, so
+      // lost; FastMail deletes EmailSubmission records after delivery, so
       // there is no way to tell, and re-submitting the same email delivers
       // a SECOND copy (observed in the wild: identical Message-IDs in the
       // recipient's Inbox, one confirmation per submit). Those ambiguous
-      // failures are logged and NOT retried — the expense is already
-      // saved, and the more likely outcome is that the reply was delivered.
+      // failures are logged and NOT retried (the expense is already
+      // saved, and the more likely outcome is that the reply was delivered).
       const message = err instanceof Error ? err.message : String(err);
       if (isAmbiguousSubmitFailure(err)) {
         console.warn(

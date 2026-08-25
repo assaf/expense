@@ -4,7 +4,7 @@ System-only via `prefers-color-scheme`, no toggle. The
 `@custom-variant dark (&:is(.dark *))` in `app/global.css` is already wired;
 an inline `<script>` in `app/root.tsx` applies `.dark` to `<html>` before
 first paint (FOUC-free) and listens for live OS theme changes. **Every new
-component must add `dark:` variants for all color classes** — background,
+component must add `dark:` variants for all color classes**: background,
 text, border, ring, placeholder, hover, and focus states. Use these
 mappings:
 
@@ -27,7 +27,7 @@ mappings:
   `hover:bg-black/5` → `dark:hover:bg-white/5`
 - Focus rings: `focus:ring-blue-500` → `dark:focus:ring-blue-400`,
   `ring-offset-white` → `dark:ring-offset-gray-900`
-- Do NOT use `bg-ink` or `text-ink` in dark mode — `--color-ink` is a
+- Do NOT use `bg-ink` or `text-ink` in dark mode; `--color-ink` is a
   CSS custom property that resolves to different values per theme.
   Prefer concrete Tailwind colors wherever possible.
 - Shared UI primitives (`Button`, `Input`, `Textarea`, `Select`,

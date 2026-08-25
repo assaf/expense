@@ -32,11 +32,11 @@ export async function readExpense(
 }
 
 /** Expense row plus its image blob in one round trip, for the image serving
- * route — the home list requests one image per receipt, and two sequential
+ * route: the home list requests one image per receipt, and two sequential
  * queries per tile (expense, then blob) doubled the DB round trips. The
  * LEFT JOIN is on the expense's namespaced `imageFile` key, so `blobMime` /
  * `blobData` / `thumbnail` are null when the expense has no image (or its
- * blob row is missing) — callers 404 on that, same as a null blob read. */
+ * blob row is missing); callers 404 on that, same as a null blob read. */
 export type ExpenseImageRow = {
   type: string;
   imageFile: string;
@@ -79,7 +79,7 @@ export async function readNeighborIds(
 
   if (hasDate) {
     // Prev: the expense with the closest *newer* date (date > this one,
-    // ordered ascending — the smallest gap forward in time = the one just
+    // ordered ascending, so the smallest gap forward in time = the one just
     // before in a newest-first list).
     const prev = await prisma.expense.findFirst({
       where: {
@@ -106,7 +106,7 @@ export async function readNeighborIds(
     if (next) {
       nextId = next.id;
     } else {
-      // No older dated expense — fall back to the first undated row.
+      // No older dated expense; fall back to the first undated row.
       const firstUndated = await prisma.expense.findFirst({
         where: { accountId, date: "", id: { not: expense.id } },
         orderBy: { createdAt: "desc" },
@@ -157,7 +157,7 @@ export async function readNeighborIds(
 
 /**
  * The only fields required for client-side duplicate detection on the create
- * page — a thin subset of every expense row so the page doesn't load every
+ * page: a thin subset of every expense row so the page doesn't load every
  * column just to check whether the draft looks like an existing entry.
  * The returned objects satisfy the Expense interface (unused fields default
  * to empty) so they slot straight into the existing findDuplicates call.
@@ -219,7 +219,7 @@ export async function upsertExpense(
 ): Promise<void> {
   // Targeted row write: one UPDATE when the expense already exists, one
   // INSERT when it doesn't. The row's id is a client-generated ulid, so an
-  // account-scoped update that hits nothing means "new expense" — never a
+  // account-scoped update that hits nothing means "new expense", never a
   // takeover of another account's row (that would be a unique-id conflict
   // on create, exactly like the old whole-table rewrite).
   const data = { ...expenseData(expense), accountId };
@@ -243,7 +243,7 @@ export async function upsertExpense(
 const RECENT_MATCH_WINDOW_MS = 30 * 60 * 1000;
 
 /**
- * A matching receipt expense imported within RECENT_MATCH_WINDOW_MS — the
+ * A matching receipt expense imported within RECENT_MATCH_WINDOW_MS: the
  * inbox-original / forwarded-copy overlap between the connected-account
  * pipeline and the receipts-by-email pipeline. The same receipt exists as
  * two different emails (different from/to, different mailboxes), so each
@@ -315,7 +315,7 @@ export async function readPriorMerchants(accountId: string): Promise<string[]> {
 
 const NINETY_DAYS_MS = 90 * 24 * 3600 * 1000;
 
-/** The date 90 days ago as an ISO string — used as the lower bound for
+/** The date 90 days ago as an ISO string, used as the lower bound for
  * merchant-history lookups. Computed once per call so tests can advance time
  * without restarting. */
 function ninetyDaysAgo(): string {
@@ -370,7 +370,7 @@ export async function readKnownMerchants(
       m.latestAt = row.createdAt.toISOString();
       m.display = row.merchant.trim();
     }
-    // Per-field newest non-empty value wins — a field is inherited from
+    // Per-field newest non-empty value wins: a field is inherited from
     // its own newest expense, even when the overall-newest row left it
     // empty.
     if (
@@ -534,7 +534,7 @@ function rowToExpense(row: {
   const mileage: MileageExpense = {
     ...base,
     type: "mileage",
-    // Legacy rows predate the type column — they are business trips.
+    // Legacy rows predate the type column; they are business trips.
     mileageType: isMileageType(row.mileageType) ? row.mileageType : "business",
     locations: parseLocations(row.locations),
     distanceMiles: row.distanceMiles?.toFixed(2) ?? "",

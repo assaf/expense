@@ -33,7 +33,7 @@ import type { Expense, Location, MileageType } from "~/lib/types";
 /**
  * Data shape shared by the edit route (/expense/:id) and the create route
  * (/expense/new). Create mode renders the same editors against a skeleton
- * expense — nothing is persisted until Save.
+ * expense; nothing is persisted until Save.
  */
 export type EditorData = {
   mode: "create" | "edit";
@@ -43,11 +43,11 @@ export type EditorData = {
   categories: string[];
   merchants: string[];
   home: Location;
-  /** The IRS mileage-rate master table — the editor resolves the rate from
+  /** The IRS mileage-rate master table. The editor resolves the rate from
    * it by (date, type), so changing either recomputes the amount. */
   rates: MileageRateEntry[];
   nav?: { prevId: string | null; nextId: string | null } | null;
-  /** True when the expense's report is closed — all fields become read-only. */
+  /** True when the expense's report is closed; all fields become read-only. */
   reportClosed: boolean;
 };
 
@@ -59,7 +59,7 @@ function reasonText(reason: DuplicateReason): string {
 }
 
 /** Inline warning in the create editors: the draft looks like an existing
- * expense. Informational — it never blocks Save; the Save button turns into
+ * expense. Informational only, it never blocks Save; the Save button turns
  * "Save anyway" so keeping the entry is deliberate. */
 export function DuplicateWarning({ matches }: { matches: DuplicateMatch[] }) {
   const first = matches[0]!;
@@ -257,7 +257,7 @@ export function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
 /** The Date + Type + Amount field row shared by both editors (amount
  * normalizes on blur; mileage marks manual edits so route recomputation
  * won't overwrite them). Mileage renders a Type select between Date and
- * Amount — changing it (or the date) picks a new IRS rate and recomputes
+ * Amount; changing it (or the date) picks a new IRS rate and recomputes
  * the amount. Receipts pass no type and keep the two-column layout. */
 export function DateAmountFields({
   date,
@@ -336,7 +336,7 @@ const NEW_REPORT = "__new__";
 
 /** The Report picker: a dropdown of open reports plus a "+ New report…"
  * option that swaps the select for an inline name input with explicit
- * Create/Cancel. Selecting the dropdown never creates anything — creation
+ * Create/Cancel. Selecting the dropdown never creates anything; creation
  * requires a name and an explicit Create click (or Enter), so a stray tap
  * or scroll through the list can't mint a report by accident. Escape (or
  * Cancel) closes the input untouched. */
@@ -556,7 +556,7 @@ export function EditorActions({
   );
 }
 
-/** Submit a "delete" intent through a fetcher — the shared delete action
+/** Submit a "delete" intent through a fetcher: the shared delete action
  * of the receipt and mileage editors (the row is deleted server-side, no
  * page navigation). */
 export function submitDelete(fetcher: ReturnType<typeof useFetcher>): void {
@@ -691,7 +691,7 @@ export function useFormKeys(opts: {
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       // The inline new-report form (input + buttons) handles Enter/Escape
-      // itself — the editor shortcuts must not hijack it (Escape would
+      // itself; the editor shortcuts must not hijack it (Escape would
       // cancel the whole editor).
       if (target?.closest?.("[data-report-create]")) return;
       // Inputs with a <datalist> (e.g. merchant autocomplete): Enter picks the

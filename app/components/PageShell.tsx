@@ -23,7 +23,7 @@ export type DropTarget = {
  * - Editor shell (default): an optional Back link/button row above the page
  *   title, with optional headerRight content beside it.
  * - Standalone pages (pass `icon`): Settings, Export, Emails, Reconcile and
- *   the inbox review page render a single toolbar row — icon + title on the
+ *   the inbox review page render a single toolbar row: icon + title on the
  *   left, actions and a ghost Back button on the right.
  */
 export function PageShell({
@@ -75,7 +75,7 @@ export function PageShell({
     .join(" ");
 
   // Toolbar layout (`icon` set): the standalone pages put the titled heading
-  // and their actions on one wrapping row. Static — no dim transition.
+  // and their actions on one wrapping row. Static; no dim transition.
   if (icon) {
     return (
       <main id="main-content" className={containerClass} {...dropHandlers}>

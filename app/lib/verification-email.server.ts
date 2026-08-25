@@ -8,7 +8,7 @@ import { PUBLIC_URL } from "~/lib/env";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
- * Shared builder for the app's two verification emails — the account
+ * Shared builder for the app's two verification emails: the account
  * signup/join email (account-verification.server.ts) and the
  * receipts-by-email sender email (sender-verification.server.ts). Both
  * email a single-use token link, render the same shell + CTA button +
@@ -39,7 +39,7 @@ function verifyButton(link: string, label: string): string {
 /**
  * Send a verification email for a single-use token link: the intro
  * paragraphs, the CTA button, and a closing note inside the shared email
- * shell. Returns true when the transport accepted it — false after logging
+ * shell. Returns true when the transport accepted it, false after logging
  * when it can't be sent or no public origin is set (PUBLIC_URL), because
  * callers must never fail because email did.
  */

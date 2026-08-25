@@ -118,7 +118,7 @@ describe("anonymous-action per-IP throttle", () => {
       /too many failed attempts/i,
     );
     // …but the unscoped (signup/join/resend) budget for the same IP is
-    // untouched — the two throttling domains must not share a counter.
+    // untouched: the two throttling domains must not share a counter.
     await expect(guardAnonymousAction(req)).resolves.toBeUndefined();
   });
 });
@@ -134,7 +134,7 @@ describe("sweepExpiredRows", () => {
   it("deletes elapsed-window rows but keeps fresh rows and active locks", async () => {
     // One failure at T0 (window starts, not locked)…
     await recordAuthFailure("sweep:stale", OPTIONS, T0);
-    // Five failures at T0 — locks until T0 + lockMs…
+    // Five failures at T0, locks until T0 + lockMs…
     for (let i = 0; i < AUTH_THRESHOLD; i += 1) {
       await recordAuthFailure("sweep:locked", OPTIONS, T0);
     }
@@ -142,7 +142,7 @@ describe("sweepExpiredRows", () => {
     const T_FRESH = T0 + AUTH_WINDOW_MS;
     await recordAuthFailure("sweep:fresh", OPTIONS, T_FRESH);
 
-    // Mid-window sweep (T0 + 1s): nothing is expired yet — stale's window
+    // Mid-window sweep (T0 + 1s): nothing is expired yet; stale's window
     // is 1s old, locked is still locking, fresh is brand new.
     await sweepExpiredRows(T0 + 1_000, AUTH_WINDOW_MS);
     for (const key of TEST_KEYS) {
@@ -151,14 +151,14 @@ describe("sweepExpiredRows", () => {
 
     // Sweep one minute after the window elapsed for the T0 rows (T0 + 16min):
     // stale (elapsed, unlocked) and locked (its T0 + 15min lock has expired)
-    // are swept; fresh — created at T0 + 15min, so 1 minute into its window
-    // — is kept.
+    // are swept; fresh (created at T0 + 15min, so 1 minute into its window)
+    // is kept.
     await sweepExpiredRows(T0 + AUTH_WINDOW_MS + 60_000, AUTH_WINDOW_MS);
     expect(await countKey("sweep:stale")).toBe(0);
     expect(await countKey("sweep:locked")).toBe(0);
     expect(await countKey("sweep:fresh")).toBe(1);
 
-    // Cleanup — never leave rows behind for other tests.
+    // Cleanup: never leave rows behind for other tests.
     await prisma.authAttempt.deleteMany({
       where: { key: { in: TEST_KEYS } },
     });

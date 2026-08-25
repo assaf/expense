@@ -143,7 +143,7 @@ function depsFor(adapter: ConnectionMailAdapter, connectionId: string) {
 }
 
 async function cleanupConnection() {
-  // emailAddress is globally unique — clear by address, not id.
+  // emailAddress is globally unique: clear by address, not id.
   const rows = await testPrisma.emailConnection.findMany({
     where: { emailAddress: "mailbox@example.com" },
     select: { id: true },
@@ -286,7 +286,7 @@ describe("processConnectionEmail", () => {
     );
     expect(second.status).toBe("partial");
     // The second import saved its own expense row but the confirmation is
-    // suppressed — still exactly one notification to the owner.
+    // suppressed; still exactly one notification to the owner.
     expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
   });
 
@@ -368,7 +368,7 @@ describe("processConnectionEmail", () => {
 
   it("ignores the app's own confirmation email (loop guard via header)", async () => {
     // The app's outbound confirmation carries X-Expense-Confirmation.
-    // If one lands back in the Inbox it must never reprocess — even if a
+    // If one lands back in the Inbox it must never reprocess, even if a
     // rule matched its sender (the header is the stable signal).
     await addEmailRule({
       accountId: "",
@@ -566,7 +566,7 @@ describe("processConnectionEmail", () => {
       moveToTrash: (id: string) => adapter.moveToTrash(id),
       sendToOwner: async () => {},
     };
-    // Fire both concurrently — the claim is the only thing preventing a dupe.
+    // Fire both concurrently; the claim is the only thing preventing a dupe.
     const [a, b] = await Promise.all([
       processConnectionEmail(
         conn,
@@ -590,7 +590,7 @@ describe("processConnectionEmail", () => {
       ),
     ]);
     const statuses = [a.status, b.status].sort();
-    // One winner (partial — local extraction leaves category empty) and one
+    // One winner (partial, since local extraction leaves category empty) and one
     // loser ("already processed"). Never two expenses.
     expect(statuses).toContain("ignored");
     expect(statuses.filter((s) => s === "ignored")).toHaveLength(1);
@@ -602,7 +602,7 @@ describe("processConnectionEmail", () => {
     ) as { status: string; expenseId?: string } | undefined;
     expect(winner).toBeDefined();
     expect(winner?.expenseId).toBeDefined();
-    // Exactly one expense — the winner's; the loser created none.
+    // Exactly one expense, the winner's; the loser created none.
     const expenses = await readExpenses(conn.accountId);
     const created = expenses.filter((e) => e.id === winner?.expenseId);
     expect(created).toHaveLength(1);
@@ -678,7 +678,7 @@ describe("drainEmailConnection", () => {
     expect(row?.receivedCount).toBe(2);
     expect(row?.processedCount).toBe(1);
 
-    // Second drain: everything already evaluated — no new counters, no new expenses.
+    // Second drain: everything already evaluated, no new counters, no new expenses.
     const second = await drainEmailConnection(conn, { adapter, batchSize: 10 });
     expect(second.evaluated).toBe(0);
     const after = await testPrisma.emailConnection.findUnique({
@@ -719,7 +719,7 @@ describe("drainEmailConnection", () => {
       },
     );
     expect(result.status).toBe("error");
-    // Drain now sees the email as already evaluated (error outcome) —
+    // Drain now sees the email as already evaluated (error outcome):
     // the catch-up cron does not retry errors (they stay visible in the Inbox).
     const drain = await drainEmailConnection(conn, { adapter, batchSize: 10 });
     expect(drain.evaluated).toBe(0);
@@ -727,7 +727,7 @@ describe("drainEmailConnection", () => {
 
   it("reaches fresh mail behind an all-seen front (cursor scan)", async () => {
     // The catch-up drain used to stop at the first batch with no fresh
-    // mail — so ignored mail that stays in the Inbox (newsletters, self
+    // mail, so ignored mail that stays in the Inbox (newsletters, self
     // mail) built a wall in front of newer receipts, and the cron never
     // reached them (the Shopify bill sat behind one). The cursor scan
     // slides past all-seen batches instead of stopping.
@@ -808,7 +808,7 @@ describe("drainEmailConnection", () => {
       failed: 0,
     });
 
-    // A receipt arrives — NEWER than the seen wall in front of it.
+    // A receipt arrives, NEWER than the seen wall in front of it.
     emails.push({
       id: "g2",
       from: "Apple <no_reply@email.apple.com>",
@@ -817,7 +817,7 @@ describe("drainEmailConnection", () => {
       receivedAt: "2026-07-14T11:00:00.000Z",
     });
 
-    // batchSize 1: the first batch is the seen g1 — the cursor must scan
+    // batchSize 1: the first batch is the seen g1; the cursor must scan
     // past it and reach g2 (the old code stopped dead at g1).
     const second = await drainEmailConnection(conn, {
       adapter,

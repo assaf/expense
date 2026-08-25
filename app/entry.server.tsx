@@ -7,12 +7,12 @@ import { renderToReadableStream } from "react-dom/server";
 import { captureErrorOnce } from "~/lib/errors.server";
 
 // Sentry SDK init for the server runtime. This module is bundled into
-// build/server/index.js — the exact file Vercel boots as the serverless
+// build/server/index.js, the exact file Vercel boots as the serverless
 // function handler (the @vercel/remix-builder SSR template), so init runs
 // in the deployed bundle. It must NOT live in a separate instrument file
 // loaded via NODE_OPTIONS --import: Vercel never runs the `start` script
 // (the function config has an empty environment), so that code never
-// executed in production — server errors only ever reached Sentry locally.
+// executed in production; server errors only ever reached Sentry locally.
 // Gate on VERCEL_ENV=production so local dev/test and preview deployments
 // don't emit to the production project. try/catch: if the profiling native
 // module fails to load in some runtime, the app must still boot.
@@ -41,7 +41,7 @@ if (process.env.VERCEL_ENV === "production") {
       // Filter out 404s and routing errors from error reporting.
       // React Router throws getInternalRouterError for unmatched routes
       // ("No route matches URL") and missing loaders ("did not provide
-      // a `loader`") — these aren't app bugs, just normal web traffic.
+      // a `loader`"); these aren't app bugs, just normal web traffic.
       beforeSend(event) {
         if (event.exception) {
           const error = event.exception.values?.[0];
@@ -52,7 +52,7 @@ if (process.env.VERCEL_ENV === "production") {
             return null;
           }
           // getInternalRouterError for unmatched routes and missing
-          // loaders — bots/crawlers/curious humans hitting paths that
+          // loaders: bots/crawlers/curious humans hitting paths that
           // don't exist or only support POST.
           if (error?.type === "Error") {
             const msg = error?.value ?? "";
@@ -87,10 +87,10 @@ export default Sentry.wrapSentryHandleRequest(
         signal: AbortSignal.timeout(10_000),
         onError(error: unknown) {
           responseStatusCode = 500;
-          // Client disconnect — nothing meaningful to report (handleError
+          // Client disconnect; nothing meaningful to report (handleError
           // skips aborted requests for the same reason).
           if (request.signal.aborted) return;
-          // Report every render error — including ones thrown before the
+          // Report every render error, including ones thrown before the
           // shell completes. The old shellRendered guard dropped those:
           // the response was a 500 but neither Vercel logs nor Sentry saw
           // the error. captureErrorOnce dedupes the fatal ones, which also
@@ -115,7 +115,7 @@ export default Sentry.wrapSentryHandleRequest(
 /**
  * Called by React Router for errors thrown in loaders and actions (server
  * and .data requests) and for render errors that rejected the stream (fatal
- * shell failures). Capture in Sentry with the request context — this is how
+ * shell failures). Capture in Sentry with the request context; this is how
  * production errors reach the dashboard; the console line keeps Vercel logs
  * readable too. captureErrorOnce dedupes the render errors already reported
  * via the stream's onError.

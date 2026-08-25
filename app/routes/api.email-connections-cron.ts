@@ -12,7 +12,7 @@ import type { Route } from "./+types/api.email-connections-cron";
 /**
  * Daily maintenance cron for connected email accounts (vercel.json):
  * renew every connection's JMAP push subscription (they live ~30 days;
- * recreate within 7 days of expiry — recreating triggers a fresh
+ * recreate within 7 days of expiry; recreating triggers a fresh
  * PushVerification our webhook completes). A connection whose renewal
  * fails (revoked token, FastMail error) is flagged status=error so the
  * user sees "Needs attention" in Settings.

@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 
 /**
  * Strictly parse a decimal string into an exact Decimal, or null if
- * invalid/empty. Never returns an IEEE float — arithmetic on the result is
+ * invalid/empty. Never returns an IEEE float; arithmetic on the result is
  * exact (see `summarizeBy`). Shared by the money math in format.ts (sums,
  * display) and mileage-rates.ts (distance × rate).
  */

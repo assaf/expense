@@ -50,7 +50,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       readAccountUsers(user.accountId),
     ]);
   // The "current rate" line is computed CLIENT-side from the browser's
-  // local today — the server runs UTC and must not guess the user's day.
+  // local today; the server runs UTC and must not guess the user's day.
   // The rates table itself is passed through (timezone-independent).
   return {
     accountName: account?.name ?? "",
@@ -134,7 +134,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     mcpUrl,
   } = loaderData;
   // The "current rate" line depends on the browser's local today (the
-  // server runs UTC) — computed client-side after mount.
+  // server runs UTC); computed client-side after mount.
   const [today, setToday] = useState<string | null>(null);
   useEffect(() => {
     setToday(todayDate());

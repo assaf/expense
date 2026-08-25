@@ -7,7 +7,7 @@ import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
  *
  * Two expenses are duplicates when they describe the same entry:
  *  - receipts: same date + same merchant + same amount to the cent, and the
- *    category, report, and description agree — each field matches when both
+ *    category, report, and description agree: each field matches when both
  *    are empty or when the values are the same. A difference in any of the
  *    three (e.g. one categorized, one not; different receipt numbers in the
  *    description) means the entries are not duplicates.
@@ -21,7 +21,7 @@ import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
  * route, or distance) can't match anything.
  *
  * Matching is a pure function over the expense rows the loaders already
- * fetch — no extra queries, no stored state. The only persisted thing is
+ * fetch; no extra queries, no stored state. The only persisted thing is
  * the dismissal of a pair the user has marked "not a duplicate", one row
  * in the `duplicate_dismissals` table per pair (read as a `Set` of
  * `duplicatePairKey` strings by `readDuplicateDismissals`).
@@ -95,7 +95,7 @@ export function groupDuplicateMatches(
       }
     }
   }
-  // Oldest match first — the warning points at the original entry.
+  // Oldest match first, so the warning points at the original entry.
   for (const list of matches.values()) {
     list.sort((a, b) => a.expense.createdAt.localeCompare(b.expense.createdAt));
   }
@@ -130,7 +130,7 @@ function receiptKey(
   // Category/report/description are equal-unless-different: both empty or
   // the same value matches, any difference splits the pair. Category and
   // report compare normalized (case/whitespace-insensitive, like the
-  // merchant); description compares exactly after trimming — receipt
+  // merchant); description compares exactly after trimming (receipt
   // numbers and account names are case-sensitive data.
   const category = normalizeMerchant(e.category);
   const report = normalizeMerchant(e.report);

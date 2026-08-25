@@ -4,7 +4,7 @@ import { cn } from "~/lib/cn";
 type BadgeTone = "green" | "amber" | "blue" | "gray" | "red" | "purple";
 
 /** Background/text pairs per tone; every entry carries its dark: variant.
- * Blue's dark background is neutral gray-700 — the majority of the call
+ * Blue's dark background is neutral gray-700: the majority of the call
  * sites this consolidates used it (not blue-900/60). Gray carries no text
  * color: it inherits, like the category tag it backs. */
 const TONE_CLASSES: Record<BadgeTone, string> = {
@@ -20,7 +20,7 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
 interface BadgeProps extends ComponentProps<"span"> {
   tone: BadgeTone;
   /** Square tag style (category labels): rounded corners, regular weight,
-   * tighter padding. Ignores `tone` — only the gray variant exists. */
+   * tighter padding. Ignores `tone`; only the gray variant exists. */
   square?: boolean;
   /** Optional leading icon (already aria-hidden by the caller). */
   icon?: ReactNode;

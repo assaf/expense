@@ -7,7 +7,7 @@ import { isIP } from "node:net";
  * `<img src>` URLs inside forwarded email HTML).
  *
  * `fetchPublicUrl` only follows http(s), rejects private/unresolvable hosts
- * (literal address AND DNS-resolved — a public-looking hostname that
+ * (literal address AND DNS-resolved: a public-looking hostname that
  * resolves to 10.x or 169.254.169.254 is blocked), and follows redirects
  * manually with the same checks at every hop, so a redirect chain can never
  * smuggle the request to an internal address.
@@ -27,7 +27,7 @@ const MAX_REDIRECTS = 3;
 
 /** True when a hostname (literal or name) points at a private, loopback,
  * link-local, or otherwise non-routable address. Hostnames that are not
- * literal IPs return false here — `isPrivateUrl` resolves those and checks
+ * literal IPs return false here; `isPrivateUrl` resolves those and checks
  * every resulting address. IPv6 literals are fully parsed (not regex
  * matched), so every spelling of a private range is caught: `::ffff:a00:1`
  * is IPv4-mapped 10.0.0.1 and must be blocked the same as the dotted form. */
@@ -48,7 +48,7 @@ export function isPrivateHost(hostname: string): boolean {
   if (isIP(h) === 6) {
     return isPrivateIpv6(h);
   }
-  // Not an IP literal — hostnames are checked by resolving every A/AAAA
+  // Not an IP literal; hostnames are checked by resolving every A/AAAA
   // record in isPrivateUrl. (A plain name can never be "private" itself;
   // this also stops the old fc/fd prefix check from blocking legitimate
   // hosts like fcc.gov.)
@@ -68,7 +68,7 @@ function isPrivateIpv4(a: number, b: number, _c: number, _d: number): boolean {
 }
 
 /** Parse an IPv6 literal into its 8 groups of 16 bits (handles `::`
- * compression and a dotted-decimal IPv4 tail). null when unparseable —
+ * compression and a dotted-decimal IPv4 tail). null when unparseable;
  * callers fail closed. */
 function ipv6Groups(addr: string): number[] | null {
   let s = addr.toLowerCase();
@@ -108,7 +108,7 @@ function ipv6Groups(addr: string): number[] | null {
 }
 
 /** Private/reserved IPv6 ranges, on the canonical 8-group form:
- * unspecified (::), loopback (::1), IPv4-mapped (::ffff:a.b.c.d — the
+ * unspecified (::), loopback (::1), IPv4-mapped (::ffff:a.b.c.d, where the
  * embedded address is checked with the IPv4 rules), link-local (fe80::/10),
  * unique-local (fc00::/7), site-local (fec0::/10), and multicast (ff00::/8).
  * Anything unparseable is treated as private (fail closed). */
@@ -136,7 +136,7 @@ function isPrivateIpv6(h: string): boolean {
     g[4] === 0 &&
     g[5] === 0xffff
   ) {
-    // IPv4-mapped (dotted or hex form) — check the embedded IPv4.
+    // IPv4-mapped (dotted or hex form): check the embedded IPv4.
     return isPrivateIpv4(g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff);
   }
   if ((g[0] & 0xffc0) === 0xfe80) return true; // link-local
@@ -150,7 +150,7 @@ function isPrivateIpv6(h: string): boolean {
  * True when a URL would reach a private or unresolvable address: the
  * literal host is checked first, then the hostname is resolved and every
  * A/AAAA record is checked (a rebinding-friendly hostname with any private
- * record is rejected). Fails closed — unresolvable hostnames are private.
+ * record is rejected). Fails closed; unresolvable hostnames are private.
  * `lookupFn` is injectable for tests.
  */
 export async function isPrivateUrl(
@@ -181,7 +181,7 @@ export interface PublicFetchOptions {
 
 /** Fetch a user-supplied URL with SSRF guards, following redirects manually
  * (same checks at every hop). Throws SsrfError on any invalid, blocked, or
- * failed request. The response is NOT size-limited here — callers bound the
+ * failed request. The response is NOT size-limited here; callers bound the
  * body per use case with `readBodyLimited`. */
 export async function fetchPublicUrl(
   input: string | URL,
@@ -205,7 +205,7 @@ export async function fetchPublicUrl(
     // TOCTOU). Every record is checked up front and IP literals have no DNS
     // at all; fully closing the window would require pinning the connection
     // to the checked address with a custom TLS agent. On Vercel, function
-    // egress cannot reach private ranges anyway — this guard is
+    // egress cannot reach private ranges anyway, so this guard is
     // defense-in-depth for self-hosted instances.
     let res: Response;
     try {
@@ -236,7 +236,7 @@ export async function fetchPublicUrl(
 /**
  * Read a fetch response body into memory, aborting once `maxBytes` is
  * exceeded. A server-side fetch of a user-supplied URL must never buffer an
- * unbounded stream — the size check has to happen DURING the read, not
+ * unbounded stream: the size check has to happen DURING the read, not
  * after `arrayBuffer()` has already committed the memory. Throws SsrfError
  * when the body is larger; the underlying stream is cancelled so the
  * download stops.

@@ -22,10 +22,10 @@ function makePdf(text: string, size = 12): Promise<Buffer> {
 }
 
 /**
- * Real pdfjs text extraction — exercises the main-thread worker setup in
+ * Real pdfjs text extraction, exercising the main-thread worker setup in
  * receipt-ocr.server.ts (extractPdfText is faked everywhere else, so a
- * broken worker — e.g. "Setting up fake worker failed" on serverless
- * bundles — would go unnoticed).
+ * broken worker, e.g. "Setting up fake worker failed" on serverless
+ * bundles, would go unnoticed).
  */
 describe("PDF text extraction", () => {
   it("extracts the text layer via the main-thread worker", async () => {

@@ -17,27 +17,27 @@ import type {
  *
  * Formats: CSV (header detection, US/ISO/named dates, signed amounts or
  * Debit/Credit split), QFX/OFX (SGML blocks, FITID transaction ids), and
- * PDF (text layer reconstructed into lines — scanned PDFs have no text and
- * are reported as unparseable; banks all offer CSV/QFX anyway).
+ * PDF (text layer reconstructed into lines; scanned PDFs have no text and
+ * are reported as unparseable, but banks all offer CSV/QFX anyway).
  *
  * Every parsed row normalizes to the same shape: an absolute amount plus a
  * direction (charge | refund), so a Chase-style signed CSV, a Citi-style
  * Debit/Credit split, and an OFX file all match identically. Refund rows
- * never auto-match an expense — a refund is not a deductible expense — and
+ * never auto-match an expense (a refund is not a deductible expense) and
  * land in the unmatched bucket for the user to discard.
  *
  * Matching rules (see matchStatementRows): receipt expenses only (mileage
  * is never a card transaction), not already reconciled, same direction,
  * date within ±2 days and amount within $0.50 / 1% of the expense. Exact
- * date + exact amount + shared merchant token — or shared after joining
- * adjacent words, so "OFFICE MAX" matches merchant "OfficeMax" — →
+ * date + exact amount + shared merchant token (or shared after joining
+ * adjacent words, so "OFFICE MAX" matches merchant "OfficeMax") →
  * high-confidence match. Anything close but not exact, any ambiguity (several candidates, or two
  * statement lines claiming the same expense), or a merchant that differs →
  * review, where the user picks.
  */
 
 /** Statement dates and expense dates may differ by up to this many days and
- * still be candidates — statements carry the posting date, users enter the
+ * still be candidates: statements carry the posting date, users enter the
  * purchase date, and they drift by a day or two. */
 export const DATE_TOLERANCE_DAYS = 2;
 
@@ -118,7 +118,7 @@ export function normalizeDate(value: string): string | null {
 
 /** Earliest of the given dates (YYYY-MM-DD strings sort lexicographically),
  * or null when none parse. Statements carry both a transaction date and a
- * posting date — the transaction date is the purchase event, posting is a
+ * posting date. The transaction date is the purchase event; posting is a
  * settlement artifact a day or two later, so the earliest always wins. */
 function earliestDate(dates: (string | null)[]): string | null {
   let best: string | null = null;
@@ -171,10 +171,10 @@ function dayDiff(a: string, b: string): number {
 }
 
 /** True when the statement description and the expense merchant share a
- * word token, or share one after concatenating adjacent words — the
+ * word token, or share one after concatenating adjacent words (the
  * "OfficeMax" ↔ "OFFICE MAX" case: the two name the same merchant once
  * spaces are removed but share no single token. Exact string equality
- * only — no fuzzy thresholds, so genuinely different merchants never
+ * only, with no fuzzy thresholds, so genuinely different merchants never
  * collide ("Star" stays apart from "Starbucks"). */
 function merchantOverlap(desc: Set<string>, merchant: Set<string>): boolean {
   if (merchant.size === 0) return false;
@@ -184,7 +184,7 @@ function merchantOverlap(desc: Set<string>, merchant: Set<string>): boolean {
 }
 
 /** Expand a token set with the concatenation of adjacent tokens (windows
- * of 2–3, in text order) — "OFFICE MAX" → {office, max, officemax}.
+ * of 2–3, in text order): "OFFICE MAX" → {office, max, officemax}.
  * Word-boundary differences ("Office Max" / "OfficeMax" / "OFFICE-MAX")
  * collapse to the same string; genuinely different names never do. */
 function expandedTokens(tokens: Set<string>): Set<string> {
@@ -199,7 +199,7 @@ function expandedTokens(tokens: Set<string>): Set<string> {
 }
 
 /** Refund-ish keywords: a statement line containing any of these is a
- * credit/payment/return — a non-expense — never an auto match. Covers the
+ * credit/payment/return (a non-expense), never an auto match. Covers the
  * common abbreviations and labels across banks ("ONLINE PYMT", "CASH
  * BACK", "PURCHASE ADJUSTMENT", "CASH REBATE", "ACH Deposit"). */
 const REFUND_RE =
@@ -207,7 +207,7 @@ const REFUND_RE =
 
 /** Direction for a signed amount: credit-card convention (negative = the
  * purchase, positive = a credit), guarded by whether the file carries signs
- * at all — unsigned files are all charges. */
+ * at all; unsigned files are all charges. */
 function directionFor(
   signed: Decimal,
   description: string,
@@ -233,7 +233,7 @@ function directionForSign(
 }
 
 /** Strong, unambiguous direction words for a Type/Category column. The
- * full REFUND_RE is too eager here — "Fees & Adjustments" is a category,
+ * full REFUND_RE is too eager here: "Fees & Adjustments" is a category,
  * not a refund. */
 const TYPE_REFUND_RE = /payment|refund|credit|return|reversal|cash\s?back/i;
 
@@ -313,7 +313,7 @@ function parseStatementCells(
   // Column mapping: use a header row when one is recognizable.
   const header = raw[0]!.map((h) => h.trim().toLowerCase());
   // Every date column ("Transaction Date", "Posting Date", …), not just the
-  // first: the row's date is the EARLIEST of them — the transaction date.
+  // first: the row's date is the EARLIEST of them, the transaction date.
   // Posting is a settlement artifact a day or two later, and column order
   // varies by bank, so the first date column is not trustworthy.
   const dateIdxs = header.flatMap((h, i) => (/date/.test(h) ? [i] : []));
@@ -381,7 +381,7 @@ function parseStatementCells(
         amount = signed.abs();
         const typeText = typeIdx >= 0 ? (cells[typeIdx] ?? "") : "";
         // The type/category column is only trusted for unambiguous
-        // direction words — category names like "Fees & Adjustments"
+        // direction words; category names like "Fees & Adjustments"
         // contain refund-ish words without being refunds.
         if (TYPE_REFUND_RE.test(typeText)) {
           direction = "refund";
@@ -428,7 +428,7 @@ function normalizeOfxDate(value: string): string | null {
 }
 
 /** Parse an OFX/QFX statement (SGML <STMTTRN> blocks; the OFXHEADER block
- * before <OFX> is skipped). FITID — the bank's unique transaction id — is
+ * before <OFX> is skipped). FITID, the bank's unique transaction id, is
  * carried on each row as the idempotency key. */
 export function parseOfxStatement(text: string): {
   rows: StatementRow[];
@@ -461,7 +461,7 @@ export function parseOfxStatement(text: string): {
 
   for (const [i, b] of blocks.entries()) {
     // The earliest of the block's dates: DTPOSTED is the posting date and
-    // DTUSER — the user's transaction date — is a day or two earlier when
+    // DTUSER (the user's transaction date) is a day or two earlier when
     // present (Chase QFX carries both). DTAVAIL is rarely populated.
     const posted = ofxField(b, "DTPOSTED");
     const date = earliestDate(
@@ -517,14 +517,14 @@ const PDF_AMOUNT_SPACED = /[-+]\s*\$?\s*\d[\d,]*\.\d{2}/g;
 const PDF_SUMMARY_NOISE =
   /statement|closing date|available credit|credit limit|previous balance|new balance|minimum payment|payment due|balance as of/i;
 
-/** The statement's billing cycle — used to date yearless transaction dates
+/** The statement's billing cycle, used to date yearless transaction dates
  * (Capital One prints "Jun 13" and lets the cycle header carry the year). */
 interface Cycle {
   start: string; // YYYY-MM-DD
   end: string;
 }
 
-/** Cycle-window check with a few days of slack — posting dates can fall a
+/** Cycle-window check with a few days of slack: posting dates can fall a
  * day or two outside the stated cycle (a transaction on Jun 11 posts Jun
  * 12, the cycle's first day). */
 function inCycle(date: string, cycle: Cycle): boolean {
@@ -537,7 +537,7 @@ function inCycle(date: string, cycle: Cycle): boolean {
 }
 
 /** Find "Jun 12, 2026 - Jul 12, 2026" or "06/08/26 - 07/07/26" cycle
- * headers (named and numeric — Capital One and Chase print them
+ * headers (named and numeric; Capital One and Chase print them
  * differently). */
 function extractCycle(lines: string[]): Cycle | null {
   const patterns = [
@@ -545,7 +545,7 @@ function extractCycle(lines: string[]): Cycle | null {
     /([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})\s*[-–—]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
     // "06/08/26 - 07/07/26" (Chase)
     /(\d{1,2}\/\d{1,2}\/\d{2,4})\s*[-–—]\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/,
-    // "Jul 1 — Jul 31, 2026" (Apple Card — the first date carries no year)
+    // "Jul 1 — Jul 31, 2026" (Apple Card; the first date carries no year)
     /([A-Za-z]{3,}\.?\s+\d{1,2})\s*[-–—]\s*([A-Za-z]{3,}\.?\s+\d{1,2},?\s+\d{4})/,
   ];
   for (const line of lines) {
@@ -563,7 +563,7 @@ function extractCycle(lines: string[]): Cycle | null {
   return null;
 }
 
-/** Resolve a yearless date against the billing cycle — a statement only
+/** Resolve a yearless date against the billing cycle: a statement only
  * lists transactions inside its cycle, so the year is unambiguous (and a
  * date far outside the cycle is a description, not a transaction). Handles
  * month names ("Jun 13", Capital One) and numeric dates ("07/01", Chase). */
@@ -595,13 +595,13 @@ function resolveYearlessDate(
 }
 
 /**
- * Try "<description> <date> <amount>" on one line, in any order — bank
+ * Try "<description> <date> <amount>" on one line, in any order; bank
  * PDFs put the date and amount anywhere on the line (Amex:
  * "AplPay RALPHS GROCERY STUDIO CITY CA 06/14/26 $143.21" and even
  * "…CA $112.71 06/24/26"). Requires exactly one amount token; every
  * date token (1–3 token windows, since named dates are three tokens:
  * "Aug 3 2026", and yearless "Jun 13" is two) is stripped from the
- * description — Capital One rows carry both a transaction and a posting
+ * description. Capital One rows carry both a transaction and a posting
  * date, and the EARLIEST of them becomes the row date (the transaction
  * date; posting is a settlement artifact a day or two later). Two amount
  * tokens means a summary/table line, not a transaction.
@@ -622,7 +622,7 @@ function tryPdfOneLine(
 
   // Amount tokens. Apple Card rows carry the Daily Cash amount before the
   // transaction amount ("…USA 2% $0.18 $8.83"). Two amounts are normally
-  // a summary/table line — but a percentage token right before the first
+  // a summary/table line, but a percentage token right before the first
   // amount marks the daily-cash layout, where the LAST amount is the
   // transaction and both amounts + the percentage are column noise.
   const amountIndices: number[] = [];
@@ -642,8 +642,8 @@ function tryPdfOneLine(
   const dateWindows: { start: number; len: number }[] = [];
   const dates: string[] = [];
   /** Date at token i: yearful windows first ("Aug 3 2026" must not be
-   * truncated to yearless "Aug 3"), then a yearless date — "07/01" is
-   * one token (Chase), "Jun 13" is two (Capital One) — resolved against
+   * truncated to yearless "Aug 3"), then a yearless date, where "07/01" is
+   * one token (Chase) and "Jun 13" is two (Capital One), resolved against
    * the billing cycle. */
   const findDate = (i: number): { date: string; len: number } | null => {
     for (let len = 1; len <= 3 && i + len <= tokens.length; len++) {
@@ -672,7 +672,7 @@ function tryPdfOneLine(
   }
   if (dateWindows.length === 0) return null;
   // Both dates present (Capital One prints trans + posting): take the
-  // earliest — the transaction date.
+  // earliest (the transaction date).
   const date = earliestDate(dates)!;
 
   const description = tokens
@@ -697,10 +697,10 @@ function tryPdfOneLine(
 
 /** Direction for a PDF row. Every credit-card PDF seen in the wild lists
  * payments and credits as negative amounts and charges as positive (Amex,
- * Capital One, Chase, Apple Card all do — the Chase CSV convention of
+ * Capital One, Chase, Apple Card all do; the Chase CSV convention of
  * negative-purchases is a CSV thing). Credits carry refund-ish keywords;
  * a negative amount with no keyword is still a credit, never an expense;
- * everything else — including fees — is a charge. */
+ * everything else, including fees, is a charge. */
 function pdfDirection(
   description: string,
   signed: Decimal,
@@ -714,7 +714,7 @@ function pdfDirection(
  * line ("<desc> <date> <amount>" in any order, with yearless dates like
  * "Jun 13" resolved against the statement's billing cycle) and the common
  * multi-line layout (a date line, then description lines, then an amount
- * line). Everything else is reported as skipped — the UI shows those
+ * line). Everything else is reported as skipped; the UI shows those
  * lines so the user can judge what the parser missed. */
 export function parsePdfStatementLines(lines: string[]): {
   rows: StatementRow[];
@@ -805,13 +805,13 @@ export function parsePdfStatementLines(lines: string[]): {
       if (pending.desc.length < 3) pending.desc.push(line);
       continue;
     }
-    // Junk (headers, footers, summary lines) — report it, don't guess.
+    // Junk (headers, footers, summary lines): report it, don't guess.
     if (
       /statement|balance|total|page\b|payment due|credit limit|account\b|annual|interest/i.test(
         line,
       )
     ) {
-      continue; // known chrome, not a transaction — stay quiet
+      continue; // known chrome, not a transaction, so stay quiet
     }
     skipped.push({
       line: lineNo,
@@ -865,7 +865,7 @@ export async function parseStatementUpload(
     return { ...parsePdfStatementLines(lines), format: "pdf" };
   }
   if (ext === "xls" || head.startsWith("\xd0\xcf\x11\xe0")) {
-    // Old binary BIFF workbooks — not supported; point at the trivial fix.
+    // Old binary BIFF workbooks are not supported; point at the trivial fix.
     return {
       rows: [],
       skipped: [
@@ -969,7 +969,7 @@ export function matchStatementRows(
 
   const stmtAbs = rows.map((r) => parseAmount(r.amount));
   const descTokens = rows.map((r) => tokensOf(r.description));
-  // Expanded once per row — the scoring loop below counts shared tokens
+  // Expanded once per row, since the scoring loop below counts shared tokens
   // and shared adjacent-token concatenations.
   const descExpanded = descTokens.map((t) => expandedTokens(t));
 
@@ -1012,7 +1012,7 @@ export function matchStatementRows(
   });
 
   // Collision detection: an expense that is the best candidate of two
-  // statement lines is ambiguous — both lines go to review (the user picks
+  // statement lines is ambiguous, so both lines go to review (the user picks
   // which one really is that expense; the other becomes unmatched).
   const claimedByExpense = new Map<string, number[]>();
   for (const [i, best] of bestByRow.entries()) {
@@ -1095,7 +1095,7 @@ export function reconcileForMcp(
   const unmatchedLines: unknown[] = [];
   const matchedExpenseIds = new Set<string>();
 
-  // Newest first, matching the web UI — `line` still points at the
+  // Newest first, matching the web UI; `line` still points at the
   // row's original position in the statement.
   const orderedRows = rows.toSorted(
     (a, b) => b.date.localeCompare(a.date) || a.index - b.index,

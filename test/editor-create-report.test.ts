@@ -7,7 +7,7 @@ import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 /**
  * Creating a report from the expense editor. The Report dropdown's
  * "+ New report…" option must make creation simple but deliberate:
- * selecting it only opens an inline name input — nothing is created until
+ * selecting it only opens an inline name input; nothing is created until
  * the user types a name and confirms with Create (or Enter). Cancel and
  * Escape close the input without side effects. The database is re-seeded
  * before this file, so the fixtures created in beforeAll can stay in place.
@@ -15,7 +15,7 @@ import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 describe("Editor: create report", () => {
   let page: Page;
 
-  /** The Report <select> — in the receipt editor (/expense/new) it is the
+  /** The Report <select>: in the receipt editor (/expense/new) it is the
    * first select on the page (Category renders second), the same convention
    * the existing suite relies on. */
   const reportSelect = (editor: Page) => editor.locator("select").first();
@@ -42,7 +42,7 @@ describe("Editor: create report", () => {
     const input = editor.getByPlaceholder("New report name");
     await expect(input).toBeVisible();
     await expect(input).toBeFocused();
-    // …but no report exists yet — creation needs the explicit Create click.
+    // …but no report exists yet: creation needs the explicit Create click.
     expect(await reportCount()).toBe(2);
     await editor.close();
   });
@@ -85,7 +85,7 @@ describe("Editor: create report", () => {
     const editor = await goto("/expense/new");
     const select = reportSelect(editor);
     expect(await reportCount()).toBe(4);
-    // Cancel after typing. `.first()` — the editor's own bottom Cancel
+    // Cancel after typing. `.first()`, because the editor's own bottom Cancel
     // button matches the same name.
     await select.selectOption("__new__");
     const input = editor.getByPlaceholder("New report name");
@@ -111,13 +111,13 @@ describe("Editor: create report", () => {
     const input = editor.getByPlaceholder("New report name");
     await input.fill("2026 Test");
     await editor.getByRole("button", { name: "Create" }).click();
-    // The error shows inline and the form stays open — the selection does
+    // The error shows inline and the form stays open; the selection does
     // not silently switch.
     await expect(
       editor.getByText('A report named "2026 Test" already exists.'),
     ).toBeVisible();
     await expect(input).toBeVisible();
-    // The Report select is gone — only the Category select remains.
+    // The Report select is gone; only the Category select remains.
     await expect(editor.locator("select")).toHaveCount(1);
     expect(await reportCount()).toBe(4);
     await editor.close();

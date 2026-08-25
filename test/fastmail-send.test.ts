@@ -6,7 +6,7 @@ import {
 } from "~/lib/fastmail.server";
 
 /**
- * sendEmailViaJmap with injected deps — exercises the whole
+ * sendEmailViaJmap with injected deps, exercising the whole
  * identity-match → build MIME → upload → import → submit sequence offline
  * (outbound network is blocked in tests).
  */
@@ -161,7 +161,7 @@ describe("sendEmailViaJmap", () => {
 
     expect(await sendEmailViaJmap(input, deps)).toBe(true);
     expect(submitEmail).toHaveBeenCalledTimes(2);
-    // The retry reuses the same email id — the blob upload and Sent import
+    // The retry reuses the same email id: the blob upload and Sent import
     // already succeeded, so only the submission repeats.
     expect(submitEmail).toHaveBeenNthCalledWith(1, "id-1", "email-1");
     expect(submitEmail).toHaveBeenNthCalledWith(2, "id-1", "email-1");
@@ -183,7 +183,7 @@ describe("sendEmailViaJmap", () => {
     // Ambiguous failure: the first attempt may have been processed with
     // only the response lost. Re-submitting the same email delivers a
     // duplicate (observed: identical Message-IDs in the Inbox). The send
-    // is treated as successful — the expense is saved regardless.
+    // is treated as successful; the expense is saved regardless.
     expect(await sendEmailViaJmap(input, deps)).toBe(true);
     expect(submitEmail).toHaveBeenCalledTimes(1);
   });
@@ -200,7 +200,7 @@ describe("sendEmailViaJmap", () => {
 
   it("retries once when the server explicitly rejected the submission", async () => {
     // An HTTP/JMAP error response means the submission is known not to
-    // exist — the retry is safe and cannot duplicate.
+    // exist, so the retry is safe and cannot duplicate.
     const submitEmail = vi
       .fn()
       .mockRejectedValueOnce(new Error("JMAP API failed: 502 Bad Gateway"))

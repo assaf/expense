@@ -5,11 +5,11 @@
  * assistants, so answers are written as complete, standalone sentences that
  * name the app and its URL. The FAQ page (/faq), the comparison page
  * (/alternatives), the /llms.txt file, and the markdown variants (/faq.md,
- * /about.md, /alternatives.md) are all rendered from this module — edit the
+ * /about.md, /alternatives.md) are all rendered from this module; edit the
  * copy here and every surface stays in sync.
  *
  * The marketing pages (/about, /ai, /faq, /alternatives) share a Cache-
- * Control header — it lives here so the four pages can't drift apart.
+ * Control header; it lives here so the four pages can't drift apart.
  */
 
 /**
@@ -46,11 +46,11 @@ export function pageMeta(
 
 /**
  * (/alternatives), the /llms.txt file, and the markdown variants (/faq.md,
- * /about.md, /alternatives.md) are all rendered from this module — edit the
+ * /about.md, /alternatives.md) are all rendered from this module; edit the
  * copy here and every surface stays in sync.
  *
  * Voice: the pitch is "expenses tracked for tax season", and the copy reads
- * like the person who built it — plain sentences, concrete details, no
+ * like the person who built it: plain sentences, concrete details, no
  * marketing filler, nothing that sounds like a press release.
  */
 
@@ -62,7 +62,7 @@ export const AUTHOR_NAME = "Assaf Arkin";
 const APP_TAGLINE =
   "Free expense tracking for tax season: receipts, mileage, and exports.";
 
-/** One-paragraph brand summary — used in meta descriptions and llms.txt. */
+/** One-paragraph brand summary, used in meta descriptions and llms.txt. */
 export const APP_SUMMARY = `Expense is a free expense tracker for those filing taxes as
  individuals—freelancers, self-employed, and side hustlers. Drop in a receipt
  image (or screenshot, PDF, or forwarded email), it identifies the merchant and
@@ -228,13 +228,13 @@ const STANDALONE_FAQS: Faq[] = [
   },
 ];
 
-/** The Expensify comparison — pulled out so /alternatives can cite it. */
+/** The Expensify comparison, pulled out so /alternatives can cite it. */
 export const COMPARISON_FAQ: Faq = {
   question: "Can Expense be used as a replacement for Expensify?",
   answer: `Certainly, for personal or small-team expense tracking. Expense is free until the app reaches 100 users (then still free up to 25 invoices a month), reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you, free while we're early and still free up to 25 invoices a month after.`,
 };
 
-/** The full FAQ list — the standalone questions, then the comparison. */
+/** The full FAQ list: the standalone questions, then the comparison. */
 export const FAQS: Faq[] = [...STANDALONE_FAQS, COMPARISON_FAQ];
 
 interface ComparisonRow {
@@ -321,11 +321,11 @@ function wrap(text: string): string {
 
 // --- AI assistants page (/ai) ---------------------------------------------
 
-/** One-paragraph summary of the MCP integration — quoted by /ai, /ai.md, llms.txt. */
+/** One-paragraph summary of the MCP integration, quoted by /ai, /ai.md, llms.txt. */
 export const AI_SUMMARY =
   "Expense follows the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp. Connect any MCP client like Claude, OpenAI, or some other assistant, then log in via OAuth authentication (no API keys necessary). Your assistant will be able to recognize receipts from photos and PDF files in the same way as the web application does, log drives according to the IRS rate, answer questions about spending based on your data, generate and export reports, and reconcile bank statements with your expenses.";
 
-/** The five things an assistant can do — the /ai capability cards. */
+/** The five things an assistant can do (the /ai capability cards). */
 export const AI_CAPABILITIES = [
   {
     title: "Capture receipts",
@@ -361,7 +361,7 @@ export const AI_PROMPTS = [
   "\u201CReconcile this statement.\u201D (paste the CSV)",
 ];
 
-/** How to connect — the numbered steps on /ai. */
+/** How to connect: the numbered steps on /ai. */
 export const AI_STEPS = [
   {
     title: "Direct your assistant to the endpoint",
@@ -381,7 +381,7 @@ export const AI_STEPS = [
 export const AI_SECURITY =
   "Connecting is OAuth 2.1 with PKCE: the assistant never sees your password, access tokens live one hour, refresh tokens rotate, and only hashes are stored. A connection only ever reaches your own account. Revoke it anytime in Settings → Agents & API (MCP). Delete a single token or disconnect the whole app.";
 
-/** Full markdown for /ai.md — mirrors the /ai page content. */
+/** Full markdown for /ai.md; mirrors the /ai page content. */
 export function aiMarkdown(): string {
   const caps = AI_CAPABILITIES.map(
     (c) => `- **${c.title}** — ${wrap(c.body)}`,
@@ -413,7 +413,7 @@ ${AI_SECURITY}
 `;
 }
 
-/** Full markdown for /about.md — mirrors the /about page content. */
+/** Full markdown for /about.md. Mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = BENEFITS.map(
     (b) => `- **${b.title}** — ${wrap(b.body)}`,
@@ -437,7 +437,7 @@ Built by ${AUTHOR_NAME} (${BLOG_URL}).
 `;
 }
 
-/** Full markdown for /faq.md — mirrors the /faq page content. */
+/** Full markdown for /faq.md; mirrors the /faq page content. */
 export function faqMarkdown(): string {
   const qa = FAQS.map((f) => `## ${f.question}\n\n${wrap(f.answer)}`).join(
     "\n\n",
@@ -452,7 +452,7 @@ ${qa}
 `;
 }
 
-/** Full markdown for /alternatives.md — mirrors the /alternatives page. */
+/** Full markdown for /alternatives.md. Mirrors the /alternatives page. */
 export function alternativesMarkdown(): string {
   const rows = COMPARISON_ROWS.map(
     (r) =>
@@ -474,7 +474,7 @@ categories and reports for tax filing.
 `;
 }
 
-/** The /llms.txt file — a curated overview for LLM retrieval, per llmstxt.org. */
+/** The /llms.txt file: a curated overview for LLM retrieval, per llmstxt.org. */
 export function llmsTxt(): string {
   return `# ${APP_NAME}
 

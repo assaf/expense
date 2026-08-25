@@ -1,7 +1,7 @@
 /**
  * Seed the test database (expense_test) with two accounts, three users, and
  * known expenses/reports/categories/settings. Requires Postgres running
- * locally — the schema is created by `pnpm test:db:push` (globalSetup ensures
+ * locally (the schema is created by `pnpm test:db:push`; globalSetup ensures
  * it before seeding). Idempotent: replaces all rows on each call. Foreign
  * keys cascade, so deleting accounts wipes everything.
  */
@@ -13,7 +13,7 @@ import { hashPassword } from "~/lib/passwords";
 export const TEST_DB_URL = "postgres://assaf@localhost/expense_test";
 
 /**
- * Test-only Prisma client pinned to expense_test — never inherits the
+ * Test-only Prisma client pinned to expense_test; never inherits the
  * process DATABASE_URL (which may point at the dev database).
  */
 export const testPrisma = new PrismaClient({
@@ -26,11 +26,11 @@ export const testPrisma = new PrismaClient({
   }),
 });
 
-/** Test account — the default login (testuser) belongs here. */
+/** Test account: the default login (testuser) belongs here. */
 export const TEST_ACCOUNT_ID = "acct_test1";
 export const TEST_INVITE_CODE = "TESTCODE1";
 
-/** Second account — used to prove data isolation between accounts. */
+/** Second account, used to prove data isolation between accounts. */
 export const OTHER_ACCOUNT_ID = "acct_test2";
 
 /** Test login credentials (matches the seeded testuser row). */
@@ -68,7 +68,7 @@ export async function seedTestData() {
         accountId: TEST_ACCOUNT_ID,
         email: TEST_EMAIL,
         passwordHash: await hashPassword(TEST_PASSWORD),
-        // Seeded users are pre-verified — the signup flows under test verify
+        // Seeded users are pre-verified; the signup flows under test verify
         // through the emailed-link route instead.
         emailVerifiedAt: now,
         createdAt: now,
@@ -248,6 +248,6 @@ export async function seedTestData() {
     })),
   });
 
-  // Mileage expenses live entirely in the expenses table — the derived
+  // Mileage expenses live entirely in the expenses table; the derived
   // mileage table was dropped.
 }

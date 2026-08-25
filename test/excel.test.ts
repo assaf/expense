@@ -6,7 +6,7 @@ import { parseStatementUpload } from "~/lib/reconcile.server";
 /**
  * parseXlsxSheets must turn real Excel date cells (serial numbers with a
  * date number-format) into ISO dates instead of leaking the raw serial.
- * The fixtures here are built by hand — fflate zips the OOXML parts — so a
+ * The fixtures here are built by hand (fflate zips the OOXML parts), so a
  * date column can be exercised without shipping a binary fixture.
  */
 

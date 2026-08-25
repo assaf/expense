@@ -2,7 +2,7 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 // errors.server imports @sentry/react-router, which drags in
-// @opentelemetry/api — broken under vite-node's ESM resolution. Mock the
+// @opentelemetry/api, broken under vite-node's ESM resolution. Mock the
 // Sentry module; captureError only reaches Sentry when isInitialized() is
 // true, so the dedupe logic under test is unaffected.
 vi.mock("@sentry/react-router", () => ({
@@ -103,7 +103,7 @@ describe("Completeness", () => {
   });
 
   it("a receipt with all fields but no image is complete", () => {
-    // The image is not a completeness factor — the badge tracks the data
+    // The image is not a completeness factor; the badge tracks the data
     // fields only.
     expect(isReceiptComplete(makeReceipt({ imageFile: "" }))).toBe(true);
   });
@@ -168,7 +168,7 @@ describe("Format helpers", () => {
 
   it("builds mileage merchant label", () => {
     expect(mileageMerchant("32.00", "0.70")).toBe("32.00 mi @ $0.70 / mi");
-    // No rate configured for the year — the distance still shows.
+    // No rate configured for the year, but the distance still shows.
     expect(mileageMerchant("32.00", "")).toBe("32.00 mi");
     expect(mileageMerchant("", "0.70")).toBe("");
   });
@@ -247,7 +247,7 @@ describe("Decimal money math", () => {
   });
 
   it("multiplies with exact decimal precision", () => {
-    // 122.15 × 0.70 = 85.505 — exactly.
+    // 122.15 × 0.70 = 85.505, exactly.
     const product = new Decimal("122.15").mul("0.70");
     expect(product.toString()).toBe("85.505");
   });
@@ -314,7 +314,7 @@ describe("geocode canonicalization", () => {
     expect(result.lat).toBe(37.4224);
     expect(result.lng).toBe(-122.0841);
     // Street + city copied from the geocoded match, state abbreviated, and
-    // the US country dropped (it's the default) — never the typed shorthand.
+    // the US country dropped (it's the default), never the typed shorthand.
     expect(result.address).toBe("1600 Amphitheatre Parkway, Mountain View, CA");
   });
 
@@ -343,7 +343,7 @@ describe("geocode canonicalization", () => {
   });
 
   it("keeps the typed house number when the geocoder matches only the street", async () => {
-    // Nominatim has no address point for "50 W 3rd Street" — the top match
+    // Nominatim has no address point for "50 W 3rd Street"; the top match
     // is the road itself, with no house_number. The user's number must not
     // be dropped.
     vi.stubGlobal(
@@ -448,7 +448,7 @@ describe("geocode canonicalization", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await geocode("Los Angeles CA");
-    // The city's own name + abbreviated state — never the county it sits in.
+    // The city's own name + abbreviated state, never the county it sits in.
     expect(result.address).toBe("Los Angeles, CA");
     expect(result.lat).toBe(34.0537);
     // addressdetails=1 is what makes the structured city/state/country come
@@ -555,7 +555,7 @@ describe("recomputeMileage locality hint", () => {
   });
 
   it("leaves a city-only query alone (no locality appended)", async () => {
-    // The geocoder only knows the plain query — a city name — and must not
+    // The geocoder only knows the plain query (a city name) and must not
     // have "Los Angeles, CA" appended (that would point it at a place named
     // "New York" inside LA County).
     const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
@@ -656,13 +656,13 @@ describe("recomputeMileage locality hint", () => {
       [LA, { address: "123 Main St", lat: null, lng: null }],
       "0.70",
     );
-    // The LA lookup failed — the San Francisco result is kept rather than
+    // The LA lookup failed, so the San Francisco result is kept rather than
     // guessing or dropping the address.
     expect(r.locations[1]!.address).toBe("123 Main St, San Francisco, CA");
   });
 
   it("skips the hinted retry when the plain result is already near the previous stop", async () => {
-    // The plain query already resolves in/near Los Angeles — no second
+    // The plain query already resolves in/near Los Angeles, so no second
     // Nominatim call is made (the 50km short-circuit).
     const fetchMock = vi.fn().mockImplementation(async (url: string | URL) => {
       const href = String(url);
@@ -829,7 +829,7 @@ describe("recomputeMileage money math", () => {
       [A, { address: "Unknown Place", lat: null, lng: null }],
       "0.70",
     );
-    // The geocode failure doesn't crash — the bad address is kept as-is
+    // The geocode failure doesn't crash: the bad address is kept as-is
     // with null coordinates.
     expect(r.locations[1]!.address).toBe("Unknown Place");
     expect(r.locations[1]!.lat).toBeNull();
@@ -992,7 +992,7 @@ describe("route map rendering (report PDF)", () => {
   }
 
   /** A solid 256×256 tile so tests stay offline (the renderer is given a
-   * fake tile fetcher — the real one hits the Carto basemap). Violet — no
+   * fake tile fetcher; the real one hits the Carto basemap). Violet: no
    * color in the schematic fallback or the route is anywhere near it, so
    * tile pixels are unambiguous. */
   async function tilePng(): Promise<Buffer> {
@@ -1136,7 +1136,7 @@ describe("password hashing (scrypt)", () => {
     await expect(
       verifyPassword("x", "$scrypt$N=65536,r=8,p=1$salt$hash"),
     ).resolves.toBe(false);
-    // N=3 is not a power of two — garbage params fail closed.
+    // N=3 is not a power of two; garbage params fail closed.
     await expect(
       verifyPassword("x", "$scrypt$N=3,r=8,p=1$AAAA$AAAA"),
     ).resolves.toBe(false);
@@ -1153,7 +1153,7 @@ describe("captureErrorOnce", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       // The stream onError fires first, then renderToReadableStream rejects
-      // with the same object and handleError forwards it again — the second
+      // with the same object and handleError forwards it again, so the second
       // report must be a no-op.
       captureErrorOnce(error, { url: "/expense/1" });
       captureErrorOnce(error, { url: "/expense/1", method: "GET" });

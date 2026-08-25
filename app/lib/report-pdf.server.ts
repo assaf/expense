@@ -12,7 +12,7 @@ import { renderRouteMap } from "~/lib/route-map.server";
 import type { Expense, MileageExpense } from "~/lib/types";
 
 /**
- * Build the PDF for one report — the same layout the /export/report/:name
+ * Build the PDF for one report, the same layout the /export/report/:name
  * download uses, extracted so the MCP `export_report` tool can reuse it.
  *
  * Grouped by category (chronological within each), with a receipts image
@@ -48,7 +48,7 @@ export async function buildReportPdf(
   doc.fillColor("#111827");
 
   // Group by category (expenses with no category under "No category"),
-  // chronological within each group — every expense in the report appears.
+  // chronological within each group; every expense in the report appears.
   const NO_CATEGORY = "No category";
   const categoryOf = (e: Expense) => e.category || NO_CATEGORY;
   const categories = uniqueSorted(inReport.map(categoryOf));
@@ -165,7 +165,7 @@ export async function buildReportPdf(
     doc.moveDown(0.5);
     let firstItem = true;
     const pageForNext = () => {
-      // One item per page — but no trailing blank page after the last.
+      // One item per page, but no trailing blank page after the last.
       if (!firstItem) doc.addPage();
       firstItem = false;
     };
@@ -198,7 +198,7 @@ export async function buildReportPdf(
       const textX = 50 + mapW + 16;
       const textW = 512 - textX;
       // doc.image with an explicit y does NOT advance doc.y, and the field
-      // text calls reset it too — position the stops below the map
+      // text calls reset it too; position the stops below the map
       // explicitly so they land under it, not on top of it.
       const mapTop = doc.y;
       doc.image(map, 50, mapTop, { fit: [mapW, mapH] });
@@ -222,7 +222,7 @@ export async function buildReportPdf(
       doc.fillColor("#111827");
       doc.y = mapTop + mapH;
 
-      // The trip's stops, in route order, under the map (no header — the
+      // The trip's stops, in route order, under the map (no header; the
       // placement makes it obvious they belong to the trip).
       const locations = e.locations
         .map((l) => l.address.trim())

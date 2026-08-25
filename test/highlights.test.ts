@@ -72,7 +72,7 @@ describe("feature highlights", () => {
     const unconnectedPool = availableHighlights(EMPTY); // includes connect-email
     const connectedPool = availableHighlights(FULL); // does not
     // Deterministic RNG: the odds test must never depend on the ambient
-    // randomness of Math.random (a 200-trial share can land ~2.6σ low — this
+    // randomness of Math.random (a 200-trial share can land ~2.6σ low; this
     // flaked in CI at 0.285 vs a 0.333 threshold). Seeded, it always passes.
     const random = mulberry32(0x5eed);
     const seen: HighlightId[] = [];
@@ -87,7 +87,7 @@ describe("feature highlights", () => {
     }
     const connectShare =
       seen.filter((h) => h === "connect-email").length / seen.length;
-    // 3 copies out of (pool size + 2) — roughly 3x the base share.
+    // 3 copies out of (pool size + 2), roughly 3x the base share.
     const baseShare = 1 / unconnectedPool.length;
     expect(connectShare).toBeGreaterThan(baseShare * 2);
   });

@@ -3,16 +3,16 @@ import { looksLikeReceiptEmail } from "~/lib/email-classify";
 
 /**
  * Infer candidate GENERAL email rules from a connected inbox: senders whose
- * mail consistently looks like receipts. Read-only — it never mutates the
+ * mail consistently looks like receipts. Read-only: it never mutates the
  * mailbox; the script (scripts/infer-email-rules.ts) decides what to apply.
  *
  * NOT wired into any cron or webhook on purpose: general rules apply to
  * every user, so an operator reviews the candidates and applies them
- * deliberately (`--apply`). Everything here must stay offline-cheap —
+ * deliberately (`--apply`). Everything here must stay offline-cheap:
  * subject + preview regex only, no LLM, no full-body fetches.
  */
 
-/** Mail domains that must never become rules (personal mail providers —
+/** Mail domains that must never become rules (personal mail providers;
  * rules on them would import half the internet's forwarded mail). Exported
  * for the review flow's sender-acceptance (same policy: a rule is the
  * domain, or the exact address for freemail senders). */
@@ -90,7 +90,7 @@ function domainOf(address: string): string | null {
 /**
  * Scan the Inbox's recent mail and score senders by receipt-likeness.
  * Uses Email/query (Inbox, after the lookback) + Email/get with `preview`
- * — the first ~50 words of the body, enough signal for the local
+ * (the first ~50 words of the body), enough signal for the local
  * classifier without downloading full messages.
  */
 export async function inferRuleCandidates(

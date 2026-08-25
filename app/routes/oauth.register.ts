@@ -4,7 +4,7 @@ import { registerOAuthClient } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.register";
 
 /**
- * GET /oauth/register — not a valid endpoint. RFC 7591 only defines POST
+ * GET /oauth/register is not a valid endpoint. RFC 7591 only defines POST
  * for client registration. Return 405 so React Router doesn't throw
  * getInternalRouterError.
  */
@@ -13,7 +13,7 @@ export function loader(): Response {
 }
 
 /**
- * POST /oauth/register — dynamic client registration (RFC 7591). MCP clients
+ * POST /oauth/register: dynamic client registration (RFC 7591). MCP clients
  * call this once and keep the returned client_id; the response includes a
  * client_secret only for `client_secret_basic` (confidential) registrations.
  * PKCE clients register with `token_endpoint_auth_method: "none"`.

@@ -7,14 +7,14 @@ import { ocrImage } from "~/lib/receipt-ocr.server";
  * Receipt-image OCR fixtures. Each PNG in test/fixtures/images/ is a receipt
  * text sheet rendered by `renderReceiptImage` (the app's own email-receipt
  * renderer), paired with a `<name>.yaml` carrying the receipt's ground truth:
- * `date,amount,merchant,text` — the printed date, total, and merchant name
+ * `date,amount,merchant,text`, which holds the printed date, total, and merchant name
  * plus the full receipt text. This test OCRs each image with the real
  * tesseract pipeline (`ocrImage`) and asserts the recognized text recovers
  * the date, amount, merchant, and the full receipt text.
  *
  * Skipped unless RUN_OCR_TESTS=1: tesseract downloads eng.traineddata from a
  * CDN on first run (network + a few seconds), so it's opt-in locally and on
- * in CI — the same gate as pdf-ocr.test.ts. Comparison runs on text
+ * in CI, the same gate as pdf-ocr.test.ts. Comparison runs on text
  * normalized to [A-Z0-9] (case/spacing/punctuation-insensitive) because OCR
  * output never reproduces whitespace and separator lines exactly.
  */

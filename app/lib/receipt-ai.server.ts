@@ -15,7 +15,7 @@ import {
 import { normalizeAmount } from "~/lib/format";
 
 /**
- * Receipt data extraction via an OpenAI-compatible chat-completions API —
+ * Receipt data extraction via an OpenAI-compatible chat-completions API,
  * DeepSeek by default (base URL + key + model configurable via env; see
  * env.ts). DeepSeek-only request params are emitted only against the
  * DeepSeek endpoint, so pointing LLM_BASE_URL at any other provider works.
@@ -32,13 +32,13 @@ import { normalizeAmount } from "~/lib/format";
  */
 
 interface ExtractionInput {
-  /** Scoped cache key — extraction results are per-account. */
+  /** Scoped cache key: extraction results are per-account. */
   accountId: string;
   text?: string;
   image?: { buffer: Buffer; mime: string };
-  /** Existing category names — the model picks the closest one or "". */
+  /** Existing category names; the model picks the closest one or "". */
   categories?: string[];
-  /** Existing report names — the model picks the closest one or "". */
+  /** Existing report names (the model picks the closest one or ""). */
   reports?: string[];
 }
 
@@ -93,8 +93,8 @@ export function matchKnownMerchant(
   return best?.merchant ?? null;
 }
 
-/** Key must not be flanked by letters/digits — "amc" must not match
- * "camcorder" — but punctuation and whitespace are fine boundaries. */
+/** The key must not be flanked by letters/digits ("amc" must not match
+ * "camcorder"); punctuation and whitespace are fine boundaries. */
 function isWordBounded(text: string, start: number, end: number): boolean {
   const before = start === 0 ? "" : text[start - 1]!;
   const after = end >= text.length ? "" : text[end]!;
@@ -186,7 +186,7 @@ function amountsOnLine(line: string): Array<{
  * Deterministic total extraction for the LLM-skip path: prefer an explicit
  * "total"/"amount due" line (either decimal convention, symbol or code
  * before or after), else the last currency-marked amount not on a
- * tip/change line. Returns null when nothing is trustworthy — the caller
+ * tip/change line. Returns null when nothing is trustworthy; the caller
  * then falls through to the LLM. Refund/credit receipts (negative
  * amounts) never match and are left to the model.
  */
@@ -196,8 +196,8 @@ export function parseReceiptAmount(text: string): {
 } | null {
   if (!text) return null;
   const lines = text.split("\n");
-  // Pass 1: an explicit total/amount line — take the amount closest to the
-  // keyword so "Subtotal: $38.00 — TOTAL: $42.50" picks the total.
+  // Pass 1: an explicit total/amount line. Take the amount closest to the
+  // keyword, so "Subtotal: $38.00 — TOTAL: $42.50" picks the total.
   for (const line of lines) {
     if (!TOTAL_LINE.test(line)) continue;
     const keywordIndex = line.match(TOTAL_LINE)?.index ?? 0;
@@ -234,7 +234,7 @@ export function parseReceiptAmount(text: string): {
  * Full extraction without any model call: the receipt text names a known
  * merchant and a total amount, so merchant/category/report come from the
  * account's own history and the amount is parsed deterministically. Returns
- * null when either is missing or ambiguous — callers then run the LLM.
+ * null when either is missing or ambiguous; callers then run the LLM.
  */
 export function tryKnownMerchantExtraction(
   text: string,
@@ -258,7 +258,7 @@ export function tryKnownMerchantExtraction(
   };
 }
 
-/** Curated display names for the general-rule senders — the merchants a
+/** Curated display names for the general-rule senders: the merchants a
  * fresh mailbox is most likely to see first, before any expense history
  * exists. Falls back to a title-cased leftmost domain label for anything
  * else (learned/inferred rules on senders without a curated name). */
@@ -303,7 +303,7 @@ export function parseReceiptRef(subject: string, body: string): string {
   return mb ? `#${mb[1]}` : "";
 }
 
-/** The account/company name on a bill — Shopify bills say "Account billed
+/** The account/company name on a bill. Shopify bills say "Account billed
  * <name>" followed by the account email (or a newline). The capture stops
  * at an email-looking token or a newline; with no boundary the layout
  * columns run together, so we capture nothing rather than guess. */
@@ -313,15 +313,15 @@ export function parseAccountBilled(text: string): string {
   return ACCOUNT_BILLED_RE.exec(text ?? "")?.[1]?.trim() ?? "";
 }
 
-/** Apple subscription renewal line: "Renews <Month> <day>[,] <year>" —
- * "Renews September 12, 2026" or "Renews September 11,2026". One-time
+/** Apple subscription renewal line: "Renews <Month> <day>[,] <year>"
+ * ("Renews September 12, 2026" or "Renews September 11,2026"). One-time
  * App Store purchases have no renewal line. */
 const APPLE_RENEWS_RE =
   /^\s*Renews\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s*\d{4}/i;
 
 /** The product/plan line on an Apple subscription receipt: the non-empty
- * line immediately above the "Renews <Month> <year>" line — e.g. "iCloud+
- * with 2 TB (Monthly)" or "Viki Pass Standard (Monthly)". Apple's renewal
+ * line immediately above the "Renews <Month> <year>" line (e.g. "iCloud+
+ * with 2 TB (Monthly)" or "Viki Pass Standard (Monthly)"). Apple's renewal
  * emails name the plan there; returns "" when there is no renewal line
  * (one-time purchases) or the text doesn't parse. */
 export function parseApplePlanName(text: string): string {
@@ -348,10 +348,10 @@ export function isAppleReceipt(subject: string, text: string): boolean {
 }
 
 /** The local-only expense description: the receipt/bill reference plus the
- * billed account when present — e.g. "#576523939 — ZHED Media LLC" — so the
- * user can tell which expense came from which bill. Apple receipts carry
- * neither (their order id has no "#", and there is no "Account billed"
- * line), so for those the product/plan name is added instead. */
+ * billed account when present, so the user can tell which expense came
+ * from which bill. Apple receipts carry neither (their order id has no
+ * "#", and there is no "Account billed" line), so for those the
+ * product/plan name is added instead. */
 export function composeLocalDescription(subject: string, text: string): string {
   const parts = [parseReceiptRef(subject, text), parseAccountBilled(text)];
   if (isAppleReceipt(subject, text)) {
@@ -364,7 +364,7 @@ export function composeLocalDescription(subject: string, text: string): string {
 /** Local-only extraction chain shared by the body and PDF-text paths of
  * the connected flow: prefer a known merchant (a repeat), else name a
  * first-time merchant from the rule sender. Null when no total parses
- * locally — the caller skips (the email stays in the Inbox). On success
+ * locally; the caller then skips (the email stays in the Inbox). On success
  * the description carries the receipt/bill reference + billed account. */
 export function tryLocalExtraction(
   text: string,
@@ -382,10 +382,10 @@ export function tryLocalExtraction(
 
 /** Local extraction for a FIRST-TIME merchant matched by a general rule:
  * the merchant name comes from the rule sender domain (no prior expense
- * history needed), the total from parseReceiptAmount. Category is "" — the
+ * history needed), the total from parseReceiptAmount. Category is "": the
  * completeness badge prompts the user to set it once, after which the
  * known-merchant path carries it forward. Returns null when no total can
- * be parsed locally (refunds, no explicit total, unusual layout) — callers
+ * be parsed locally (refunds, no explicit total, unusual layout); callers
  * then skip the email (never fall through to the model in the connected
  * flow). Confidence is "medium": the merchant is inferred from the sender,
  * not read off the receipt. */
@@ -447,7 +447,7 @@ The user message contains third-party receipt content inside <<<RECEIPT>>> marke
 
 /**
  * Cap the receipt text sent to the model. A receipt's key fields sit at the
- * extremes — merchant/date at the top, tax/total at the bottom — so keep
+ * extremes (merchant/date at the top, tax/total at the bottom), so keep
  * both ends and drop the middle line items. Only binds on pathological
  * input (noisy OCR, very long PDFs/email bodies); a normal receipt passes
  * through untouched.
@@ -467,7 +467,7 @@ function limitReceiptText(text: string): string {
 const MAX_CONTEXT_LIST_CHARS = 800;
 
 /** An account's existing category/report names, capped at a character
- * budget — with many names the tail adds tokens without improving the
+ * budget: with many names the tail adds tokens without improving the
  * match. Keeps whole names (never truncates mid-name) and says how many
  * were dropped. */
 function capNameList(names: string[]): string {
@@ -487,7 +487,7 @@ function capNameList(names: string[]): string {
 
 /** Fence markers around the untrusted receipt content in the prompt, so a
  * crafted receipt can't pose as instructions to the model. The markers are
- * stripped from the payload itself — injected text can't close the fence
+ * stripped from the payload itself, so injected text can't close the fence
  * early. */
 const RECEIPT_FENCE_START = "<<<RECEIPT>>>";
 const RECEIPT_FENCE_END = "<<</RECEIPT>>>";
@@ -521,10 +521,10 @@ async function chatCompletion(
   opts: {
     json?: boolean;
     image?: { buffer: Buffer; mime: string };
-    /** Output token cap — per call site, sized to that call's real answer. */
+    /** Output token cap, sized per call site to that call's real answer. */
     maxTokens?: number;
 
-    /** Model override — vision calls use `LLM_VISION_MODEL` (a reasoning
+    /** Model override: vision calls use `LLM_VISION_MODEL` (a reasoning
      * model may differ from the text model). Defaults to `LLM_MODEL`. */
     model?: string;
     /** False suppresses the DeepSeek `thinking` param for providers that
@@ -550,7 +550,7 @@ async function chatCompletion(
   }
   // DeepSeek-specific: JSON mode + disabled thinking. Other providers get
   // JSON mode too (OpenAI-compatible), but no `thinking` param. Disabling
-  // thinking matters for the vision-exp reasoning model — with it on, the
+  // thinking matters for the vision-exp reasoning model; with it on, the
   // budget burns on reasoning_content (empty content at low max_tokens).
   const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
   const providerLabel = isDeepSeek
@@ -630,7 +630,7 @@ function confidenceField(v: unknown): Confidence {
 
 /** Extract structured receipt data from text and/or an image. The LLM call
  * is skipped when (a) the input matches a freshly cached extraction for
- * this account, or (b) — for text inputs — the text names a known merchant
+ * this account, or (b), for text inputs, the text names a known merchant
  * with a parseable total (see tryKnownMerchantExtraction). */
 export async function extractReceipt(
   input: ExtractionInput,
@@ -667,7 +667,7 @@ export async function extractReceipt(
 }
 
 /** Output bounds: cap the model's free-text fields so a steered response
- * can't dump arbitrary content — or the prompt's account context — into
+ * can't dump arbitrary content, or the prompt's account context, into
  * persisted expense data and confirmation emails. A receipt's real values
  * never approach these caps. */
 const MAX_MERCHANT_CHARS = 120;
@@ -738,7 +738,7 @@ export function matchCategory(suggested: string, existing: string[]): string {
 
 /**
  * Pick the category for a new receipt. A previous expense for the same
- * merchant (normalized name match, same rule as duplicate detection) wins —
+ * merchant (normalized name match, same rule as duplicate detection) wins:
  * the merchant was already categorized, so its category is reused instead of
  * guessed. Without a prior category, the model's suggestion is mapped onto
  * an existing category name ("" when nothing fits).
@@ -761,7 +761,7 @@ export function resolveCategory(
 
 /**
  * Pick the report for a new receipt. A previous expense for the same
- * merchant (normalized name match, last 90 days) wins — the merchant was
+ * merchant (normalized name match, last 90 days) wins: the merchant was
  * already filed to a report. Without a prior report, the model's suggestion
  * is mapped onto an existing report name ("" when nothing fits).
  */

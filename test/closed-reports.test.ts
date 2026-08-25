@@ -83,7 +83,7 @@ describe("Closed reports", () => {
   it("does not offer closed reports in the expense editor", async () => {
     const editor = await goto("/expense/exp_openq3");
     const reportSelect = editor.locator("select").first();
-    // Options inside a closed <select> are never "visible" to Playwright —
+    // Options inside a closed <select> are never "visible" to Playwright,
     // assert on presence instead.
     await expect(
       reportSelect.locator("option", { hasText: "2026 Test" }),
@@ -95,7 +95,7 @@ describe("Closed reports", () => {
   });
 
   it("shows a closed-report expense as read-only with no Save button", async () => {
-    // The expense lives in a closed report; the editor must be read-only —
+    // The expense lives in a closed report; the editor must be read-only:
     // fields are disabled and the Save button is not rendered.
     const editor = await goto("/expense/exp_closedq3");
     const reportSelect = editor.locator("select").first();

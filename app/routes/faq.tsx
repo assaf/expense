@@ -8,7 +8,7 @@ import {
 } from "~/lib/seo-content";
 import type { Route } from "./+types/faq";
 
-/** FAQPage structured data — the primary signal for FAQ-style AI answers. */
+/** FAQPage structured data: the primary signal for FAQ-style AI answers. */
 const FAQ_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "FAQPage",

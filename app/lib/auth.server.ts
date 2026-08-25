@@ -42,8 +42,8 @@ import type { User } from "./types";
 /**
  * Multi-user access control. Users live in Postgres (accounts + users
  * tables); the session is a signed HttpOnly cookie holding the user id
- * (SESSION_SECRET). Every protected route resolves the user — and therefore
- * the account — before touching any data, so users only ever see their own
+ * (SESSION_SECRET). Every protected route resolves the user (and therefore
+ * the account) before touching any data, so users only ever see their own
  * account's expenses/settings.
  *
  * The very first user/account is bootstrapped from APP_EMAIL /
@@ -82,7 +82,7 @@ export async function requireUser(request: Request): Promise<User> {
     typeof userId === "string" ? await findUserById(userId) : undefined;
   if (!user) {
     const url = new URL(request.url);
-    // Loader fetches arrive as /path.data — redirect back to the real page
+    // Loader fetches arrive as /path.data; redirect back to the real page
     // so the post-login bounce (safeNext) lands on the route, not its data.
     const pathname = url.pathname.endsWith(".data")
       ? url.pathname.slice(0, -5)
@@ -175,7 +175,7 @@ async function guardLockout(key: string): Promise<void> {
 /**
  * Reject a state-changing POST whose Origin is another site (login CSRF).
  * SameSite=Lax stops cross-site POSTs from CARRYING the session cookie,
- * but the browser still processes a Set-Cookie on the response — so the
+ * but the browser still processes a Set-Cookie on the response, so the
  * session-creating actions (login, signup, onboarding, reset-request) must
  * verify the request actually came from this app. Requests without an
  * Origin header (curl, server-to-server) are allowed: they carry no
@@ -188,7 +188,7 @@ export function rejectCrossSitePost(request: Request): void {
   try {
     originUrl = new URL(origin);
   } catch {
-    // Unparseable Origin — treat as foreign rather than guess.
+    // Unparseable Origin: treat as foreign rather than guess.
     throw new Response("Cross-site request blocked", { status: 403 });
   }
   if (originUrl.origin !== new URL(request.url).origin) {
@@ -202,8 +202,8 @@ function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 }
 /**
- * Per-IP guard for unauthenticated actions (signup/join/resend, and —
- * with scope "signin" — the sign-in path, which otherwise has no per-IP
+ * Per-IP guard for unauthenticated actions (signup/join/resend, and
+ * with scope "signin" the sign-in path, which otherwise has no per-IP
  * bound and lets one IP force unlimited scrypt derivations or trip the
  * per-email lockout of any account). Every attempt counts: five inside 15
  * minutes lock the IP for 15 minutes. The key is scoped to the path AND
@@ -225,7 +225,7 @@ export async function guardAnonymousAction(
 }
 
 /** Count one anonymous attempt (call after guardAnonymousAction, success or
- * failure — the cap is on work, not on outcomes). */
+ * failure; the cap is on work, not on outcomes). */
 export async function recordAnonymousAttempt(
   request: Request,
   scope = "",
@@ -279,7 +279,7 @@ export async function login(
     throw new EmailNotVerifiedError(user.email);
   }
   // Re-derive with the current scrypt cost when the stored hash used older
-  // parameters (legacy `salt:hash` rows or an older cost factor) — a
+  // parameters (legacy `salt:hash` rows or an older cost factor), a
   // one-time cost on the next successful sign-in.
   if (needsRehash(stored)) {
     await updateUserPasswordHash(user.id, await hashPassword(password));
@@ -290,7 +290,7 @@ export async function login(
 
 /**
  * Create a new account with its first user and return the pending signup
- * state — the user is NOT logged in until the emailed verification link is
+ * state: the user is NOT logged in until the emailed verification link is
  * clicked. If an earlier signup with the same email is still unverified it
  * is discarded (account, old verification link) and replaced by this one.
  * Throws with a user-facing message on invalid input or a verified email
@@ -321,7 +321,7 @@ export async function createAccountWithUser(
  * Join an existing account via its invite code. Like signup, the new user
  * must verify their email before signing in; an earlier unverified user
  * with the same email is discarded and replaced. Returns the pending
- * signup state — never a session. Throws with a user-facing message on a
+ * signup state, never a session. Throws with a user-facing message on a
  * bad code or duplicate verified email.
  */
 export async function joinAccountWithInviteCode(
@@ -379,7 +379,7 @@ async function replaceUnverifiedSignup(email: string): Promise<void> {
  * + store the verification token, ensure the default receipts-by-email
  * sender, and email the verification link. The account must already exist
  * and the email must be free (see replaceUnverifiedSignup). Returns the
- * pending signup's email — never a session.
+ * pending signup's email (never a session).
  */
 async function createPendingUser(input: {
   accountId: string;
@@ -443,7 +443,7 @@ export async function resendAccountVerification(
  * Email a single-use password-reset link for a verified account. The
  * response is the same whether or not the account exists (no account
  * enumeration); a reset already sent within the last day is not re-sent
- * (the recipient checks their inbox). Unverified accounts are skipped —
+ * (the recipient checks their inbox). Unverified accounts are skipped;
  * they can't sign in anyway (the verification link is the recovery).
  * Never throws: email failures are logged inside the send path.
  */
@@ -489,7 +489,7 @@ export async function resetPasswordWithToken(
   password: string,
 ): Promise<{ email: string }> {
   await initStore();
-  // Same password contract as signup — check BEFORE the token is consumed,
+  // Same password contract as signup: check BEFORE the token is consumed,
   // so a bad password doesn't burn a live link.
   if (password.length < 8) {
     throw new Error("Password must be at least 8 characters");

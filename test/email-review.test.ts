@@ -156,7 +156,7 @@ function fakeAdapter(
 }
 
 async function cleanupConnection() {
-  // emailAddress is globally unique — clear by address, not id.
+  // emailAddress is globally unique: clear by address, not id.
   const rows = await testPrisma.emailConnection.findMany({
     where: { emailAddress: "mailbox@example.com" },
     select: { id: true },
@@ -273,7 +273,7 @@ describe("scanConnectionInbox", () => {
     expect(result.added).toBe(2);
     expect(result.pending).toBe(2);
     expect(result.finished).toBe(true);
-    expect(result.atCap).toBe(false); // small mailbox — everything was scanned
+    expect(result.atCap).toBe(false); // small mailbox: everything was scanned
     // One bounded query: the 50 most recent emails, newest first.
     expect(queries).toEqual([{ limit: 50, descending: true }]);
 
@@ -296,7 +296,7 @@ describe("scanConnectionInbox", () => {
     expect(await logRow(conn.id, "e2")).toBeNull();
 
     // Both candidates are on the list (newest-first; same receivedAt here,
-    // so tie order is unspecified — compare as a set).
+    // so tie order is unspecified; compare as a set).
     expect(items.map((i) => i.emailId).sort()).toEqual(["e1", "e3"]);
 
     // The scan stamped reviewScannedAt.
@@ -407,7 +407,7 @@ describe("scanConnectionInbox", () => {
       ],
     });
     // Even though every email here looks like a receipt, the ignored reasons
-    // are decisive — the scan must not re-offer them.
+    // are decisive: the scan must not re-offer them.
     const { adapter } = fakeAdapter(
       new Map([
         [
@@ -499,7 +499,7 @@ describe("scanConnectionInbox", () => {
   });
 
   it("examines at most 50 emails per scan pass", async () => {
-    // 60 receipt-like emails — the adapter honors the limit, so only the
+    // 60 receipt-like emails; the adapter honors the limit, so only the
     // most recent 50 are examined; the scan stays bounded and fast.
     const emails = new Map<
       string,
@@ -524,7 +524,7 @@ describe("scanConnectionInbox", () => {
     expect(result.scanned).toBe(50);
     expect(result.added).toBe(50);
     expect(result.pending).toBe(50);
-    expect(result.atCap).toBe(true); // mailbox has more — older mail not offered
+    expect(result.atCap).toBe(true); // mailbox has more; older mail not offered
   });
 });
 
@@ -582,7 +582,7 @@ describe("processReviewItem", () => {
     const created = expenses.find((e) => e.id === result.expenseId);
     expect(created?.type === "receipt" && created.merchant).toBe("Acme Corp");
     expect(created?.amount?.toString()).toBe("12.34");
-    // No rule matched — but the review flow processed it anyway (no rule gate).
+    // No rule matched, but the review flow processed it anyway (no rule gate).
     expect(
       await matchEmailRule(conn.accountId, "no_reply@acme.example"),
     ).toBeUndefined();
@@ -784,7 +784,7 @@ describe("ignoreReviewItem", () => {
     expect(await ignoreReviewItem(conn.id, "e1")).toBe(true);
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("review-ignored");
     expect(await listReviewItems(conn.id)).toEqual([]);
-    // Already decided — a second ignore is a no-op.
+    // Already decided: a second ignore is a no-op.
     expect(await ignoreReviewItem(conn.id, "e1")).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import type { FileChooser, Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
 
-/** Shortcuts fire only outside form fields — release whatever holds focus. */
+/** Shortcuts fire only outside form fields, so release whatever holds focus. */
 const blurFocus = (page: Page) =>
   page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) {
@@ -38,7 +38,7 @@ describe("Command palette", () => {
   });
 
   it("searches expenses from the palette with a typed query", async () => {
-    // goto() waits for React Router hydration — Cmd+K before the palette
+    // goto() waits for React Router hydration: Cmd+K before the palette
     // mounts is a no-op, which intermittently fails the palette-open wait.
     page = await goto("/");
     await page.keyboard.press("ControlOrMeta+k");
@@ -84,7 +84,7 @@ describe("Command palette", () => {
     await page.keyboard.press("Enter");
     await page.waitForURL("**/settings");
     await expect(page.getByText("CmdK Category")).toBeVisible();
-    // Remove the category — settings.test.ts asserts the account's exact
+    // Remove the category; settings.test.ts asserts the account's exact
     // category list, and suites share one seeded database per run.
     await testPrisma.category.deleteMany({
       where: { accountId: TEST_ACCOUNT_ID, name: "CmdK Category" },
@@ -95,8 +95,8 @@ describe("Command palette", () => {
     page = await goto("/");
     // Shortcuts fire only when focus is outside form fields.
     await blurFocus(page);
-    // kbar's chained shortcuts (["g", "r"] etc.) complete silently — the
-    // palette does not open on "g" alone, so the navigation itself is the
+    // kbar's chained shortcuts (["g", "r"] etc.) complete silently (the
+    // palette does not open on "g" alone), so the navigation itself is the
     // success signal. A keypress can land in the brief window before kbar
     // binds its listener after hydration (a no-op, like the Cmd+K tests'
     // open-wait), so retry the whole chord until the URL moves.
@@ -128,7 +128,7 @@ describe("Command palette", () => {
     await page.waitForURL("**/expense/new");
 
     // Editors autofocus their first field and shortcuts only fire outside
-    // form fields — return to a neutral page before each next key.
+    // form fields, so return to a neutral page before each next key.
     page = await goto("/");
     await blurFocus(page);
     await page.keyboard.press("m");
@@ -161,14 +161,14 @@ describe("Command palette", () => {
     await box.click();
     await box.pressSequentially("amefgs");
     await page.waitForTimeout(500);
-    expect(page.url()).toBe(page.url()); // still on home — no shortcut fired
+    expect(page.url()).toBe(page.url()); // still on home, no shortcut fired
     await expect(box).toHaveValue("amefgs");
   });
 
   it("opens a file picker for Upload expense file and drafts the receipt", async () => {
     // The palette command's filechooser click can land in a window where the
     // headless browser drops it (same class as the g-shortcut hydration race
-    // and the "f" retry below) — the command request is consumed on fire, so
+    // and the "f" retry below). The command request is consumed on fire, so
     // a missed chooser can't be re-pressed; retry the whole sequence.
     let chooser: FileChooser | null = null;
     for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
@@ -204,7 +204,7 @@ describe("Command palette", () => {
   });
 
   it("routes Upload reconcile statement to the reconcile page's picker", async () => {
-    // Fired from home: the home consumer must not swallow the request —
+    // Fired from home: the home consumer must not swallow the request;
     // it stays pending until the reconcile landing mounts and opens its
     // statement file input. The chooser can be dropped in the same
     // headless window as the upload-expense test, so retry the whole

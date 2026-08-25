@@ -8,7 +8,7 @@ import type { InboundSenderRecord } from "~/lib/types";
 
 /**
  * One receipts-by-email sender: the address, its verified status, and
- * actions. The account's login email (the default sender) is locked — it
+ * actions. The account's login email (the default sender) is locked: it
  * can't be removed, only verified. Unverified addresses get a Resend button
  * that emails a fresh verification link.
  */
@@ -112,7 +112,7 @@ export function AddSenderForm() {
   );
   const busy = fetcher.state !== "idle";
 
-  // A successful add leaves the row in the list with its own status — clear
+  // A successful add leaves the row in the list with its own status. Clear
   // the input; the notice carries the "email sent" confirmation.
   useEffect(() => {
     const data = fetcher.data;

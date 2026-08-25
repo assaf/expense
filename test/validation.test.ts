@@ -30,7 +30,7 @@ describe("isEmail", () => {
 
   it("rejects strings with internal spaces", () => {
     expect(isEmail("user @example.com")).toBe(false);
-    // Leading/trailing spaces are trimmed by isEmail — they don't
+    // Leading/trailing spaces are trimmed by isEmail, so they don't
     // make an email invalid. Only spaces within the address itself
     // cause rejection.
     expect(isEmail(" user@example.com")).toBe(true);
@@ -78,7 +78,7 @@ describe("extractEmailAddress", () => {
 
   it("falls back to raw string when angle brackets contain no @", () => {
     // Not a real email address, but the regex matches the angle-bracket
-    // group — no @ inside, so no match, falls back to the raw string.
+    // group (no @ inside), so no match, falls back to the raw string.
     expect(extractEmailAddress("<not-an-email>")).toBe("<not-an-email>");
   });
 });

@@ -1,14 +1,14 @@
 /**
  * Render an email body into a receipt image using a real browser engine
  * (headless Chromium), so the stored image shows the email as the sender
- * designed it — not a flattened text sheet. Two entry points:
+ * designed it, not a flattened text sheet. Two entry points:
  *  - `renderEmailImage`: render an email's HTML (network blocked, inline
  *    `cid:` images rewritten by the caller-provided resolver).
  *  - `renderTextEmail`: render a plain-text email as a 600px text column
  *    with 24px margins at 14pt.
  *
  * Binary selection:
- *  - Vercel (`process.env.VERCEL === "1"`): `@sparticuz/chromium` — the
+ *  - Vercel (`process.env.VERCEL === "1"`): `@sparticuz/chromium`, the
  *    packaged Chromium build behind Vercel's own Puppeteer guide. The binary
  *    ships in node_modules (fits the 250MB function limit; supports Node
  *    >=24).
@@ -66,7 +66,7 @@ const TEXT_FONT_SIZE = "14pt";
 
 // Email CSS almost always names a system stack (Arial/Helvetica/Verdana/...).
 // Serverless runtimes have no system fonts, so shadow those families with
-// the bundled Inter — Chromium lets @font-face redefine named families.
+// the bundled Inter; Chromium lets @font-face redefine named families.
 const FONT_FAMILIES = [
   "Arial",
   "Helvetica",
@@ -78,7 +78,7 @@ const FONT_FAMILIES = [
 ];
 
 // Receipt/confirmation emails love `<pre>` with long unbroken lines, and
-// `pre` refuses to wrap — a 600-char paragraph can inflate the layout to
+// `pre` refuses to wrap, so a 600-char paragraph can inflate the layout to
 // thousands of pixels wide (and Puppeteer's fullPage screenshot captures the
 // full scroll width). Force wrapping; the clip is a final safety net.
 const EMAIL_LAYOUT_CSS =
@@ -228,7 +228,7 @@ export function collectRemoteImageUrls(html: string): string[] {
 }
 
 /** Pre-fetch remote images and rewrite their URLs to data: URIs. The page
- * keeps all network blocked — only the caller-provided fetcher runs, and
+ * keeps all network blocked: only the caller-provided fetcher runs, and
  * only against the bounded URL list above. Unresolvable images are left as
  * remote URLs and the browser drops them, exactly as today. */
 async function rewriteRemoteImages(
@@ -262,10 +262,10 @@ async function renderDocument(
   try {
     page.setDefaultTimeout(PAGE_TIMEOUT_MS);
     await page.setViewport({ width: viewportWidth, height: 800 });
-    // Email HTML is untrusted input — never run its JavaScript. Inline
+    // Email HTML is untrusted input; never run its JavaScript. Inline
     // <script> blocks, event-handler attributes, and any dynamic behavior
     // are all inert; the render is static markup + CSS, exactly like a real
-    // email client. (External scripts were already unreachable — the
+    // email client. (External scripts were already unreachable, since the
     // request interception below blocks every http(s) fetch.)
     await page.setJavaScriptEnabled(false);
     await page.setRequestInterception(true);
@@ -280,7 +280,7 @@ async function renderDocument(
     const render = async (): Promise<Uint8Array> => {
       await page.setContent(doc, { waitUntil: "load" });
       // Capture the content at the fixed viewport width using the measured
-      // height — NOT fullPage, which would grow the capture to the full
+      // height, NOT fullPage, which would grow the capture to the full
       // scroll width (a wide email element would produce a huge blank
       // strip). Content beyond the cap is clipped, like an email client.
       // page.evaluate is unavailable with JavaScript disabled, so the
@@ -314,7 +314,7 @@ async function renderDocument(
 
 /** Remove `<img>` elements that have no usable src (missing, empty, or a bare
  * placeholder like `#`). With the page's network blocked they could never
- * render — they'd only show as broken-image glyphs in the receipt image.
+ * render; they'd only show as broken-image glyphs in the receipt image.
  * Regex-based so the rest of the email HTML is left byte-for-byte intact. */
 export function dropSourcelessImages(html: string): string {
   return html.replace(/<img\b[^>]*>/gi, (tag) => {
@@ -330,7 +330,7 @@ export function dropSourcelessImages(html: string): string {
 /**
  * Render an email's HTML to a full-page PNG (white background, network
  * blocked, bundled fonts). Throws on empty/oversized input, blank output,
- * or browser failure — callers fall back to the resvg text sheet.
+ * or browser failure; callers fall back to the resvg text sheet.
  */
 export async function renderEmailImage(
   html: string,
@@ -369,7 +369,7 @@ export interface RenderTextEmailOptions {
  * Render a plain-text email to a full-page PNG: a 600px text column with
  * 24px margins and 14pt sans-serif text, so the body reads like an email
  * rather than a wide mono sheet. Throws on empty/oversized input, blank
- * output, or browser failure — callers fall back to the resvg text sheet.
+ * output, or browser failure. Callers fall back to the resvg text sheet.
  */
 export async function renderTextEmail(
   text: string,

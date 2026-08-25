@@ -21,7 +21,7 @@ import type { Route } from "./+types/reset-password";
 
 /**
  * Password recovery: request an emailed single-use link, then set a new
- * password with it. Public (the token IS the credential — the root loader
+ * password with it. Public (the token IS the credential; the root loader
  * treats it like /verify-email). Entry points: the "Forgot password?"
  * links on /login and the attach step of /onboarding.
  */
@@ -52,7 +52,7 @@ export async function action({ request }: Route.ActionArgs) {
   const intent = formString(form, "intent");
 
   if (intent === "request") {
-    // Anonymous work (an email send per request) — cap per IP like signup.
+    // Anonymous work (an email send per request); cap per IP like signup.
     await guardAnonymousAction(request);
     const email = formString(form, "email").trim().toLowerCase();
     if (!isEmail(email)) {

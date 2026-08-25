@@ -106,7 +106,7 @@ describe("Reconcile flow", () => {
     await row.getByRole("button", { name: "Discard" }).click();
     await expect(page.getByText("In progress")).not.toBeVisible();
 
-    // Re-uploading the same file parses fresh — no stale draft blocks it.
+    // Re-uploading the same file parses fresh; no stale draft blocks it.
     await page.setInputFiles('input[name="file"]', {
       name: "draft.csv",
       mimeType: "text/csv",

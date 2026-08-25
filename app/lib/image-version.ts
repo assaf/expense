@@ -4,7 +4,7 @@
  * The version is the pair of fields that change whenever the bytes served at
  * `/expense/:id/image` change: replacing an image stores a new blob key and
  * bumps `updatedAt`, renaming changes `imageFile` (and the key). Unrelated
- * edits also bump `updatedAt` — that only causes a harmless extra thumbnail
+ * edits also bump `updatedAt`; that only causes a harmless extra thumbnail
  * fetch, never a stale one.
  *
  * Rendered into image URLs as `?v=…` so the URL is content-keyed: a changed

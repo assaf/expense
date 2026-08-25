@@ -72,7 +72,7 @@ function runToRecord(row: {
 
 /** Store a freshly parsed statement as a draft run. Matching is computed by
  * the caller (reconcile.server.ts) and persisted here so the review UI
- * doesn't recompute — the user's decisions accumulate in `data.decisions`. */
+ * doesn't recompute: the user's decisions accumulate in `data.decisions`. */
 export async function createReconciliationRun(
   accountId: string,
   input: CreateReconciliationRunInput,
@@ -110,8 +110,8 @@ export async function readReconciliationRun(
   return row ? runToRecord(row) : undefined;
 }
 
-/** The most recent draft or completed run for the same uploaded bytes —
- * the idempotency guard. A completed run means "already reconciled"; a
+/** The most recent draft or completed run for the same uploaded bytes; this
+ * is the idempotency guard. A completed run means "already reconciled"; a
  * draft means the user can resume where they left off. */
 export async function findReconciliationRunByHash(
   accountId: string,
@@ -124,7 +124,7 @@ export async function findReconciliationRunByHash(
   return row ? runToRecord(row) : undefined;
 }
 
-/** All runs for the account, newest first (the /reconcile landing page —
+/** All runs for the account, newest first (the /reconcile landing page:
  * drafts show as in-progress with a discard control, finished runs as
  * history). Also garbage collects drafts abandoned more than 30 days ago. */
 export async function listReconciliationRuns(
@@ -170,7 +170,7 @@ export async function updateReconciliationDecision(
   return true;
 }
 
-/** Abandon a draft run — the statement is dropped without touching any
+/** Abandon a draft run; the statement is dropped without touching any
  * expense. */
 export async function discardReconciliationRun(
   accountId: string,
@@ -192,9 +192,9 @@ interface CompleteReconciliationResult {
 
 /**
  * Apply a draft run: mark every matched expense reconciled (and not yet
- * reconciled) and create the "add as new expense" drafts — one transaction,
+ * reconciled) and create the "add as new expense" drafts in one transaction,
  * so completion is all-or-nothing. Statement rows the user left undecided
- * are discarded (they were never in the database — nothing existing is
+ * are discarded (they were never in the database, so nothing existing is
  * ever deleted by reconciliation).
  *
  * New expenses get a rendered statement receipt as their image (the same
@@ -206,7 +206,7 @@ interface CompleteReconciliationResult {
 export async function completeReconciliationRun(
   accountId: string,
   runId: string,
-  /** The client's local today (YYYY-MM-DD) — the browser knows its own
+  /** The client's local today (YYYY-MM-DD): the browser knows its own
    * timezone; the server runs UTC. Used as the future-date ceiling. */
   today?: string,
 ): Promise<
@@ -245,7 +245,7 @@ export async function completeReconciliationRun(
     }
   }
 
-  // Render the new-expense receipt images up front — the transaction below
+  // Render the new-expense receipt images up front; the transaction below
   // must not hold a sharp/render pass.
   const images = new Map<
     number,
@@ -289,7 +289,7 @@ export async function completeReconciliationRun(
       if (res.kind === "match") {
         // The expense must still exist, belong to this account, and not be
         // reconciled already (updateMany with reconciledAt: null makes the
-        // claim atomic — a concurrent completion can't double-mark).
+        // claim atomic, so a concurrent completion can't double-mark).
         const updated = await tx.expense.updateMany({
           where: { id: res.expenseId, accountId, reconciledAt: null },
           data: { reconciledAt: now, reconciledInRunId: runId },
@@ -345,7 +345,7 @@ export async function completeReconciliationRun(
         createdAt: now,
         updatedAt: now,
       };
-      // The statement row IS the record — name the image by convention like
+      // The statement row IS the record: name the image by convention like
       // any other filed receipt (2026-08-03_<report>_<file>.png).
       expense.imageFile = await renameImageToConvention(
         accountId,

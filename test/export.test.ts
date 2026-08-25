@@ -32,7 +32,7 @@ describe("Export", () => {
   });
 
   it("shows a lone closed report in its own section", async () => {
-    // Even a single closed report leaves the main list — the separate
+    // Even a single closed report leaves the main list; the separate
     // closed section exists as soon as there is at least one.
     await testPrisma.report.createMany({
       data: [{ name: "Lone Closed", accountId: TEST_ACCOUNT_ID, closed: true }],
@@ -69,7 +69,7 @@ describe("Export", () => {
 
   it("shows closed reports in their own section when there are several", async () => {
     // Two more closed reports (three total with "Lone Closed" from the
-    // previous test) — closed reports now get a separate list.
+    // previous test), so closed reports now get a separate list.
     const now = "2026-06-15T00:00:00.000Z";
     await testPrisma.report.createMany({
       data: [
@@ -172,9 +172,9 @@ describe("Export", () => {
     expect(text).toContain("456 Dev Ave, Coding, CA");
 
     // The route map lives in the appendix, with the date, mileage, and
-    // amount listed beside it ("Mileage" + "32.00 miles" — no parens —
-    // are the appendix's field label and value), and the trip's stops
-    // listed below it ("Start/end", "Stop 1" — no header).
+    // amount listed beside it ("Mileage" + "32.00 miles", no parens, is
+    // the appendix's field label and value), and the trip's stops
+    // listed below it ("Start/end", "Stop 1", no header).
     expect(text).toContain("Receipts & routes");
     expect(text).toContain("Mileage");
     expect(text).toContain("32.00 miles");
@@ -185,7 +185,7 @@ describe("Export", () => {
     expect(text).not.toContain("Locations");
 
     // The trip's route map is embedded as an image (the fallback straight-
-    // line render — the seeded expense predates saved route geometry).
+    // line render; the seeded expense predates saved route geometry).
     const task = getDocument({ data: new Uint8Array(buf), verbosity: 0 });
     const doc = await task.promise;
     try {
@@ -204,7 +204,7 @@ describe("Export", () => {
   });
 
   it("includes uncategorized expenses under 'No category'", async () => {
-    // Seed a receipt in the "2026 Test" report with no category — the PDF
+    // Seed a receipt in the "2026 Test" report with no category: the PDF
     // must include it rather than drop it, under a "No category" heading.
     const id = ulid();
     await testPrisma.expense.create({
@@ -277,7 +277,7 @@ describe("Export", () => {
   });
 
   it("produces a valid PDF for an empty report", async () => {
-    // A report with no expenses must still produce a valid PDF — no crash,
+    // A report with no expenses must still produce a valid PDF: no crash,
     // no empty buffer.
     await testPrisma.report.create({
       data: { name: "Empty Report", accountId: TEST_ACCOUNT_ID },

@@ -1,8 +1,8 @@
 # Publish server.json to the Official MCP Registry (registry.modelcontextprotocol.io)
 # on version tags (git tag vX.Y.Z && git push origin vX.Y.Z), or manually via
-# workflow_dispatch. Auth is GitHub OIDC — no secrets to store.
+# workflow_dispatch. Auth is GitHub OIDC: no secrets to store.
 #
-# This repo's server is REMOTE (https://expense.labnotes.org/mcp) — there is
+# This repo's server is REMOTE (https://expense.labnotes.org/mcp); there is
 # no npm package, so unlike the registry's npm example this workflow only
 # publishes the MCP metadata (server.json).
 #

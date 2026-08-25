@@ -10,15 +10,15 @@
  *
  * All three clocks are pinned to this instant, ticking in real time from it
  * (FROZEN_MS + elapsed) so timestamps stay distinct and monotonic:
- *  - the test process — see pinned-time.ts (installPinnedClock, used by
+ *  - the test process: see pinned-time.ts (installPinnedClock, used by
  *    frozen-time-setup and testSuiteSetup),
- *  - the browser page — Playwright `page.clock.setFixedTime` — see
+ *  - the browser page (Playwright `page.clock.setFixedTime`): see
  *    launchBrowser's `freezePageClock` (fully frozen there; the browser never
  *    writes ordered timestamps),
- *  - the test server child process — see pinned-clock.mjs, loaded via
+ *  - the test server child process: see pinned-clock.mjs, loaded via
  *    NODE_OPTIONS in launchServer.
  *
- * Timers and `performance.now()` are NOT faked anywhere — only Date is
+ * Timers and `performance.now()` are NOT faked anywhere; only Date is
  * pinned, so polling loops and Playwright timeouts keep working.
  */
 export const FROZEN_MS = Date.parse("2026-07-15T12:00:00.000Z");

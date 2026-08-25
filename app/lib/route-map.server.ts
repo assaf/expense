@@ -8,7 +8,7 @@ import { MAP_USER_AGENT } from "~/lib/maps.server";
 import { geocodedLocations, type MileageExpense } from "~/lib/types";
 
 /**
- * Render a real map of a mileage trip for the report PDF — the same look
+ * Render a real map of a mileage trip for the report PDF, the same look
  * as the mileage editor's Leaflet map: Carto Positron light tiles with the
  * measured route drawn on top (white-cased blue outbound line, dashed gray
  * return leg, numbered stop bubbles).
@@ -16,7 +16,7 @@ import { geocodedLocations, type MileageExpense } from "~/lib/types";
  * The tiles are fetched server-side (with a descriptive User-Agent and a
  * small in-process cache so trips in the same city share tiles), stitched
  * into an SVG as data URIs, and rasterized with resvg + the bundled
- * JetBrains Mono — no system fonts needed on serverless runtimes.
+ * JetBrains Mono, so no system fonts are needed on serverless runtimes.
  *
  * If the tile server is unreachable (offline/blocked), the map falls back
  * to a schematic rendering (route drawn on a plain background) so an export
@@ -31,14 +31,14 @@ const PAD = 28;
 const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
 const TILE_CACHE_MAX = 200;
 
-/** The tile fetcher signature — injectable so tests stay offline. */
+/** The tile fetcher signature, injectable so tests stay offline. */
 type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
 
 /** In-memory tile cache (a promise per key): trips in the same city share
  * tiles and concurrent renders dedupe. Evicts the oldest past the cap. */
 const tileCache = new Map<string, Promise<Buffer>>();
 
-/** Fetch one Carto Positron light tile — the same basemap the editor's
+/** Fetch one Carto Positron light tile, the same basemap the editor's
  * Leaflet map uses (attribution is drawn on every rendered map). */
 async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
   const key = `${z}/${x}/${y}`;
@@ -69,7 +69,7 @@ async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
   }
 }
 
-/** Web-Mercator world pixel position at zoom z (256px tiles) — the same
+/** Web-Mercator world pixel position at zoom z (256px tiles): the same
  * projection Leaflet uses, so the route lands exactly where the editor's
  * map draws it. */
 function worldX(lon: number, z: number): number {
@@ -158,7 +158,7 @@ function routeBounds(geo: TripGeometry): {
   };
 }
 
-/** The route drawing shared by the tiled map and the schematic fallback —
+/** The route drawing shared by the tiled map and the schematic fallback:
  * dashed gray return under a white-cased blue outbound line with numbered
  * stop bubbles, the same visual language as the editor's map. */
 function routeSvg(
@@ -185,7 +185,7 @@ function routeSvg(
 
 /**
  * Render the trip map: real tiles when reachable, schematic otherwise.
- * Never throws — a tile failure falls back to the plain drawing.
+ * Never throws: a tile failure falls back to the plain drawing.
  */
 export async function renderRouteMap(
   e: MileageExpense,

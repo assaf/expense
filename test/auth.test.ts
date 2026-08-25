@@ -29,7 +29,7 @@ describe("Access control", () => {
     await browser?.close();
   });
 
-  /** A fresh context — no session cookie, no shared state. */
+  /** A fresh context: no session cookie, no shared state. */
   async function openPage(): Promise<Page> {
     const context = await browser.newContext({ baseURL });
     const page = await context.newPage();
@@ -45,7 +45,7 @@ describe("Access control", () => {
   }
 
   /** Fill the signup form and submit; expect the pending "check your
-   * email" state — signup never signs the user in anymore. */
+   * email" state. Signup never signs the user in anymore. */
   async function signUp(
     page: Page,
     accountName: string,
@@ -145,7 +145,7 @@ describe("Access control", () => {
   });
 
   it("navigates from the landing footer to public pages without a login redirect", async () => {
-    // Client-side Link clicks fetch /<page>.data — the root loader must
+    // Client-side Link clicks fetch /<page>.data, so the root loader must
     // recognize those as the public page, or every footer link bounces
     // anonymous visitors to /login?next=... (regression: root loader only
     // matched the bare path).
@@ -164,7 +164,7 @@ describe("Access control", () => {
       await page.waitForURL((url) => url.pathname === path, {
         timeout: 15_000,
       });
-      // The page actually rendered — not a redirect to /login.
+      // The page actually rendered, not a redirect to /login.
       await expect(
         page.getByRole("heading", { level: 1 }).first(),
       ).toBeVisible();
@@ -212,7 +212,7 @@ describe("Access control", () => {
   it("rehashes a legacy password hash to the current scrypt cost on login", async () => {
     // Rewrite the seeded user's stored hash to the pre-format-change shape
     // (hex `salt:hash` derived with Node's default scrypt cost), then sign
-    // in — the login path must upgrade the row to the self-describing
+    // in; the login path must upgrade the row to the self-describing
     // format while still accepting the same password.
     const salt = randomBytes(16).toString("hex");
     const legacyHash = `${salt}:${scryptSync(TEST_PASSWORD, salt, 64).toString("hex")}`;
@@ -272,7 +272,7 @@ describe("Access control", () => {
     await verifyEmail(page, "freshuser@example.com", "fresh-verify-token");
     await signIn(page, "freshuser@example.com", "fresh-password");
     await expect(page.locator("h1")).toContainText("Expense");
-    // A new account starts empty — none of the seeded data may appear.
+    // A new account starts empty: none of the seeded data may appear.
     await expect(page.getByText("Test Store")).not.toBeVisible();
     await page.close();
   });
@@ -329,7 +329,7 @@ describe("Access control", () => {
       select: { address: true },
     });
     expect(senders.map((s) => s.address)).toEqual(["senderfresh@example.com"]);
-    // The signup email starts PENDING — receipts are only accepted after it
+    // The signup email starts PENDING; receipts are only accepted after it
     // is verified by clicking the emailed link.
     const verifications = await testPrisma.inboundSenderVerification.findMany({
       where: { accountId: user.accountId },
@@ -368,7 +368,7 @@ describe("Access control", () => {
       "unverifieduser@example.com",
       "unverified-password",
     );
-    // The pending account can't sign in — the login page says why and
+    // The pending account can't sign in, so the login page says why and
     // offers a resend button.
     await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
     await page.fill('input[name="email"]', "unverifieduser@example.com");
@@ -406,7 +406,7 @@ describe("Access control", () => {
       },
     });
 
-    // The user typed the wrong password — back to the signup page with the
+    // The user typed the wrong password: back to the signup page with the
     // same email and a new password. The unverified account is replaced.
     await signUp(
       page,
@@ -428,7 +428,7 @@ describe("Access control", () => {
       testPrisma.account.findUnique({ where: { id: firstAccountId } }),
     ).resolves.toBeNull();
 
-    // The old verification link is dead — the re-signup discarded it.
+    // The old verification link is dead; the re-signup discarded it.
     await page.goto("/verify-email?token=old-link-token", {
       waitUntil: "load",
       timeout: 15_000,
@@ -508,7 +508,7 @@ describe("Access control", () => {
   }
 
   /** Poll the auth_attempts row until the server has recorded the expected
-   * failure count — the browser alert text is identical across wrong
+   * failure count. The browser alert text is identical across wrong
    * attempts, so the DB is the only unambiguous signal that the previous
    * request finished server-side before the next one fires. */
   async function waitForFailures(

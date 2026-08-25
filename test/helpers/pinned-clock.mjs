@@ -1,7 +1,7 @@
 /**
  * Server-process clock pin. Loaded via NODE_OPTIONS=--import by
  * test/helpers/launchServer.ts so the test server shares the suite-wide
- * pinned instant (test/helpers/frozen-time.ts — keep the instant in sync).
+ * pinned instant (test/helpers/frozen-time.ts; keep the instant in sync).
  *
  * `new Date()` and `Date.now()` return FROZEN_MS + real elapsed time since
  * this module loaded: the calendar date is pinned (2026-07-15 for any

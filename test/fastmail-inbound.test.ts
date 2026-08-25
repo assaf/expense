@@ -178,7 +178,7 @@ function fakeExtract(text?: string): ExtractionResult {
 }
 
 /** Fake pipeline deps: everything canned, extraction via markers. The three
- * fetch collaborators are intentionally absent — the MIME bridge provides
+ * fetch collaborators are intentionally absent; the MIME bridge provides
  * them when spread underneath ({ ...bridgeDeps, ...fakeDeps() }). */
 function fakeDeps(): Omit<
   InboundDeps,
@@ -436,7 +436,7 @@ describe("processUnprocessedReceipts", () => {
   });
 
   it("skips + destroys its own confirmation emails (loop guard)", async () => {
-    // The app's own confirmation, filed back into the Receipts folder —
+    // The app's own confirmation, filed back into the Receipts folder;
     // without the guard it looks like a receipt ("Receipt" + $10 in the
     // body) and reprocesses on every drain, spawning dupes. Recognized by
     // the X-Expense-Confirmation header the app sets on its outbound mail.
@@ -478,7 +478,7 @@ describe("processUnprocessedReceipts", () => {
       deps: pipelineDeps,
     });
 
-    // Destroyed (removed) but NOT processed: no expense, no reply — loop broken.
+    // Destroyed (removed) but NOT processed: no expense, no reply. Loop broken.
     expect(result).toEqual({ processed: 0, failed: 0, destroyed: 1 });
     expect(destroyed).toEqual([id]);
     expect(sendReply).not.toHaveBeenCalled();
@@ -486,7 +486,7 @@ describe("processUnprocessedReceipts", () => {
 
   it("skips silently when a concurrent drain already removed the email", async () => {
     // The id is still returned by unprocessedReceiptIds, but rawEmail
-    // fails — another drain listed and destroyed it first (EXPENSE-K).
+    // fails; another drain listed and destroyed it first (EXPENSE-K).
     const id = "fm-proc-3";
     const { adapter, destroyed } = recordingAdapter(
       new Map([[id, rawEmailOf(id)]]),
@@ -503,7 +503,7 @@ describe("processUnprocessedReceipts", () => {
     });
 
     // Gone is the desired end state: no Sentry capture, no failed count,
-    // no abort — the email is counted as handled.
+    // no abort; the email is counted as handled.
     expect(result).toEqual({ processed: 0, failed: 0, destroyed: 1 });
     expect(destroyed).toEqual([]);
   });
@@ -533,7 +533,7 @@ describe("processUnprocessedReceipts", () => {
       deps: pipelineDeps,
     });
     // The DB row (status "created") short-circuits to "duplicate", no new
-    // expense — but the email still gets destroyed.
+    // expense, but the email still gets destroyed.
     expect(second).toEqual({ processed: 1, failed: 0, destroyed: 1 });
     expect(destroyed).toEqual([id, id]);
 
@@ -549,8 +549,8 @@ describe("processUnprocessedReceipts", () => {
 
   it("sends no replies for unknown senders within one drain", async () => {
     // Loop guard: unknown senders never get a reply (the From header is
-    // attacker-controlled), so a runaway mail — bounce or autoresponder
-    // variant that slips past the guards — can neither fill the Sent folder
+    // attacker-controlled), so a runaway mail (a bounce or autoresponder
+    // variant that slips past the guards) can neither fill the Sent folder
     // nor amplify. Two unknown-sender emails in one drain → zero replies.
     const sent: { to: string; subject: string }[] = [];
     const { adapter, destroyed } = recordingAdapter(

@@ -39,7 +39,7 @@ import {
 
 function initLocations(expense: MileageExpense, home: Location): Location[] {
   const saved = expense.locations.map((l) => ({ ...l }));
-  // A mileage expense always has a start/end and a first stop — pad trips
+  // A mileage expense always has a start/end and a first stop, so pad trips
   // that predate that rule (or start fresh from the account's start
   // location).
   if (saved.length === 1) {
@@ -52,7 +52,7 @@ function initLocations(expense: MileageExpense, home: Location): Location[] {
   return [first, { address: "", lat: null, lng: null }];
 }
 
-/** "Street, city" form of a canonical address — the first two comma parts,
+/** "Street, city" form of a canonical address: the first two comma parts,
  * used for map tooltips so the state/country don't crowd the popup. Falls
  * back to the full address when it has fewer than two parts. */
 function shortAddress(address: string): string {
@@ -74,7 +74,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   );
   // The last geocoded result from /api/route: what the map, the distance,
   // and the saved locations use. Distinct from `locations` (the typed text)
-  // so a route response can never rewrite what the user is typing — a slow,
+  // so a route response can never rewrite what the user is typing. A slow,
   // stale response would otherwise yank text out from under the cursor.
   const [resolved, setResolved] = useState<Location[]>(() =>
     initLocations(expense, home),
@@ -82,7 +82,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   const [distanceMiles, setDistanceMiles] = useState(expense.distanceMiles);
   const [amount, setAmount] = useState(expense.amount);
   // Create mode ships an empty date (the server can't know the user's
-  // timezone) — fall back to the browser's local today. Edit mode uses the
+  // timezone), so fall back to the browser's local today. Edit mode uses the
   // stored date.
   const [date, setDate] = useState(() => expense.date || todayDate());
   const [mileageType, setMileageType] = useState<MileageType>(
@@ -92,7 +92,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   const [category, setCategory] = useState(expense.category);
   const [description, setDescription] = useState(expense.description);
   const [coords, setCoords] = useState<[number, number][]>(() =>
-    // Saved driving geometry when present; empty otherwise — the map never
+    // Saved driving geometry when present, empty otherwise. The map never
     // draws a line until real directions are computed (or were saved).
     expense.route.coords.length >= 2 ? expense.route.coords : [],
   );
@@ -105,13 +105,13 @@ export function MileageEditor({ data }: { data: EditorData }) {
   // Per-field geocoding errors, aligned with `locations` (null = no error).
   const [addressErrors, setAddressErrors] = useState<(string | null)[]>([]);
   // Route-level error: set when the /api/route call itself fails (HTTP
-  // error, network down) — cleared on the next successful geocode.
+  // error, network down); cleared on the next successful geocode.
   const [routeError, setRouteError] = useState<string | null>(null);
   // Indexes of fields currently being geocoded (in-flight blur geocodes and
-  // the save-time flush) — drives the per-field spinner.
+  // the save-time flush), which drives the per-field spinner.
   const [geocodingFields, setGeocodingFields] = useState<number[]>([]);
   const manualAmount = useRef(false);
-  // The IRS rate for the trip's (date, type) — it changes the moment either
+  // The IRS rate for the trip's (date, type); it changes the moment either
   // does, so the footer rate and the recomputed amount stay in sync.
   const rate = useMemo(
     () => mileageRateFor(rates, date, mileageType),
@@ -129,7 +129,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   }
 
   /** Changing the date can move the trip into a different IRS period with a
-   * different rate — recompute the amount, same as a type change. */
+   * different rate: recompute the amount, same as a type change. */
   function changeDate(d: string) {
     setDate(d);
     manualAmount.current = false;
@@ -140,16 +140,16 @@ export function MileageEditor({ data }: { data: EditorData }) {
 
   // Monotonic id for route requests: only the latest request may update
   // shared state, so an out-of-order response can't overwrite newer
-  // results. Typing bumps it too — any in-flight geocode is stale the
+  // results. Typing bumps it too, so any in-flight geocode is stale the
   // moment the addresses change.
   const requestSeq = useRef(0);
-  // The latest computed route geometry — saved with the expense so the map
+  // The latest computed route geometry, saved with the expense so the map
   // shows the driving route everywhere (list thumbnails, editor on open),
   // not just while this session's recompute result is in state.
   const lastRoute = useRef<RouteGeometry | null>(null);
 
   // Legacy expenses (created before routes were persisted) load with no
-  // geometry — compute it once on open so the driving route appears. Until
+  // geometry; compute it once on open so the driving route appears. Until
   // it resolves, the map shows the stops unconnected (never a guessed
   // point-to-point line). New expenses start empty (nothing to geocode yet)
   // and compute on the first blur. Distance and amount are left as saved;
@@ -176,7 +176,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   }, []);
 
   /** Geocode the addresses and compute the route + amount via /api/route.
-   * Pure — no state writes — so callers decide what to apply. */
+   * Pure (no state writes), so callers decide what to apply. */
   async function computeRoute(
     locations: Location[],
     rate: string,
@@ -189,7 +189,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
     approximate: boolean;
   } | null> {
     if (!locations.some((l) => l.address.trim())) {
-      // Everything is empty — there is no trip to compute. Return a blank
+      // Everything is empty; there is no trip to compute. Return a blank
       // result so callers reset the map and distance to nothing instead of
       // leaving a stale route on screen.
       return {
@@ -250,7 +250,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   async function commitLocation(i: number) {
     const address = locations[i]?.address ?? "";
     // A field that was never filled (or already emptied and committed)
-    // blurs without changing the trip — no recompute. Only a field with
+    // blurs without changing the trip, so no recompute. Only a field with
     // typed content, or one that was part of the committed route and is
     // now being emptied, triggers a recompute.
     const wasGeocoded =
@@ -261,7 +261,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       const seq = ++requestSeq.current;
       const result = await computeRoute(locations, rate);
       // A stale result (seq already advanced by a newer blur/edit) is
-      // silently dropped — a newer request is in flight.
+      // silently dropped: a newer request is in flight.
       if (requestSeq.current !== seq) return;
       if (!result) {
         setRouteError(
@@ -273,7 +273,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       }
       setRouteError(null);
       const r = result.locations[i];
-      // A non-empty field that failed to geocode is an error — tell the
+      // A non-empty field that failed to geocode is an error; tell the
       // user, never guess an address. An emptied field is expected to come
       // back without coordinates (it is excluded from the route).
       if (address.trim() && (!r || r.lat === null || r.lng === null)) {
@@ -430,7 +430,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
     blocked: confirmDelete,
   });
 
-  // The map shows the geocoded route (`resolved`), not the raw typed text —
+  // The map shows the geocoded route (`resolved`), not the raw typed text:
   // it only changes when an address field loses focus and its address
   // geocodes successfully, never while typing. The tooltip shows the stop's
   // role + its street-and-city form (no state/country), escaped because
@@ -465,7 +465,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
           ariaLabel={`Driving route map with ${stops.length} stops — ${distanceMiles ? `${distanceMiles} miles` : "distance not yet computed"}`}
         />
         {computing ? (
-          // Geocoding + OSRM can take a couple of seconds — a pill centered
+          // Geocoding + OSRM can take a couple of seconds, so a pill centered
           // over the map says a recompute is in flight instead of leaving
           // the stale route on screen with no feedback.
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -580,7 +580,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
                   </p>
                 ) : null}
               </div>
-              {/* The start/end and the first stop are required — only extra
+              {/* The start/end and the first stop are required; only extra
                   stops can be removed. */}
               {i >= 2 && !reportClosed ? (
                 <button
@@ -618,7 +618,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       />
 
       <EditorActions
-        // Create mode: a fresh expense is expected to be incomplete — the
+        // Create mode: a fresh expense is expected to be incomplete. The
         // badge only means something while editing an existing row.
         complete={isNew ? true : complete}
         saving={fetcher.state !== "idle"}

@@ -1,7 +1,7 @@
 import { escapeHtml } from "~/lib/escape";
 
 /**
- * Shared HTML layout for the app's emails — the verification email
+ * Shared HTML layout for the app's emails: the verification email
  * (sender-verification.server.ts) and the inbound reply emails
  * (inbound-email.server.ts). One place for the shell, paragraph styling, and
  * footers so the two builders can't drift apart.
@@ -27,7 +27,7 @@ ${opts.footer ?? SIMPLE_FOOTER}
 </div>`;
 }
 
-/** The plain footer (inbound replies) — no link, no pitch. */
+/** The plain footer (inbound replies), with no link or pitch. */
 export const SIMPLE_FOOTER =
   '<p style="margin-top:20px;color:#6b7280;font-size:12px">Expense — receipts by email</p>';
 

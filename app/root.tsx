@@ -16,7 +16,7 @@ import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
 import type { Route } from "./+types/root";
 
-/** Inline script that runs before first paint — applies the `dark` class
+/** Inline script that runs before first paint; applies the `dark` class
  * based on `prefers-color-scheme` and listens for live system changes. */
 const THEME_SCRIPT = `
 (() => {
@@ -44,11 +44,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   // The home page (landing for anonymous visitors), the login route, the
   // sender-verification page, and the public marketing pages are open;
   // everything else requires a session (the verify link carries its own
-  // credential — the single-use emailed token).
+  // credential, the single-use emailed token).
   let path = url.pathname;
   if (path.endsWith(".md")) path = path.slice(0, -3);
   // React Router appends .data to loader fetches during client-side
-  // navigation (e.g. /about.data for a Link click on /about) — match the
+  // navigation (e.g. /about.data for a Link click on /about). Match the
   // page path, not the fetch path, so public pages stay public.
   if (path.endsWith(".data")) path = path.slice(0, -5);
   // React Router maps `_index` layout index routes to `/_` for their
@@ -73,7 +73,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     user = await requireUser(request);
   }
   // Report names feed the palette's export submenu (same 5-min cache the
-  // export page uses — acceptable per-navigation cost).
+  // export page uses; acceptable per-navigation cost).
   const reportNames = user
     ? (await readReports(user.accountId)).map((r) => r.name)
     : [];
@@ -81,13 +81,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     user: user ? { id: user.id } : null,
     reportNames,
     // Clickjacking denial is a real HTTP header from the route's headers()
-    // export below — never from this loader data object.
+    // export below, never from this loader data object.
   };
 }
 
 /**
  * Clickjacking defense on every HTML response: no page may render inside a
- * frame. The loader's `headers` key is inert loader data — only this
+ * frame. The loader's `headers` key is inert loader data; only this
  * function emits real HTTP headers; React Router merges them with the
  * child route's headers() (e.g. the marketing Cache-Control). HSTS is set
  * by the platform: Vercel emits strict-transport-security for production
@@ -109,7 +109,7 @@ export function meta(): Route.MetaDescriptors {
         "Expense reads your receipts — snap a photo, paste a screenshot, or forward a receipt email — and organizes them into IRS Schedule C categories and reports for tax season.",
     },
     // Social sharing defaults (og:site_name, og:locale, og:type,
-    // twitter:card, theme-color) live as static tags in the root <head> —
+    // twitter:card, theme-color) live as static tags in the root <head>;
     // route meta arrays replace (not merge) parent meta in React Router, so
     // only per-page values (title, description, canonical, og:image) belong
     // here. The landing page overrides this title/description.
@@ -142,7 +142,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     // Link this session's pageviews/events to the signed-in user. Safe even
-    // before the (deferred) script has run — identify is a no-op then.
+    // before the (deferred) script has run; identify is a no-op then.
     window.umami?.identify?.({ id: user.id });
   }, [user]);
   return (
@@ -161,7 +161,7 @@ export default function App() {
         <Meta />
         <Links />
         {/* Umami is production-only: no tracking script (or identify calls)
-        in dev — dev traffic would pollute the stats. */}
+        in dev; dev traffic would pollute the stats. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {process.env.NODE_ENV === "production" ? (
           <script

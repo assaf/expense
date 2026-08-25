@@ -1,6 +1,6 @@
 /**
  * Decode a Vite `?inline` asset import to raw bytes. Vite returns the asset
- * as a base64 string (older versions as a `data:` URI) — normalize to raw
+ * as a base64 string (older versions as a `data:` URI); normalize to raw
  * bytes either way. Used for the bundled font files embedded as @font-face
  * data URIs in the email/text receipt renderers.
  */

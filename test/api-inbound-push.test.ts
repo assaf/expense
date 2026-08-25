@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 // The route's network-facing collaborators are mocked; decryption itself is
 // real (successful decryption is the route's auth). ~/lib/env is mocked
 // with a throwaway keypair so the decrypt cases run everywhere (including CI
-// without .env) — the forge below encrypts to the same mock keys. The keys
+// without .env). The forge below encrypts to the same mock keys. The keys
 // are generated lazily: vi.hoisted runs before node:crypto is initialized,
 // but the getters below are only read once the route imports the env
 // module, by which time the import has executed.

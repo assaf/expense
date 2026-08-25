@@ -35,9 +35,9 @@ describe("isPdf", () => {
   });
 
   it("returns true when any signal matches, even if others disagree", () => {
-    // A file named .pdf with an image mime — the .pdf name is enough.
+    // A file named .pdf with an image mime: the .pdf name is enough.
     expect(isPdf({ mime: "image/png", originalName: "fake.pdf" })).toBe(true);
-    // A file with PDF mime — the mime is enough regardless of name.
+    // A file with PDF mime: the mime is enough regardless of name.
     expect(isPdf({ mime: "application/pdf", originalName: "photo.jpg" })).toBe(
       true,
     );

@@ -1,13 +1,13 @@
 import sharp, { type Metadata } from "sharp";
 
 /**
- * Receipt image normalization for storage — resize + light compression,
+ * Receipt image normalization for storage (resize + light compression),
  * applied at save time so every stored receipt (manual upload, paste,
  * inbound email, PDF render) is bounded in size.
  *
  * Kept dependency-free (no app imports, erasable TypeScript only) so the
  * one-off backfill script (`scripts/compress-images.ts`) can reuse it with
- * plain `node` type stripping — no tsx needed.
+ * plain `node` type stripping, no tsx needed.
  *
  * Rules:
  *  - Not decodable by sharp, GIF (animation), or SVG → pass through
@@ -30,7 +30,7 @@ const STORED_IMAGE_QUALITY = 85;
 
 /**
  * Pixel cap for decoding user-supplied images. Sharp's own default
- * (268MP) lets a crafted image decode to ~1GB of pixel buffer — a
+ * (268MP) lets a crafted image decode to ~1GB of pixel buffer, a
  * single-request memory spike in a serverless function. 2^26 (64MP)
  * covers phone photos and DPI scans while bounding the worst-case decode
  * to a few hundred MB; larger inputs fail fast at decode instead of
@@ -58,7 +58,7 @@ export async function normalizeStoredImage(
       limitInputPixels: MAX_DECODE_PIXELS,
     }).metadata();
   } catch {
-    return null; // not decodable by sharp (or over the pixel cap) — pass through
+    return null; // not decodable by sharp (or over the pixel cap): pass through
   }
   if (!meta.width || !meta.height || !meta.format) return null;
   if (!RASTER_FORMATS.has(meta.format)) return null; // gif/svg/other
@@ -67,7 +67,7 @@ export async function normalizeStoredImage(
     meta.width <= STORED_IMAGE_MAX_WIDTH &&
     meta.height <= STORED_IMAGE_MAX_HEIGHT
   ) {
-    return null; // already small + compressed — store as-is
+    return null; // already small + compressed, so store as-is
   }
 
   // .rotate() applies EXIF orientation so re-encoding never flips sideways.
@@ -80,14 +80,14 @@ export async function normalizeStoredImage(
     });
     return { buffer: out, mime: "image/jpeg" };
   } catch {
-    return null; // decode failed (e.g. over the pixel cap) — pass through
+    return null; // decode failed (e.g. over the pixel cap): pass through
   }
 }
 
 /**
  * Downscale an image to fit within `maxWidth` (never upscale). Returns the
- * original buffer when it already fits, or null when sharp can't decode it
- * — callers treat null as "pass through unchanged". Shared by the OCR and
+ * original buffer when it already fits, or null when sharp can't decode it;
+ * callers treat null as "pass through unchanged". Shared by the OCR and
  * attachment-image normalizers in receipt-ocr.server.ts.
  */
 export async function resizeIfWider(
@@ -100,7 +100,7 @@ export async function resizeIfWider(
     .metadata()
     .catch(() => null);
   if (!meta?.width) return null; // not decodable by sharp
-  if (meta.width <= maxWidth) return buffer; // already fits — no re-encode
+  if (meta.width <= maxWidth) return buffer; // already fits, no re-encode
   try {
     return await sharp(buffer, {
       limitInputPixels: MAX_DECODE_PIXELS,
@@ -108,7 +108,7 @@ export async function resizeIfWider(
       .resize({ width: maxWidth, withoutEnlargement: true })
       .toBuffer();
   } catch {
-    return null; // decode failed (e.g. over the pixel cap) — pass through
+    return null; // decode failed (e.g. over the pixel cap): pass through
   }
 }
 

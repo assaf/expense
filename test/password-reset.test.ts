@@ -15,7 +15,7 @@ import {
 /**
  * Password recovery: request an emailed single-use link, set a new password
  * with it. The email transport is never hit (the test env has no public
- * origin / skips sends) — these tests assert the token lifecycle and the
+ * origin / skips sends), so these tests assert the token lifecycle and the
  * password swap.
  */
 
@@ -34,7 +34,7 @@ async function seedUser(email: string, password = PASSWORD) {
 }
 
 /** Pin the row's reset-token hash to a known token (the app mints tokens
- * internally and emails them — tests can't see the raw token otherwise). */
+ * internally and emails them; tests can't see the raw token otherwise). */
 async function pinResetToken(userId: string, rawToken: string) {
   await testPrisma.user.update({
     where: { id: userId },
@@ -126,7 +126,7 @@ describe("password reset", () => {
       /at least 8/,
     );
 
-    // The token survives — the user can retry.
+    // The token survives; the user can retry.
     const row = await testPrisma.user.findUnique({ where: { email } });
     expect(row?.passwordResetTokenHash).toBe(hashToken(token));
   });

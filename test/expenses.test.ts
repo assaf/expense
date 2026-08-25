@@ -8,7 +8,7 @@ import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
 import { saveImage } from "~/lib/images.server";
 
-/** Local-date string (YYYY-MM-DD) — matches the app's `todayDate()`. */
+/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
 function todayLocal(): string {
   const now = new Date();
   const tz = now.getTimezoneOffset() * 60_000;
@@ -52,7 +52,7 @@ const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
 /**
  * Wait for React Router to settle the create-editor navigation. The router
  * renders the route element once the URL changes, then remounts it ~1ms
- * later when the loader settles — replacing the file input in between. A
+ * later when the loader settles, replacing the file input in between. A
  * file set in that window lands on the instance that is about to be torn
  * down and the change event is silently lost (no request ever fires). The
  * remount is tied to React's render cycle, so a short settle beat after
@@ -82,7 +82,7 @@ describe("Expense CRUD", () => {
     // Click "Add receipt"
     await page.getByText("Add receipt").click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
-    // The editor is a draft — nothing is persisted until Save.
+    // The editor is a draft: nothing is persisted until Save.
     expect(
       await testPrisma.expense.count({
         where: { accountId: TEST_ACCOUNT_ID },
@@ -111,7 +111,7 @@ describe("Expense CRUD", () => {
     // Select category
     const selects = page.locator("select");
     await selects.nth(1).selectOption("Testing");
-    // Submit — only now is the row written.
+    // Submit. Only now is the row written.
     await page.getByText("Save").click();
     // Should redirect to home page (with ?new=<id> to highlight the row)
     await page.waitForURL((url) => url.pathname === "/", {
@@ -182,7 +182,7 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Edited Merchant" },
     });
     expect(row).not.toBeNull();
-    // Prisma returns amount as a Decimal — compare as strings.
+    // Prisma returns amount as a Decimal, so compare as strings.
     expect(String(row!.amount)).toBe("99.99");
     expect(row!.report).toBe("2027 Test");
     expect(row!.category).toBe("Development");
@@ -287,7 +287,7 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
 
-    // The editor then runs a second POST (draft-ocr) to fill in the fields —
+    // The editor then runs a second POST (draft-ocr) to fill in the fields;
     // count responses so the assertion is race-free.
     let posts = 0;
     let ocrOk: boolean | undefined;
@@ -299,7 +299,7 @@ describe("Expense CRUD", () => {
     });
 
     // Upload a PDF: the draft-upload response is gated on rasterization
-    // only — OCR runs as a separate request (see below) so a slow scan can
+    // only; OCR runs as a separate request (see below) so a slow scan can
     // never block the draft. Two pages give the conversion stage a visible
     // window to assert against.
     const upload = page.waitForResponse(
@@ -328,11 +328,11 @@ describe("Expense CRUD", () => {
 
     // The draft-upload response comes back without OCR fields; the separate
     // draft-ocr POST must still complete (fields may be empty without an AI
-    // key — the request itself is the contract).
+    // key; the request itself is the contract).
     await expect.poll(() => posts, { timeout: 60_000 }).toBe(2);
     expect(ocrOk).toBe(true);
 
-    // The draft is stored as rasterized, browser-displayable bytes — never
+    // The draft is stored as rasterized, browser-displayable bytes, never
     // the raw PDF (an <img> can't render one). Draft keys are ULID-prefixed,
     // so the newest upload sorts last by key.
     const draft = await testPrisma.imageBlob.findFirst({
@@ -507,14 +507,14 @@ describe("Expense CRUD", () => {
     await page.getByLabel("Date").fill("2099-12-31");
     await page.getByText("Save").click();
 
-    // Future dates are allowed — the save succeeds and returns to the list.
+    // Future dates are allowed: the save succeeds and returns to the list.
     await expect(page).toHaveURL(/\/$/);
     const row = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
     });
     expect(row?.date).toBe("2099-12-31");
     // The list flags future-dated expenses so they don't read as normal
-    // rows — a "Future" pill next to the date.
+    // rows, with a "Future" pill next to the date.
     await expect(page.getByText("Future").first()).toBeVisible();
     await testPrisma.expense.deleteMany({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
@@ -524,7 +524,7 @@ describe("Expense CRUD", () => {
   it("drags a file onto the home page to create a receipt draft", async () => {
     await page.goto("/", { waitUntil: "load" });
 
-    // Dropping an unsupported file does nothing — no navigation.
+    // Dropping an unsupported file does nothing (no navigation).
     const textDrop = await page.evaluateHandle(() => new DataTransfer());
     await textDrop.evaluate((dt) => {
       dt.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
@@ -595,7 +595,7 @@ describe("Expense CRUD", () => {
     await page.goto(`/expense/${expense.id}`, { waitUntil: "load" });
     const main = page.locator("main#main-content");
 
-    // The seeded expense has every data field — no image — and the notice
+    // The seeded expense has every data field (no image), and the notice
     // is down (the image is not a completeness factor).
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
@@ -612,7 +612,7 @@ describe("Expense CRUD", () => {
     await main.dispatchEvent("dragleave", { dataTransfer: drag });
     await expect(main).not.toHaveClass(/outline-dashed/);
 
-    // Dropping a receipt image on edit: the new image is held as a draft —
+    // Dropping a receipt image on edit: the new image is held as a draft;
     // it shows in the editor (blob preview) and re-reads the fields, but
     // nothing is written to the row until Save.
     const png = await tinyPng();
@@ -625,7 +625,7 @@ describe("Expense CRUD", () => {
       },
       [...png],
     );
-    // draft-upload then ocr — both hit /api/expense in that order.
+    // draft-upload then ocr; both hit /api/expense in that order.
     const draft = page.waitForResponse(
       (r) =>
         r.url().includes("/api/expense") && r.request().method() === "POST",
@@ -642,7 +642,7 @@ describe("Expense CRUD", () => {
 
     // The new image renders as the draft preview…
     await expect(page.locator("img")).toBeVisible();
-    // …but the expense row is untouched — reloading still shows the
+    // …but the expense row is untouched: reloading still shows the
     // original (imageless) expense.
     expect(
       (
@@ -654,7 +654,7 @@ describe("Expense CRUD", () => {
     await page.reload({ waitUntil: "load" });
     await expect(page.locator("img")).toHaveCount(0);
 
-    // All data fields are present before and after the drop — the notice
+    // All data fields are present before and after the drop, so the notice
     // stays down.
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
@@ -706,7 +706,7 @@ describe("Expense CRUD", () => {
   });
 
   it("shows the Incomplete notice only while editing, not when creating", async () => {
-    // Create mode: a fresh expense is expected to be missing fields — the
+    // Create mode: a fresh expense is expected to be missing fields; the
     // badge is reserved for editing, where it flags what to fill in.
     await page.goto("/expense/new", { waitUntil: "load" });
     await expect(page.getByText("Incomplete")).toHaveCount(0);
@@ -737,7 +737,7 @@ describe("Expense CRUD", () => {
       await page.goto(`/expense/${id}`, { waitUntil: "load" });
       await expect(page.getByText("Incomplete")).toBeVisible();
 
-      // Filling the data fields clears the notice — the receipt image is
+      // Filling the data fields clears the notice; the receipt image is
       // not a completeness factor, so no draft upload is needed.
       await page.getByLabel("Amount").fill("12.34");
       await page.locator("input[list='merchants']").fill("Drag Test Store");

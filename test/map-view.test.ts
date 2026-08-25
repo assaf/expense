@@ -6,7 +6,7 @@ import { goto } from "./helpers/launchBrowser";
 /**
  * Mileage map rendering: the light Carto basemap, the cased route (white
  * underlay + blue line) with a gray dashed return leg, the numbered stop
- * bubbles with their invisible hit areas, and — critically — that
+ * bubbles with their invisible hit areas, and, critically, that
  * redrawing the route replaces the old layers instead of accumulating
  * them.
  */
@@ -59,7 +59,7 @@ describe("Mileage map rendering", () => {
     await inputs.nth(1).fill("");
     await inputs.first().pressSequentially("Wilshire Blvd", { delay: 20 });
     await inputs.nth(1).pressSequentially("Santa Monica Pier", { delay: 20 });
-    // Field 1 has focus — blurring it fires the geocode.
+    // Field 1 has focus; blurring it fires the geocode.
     await inputs.nth(1).blur();
     return { inputs };
   }
@@ -105,7 +105,7 @@ describe("Mileage map rendering", () => {
         .count(),
     ).toBe(1); // gray dashed return leg
 
-    // Redrawing (a second geocode) replaces the layers — the counts must
+    // Redrawing (a second geocode) replaces the layers, so the counts must
     // not grow (regression: stop markers used to accumulate).
     await page.goto("/", { waitUntil: "load" });
     const { inputs } = await openEditorWithRoute();
@@ -133,7 +133,7 @@ describe("Mileage map rendering", () => {
   });
 
   it("shows stops unconnected until directions are computed", async () => {
-    // The seeded mileage expense predates route persistence — it opens
+    // The seeded mileage expense predates route persistence: it opens
     // with its two stops but no route line until the on-open recompute
     // resolves. Hold the response so the in-between state is observable.
     let release: () => void = () => {};
@@ -175,7 +175,7 @@ describe("Mileage map rendering", () => {
     await page.waitForURL(/\/expense\//, { timeout: 10_000 });
     await expect(page.getByText("Mileage expense")).toBeVisible();
 
-    // The stops are there (numbered bubbles), but nothing is connected —
+    // The stops are there (numbered bubbles), but nothing is connected;
     // no route line until the directions arrive.
     await expect.poll(() => page.locator(".map-stop-bubble").count()).toBe(2);
     expect(

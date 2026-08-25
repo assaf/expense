@@ -6,20 +6,20 @@ drops pdf.worker.mjs / tesseract wasm and breaks PDF/OCR in production.
 Real coverage: `test/pdf-ocr.test.ts` (text extraction + rasterization in
 `pnpm test`; tesseract round-trip opt-in via `RUN_OCR_TESTS=1`, on in CI)
 and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
-runs in the deployed serverless bundle — `scripts/deploy` curls it after
+runs in the deployed serverless bundle; `scripts/deploy` curls it after
 CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
 push to `main`. The workflow: `secretlint` runs first and gates the whole
 pipeline, then `check` + `test` run in parallel, then
 `migrate-db` (runs `./scripts/migrate-prod --ci` against prod via the
-`DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass — never
+`DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass, never
 before) → `pdf-ocr-smoke`. The smoke job fails fast when
 CI or the migration fails, so a broken build or an unmigrated schema never
 reports a passing smoke check. Job timeouts (2/2/4/1/2 minutes) bound the
 whole run to a ~10m ceiling; typical runs are ~5m.
 **Deployment Checks gate: REMOVED (Aug 2026).** Production promotion is no
-longer gated on a Vercel Deployment Check — the alias follows the latest
+longer gated on a Vercel Deployment Check; the alias follows the latest
 READY production deployment automatically. The gate broke twice: a stale
-required check name ("Check & Test" — split into separate "Check" +
+required check name ("Check & Test", split into separate "Check" +
 "Test" jobs in 6037bcb, leaving Vercel waiting on a check-run that never
 existed, so every deployment's `deployment-alias` check stayed pending
 forever) kept the alias frozen on a pre-migration build for ~23h (P2021
@@ -31,7 +31,7 @@ alias. To inspect/re-add checks: `vercel project checks` /
 `/v2/projects/…/checks`); the Vercel dashboard path is Settings → Build &
 Deployment → Deployment Checks. Requires `VERCEL_TOKEN`,
 `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
-`SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name — keep
+`SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name; keep
 it stable.
 
 ## `./scripts/deploy` notes
@@ -41,10 +41,10 @@ knip's `ignoreBinaries` already treats it as global). Do NOT revert to
 `pnpx -y vercel@latest`: pnpm 10 blocks esbuild's build script with an
 interactive "Choose which packages to build" prompt that hangs scripted
 deploys (this forced raw `vercel deploy` workarounds that bypassed the
-test gate — Aug 2026).
+test gate; Aug 2026).
 
 Flags (any order): `--skip-tests`, `--skip-db-sync`. The latter skips
-`prisma db push` — Prisma 7's AI-agent consent guard refuses `db push
+`prisma db push`: Prisma 7's AI-agent consent guard refuses `db push
 --accept-data-loss` when it detects an agent (even for a verified no-op
 run), so agent-driven deploys should pass `--skip-db-sync` and verify
 schema drift separately:

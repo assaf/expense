@@ -6,8 +6,8 @@ import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
  * Shared shell for the two public verification-link landing pages
  * (/verify-email for account verification, /receipts-email-verify for
  * receipts-by-email sender verification). Both consume a single-use token
- * in the loader and render the same card — logo, status icon + title,
- * body copy, and a "Sign in" footer — differing only in the copy each
+ * in the loader and render the same card (logo, status icon + title,
+ * body copy, and a "Sign in" footer), differing only in the copy each
  * route supplies. The icon follows the status (green check, amber clock,
  * or red X) so the two pages can't drift apart visually.
  */

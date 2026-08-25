@@ -7,7 +7,7 @@
 #   5. open the production site
 #
 # Prod secrets come from `vercel env pull`. Use DATABASE_URL_UNPOOLED for schema
-# DDL — the pooled URL is for runtime queries.
+# DDL; the pooled URL is for runtime queries.
 set -eo pipefail
 
 PROD_DOMAIN="expense.labnotes.org"
@@ -23,7 +23,7 @@ done
 
 # The Vercel CLI is a global binary (see knip.json ignoreBinaries). pnpm's
 # dlx wrapper (`pnpx -y vercel@latest`) prompts interactively for esbuild's
-# build script and hangs a scripted deploy — use the global CLI directly.
+# build script and hangs a scripted deploy; use the global CLI directly.
 if ! command -v vercel >/dev/null 2>&1; then
   echo "vercel CLI not found on PATH — install it first: brew install vercel-cli" >&2
   exit 1
@@ -72,7 +72,7 @@ else
     echo -e "\033[0;33mVERCEL_PROTECTION_BYPASS is not set — the smoke check cannot reach the protected deployment URL; skipping.\033[0m"
     echo "Create it in Vercel (Settings → Security → Protection Bypass for Automation) and add it as a production env var."
   else
-    # Shared with the CI workflow's pdf-ocr-smoke job — see scripts/smoke-check.
+    # Shared with the CI workflow's pdf-ocr-smoke job (see scripts/smoke-check). scripts/smoke-check.
     ./scripts/smoke-check "$DEPLOY_URL"
   fi
 fi

@@ -3,12 +3,12 @@ import prisma from "~/lib/prisma.server";
 import { EMAIL_SHAPE_RE, extractEmailAddress } from "~/lib/validation";
 
 /**
- * Email rules — which senders a connected account auto-imports. General
+ * Email rules: which senders a connected account auto-imports. General
  * rules (accountId = "", synced from app/data/email-rules.ts) apply to
  * everyone; user rules are scoped to a workspace and learned from forwards.
  *
- * A rule's `sender` is either a full address ("receipts@stripe.com" — exact
- * match) or a bare domain ("apple.com" — matches the domain and any
+ * A rule's `sender` is either a full address ("receipts@stripe.com", exact
+ * match) or a bare domain ("apple.com", which matches the domain and any
  * subdomain).
  */
 
@@ -39,7 +39,7 @@ export async function matchEmailRule(
 ): Promise<EmailRuleRecord | undefined> {
   const fromAddress = extractEmailAddress(from);
   if (!fromAddress.includes("@")) return undefined;
-  // General rules first, then the workspace's own — a user rule can't be
+  // General rules first, then the workspace's own, so a user rule can't be
   // shadowed, but the order only matters for reporting anyway.
   const rules = await prisma.emailRule.findMany({
     where: { OR: [{ accountId: "" }, { accountId }] },
@@ -47,7 +47,7 @@ export async function matchEmailRule(
   return rules.find((r) => ruleSenderMatches(r.sender, fromAddress));
 }
 
-/** The general rules (accountId = "") — the seed + anything inferred. */
+/** The general rules (accountId = ""): the seed + anything inferred. */
 export async function listGeneralEmailRules(): Promise<EmailRuleRecord[]> {
   const rows = await prisma.emailRule.findMany({
     where: { accountId: "" },

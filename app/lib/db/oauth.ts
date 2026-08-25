@@ -9,7 +9,7 @@ import type {
 
 /**
  * Register an OAuth client (RFC 7591 dynamic registration). The raw client
- * secret is never stored — only its SHA-256 hash. Returns the record; the
+ * secret is never stored; only its SHA-256 hash. Returns the record; the
  * caller hands the secret to the client exactly once.
  */
 export async function registerOAuthClient(input: {
@@ -165,10 +165,10 @@ export async function revokeOAuthToken(tokenHash: string): Promise<void> {
 }
 
 /**
- * The OAuth clients this user has connected, with activity summary — the
- * Settings → Agents & API "connected apps" list. Individual tokens are not
+ * The OAuth clients this user has connected, with activity summary for
+ * the Settings → Agents & API "connected apps" list. Individual tokens are not
  * exposed here: the UI shows the app, when it was last used (the most recent
- * token issuance for this client — access tokens are minted on every
+ * token issuance for this client; access tokens are minted on every
  * session/refresh), and when its access expires (the furthest expiry among
  * still-active tokens; null when the connection has no live tokens).
  */
@@ -261,7 +261,7 @@ function oauthClientFromRow(row: {
       redirectUris = parsed.filter((v): v is string => typeof v === "string");
     }
   } catch {
-    // malformed stored JSON — treat as no redirect URIs
+    // malformed stored JSON; treat as no redirect URIs
   }
   return {
     id: row.id,

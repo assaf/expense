@@ -30,10 +30,10 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
 /**
  * Inbox review (/email-review): after connecting a mailbox, the user scans
- * the Inbox for receipt-like emails and decides each one — process (→
+ * the Inbox for receipt-like emails and decides each one: process (→
  * expense, email to Trash) or ignore (drops off the list). The scan
  * classifies locally (same regex gate as the auto-pipeline) but is NOT
- * limited to rule-matched senders — the review list is how a first-time
+ * limited to rule-matched senders, since the review list is how a first-time
  * sender's receipts surface, and the user can "accept" the sender while
  * processing (adds a user rule so their future receipts auto-import).
  *
@@ -42,24 +42,24 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * receivedAt/fromDisplay the list renders); process flips to
  * created/partial, ignore to `review-ignored`. The auto-pipeline's
  * seenEmail check skips any logged email, so pending/review-ignored rows
- * are never double-processed by a drain — and emails the pipeline already
+ * are never double-processed by a drain, and emails the pipeline already
  * created or ignored stay out of the list (the scan re-examines only
  * undecided or recoverable rows).
  */
 
 /** The scan examines at most this many of the most recent Inbox emails per
- * pass — deliberately bounded: a scan stays short (a handful of fetches)
+ * pass, deliberately bounded: a scan stays short (a handful of fetches)
  * and can't be hammered into downloading a whole backlog. Email older than
  * the most recent 50 isn't offered by review; rule-matched senders are
  * still caught by the auto-drain. */
 const SCAN_MAX_EMAILS = 50;
 
 /** Max time one scan request spends before returning partial results
- * (defensive — 50 fetches is normally seconds; this catches a slow
+ * (defensive; 50 fetches normally take seconds, and this catches a slow
  * mailbox/network). */
 const REVIEW_BUDGET_MS = 45_000;
 
-/** Ignored-row reasons that mean "definitely not a receipt" — the scan
+/** Ignored-row reasons that mean "definitely not a receipt": the scan
  * never re-offers these. Everything else (no rule, not a receipt locally,
  * no receipt content, not extractable locally, errors) is re-examined:
  * those are exactly the emails review exists to recover. */
@@ -69,7 +69,7 @@ const IGNORED_SKIP_REASONS = new Set(["self", "bounce", "own confirmation"]);
 
 /**
  * The rule pattern to remember for a sender when the user accepts them in
- * review: their domain for real senders (matches subdomains — the seeded
+ * review: their domain for real senders (matches subdomains, the seeded
  * rule style), or the exact address for freemail providers (a gmail.com
  * rule would import half the internet's forwarded mail).
  */
@@ -109,7 +109,7 @@ export interface ScanResult {
   /** Total waiting on the list now. */
   pending: number;
   /** True when the batch was fully examined; false means the time budget
-   * hit mid-batch — run the scan again to continue. */
+   * hit mid-batch; run the scan again to continue. */
   finished: boolean;
   /** True when the mailbox had at least SCAN_MAX_EMAILS recent emails, so
    * the list may be missing older receipts (the scan is capped by design). */
@@ -129,7 +129,7 @@ export interface ScanOptions {
  * review list (rows with outcome pending-review). One bounded batch: the
  * 50 most recent Inbox emails (newest first) are examined; already-decided
  * rows are skipped without a fetch. Stamps reviewScannedAt so the page
- * knows the list is current. A re-scan re-examines the same 50 (cheap —
+ * knows the list is current. A re-scan re-examines the same 50 (cheap,
  * decided rows skip) and picks up mail that arrived since.
  */
 export async function scanConnectionInbox(
@@ -193,13 +193,13 @@ export async function scanConnectionInbox(
         bodyText,
       })
     ) {
-      continue; // not a receipt — no row, the next scan re-checks
+      continue; // not a receipt: no row, the next scan re-checks
     }
     const fromAddress = extractEmailAddress(summary.from ?? "");
     const now = new Date().toISOString();
     // Mark the email as pending-review, but only when it is still
     // recoverable (no row, or ignored/error): a drain that processed it
-    // between our row-read and this write owns the decision — flipping a
+    // between our row-read and this write owns the decision; flipping a
     // created/processing row back to pending-review would re-offer an
     // already-imported receipt and risk a duplicate expense. The create
     // path's P2002 means someone else claimed it meanwhile: skip.
@@ -239,7 +239,7 @@ export async function scanConnectionInbox(
           err instanceof Prisma.PrismaClientKnownRequestError &&
           err.code === "P2002"
         ) {
-          continue; // a drain claimed this email meanwhile — its call
+          continue; // a drain claimed this email meanwhile; its call
         }
         throw err;
       }
@@ -311,7 +311,7 @@ async function countPendingReview(connectionId: string): Promise<number> {
 // --- Per-item actions -----------------------------------------------------------
 
 /** Remove an email from the list without touching the mailbox (the email
- * stays in the Inbox — the user might still want it there). The
+ * stays in the Inbox, where the user might still want it). The
  * review-ignored row also stops the auto-pipeline from ever re-offering
  * it. Returns false when the item wasn't on the list anymore. */
 export async function ignoreReviewItem(
@@ -331,7 +331,7 @@ export type ReviewProcessResult =
 
 /**
  * Process one review-list email as an expense: the same pipeline as
- * auto-import, in review mode (explicit user choice — the model is allowed,
+ * auto-import, in review mode (explicit user choice: the model is allowed,
  * the rule gate is off, failures keep the item on the list). On success the
  * email moves to Trash, the owner gets a confirmation in their Inbox, and
  * the item drops off the list. When `acceptSender` is set and the sender

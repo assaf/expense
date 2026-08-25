@@ -3,7 +3,7 @@ import { rawEmail } from "~/lib/fastmail.server";
 
 /**
  * rawEmail (the RFC 5322 blob download) must reject mail over MAX_EMAIL_BYTES
- * — the inbound pipeline otherwise buffers an unbounded message into a
+ * because the inbound pipeline otherwise buffers an unbounded message into a
  * serverless function (memory-exhaustion DoS reachable by any sender whose
  * mail gets processed). The cap is enforced DURING the stream read.
  */

@@ -10,7 +10,7 @@ function toISO(d: Date): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-/** "Friday, August 15, 2026" — the day buttons' accessible names. */
+/** "Friday, August 15, 2026" is the day buttons' accessible-name format. */
 function longLabel(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-US", {

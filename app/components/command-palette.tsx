@@ -68,7 +68,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
     searchQuery: state.searchQuery,
   }));
   // `prompting` lives above the portal (which unmounts per close), so it
-  // must be reset explicitly whenever the palette reopens — including a
+  // must be reset explicitly whenever the palette reopens, including a
   // Cmd+K pressed while the prompt is showing.
   const [prompting, setPrompting] = useState<null | "category">(null);
   useEffect(() => {
@@ -198,7 +198,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         },
       },
       // Typing a real query swaps the bare "Search expenses" command for a
-      // query-carrying one — kbar's `tokenMatch: "all"` would otherwise
+      // query-carrying one; kbar's `tokenMatch: "all"` would otherwise
       // hide the command the moment extra words are typed. The action name
       // embeds the query, so Fuse keeps matching it as the user types.
       ...(searchQuery.trim().length >= 2
@@ -384,7 +384,7 @@ function CategoryPrompt({
   const error = data && !data.ok ? data.error : null;
 
   // kbar restores focus to the element focused before the palette opened
-  // once the palette closes — that blur can hit this input mid-interaction.
+  // once the palette closes. That blur can hit this input mid-interaction.
   // Refocus once the palette is fully hidden (the blur is one-shot, so the
   // focus sticks).
   const { visualState } = useKBar((state) => ({
@@ -425,7 +425,7 @@ function CategoryPrompt({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              // Escape cancels the prompt (and reopens the palette) — no
+              // Escape cancels the prompt (and reopens the palette). No
               // kbar window handler is active while the palette is closed,
               // but stopPropagation keeps it that way regardless.
               if (e.key === "Escape") {

@@ -7,7 +7,7 @@ import type { StatementRow } from "~/lib/types";
 
 /**
  * Runs the REAL bank statement files (committed fixtures, test/fixtures/statements/)
- * through the full pipeline — PDFs, CSV, QuickBooks QBO, and Excel — and
+ * through the full pipeline (PDFs, CSV, QuickBooks QBO, and Excel) and
  * checks each layout still yields its transactions with clean descriptions
  * and correct credit classification. Extraction quirks (column merging,
  * y-sorting, custom-font encoding, yearless dates, Daily Cash columns,
@@ -16,7 +16,7 @@ import type { StatementRow } from "~/lib/types";
  *
  * The fixtures are the user's own statements, redacted of personal
  * information (names, emails, home address, card/account numbers, MICR
- * lines) by scripts/redact-statements.py — PII-bearing text is removed
+ * lines) by scripts/redact-statements.py: PII-bearing text is removed
  * from the PDF text layer and covered with black bars, and replaced in
  * CSV/QBO/Excel cells. This test therefore also guards the redaction
  * itself: re-reading the fixtures must surface none of the personal
@@ -132,7 +132,7 @@ const CASES: {
     ],
   },
   {
-    // The same Amex statement in CSV, QuickBooks QBO, and Excel — the
+    // The same Amex statement in CSV, QuickBooks QBO, and Excel. The
     // descriptions differ slightly per format (Amex truncates the NAME
     // field in QBO and pads the address in CSV/Excel), so these spot
     // checks are keyed on date + amount + direction only.
@@ -170,7 +170,7 @@ const CASES: {
 ];
 
 /** Personal identifiers that must never appear in the fixtures' text layer.
- * Names are word-boundary matched — "arkin" is a substring of "PARKING",
+ * Names are word-boundary matched: "arkin" is a substring of "PARKING",
  * which is a merchant, not the account holder. */
 const PII_NAMES = /\b(assaf|arkin|jennifer|hong|jyzoe)\b/i;
 const PII_OTHER = [
@@ -225,7 +225,7 @@ describe("real bank statement fixtures", () => {
       const buf = readFileSync(`${FIXTURES_DIR}/${file}`);
       const { rows, skipped } = await parseStatementUpload(file, buf);
 
-      // The statement's transactions all come through — nothing below the
+      // The statement's transactions all come through, nothing below the
       // per-bank floor.
       expect(rows.length).toBeGreaterThanOrEqual(minRows);
 

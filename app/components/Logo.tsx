@@ -2,9 +2,9 @@
  * The Expense logo. Renders the icon mark + "🧾 Expense" as selectable
  * DOM text so double-click → copy works reliably.
  *
- * `icon` — just the icon mark (footer, favicon-like spots). Still uses
+ * `icon`: just the icon mark (footer, favicon-like spots). Still uses
  *   alt text for copy behavior there.
- * `link` — wraps in a clickable link to "/".
+ * `link`: wraps in a clickable link to "/".
  */
 export function Logo({
   icon = false,

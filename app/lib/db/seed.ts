@@ -19,7 +19,7 @@ import type { MileageType, User } from "~/lib/types";
  * duplicate-pair dismissals out of the settings blob, and sync the global
  * IRS mileage-rate master table from app/data/mileage-rates.ts.
  *
- * There is no runtime DDL — schema changes go through `prisma migrate` /
+ * There is no runtime DDL: schema changes go through `prisma migrate` /
  * `pnpm db:push`; this only seeds data.
  */
 
@@ -64,7 +64,7 @@ export async function initStore(): Promise<void> {
 }
 
 /**
- * The IRS mileage-rate master table (global — the same rates for every
+ * The IRS mileage-rate master table (global, the same rates for every
  * account), synced from app/data/mileage-rates.ts whenever the seed
  * differs. Update the seed file to change rates; the next process start
  * applies it. Diff-based, so an unchanged seed is a no-op on every boot.
@@ -92,7 +92,7 @@ async function syncMileageRates(): Promise<void> {
 
 /**
  * The GENERAL email rules (accountId = ""), synced from the seed file
- * (app/data/email-rules.ts) — same diff-based pattern as the mileage rates:
+ * (app/data/email-rules.ts), the same diff-based pattern as the mileage rates:
  * an unchanged seed is a no-op on every boot. User rules (scoped rows) and
  * removals made here (a general rule deleted from the seed) are never
  * touched: the sync only adds/updates rows whose sender is in the seed.
@@ -149,7 +149,7 @@ function rateEntryEquals(a: MileageRateEntry, b: MileageRateEntry): boolean {
   );
 }
 
-/** In-memory cache for the global IRS mileage rates table — it changes at
+/** In-memory cache for the global IRS mileage rates table; it changes at
  * most once a year when new rates are published. 1-hour TTL is safe. */
 let mileageRatesCache: {
   data: MileageRateEntry[];

@@ -1,6 +1,6 @@
 /**
  * Build a raw RFC 5322 message for the app's outbound email (replies and
- * verifications). Pure — no I/O — so it is unit-testable and shared by the
+ * verifications). Pure (no I/O), so it is unit-testable and shared by the
  * FastMail JMAP sender.
  *
  * Structure: multipart/mixed when there are attachments, else
@@ -17,7 +17,7 @@ export interface SendEmailInput {
   subject: string;
   html: string;
   text?: string;
-  /** Original message's id — sets In-Reply-To + References (threading). */
+  /** Original message's id; sets In-Reply-To + References (threading). */
   inReplyTo?: string;
   /** File attachments; `content` is base64. `contentType` overrides the
    * default `application/octet-stream` (images/PDFs get their real type). */
@@ -83,7 +83,7 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     "MIME-Version: 1.0",
     // Stable marker so the inbound pipelines can recognize this as the
     // app's own outbound mail (confirmation/reply) and never reprocess it
-    // — the loop guard. Not subject to subject-wording changes.
+    // (the loop guard). Not subject to subject-wording changes.
     "X-Expense-Confirmation: 1",
   ];
   if (input.inReplyTo) {

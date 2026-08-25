@@ -32,7 +32,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   try {
     // Sentry cron monitor: a missed check-in (cron stops firing, the drain
-    // throws before completing, the route breaks on a bad deploy) alerts —
+    // throws before completing, the route breaks on a bad deploy) alerts:
     // the watchdog for the receipts pipeline. No-op when Sentry isn't
     // initialized (dev/tests/previews), so the tick still runs everywhere.
     const runTick = async () => {

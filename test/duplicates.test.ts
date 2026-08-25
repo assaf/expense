@@ -146,7 +146,7 @@ describe("Receipt duplicates", () => {
     expect(
       findDuplicates(makeReceipt({ id: "new" }), [makeReceipt()]),
     ).toHaveLength(1);
-    // Any difference — including one side empty — breaks the pair.
+    // Any difference (including one side empty) breaks the pair.
     expect(
       findDuplicates(makeReceipt({ id: "new", category: "Software" }), [
         makeReceipt(),

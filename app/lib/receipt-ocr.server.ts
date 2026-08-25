@@ -28,11 +28,11 @@ import type { ExtractionResult } from "./receipt-ai.server";
 /**
  * pdfjs runs its "fake worker" on the main thread. It normally loads
  * pdf.worker.mjs through a dynamic import whose specifier is a variable
- * annotated with a bundler ignore-hint — Vite and Vercel's tracer never
+ * annotated with a bundler ignore-hint; Vite and Vercel's tracer never
  * follow it, so the worker file is missing from the serverless bundle and
  * every PDF fails with "Setting up fake worker failed: Cannot find module
  * …pdf.worker.mjs". Statically importing the module and exposing its
- * WorkerMessageHandler makes pdfjs use it directly, with no file load — the
+ * WorkerMessageHandler makes pdfjs use it directly, with no file load, the
  * same code path its fake worker would have taken.
  */
 globalThis.pdfjsWorker = pdfjsWorker;
@@ -45,17 +45,17 @@ globalThis.pdfjsWorker = pdfjsWorker;
  * (scanned PDF) the pages are rasterized to a PNG and read by the image path
  * below. Images are normalized (HEIC/webp→png, alpha flattened, downscaled)
  * and extracted with the RECEIPT_OCR_MODE backend:
- *  - "auto" (default): DeepSeek vision first — no local OCR CPU on the happy
- *    path — tesseract only when the provider errors
+ *  - "auto" (default): DeepSeek vision first (no local OCR CPU on the happy
+ *    path); tesseract runs only when the provider errors
  *  - "deepseek": DeepSeek vision only
  *  - "tesseract": local OCR only (tesseract.js, worker/core/lang fetched from
- *    a CDN at runtime — safe for serverless bundles)
+ *    a CDN at runtime, which is safe for serverless bundles)
  */
 
 /** Normalize an image for OCR: decode, flatten alpha, cap width at 3000px. */
 async function normalizeImage(buffer: Buffer): Promise<Buffer> {
   const resized = await resizeIfWider(buffer, 3000);
-  if (resized === null) return buffer; // not decodable by sharp — pass through
+  if (resized === null) return buffer; // not decodable by sharp: pass through
   return sharp(resized)
     .flatten({ background: "#ffffff" })
     .png({ compressionLevel: 6 })
@@ -84,7 +84,7 @@ async function toBrowserImage(
     if (sniffed) mime = sniffed;
   }
   const resized = await resizeIfWider(buffer, STORED_IMAGE_MAX_WIDTH);
-  if (resized === null) return { buffer, mime }; // not decodable — pass through
+  if (resized === null) return { buffer, mime }; // not decodable, so pass through
   if (
     [
       "image/heic",
@@ -121,7 +121,7 @@ const nodeRequire = createRequire(import.meta.url);
  * The core loads the base64-embedded `.wasm.js` variants (patched via
  * patches/tesseract.js@7.0.0.patch) instead of the separate `.wasm` files,
  * because Vercel's dependency tracer ships JS but drops binary `.wasm`
- * references — the embedded variants survive tracing.
+ * references; the embedded variants survive tracing.
  */
 const TESSERACT_NODE_WORKER = nodeRequire.resolve(
   "tesseract.js/src/worker-script/node/index.js",
@@ -131,7 +131,7 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
  * Singleton tesseract worker, created lazily and reused across calls. The
  * wasm core comes from the local tesseract.js-core package; traineddata
  * downloads from a CDN once per process. A per-call worker paid WASM init +
- * (in serverless) a fresh traineddata download on every OCR — seconds of
+ * (in serverless) a fresh traineddata download on every OCR: seconds of
  * cold-start latency per image. One worker serializes recognize jobs
  * internally, so concurrent calls queue instead of spawning workers. Reset
  * on error: a failed recognize can leave the worker in a bad state, and the
@@ -165,11 +165,11 @@ export async function ocrImage(buffer: Buffer): Promise<string> {
 /**
  * pdf.js fetches the standard-14 fonts (Helvetica etc.) from the package's
  * standard_fonts dir; in serverless bundles that dir isn't shipped, so point
- * at the CDN copy. Non-fatal if unreachable — text extraction still works.
+ * at the CDN copy. Non-fatal if unreachable; text extraction still works.
  *
  * useWorkerFetch MUST be true: in the Node build it makes the worker fetch
  * standard-font data over HTTP (fetchBinaryData). With useWorkerFetch: false
- * the data is read via fs.readFile(standardFontDataUrl) — a CDN URL can't be
+ * the data is read via fs.readFile(standardFontDataUrl), and a CDN URL can't be
  * read as a file, so the font falls back to built-in rendering, which
  * produces visible glyphs locally but BLANK pages in the serverless bundle
  * (confirmed via the /api/smoke PNG pixel stats: mean 255, darkFraction 0).
@@ -182,7 +182,7 @@ function pdfData(buffer: Buffer): Uint8Array {
 }
 
 /**
- * Node has no FontFace API — render glyphs as paths (disableFontFace) and
+ * Node has no FontFace API, so render glyphs as paths (disableFontFace) and
  * fetch standard-font data from the CDN copy of pdfjs-dist over HTTP.
  */
 const pdfParams = {
@@ -192,7 +192,7 @@ const pdfParams = {
   verbosity: 0,
 } as const;
 
-/** Detect a PDF by mime or magic bytes — covers mislabeled uploads. */
+/** Detect a PDF by mime or magic bytes; covers mislabeled uploads. */
 function isPdfInput(buffer: Buffer, mime: string): boolean {
   return isPdf({ buffer, mime });
 }
@@ -239,8 +239,8 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
 
 /**
  * Extract the text layer of a PDF reconstructed into real lines (up to the
- * first 4 pages). Unlike `extractPdfText` — which joins every glyph on a
- * page into one string, fine for short receipts — this groups items by
+ * first 4 pages). Unlike `extractPdfText`, which joins every glyph on a
+ * page into one string (fine for short receipts), this groups items by
  * their vertical position so tabular statements keep their row structure
  * (date, description, amount on the same line). Reconciliation needs the
  * lines, not the text.
@@ -303,8 +303,8 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
       const viewport = page.getViewport({ scale: 2 });
       // A crafted MediaBox can declare a huge page (e.g. 20000x20000 pt →
       // a multi-GB canvas allocation). The input byte cap doesn't bound the
-      // decoded geometry, so clamp it here — mirroring sharp's
-      // limitInputPixels — before createCanvas eagerly allocates.
+      // decoded geometry, so clamp it here (mirroring sharp's
+      // limitInputPixels) before createCanvas eagerly allocates.
       const MAX_PDF_RENDER_PX = 4000;
       const MAX_PDF_RENDER_PIXELS = 8_000_000;
       if (
@@ -349,7 +349,7 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
 
 /**
  * Rasterize an uploaded PDF to a PNG for storage and rename it to *.png
- * (`receipt.pdf` → `receipt.png`). Throws when the PDF can't be rendered —
+ * (`receipt.pdf` → `receipt.png`). Throws when the PDF can't be rendered;
  * callers turn that into their own "couldn't read the PDF" response (see
  * prepareUploadedReceipt).
  */
@@ -370,7 +370,7 @@ async function rasterizePdfUpload(uploaded: {
  * rasterized to PNG before storage (receipts are always displayed as
  * images, and the thumbnail/export pipelines assume sharp-decodable
  * bytes). Non-PDFs pass through unchanged. Returns null when an unreadable
- * PDF fails to render — callers turn that into their own "Couldn't read
+ * PDF fails to render, and callers turn that into their own "Couldn't read
  * that PDF" response. Shared by the draft-upload (/api/expense) and the
  * editor image-replace (/expense/:id/image) routes, which differ only in
  * their log tag; `wasPdf` lets the draft route skip OCR for PDFs and run
@@ -459,15 +459,15 @@ export async function prepareUploadOr400(
  * Extract structured receipt data from an image attachment. Text-mode
  * inputs (PDF text layer, tesseract fallback) go through the known-merchant
  * skip (tryKnownMerchantExtraction) before any model call; the image path
- * itself is vision-first — a local OCR pre-scan would add seconds of
+ * itself is vision-first: a local OCR pre-scan would add seconds of
  * latency to every upload, while the email/PDF paths get the skip for free.
  * LLM results are cached per account by input hash (extractReceipt), so
  * re-uploading the same receipt skips the call too.
  * `stored` is the normalized, browser-friendly image for saving as the
  * receipt image.
  *
- * PDFs are rasterized to PNG first — the stored image must be displayable in
- * an <img> — and extraction prefers the PDF text layer, only OCR'ing the
+ * PDFs are rasterized to PNG first (the stored image must be displayable in
+ * an <img>), and extraction prefers the PDF text layer, only OCR'ing the
  * rendered pages when the text is empty (scanned PDF). Mirrors the
  * inbound-email path; a corrupt/undecodable PDF throws here and callers
  * decide the fate (the draft flow stores nothing and surfaces the error).
@@ -494,7 +494,7 @@ export async function extractFromImage(input: {
         ? {
             ...skipped,
             // The skip must not lose the receipt's own context (bill ref,
-            // billed account, Apple plan name). No subject here — the body
+            // billed account, Apple plan name). No subject here; the body
             // text alone carries the Apple markers.
             description: composeLocalDescription("", pdfText),
           }
@@ -558,7 +558,7 @@ export async function extractFromImage(input: {
       });
     }
   } else {
-    // "auto" — the LLM reads the image; tesseract runs only when the
+    // "auto" mode: the LLM reads the image; tesseract runs only when the
     // provider errors. The model is the better reader for photocopies,
     // glare, and skew, so a weak vision result stands rather than
     // spending local OCR CPU on a rescue it would likely miss anyway.
@@ -593,7 +593,7 @@ export async function extractFromImage(input: {
  * straight from the extraction, and the category as the merchant's previous
  * category when one exists (a merchant the user already categorized is
  * reused, not re-guessed), else the suggested category mapped onto one the
- * account already uses. Throws when extraction fails — callers decide
+ * account already uses. Throws when extraction fails, and callers decide
  * whether that is fatal (it isn't for drafts or edit-mode re-reads).
  * Shared by the draft upload (/api/expense) and the editor's image replace
  * (/expense/:id/image).

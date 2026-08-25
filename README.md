@@ -7,28 +7,29 @@
 
 ## Screenshots
 
-![Expense list — reports, receipts, and a mileage route](public/screenshot-home.png)
+![Expense list: reports, receipts, and a mileage route](public/screenshot-home.png)
 
 ![Receipt editor with the receipt image](public/screenshot-expense.png)
 
 What it does:
 
 - Log receipt expenses (upload/scan the image, specify the date, report,
-  category, merchant, amount) and mileage expenses (map a route on the map —
-  Leaflet + OSRM — using the per year mileage rate)
+  category, merchant, amount) and mileage expenses (map a route on the map,
+  powered by Leaflet + OSRM, using the per year mileage rate)
 - Forward your receipt to the email associated with your Expense account, and
   the receipt will be parsed and automatically added (see below)
-- Reports and categories — organize your expenses into; every receipt image is
+- Reports and categories to organize your expenses into; every receipt image is
   saved and automatically renamed to `YYYY-MM-DD_Report_Name.jpg`
-- Export — as a PDF (one PDF per report with receipt images attached) and a ZIP
+- Export: as a PDF (one PDF per report with receipt images attached) and a ZIP
   archive
 
 Stack:
 
 - React Router v8 (framework mode) + Tailwind v4, TypeScript
-- Postgres via Prisma — accounts, users, expenses, reports, categories,
+- Postgres via Prisma: accounts, users, expenses, reports, categories,
   settings, mileage, image blobs
-- Images: Postgres BYTEA (production and development/test) — no external storage
+- Images: Postgres BYTEA (production and development/test), with no external
+  storage
 - Deployed on Vercel + Supabase Postgres (git push to main automatically
   deploys)
 
@@ -43,7 +44,7 @@ Auth and accounts:
 
 ## Accounts and sharing
 
-Email/password login — email is the login name, stored in lowercase and
+Email/password login: email is the login name, stored in lowercase and
 validated, and unique at signup/join. All expenses, reports, categories, and
 settings belong to an account; everything in an account is shared between users,
 and accounts are fully isolated from each other.
@@ -61,16 +62,16 @@ Marketing pages that are available publicly double as the AI search surface: if
 an assistant is asked for an expense tracker, the GPTBot / OAI-SearchBot /
 ClaudeBot / PerplexityBot crawler quotes them. The copy is written in such a way
 that it's easily quotable and includes the app name and the URL and lives only
-in one file — `app/lib/seo-content.ts` — which renders all the surfaces:
+in one file, `app/lib/seo-content.ts`, which renders all the surfaces:
 
-| Page                                     | Purpose                                                        |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `/`                                      | Landing page (SoftwareApplication JSON-LD)                     |
-| `/about`                                 | Full feature/benefit list (AboutPage JSON-LD)                  |
-| `/faq`                                   | 13 Q&As matching real AI queries (FAQPage JSON-LD)             |
-| `/alternatives`                          | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)    |
-| `/llms.txt`                              | The llmstxt.org file — the curated overview AI assistants read |
-| `/about.md` `/faq.md` `/alternatives.md` | Markdown mirrors per the llms.txt convention                   |
+| Page                                     | Purpose                                                       |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `/`                                      | Landing page (SoftwareApplication JSON-LD)                    |
+| `/about`                                 | Full feature/benefit list (AboutPage JSON-LD)                 |
+| `/faq`                                   | 13 Q&As matching real AI queries (FAQPage JSON-LD)            |
+| `/alternatives`                          | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)   |
+| `/llms.txt`                              | The llmstxt.org file, the curated overview AI assistants read |
+| `/about.md` `/faq.md` `/alternatives.md` | Markdown mirrors per the llms.txt convention                  |
 
 Plumbing to support it: `public/robots.txt` explicitly permits the AI crawlers
 while app routes are blocked, and `public/sitemap.xml` lists the public pages.
@@ -84,31 +85,31 @@ else still requires a session.
   and **mileage** expenses (date, 2+ addresses, distance, amount, report).
 - Mileage routes run **Home → stops → Home**; distance is calculated using OSRM
   and the amount based on a per-year mileage rate. Maps is powered by Leaflet +
-  OpenStreetMap — **no API keys necessary**.
+  OpenStreetMap; **no API keys necessary**.
 - Incomplete expenses are highlighted to make it easy to complete them.
 - Paste (⌘V) or upload an image anywhere to create a new receipt.
 - **Export** each report as a PDF (grouped by category, with all receipt images
   attached) and a ZIP archive (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
-- **AI assistants (MCP)**: any MCP client — Claude, OpenAI — can connect by
+- **AI assistants (MCP)**: any MCP client (Claude, OpenAI) can connect by
   logging in with your account (OAuth; no API keys). See [AI
   assistants](#ai-assistants-mcp) below.
 
 ## AI assistants (MCP)
 
 The app speaks the Model Context Protocol at `https://expense.labnotes.org/mcp`
-(auth: OAuth 2.1 authorization-code + PKCE — sign in and authorize the
-connection; no API keys). An assistant linked with to your account can:
+(auth: OAuth 2.1 authorization-code + PKCE, where you sign in and authorize
+the connection; no API keys). An assistant linked with to your account can:
 
-- **Upload a receipt** — drag and drop a picture or PDF into chat; it processes
+- **Upload a receipt**: drag and drop a picture or PDF into chat; it processes
   the same way as the web app and uses the same OCR and extraction as well as
   your merchant history for categorization.
-- **Log a drive** — drag and drop stops written in plain English; it geocodes,
+- **Log a drive**: drag and drop stops written in plain English; it geocodes,
   routs, and prices the route according to the year's IRS rates.
-- **Answer questions about spending** — for example "how much have I spent on
-  flights last quarter?" — you'll receive the answer based on your data.
-- **Create reports** — create/close a report, move expenses into it, export
+- **Answer questions about spending**: for example "how much have I spent on
+  flights last quarter?" You'll receive the answer based on your data.
+- **Create reports**: create/close a report, move expenses into it, export
   a report PDF.
-- **Reconcile** — upload your bank statement as a CSV; it will match all charges
+- **Reconcile**: upload your bank statement as a CSV; it will match all charges
   without a matching receipt (read-only).
 
 Connect any MCP client:
@@ -136,7 +137,7 @@ The storage is Postgres-only via **Prisma** (`prisma/schema.prisma` is the only
 source of truth; the client is built to `prisma/generated` with `pnpm
 build:prisma`). `DATABASE_URL` is required upon launch (otherwise the app will
 crash with an error). Image blobs are stored inside Postgres BYTEA
-(`image_blobs`) in production and development — there is no additional storage
+(`image_blobs`) in production and development; there is no additional storage
 service.
 
 | Data                        | Images                         |
@@ -149,8 +150,8 @@ service.
 All reads/writes are done via `app/lib/database.ts` (Prisma queries scoped by
 `accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
 `imageBlob`). Image blobs are kept in `images/{accountId}/...` pathnames on all
-backends — they are namespaced per account and thus, two accounts cannot ever
-have a name conflict. Schema changes: edit `prisma/schema.prisma`, then run
+backends. They are namespaced per account, so two accounts can never have a
+name conflict. Schema changes: edit `prisma/schema.prisma`, then run
 `prisma migrate dev --name …` locally and `pnpm db:push` (or `pnpm db:migrate`)
 before deploy.
 
@@ -162,7 +163,7 @@ Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
 `.env` is used to fill holes. `DATABASE_URL` is required; `.env` is gitignored.
 if (!hasDatabase()) {
 
-**dev / test — local `.env`:**
+**dev / test (local `.env`):**
 
 ```bash
 # .env (project root, gitignored)
@@ -177,7 +178,7 @@ created via the app's signup/join flow. `SESSION_SECRET` is always required.
 one user.
 
 Accounts created before email login (username era) retain their original
-username as the stored email until `APP_EMAIL` is set — `initStore` then adds
+username as the stored email until `APP_EMAIL` is set; `initStore` then adds
 that address to the bootstrap (oldest) user, so the configured credentials
 continue to work.
 
@@ -185,7 +186,7 @@ Tests deliberately hardcode `expense_test` (Postgres with blobs/images), ignore
 the local database, and reset the schema from Prisma on every run (`pnpm
 test:db:push` in the test setup).
 
-**prod — Vercel:** set env vars in the project dashboard (Settings →
+**prod (Vercel):** set env vars in the project dashboard (Settings →
 Environment Variables): `DATABASE_URL` (Supabase Supavisor pooled URL),
 `SESSION_SECRET`,
 and (only until the first user exists) `APP_EMAIL` / `APP_PASSWORD`.
@@ -218,18 +219,18 @@ How it determines what to import:
 
 ### Setup DeepSeek
 
-- **DeepSeek vision**: the hosted DeepSeek API is text-only — receipt images are
-  OCR'd locally with tesseract.js (worker/fonts fetched from a CDN at runtime).
-  Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model will be able to
-  handle receipt images (vision tries first and falls back on `auto`).
+- **DeepSeek vision**: the hosted DeepSeek API is text-only, so receipt images
+  are OCR'd locally with tesseract.js (worker/fonts fetched from a CDN at
+  runtime). Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model will be
+  able to handle receipt images (vision tries first and falls back on `auto`).
 - **Scanned PDFs** (without the text layer) are rasterized and OCR'd; the first
   pages are uploaded as receipt image.
-- **HTML receipts** are converted to a text image (receipt form on the paper) —
+- **HTML receipts** are converted to a text image (receipt form on the paper);
   no headless browser needed.
-- Forwarding **as attachment (.eml)** — the receipt enclosed in `.eml` is not
+- Forwarding **as attachment (.eml)**: the receipt enclosed in `.eml` is not
   parsed; use normal inline forwarding (for example, Gmail/iOS includes original
   email in the body).
-- Webhook processing time limit is 60 seconds (max Vercel `maxDuration`) —
+- Webhook processing time limit is 60 seconds (max Vercel `maxDuration`),
   enough to download attachment + OCR + parse.
 
 ## Maps & geocoding

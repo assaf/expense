@@ -6,8 +6,8 @@ import { cn } from "~/lib/cn";
 
 /**
  * Shared layout for the public marketing/SEO subpages (/about, /ai, /faq,
- * /alternatives): the site chrome plus the standard hero — eyebrow label,
- * display heading, and summary paragraph — with the page body and an
+ * /alternatives): the site chrome plus the standard hero (eyebrow label,
+ * display heading, and summary paragraph), with the page body and an
  * optional dark CTA panel inside the same max-width container. The four
  * pages used to hand-write this shell; it lives here so the hero and the
  * CTA stay visually identical.
@@ -29,7 +29,7 @@ export function MarketingPage({
   summary: ReactNode;
   /** JSON-LD <script> blocks rendered before the main content. */
   schema?: ReactNode;
-  /** Container classes — override the default max-w-4xl (FAQ uses max-w-3xl). */
+  /** Container classes: override the default max-w-4xl (FAQ uses max-w-3xl). */
   className?: string;
   children?: ReactNode;
 }) {
@@ -61,7 +61,7 @@ export function MarketingPage({
  * The dark "create your account" panel that closes every marketing page:
  * ink background, centered heading + body, and a primary CTA button (white
  * variant on FAQ/Compare) with an optional ghost secondary button. The panel
- * always links to the signup — pages only vary the copy, the icon, the
+ * always links to the signup; pages only vary the copy, the icon, the
  * heading size, and the spacing.
  */
 export function MarketingCta({
@@ -84,7 +84,7 @@ export function MarketingCta({
   /** Optional ghost secondary button next to the primary. */
   secondaryLabel?: string;
   secondaryHref?: string;
-  /** Panel classes — top margin (mt-12 on FAQ/Compare) and padding. */
+  /** Panel classes for top margin (mt-12 on FAQ/Compare) and padding. */
   className?: string;
   /** Button-row margin (mt-6 on FAQ/Compare). */
   buttonRow?: string;

@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 
 /**
- * Forward-block stripping for email bodies — pure text/HTML logic in a
+ * Forward-block stripping for email bodies: pure text/HTML logic in a
  * font-free module. Lives apart from email-render.server (which pulls the
  * Inter woff2 for the headless-browser render path) so importers that only
  * need to strip forwarded-quote envelopes (the inbound + connected

@@ -5,11 +5,11 @@ import { parseCsv, parseStatementUpload } from "~/lib/reconcile.server";
 /**
  * Every statement fixture in test/fixtures/statements/ is paired with a
  * companion CSV named `<basename>-statements.csv` that lists every expense
- * (charge) in the statement — one `date,amount,merchant` row per expense.
+ * (charge) in the statement, one `date,amount,merchant` row per expense.
  * This test parses each statement and asserts it yields exactly the same
  * expenses: the same (date, amount) multiset.
  *
- * Only charges are compared — refunds/payments/credits are not expenses,
+ * Only charges are compared; refunds/payments/credits are not expenses,
  * and banks print them in a summary section the PDF parser deliberately
  * skips. The `merchant` column is documentation for the reader, not an
  * assertion: export formats mangle the name (QBO truncates "CENTRAL GARDENA"

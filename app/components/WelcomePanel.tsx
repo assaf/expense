@@ -7,7 +7,7 @@ import { Button } from "~/components/ui/Button";
  * One-time welcome panel shown on the expense list after FastMail
  * onboarding finishes. Introduces the features the user hasn't seen yet;
  * dismissing it writes the `onboardingDone` setting so it never returns.
- * `inboundAddress` comes from the loader — `~/lib/env` is server-only and
+ * `inboundAddress` comes from the loader; `~/lib/env` is server-only and
  * must never be imported from a client component.
  */
 
@@ -16,7 +16,7 @@ export function WelcomePanel({ inboundAddress }: { inboundAddress: string }) {
   const [hidden, setHidden] = useState(false);
   const busy = fetcher.state !== "idle";
 
-  // The dismiss action returns null — hide as soon as it settles, so the
+  // The dismiss action returns null; hide as soon as it settles, so the
   // panel doesn't linger until the next page load.
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data !== undefined) {

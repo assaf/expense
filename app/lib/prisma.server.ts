@@ -4,7 +4,7 @@ import { DATABASE_URL } from "~/lib/env";
 
 /**
  * Prisma client (driver adapter over node-postgres). The single database
- * connection for the app — schema comes from prisma/schema.prisma
+ * connection for the app; the schema comes from prisma/schema.prisma
  * (see `pnpm db:push` / `prisma migrate`), so there is no runtime DDL.
  */
 
@@ -20,13 +20,13 @@ if (!DATABASE_URL) {
  * Supabase's private CA (`Supabase Intermediate 2021 CA`), so
  * `sslmode=require`/`verify-full` FAIL with "self-signed certificate" on
  * pg >= 8.13 (sslmode=require no longer skips verification). Prod URLs
- * therefore carry `?sslmode=no-verify` (encrypt-only — matches the pooler's
+ * therefore carry `?sslmode=no-verify` (encrypt-only, matching the pooler's
  * long-standing behavior); local dev/test URLs omit it → no TLS.
  *
  * Serverless: every Vercel instance opens its own node-postgres pool, so a
  * burst of concurrent requests multiplies connections per request. Prod
  * connects through Supabase's TRANSACTION-mode pooler (port 6543), which
- * shares ONE small backend pool across all clients — connections are
+ * shares ONE small backend pool across all clients: connections are
  * checked out only for the duration of a query/transaction, so serverless
  * instances stop holding dedicated slots. Keep the per-instance pool small
  * and release idle connections fast; the pooler's `pool_size` in the

@@ -65,11 +65,11 @@ describe("inferRuleCandidates", () => {
       entry("no_reply@email.apple.com", "Your order #123", ""),
       entry("receipts@stripe.com", "Payment received", "Total: $12.00"),
       entry("receipts@stripe.com", "Your invoice", "Amount due: $8.50"),
-      // Plenty of mail, but mixed — ratio below 0.5.
+      // Plenty of mail, but mixed: ratio below 0.5.
       entry("news@github.com", "Your weekly digest", "unsubscribe"),
       entry("news@github.com", "Security alert", "new sign-in"),
       entry("news@github.com", "Your receipt from GitHub", "Total: $4.00"),
-      // Single receipt-like email — below minReceiptLike.
+      // Single receipt-like email, below minReceiptLike.
       entry("orders@shop.example", "Order confirmation", "Total: $9.99"),
     ];
     const { scanned, candidates } = await inferRuleCandidates("tok", OWNER);
@@ -138,7 +138,7 @@ describe("apply path (addEmailRule as inferred general rule)", () => {
       source: "inferred",
     });
     const general = await listGeneralEmailRules();
-    // A sender NOT in the seed (stripe.com is) — source must stay "inferred".
+    // A sender NOT in the seed (stripe.com is); source must stay "inferred".
     expect(
       general.filter((r) => r.sender === "acme-shop.example"),
     ).toHaveLength(1);

@@ -2,14 +2,14 @@
  * Local (no-LLM) classification for connected-account email: does this
  * email look like a receipt/order confirmation worth processing?
  *
- * This gate runs on EVERY rule-matched email in the webhook/cron drain —
+ * This gate runs on EVERY rule-matched email in the webhook/cron drain:
  * it must stay cheap (regex over subject + plain-text body) so marketing
  * mail is filtered without a model call. The LLM extraction only runs
  * after this says yes; the model's isReceipt verdict remains the backstop
  * for junk that slips through.
  *
  * False negatives are possible (a receipt with neither a receipt-y subject
- * nor a parseable total is skipped) — accepted deliberately: rule-matched
+ * nor a parseable total is skipped), accepted deliberately: rule-matched
  * senders' receipts virtually always carry one of these signals, and the
  * user still has the email in their Inbox to add manually.
  */
@@ -33,7 +33,7 @@ const TOTAL_BODY_RE =
 
 /** The app's own outbound mail carries this header (set by
  * buildRfc822Message) so the inbound pipelines can recognize it and never
- * reprocess it — the loop guard. Header-based (not subject-based) so it's a
+ * reprocess it (the loop guard). Header-based (not subject-based) so it's a
  * stable signal that survives subject-wording changes and can't be spoofed
  * by a real receipt (no real sender sets our custom header). */
 export function hasOwnConfirmationHeader(
@@ -64,7 +64,7 @@ export function looksLikeReceiptEmail(input: EmailClassifyInput): boolean {
   // A parseable total anywhere in the body is the strongest signal.
   if (TOTAL_BODY_RE.test(body)) return true;
 
-  // Shipping/tracking notices are order mail but not receipts — unless
+  // Shipping/tracking notices are order mail but not receipts, unless
   // the body shows money (checked above).
   if (SHIPMENT_SUBJECT_RE.test(subject)) return false;
 

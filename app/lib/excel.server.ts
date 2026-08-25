@@ -2,7 +2,7 @@ import { unzipSync } from "fflate";
 import { load } from "cheerio";
 
 /**
- * Minimal .xlsx (OOXML spreadsheet) reader — enough for bank statement
+ * Minimal .xlsx (OOXML spreadsheet) reader, enough for bank statement
  * exports. An .xlsx is a ZIP of XML: workbook.xml lists the sheets,
  * workbook.xml.rels maps each sheet's r:id to its worksheet file,
  * sharedStrings.xml holds the shared text, and each worksheet has the
@@ -16,7 +16,7 @@ import { load } from "cheerio";
  * ID (14–22, 45–47) or a custom format code with y/m/d/h/s tokens.
  *
  * Uses only libraries the app already ships (fflate for the ZIP, cheerio
- * for the XML) — no new dependency.
+ * for the XML); no new dependency.
  */
 
 function decode(bytes: Uint8Array | undefined): string {
@@ -102,7 +102,7 @@ function dateStyles(zip: Record<string, Uint8Array>): Set<number> {
 
 /** Excel serial number → ISO date (YYYY-MM-DD). The Excel epoch is
  * 1899-12-30; 25569 is the day offset to the Unix epoch. Time-of-day
- * fractions are dropped — the statement matcher only needs the date. */
+ * fractions are dropped (the statement matcher only needs the date). */
 function serialToDate(serial: number): string {
   if (!Number.isFinite(serial)) return "";
   const ms = (Math.floor(serial) - 25569) * 86_400_000;

@@ -54,7 +54,7 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
   Object.keys(FEATURE_ICONS).map((title) => {
     const benefit = BENEFITS.find((b) => b.title === title);
     // A missing title breaks at module load instead of silently dropping a
-    // card — the two lists can't drift apart without a loud error.
+    // card; the two lists can't drift apart without a loud error.
     if (!benefit) {
       throw new Error(
         `LandingPage feature "${title}" is missing from BENEFITS in seo-content.ts`,
@@ -301,7 +301,7 @@ export default function LandingPage() {
 
         {/* CTA */}
         <section className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
-          {/* The landing page's closing panel is the page's final moment —
+          {/* The landing page's closing panel is the page's final moment:
            * larger heading, taller padding, transparent Sign in. */}
           <MarketingCta
             heading="Start collecting this year's expenses."

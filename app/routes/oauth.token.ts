@@ -12,7 +12,7 @@ import { consumeOAuthCode } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.token";
 
 /**
- * POST /oauth/token — the OAuth token endpoint. Supports the
+ * POST /oauth/token: the OAuth token endpoint. Supports the
  * authorization_code grant (PKCE S256 required) and the refresh_token grant
  * (tokens rotate: the presented refresh token is revoked and a fresh pair
  * is issued). Client authentication: client_id parameter for "none"

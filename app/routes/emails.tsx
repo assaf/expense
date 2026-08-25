@@ -34,11 +34,11 @@ import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/emails";
 
 /**
- * Email — how receipts get into Expense by email. Two features:
+ * Email: how receipts get into Expense by email. Two features:
  *
  * 1. Connected email accounts: a user's own mailbox (FastMail via JMAP) whose
- *    receipts are imported automatically — expense added, email moved to
- *    Trash, reply with an edit link lands in the inbox.
+ *    receipts are imported automatically (expense added, email moved to
+ *    Trash, and a reply with an edit link lands in the inbox).
  * 2. Receipts by email: a dedicated forward-to address; forwarding a receipt
  *    email there parses and adds it (only from verified sender addresses).
  */
@@ -74,7 +74,7 @@ export async function action({ request }: Route.ActionArgs) {
       if (!result.ok) return Response.json(result);
       // New/updated sender → email its verification link so receipts start
       // flowing once the mailbox owner clicks it. `token: null` means the
-      // address was already verified for this account — nothing to send.
+      // address was already verified for this account; nothing to send.
       if (result.token) {
         const account = await readAccount(user.accountId);
         await sendVerificationEmail({
@@ -150,7 +150,7 @@ export async function action({ request }: Route.ActionArgs) {
       if (connection) {
         // Best effort: tear down the server-side push subscription with
         // the user's token. A failure (revoked token, FastMail down) still
-        // disconnects — the orphaned subscription dies at expiry and its
+        // disconnects. The orphaned subscription dies at expiry and its
         // pushes hit the webhook's unknown-connection path.
         try {
           const token = decryptSecret(connection.tokenEnc);

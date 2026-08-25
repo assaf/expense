@@ -83,7 +83,7 @@ describe("user email verification (store)", () => {
         where: { id: userId },
         data: {
           verificationTokenHash: hashToken("stale-tok"),
-          // 8 days ago — past the 7-day TTL.
+          // 8 days ago, past the 7-day TTL.
           verificationSentAt: new Date(Date.now() - 8 * DAY_MS).toISOString(),
         },
       });
@@ -108,7 +108,7 @@ describe("user email verification (store)", () => {
       await expect(
         deleteUnverifiedUser("replace@example.com"),
       ).resolves.toEqual({ status: "replaced" });
-      // The throwaway account is gone — the old verification link can no
+      // The throwaway account is gone; the old verification link can no
       // longer match anything.
       await expect(
         testPrisma.account.findUnique({ where: { id: unverified.accountId } }),

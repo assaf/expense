@@ -5,7 +5,7 @@ so they can be shared, matching the statement/receipt fixtures' redaction.
 
 Each committed .html is quoted-printable encoded (saved raw from the MIME
 source). This script decodes it, replaces the account holder's personal
-identifiers with REDACTED, and writes the clean HTML back in place — the same
+identifiers with REDACTED, and writes the clean HTML back in place; the same
 form the inbound pipeline would receive from Resend.
 
 Redacted: emails on the holder's domains (@labnotes.org / @arkin.me), the

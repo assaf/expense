@@ -4,20 +4,20 @@
  * a className string must have a `dark:` twin of the same utility family
  * (bg→bg, text→text, border→border, …) whose variant set covers it, e.g.
  * `hover:bg-gray-100` is satisfied by `dark:hover:bg-gray-800` (exact) or
- * by `dark:bg-gray-800` (dark base covers the hover state — Tailwind emits
+ * by `dark:bg-gray-800` (dark base covers the hover state: Tailwind emits
  * dark: after interactive variants, so it wins on hover). Catches:
  *
  *   - a color class with no dark variant at all (unreadable in dark mode)
  *   - conflicting `dark:` values for one utility+variant set, e.g.
  *     `text-gray-700 dark:text-gray-700 dark:text-gray-200` (the second
- *     silently wins — the typo class this check exists for)
+ *     silently wins, the typo class this check exists for)
  *
  * Theme-neutral utilities are exempt (they resolve identically in both
  * themes): transparent/current/inherit, `--color-ink`, white/black text on
  * colored surfaces, opacity overlays (bg-white/50, bg-black/50), the dark-
  * side muted text shades (gray-50…400), status-dot colors (hue-400
  * backgrounds), and status icon text (amber/green-600). The exact light→dark
- * color mapping is guidance in docs/dark-mode.md, not enforced here — the
+ * color mapping is guidance in docs/dark-mode.md, not enforced here, since the
  * app's surfaces legitimately use /50 opacities and tinted darks.
  *
  * Runs on every `.tsx` under `app` (components + routes).
@@ -34,25 +34,25 @@ const COLOR_UTILITY =
 
 /** Theme-neutral: same value in both themes. */
 const NEUTRAL = /-(?:transparent|current|inherit)$/;
-/** `--color-ink` resolves per theme — never needs a dark twin (docs). */
+/** `--color-ink` resolves per theme and never needs a dark twin (docs). */
 const INK = /-(?:bg|text)-ink$/;
-/** Dark-side muted text — valid on both themes (docs map gray-500/600/700/800
+/** Dark-side muted text, valid on both themes (docs map gray-500/600/700/800
  * TO these, so they are the dark-mode text palette). */
 const DARK_SIDE_TEXT = /^text-gray-(?:50|100|200|300|400)$/;
-/** Status indicator dots — the same color in both themes by design. */
+/** Status indicator dots: the same color in both themes by design. */
 const STATUS_DOT =
   /^bg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-400$/;
-/** Status icon text on tinted badges — readable on both themes. */
+/** Status icon text on tinted badges is readable on both themes. */
 const STATUS_ICON_TEXT = /^text-(?:amber|green|red|teal)-(?:500|600|700)$/;
-/** White/black text on colored buttons — theme-neutral. */
+/** White/black text on colored buttons is theme-neutral. */
 const SURFACE_TEXT = /^text-(?:white|black)$/;
-/** Opacity overlays (scrims, hero glows) — theme-neutral. */
+/** Opacity overlays (scrims, hero glows) are theme-neutral. */
 const OVERLAY = /^(?:bg|text)-(?:white|black)\/\d+$/;
-/** Dark-side surfaces — the dark-mode palette itself, safe to use as
+/** Dark-side surfaces: the dark-mode palette itself, safe to use as
  * always-dark tiles (e.g. a logo tile) in both themes. */
 const DARK_SIDE_BG = /^bg-gray-(?:800|900|950)$/;
 /** Deep accent fills paired with white text (badges, progress, verification
- * icons) — the fill color reads on both themes. */
+ * icons); the fill color reads on both themes. */
 const DEEP_ACCENT_BG =
   /^bg-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:500|600|700|800)$/;
 
@@ -127,11 +127,11 @@ for (const file of tsxFiles(APP_DIR)) {
 
     // Every non-exempt color utility needs a dark twin of the same family
     // whose variant set covers it. Coverage: the dark twin's variants minus
-    // `dark` are a SUBSET of the light token's variants — e.g. `dark:text-red-400`
+    // `dark` are a SUBSET of the light token's variants; e.g. `dark:text-red-400`
     // covers `hover:text-red-600` because Tailwind emits dark: after hover:,
     // so the dark base wins on hover. The one exception: `file:` targets the
     // `::file-selector-button` pseudo-element, which a plain dark: utility
-    // never styles — those need an explicit `dark:file:` twin.
+    // never styles, so those need an explicit `dark:file:` twin.
     for (const token of tokens) {
       if (token.startsWith("dark:")) continue;
       if (isExempt(token)) continue;

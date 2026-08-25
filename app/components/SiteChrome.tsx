@@ -16,8 +16,8 @@ const FOOTER_NAV: SiteNavItem[] = [
 /**
  * Site header + footer for the public marketing/SEO pages (the landing page
  * and the /about, /faq, /alternatives SitePage). Both pages render the same
- * chrome — the wordmark header with a "Sign in" button and the
- * brand + copyright footer with the fixed FOOTER_NAV link list — so the
+ * chrome: the wordmark header with a "Sign in" button and the
+ * brand + copyright footer with the fixed FOOTER_NAV link list, so the
  * chrome lives here and every public page just mounts SiteHeader +
  * SiteFooter.
  */
@@ -28,7 +28,7 @@ interface SiteNavItem {
   label: string;
   to: string;
   external?: boolean;
-  /** Hide on small screens (header nav only — it is already crowded). */
+  /** Hide on small screens (header nav only; it is already crowded). */
   hideOnMobile?: boolean;
 }
 

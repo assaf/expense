@@ -11,7 +11,7 @@ import {
  * Turn an email body into a receipt image (no headless browser needed):
  *  - HTML bodies are reduced to readable text (htmlToText)
  *  - the text is laid out on a white canvas as a monospace "receipt sheet"
- *    and rasterized to PNG — via sharp/librsvg with the font embedded as a
+ *    and rasterized to PNG, via sharp/librsvg with the font embedded as a
  *    @font-face data URI, falling back to resvg (SVG → PNG) with the
  *    bundled JetBrains Mono woff2 or system fonts.
  *
@@ -98,7 +98,7 @@ export async function hasInk(png: Buffer): Promise<boolean> {
     const stats = await sharp(png).stats();
     return stats.channels.slice(0, 3).some((c) => c.min < 250);
   } catch {
-    // Can't inspect — assume the render is fine rather than degrade it.
+    // Can't inspect; assume the render is fine rather than degrade it.
     return true;
   }
 }
@@ -107,7 +107,7 @@ export async function hasInk(png: Buffer): Promise<boolean> {
  * Rasterize a text receipt to a PNG buffer (white background, black mono
  * text). Renders through a fallback chain and refuses to return a blank
  * image:
- *  1. sharp (librsvg) with the font embedded via @font-face — sharp is
+ *  1. sharp (librsvg) with the font embedded via @font-face. sharp is
  *     already used in the receipt pipeline (HEIC/BMP/TIFF → PNG) so its
  *     native binary is guaranteed to be present on every runtime, and the
  *     embedded font needs no runtime font files.

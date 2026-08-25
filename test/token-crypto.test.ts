@@ -48,7 +48,7 @@ describe("token crypto", () => {
   it("reports unconfigured when EMAIL_TOKEN_ENCRYPTION_KEY is unset", async () => {
     vi.resetModules();
     // Empty (not deleted): env.ts re-runs loadEnvFile on re-import, and a
-    // developer's .env may legitimately define the key — an existing (empty)
+    // developer's .env may legitimately define the key; an existing (empty)
     // env var wins over the file, keeping this test hermetic.
     process.env.EMAIL_TOKEN_ENCRYPTION_KEY = "";
     const { isTokenCryptoConfigured } =

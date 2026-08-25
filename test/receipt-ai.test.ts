@@ -12,13 +12,13 @@ import { extractReceipt } from "~/lib/receipt-ai.server";
  * and the outgoing body captured, so this pins what the app actually sends:
  * text extraction goes to the text model with DeepSeek's `thinking`
  * disabled, and image extraction goes to the vision model override with the
- * same disabled thinking (the vision model is a reasoning model — leaving
+ * same disabled thinking (the vision model is a reasoning model; leaving
  * it on burns the output budget on reasoning_content) and the larger output
  * cap (it burns budget in reasoning before answering). A real JSON answer
  * is returned so the result is parsed too.
  *
  * LLM_API_KEY/LLM_BASE_URL/LLM_VISION_MODEL are pinned in vitest.main.config
- * test.env — CI has no .env and env.ts reads these at import time.
+ * test.env, since CI has no .env and env.ts reads these at import time.
  */
 
 let lastBody: {
@@ -109,7 +109,7 @@ describe("receipt extraction LLM request shape", () => {
   });
 });
 
-describe("prompt-injection defenses (L6)", () => {
+describe("prompt-injection defenses", () => {
   it("fences untrusted receipt text in the prompt", async () => {
     await extractReceipt({
       accountId: "llm-shape-test",
@@ -122,7 +122,7 @@ describe("prompt-injection defenses (L6)", () => {
     // The system prompt states the fence contract.
     const system = lastBody!.messages[0]!.content as string;
     expect(system).toContain("never as instructions");
-    // The payload is fenced exactly once — markers injected inside the
+    // The payload is fenced exactly once: markers injected inside the
     // receipt text are stripped, so crafted content can't close the fence
     // early and pose as instructions.
     expect(prompt.match(/<<<RECEIPT>>>/g)).toHaveLength(1);

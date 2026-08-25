@@ -96,7 +96,7 @@ const CSV = [
 
 /** Build a minimal .xlsx workbook from cell rows (fflate zip + minimal
  * OOXML). Number-like cells are stored as numeric cells, everything else
- * as shared strings — matching what bank exports produce. */
+ * as shared strings, matching what bank exports produce. */
 function makeXlsx(rows: string[][]): Buffer {
   const shared: string[] = [];
   const sharedIdx = new Map<string, number>();
@@ -209,7 +209,7 @@ describe("statement parsing", () => {
   });
 
   it("uses the earliest date column when a CSV carries trans + posting dates", () => {
-    // Chase-style with Posting Date listed first — the transaction date is
+    // Chase-style with Posting Date listed first; the transaction date is
     // still the row date (posting is a settlement artifact a day later).
     const { rows, skipped } = parseStatementCsv(
       [
@@ -309,7 +309,7 @@ describe("statement parsing", () => {
 
   it("uses the earlier of DTUSER / DTPOSTED in OFX", () => {
     // Chase QFX carries both the user's transaction date and the posting
-    // date — the transaction date is the expense date.
+    // date, and the transaction date is the expense date.
     const ofx = [
       "<OFX>",
       "<CREDITCARDMSGSRSV1>",
@@ -411,7 +411,7 @@ describe("statement parsing", () => {
     });
     expect(rows[1]).toMatchObject({ date: "2026-06-24", amount: "112.71" });
     // Credits carry refund keywords; the fee is a charge; payments are
-    // refunds — PDF signs vary by bank, so keywords decide.
+    // refunds. PDF signs vary by bank, so keywords decide.
     expect(rows[2]).toMatchObject({ direction: "refund" });
     expect(rows[3]).toMatchObject({
       date: "2026-07-12",
@@ -474,7 +474,7 @@ describe("statement parsing", () => {
     ];
     const { rows } = parsePdfStatementLines(lines);
     expect(rows).toHaveLength(2);
-    // Posting date printed first — the transaction date still wins.
+    // Posting date printed first, yet the transaction date still wins.
     expect(rows[0]).toMatchObject({
       date: "2026-07-07",
       description: "AMAZON MKTPLACE",
@@ -640,7 +640,7 @@ describe("statement matching", () => {
   });
 
   it("keeps genuinely different merchants apart (no fuzzy substring match)", () => {
-    // "Star" is a prefix of "Starbucks" — a fuzzy metric would wrongly
+    // "Star" is a prefix of "Starbucks"; a fuzzy metric would wrongly
     // link them; the exact-token/concatenation match must not.
     const row: StatementRow = {
       ...stubRows()[0]!,
@@ -874,7 +874,7 @@ describe("reconciliation store", () => {
     const second = await completeReconciliationRun(TEST_ACCOUNT_ID, run.id);
     expect(second.error).toMatch(/already finished/);
 
-    // A fresh run matching the now-reconciled expense finds no candidate —
+    // A fresh run matching the now-reconciled expense finds no candidate:
     // the matcher excludes it, so completing it touches nothing.
     const run2 = await draftRun();
     const matches = (await readReconciliationRun(TEST_ACCOUNT_ID, run2.id))!
@@ -950,7 +950,7 @@ describe("reconciliation store", () => {
   });
 
   it("detects QuickBooks .qbo files as OFX and parses them", async () => {
-    // QBO is the QuickBooks WebConnect format — an OFX file with a .qbo
+    // QBO is the QuickBooks WebConnect format: an OFX file with a .qbo
     // extension, in the XML 2.x form Amex and newer banks export
     // (<?xml…?><?OFX OFXHEADER="200"…?><OFX>…). Detection is
     // content-based, so the extension isn't even required.
@@ -1091,7 +1091,7 @@ describe("reconciliation store", () => {
   });
 
   it("parses a real QFX file end to end through the store", async () => {
-    // DevShop (99.99 @ 2026-04-05) and Misc (12.00 @ 2026-05-01) — expenses
+    // DevShop (99.99 @ 2026-04-05) and Misc (12.00 @ 2026-05-01): expenses
     // the earlier completion tests haven't touched.
     const qfx = [
       "OFXHEADER:100",

@@ -12,11 +12,11 @@ two passes:
    personal identifiers (names, emails, home address, card/account
    numbers, MICR lines, anything that is >= 60% digits with >= 10 digits)
    are flagged.
-2. The content streams (page + nested forms) are re-parsed op by op —
+2. The content streams (page + nested forms) are re-parsed op by op:
    pypdf visits operations in exactly the order they appear, so ops pair
    with the visitor's positions 1:1. Flagged ops have their text replaced
    with same-length spaces in the string's OWN encoding (UTF-16BE where
-   the source used it — plain ASCII spaces would decode as dagger glyphs)
+   the source used it; plain ASCII spaces would decode as dagger glyphs)
    and a black bar is painted over the region.
 
 Forms are shared across pages (Chase reuses its header XObjects), so all
@@ -50,7 +50,7 @@ from pypdf.generic import (
 
 # --- PII rules ---------------------------------------------------------------
 
-# Names are word-boundary matches — "arkin" must not match "PARKING".
+# Names are word-boundary matches: "arkin" must not match "PARKING".
 NAME_RE = re.compile(r"\b(assaf|arkin|jennifer|jyzoe)\b", re.IGNORECASE)
 EMAILS = ["@labnotes", "@gmail"]
 ADDRESS = ["1050 s flower", "apt 503", "90015-5106"]
@@ -87,7 +87,7 @@ def _blank_bytes(_raw: bytes) -> bytes:
     """Replace a text run with nothing. These fonts encode strings as
     Identity-H glyph codes; a space code (0x0020) is not mapped in every
     font's ToUnicode and decodes as garbage, so the safest blank is an
-    empty string — nothing extracts, and the redaction bar covers the
+    empty string. Nothing extracts, and and the redaction bar covers the
     region."""
     return b""
 
@@ -209,7 +209,7 @@ def redact_pdf(src_path: str, dst_path: str, is_pii=_is_pii) -> dict:
         bars = []
         for (text, x, y, fs) in flagged:
             # pypdf sometimes accumulates a whole page into one run at (0,0)
-            # — skip those (the per-line runs cover the same text).
+            # at (0,0); skip those (the per-line runs cover the same text).
             if x < 1 and y < 1:
                 continue
             best = None
@@ -294,7 +294,7 @@ def redact_pdf(src_path: str, dst_path: str, is_pii=_is_pii) -> dict:
             new_ops.append(([], b"f"))
         cs.operations = normalize_ops(new_ops)
         obj = refs[key]
-        # Write the edited content decoded with no filter — pypdf writes
+        # Write the edited content decoded with no filter; pypdf writes
         # stream data raw, and some banks chain Ascii85 filters that a
         # re-encode would corrupt. Decoded content is valid PDF.
         if NameObject("/Filter") in obj:
@@ -313,9 +313,9 @@ def redact_text(text: str) -> tuple[str, int]:
     and long digit runs. Returns the redacted text and the replacement
     count."""
     rules = [
-        # Card-holder names (word boundaries — "arkin" is in "PARKING").
+        # Card-holder names (word boundaries: "arkin" is in "PARKING").
         (re.compile(r"\b(ASSAF ARKIN|JENNIFER HONG)\b", re.I), "REDACTED"),
-        # Card endings: -12004, -13010, |12004 — but never an amount like
+        # Card endings: -12004, -13010, |12004, but never an amount like
         # -1260.08 (the lookahead excludes digits followed by a decimal).
         (re.compile(r"(?<=[-|])\d{4,5}(?![\d.])"), "XXXX"),
         # QBO account id (<ACCTID>H9ACO0O8N1XWTBJ|12004</ACCTID>).

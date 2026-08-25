@@ -15,8 +15,8 @@ import {
 import { formString, validateDate } from "~/lib/validation";
 
 /**
- * Shared handler for the "addReport" intent — used by both expense editor
- * routes (create and edit). Fetcher-driven — returns the created name or
+ * Shared handler for the "addReport" intent, used by both expense editor
+ * routes (create and edit). Fetcher-driven; returns the created name or
  * the error so the editor's Report picker can select the new report.
  */
 export async function addReportAction(
@@ -29,7 +29,7 @@ export async function addReportAction(
 }
 
 /**
- * Validate the inputs every expense write shares — the date (a valid
+ * Validate the inputs every expense write shares: the date (a valid
  * calendar date, not in the future) and the report (must exist and be
  * open, when one is assigned). Returns an error message, or null when the
  * inputs are fine. Callers skip the report check when the expense keeps
@@ -54,12 +54,12 @@ export async function validateExpenseInputs(
 /**
  * Persist an expense from a save form submission. Shared by the edit route
  * (/expense/:id, `existing` = the current row) and the create route
- * (/expense/new, `existing` = null — the expense is a fresh shell, and the
+ * (/expense/new, `existing` = null: the expense is a fresh shell, and the
  * form's `type` field decides receipt vs mileage).
  *
  * Applies the same validation as the original per-route actions:
  *  - date must be a valid calendar date, not in the future
- *  - a report that is closed can't be assigned — but an expense already in
+ *  - a report that is closed can't be assigned, but an expense already in
  *    a closed report keeps it when saved unchanged
  *  - the amount is normalized to two fractional digits
  *  - a receipt image is renamed to its convention name when date + report
@@ -76,7 +76,7 @@ export async function saveExpenseFromForm(
   const date = formString(form, "date");
   const report = formString(form, "report");
   const inputError = await validateExpenseInputs(accountId, date, report, {
-    // The report must exist and be open — an expense already in a closed
+    // The report must exist and be open; an expense already in a closed
     // report keeps it when saved unchanged (the check is skipped then).
     checkReport: Boolean(report && (!existing || report !== existing.report)),
   });
@@ -91,14 +91,14 @@ export async function saveExpenseFromForm(
     ? existing.type === "mileage"
     : formString(form, "type") === "mileage";
   if (isMileage) {
-    // The IRS trip type (business/charity/medical/moving) — invalid or
+    // The IRS trip type (business/charity/medical/moving); invalid or
     // missing values fall back to the business default.
     const rawType = formString(form, "mileageType");
     const mileageType: MileageExpense["mileageType"] = isMileageType(rawType)
       ? rawType
       : "business";
     // The form carries the latest computed route geometry (empty when the
-    // session never recomputed — keep the stored route then, so a legacy
+    // session never recomputed; keep the stored route then, so a legacy
     // expense saved unchanged doesn't wipe its geometry).
     const sentRoute = parseRoute(formString(form, "route"));
     const route =
@@ -117,7 +117,7 @@ export async function saveExpenseFromForm(
       description,
       amount,
       mileageType,
-      // Empty/blank addresses are never persisted — the editor keeps blank
+      // Empty/blank addresses are never persisted: the editor keeps blank
       // rows as placeholders, but a saved trip only stores real stops.
       locations: parseLocations(formString(form, "locations")).filter(
         (l) => l.address.trim() !== "",
@@ -142,7 +142,7 @@ export async function saveExpenseFromForm(
     amount,
     merchant: formString(form, "merchant").trim(),
     // A draft image (held by /api/expense) becomes the expense's image on
-    // save — in create mode it's the uploaded receipt, in edit mode it's a
+    // save: in create mode it's the uploaded receipt, in edit mode it's a
     // replacement held locally until Save (the editor shows the new file
     // without touching the row, so a reload still shows the original). The
     // convention rename below moves it into the dated/report-named key.
@@ -165,7 +165,7 @@ export async function saveExpenseFromForm(
     existing.imageFile !== draftKey
   ) {
     // The replacement is a new blob (the draft); the old stored image is
-    // orphaned once the row points at the new key — drop it.
+    // orphaned once the row points at the new key; drop it.
     await deleteImage(accountId, existing.imageFile);
   }
   if (receipt.imageFile) {

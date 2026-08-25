@@ -4,7 +4,7 @@ import type { EmailConnectionRecord } from "~/lib/types";
 
 /**
  * Connected email accounts (Email page → Email accounts): a user's own
- * mailbox linked for automatic expense import. One row per mailbox —
+ * mailbox linked for automatic expense import. One row per mailbox;
  * emailAddress is globally unique so two workspaces can never race to
  * process (and trash) the same email. API tokens are stored encrypted
  * (token-crypto.server.ts), never in the clear.
@@ -132,7 +132,7 @@ export async function findEmailConnectionByAddress(
 }
 
 /** A connection row with the token ciphertext and push-subscription state
- * (server-side only — never returned to the client). */
+ * (server-side only, never returned to the client). */
 export interface EmailConnectionWithSecret extends EmailConnectionRecord {
   tokenEnc: string;
   jmapAccountId: string;
@@ -183,7 +183,7 @@ export async function readEmailConnection(
   return row ? rowWithSecret(row) : undefined;
 }
 
-/** A connection by id alone — the push webhook has no session/account. */
+/** A connection by id alone; the push webhook has no session/account. */
 export async function readEmailConnectionById(
   id: string,
 ): Promise<EmailConnectionWithSecret | undefined> {
@@ -245,7 +245,7 @@ export async function createEmailConnection(input: {
 }
 
 /**
- * Disconnect a mailbox: delete the row (the token dies with it — revoking
+ * Disconnect a mailbox: delete the row (the token dies with it; revoking
  * the token itself stays a FastMail-side action for the user). Caller must
  * also destroy the server-side push subscription once phase 2 wires it.
  */
@@ -274,7 +274,7 @@ export async function saveEmailConnectionSubscription(
   });
 }
 
-/** A push arrived — stamp lastPushAt (the "last handled webhook" stat). */
+/** A push arrived: stamp lastPushAt (the "last handled webhook" stat). */
 export async function touchEmailConnectionPush(id: string): Promise<void> {
   await prisma.emailConnection.update({
     where: { id },

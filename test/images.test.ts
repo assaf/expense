@@ -296,7 +296,7 @@ describe("renameImageToConvention", () => {
     expect(nameA).toBe("images/acct_test1/2026-01-15_2026_Test_receipt.jpg");
 
     // Second image with the same date/report/original name must get a
-    // different, GUID-suffixed name — never a duplicate.
+    // different, GUID-suffixed name, never a duplicate.
     const { filename: tempB } = await saveImage(
       TEST_ACCOUNT_ID,
       BUFFER,
@@ -409,7 +409,7 @@ function bombPng(width: number, height: number): Buffer {
 
 describe("pixel cap on decode", () => {
   it("rejects an over-cap image instead of allocating a huge buffer", async () => {
-    // 16385×4096 ≈ 67.1MP — just past the 2^26 cap; libvips' own limits
+    // 16385×4096 ≈ 67.1MP, just past the 2^26 cap; libvips' own limits
     // are far higher, so this only trips the app's cap.
     const bomb = bombPng(16385, 4096);
     expect(await resizeIfWider(bomb, 1024)).toBeNull();

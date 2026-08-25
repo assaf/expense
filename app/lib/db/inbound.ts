@@ -34,7 +34,7 @@ export async function upsertInboundEmail(input: {
 
 /**
  * Atomically claim a received email for processing. Inserts the row with
- * status "processing" via `createMany ... skipDuplicates` — when two
+ * status "processing" via `createMany ... skipDuplicates`: when two
  * concurrent drains (a burst of webhook pushes, or a push racing the daily
  * cron) both list the same email before either marks it, exactly one wins
  * the claim and the other gets `claimed: false` with the existing row.
@@ -43,7 +43,7 @@ export async function upsertInboundEmail(input: {
  *
  * The row is updated to the final outcome (created/partial/error) by the
  * pipeline. A drain that crashes mid-processing leaves a "processing" row
- * and the email stays marked in the folder — the same recovery path as a
+ * and the email stays marked in the folder: the same recovery path as a
  * crash after the keyword mark (the error reply / folder state is the
  * recovery), and the price of never replying twice.
  */
@@ -71,7 +71,7 @@ export async function claimInboundEmail(input: {
     skipDuplicates: true,
   });
   if (count > 0) return { claimed: true, existing: undefined };
-  // The row already exists — read it so the caller can decide how to
+  // The row already exists; read it so the caller can decide how to
   // treat the duplicate (already done, in flight, or previously failed).
   const existing = await prisma.inboundEmail.findUnique({
     where: { emailId: input.emailId },
@@ -83,7 +83,7 @@ export async function claimInboundEmail(input: {
 }
 
 /**
- * The account that verified this sender address — the exclusivity owner.
+ * The account that verified this sender address (the exclusivity owner).
  * Only verified addresses accept receipts; see InboundSenderVerification.
  * Undefined when no account has verified the address.
  */
@@ -152,7 +152,7 @@ export async function listInboundSenders(
 /**
  * Add a sender address for an account (normalized, idempotent) and mint a
  * fresh verification token for it. The address is only usable once verified
- * — and only one account can verify it. Returns the token so the caller
+ * and only one account can verify it. Returns the token so the caller
  * emails the verification link; `token: null` means the address was already
  * verified for this account (nothing to send). Fails when the address is
  * already verified for a different account.
@@ -277,7 +277,7 @@ export async function verifyInboundSenderAddress(
           verifiedAt: new Date().toISOString(),
         },
       }),
-      // The address is now exclusively this account's — drop rivals' pending rows.
+      // The address is now exclusively this account's; drop rivals' pending rows.
       prisma.inboundSender.deleteMany({
         where: { address: row.address, accountId: { not: row.accountId } },
       }),
@@ -290,7 +290,7 @@ export async function verifyInboundSenderAddress(
       }),
     ]);
   } catch (err) {
-    // P2002 — another account verified the address first (race).
+    // P2002: another account verified the address first (race).
     if ((err as { code?: string } | null)?.code === "P2002") {
       return {
         status: "already-verified",
@@ -311,12 +311,12 @@ export async function verifyInboundSenderAddress(
 
 /**
  * Claim the account's login email as a VERIFIED receipts-by-email sender
- * without an emailed link — used by FastMail onboarding, where a valid
+ * without an emailed link; used by FastMail onboarding, where a valid
  * JMAP API token has already proven mailbox control (the same proof the
  * link click provides). Creates the sender row when missing, then claims
  * the address exclusively with the same transaction as the link click.
  * `claimedByOther` means the address is already verified for a different
- * account — the caller must not touch it (and must not treat it as fatal).
+ * account, so the caller must not touch it (and must not treat it as fatal).
  */
 export async function verifyInboundSenderDirect(
   accountId: string,
@@ -338,11 +338,11 @@ export async function verifyInboundSenderDirect(
       prisma.inboundSenderVerification.create({
         data: { address: normalized, accountId, verifiedAt: now },
       }),
-      // The address is now exclusively this account's — drop rivals' pending rows.
+      // The address is now exclusively this account's; drop rivals' pending rows.
       prisma.inboundSender.deleteMany({
         where: { address: normalized, accountId: { not: accountId } },
       }),
-      // No emailed token to consume — the proof was the JMAP session.
+      // No emailed token to consume; the proof was the JMAP session.
       prisma.inboundSender.updateMany({
         where: { accountId, address: normalized },
         data: { verificationTokenHash: null, verificationSentAt: null },
@@ -350,7 +350,7 @@ export async function verifyInboundSenderDirect(
     ]);
     return { verified: true, claimedByOther: false };
   } catch (err) {
-    // P2002 — another account verified the address first (race).
+    // P2002: another account verified the address first (race).
     if ((err as { code?: string } | null)?.code === "P2002") {
       return { verified: false, claimedByOther: true };
     }
@@ -365,7 +365,7 @@ export async function verifyInboundSenderDirect(
  * returned (send the verification email now) when the row was just created
  * or the last verification email is stale (>24h). `verified` reports an
  * already-verified own row; `claimedByOther` means the address is verified
- * for a different account (the login email can't be claimed — the mailbox
+ * for a different account (the login email can't be claimed, since the
  * owner verified it elsewhere first).
  */
 export async function ensureInboundSenderForUser(
@@ -399,7 +399,7 @@ export async function ensureInboundSenderForUser(
       Number.isFinite(sentAt) &&
       Date.now() - sentAt < VERIFICATION_RESEND_MS
     ) {
-      // A fresh verification email is already in flight — don't re-send.
+      // A fresh verification email is already in flight; don't re-send.
       return { token: null, verified: false, claimedByOther: false };
     }
   }

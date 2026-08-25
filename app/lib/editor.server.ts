@@ -9,7 +9,7 @@ import { homeLocation, type Expense, type Location } from "~/lib/types";
 /**
  * Editor context shared by the edit loader (/expense/:id) and the create
  * loader (/expense/new): the expense plus the pickers and defaults both
- * editors render — open reports, categories, prior merchants, home location,
+ * editors render, namely open reports, categories, prior merchants, home location,
  * and the IRS mileage-rate master table (the editor resolves the rate from
  * it by trip date + type, so changing either recomputes the amount).
  */

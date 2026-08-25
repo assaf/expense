@@ -8,7 +8,7 @@ export function hasAmount(amount: string): boolean {
 }
 
 /** A receipt is complete when it has date, merchant, amount, category, and
- * report. The receipt image is deliberately NOT a completeness factor — the
+ * report. The receipt image is deliberately NOT a completeness factor; the
  * badge tracks the data fields only. */
 export function isReceiptComplete(
   e: Extract<Expense, { type: "receipt" }>,

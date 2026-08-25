@@ -23,12 +23,12 @@ export async function launchServer(): Promise<string> {
     DATABASE_URL: "postgres://assaf@localhost/expense_test",
     // Fixed key (same value as vitest.main.config.ts `test.env`) so the Email
     // page renders the connected-accounts UI deterministically. The spawned
-    // server doesn't inherit vitest's test.env — globalSetup runs in the main
-    // process — and CI has no .env, so without this the section would show
+    // server doesn't inherit vitest's test.env (globalSetup runs in the main
+    // process), and CI has no .env, so without this the section would show
     // "not configured" there and "configured" locally.
     EMAIL_TOKEN_ENCRYPTION_KEY: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
     // PUBLIC_URL would otherwise leak from .env into the test server and
-    // change the OAuth metadata issuer to the production origin — tests
+    // change the OAuth metadata issuer to the production origin; tests
     // assert on the request/forwarded origin instead.
     PUBLIC_URL: "",
     // Pin the server's clock to the suite-wide pinned instant (see
@@ -51,8 +51,8 @@ export async function launchServer(): Promise<string> {
   });
 
   // Wait for the server to be ready by polling the port. Uses
-  // performance.now() — the test-process Date is frozen by the suite, so
-  // Date.now() would never advance past the deadline.
+  // performance.now() because the test-process Date is frozen by the suite
+  // and Date.now() would never advance past the deadline.
   const baseURL = `http://127.0.0.1:${serverPort}`;
   const deadline = performance.now() + 60_000;
   while (performance.now() < deadline) {

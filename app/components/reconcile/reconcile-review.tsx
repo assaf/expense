@@ -51,7 +51,7 @@ export function DraftReview({
   const fetcher = useFetcher();
   const busy = fetcher.state !== "idle";
 
-  // Rows are stored in file order — show them newest first (dates are
+  // Rows are stored in file order; show them newest first (dates are
   // YYYY-MM-DD, so lexicographic sort is chronological; ties keep file
   // order). Matches and decisions are keyed by `row.index`, so reordering
   // the display list never misaligns them.
@@ -74,7 +74,7 @@ export function DraftReview({
       "new",
   );
   // Every row without an effective match or new-expense decision will be
-  // left out at completion — including auto-matched rows the user dropped.
+  // left out at completion, including auto-matched rows the user dropped.
   const unmatched = rows.filter(
     (r) =>
       effectiveCall(r.match, data.decisions[String(r.row.index)]).kind ===
@@ -233,7 +233,7 @@ export function DraftReview({
             const f = new FormData();
             f.set("intent", "complete");
             f.set("runId", run.id);
-            // The server runs UTC — the future-date ceiling must be the
+            // The server runs UTC, so the future-date ceiling must be the
             // client's local today, computed in the browser.
             f.set("today", todayDate());
             void fetcher.submit(f, { method: "post" });
@@ -522,7 +522,7 @@ function ReviewRowCard({
   );
 }
 
-/** A row already queued as a new expense — show the pending draft; the
+/** A row already queued as a new expense. Show the pending draft; the
  * user can remove it (and re-add with different fields). */
 function NewExpenseCard({ runId, row }: { runId: string; row: StatementRow }) {
   const { busy, submit } = useRowDecision(runId, row.index);

@@ -8,7 +8,7 @@
  *  - filename: case-insensitive extension match
  *  - bytes: PDF magic bytes, covering mislabeled uploads (e.g. a browser
  *    that reports no type)
- * Any provided signal may match — pass what you have.
+ * Any provided signal may match; pass what you have.
  */
 
 /** True when the mime type is a PDF (parameters after ";" ignored). */
@@ -28,7 +28,7 @@ function isPdfMagicBytes(buffer: Buffer): boolean {
   );
 }
 
-/** True when the input is a PDF — by mime, filename, or magic bytes. */
+/** True when the input is a PDF: by mime, filename, or magic bytes. */
 export function isPdf(input: {
   buffer?: Buffer;
   mime?: string;
@@ -43,7 +43,7 @@ export function isPdf(input: {
 }
 
 /** File extensions the app treats as image receipts. Single source of truth
- * for extension-based image detection — add a format here (not in a second
+ * for extension-based image detection; add a format here (not in a second
  * regex) when a new image type is supported. The storage mime map in
  * images.server.ts covers the narrower subset it re-encodes/stores by
  * mime; the wider set here is what detection accepts. */
@@ -63,7 +63,7 @@ const IMAGE_EXTENSIONS = [
 
 const IMAGE_NAME_RE = new RegExp(`\\.(${IMAGE_EXTENSIONS.join("|")})$`, "i");
 
-/** Sniff the real image mime from the leading bytes — "image/png",
+/** Sniff the real image mime from the leading bytes: "image/png",
  * "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/tiff",
  * "image/heic" or "image/avif". Null when the bytes aren't a known image.
  * Covers attachments served as application/octet-stream (phones attach
@@ -92,7 +92,7 @@ export function detectImageMime(buffer: Buffer): string | null {
   return null;
 }
 
-/** True when the input is an image — by mime, filename, or magic bytes. */
+/** True when the input is an image, by mime, filename, or magic bytes. */
 export function isImage(input: {
   mime?: string;
   originalName?: string;
@@ -116,7 +116,7 @@ export function isImage(input: {
   return false;
 }
 
-/** True when a dropped/pasted/uploaded file matches the upload input —
+/** True when a dropped/pasted/uploaded file matches the upload input:
  * any image mime, or a PDF by mime or filename. Client-side counterpart
  * to the server's isImage/isPdf checks; used by the drag-drop targets. */
 export function isReceiptFile(file: File): boolean {

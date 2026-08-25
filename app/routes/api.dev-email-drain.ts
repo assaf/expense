@@ -5,7 +5,7 @@ import { safeEqual } from "~/lib/passwords";
 import type { Route } from "./+types/api.dev-email-drain";
 
 /**
- * DEV ONLY — drain one connected mailbox with the REAL renderer (headless
+ * DEV ONLY: drain one connected mailbox with the REAL renderer (headless
  * Chromium, not the tsx stub) so the saved receipt image is a true render of
  * the email. The tsx `pnpm drain:email` script stubs the renderer (tsx can't
  * load Vite's ?inline font assets), which produces a 1×1 placeholder image;
@@ -13,7 +13,7 @@ import type { Route } from "./+types/api.dev-email-drain";
  *
  * Gated: rejects in production, and requires `Authorization: Bearer
  * <CRON_SECRET>` (same as the cron routes). Drains the Inbox, 60-day
- * lookback, batch 50 — idempotent (already-evaluated emails are skipped).
+ * lookback, batch 50. Idempotent (already-evaluated emails are skipped).
  *
  *   curl -s -H "Authorization: Bearer $CRON_SECRET" \
  *     "http://localhost:4565/api/dev-email-drain?connection=<id>"

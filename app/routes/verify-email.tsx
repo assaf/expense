@@ -10,12 +10,12 @@ import type { Route } from "./+types/verify-email";
 
 /**
  * Public landing page for account-verification links (emailed after
- * signup/join). No session — anyone with the token can verify, which is
+ * signup/join). No session: anyone with the token can verify, which is
  * the point: only the mailbox owner has the link. The loader consumes the
  * single-use token and marks the user's email verified, after which they
  * can sign in. Refreshing a used link reports "already verified" (the
  * token hash is kept after success); a token from a replaced account
- * (re-signup while unverified) is invalid — the old link is discarded.
+ * (re-signup while unverified) is invalid; the old link is discarded.
  */
 
 export async function loader({

@@ -16,9 +16,9 @@ deleted by reconciliation.** Draft runs store rows/matches/decisions in a
 `reconciliation_runs.data` JSON column (survives reloads); the file sha256
 (`fileHash`) makes re-uploads idempotent (resume the draft, or refuse when
 already completed). `Expense.reconciledAt` is only ever written by the
-reconciliation flow — `expenseData` deliberately omits it so a normal save
+reconciliation flow; `expenseData` deliberately omits it so a normal save
 can't wipe the status. The home page shows a green “Reconciled” badge and
 a Reconcile entry point. The MCP `reconcile` tool is the same matcher in
 read-only mode (adds a `needsReview` tier). PDF support is text-layer
-only — scanned statements can't be parsed; the UI says so and points at
+only: scanned statements can't be parsed; the UI says so and points at
 the CSV/QFX export.

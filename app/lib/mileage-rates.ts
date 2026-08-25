@@ -65,7 +65,7 @@ export function mileageRateFor(
   return best;
 }
 
-/** The period covering `date` — its inclusive dates and the four type
+/** The period covering `date`, with its inclusive dates and the four type
  * rates, for a compact "current rate" display. When no published period
  * covers the date (e.g. before the IRS announces next year's rate), falls
  * back to the most recent known period and marks itself not current.
@@ -94,7 +94,7 @@ export function currentMileageRates(
     return start! <= date && (end === "" || date <= end!);
   });
   // The fallback is the latest published period by start date (then end
-  // date) — independent of the input order.
+  // date), independent of the input order.
   const latest = [...periods.keys()].toSorted((a, b) => {
     const [as, ae] = a.split("|");
     const [bs, be] = b.split("|");
@@ -115,10 +115,10 @@ export function currentMileageRates(
 /**
  * Distance × rate, rounded half-up to cents with exact decimal math:
  * 122.15 mi × $0.70 → $85.51, 122.15 × $0.235 → $28.71. The single money
- * expression for every caller — the editor, the server route recompute
+ * expression for every caller: the editor, the server route recompute
  * (`recomputeMileage` in maps.server.ts), the MCP tools, and exports all
  * produce identical amounts. Returns "" when the distance is
- * missing/unparseable/≤ 0 or the rate is missing/unparseable/non-finite —
+ * missing/unparseable/≤ 0 or the rate is missing/unparseable/non-finite;
  * a missing rate means "no amount", never $0.00.
  */
 export function mileageAmount(distanceMiles: string, rate: string): string {
@@ -158,7 +158,7 @@ export function periodLabel(start: string, end: string): string {
 
 /**
  * "$0.76"-style display for a rate string: always two decimals, and a
- * half-cent rate keeps its third digit (0.235 → "0.235", 0.70 → "0.70") —
+ * half-cent rate keeps its third digit (0.235 → "0.235", 0.70 → "0.70"),
  * never rounded to a wrong value.
  */
 export function formatRate(rate: string): string {
@@ -170,7 +170,7 @@ export function formatRate(rate: string): string {
 }
 
 /**
- * "Business · $0.70/mi" — the compact per-type rate label used by the
+ * "Business · $0.70/mi": the compact per-type rate label used by the
  * editor's mileage summary and the report PDF. Callers resolve the rate
  * for the trip's (date, type) first (`mileageRateFor`), then render this.
  */

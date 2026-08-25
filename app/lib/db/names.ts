@@ -2,7 +2,7 @@ import prisma from "~/lib/prisma.server";
 import type { Prisma } from "prisma/generated";
 
 /**
- * Add/rename helpers shared by reports and categories — both are "named
+ * Add/rename helpers shared by reports and categories; both are "named
  * rows" that expenses reference by name, so add and rename behave
  * identically (create-if-absent, rename the row plus every expense that
  * references the old name).

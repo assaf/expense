@@ -5,7 +5,7 @@ import { duplicatePairKey } from "~/lib/duplicates";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
-/** Local-date string (YYYY-MM-DD) — matches the app's `todayDate()`. */
+/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
 function todayLocal(): string {
   const now = new Date();
   const tz = now.getTimezoneOffset() * 60_000;
@@ -108,7 +108,7 @@ describe("Duplicate detection", () => {
 
   it("does not badge rows that merely share a date or amount", async () => {
     // DupCorp A and BannerCo share today's date and the same category but
-    // differ in merchant/amount — no cross-match.
+    // differ in merchant/amount, so no cross-match.
     await expect(page.getByText(/Possible duplicate of BannerCo/)).toHaveCount(
       0,
     );
@@ -136,7 +136,7 @@ describe("Duplicate detection", () => {
     expect(duplicatePairKey(row!.expenseAId, row!.expenseBId)).toBe(
       duplicatePairKey(PAIR_A[0]!, PAIR_A[1]!),
     );
-    // Survives a reload — the warning never nags again.
+    // Survives a reload: the warning never nags again.
     await page.reload({ waitUntil: "load" });
     await expect(page.getByText(/Possible duplicate of DupCorp A/)).toHaveCount(
       0,
@@ -188,7 +188,7 @@ describe("Duplicate detection", () => {
     );
     // Both sides of the pair are visually identical (same merchant, amount,
     // date, category, and banner), and the seeded rows share createdAt, so
-    // list order is a DB tie-break — first() may hit either row. Assert the
+    // list order is a DB tie-break; first() may hit either row. Assert the
     // pair is halved, not which specific side survived.
     const [b1, b2] = await Promise.all([
       testPrisma.expense.findUnique({ where: { id: PAIR_B[0]! } }),
@@ -213,7 +213,7 @@ describe("Duplicate detection", () => {
       page.getByRole("button", { name: "Save anyway" }),
     ).toBeVisible();
 
-    // Changing the amount clears the warning live — Save goes back.
+    // Changing the amount clears the warning live; Save goes back.
     await page.fill('input[type="number"]', "9.00");
     await expect(
       page.getByText(/This looks like a duplicate of BannerCo/),
@@ -239,7 +239,7 @@ describe("Duplicate detection", () => {
     await expect(
       page.getByText("Delete this expense? This cannot be undone."),
     ).toBeVisible();
-    // Cancel keeps it (the editor toolbar also has a Cancel — use the dialog's).
+    // Cancel keeps it (the editor toolbar also has a Cancel; use the dialog's).
     await page.getByRole("button", { name: "Cancel" }).last().click();
     expect(
       await testPrisma.expense.findUnique({ where: { id: MILEAGE_DEL } }),

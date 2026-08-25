@@ -19,7 +19,7 @@ import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/email-review";
 
 /** Inbox review: scan a connected mailbox for receipt-like emails and
- * decide each one — process (→ expense, email to Trash) or ignore (drops
+ * decide each one: process (→ expense, email to Trash) or ignore (drops
  * off the list). Both decisions require confirmation in the UI. This is
  * where a first-time sender's receipts surface: processing one with
  * "remember this sender" adds a user rule, so future receipts from them

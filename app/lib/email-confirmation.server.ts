@@ -1,12 +1,12 @@
 /**
- * Confirmation email builders for receipt imports — shared by the
+ * Confirmation email builders for receipt imports, shared by the
  * receipts-by-email pipeline (sent to the SENDER) and the connected-account
  * pipeline (imported into the OWNER's Inbox).
  *
  * The confirmation carries the extracted details plus the ORIGINAL receipt:
  * a body-source receipt is quoted verbatim below the details (HTML
  * blockquote + ">"-prefixed plain text, capped at QUOTED_ORIGINAL_MAX_CHARS);
- * an attachment-source receipt carries the original file — built by the
+ * an attachment-source receipt carries the original file, built by the
  * caller (`saveExpenseFromExtraction` in inbound-email.server.ts).
  */
 import { escapeHtml } from "~/lib/escape";
@@ -36,7 +36,7 @@ function confirmationFields(
   ];
 }
 
-/** Longest original-receipt text quoted in a confirmation reply — the
+/** Longest original-receipt text quoted in a confirmation reply: the
  * parsed email body can be a whole thread; a receipt is never this big. */
 const QUOTED_ORIGINAL_MAX_CHARS = 4000;
 
@@ -102,7 +102,7 @@ export interface ConfirmationEmailOptions {
   description: string;
   notes: string;
   missing: string[];
-  /** Intro line — defaults to the forward-flow wording; the
+  /** Intro line; defaults to the forward-flow wording, and the
    * connected-account flow passes its own. */
   intro?: string;
   reportStats?: {
@@ -110,7 +110,7 @@ export interface ConfirmationEmailOptions {
     after: { count: number; total: string };
   };
   /** The original receipt text (a body-source receipt) to quote below the
-   * details. The connected pipeline doesn't pass it — the original email
+   * details. The connected pipeline doesn't pass it, since the original email
    * already sits in the owner's Inbox. */
   quotedOriginal?: string;
 }

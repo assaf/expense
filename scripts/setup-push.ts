@@ -28,7 +28,7 @@ function loadEnv(path: string): void {
       if (!(key in process.env)) process.env[key] = value;
     }
   } catch {
-    // no .env file — fine, env vars may come from the shell
+    // no .env file, which is fine: env vars may come from the shell
   }
 }
 
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
     console.info(`  vercel env add PUSH_AUTH ${keys.auth} production`);
   }
 
-  // env.ts loads .env on first import — the keys above are now in place.
+  // env.ts loads .env on first import, so the keys above are now in place.
   const [{ ensureSubscription, pushUrl }, { FASTMAIL_TOKEN }] =
     await Promise.all([
       import("~/lib/fastmail-push.server"),

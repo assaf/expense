@@ -5,7 +5,7 @@ import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
 // `page` is shared read-only across the display tests; the mutation tests
-// drive their own page. Tests that delete reports run last — deleting a
+// drive their own page. Tests that delete reports run last, because deleting a
 // report cascades to its expenses, which would skew the category counts the
 // earlier tests assert.
 describe("Settings", () => {
@@ -66,7 +66,7 @@ describe("Settings", () => {
     // The signed-in user, pinned first with a "You" badge.
     await expect(section.getByText("testuser@example.com")).toBeVisible();
     await expect(section.getByText("You", { exact: true })).toBeVisible();
-    // A member who clicked the emailed verification link is Active — the
+    // A member who clicked the emailed verification link is Active; the
     // signed-in user is verified too, so exactly two Active badges.
     await expect(
       section.getByText("verified.member@example.com"),
@@ -78,14 +78,15 @@ describe("Settings", () => {
       section.getByText("Waiting to verify", { exact: true }),
     ).toBeVisible();
     // All three members show their join date (the exact day depends on the
-    // machine's timezone — assert the year only).
+    // machine's timezone, so assert the year only).
     await expect(section.getByText(/Joined .* 2026/)).toHaveCount(3);
     // Other accounts' users never leak into this list.
     await expect(section.getByText("otheruser@example.com")).toHaveCount(0);
   });
 
   it("category counts exclude expenses in closed reports", async () => {
-    // lives in it — then verify the category count on Settings drops.
+    // Close "2027 Test" (one of Development's expenses lives in it), then
+    // verify the category count on Settings drops.
     await testPrisma.report.updateMany({
       where: { accountId: TEST_ACCOUNT_ID, name: "2027 Test" },
       data: { closed: true },
@@ -170,7 +171,7 @@ describe("Settings", () => {
     });
     await section.locator('input[type="text"][name="name"]').fill("Testing");
     await section.getByRole("button", { name: "Add" }).click();
-    // Duplicate — the action reports it inline; the existing row doesn't
+    // Duplicate: the action reports it inline; the existing row doesn't
     // flash and the input keeps the typed value so the user can correct it.
     await expect(section.getByText(/already exists/i)).toBeVisible();
     const existing = section.locator("ul li").filter({ hasText: "Testing" });
@@ -185,8 +186,8 @@ describe("Settings", () => {
   });
 
   it("category counts exclude expenses in closed reports", async () => {
-    // Close "2027 Test" through the API — one of Development's expenses
-    // lives in it — then verify the category count on Settings drops.
+    // Close "2027 Test" through the API (one of Development's expenses
+    // lives in it), then verify the category count on Settings drops.
     await testPrisma.report.updateMany({
       where: { accountId: TEST_ACCOUNT_ID, name: "2027 Test" },
       data: { closed: true },
@@ -237,12 +238,12 @@ describe("Settings", () => {
     });
     const row = categories.locator("ul li").filter({ hasText: "Development" });
 
-    // Dismiss the confirmation — nothing is deleted.
+    // Dismiss the confirmation: nothing is deleted.
     page.once("dialog", (d) => void d.dismiss());
     await row.getByRole("button", { name: /remove development/i }).click();
     await expect(row).toBeVisible();
 
-    // Accept the confirmation — the category is deleted, its expenses stay.
+    // Accept the confirmation; the category is deleted, its expenses stay.
     let message = "";
     page.once("dialog", (d) => {
       message = d.message();
@@ -304,7 +305,7 @@ describe("Settings", () => {
     await row.scrollIntoViewIfNeeded();
     const scrollY = await page.evaluate(() => window.scrollY);
     await row.getByRole("button", { name: /rename temp category/i }).click();
-    // The row is now an editor (input + Save/Cancel) — locate it via the
+    // The row is now an editor (input + Save/Cancel); locate it via the
     // section, since the row's text no longer contains the old name.
     const input = categories.locator('input[name="newName"]');
     await expect(input).toBeVisible();

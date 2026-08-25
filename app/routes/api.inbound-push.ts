@@ -8,14 +8,14 @@ import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
 import type { Route } from "./+types/api.inbound-push";
 
 /**
- * FastMail JMAP push webhook (public — no session). FastMail POSTs an
+ * FastMail JMAP push webhook (public, no session). FastMail POSTs an
  * encrypted RFC 8291 (aes128gcm) payload here; successful decryption is
  * itself the authentication (only a sender holding our public key can
  * produce a decryptable body).
  *
  *  - PushVerification: FastMail asks us to echo the code back before the
  *    subscription becomes verified.
- *  - StateChange: new mail arrived somewhere — drain the Receipts folder.
+ *  - StateChange: new mail arrived somewhere; drain the Receipts folder.
  *
  * Processing is best-effort and bounded (45s budget, one batch); the daily
  * cron is the catch-up net for anything a missed push leaves behind.
@@ -37,7 +37,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (type === "PushVerification") {
     // Absent fields degrade to empty strings, as the old typeof narrowing
-    // did — the echo simply fails downstream.
+    // did; the echo simply fails downstream.
     const { pushSubscriptionId: id, verificationCode: code } =
       pushVerificationOf(payload) ?? {
         pushSubscriptionId: "",

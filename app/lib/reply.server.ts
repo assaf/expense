@@ -4,10 +4,10 @@ import { FASTMAIL_TOKEN } from "~/lib/env";
 
 /**
  * Send email from the app's mailbox through the FastMail JMAP account from
- * the receipts address (INBOUND_EMAIL_ADDRESS — identity-matched, falling
+ * the receipts address (INBOUND_EMAIL_ADDRESS, identity-matched, falling
  * back to the account's default identity). Requires FASTMAIL_TOKEN with
  * send permission; when it's unset the send is skipped with a warning.
- * Never breaks the caller — failures are logged and Sentry-captured inside
+ * Never breaks the caller: failures are logged and Sentry-captured inside
  * the FastMail path, and return false.
  */
 

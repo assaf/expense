@@ -4,7 +4,7 @@ import { StrictMode, startTransition } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 
-// Sentry SDK init for the browser — production builds only, and only when
+// Sentry SDK init for the browser; production builds only, and only when
 // VITE_SENTRY_DSN is configured at build time.
 if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({

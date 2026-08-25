@@ -45,7 +45,7 @@ describe("Email", () => {
 
   it("shows the sign-in email as a pending receipts-by-email sender", async () => {
     // The login email is auto-added as the account's default sender on
-    // sign-in — pending until its verification link is clicked.
+    // sign-in, pending until its verification link is clicked.
     const section = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Receipts by email" }),
     });

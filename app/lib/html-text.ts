@@ -3,8 +3,8 @@ import { load } from "cheerio";
 /**
  * Reduce an HTML email body to readable plain text. Lives in its own
  * font-free module so importers that only need text extraction (the
- * inbound + connected pipelines) don't pull the resvg font chain — that
- * chain is heavy (a bundled woff2) and only needed when actually
+ * inbound + connected pipelines) don't pull the resvg font chain, which is
+ * heavy (a bundled woff2) and only needed when actually
  * rasterizing a receipt image.
  *
  * Block elements become newlines, inline elements stay inline; scripts,

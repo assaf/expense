@@ -3,7 +3,7 @@ import { findOAuthToken, revokeOAuthToken } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.revoke";
 
 /**
- * POST /oauth/revoke — token revocation (RFC 7009). Revokes an access or
+ * POST /oauth/revoke: token revocation (RFC 7009). Revokes an access or
  * refresh token; unknown, expired, or already-revoked tokens are a no-op
  * success per the spec. Client authentication mirrors the token endpoint.
  */

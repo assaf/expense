@@ -1,5 +1,5 @@
 import { markdownRouteLoader } from "~/lib/markdown-route.server";
 import { aboutMarkdown } from "~/lib/seo-content";
 
-/** /about.md — the llmstxt.org convention: markdown mirror of /about. */
+/** /about.md is the llmstxt.org convention: markdown mirror of /about. */
 export const loader = markdownRouteLoader(aboutMarkdown, "text/markdown");

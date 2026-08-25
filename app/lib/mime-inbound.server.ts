@@ -19,7 +19,7 @@ import type {
  *
  * The transports differ only in (a) how a raw email is fetched, (b) how the
  * cache key is derived from an email id, and (c) the error message when an
- * attachment id wasn't produced by that transport — all three are injected
+ * attachment id wasn't produced by that transport; all three are injected
  * by `mimeFetchDeps`.
  */
 
@@ -53,7 +53,7 @@ function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
 }
 
 /** One TTL+LRU parse cache per transport module. Keys must be unique across
- * everything sharing an instance — connected accounts namespace theirs with
+ * everything sharing an instance: connected accounts namespace theirs with
  * `${connectionId}:${emailId}`; the FastMail transport uses the raw id. */
 export interface MimeInboundCache {
   parsedEmail(
@@ -182,7 +182,7 @@ export function mimeFetchDeps(
       const attachment = email.attachments[Number(m[2]!)];
       if (!attachment) throw new Error(`Attachment ${meta.id} not found`);
       // Defensive per-attachment cap: the raw blob is already capped at
-      // MAX_EMAIL_BYTES, but PostalMime decodes eagerly — check the decoded
+      // MAX_EMAIL_BYTES, but PostalMime decodes eagerly, so check the decoded
       // size too so oversized parts never reach sharp/pdf.js/OCR.
       const content = toBytes(attachment.content);
       if (content.byteLength > MAX_EMAIL_BYTES) {

@@ -23,7 +23,7 @@ import type { Route } from "./+types/login";
 
 type Mode = "signin" | "create" | "join" | "resend-verification";
 
-/** Success payloads are `{ ok: true, email }` (no session yet — the account
+/** Success payloads are `{ ok: true, email }` (no session yet; the account
  * is pending until the emailed link is clicked); failures are `{ error }`
  * with `unverifiedEmail` set when the only problem is a missing
  * verification, so the UI can offer a resend button. */
@@ -91,7 +91,7 @@ export async function action({ request }: Route.ActionArgs) {
         },
         origin,
       );
-      // No session yet — the account stays pending until the email is
+      // No session yet. The account stays pending until the email is
       // verified, so the response is a "check your email" state, not a
       // redirect into the app.
       return Response.json({
@@ -123,7 +123,7 @@ export async function action({ request }: Route.ActionArgs) {
     const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
-    // Count under the same scope the guard used — signin failures must not
+    // Count under the same scope the guard used: signin failures must not
     // consume the signup/join/resend budget for this IP (and vice versa).
     await recordAnonymousAttempt(request, mode === "signin" ? "signin" : "");
     const message =
@@ -151,7 +151,7 @@ export default function LoginPage() {
   );
   // Tracks the email field so the resend button can re-send to it.
   const [emailValue, setEmailValue] = useState("");
-  // After a successful create/join/resend the user is NOT signed in — show
+  // After a successful create/join/resend the user is NOT signed in. Show
   // the "check your email" screen until they pick a different email.
   const [dismissed, setDismissed] = useState(false);
 
@@ -170,7 +170,7 @@ export default function LoginPage() {
   };
 
   // After signup/join/resend, the account exists but can't sign in until
-  // the emailed link is clicked — replace the form with that instruction.
+  // emailed link is clicked; replace the form with that instruction.
   if (pendingEmail && !dismissed) {
     return (
       <AuthCard center>

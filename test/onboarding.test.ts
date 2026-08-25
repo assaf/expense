@@ -32,7 +32,7 @@ import { encryptSecret } from "~/lib/token-crypto.server";
 
 /**
  * FastMail onboarding (/onboarding): the token is the credential, so the
- * JMAP session call is mocked — the store tests cover the real connect
+ * JMAP session call is mocked; the store tests cover the real connect
  * path (see email-connections.test.ts). EMAIL_TOKEN_ENCRYPTION_KEY comes
  * from the vitest main-project env (fixed test key).
  */
@@ -83,7 +83,7 @@ describe("FastMail onboarding", () => {
       password: PASSWORD,
     });
 
-    // No verification email needed — the token proved mailbox control.
+    // No verification email needed: the token proved mailbox control.
     const user = await testPrisma.user.findUnique({ where: { email } });
     expect(user).not.toBeNull();
     expect(user!.emailVerifiedAt).not.toBeNull();
@@ -100,7 +100,7 @@ describe("FastMail onboarding", () => {
     });
     expect(connection?.emailAddress).toBe(email);
 
-    // The login email is a VERIFIED receipts-by-email sender — no link.
+    // The login email is a VERIFIED receipts-by-email sender, no link.
     const sender = await testPrisma.inboundSenderVerification.findUnique({
       where: { address: email },
     });
@@ -127,7 +127,7 @@ describe("FastMail onboarding", () => {
       password: PASSWORD,
     });
 
-    // Same account — no duplicate user.
+    // Same account, no duplicate user.
     const users = await testPrisma.user.findMany({
       where: { accountId: account.id },
     });
@@ -175,7 +175,7 @@ describe("FastMail onboarding", () => {
     });
     expect(welcome?.value).toBe("1");
     // The sender claim applies only when the account email IS the mailbox
-    // — the token proves control of the mailbox, not of other addresses.
+    // (the token proves control of the mailbox, not of other addresses).
     const sender = await testPrisma.inboundSenderVerification.findUnique({
       where: { address: mailbox },
     });
@@ -263,7 +263,7 @@ describe("FastMail onboarding", () => {
   });
 
   it("refuses to create an account for an email the token did not verify", async () => {
-    // The token proves control of the mailbox only — an arbitrary typed
+    // The token proves control of the mailbox only; an arbitrary typed
     // email must never get emailVerifiedAt stamped (signup squatting).
     const mailbox = "token.owner@example.com";
     const otherEmail = "someone.else@example.com";
@@ -364,7 +364,7 @@ afterAll(async () => {
  * Browser-level coverage of the onboarding surface: the login-page entry,
  * the /onboarding first step, and the welcome panel lifecycle. The full
  * token→account flow can't run here (the live server can't reach FastMail
- * or mock the JMAP call) — that logic is covered by the unit tests above.
+ * or mock the JMAP call). That logic is covered by the unit tests above.
  */
 describe("FastMail onboarding UI", () => {
   let browser: Browser;

@@ -7,13 +7,13 @@ name: deployment-checks
 #     `secretlint` runs FIRST and gates the whole pipeline (a committed
 #     secret must never reach prod), then `check` and `test` run in
 #     PARALLEL, and `migrate-db` needs both.
-#   - DB migrations run ONLY after the test suite passes — never before.
+#   - DB migrations run ONLY after the test suite passes, never before.
 #     Migrating prod for code whose tests haven't passed would leave the
 #     schema ahead of the deployed bundle. So the contract is:
 #         secretlint → check & test → migrate prod DB
 #   - Time budget: there is no workflow-level timeout in GitHub Actions,
 #     so the whole run is bounded by the job timeouts on the critical
-#     path — secretlint 2m + max(check 2m, test 4m) + migrate 2m = an
+#     path: secretlint 2m + max(check 2m, test 4m) + migrate 2m = an
 #     ~8m ceiling (typical runs finish in ~4m; PR-only runs are just
 #     secretlint + check + test, ~3m). These are fail-fast guards, not
 #     targets: a hung job dies here instead of running for the default 6h.
@@ -22,7 +22,7 @@ name: deployment-checks
 #     most one.
 #
 # The post-deploy PDF/OCR/MCP smoke check runs ONLY from scripts/deploy
-# (CLI deploys), after the deployment is live — it curls /api/smoke on the
+# (CLI deploys), after the deployment is live; it curls /api/smoke on the
 # fresh deployment. It is not a GitHub Action because it needs a deployed
 # server to hit.
 #
@@ -32,7 +32,7 @@ name: deployment-checks
 # VERCEL_TOKEN can't read project settings (403 PROJECT_UNAUTHORIZED) so
 # `vercel env pull` doesn't work here.
 #
-# NOTE: the job names are stable — keep them that way.
+# NOTE: the job names are stable; keep them that way.
 
 on:
   push:
@@ -44,12 +44,12 @@ permissions:
   contents: read
 
 jobs:
-  # Whole-repo secret scan (tokens, keys, credentials) — runs FIRST and
+  # Whole-repo secret scan (tokens, keys, credentials); runs FIRST and
   # gates everything below: check/test/migrate don't start until it
   # passes, so a committed secret never reaches prod. Runs on PRs too.
   # --format github emits inline PR annotations on failures; .gitignore is
   # respected (secretlint v13+), so gitignored files (.env*, node_modules,
-  # prisma/backup.sql) are never scanned — the scan set is exactly what
+  # prisma/backup.sql) are never scanned. The scan set is exactly what
   # could reach the repo. Config: .secretlintrc.json
   secretlint:
     name: Secretlint
@@ -69,7 +69,7 @@ jobs:
 
       - run: pnpm exec secretlint --format github "**/*"
 
-  # Static checks (fmt, lint, types) — no database, no browsers. Runs in
+  # Static checks (fmt, lint, types): no database, no browsers. Runs in
   # parallel with the test job (after the secretlint gate).
   check:
     name: Check
@@ -129,7 +129,7 @@ jobs:
       # (downloads eng.traineddata from a CDN; skipped locally by default).
       RUN_OCR_TESTS: "1"
       # Defense-in-depth: launchServer already pins this for the spawned
-      # server, but CI has no .env — keep the /emails page on the configured
+      # server, but CI has no .env, so keep the /emails page on the configured
       # branch even if the pin ever regresses (Aug 2026 flake, see
       # docs/../commit 014a9c6f).
       EMAIL_TOKEN_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
@@ -145,12 +145,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The build imports prisma/generated (gitignored) — pnpm check generates
+      # The build imports prisma/generated (gitignored); pnpm check generates
       # it in the parallel check job, but each job is a fresh checkout.
       - run: pnpm build:prisma
 
       # Playwright browsers are not installed by pnpm install; the E2E tests
-      # launch headless Chromium, so download it (with OS deps) first — and
+      # launch headless Chromium, so download it (with OS deps) first, and
       # cache the browsers so the ~20-40s install only happens once per lockfile.
       - name: Cache Playwright browsers
         uses: actions/cache@v5
@@ -162,7 +162,7 @@ jobs:
 
       - run: pnpm test
 
-  # Production schema sync — runs ONLY after the test suite passes (never
+  # Production schema sync: runs ONLY after the test suite passes (never
   # before; a migration applied for code that later fails CI would leave prod
   # ahead of the deployed bundle).
   migrate-db:
@@ -178,7 +178,7 @@ jobs:
     # when check or test failed) on top of the main-only gate.
     if: success() && github.ref == 'refs/heads/main'
     env:
-      # Prod DDL URL (Supabase session pooler) — the same value scripts/deploy
+      # Prod DDL URL (Supabase session pooler), the same value scripts/deploy
       # pulls from Vercel as DATABASE_URL_UNPOOLED. Required; the job fails
       # fast if the secret is missing.
       DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}

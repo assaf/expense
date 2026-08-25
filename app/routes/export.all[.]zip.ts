@@ -10,7 +10,7 @@ import type { Route } from "./+types/export.all[.]zip";
 /** CSV formula-injection guard (CWE-1236): spreadsheet apps evaluate cells
  * that start with =, +, -, @, tab, or carriage return as formulas. Prefix
  * with a single quote so the value is treated as literal text. Applies to
- * the user-typed fields only — date/amount are app-generated. */
+ * the user-typed fields only; date/amount are app-generated. */
 function csvSafe(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }

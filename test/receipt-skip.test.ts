@@ -14,7 +14,7 @@ import {
 
 /**
  * The LLM-skip path: receipt text naming a merchant the account already
- * spent with, plus a parseable total, extracts without any model call —
+ * spent with, plus a parseable total, extracts without any model call;
  * merchant/category/report come from the account's history, the amount is
  * parsed deterministically. These tests pin the matching and parsing rules
  * so a skip never fires on text it can't read correctly (false merchant or
@@ -70,7 +70,7 @@ describe("matchKnownMerchant", () => {
 
   it("picks the longest (most specific) matching merchant", () => {
     const m = matchKnownMerchant("Your Uber Eats order\nTOTAL $23.40", known);
-    // Both "uber" and "uber eats" appear — the longer name wins.
+    // Both "uber" and "uber eats" appear; the longer name wins.
     expect(m?.display).toBe("Uber Eats");
   });
 });
@@ -306,7 +306,7 @@ describe("parseAccountBilled", () => {
   });
 
   it("captures nothing when no boundary follows (columns run together)", () => {
-    // No email/newline after the name — the capture would swallow the rest
+    // No email/newline after the name, so the capture would swallow the rest
     // of the text; capture nothing rather than guess.
     expect(
       parseAccountBilled(

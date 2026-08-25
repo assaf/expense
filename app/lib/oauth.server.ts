@@ -22,7 +22,7 @@ export { hashToken, safeEqual };
  * authorization endpoint in a browser where the user signs in with their
  * normal account and approves the connection, and exchanges the resulting
  * code (PKCE-verified) for tokens at the token endpoint. The access token
- * then authenticates /mcp like an API token does — but no token management
+ * then authenticates /mcp like an API token does, but no token management
  * is needed; the user just signs in.
  *
  * Tokens are opaque random strings (`oat_…` access, `ort_…` refresh) whose
@@ -88,13 +88,13 @@ function buildOAuthMetadata(origin: string): Record<string, unknown> {
  * clients probe first when the MCP server URL has a path.
  */
 /**
- * The origin this server advertises publicly — the issuer of the OAuth
+ * The origin this server advertises publicly: the issuer of the OAuth
  * metadata and the base of every endpoint URL. Resolution order:
  *  1. PUBLIC_URL, when configured (the explicit answer for any proxy setup);
  *  2. the request's own origin when it arrived over https;
  *  3. behind a TLS-terminating proxy (request over http + `x-forwarded-proto:
  *     https`, e.g. a local https://expense.localhost Caddy setup) the
- *     forwarded proto/host — otherwise clients see the proxy-internal http
+ *     forwarded proto/host; otherwise clients see the proxy-internal http
  *     origin and refuse to authenticate ("Protected resource … does not
  *     match expected …").
  */
@@ -337,8 +337,8 @@ async function authenticateClient(
  * Parse a form-urlencoded POST and authenticate the client from the
  * `client_id` parameter and/or HTTP Basic header. Returns either the parsed
  * form plus the authenticated client, or the error response to return.
- * Shared by the token and revoke endpoints (RFC 6749 §2.3 / RFC 7009 §2.1
- * — both authenticate the client the same way).
+ * Shared by the token and revoke endpoints (RFC 6749 §2.3 / RFC 7009 §2.1;
+ * both authenticate the client the same way).
  */
 export async function authenticateFormRequest(
   request: Request,

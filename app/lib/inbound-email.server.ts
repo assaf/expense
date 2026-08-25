@@ -60,13 +60,13 @@ import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
  * download over JMAP via postal-mime). The pipeline determines the expense
  * date, picks the receipt (attachment or email body), extracts
  * merchant/amount/category via DeepSeek (with tesseract OCR fallback), stores
- * the receipt image, and creates the expense — scoped to the account whose
+ * the receipt image, and creates the expense, scoped to the account whose
  * VERIFIED inbound sender matches the From address (an added-but-unverified
  * address gets a "verify first" reply and no import).
  *
  * Replies: failures and incomplete imports get an explanatory email;
  * successful imports get a confirmation with the extracted details and the
- * ORIGINAL receipt — the body text quoted below the details, or the
+ * ORIGINAL receipt: the body text quoted below the details, or the
  * original image/PDF attached (`confirmationEmail`, `saveExpenseFromExtraction`).
  * Each email id (the JMAP id) is tracked in `inbound_emails` so a
  * concurrent push/cron drain never creates duplicate expenses.
@@ -85,7 +85,7 @@ export interface EmailReceivedData {
   received_for: string[];
   message_id: string;
   subject: string;
-  /** Parsed headers (lowercased keys not guaranteed — use
+  /** Parsed headers (lowercased keys not guaranteed; use
    * hasOwnConfirmationHeader for case-insensitive lookup). Lets the
    * pipeline recognize the app's own outbound mail (loop guard). */
   headers: Record<string, string>;
@@ -175,7 +175,7 @@ export interface InboundDeps {
   renderEmailImage(html: string, opts?: RenderEmailOptions): Promise<Buffer>;
   renderTextEmail(text: string, opts?: RenderTextEmailOptions): Promise<Buffer>;
   /** Send a reply email; failures are logged inside the transport and never
-   * throw — the pipeline treats replies as fire-and-forget. */
+   * throw, so the pipeline treats replies as fire-and-forget. */
   sendReply(input: SendEmailOptions): Promise<void>;
 }
 
@@ -223,8 +223,8 @@ function zoneOffsetMs(s: string): number | null {
 
 /**
  * Parse an RFC 2822 / human date string into YYYY-MM-DD, in the timezone the
- * string itself names — the sender's local date, which is what a receipt
- * means. The UTC calendar date of the same instant can be the next (or
+ * string itself names (the sender's local date, which is what a receipt
+ * means). The UTC calendar date of the same instant can be the next (or
  * previous) day for evening sends in negative offsets (17:08 PDT on Aug 23
  * is 00:08 UTC Aug 24). Naive strings (no zone) keep the UTC interpretation.
  * Null if invalid or in the future.
@@ -342,7 +342,7 @@ function isEmlMeta(meta: AttachmentMeta): boolean {
 }
 
 /** Download a small .eml attachment (the embedded original message) as
- * UTF-8 text. Null when there is none, it is empty, or it is >= 1 MB —
+ * UTF-8 text. Null when there is none, it is empty, or it is >= 1 MB;
  * beyond that it is not worth parsing for quoted headers. The text is
  * capped at 100k chars; the headers the callers want live at the top.
  * Shared by the bounce reader, the receipt-date reader, and the
@@ -363,7 +363,7 @@ async function readSmallEmlAttachment(
 /**
  * Heuristic score: PDFs and images are candidates; logos/signatures (tiny,
  * inline, or named) are penalized; inline images referenced by the HTML
- * (`cid:` in an <img>) are boosted — that is often the receipt itself.
+ * (`cid:` in an <img>) are boosted, because that is often the receipt itself.
  */
 export function scoreAttachment(meta: AttachmentMeta, html: string): number {
   let score = 0;
@@ -480,15 +480,16 @@ function replyHtml(title: string, paragraphs: string[]): string {
 //
 // Delivery-status notifications (bounces) arrive when one of OUR outbound
 // replies fails. Without a guard, a bounce looks like an unknown sender and
-// gets a "sender not recognized" reply — which itself bounces, which gets
+// gets a "sender not recognized" reply, which itself bounces, which gets
 // another reply, looping forever and filling the Sent folder. Autoresponders
 // (vacation notices, delivery receipts) are the same trap: they reply to
 // every message, so replying to them is also an infinite loop.
 //
 // Two layers: a cheap check on metadata that exists before any fetch (DSN
-// subject lines and daemon senders — catches Fastmail's own bounces), and a
-// header check after fetch (null Return-Path, multipart/report, Auto-Submitted
-// — catches DSNs that arrive with a spoofed From and autoresponder loops).
+// subject lines and daemon senders, which catches Fastmail's own bounces),
+// and a header check after fetch (null Return-Path, multipart/report,
+// Auto-Submitted), which catches DSNs that arrive with a spoofed From and
+// autoresponder loops).
 
 /** Subject lines of standard delivery-status / bounce notifications. */
 const BOUNCE_SUBJECT_RE =
@@ -526,7 +527,7 @@ export function isDeliveryNotification(
 }
 
 /** Match a delivery-status body for the failed recipient. The address may
- * appear bare, in angle brackets, or after a display name — captures are
+ * appear bare, in angle brackets, or after a display name; captures are
  * `<?addr>` and trailing punctuation is trimmed by `cleanBounceAddress`. */
 const BOUNCE_RECIPIENT_PATTERNS: RegExp[] = [
   // delivery-status field: "Final-Recipient: rfc822; user@example.com"
@@ -549,8 +550,8 @@ function cleanBounceAddress(addr: string): string {
  * The failed recipient named by a delivery-status notification: the
  * X-Failed-Recipients header, a Final/Original-Recipient field in the DSN
  * body, a "failed to deliver" line, or the To header of the embedded
- * original message. Null when the bounce names no address — the caller
- * still drops the bounce either way; this is only for the log.
+ * original message. Null when the bounce names no address (the caller
+ * still drops the bounce either way; this is only for the log).
  */
 async function bounceRecipient(
   email: Pick<ReceivedEmail, "text" | "html" | "headers">,
@@ -582,7 +583,7 @@ async function bounceRecipient(
       }
     }
   } catch {
-    // Best effort — a broken attachment must not fail the drain.
+    // Best effort: a broken attachment must not fail the drain.
   }
   return null;
 }
@@ -648,7 +649,7 @@ async function originalForwardedSender(
   return null;
 }
 
-/** Learn a user rule from a successfully imported forward (best effort —
+/** Learn a user rule from a successfully imported forward (best effort;
  * failures log a warning and never affect the import). */
 async function learnRuleFromForward(
   accountId: string,
@@ -672,7 +673,7 @@ async function learnRuleFromForward(
 //
 // processInboundEvent is the receipts-by-email flow (verified forwarders,
 // replies to the sender). The connected-account pipeline shares the heavy
-// middle — pick the receipt source, extract, render, save the expense —
+// middle (pick the receipt source, extract, render, save the expense)
 // through these three helpers, and differs in everything around them
 // (rules instead of sender verification, Trash instead of destroy,
 // notification to the mailbox owner instead of a reply to the sender).
@@ -746,7 +747,7 @@ export async function selectReceiptSource(
     // served as application/octet-stream with a UUID filename and no
     // extension). Sniff the best unscored candidate before falling back to
     // the body: prefer an attachment-disposition part, largest first. At
-    // most one download — if it isn't an image/PDF by magic bytes, the
+    // most one download; if it isn't an image/PDF by magic bytes, the
     // body path below decides.
     const unscored = attachments
       .filter((meta) => !isPdfMeta(meta) && !isImageMeta(meta))
@@ -801,7 +802,7 @@ export async function extractReceiptFromSource(opts: {
    * call). Body receipts parse via the known-merchant or rule-merchant
    * path; attachment receipts return null (skip for manual review). */
   localOnly?: boolean;
-  /** The matched rule's sender domain — used to name a first-time merchant
+  /** The matched rule's sender domain, used to name a first-time merchant
    * when localOnly is set. Required for the rule-merchant local path. */
   ruleSender?: string;
 }): Promise<ExtractedReceipt | null> {
@@ -818,13 +819,13 @@ export async function extractReceiptFromSource(opts: {
     if (opts.localOnly) {
       // No model: PDFs with a text layer are extracted locally (pdf.js,
       // no OCR, no vision). Image attachments + scanned PDFs (no text
-      // layer) are skipped — they need OCR/vision, and the connected flow
+      // layer) are skipped: they need OCR/vision, and the connected flow
       // is LLM-free. The email stays in the Inbox for a manual add.
       if (!isPdf({ mime: contentType, originalName: filename })) return null;
       const { extractPdfText, renderPdfToPng } =
         await import("~/lib/receipt-ocr.server");
       const pdfText = await extractPdfText(buffer);
-      // Text layer must exist (scanned PDFs are skipped — they need OCR).
+      // Text layer must exist; scanned PDFs are skipped (they need OCR).
       const local =
         pdfText.trim().length >= 20
           ? tryLocalExtraction(
@@ -872,7 +873,7 @@ export async function extractReceiptFromSource(opts: {
     }
   } else {
     const bodyText = stripForwardedText(source.text).slice(0, 20_000);
-    // Render the actual email with headless Chromium — the HTML part when
+    // Render the actual email with headless Chromium: the HTML part when
     // present, otherwise the plain text as a narrow email-style column.
     // The resvg text sheet stays as the final fallback (e.g. a runtime
     // without a browser binary). The forward-quote header block is
@@ -926,9 +927,9 @@ export async function extractReceiptFromSource(opts: {
       extraction = local;
     } else {
       // Known-merchant skip: the body names a merchant the account has spent
-      // with before and carries a parseable total — no model call needed.
+      // with before and carries a parseable total, so no model call is needed.
       // The description is composed locally too (bill ref, billed account,
-      // Apple plan name) — the skip must not lose the receipt's own context.
+      // Apple plan name); the skip must not lose the receipt's own context.
       const skipped = tryKnownMerchantExtraction(
         bodyText,
         context.knownMerchants,
@@ -968,12 +969,12 @@ interface ReportSummaryStats {
 /** A saved expense plus everything its confirmation email needs.
  *
  * The confirmation has two audiences with different receipts:
- * - The SENDER's reply always carries the ORIGINAL receipt — the original
+ * - The SENDER's reply always carries the ORIGINAL receipt: the original
  *   file (`originalAttachment`, image/PDF source) or the original body
  *   text (`quotedOriginal`, body source). Never the stored processed image.
  * - The connected pipeline's owner-inbox confirmation carries the STORED
- *   image (`receiptAttachment`) — the original email is already in the
- *   owner's Inbox, so the original would be redundant there. */
+ *   image (`receiptAttachment`), because the original email is already in
+ *   the owner's Inbox and would be redundant there. */
 interface SavedExpense {
   expenseId: string;
   missing: string[];
@@ -981,7 +982,7 @@ interface SavedExpense {
   report: string;
   reportStats?: ReportSummaryStats;
   /** The original receipt file (image/PDF attachment source) to attach to
-   * the sender's confirmation reply — the sender's file, not the rendered
+   * the sender's confirmation reply; it is the sender's file, not the rendered
    * image. */
   originalAttachment?: {
     content: string;
@@ -995,7 +996,7 @@ interface SavedExpense {
    * owner-inbox confirmation only). */
   receiptAttachment?: { content: string; filename: string };
   /** A matching receipt was imported within the recent window (the other
-   * pipeline) — suppress this confirmation to avoid duplicate responses. */
+   * pipeline), so suppress this confirmation to avoid duplicate responses. */
   recentMatch?: { id: string; createdAt: string };
 }
 
@@ -1008,7 +1009,7 @@ export async function saveExpenseFromExtraction(opts: {
   receiptImage: Buffer | null;
   imageMime: string;
   originalName: string;
-  /** What the receipt was in the incoming email — the reply carries the
+  /** What the receipt was in the incoming email; the reply carries the
    * original: quoted text for a body source, the original file for an
    * attachment source. */
   originalSource: ReceiptSource;
@@ -1029,7 +1030,7 @@ export async function saveExpenseFromExtraction(opts: {
       opts.originalName,
     );
     imageFile = saved.filename;
-    // saveImage may have re-encoded the format (e.g. PNG → JPEG) — record
+    // saveImage may have re-encoded the format (e.g. PNG → JPEG), so record
     // the mime of the bytes actually stored, not the renderer's mime.
     imageMime = saved.mime;
   } else {
@@ -1080,7 +1081,7 @@ export async function saveExpenseFromExtraction(opts: {
     quotedOriginal = opts.originalSource.text;
   }
 
-  // The same receipt already imported within the recent window — the
+  // The same receipt already imported within the recent window. The
   // connected-account pipeline imported the inbox original moments ago and
   // this import is the user's forwarded copy (or vice versa). The caller
   // suppresses its confirmation so the user gets one response per receipt.
@@ -1122,7 +1123,7 @@ export async function saveExpenseFromExtraction(opts: {
 }
 
 /**
- * Send the confirmation — or suppress it when the same receipt was already
+ * Send the confirmation, or suppress it when the same receipt was already
  * imported within the recent window by the other pipeline (the inbox
  * original vs. the forwarded copy). The user gets one response per receipt;
  * the suppression is logged and Sentry-alerted so a false match (two
@@ -1133,7 +1134,7 @@ async function sendConfirmationOrSuppress(opts: {
   deps: InboundDeps;
   data: EmailReceivedData;
   confirmation: { subject: string; html: string; text: string };
-  /** The original receipt file (image/PDF source) — attached instead of
+  /** The original receipt file (image/PDF source), attached instead of
    * the stored rendered image. */
   originalAttachment?: {
     content: string;
@@ -1191,13 +1192,13 @@ export async function processInboundEvent(
   }
 
   // Bounce guard: a delivery-status notification is one of OUR replies that
-  // failed. Never import it and never answer it — replying to a bounce (or
+  // failed. Never import it and never answer it: replying to a bounce (or
   // to an autoresponder) starts a reply→bounce→reply loop that fills Sent.
   // This check runs before the sender resolution so Fastmail's own
   // MAILER-DAEMON bounces never reach the "unknown sender" reply path.
   if (looksLikeBounce(data)) {
     // Never import and never answer a bounce, but name the failed recipient
-    // for the log (best effort — fetch/extraction failures still drop it).
+    // for the log (best effort; fetch/extraction failures still drop it).
     return await bounceResult(data.email_id, deps);
   }
 
@@ -1221,7 +1222,7 @@ export async function processInboundEvent(
     // Unknown senders get NO reply: the From header is attacker-controlled at
     // SMTP time, so replying would let anyone use the app's mailbox as an
     // unauthenticated mail amplifier against arbitrary addresses. Log the
-    // drop and move on — the owner sees nothing and the sender learns
+    // drop and move on; the owner sees nothing and the sender learns
     // nothing (verification flow exists for addresses the owner adds).
     console.info("[inbound] dropped mail from unrecognized sender", {
       emailId: data.email_id,
@@ -1236,7 +1237,7 @@ export async function processInboundEvent(
   // pushes (or a push racing the daily cron) can both list the same email
   // before either marks it `$receipt-processed`; the first to insert the
   // "processing" row wins, and every other drain skips without importing
-  // or replying — otherwise the same receipt gets two confirmations (and
+  // or replying; otherwise the same receipt gets two confirmations (and
   // two import attempts).
   const claim = await claimInboundEmail({
     emailId: data.email_id,
@@ -1249,12 +1250,12 @@ export async function processInboundEvent(
       return { status: "duplicate" };
     }
     if (existing?.status === "processing") {
-      // Another drain is importing this email right now — it sends the
+      // Another drain is importing this email right now. It sends the
       // confirmation. Never import twice, never reply twice.
       return { status: "concurrent" };
     }
     // "error" (or a vanished row): a previous run already failed and
-    // emailed the sender — the reply is the recovery path, so re-running
+    // emailed the sender. The reply is the recovery path, so re-running
     // the pipeline here would only re-send a second error email.
     return { status: "duplicate" };
   }
@@ -1367,7 +1368,7 @@ export async function processInboundEvent(
       return { status: "partial", expenseId, missing };
     }
 
-    // Successful import — send a confirmation email with the details.
+    // Successful import: send a confirmation email with the details.
     const confirmation = confirmationEmail({
       expenseId,
       date: expenseDate,
@@ -1453,7 +1454,7 @@ const REMOTE_IMAGE_REDIRECTS = 3;
  * inlined as a data URI (the renderer blocks all network). Returns null for
  * anything non-image, oversized, timed out, or pointing at a private host.
  * The fetch itself is SSRF-guarded (http(s) only, private/resolved-private
- * hosts rejected, redirects re-checked at every hop — see ssrf.server). */
+ * hosts rejected, redirects re-checked at every hop; see ssrf.server). */
 export async function fetchRemoteImageImpl(
   url: string,
 ): Promise<CidImage | null> {
@@ -1472,7 +1473,7 @@ export async function fetchRemoteImageImpl(
   if (Number(res.headers.get("content-length") ?? 0) > REMOTE_IMAGE_MAX_BYTES) {
     return null;
   }
-  // Stream with a hard cap — the cap must hold DURING the read, not after
+  // Stream with a hard cap: the cap must hold DURING the read, not after
   // arrayBuffer() has already committed the full body (readBodyLimited
   // cancels the stream past the limit). A slow-dripping or chunked server
   // response can't force unbounded buffering.

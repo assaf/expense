@@ -36,7 +36,7 @@ export type HighlightId =
   | "reconcile";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
- * empty strings — the matching highlights are excluded from the pool.
+ * empty strings; the matching highlights are excluded from the pool.
  * `mileageRate` is filled client-side from the browser's local today (the
  * server runs UTC); `hasRates` (server-computable, timezone-independent)
  * decides whether the mileage-rate highlight is eligible at all.
@@ -220,7 +220,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
 }
 
 /** Pick one highlight at random from the ones the current data can render.
- * `boost` triples the odds for that id (it gets two extra pool entries) —
+ * `boost` triples the odds for that id (it gets two extra pool entries),
  * used to nudge unconnected accounts toward the connect-email highlight
  * while still keeping the rotation. Ignored when the boosted id isn't in
  * the pool. `random` is injectable so tests can be deterministic. */

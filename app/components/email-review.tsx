@@ -17,7 +17,7 @@ import { formatShortDate } from "~/lib/format";
 /**
  * Inbox review (/email-review): the list of receipt-like emails found in a
  * connected inbox. Each row shows when the email arrived, the sender, and
- * the subject, with two confirmed actions — Process (create the expense,
+ * the subject, with two confirmed actions: Process (create the expense,
  * email to Trash) or Ignore (drops off the list, email stays in the Inbox).
  * Processing a receipt from a sender with no rule offers "remember this
  * sender" (adds a user rule for future auto-import).
@@ -80,7 +80,7 @@ export function ReviewInbox({
   const scanAtCap = scanData?.ok && scanData.result?.atCap === true;
   const autoScanFired = useRef(false);
 
-  // A freshly connected account (never scanned) walks the inbox right away —
+  // A freshly connected account (never scanned) walks the inbox right away;
   // fired once per page visit; failures are retried from the alert below.
   useEffect(() => {
     if (scannedAt) return;

@@ -67,7 +67,7 @@ export default defineConfig((config) => {
           telemetry: false,
           // Release name for sourcemaps + release health. Vercel provides the
           // commit SHA at build time; SENTRY_RELEASE overrides if ever needed.
-          // (The react-router wrapper forwards a release OBJECT — a bare string
+          // (The react-router wrapper forwards a release OBJECT; a bare string
           // gets spread into char indices and the name is silently lost.)
           release: {
             name:
@@ -95,7 +95,7 @@ export default defineConfig((config) => {
     },
 
     optimizeDeps: {
-      // Never pre-bundle Node-only/native packages — the client never imports
+      // Never pre-bundle Node-only/native packages: the client never imports
       // them (server code is stripped from route bundles), and rolldown-vite's
       // optimizer chokes on their .node binaries (UNLOADABLE_DEPENDENCY).
       exclude: [

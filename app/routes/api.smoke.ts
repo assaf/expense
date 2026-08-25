@@ -15,8 +15,8 @@ import type { Route } from "./+types/api.smoke";
 /**
  * Post-deploy smoke test for the PDF + OCR + MCP pipelines (GET /api/smoke).
  *
- * Runs the exact code paths the receipt pipeline uses — pdfkit → pdfjs text
- * extraction → pdfjs rasterization → tesseract OCR — plus a real MCP
+ * Runs the exact code paths the receipt pipeline uses (pdfkit → pdfjs text
+ * extraction → pdfjs rasterization → tesseract OCR), plus a real MCP
  * initialize → tools/list → tools/call round trip (see runMcpSmoke) inside
  * the deployed serverless bundle. Local/CI tests run against node_modules,
  * where every file is present; this is the only place the real Vercel bundle
@@ -83,7 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       return fail(`tesseract OCR did not recover the smoke text: "${ocrText}"`);
     }
 
-    // MCP round trip — a fresh token (revoked immediately after) exercises
+    // MCP round trip: a fresh token (revoked immediately after) exercises
     // the endpoint the same way a client would, inside this bundle.
     const mcp = await runMcpSmoke();
 
@@ -93,7 +93,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       ocrText,
       pngBytes: png.length,
       mcp,
-      // Server Sentry init lives in the bundle (entry.server.tsx) — this is
+      // Server Sentry init lives in the bundle (entry.server.tsx); this is
       // the one place the real deployed function is exercised, so report
       // whether it actually initialized. False here means server errors are
       // console-only again (see scripts/smoke-check).

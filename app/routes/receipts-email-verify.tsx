@@ -8,7 +8,7 @@ import type { Route } from "./+types/receipts-email-verify";
 
 /**
  * Public landing page for receipts-by-email verification links (emailed to
- * the sender address). No session — anyone with the token can verify, which
+ * the sender address). No session: anyone with the token can verify, which
  * is the point: only the mailbox owner has the link. The loader consumes the
  * single-use token and claims the address for its account; the page reports
  * the outcome. Refreshing after a successful click shows the "already used"
@@ -19,7 +19,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const token = new URL(request.url).searchParams.get("token") ?? "";
   const outcome = await verifyInboundSenderAddress(token);
   // The forward-to address, so the page states the same sentence the email
-  // does ("Receipts forwarded from X to Y will be added to …") — the user can
+  // does ("Receipts forwarded from X to Y will be added to …"); the user can
   // read it in the email and copy the same details from the page.
   return { ...outcome, forwardTo: INBOUND_EMAIL_ADDRESS };
 }

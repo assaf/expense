@@ -32,7 +32,7 @@ import { sendEmail } from "~/lib/reply.server";
  * FastMail-backed transport for the receipts-by-email pipeline.
  *
  * The pipeline (`processInboundEvent` in inbound-email.server) talks to the
- * world through the injectable `InboundDeps` collaborators — this module
+ * world through the injectable `InboundDeps` collaborators; this module
  * implements the three fetch collaborators (email, attachment list, blob
  * download) over FastMail JMAP instead of the Resend API, so the whole
  * OCR/DeepSeek/expense-create pipeline runs unchanged.
@@ -112,7 +112,7 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
 
 /**
  * Build the webhook-shaped `EmailReceivedData` for a Fastmail email. The
- * `email_id` is the JMAP id — it becomes the `inbound_emails` idempotency
+ * `email_id` is the JMAP id: it becomes the `inbound_emails` idempotency
  * key, so re-fired pushes and the cron can never create duplicate expenses.
  */
 export async function receiptEmailData(
@@ -142,7 +142,7 @@ export interface ProcessUnprocessedOptions {
   deps?: InboundDeps;
   /** Max emails per query batch (default 10). */
   batchSize?: number;
-  /** Time budget before stopping mid-backlog (default 45s — headroom inside 60s). */
+  /** Time budget before stopping mid-backlog (default 45s, headroom inside 60s). */
   timeBudgetMs?: number;
 }
 
@@ -152,7 +152,7 @@ export interface ProcessUnprocessedResult {
   destroyed: number;
 }
 
-/** The outbound reply a processing result implies — for the per-email log. */
+/** The outbound reply a processing result implies, for the per-email log. */
 function replyTypeFor(
   result: Awaited<ReturnType<typeof processInboundEvent>>,
 ): string {
@@ -203,7 +203,7 @@ export async function processUnprocessedReceipts(
   // drain. A drain legitimately replies to each sender at most once, so a
   // repeated target means the same mail (typically a bounce or an
   // autoresponder that slipped past the guards in inbound-email.server) is
-  // generating reply after reply — suppress the duplicates and raise a
+  // generating reply after reply; suppress the duplicates and raise a
   // Sentry warning instead of filling the Sent folder. Bounded to this
   // drain (no persistence): the durable stop is the bounce guard; this is
   // the alarm that fires when the guard is bypassed.
@@ -234,7 +234,7 @@ export async function processUnprocessedReceipts(
         const data = await receiptEmailData(id, adapter);
         // Loop guard: the app's own outbound mail carries the
         // X-Expense-Confirmation header. If one is filed back into the
-        // Receipts folder, skip + destroy it — it's the app's own output,
+        // Receipts folder, skip + destroy it: it's the app's own output,
         // not a user receipt. Header-based (stable), not subject-based.
         if (hasOwnConfirmationHeader(data.headers)) {
           console.info(
@@ -263,7 +263,7 @@ export async function processUnprocessedReceipts(
         }
         if (result.status === "concurrent") {
           // Another drain won the claim and is importing this email right
-          // now — it sends the confirmation and destroys the email when
+          // now. It sends the confirmation and destroys the email when
           // done. Destroying it here would yank it out from under the
           // winner mid-import (fetch fails, expense lost). Leave it alone.
           processed++;
@@ -294,7 +294,7 @@ export async function processUnprocessedReceipts(
       } catch (err) {
         // A concurrent drain (a burst of pushes, or the cron overlapping a
         // push) can list an email that another drain destroys before this
-        // one fetches it — rawEmail then reports "Email … not found". Gone
+        // one fetches it; rawEmail then reports "Email … not found". Gone
         // is the desired end state, so skip silently instead of Sentry
         // noise (EXPENSE-K). Everything else stays the marked-and-skipped
         // path below.
@@ -306,7 +306,7 @@ export async function processUnprocessedReceipts(
         // No rollback: Fastmail won't remove the $receipt-processed keyword,
         // so an email that reaches this point stays marked and is skipped
         // next time. The email remains in the Receipts folder, so nothing is
-        // lost — the error reply (when the pipeline got that far) or the
+        // lost. The error reply (when the pipeline got that far) or the
         // folder itself is the recovery path.
         failed++;
         captureError(err, { emailId: id });

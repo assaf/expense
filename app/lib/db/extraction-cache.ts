@@ -5,14 +5,14 @@ import prisma from "~/lib/prisma.server";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 
 /**
- * Cache of DeepSeek extraction results keyed by sha256 of the input — the
+ * Cache of DeepSeek extraction results keyed by sha256 of the input: the
  * normalized image bytes or the receipt text. Re-uploading the same receipt
  * (retry, a second draft, MCP + web upload of the same file) returns the
  * stored result instead of paying for another LLM call. Account-scoped
  * because category/report suggestions depend on the account's names.
  *
  * The cache wraps only the LLM call (extractReceipt); the known-merchant
- * skip path never touches it. Entries expire after TTL_MS — the read treats
+ * skip path never touches it. Entries expire after TTL_MS: the read treats
  * stale rows as misses, and each write sweeps the account's expired rows so
  * the table stays small without a cron.
  */
@@ -54,7 +54,7 @@ export async function readCachedExtraction(
   return row.result as unknown as ExtractionResult;
 }
 
-/** Store (or refresh) the extraction for (accountId, hash). Best-effort —
+/** Store (or refresh) the extraction for (accountId, hash). Best-effort:
  * a cache write failure must never fail the extraction itself. */
 export async function writeCachedExtraction(
   accountId: string,

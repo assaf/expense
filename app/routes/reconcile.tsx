@@ -28,7 +28,7 @@ import type { NewExpenseDraft, ReconciliationDecision } from "~/lib/types";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/reconcile";
 
-/** Statements are text files — a generous cap against paste bombs. */
+/** Statements are text files; a generous cap against paste bombs. */
 const MAX_STATEMENT_BYTES = 5 * 1024 * 1024;
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -69,7 +69,7 @@ export function meta(): Route.MetaDescriptors {
  *  - update: record the user's decision for one statement row (match an
  *    expense / add as a new expense / none), persisted on the run so the
  *    session survives reloads
- *  - complete: apply every decision in one transaction — matched expenses
+ *  - complete: apply every decision in one transaction. Matched expenses
  *    are marked reconciled, "new" drafts become expenses (with a rendered
  *    statement receipt), everything undecided is discarded. Nothing
  *    existing is ever deleted.

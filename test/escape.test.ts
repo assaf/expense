@@ -14,7 +14,7 @@ describe("escapeHtml", () => {
 
   it("escapes ampersands first so already-escaped text is not double-escaped", () => {
     expect(escapeHtml("&")).toBe("&amp;");
-    // Already-escaped input is re-escaped — that is the correct
+    // Already-escaped input is re-escaped, and that is the correct
     // one-pass behavior: it protects against data that contains
     // literal ampersands. You must never double-escape; callers
     // that pass pre-escaped strings won't do it.

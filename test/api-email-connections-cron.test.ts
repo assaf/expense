@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * /api/email-connections-cron — the daily renewal cron. CRON_SECRET-gated;
+ * /api/email-connections-cron: the daily renewal cron. CRON_SECRET-gated;
  * every connection is renewed, failures flag status=error.
  */
 

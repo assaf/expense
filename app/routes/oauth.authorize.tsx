@@ -15,7 +15,7 @@ import type { Route } from "./+types/oauth.authorize";
 /**
  * OAuth authorization endpoint (GET) + consent page (POST approve/deny).
  *
- * The user is already signed in (session cookie) — the flow is: an MCP
+ * The user is already signed in (session cookie). The flow is: an MCP
  * client opens this URL in the browser, the user sees who wants access and
  * clicks Allow, and we redirect back to the client with a PKCE-bound
  * authorization code. Consent is remembered (a "previously connected" note
@@ -29,7 +29,7 @@ import type { Route } from "./+types/oauth.authorize";
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const parsed = parseAuthorizeParams(url);
-  // Sign in first — requireUser redirects to /login?next=<this URL>, and the
+  // Sign in first: requireUser redirects to /login?next=<this URL>, and the
   // login action bounces back here, where consent resumes.
   const user = await requireUser(request);
   if (!parsed.ok) return errorPage(parsed.error);
@@ -40,8 +40,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     return errorPage("The redirect URI is not registered for this client.");
   }
 
-  // Codes are ONLY issued from the approve POST below — never from this
-  // GET — so an <img>/<a> request can't mint a code without a click.
+  // Codes are ONLY issued from the approve POST below, never from this
+  // GET, so an <img>/<a> request can't mint a code without a click.
   return {
     client,
     ...parsed.params,

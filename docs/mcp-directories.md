@@ -1,16 +1,16 @@
 # Listing the MCP server in directories
 
 Where to publish `https://expense.labnotes.org/mcp` so people (and their
-clients) can find it. Start with the **Official MCP Registry** — it
+clients) can find it. Start with the **Official MCP Registry**: it
 auto-propagates to PulseMCP, VS Code / Copilot, and other aggregators.
 
 ## 1. Official MCP Registry (do this first)
 
 `registry.modelcontextprotocol.io` is the centralized metadata registry
-backed by Anthropic, GitHub, PulseMCP, and Microsoft. It's in **preview** —
+backed by Anthropic, GitHub, PulseMCP, and Microsoft. It's in **preview**;
 expect possible breaking changes. Publishing is done with the
 `mcp-publisher` CLI; the metadata lives in `server.json` at the repo root
-(already written — `name: io.github.assaf/expense`, a remote Streamable HTTP
+(already written: `name: io.github.assaf/expense`, a remote Streamable HTTP
 server at `/mcp`, no package).
 
 ```bash
@@ -34,10 +34,10 @@ Notes:
 
 - **Namespace**: with GitHub auth the name must start with
   `io.github.<username>/`. You own `labnotes.org`, so DNS authentication
-  would let you use `com.labnotes/expense` (or similar) instead — see
+  would let you use `com.labnotes/expense` (or similar) instead; see
   https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/authentication.mdx.
 - **Bump `server.json` version** on meaningful changes and re-run `publish`
-  (the update endpoint is not implemented yet — treat each publish as a new
+  (the update endpoint is not implemented yet, so treat each publish as a new
   version).
 - Automate with GitHub Actions:
   https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/github-actions.mdx
@@ -50,7 +50,7 @@ can edit the name/description, see usage reports, and get review
 notifications.
 
 1. Make sure the repo has the **`mcp-server` GitHub topic** (repo → Settings
-   → Topics) — Glama indexes from topics.
+   → Topics); Glama indexes from topics.
 2. After any `glama.json` change, re-run the **Claim** flow on the server's
    Glama page to resync.
 3. Since the repo is under your personal account, authenticating with GitHub
@@ -68,13 +68,13 @@ needed server-side).
 
 Manual submission form at https://pulsemcp.com/submit (GitHub repo +
 documentation + protocol compliance). PulseMCP also ingests from the
-Official MCP Registry (~1 week propagation) — publishing there first may make
+Official MCP Registry (~1 week propagation); publishing there first may make
 this automatic.
 
 ## 5. mcp.so
 
 Community marketplace. Manual submission via the form at https://mcp.so/submit
-or a GitHub issue (Cloudflare blocks automated submissions — do it by hand).
+or a GitHub issue (Cloudflare blocks automated submissions; do it by hand).
 
 ## 6. Claude plugin directory (Claude Desktop)
 

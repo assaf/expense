@@ -24,13 +24,13 @@ import { parseIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/onboarding";
 
 /**
- * FastMail onboarding — the first-run flow for users who connect their
+ * FastMail onboarding: the first-run flow for users who connect their
  * own mailbox instead of signing up with email + verification link.
  *
  * Step 1: paste a FastMail API token. The token is verified against the
- * JMAP session endpoint, which also reveals the mailbox address — no
- * typing it.
- * Step 2: set a password (new account — email verified automatically,
+ * JMAP session endpoint, which also reveals the mailbox address (no
+ * typing it).
+ * Step 2: set a password (new account, with email verified automatically
  * because the token proves mailbox control) or enter the existing
  * account's password (the mailbox attaches to that account).
  * Success: session cookie + redirect into the inbox review, then the
@@ -55,7 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
   const { form, intent } = await parseIntent(request);
 
   if (intent === "connect-token") {
-    // Anonymous work (a FastMail session call per request) — cap per IP.
+    // Anonymous work (a FastMail session call per request); cap per IP.
     await guardAnonymousAction(request);
     if (!isTokenCryptoConfigured()) {
       await recordAnonymousAttempt(request);

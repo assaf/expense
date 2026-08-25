@@ -20,7 +20,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw notFound();
   // Editor context (reports, categories, merchants, home, rate) and the
-  // prev/next neighbours for the ← → arrows — two targeted queries instead
+  // prev/next neighbours for the ← → arrows: two targeted queries instead
   // of loading every expense.
   const [nav, context] = await Promise.all([
     readNeighborIds(user.accountId, expense),
@@ -83,7 +83,7 @@ export default function ExpenseEditor({ loaderData }: Route.ComponentProps) {
  * different expense remounts the editor with fresh field state. Create
  * mode keeps a stable key instead: the route loader builds a fresh shell
  * (new id) on every revalidation, and a changing key would remount the
- * editor mid-edit — wiping the draft form state. */
+ * editor mid-edit, wiping the draft form state. */
 export function Editor({ data }: { data: EditorData }) {
   const key =
     data.mode === "create" ? `create-${data.expense.type}` : data.expense.id;

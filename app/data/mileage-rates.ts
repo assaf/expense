@@ -1,13 +1,13 @@
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 
 /**
- * IRS standard mileage rates — the seed for the global `mileage_rates`
+ * IRS standard mileage rates: the seed for the global `mileage_rates`
  * master table, synced by initStore at startup (see database.ts). Source:
  * the IRS standard-mileage-rates page; docs/2026-08-04 IRS standard mileage
  * rates.md holds the point-in-time snapshot with the source links.
  *
  * Update this array when the IRS publishes new rates (usually each December
- * for the coming year, plus occasional mid-year changes) — the next deploy
+ * for the coming year, plus occasional mid-year changes); the next deploy
  * syncs it into every database, so the app never asks users to track rates.
  *
  * Periods are inclusive date ranges (YYYY-MM-DD). Charity is fixed by

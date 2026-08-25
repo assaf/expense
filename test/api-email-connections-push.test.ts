@@ -3,7 +3,7 @@ import { encrypt } from "http_ece";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * /api/email-connections-push — the per-connection webhook. Decryption is
+ * /api/email-connections-push: the per-connection webhook. Decryption is
  * real (successful decryption is the route's auth); the env is mocked with
  * a throwaway keypair and the network-facing collaborators (JMAP
  * verification echo, DB) are mocked.
@@ -167,7 +167,7 @@ describe("api.email-connections-push", () => {
       "sub-1",
       "code-123",
     );
-    // Healthy connection — no status flip.
+    // Healthy connection, no status flip.
     expect(mocks.setEmailConnectionStatus).not.toHaveBeenCalled();
   });
 

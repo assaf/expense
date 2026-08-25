@@ -6,8 +6,8 @@ import { deleteReceiptImages, readExpenses } from "~/lib/db/expenses";
 import type { Report } from "~/lib/types";
 
 // Reports come back in creation order: auto-increment ids are strictly
-// increasing, so `id asc` is chronological — oldest first, newest last.
-/** Short-lived per-account cache for reports — they only change when the
+// increasing, so `id asc` is chronological: oldest first, newest last.
+/** Short-lived per-account cache for reports; they only change when the
  * user edits them in Settings, so a 5-minute TTL is safe. */
 const reportsCache = createCache<Report[]>(300_000);
 
@@ -24,7 +24,7 @@ export async function readReports(accountId: string): Promise<Report[]> {
 
 /**
  * Expenses per category that belong to reports that are NOT closed (an
- * expense with no report counts — it isn't in any closed report). Categories
+ * expense with no report counts, since it isn't in any closed report). Categories
  * are referenced by name; only categories with live expenses appear.
  */
 export async function readCategoryCounts(
@@ -51,7 +51,7 @@ export async function readCategoryCounts(
 }
 
 /** True when a report with this name exists (open or closed). Used by the
- * MCP export_report tool — the report must exist, but closed reports are
+ * MCP export_report tool: the report must exist, but closed reports are
  * still exportable. */
 export async function reportExists(
   accountId: string,
@@ -63,8 +63,8 @@ export async function reportExists(
 /**
  * Find a report that can accept expenses: exists and is not closed. Returns
  * the report, or an error message when it doesn't exist or is closed. Every
- * "report must exist and be open" check — the web expense save path and the
- * MCP capture_receipt / log_mileage / add_to_report tools — goes through
+ * "report must exist and be open" check (the web expense save path and the
+ * MCP capture_receipt / log_mileage / add_to_report tools) goes through
  * this one helper, so the validation and its error text live in one place.
  */
 export async function findOpenReport(
@@ -93,7 +93,7 @@ export interface ReportSummary {
 }
 
 /**
- * All reports with their expense counts and exact totals — the shape shared
+ * All reports with their expense counts and exact totals, the shape shared
  * by the export page and the MCP list_reports tool. Counts and totals come
  * from the same summarizeByReport pass, so they always agree.
  */
@@ -115,7 +115,7 @@ export async function readReportSummaries(
 
 /**
  * Single-report aggregate (count + exact total) via a targeted Prisma query
- * — cheaper than loading every expense. Returns null when the report has no
+ * (cheaper than loading every expense). Returns null when the report has no
  * expenses (or the report name is blank).
  */
 export async function readReportSummary(
@@ -151,7 +151,7 @@ export function addReport(
 }
 
 /**
- * Delete a report together with every expense in it — including their
+ * Delete a report together with every expense in it, including their
  * receipt images. Expenses reference reports by name, so the cascade is a
  * same-account name match, executed in one transaction. An empty name is a
  * no-op: it must never touch the "unassigned" expenses (report: "").
@@ -175,7 +175,7 @@ export async function removeReport(
 
 /**
  * Rename a report and every reference to it: the report row and its
- * expenses. Receipt image keys keep their old convention name — re-saving a
+ * expenses. Receipt image keys keep their old convention name; re-saving a
  * receipt rewrites them. Returns an error message when the rename can't
  * happen (empty, unchanged, duplicate).
  */

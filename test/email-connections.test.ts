@@ -20,7 +20,7 @@ import {
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 
 /**
- * Connected email accounts — the store layer. EMAIL_TOKEN_ENCRYPTION_KEY comes from
+ * Connected email accounts: the store layer. EMAIL_TOKEN_ENCRYPTION_KEY comes from
  * the vitest main-project env (fixed test key; see vitest.main.config.ts).
  */
 
@@ -137,7 +137,7 @@ describe("email connections store", () => {
           createdAt: now,
         },
         {
-          // Created, but 3 days ago — outside the 24h window.
+          // Created, but 3 days ago, outside the 24h window.
           connectionId: connection.id,
           emailId: "e3",
           fromAddress: "apple@id.apple.com",

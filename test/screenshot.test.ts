@@ -1,5 +1,5 @@
 /**
- * README screenshot generator — skipped unless SCREENSHOT=1.
+ * README screenshot generator, skipped unless SCREENSHOT=1.
  *
  *   SCREENSHOT=1 pnpm exec vp test run test/screenshot.test.ts
  *
@@ -154,7 +154,7 @@ const RECEIPTS: ReceiptSpec[] = [
   },
 ];
 
-/** Incomplete receipt — demos the amber "Incomplete" state on the home page. */
+/** Incomplete receipt: demos the amber "Incomplete" state on the home page. */
 const INCOMPLETE = {
   merchant: "",
   date: "2026-07-27",
@@ -286,7 +286,7 @@ async function seedScreenshotData() {
   });
 
   // Receipts with generated receipt images (stored in image_blobs, like the
-  // app does — all images live in Postgres).
+  // app does; all images live in Postgres).
   for (const spec of RECEIPTS) {
     const png = await sharp(Buffer.from(receiptSvg(spec)), { density: 144 })
       .png()
@@ -389,7 +389,7 @@ async function captureHome(page: import("playwright").Page): Promise<void> {
   // Give map tiles (OSM) and webfonts a moment to arrive.
   await page.waitForTimeout(3_000);
 
-  // Structural checks — the screenshot must show the seeded dataset.
+  // Structural checks: the screenshot must show the seeded dataset.
   await expect
     .poll(() => page.locator("main li").count(), { timeout: 10_000 })
     .toBe(11); // 9 receipts + mileage + 1 incomplete
@@ -437,7 +437,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       await captureHome(page);
       console.info("wrote public/screenshot-home.png");
 
-      // Receipt editor page — show a receipt with the generated image.
+      // Receipt editor page: show a receipt with the generated image.
       const sweetgreen = await testPrisma.expense.findFirstOrThrow({
         where: { accountId: ACCOUNT, merchant: "Sweetgreen" },
         select: { id: true },

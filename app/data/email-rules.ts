@@ -1,12 +1,12 @@
 /**
- * Seed for GENERAL email rules — senders whose emails are auto-imported by
+ * Seed for GENERAL email rules: senders whose emails are auto-imported by
  * every connected account. Synced into email_rules (accountId = "") on
  * boot by initStore; edit this list and restart to change the rules.
  *
  * A domain matches the domain and any subdomain (apple.com covers
  * no_reply@email.apple.com). Be conservative: a false positive means a
  * marketing email gets classified (and only trashed when it really parses
- * as a receipt), while a false negative just means manual entry — same as
+ * as a receipt), while a false negative just means manual entry, same as
  * today. Marketing-heavy senders stay OFF this list.
  */
 
@@ -29,14 +29,14 @@ export const GENERAL_EMAIL_RULES: GeneralEmailRuleSeed[] = [
   { sender: "grubhub.com", note: "Order receipts" },
   { sender: "instacart.com", note: "Order receipts" },
   { sender: "squareup.com", note: "Square receipts" },
-  // Recurring billers — invoices/statements with an Amount-due line. The
+  // Recurring billers: invoices/statements with an Amount-due line. The
   // local gate keeps them (money total rescues the bland "bill" subject);
   // marketing mail from the same senders is rejected (no money).
   { sender: "shopify.com", note: "Shopify subscription bills" },
   { sender: "conservice.com", note: "Conservice utility statements" },
   { sender: "spectrum.com", note: "Spectrum internet/cable bills" },
   // Spectrum billing notices also arrive from spectrum.net (a separate
-  // TLD, not a subdomain — needs its own rule).
+  // TLD rather than a subdomain, so it needs its own rule).
   { sender: "spectrum.net", note: "Spectrum billing notices" },
   { sender: "verizonwireless.com", note: "Verizon Wireless phone bills" },
 ];

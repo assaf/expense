@@ -11,7 +11,7 @@ import { extractFromImage } from "~/lib/receipt-ocr.server";
 
 /**
  * Vision-first fallback contract for image receipts. "auto" reads the image
- * with the LLM — no local OCR CPU — and runs tesseract only when the
+ * with the LLM (no local OCR CPU), and runs tesseract only when the
  * provider errors: photocopies/glare/skew are the vision cases anyway, so a
  * weak vision result stands. The LLM is stubbed: the request body's user
  * content is a plain string for text calls, an array with an image_url for
@@ -24,7 +24,7 @@ const RECEIPT_PNG = readFileSync("test/fixtures/images/ralphs.png");
 type LlmCall = { text: string | null; image: boolean };
 
 let llmCalls: LlmCall[] = [];
-/** Per-call override: keyed by call index — used to fail the vision call. */
+/** Per-call override: keyed by call index; used to fail the vision call. */
 let failOn: Record<number, boolean> = {};
 // The OCR engine is created lazily inside extractFromImage, so the recognize
 // stub reads this variable at call time rather than being configured after.
@@ -123,7 +123,7 @@ describe("receipt vision-first fallback (auto)", () => {
   });
 
   it("keeps a weak vision verdict without running OCR", async () => {
-    // The model reads the image but decides it isn't a receipt — no OCR
+    // The model reads the image but decides it isn't a receipt, so no OCR
     // rescue, even though tesseract would have named a total: CPU only on
     // provider error.
     mockOcr("ACME CAFE\nTOTAL $12.50");
@@ -158,7 +158,7 @@ describe("receipt vision-first fallback (auto)", () => {
 
   it("keeps a weak vision receipt without running OCR", async () => {
     // The model saw a receipt but couldn't name a total+merchant (a
-    // photocopy) — tesseract would likely miss it too, so the weak result
+    // photocopy). Tesseract would likely miss it too, so the weak result
     // stands rather than spending CPU or failing the capture.
     mockOcr("ACME CAFE\nTOTAL $12.50"); // tesseract WOULD have read it
     vi.stubGlobal("fetch", async (_url: unknown, init: { body?: string }) => {
@@ -191,7 +191,7 @@ describe("receipt vision-first fallback (auto)", () => {
 
   it("stores octet-stream images with a displayable mime", async () => {
     // Phones attach screenshots as application/octet-stream with a UUID
-    // filename — the bytes are sniffed so the stored receipt renders.
+    // filename; the bytes are sniffed so the stored receipt renders.
     const { stored } = await extractFromImage({
       accountId: "ocr-fallback-g",
       buffer: RECEIPT_PNG,

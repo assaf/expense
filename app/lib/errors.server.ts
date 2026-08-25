@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react-router";
 
 /**
  * Log an error to the console and capture it in Sentry. Sentry is a no-op
- * until the server initializes it (app/entry.server.tsx — the bundled
+ * until the server initializes it (app/entry.server.tsx, the bundled
  * module Vercel boots as the function handler; init runs only when
  * VERCEL_ENV=production, with the DSN from SENTRY_DSN or a hardcoded
  * fallback), so this is safe to call unconditionally from route error
@@ -22,7 +22,7 @@ export function captureError(
 /**
  * Log a warning and capture it in Sentry when initialized (no-op otherwise,
  * same contract as captureError). For recoverable failures the app absorbs
- * and keeps running — e.g. an outbound reply email that could not be sent
+ * and keeps running, such as an outbound reply email that could not be sent
  * (the pipeline treats replies as fire-and-forget).
  */
 export function captureWarning(

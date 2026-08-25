@@ -91,7 +91,7 @@ export function NameList<T extends { name: string }>({
 
 /**
  * Inline rename editor: an input pre-filled with the current name, Save,
- * and Cancel. Submits through a fetcher (no page navigation — the page
+ * and Cancel. Submits through a fetcher (no page navigation; the page
  * stays put, and the action's error, e.g. a duplicate name, is shown
  * inline). The row that hosts it is keyed by name, so a successful rename
  * remounts the row and closes the editor.
@@ -104,7 +104,7 @@ export function RenameForm({
   onCancel,
 }: {
   intent: string;
-  /** Current name — also the hidden `name` field the action matches on. */
+  /** Current name; also the hidden `name` field the action matches on. */
   name: string;
   onCancel: () => void;
 }) {

@@ -4,9 +4,9 @@ import { EMAIL_TOKEN_ENCRYPTION_KEY } from "~/lib/env";
 /**
  * AES-256-GCM encryption for connected email-account API tokens. The tokens
  * must be usable later (JMAP calls on the user's behalf), so unlike session
- * or OAuth secrets they cannot be hashed — encrypt them at rest instead.
+ * or OAuth secrets they cannot be hashed; encrypt them at rest instead.
  *
- * Ciphertext format: `base64(iv).base64(tag).base64(ciphertext)` — the tag
+ * Ciphertext format: `base64(iv).base64(tag).base64(ciphertext)`. The tag
  * makes tampering detectable, the random IV makes repeats non-deterministic.
  *
  * Requires EMAIL_TOKEN_ENCRYPTION_KEY (32 bytes, base64); `isTokenCryptoConfigured`

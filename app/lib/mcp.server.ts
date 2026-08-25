@@ -58,27 +58,27 @@ import {
 } from "~/lib/types";
 
 /**
- * The MCP server for the expense tracker — the agent-facing window onto the
+ * The MCP server for the expense tracker: the agent-facing window onto the
  * same store the web app uses (POST /mcp, bearer-token auth).
  *
  * Tool design principle: expose capabilities, not CRUD. The flagship tool,
  * capture_receipt, runs the app's own extraction pipeline (DeepSeek /
  * tesseract + the account's merchant→category memory) so an agent can drop
- * a receipt photo/PDF and get a filed expense — the same work the web UI
+ * a receipt photo/PDF and get a filed expense, the same work the web UI
  * does, without a form.
  *
- * Transport: MCP Streamable HTTP via the v2 SDK's `createMcpHandler` — one
+ * Transport: MCP Streamable HTTP via the v2 SDK's `createMcpHandler`, one
  * endpoint, both protocol eras. 2025-era clients (the `initialize`
  * handshake) are served per request without sessions (the default
  * `legacy: 'stateless'` posture), and 2026-07-28 stateless clients (a
  * per-request `_meta` envelope) are served natively. Responses are
- * JSON-only (`responseMode: 'json'`) — no long-lived SSE streams, which
+ * JSON-only (`responseMode: 'json'`), with no long-lived SSE streams, which
  * keeps serverless functions from holding a connection open.
  *
  * Auth is OAuth-only: every request carries an OAuth access token
  * (authorization-code flow, see oauth.server.ts). The token resolves to an
  * account before the handler runs, and each request gets a fresh server
- * instance bound to that account — the endpoint is fully stateless, holds
+ * instance bound to that account, so the endpoint is fully stateless, holds
  * nothing between requests, and cold starts cost nothing.
  */
 
@@ -94,8 +94,8 @@ function buildServer(accountId: string): McpServer {
 
 /**
  * The 2026-07-28 leg: `createMcpHandler` builds a fresh server per request
- * and holds nothing between requests. `legacy: 'reject'` — 2025-era traffic
- * is routed to `serveLegacy` below, never here.
+ * and holds nothing between requests. `legacy: 'reject'` sends 2025-era
+ * traffic to `serveLegacy` below, never here.
  */
 const modernHandler = createMcpHandler(
   (ctx) => {
@@ -116,10 +116,10 @@ const modernHandler = createMcpHandler(
 /**
  * The 2025-era leg: one stateless transport per request (no session id
  * generator), with `enableJsonResponse` so responses are plain JSON instead
- * of SSE — simpler for CLI agents and tests, and keeps serverless functions
+ * of SSE, which is simpler for CLI agents and tests and keeps serverless
  * from holding a stream open. The built-in `legacy: 'stateless'` fallback
  * does not expose that option, so the leg is wired by hand with the SDK's
- * own `isLegacyRequest` classification — the documented pattern for keeping
+ * own `isLegacyRequest` classification, the documented pattern for keeping
  * a legacy deployment next to a strict modern handler.
  */
 async function serveLegacy(
@@ -168,7 +168,7 @@ function authInfoFor(auth: {
 
 /**
  * Handle any request to /mcp: authenticate the bearer token, then route by
- * protocol era — 2025-era (no `_meta` envelope claim) to the stateless
+ * protocol era: 2025-era (no `_meta` envelope claim) to the stateless
  * legacy leg, everything else to the strict 2026-07-28 handler. Loaders and
  * actions both land here.
  */
@@ -257,7 +257,7 @@ function fail(message: string): ToolResult {
 
 // --- Server + tools --------------------------------------------------------
 
-/** The tools a healthy server must expose — the deployed-bundle check. */
+/** The tools a healthy server must expose; the deployed-bundle check. */
 const SMOKE_TOOL_NAMES = [
   "add_to_report",
   "capture_receipt",
@@ -276,7 +276,7 @@ const SMOKE_TOOL_NAMES = [
 
 /**
  * Post-deploy MCP smoke check (called from GET /api/smoke): real round
- * trips through `handleMcpRequest` — the exact code /mcp serves — in BOTH
+ * trips through `handleMcpRequest` (the exact code /mcp serves) in BOTH
  * protocol eras: a 2025-era initialize → tools/list → tools/call flow
  * (served statelessly) and a 2026-07-28 server/discover → tools/list →
  * tools/call flow carrying the per-request `_meta` envelope and the
@@ -661,7 +661,7 @@ function createMcpServer(accountId: string): McpServer {
         expenses,
         (e) => e.category || "Uncategorized",
       );
-      // The grand total is the exact sum of the category buckets — every
+      // The grand total is the exact sum of the category buckets: every
       // amount-bearing expense lands in exactly one bucket.
       const total = [...byCategory.values()].reduce(
         (sum, b) => sum.add(b.total),
@@ -940,7 +940,7 @@ async function validatedExpenseInput(
  * Capture a receipt: decode the input, run the app's extraction pipeline
  * (DeepSeek vision/OCR, falling back to tesseract; category resolved from
  * the merchant's own history), persist the image, and create the expense.
- * Extraction failure never blocks the capture — the image is still stored
+ * Extraction failure never blocks the capture; the image is still stored
  * and the expense created with the fields we have (mirrors the draft flow).
  */
 async function captureReceipt(
@@ -978,7 +978,7 @@ async function captureReceipt(
       return fail(`Couldn't fetch ${args.url}: ${reason}.`);
     }
     if (!res.ok) return fail(`Couldn't fetch ${args.url}: HTTP ${res.status}.`);
-    // Stream with a hard cap — the 15MB check must bound the download, not
+    // Stream with a hard cap: the 15MB check must bound the download, not
     // run after the whole body has already been buffered (a big response
     // would OOM the function before the guard trips).
     let data: Buffer;
@@ -1115,7 +1115,7 @@ async function logMileage(
     return fail("A trip needs at least two stops.");
   }
 
-  // The IRS rate for the trip's (date, type) — no rate in the master table
+  // The IRS rate for the trip's (date, type). No rate in the master table
   // for the period means no amount (never $0.00).
   const rate = mileageRateFor(
     await readMileageRates(),

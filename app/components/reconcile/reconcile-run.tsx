@@ -87,7 +87,7 @@ function CompletedSummary({ run }: { run: ReconciliationRunRecord }) {
   );
 }
 
-/** Collapsible list of lines the parser couldn't turn into transactions —
+/** Collapsible list of lines the parser couldn't turn into transactions:
  * the user's judgment call, surfaced instead of silently dropped. */
 function SkippedList({
   skipped,

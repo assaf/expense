@@ -273,7 +273,7 @@ describe("Date extraction", () => {
   });
 
   it("returns the date in the zone the string names, not UTC", () => {
-    // 17:08 PDT on Jul 12 is 00:08 UTC Jul 13 — the receipt's date is the
+    // 17:08 PDT on Jul 12 is 00:08 UTC Jul 13, but the receipt's date is the
     // sender's local date (Jul 12), which is what the expense must carry.
     expect(parseDateString("Sun, 12 Jul 2026 17:08:10 -0700")).toBe(
       "2026-07-12",
@@ -496,7 +496,7 @@ describe("Attachment selection", () => {
   });
 
   it("treats extension-less octet-stream attachments as non-candidates", () => {
-    // Phones attach screenshots with UUID filenames and no declared type —
+    // Phones attach screenshots with UUID filenames and no declared type,
     // metadata scoring can't see them; the byte sniff in selectReceiptSource
     // is the fallback.
     expect(
@@ -763,14 +763,14 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.imageMime).toBe("image/jpeg"); // body render stored as JPEG
     usedExpenseIds.push(expenseIdOf(result));
     // Successful imports send a confirmation email with the ORIGINAL body
-    // text quoted below the details (attachment only for image sources —
+    // text quoted below the details (attachment only for image sources,
     // never inline in the body).
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
       "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
     const confirmation = deps.sent[0]!;
-    // A body receipt carries no attachment — the original text is quoted.
+    // A body receipt carries no attachment: the original text is quoted.
     expect(confirmation.attachments).toBeUndefined();
     expect(confirmation.html).toContain("Original receipt");
     expect(confirmation.html).toContain("MERCHANT: Amazon");
@@ -783,7 +783,7 @@ describe("processInboundEvent (body receipt)", () => {
 
   it("truncates a very long quoted original in the confirmation", async () => {
     const deps = fakeDeps();
-    // ~10k chars of body — far past the 4000-char quote cap.
+    // ~10k chars of body, far past the 4000-char quote cap.
     const longBody = [
       "MERCHANT: Amazon",
       "TOTAL: 42.50",
@@ -978,7 +978,7 @@ describe("processInboundEvent (body receipt)", () => {
 
   it("reuses the category a previous expense for the same merchant used", async () => {
     // The model suggests a different category, but a seeded prior expense
-    // for "Test Store" is filed under Testing — the merchant's own category
+    // for "Test Store" is filed under Testing; the merchant's own category
     // wins over the guess.
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () =>
@@ -999,7 +999,7 @@ describe("processInboundEvent (body receipt)", () => {
 
   it("skips the model when the body names a known merchant with a total", async () => {
     // The body names "Test Store" (seeded history: Testing / 2026 Test) and
-    // carries a parseable total — the known-merchant skip must produce the
+    // carries a parseable total, so the known-merchant skip must produce the
     // expense without consulting the model at all.
     const deps = fakeDeps();
     let modelCalls = 0;
@@ -1138,7 +1138,7 @@ describe("processInboundEvent (body receipt)", () => {
   it("suppresses the second confirmation when the same receipt was already imported recently", async () => {
     // The cross-pipeline overlap: the inbox original is imported first
     // (connected-account pipeline), then the user's forwarded copy (the
-    // receipts pipeline). Different emails, same receipt content — the
+    // receipts pipeline). Different emails, same receipt content, yet the
     // second import still saves the expense but must NOT send a second
     // confirmation (one response per receipt).
     const deps = fakeDeps();
@@ -1160,7 +1160,7 @@ describe("processInboundEvent (body receipt)", () => {
     usedExpenseIds.push(expenseIdOf(second));
     expect(second).toMatchObject({ status: "created" });
     // The receipt was imported (a second expense row), but the
-    // confirmation is suppressed — still exactly one response.
+    // confirmation is suppressed; still exactly one response.
     expect(deps.sent).toHaveLength(1);
   });
 
@@ -1177,7 +1177,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("needs attention");
     expect(deps.sent[0]!.html).toContain("merchant");
-    // A body receipt: no attachment — the original text is quoted instead.
+    // A body receipt: no attachment. The original text is quoted instead.
     const partial = deps.sent[0]!;
     expect(partial.attachments).toBeUndefined();
     expect(partial.html).toContain("Original receipt");
@@ -1206,7 +1206,7 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     // Resend retries after the route's non-2xx response: the pipeline
     // re-runs, but the atomic claim short-circuits the already-failed
-    // email — no second import attempt, no second, duplicate error email.
+    // email, so no second import attempt and no duplicate error email.
     const second = await processInboundEvent(eventData(), deps);
     expect(second).toMatchObject({ status: "duplicate" });
     expect(deps.sent).toHaveLength(1);
@@ -1215,7 +1215,7 @@ describe("processInboundEvent (body receipt)", () => {
   it("lets a concurrent drain's import proceed without a second reply", async () => {
     // Two drains race the same email: the first wins the atomic claim and
     // imports; the second sees the "processing" row and stands down
-    // without replying (status "concurrent") — the duplicate-confirmation
+    // without replying (status "concurrent"); the duplicate-confirmation
     // bug from webhook bursts. The winner's reply is the only one.
     const deps = fakeDeps();
     const email = receivedEmail({});
@@ -1273,7 +1273,7 @@ describe("processInboundEvent (body receipt)", () => {
   });
 
   it("drops unknown senders without replying and creates no expense", async () => {
-    // The From header is attacker-controlled at SMTP time — replying to it
+    // The From header is attacker-controlled at SMTP time; replying to it
     // would let anyone use the app's mailbox as a mail amplifier. Unknown
     // senders are dropped silently.
     const deps = fakeDeps();
@@ -1635,7 +1635,7 @@ describe("processInboundEvent (attachments)", () => {
     expect(created.originalName).toBe("invoice.png"); // PDF stored as PNG name
     expect(created.imageMime).toBe("image/jpeg"); // re-encoded JPEG at save
     expect(created.date).toBe("2026-06-20"); // no forward block → header date
-    // Logo was downloaded? No — only the chosen attachment is downloaded.
+    // Logo was downloaded? No, only the chosen attachment is downloaded.
     expect(deps.downloads.map((m) => m.id)).toEqual(["att-pdf"]);
     // The confirmation attaches the ORIGINAL PDF, not the rendered image.
     const pdfConfirmation = deps.sent[0]!;

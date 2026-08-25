@@ -1,7 +1,7 @@
 # Connected email accounts (auto-import)
 
 Users connect their **own** email account so expenses import straight from
-their inbox — no forwarding, no manual entry. Distinct from
+their inbox; no forwarding, no manual entry. Distinct from
 [receipts-by-email](receipts-by-email.md) (forward receipts to a dedicated
 address); both coexist.
 
@@ -18,17 +18,17 @@ instead" on the sign-up flow, /login?mode=create).
 
 - **Token = mailbox control = email verification.** The step-1 form pastes
   a FastMail API token; `verifyJmapToken` proves it live against
-  `jmap/session`, which also reveals the account's address — no typing.
+  `jmap/session`, which also reveals the account's address; no typing.
   Step 2 sets a password (new account) or enters the existing account's
   password (attach). On success `emailVerifiedAt` is stamped WITHOUT an
   emailed link: a valid token is strictly stronger proof than a
   click-through link. Session cookie + redirect into `/email-review` with
   `?onboarding=1` (the "Finish setup" CTA lands on the expense list, which
-  shows a one-time welcome panel — the flow flags the account via the
+  shows a one-time welcome panel: the flow flags the account via the
   `welcomePending` setting; other accounts never see it).
 - **Login email claimed as a VERIFIED sender.** The same proof claims the
   address as a verified receipts-by-email sender
-  (`verifyInboundSenderDirect` in `app/lib/db/inbound.ts` — same exclusive
+  (`verifyInboundSenderDirect` in `app/lib/db/inbound.ts`, the same exclusive
   claim transaction as the link click, no token), so forwarding from the
   address works immediately and `login()`'s `ensureDefaultSender` finds the
   row already verified and skips its email.
@@ -36,10 +36,10 @@ instead" on the sign-up flow, /login?mode=create).
   the EMAIL + PASSWORD the user signs in with, and the mailbox connects to
   THAT account. No account for the entered email → create one (name
   derived from the email local part, numeric suffix on collision,
-  `emailVerifiedAt` stamped — the token proves mailbox control); verified
+  `emailVerifiedAt` stamped; the token proves mailbox control); verified
   account → sign in (`login()`, so lockout/rehash apply) and attach; stale
   unverified signup → replaced via `deleteUnverifiedUser`. The token's own
-  address only PRE-FILLS the email field — a mailbox address that happens
+  address only PRE-FILLS the email field: a mailbox address that happens
   to own an account the user can't authenticate to (e.g. a bootstrap
   account) must not block attaching to the user's real account. The
   receipts-by-email sender is claimed as verified only when the account
@@ -49,28 +49,28 @@ instead" on the sign-up flow, /login?mode=create).
   is rolled back. The step-1 resolution (`verifyOnboardingToken`) reports
   none/verified/unverified so the UI picks the right copy.
   Attach can still dead-end when the user doesn't know their account
-  password — the attach step links to `/reset-password?email=…`, so
+  password. The attach step links to `/reset-password?email=…`, so
   mailbox control (the token) plus the emailed link recovers the account.
 - The user still sets a password: sessions expire after 30 days; the token
   is stored AES-256-GCM encrypted as usual.
 
 ## Discovery surfaces (how users hear about connecting)
 
-The feature is promoted in the public marketing copy (`app/lib/seo-content.ts`
-— single source; renders /, /about, /faq, /alternatives + their .md mirrors
+The feature is promoted in the public marketing copy (`app/lib/seo-content.ts`,
+the single source; renders /, /about, /faq, /alternatives + their .md mirrors
 and llms.txt) and with in-app nudges:
 
 - **Sign-up flow** (`/login?mode=create`): blue "Connect your FastMail
   account" button under an "or" divider.
 - **Landing page**: hero line ("Have a FastMail account? Connect it…") and a
   "Connect your FastMail account" feature card.
-- **FAQ**: "Does Expense work with FastMail?" — the "only support Gmail"
+- **FAQ**: "Does Expense work with FastMail?" The "only support Gmail"
   positioning lives in the FAQ, the /alternatives "Email import" comparison
   row, and the /about benefit + KEY_FACTS.
 - **Home page highlight** (`FeatureHighlight`): the `connect-email` highlight
   is in the rotation ONLY while the account has no connected mailbox
   (`HighlightData.hasEmailConnection`), and `pickHighlight(data, boost)`
-  triples its odds until connected (the loader boosts it) — so unconnected
+  triples its odds until connected (the loader boosts it), so unconnected
   accounts see the nudge within a few visits while the rotation still varies.
 - **Empty state** (`_index.tsx`): new accounts with no expenses and no
   connection get the connect suggestion under the "Nothing here yet" copy.
@@ -83,26 +83,26 @@ and llms.txt) and with in-app nudges:
 
 ## What exists today
 
-- **Model** (`prisma/schema.prisma`): `EmailConnection` — one row per
+- **Model** (`prisma/schema.prisma`): `EmailConnection`, one row per
   connected mailbox, scoped to the workspace (`accountId`) but with
   `emailAddress` **globally unique**: one mailbox feeds exactly one
   workspace, so two accounts can never race to process (and trash) the same
-  email. `EmailProcessLog` — one row per evaluated email (idempotency key =
+  email. `EmailProcessLog`, one row per evaluated email (idempotency key =
   connection + JMAP email id), the audit/health log and the source of the
   "processed in the last 24 hours" stat.
 - **Token handling**: the user generates a FastMail API token (Settings →
   Privacy & Security → API tokens), pastes it on the Email page.
   We verify it live against `https://api.fastmail.com/jmap/session`
-  (`app/lib/jmap.server.ts` — distinguishes invalid token / no mail scope /
+  (`app/lib/jmap.server.ts`, which distinguishes invalid token / no mail scope /
   network), then store it **AES-256-GCM encrypted**
   (`app/lib/token-crypto.server.ts`, key = `EMAIL_TOKEN_ENCRYPTION_KEY`, 32 bytes
   base64). The token is never returned to the client after connect.
-- **Store**: `app/lib/db/email-connections.ts` — create (with exclusivity
+- **Store** (`app/lib/db/email-connections.ts`): create (with exclusivity
   checks), list (with last-24h stat, never the token), remove, plus the
   push-subscription state, lastPushAt stamp, and status flips.
 - **Per-connection push** (`app/lib/email-connection-push.server.ts`): a
   JMAP `PushSubscription` per connection, renewed by the daily cron.
-  Reuses the app's RFC 8291 push keys (`PUSH_PRIVATE_KEY`/`PUSH_AUTH` —
+  Reuses the app's RFC 8291 push keys (`PUSH_PRIVATE_KEY`/`PUSH_AUTH`;
   they're our decryption keys, not per-tenant secrets); the per-connection
   parts are the push URL (`/api/email-connections-push?c=<connectionId>`)
   and the deviceClientId (`expense-conn-<connectionId>`). Every JMAP call
@@ -115,13 +115,13 @@ and llms.txt) and with in-app nudges:
   Pushes for unknown/disconnected connections 404 quietly.
 - **Cron** (`app/routes/api.email-connections-cron.ts`, vercel.json,
   daily 13:00 UTC): renew every connection's subscription (recreate within
-  7 days of the 30-day expiry — recreation triggers a fresh
+  7 days of the 30-day expiry; recreation triggers a fresh
   PushVerification). A failure (revoked token, FastMail error) flags the
   connection `status=error` → "Needs attention" on the Email page; a successful
   renewal clears it.
-- **Disconnect** also destroys the server-side subscription (best effort —
+- **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
-- **Settings UI**: `app/components/settings/email-accounts.tsx` — step-by-step
+- **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step
   FastMail instructions with the direct new-token link, connect form,
   connection rows with stats (received / processed / last 24h / last
   webhook), disconnect. Rendered on the Email page (`app/routes/emails.tsx`).
@@ -131,7 +131,7 @@ and llms.txt) and with in-app nudges:
 
 ## Env
 
-- `EMAIL_TOKEN_ENCRYPTION_KEY` — 32-byte base64 key (`openssl rand -base64 32`) that
+- `EMAIL_TOKEN_ENCRYPTION_KEY`: 32-byte base64 key (`openssl rand -base64 32`) that
   encrypts user API tokens at rest. **Required in production before anyone
   connects an account.** When unset, the Settings section reports the
   feature unconfigured and the `connectEmail` action returns 503. Losing
@@ -141,26 +141,26 @@ and llms.txt) and with in-app nudges:
 - **Rules** (`app/lib/db/email-rules.ts` + `app/data/email-rules.ts`):
   general rules (seeded: Apple, Amazon, Uber, …) synced on boot by
   `initStore`; user rules learned automatically when a receipt forward
-  imports successfully (`learnRuleFromForward` in the inbound pipeline —
+  imports successfully (`learnRuleFromForward` in the inbound pipeline:
   the ORIGINAL sender from the forwarded content becomes the rule). A rule
   is an exact address or a domain (matches subdomains).
 - **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
   on each push (and daily via the cron) the Inbox is drained (3-day
-  lookback, cursor-scanned over receivedAt — an all-seen batch slides the
+  lookback, cursor-scanned over receivedAt; an all-seen batch slides the
   window forward instead of stopping, so a front of ignored mail never
   blocks newer mail from the catch-up; EmailProcessLog = idempotency). Per email: self/bounce guards
   → rule match (no match = ignore, untouched) → **local classification**
-  (`app/lib/email-classify.ts` — regex only, no LLM: marketing and
+  (`app/lib/email-classify.ts`, regex only, no LLM: marketing and
   shipping mail from rule-matched senders is filtered before any model
   call, so a webhook never costs a DeepSeek request for junk) → the shared
   receipt core
-  (same extraction/render/save as receipts-by-email — see
+  (same extraction/render/save as receipts-by-email; see
   `selectReceiptSource`/`extractReceiptFromSource`/`saveExpenseFromExtraction`
   in `inbound-email.server.ts`) → on success the email moves to **Trash**
   and the mailbox owner gets a confirmation **written to their Inbox**
-  (see below — the API token can't send) with the edit link. Marketing mail
+  (see below; the API token can't send) with the edit link. Marketing mail
   from a rule-matched sender is ignored in place. Errors are logged to
-  EmailProcessLog and the email stays in the Inbox — never trashed on
+  EmailProcessLog and the email stays in the Inbox: never trashed on
   failure, never re-expensed. Counters: receivedCount per evaluated
   email, processedCount per created.
 - **JMAP mail ops as the user** (`app/lib/email-connection-mail.server.ts`):
@@ -171,17 +171,17 @@ and llms.txt) and with in-app nudges:
 - **Rule inference** (`app/lib/email-connection-infer.server.ts` +
   `pnpm infer:rules`, i.e. `scripts/infer-email-rules.ts`): scan a
   connected inbox read-only (last 90 days, up to 500 emails, subject +
-  preview only — no LLM, no full-body fetches) and score senders by
+  preview only; no LLM, no full-body fetches) and score senders by
   receipt-likeness with the local classifier. Candidates: a non-freemail
   domain with ≥2 receipt-like emails and ≥50% ratio. The script prints a
   table; `--apply` adds candidates as general rules (source = "inferred"),
-  idempotently. Deliberately operator-driven — never cron/webhook-wired,
+  idempotently. Deliberately operator-driven (never cron/webhook-wired),
   because general rules affect every workspace.
 
 ## Safety decisions
 
 - Trash, never destroy: recovery is one "move out of Trash" away.
-- One workspace per mailbox (global unique) — no double-processing.
+- One workspace per mailbox (global unique), so no double-processing.
 - Errors leave the email untouched and set `status = "error"` on the
   connection when the push subscription can't be renewed (user-visible).
 - Disconnect deletes the row + token; users should also revoke the token in
@@ -198,13 +198,13 @@ with local logic only:
   calls. (This path is shared with receipts-by-email.)
 - **First-time merchant from a rule-matched sender** →
   `tryRuleMerchantExtraction`: the merchant name comes from the rule's
-  sender domain (curated map for the seeded senders — Apple, Amazon,
+  sender domain (curated map for the seeded senders: Apple, Amazon,
   Stripe, …; title-cased label otherwise), the total from
   `parseReceiptAmount`. Category is `""` so the expense lands as
   **partial** (completeness badge flags it); set the category once and the
   known-merchant path carries it forward on every later receipt from that
   sender.
-- **Can't parse locally** (no explicit total — refunds, reference-only
+- **Can't parse locally** (no explicit total: refunds, reference-only
   confirmations) → the email is skipped, logged `"not extractable locally"`,
   and left in the Inbox for a manual add. Never trashed, never expensed.
 - **Attachment receipts** (PDF/image) → skipped for manual review. The
@@ -226,7 +226,7 @@ Email/import) but cannot send.
 
 So the confirmation-to-owner is **delivered, not sent**: the RFC 5322
 blob is uploaded and `Email/import`-ed straight into the owner's Inbox
-(mail capability only — the same one used to Trash). The owner sees it
+(mail capability only, the same one used to Trash). The owner sees it
 appear in their Inbox; no SMTP, no identity, no submission. The expense
 
 - Trash already succeeded, so a delivery failure is logged and never
@@ -236,7 +236,7 @@ appear in their Inbox; no SMTP, no identity, no submission. The expense
 
 The app's own confirmations look like receipts ("Receipt" + a `$` total
 in the body), so without a guard a flow that re-scans a folder they
-land in would reprocess them in a feedback loop — 1 receipt → N
+land in would reprocess them in a feedback loop: 1 receipt → N
 expenses + N+ confirmations across drains.
 
 `buildRfc822Message` sets `X-Expense-Confirmation: 1` on **all** outbound
@@ -247,18 +247,18 @@ before `processInboundEvent`; the connected flow
 (`processConnectionEmail`) logs + ignores it after fetch (a backstop
 behind the sender self-check). A real receipt never sets this header,
 so it can't be spoofed into the skip path. Header-based, not
-subject-based — no brittle regex to keep in sync with the wording.
+subject-based; no brittle regex to keep in sync with the wording.
 
 ## Receipt number in the description
 
 `parseReceiptRef` pulls a `#ref` (e.g. `#1718-6067`) from the subject
 (preferred) or body; the connected-flow local extraction sets it as the
 expense `description`, so each expense carries the receipt number it came
-from — the user can tell which expense maps to which receipt email.
+from; the user can tell which expense maps to which receipt email.
 
 ## Inbox review (/email-review)
 
-A freshly connected mailbox may already hold months of receipts — the
+A freshly connected mailbox may already hold months of receipts; the
 review flow walks the user through them: scan the Inbox for receipt-like
 emails, show a list (received date, sender, subject), and let the user
 **process** each (→ expense, email to Trash, confirmation in their Inbox)
@@ -270,7 +270,7 @@ count; a never-scanned connection auto-scans on first visit.
 Implementation (`app/lib/email-review.server.ts`, route
 `app/routes/email-review.tsx`, UI `app/components/email-review.tsx`):
 
-- **Scan** (`scanConnectionInbox`): one bounded batch — the 50 most
+- **Scan** (`scanConnectionInbox`): one bounded batch, the 50 most
   recent Inbox emails (newest first, 45s defensive budget). Deliberately
   capped so a scan stays short (a handful of fetches) and can't be
   hammered into downloading a whole backlog; email older than the most
@@ -283,8 +283,8 @@ Implementation (`app/lib/email-review.server.ts`, route
   auto-pipeline still evaluates them later (a rule added after a scan is
   not shadowed). Rows the pipeline already created/partial/processing,
   rows the user review-ignored, and ignored rows with a decisive reason
-  (self / bounce / own confirmation) are skipped; everything else — no
-  rule, not a receipt locally, not extractable locally, pipeline errors —
+  (self / bounce / own confirmation) are skipped; everything else (no
+  rule, not a receipt locally, not extractable locally, pipeline errors)
   is re-examined (recovering emails the pipeline couldn't handle is a
   core purpose). `reviewScannedAt` on the connection row stamps that the
   list is current.
@@ -301,7 +301,7 @@ Implementation (`app/lib/email-review.server.ts`, route
 - **Remember the sender** ("accept a new sender"): emails from senders
   with no rule show a "New sender" badge; the process confirmation
   offers a checkbox (default on) that adds a user rule
-  (`source = "review"`) — the sender's domain, or their exact address
+  (`source = "review"`): the sender's domain, or their exact address
   for freemail providers (`reviewSenderRulePattern`, same policy as rule
   inference). Skipped when any rule already covers the sender.
 - **Ignore** (`ignoreReviewItem`): flips the row to
@@ -318,11 +318,11 @@ review-ignored row is never double-processed.
 ## Dev tooling
 
 - `pnpm drain:email --connection <id> [--role inbox|trash] [--limit N]
-[--days N]` (`scripts/drain-email-connection.ts`) — drains a mailbox
+[--days N]` (`scripts/drain-email-connection.ts`): drains a mailbox
   under tsx with **stubbed renderers** (tsx can't load Vite's `?inline`
   font asset), so the saved receipt image is a 1×1 placeholder. Use it
   for fast logic checks, not for the final image.
 - `GET /api/dev-email-drain?connection=<id>` (dev only, `Bearer
-<CRON_SECRET>`) — drains the Inbox in the **bundled dev server** with the
+<CRON_SECRET>`): drains the Inbox in the **bundled dev server** with the
   real Playwright renderer, so the saved image is a true render of the
   email. Use this when the image matters.

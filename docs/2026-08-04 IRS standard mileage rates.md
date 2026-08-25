@@ -1,9 +1,9 @@
-# IRS standard mileage rates — point-in-time snapshot
+# IRS standard mileage rates: point-in-time snapshot
 
 - **Source URL:** https://www.irs.gov/tax-professionals/standard-mileage-rates
 - **Accessed:** 2026-08-04
 - **Purpose:** seed data for the app's master `mileage_rates` table
-  (`app/data/mileage-rates.ts`). The live page is mutable — this snapshot is
+  (`app/data/mileage-rates.ts`). The live page is mutable; this snapshot is
   the record of what the table was seeded from.
 
 > If you use your car for business, charity, medical or moving purposes, you
@@ -45,4 +45,4 @@ The standard mileage rates for 2026 are:
 Notes from the page: the 2018 rate is split across two announcements (TCJA
 changed moving/medical rules); moving is deductible for members of the Armed
 Forces and the Intelligence Community only. Dates before 2011 are not listed
-on the page — no rate for earlier periods.
+on the page; no rate for earlier periods.

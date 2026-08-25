@@ -69,10 +69,10 @@ export interface ConnectionEmailSummary {
 export async function mailboxSummaries(opts: {
   token: string;
   role: string;
-  /** Lower bound on receivedAt (exclusive) — the drain's lookback window. */
+  /** Lower bound on receivedAt (exclusive): the drain's lookback window. */
   afterIso?: string;
   limit: number;
-  /** Newest-first (default: oldest-first — the drain's cursor contract). */
+  /** Newest-first (default: oldest-first, the drain's cursor contract). */
   descending?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
   const mailboxId = await mailboxIdByRole(opts.token, opts.role);
@@ -215,7 +215,7 @@ export async function rawConnectionEmail(
 // --- Trash ---------------------------------------------------------------------
 
 /**
- * Move an email to the Trash mailbox (recoverable — the connected-account
+ * Move an email to the Trash mailbox (recoverable; the connected-account
  * pipeline never destroys user mail) and mark it read.
  */
 export async function moveConnectionEmailToTrash(
@@ -265,7 +265,7 @@ async function importEmail(
 
 /**
  * Deliver an email straight into the account's Inbox by writing it via JMAP
- * Email/import — no EmailSubmission, no Identity/get. FastMail API tokens
+ * Email/import, with no EmailSubmission and no Identity/get. FastMail API tokens
  * can read/write mail but cannot submit (urn:ietf:params:jmap:submission
  * is disallowed, HTTP 403), so a confirmation that goes to the mailbox
  * owner (self) is written as an Inbox message instead of being sent.

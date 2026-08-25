@@ -16,7 +16,7 @@ import { promisify } from "node:util";
 
 const SCRYPT_KEYLEN = 64;
 
-/** Current scrypt cost — N=2^16 (memory-hard, RFC 7914). The derived key
+/** Current scrypt cost: N=2^16 (memory-hard, RFC 7914). The derived key
  * needs ~64 MiB of working memory (128·N·r), so parallel/GPU cracking of
  * one hash is expensive; the parameters are embedded in every stored hash
  * (see `hashPassword`), so the cost can be raised later without breaking
@@ -24,7 +24,7 @@ const SCRYPT_KEYLEN = 64;
 const SCRYPT_N = 65_536;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
-/** scrypt's working memory for N=2^16 is ~64 MiB — allow up to 128 MiB so
+/** scrypt's working memory for N=2^16 is ~64 MiB; allow up to 128 MiB so
  * derivation never trips Node's 32 MiB default maxmem. */
 const SCRYPT_MAXMEM = 128 * 1024 * 1024;
 
@@ -72,7 +72,7 @@ export async function hashPassword(password: string): Promise<string> {
   return `$scrypt$N=${SCRYPT_N},r=${SCRYPT_R},p=${SCRYPT_P}$${salt}$${hash.toString("base64url")}`;
 }
 
-/** Parse a stored hash into its parameters, salt, and derived key — the
+/** Parse a stored hash into its parameters, salt, and derived key: the
  * self-describing `$scrypt$N=…,r=…,p=…$salt$hash` format or the legacy
  * `salt:hash` (hex) rows from before the format change. null when the
  * string isn't a valid hash (fails closed: garbage can't authenticate). */
@@ -90,7 +90,7 @@ function parseStored(
     if (hash.length !== SCRYPT_KEYLEN) return null;
     return { params, salt, hash };
   }
-  // Legacy `salt:hash` — derived with the default scrypt cost.
+  // Legacy `salt:hash`, derived with the default scrypt cost.
   const [salt, hashHex, ...rest] = stored.split(":");
   if (rest.length > 0 || !salt || !hashHex) return null;
   const hash = Buffer.from(hashHex, "hex");
@@ -100,7 +100,7 @@ function parseStored(
 
 /** "N=65536,r=8,p=1" → params. N must be a power of two and r/p positive
  * integers (scrypt throws otherwise), and the working memory must fit the
- * allowed budget — anything else fails closed at parse time. */
+ * allowed budget; anything else fails closed at parse time. */
 function parseScryptParams(part: string): ScryptParams | null {
   const params: Partial<ScryptParams> = {};
   for (const chunk of part.split(",")) {
@@ -129,7 +129,7 @@ function parseScryptParams(part: string): ScryptParams | null {
   return { N, r, p };
 }
 
-/** Constant-time check of a password against a stored hash — any format
+/** Constant-time check of a password against a stored hash, in any format
  * the app has written (self-describing or legacy `salt:hash`). */
 export async function verifyPassword(
   password: string,
@@ -144,7 +144,7 @@ export async function verifyPassword(
 }
 
 /** True when a stored hash used parameters below the current cost (legacy
- * `salt:hash` rows or an older self-describing string) — the login path
+ * `salt:hash` rows or an older self-describing string); the login path
  * rehashes with the current parameters on the next successful sign-in. */
 export function needsRehash(stored: string): boolean {
   const parsed = parseStored(stored);
@@ -173,13 +173,13 @@ export function normalizeInviteCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-/** A fresh opaque token (base64url, 256 bits) — OAuth codes/tokens and the
+/** A fresh opaque token (base64url, 256 bits); OAuth codes/tokens and the
  * inbound-sender verification links all start here. */
 export function generateOpaqueToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
-/** The stored form of any token/code — SHA-256 hex, for indexed lookups.
+/** The stored form of any token/code: SHA-256 hex, for indexed lookups.
  * One hashing primitive backs every stored secret (OAuth token/code tables
  * and sender-verification tokens), so a leaked database never exposes
  * usable tokens. */

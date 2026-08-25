@@ -27,7 +27,7 @@ export type CommandRequest =
 
 type Listener = (request: CommandRequest) => void;
 
-/** Requests older than this are dropped instead of handled — a file picker
+/** Requests older than this are dropped instead of handled: a file picker
  * popping seconds after the command was issued reads as a bug. Generous
  * enough for a slow client-side navigation to complete. */
 const REQUEST_TTL_MS = 5000;
@@ -42,7 +42,7 @@ export function requestCommand(request: CommandRequest): void {
 }
 
 /**
- * Clear the pending request and return it — call only when the kind is one
+ * Clear the pending request and return it. Call only when the kind is one
  * this consumer handles. Returns null when nothing is pending or the only
  * pending request has expired.
  */

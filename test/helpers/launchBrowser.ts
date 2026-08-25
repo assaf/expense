@@ -10,7 +10,7 @@ import { FROZEN_MS } from "./frozen-time";
  *
  * Playwright's own clock (page.clock) is NOT used: setFixedTime patches page
  * timers such that they never fire, and install() doesn't survive full-page
- * navigations — both broke the search debounce and the 3s highlight fade. */
+ * navigations. Both broke the search debounce and the 3s highlight fade. */
 export async function freezePageClock(page: Page): Promise<void> {
   await page.context().addInitScript(
     ({ FROZEN_MS }: { FROZEN_MS: number }) => {
@@ -35,7 +35,7 @@ export async function freezePageClock(page: Page): Promise<void> {
 }
 
 // The session cookie set by app/lib/auth.server.ts (SESSION_COOKIE). Kept in
-// sync manually — importing that module here would drag the server's Prisma
+// sync manually; importing that module here would drag the server's Prisma
 // client into every test-process fork.
 const SESSION_COOKIE = "expense_session";
 

@@ -18,7 +18,7 @@ import {
  * Sender-address verification + exclusivity (receipts by email). An address
  * is added "pending", only accepts receipts once its mailbox owner clicks
  * the emailed link (single-use token, 7-day expiry), and verifying claims
- * the address exclusively — no other account can use it afterwards.
+ * the address exclusively; no other account can use it afterwards.
  */
 
 const usedSenders: { accountId: string; address: string }[] = [];
@@ -129,7 +129,7 @@ describe("verifyInboundSenderAddress", () => {
     const verified = await findVerifiedSenderAccount("owner@example.com");
     expect(verified?.account.id).toBe(TEST_ACCOUNT_ID);
 
-    // The token is single-use — a second click is invalid.
+    // The token is single-use; a second click is invalid.
     expect((await verifyInboundSenderAddress(token)).status).toBe("invalid");
   });
 

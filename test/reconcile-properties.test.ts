@@ -107,7 +107,7 @@ describe("amount tolerance boundary (within $0.50 or 1%, whichever is larger)", 
     expect(withinAmount(new Decimal("98.99"), new Decimal("100.00"))).toBe(
       false,
     );
-    // $1,000.00: tolerance is $10.00 — tips and rounding must not slip in.
+    // $1,000.00: tolerance is $10.00, so tips and rounding must not slip in.
     expect(withinAmount(new Decimal("1010.00"), new Decimal("1000.00"))).toBe(
       true,
     );
@@ -246,7 +246,7 @@ describe("matcher invariants (fuzzed, deterministic)", () => {
         }
         if (match.status === "matched") {
           // High confidence must mean exact date + exact amount + merchant
-          // overlap — the matcher's own flags must agree with its verdict.
+          // overlap; the matcher's own flags must agree with its verdict.
           expect(match.confidence).toBe("high");
           expect(match.candidate.exactDate).toBe(true);
           expect(match.candidate.exactAmount).toBe(true);

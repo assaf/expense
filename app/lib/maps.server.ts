@@ -25,7 +25,7 @@ interface NominatimResult {
     county?: string;
     state?: string;
     country?: string;
-    /** State-level ISO code, e.g. "US-CA" — the reliable source for the
+    /** State-level ISO code, e.g. "US-CA": the reliable source for the
      * postal abbreviation. */
     "ISO3166-2-lvl4"?: string;
   };
@@ -128,7 +128,7 @@ function canonicalAddress(hit: NominatimResult): string {
   return hit.display_name ?? "";
 }
 
-/** "City, ST" locality of a match — the hint for geocoding the next partial
+/** "City, ST" locality of a match, the hint for geocoding the next partial
  * address in the same trip (street-like queries get the previous stop's
  * locality appended so they don't default to a faraway city). */
 function localityHint(hit: NominatimResult): string {
@@ -140,7 +140,7 @@ function localityHint(hit: NominatimResult): string {
 }
 
 /** Best-effort locality hint ("City, ST") parsed from a canonical address
- * string — the last two comma segments. Used when the previous stop already
+ * string: the last two comma segments. Used when the previous stop already
  * has coordinates but no structured geocoder data (e.g. loaded from a saved
  * expense). */
 function localityFromAddress(address: string): string {
@@ -155,7 +155,7 @@ const STREET_SUFFIX =
   /\b(st|street|ave|avenue|blvd|boulevard|rd|road|dr|drive|ln|lane|way|pkwy|parkway|ct|court|cir|circle|pl|place|ter|terrace|hwy|highway|loop|row|sq|square)\.?$/i;
 
 /** A street-like address (has a house number or ends in a street suffix).
- * Only these get the locality hint — a city-only query ("Los Angeles") must
+ * Only these get the locality hint; a city-only query ("Los Angeles") must
  * geocode on its own, appending a previous city would point it somewhere
  * else entirely. */
 function isStreetLike(address: string): boolean {
@@ -172,7 +172,7 @@ interface GeocodeMatch {
 /**
  * Nominatim sometimes matches only the street and drops the house number
  * the user typed (no address point exists, so the top result is the road
- * itself). The number is the user's own input — never a guess — so it is
+ * itself). The number is the user's own input, never a guess, so it is
  * kept: prepend it when the geocoder's result doesn't already contain it.
  */
 function preserveHouseNumber(typed: string, address: string): string {
@@ -224,7 +224,7 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
  * stop's locality when the plain lookup lands far away. Without a hint (or
  * for a city-only query) this is a single Nominatim call; with a hint it
  * retries once with "city, ST" appended and keeps whichever result is
- * closer to the previous stop. Never guesses — both candidates come from
+ * closer to the previous stop. Never guesses: both candidates come from
  * the geocoder.
  */
 async function geocodeWithLocality(
@@ -238,7 +238,7 @@ async function geocodeWithLocality(
   if (plainLat === null || plainLng === null) return plain;
   if (!isStreetLike(address) || !hint || !prevCoord) return plain;
   const plainLoc = { lat: plainLat, lng: plainLng };
-  // The plain result is already near the previous stop — no retry needed.
+  // The plain result is already near the previous stop; no retry needed.
   if (haversine(prevCoord, plainLoc) < 50_000) return plain;
   const hinted = await geocodeMatch(`${address}, ${hint}`);
   const hintedLat = hinted.location.lat;
@@ -261,7 +261,7 @@ export async function geocode(address: string): Promise<Location> {
 
 interface RouteResult {
   distanceMiles: number;
-  /** Route geometry in [lat, lng] — the outbound legs, start → last stop. */
+  /** Route geometry in [lat, lng] (the outbound legs, start → last stop). */
   coords: [number, number][];
   /** Return leg (last stop → start) geometry in [lat, lng], drawn dashed
    *  on the map. Straight line when OSRM is unavailable. */
@@ -277,9 +277,9 @@ interface RouteResult {
  * OSRM's route service connects waypoints in order but never closes the
  * loop, so the start is repeated as the last waypoint. The response then
  * carries the whole loop (outbound + return) in one call; the geometry is
- * split at the last real stop — its snapped location is a point on the
+ * split at the last real stop: its snapped location is a point on the
  * geometry, so the nearest geometry index is exactly where the return leg
- * begins — into `coords` (outbound) and `returnCoords` (return to start).
+ * begins; split there into `coords` (outbound) and `returnCoords` (return to start).
  */
 async function computeRouteDistance(
   locations: Location[],
@@ -319,7 +319,7 @@ async function computeRouteDistance(
         // The last real waypoint is second-to-last in the response (the
         // final entry is the repeated start). Its snapped location lies on
         // the geometry, so the nearest index is where the return leg
-        // begins — split exactly there.
+        // begins. Split exactly there.
         const lastStop = json.waypoints?.[json.waypoints.length - 2]?.location;
         let split = geom.length;
         if (lastStop) {
@@ -417,7 +417,7 @@ export async function recomputeMileage(
     if (l.lat !== null && l.lng !== null) {
       geocoded.push(l);
       prevCoord = { lat: l.lat, lng: l.lng };
-      // No structured data for an already-geocoded stop — the locality hint
+      // No structured data for an already-geocoded stop, so the locality hint
       // comes from its canonical address string.
       const fromAddress = localityFromAddress(l.address);
       if (fromAddress) hint = fromAddress;
@@ -434,7 +434,7 @@ export async function recomputeMileage(
   const distance = new Decimal(route.distanceMiles);
   const distanceStr = distance.gt(0) ? distance.toFixed(2) : "";
   // No rate configured for the year (or an unparseable one) → no amount,
-  // not $0.00 — mileageAmount returns "" for a missing/non-finite rate.
+  // not $0.00; mileageAmount returns "" for a missing/non-finite rate.
   const amount = mileageAmount(distanceStr, rate);
   return {
     locations: geocoded,

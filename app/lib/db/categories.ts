@@ -3,7 +3,7 @@ import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
 import type { Category } from "~/lib/types";
 
-/** Per-account cache for categories — same 5-minute TTL as reports. */
+/** Per-account cache for categories, same 5-minute TTL as reports. */
 const categoriesCache = createCache<Category[]>(300_000);
 
 export async function readCategories(accountId: string): Promise<Category[]> {

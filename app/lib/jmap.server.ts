@@ -1,5 +1,5 @@
 /**
- * JMAP client for user-supplied API tokens (connected email accounts —
+ * JMAP client for user-supplied API tokens (connected email accounts,
  * Email page → Email accounts). FastMail today; the session handshake is the
  * same for any JMAP provider, only the endpoint differs.
  *
@@ -11,8 +11,8 @@
 
 const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
 
-/** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts — the
- * app's own mailbox — and this module's per-token client) abort hung
+/** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts, the
+ * app's own mailbox, and this module's per-token client) abort hung
  * requests with it. The batch-POST/error-walk core (`jmapBatch`,
  * `jmapUploadBlob`) is also shared; the session loading and error
  * classification stay per-client (their error contracts differ on
@@ -21,7 +21,7 @@ const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
 export const REQUEST_TIMEOUT_MS = 30_000;
 /** Hard cap on a downloaded RFC 5322 email blob (both transports). Bounds
  * the memory PostalMime needs to parse the message and every attachment it
- * decodes — the upload path caps receipts at 15MB; the email path must not
+ * decodes. The upload path caps receipts at 15MB; the email path must not
  * be looser. Oversized mail is skipped by the drain (left in place). */
 export const MAX_EMAIL_BYTES = 15_000_000;
 
@@ -161,7 +161,7 @@ interface ApiResponse {
 export type JmapCapability = "urn:ietf:params:jmap:submission";
 
 /**
- * POST a batch of JMAP method calls; throws on the first per-call error —
+ * POST a batch of JMAP method calls; throws on the first per-call error,
  * including per-object /set failures surfaced via notUpdated/notCreated/
  * notDestroyed (the FastMail gotcha). Shared core behind both clients:
  * `jmapCall` (per-token, strict) and fastmail.server.ts's app-mailbox
@@ -208,8 +208,8 @@ export async function jmapBatch(
       if (failures && Object.keys(failures).length > 0) {
         // Destroying an already-removed object reports notFound in
         // notDestroyed (a concurrent drain deleted it first). For an
-        // idempotent delete that is the desired end state, not a failure
-        // — skip it; any other notDestroyed reason still throws.
+        // idempotent delete that is the desired end state, not a failure,
+        // so skip it; any other notDestroyed reason still throws.
         if (key === "notDestroyed" && opts.tolerateNotFoundDestroy) {
           const hardFailures = Object.values(failures).filter(
             (f) => (f as { type?: string }).type !== "notFound",
@@ -252,7 +252,7 @@ export async function jmapUploadBlob(
 
 /**
  * POST a batch of JMAP method calls with a user token; throws on the first
- * per-call error — including per-object /set failures surfaced via
+ * per-call error, including per-object /set failures surfaced via
  * notUpdated/notCreated/notDestroyed (the FastMail gotcha the app's own
  * client, fastmail.server.ts, documents).
  */

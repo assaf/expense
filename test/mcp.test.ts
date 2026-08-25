@@ -78,7 +78,7 @@ describe("MCP endpoint", () => {
     return { status: res.status, json };
   }
 
-  /** 2025-era handshake (served statelessly — no session id is issued). */
+  /** 2025-era handshake, served statelessly (no session id is issued). */
   async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
@@ -108,7 +108,7 @@ describe("MCP endpoint", () => {
     try {
       payload = JSON.parse(text) as Record<string, unknown>;
     } catch {
-      // Non-JSON text (e.g. zod validation errors) — wrap it.
+      // Non-JSON text (e.g. zod validation errors): wrap it.
       payload = { error: text };
     }
     return {

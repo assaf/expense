@@ -34,7 +34,7 @@ export function formatAmount(amount: string | Decimal): string {
 }
 
 /**
- * Normalize a user-typed amount to two fractional digits (ROUND_HALF_UP —
+ * Normalize a user-typed amount to two fractional digits (ROUND_HALF_UP,
  * `Decimal.toFixed`'s default). "" stays "". Unlike Number.prototype.toFixed
  * this rounds exact decimal halves correctly: "1.005" → "1.01".
  */
@@ -44,7 +44,7 @@ export function normalizeAmount(amount: string): string {
   return d.toFixed(2);
 }
 
-/** Format a YYYY-MM-DD date as "Jan 2, 2026" — or "August 12, 2026" when
+/** Format a YYYY-MM-DD date as "Jan 2, 2026", or "August 12, 2026" when
  * `long` is set. Empty → "—". */
 export function formatDate(
   date: string,
@@ -119,7 +119,7 @@ export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
 
 /**
  * Sort expenses by date; empty dates sort last (ties broken by createdAt).
- * `desc` (default) is newest-first — the home list and editor navigation;
+ * `desc` (default) is newest-first (the home list and editor navigation);
  * pass `false` for chronological order (PDF/ZIP exports). Returns a new
  * array (callers' input is never mutated).
  */
@@ -141,7 +141,7 @@ export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
   });
 }
 
-/** "1 expense" / "3 expenses" — human count label. */
+/** "1 expense" / "3 expenses": human count label. */
 export function countLabel(count: number): string {
   return `${count} expense${count === 1 ? "" : "s"}`;
 }
@@ -149,7 +149,7 @@ export function countLabel(count: number): string {
 /**
  * Per-group expense counts + exact totals, grouped by the key `keyOf`
  * returns (empty keys are skipped). Amounts are parsed as Decimals and
- * accumulated with exact decimal addition — no float drift, so a total is
+ * accumulated with exact decimal addition (no float drift), so a total is
  * the exact sum of its line items. Shared by the report summary (web +
  * MCP `list_reports`) and the MCP `expense_summary` category breakdown.
  */

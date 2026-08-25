@@ -4,7 +4,7 @@ import { duplicatePairKey } from "~/lib/duplicates";
 import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { DEFAULT_SETTINGS, type Settings } from "~/lib/types";
 
-/** Per-account cache for settings — 5-minute TTL. */
+/** Per-account cache for settings (5-minute TTL). */
 const settingsCache = createCache<Settings>(300_000);
 
 export async function readSettings(accountId: string): Promise<Settings> {
@@ -72,7 +72,7 @@ export async function readDuplicateDismissals(
  * matter which side of the pair the user acted on; the unique constraint
  * makes it idempotent, and cascade deletes retire the row with either
  * expense. If one of the expenses is already gone there is nothing to
- * dismiss — the write is skipped.
+ * dismiss, so the write is skipped.
  */
 export async function dismissDuplicatePair(
   accountId: string,

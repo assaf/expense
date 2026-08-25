@@ -1,15 +1,15 @@
 /**
  * Infer GENERAL email rules from a connected inbox (phase 4 of the
- * connected-email-accounts feature — docs/email-connections.md).
+ * connected-email-accounts feature, documented in docs/email-connections.md).
  *
  *   pnpm tsx scripts/infer-email-rules --connection <connectionId>          # dry run
  *   pnpm tsx scripts/infer-email-rules --connection <connectionId> --apply  # add as general rules
  *
- * Scans the connected account's Inbox (read-only — last 90 days, up to 500
+ * Scans the connected account's Inbox (read-only: last 90 days, up to 500
  * emails, subject + preview only) and scores senders by receipt-likeness
  * with the local classifier. Candidates: a non-freemail domain with ≥2
  * receipt-like emails and ≥50% ratio. `--apply` adds them as general rules
- * (accountId = "", source = "inferred") — idempotent, and never touches
+ * (accountId = "", source = "inferred"); idempotent, and never touches
  * user rules or the seed. General rules affect EVERY workspace, so review
  * the table before applying.
  */

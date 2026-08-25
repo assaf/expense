@@ -18,7 +18,7 @@ import type { Account } from "~/lib/types";
 /**
  * FastMail onboarding (/onboarding): a first-run flow that skips the
  * emailed verification link entirely. A valid FastMail API token proves
- * mailbox control — strictly stronger than a click-through link — so:
+ * mailbox control (strictly stronger than a click-through link), so:
  *
  * - the address the token resolves to (JMAP session `username`) becomes the
  *   login identity with `emailVerifiedAt` stamped (no verification email);
@@ -33,7 +33,7 @@ import type { Account } from "~/lib/types";
  *
  * Existing accounts: a verified user with the address signs in with their
  * password and the mailbox attaches to that account; an unverified (stale
- * pending signup) row is replaced — the token proves the same control the
+ * pending signup) row is replaced: the token proves the same control the
  * emailed link would have.
  */
 
@@ -63,18 +63,18 @@ export interface OnboardingOutcome {
 }
 
 /**
- * Complete onboarding. The step-2 form carries the token (re-verified here
- * — it is the credential) plus the EMAIL + PASSWORD the user signs in
+ * Complete onboarding. The step-2 form carries the token (re-verified here;
+ * it is the credential) plus the EMAIL + PASSWORD the user signs in
  * with. The mailbox connects to THAT account, not necessarily to the
  * account matching the mailbox address: the token proves mailbox control,
  * the password proves account ownership, and the two are combined (a
  * mailbox address may have a bootstrap/legacy account the user can't
- * authenticate to — the attach step must not force it).
+ * authenticate to, and the attach step must not force it).
  *
  * - verified account for the entered email → sign in (lockout + rehash
  *   apply), connect the mailbox to it;
  * - unverified account → replaced by deleteUnverifiedUser (the token
- *   proves mailbox control — the same basis the emailed link would use);
+ *   proves mailbox control, the same basis the emailed link would use);
  * - no account → created verified, name derived from the email.
  *
  * The receipts-by-email sender is claimed as verified ONLY when the
@@ -102,7 +102,7 @@ export async function completeOnboarding(input: {
   if (existing?.emailVerifiedAt) {
     // Attach: the account the user actually signs in with.
     if (existing.email === mailboxAddress) {
-      // Mailbox control also proves the login email as a sender — claim it
+      // Mailbox control also proves the login email as a sender; claim it
       // BEFORE login() so its ensureDefaultSender sees the verified row and
       // skips the verification email. A rival claim is not fatal.
       const sender = await verifyInboundSenderDirect(
@@ -120,7 +120,7 @@ export async function completeOnboarding(input: {
     accountId = existing.accountId;
   } else {
     validateSignup(email, input.password);
-    // The token proves control of mailboxAddress ONLY — a new account's
+    // The token proves control of mailboxAddress ONLY: a new account's
     // login email must be that address, or emailVerifiedAt would be stamped
     // for an identity the token never verified (signup squatting / a
     // verification-gate bypass). Other addresses go through regular signup.
@@ -143,7 +143,7 @@ export async function completeOnboarding(input: {
       emailVerifiedAt: new Date().toISOString(),
     });
     if (newUser.email === mailboxAddress) {
-      // createUser already made the email a sender row — claim it as
+      // createUser already made the email a sender row; claim it as
       // verified (mailbox control). A rival claim is not fatal.
       const sender = await verifyInboundSenderDirect(account.id, email);
       if (sender.claimedByOther) {
@@ -167,7 +167,7 @@ export async function completeOnboarding(input: {
   });
   if (!created.ok) {
     if (createdFresh) {
-      // The mailbox is claimed elsewhere (or the connection failed) — roll
+      // The mailbox is claimed elsewhere (or the connection failed), so roll
       // back the half-onboarded account. It is brand new (one user, no
       // expenses), and the account delete cascades the user, sender rows,
       // and default categories.
@@ -184,7 +184,7 @@ export async function completeOnboarding(input: {
 }
 
 /** The home page shows its one-time welcome panel only for accounts that
- * completed FastMail onboarding (default is hidden — see Settings). */
+ * completed FastMail onboarding (default is hidden; see Settings). */
 async function markWelcomePending(accountId: string): Promise<void> {
   const settings = await readSettings(accountId);
   await writeSettings(accountId, { ...settings, welcomePending: true });
@@ -204,7 +204,7 @@ function deriveAccountName(email: string): string {
   return base.length > 30 ? base.slice(0, 30).trim() : base;
 }
 
-/** Account names are unique — retry the derived name with a numeric suffix
+/** Account names are unique; retry the derived name with a numeric suffix
  * on collision ("Alex Jones", "Alex Jones 2", …). */
 async function createAccountWithDerivedName(email: string): Promise<Account> {
   const base = deriveAccountName(email);

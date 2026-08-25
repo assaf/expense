@@ -5,7 +5,7 @@ import { destroyEmail } from "~/lib/fastmail.server";
  * destroyEmail against the real JMAP client with a stubbed transport:
  * a destroy of an already-removed email comes back as
  * `notDestroyed: { <id>: { type: "notFound" } }` (a concurrent drain
- * deleted it first) — that must be treated as success, not surfaced to
+ * deleted it first). That must be treated as success, not surfaced to
  * Sentry as EXPENSE-J. Any other notDestroyed reason still throws.
  */
 

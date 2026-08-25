@@ -45,7 +45,7 @@ export function isLocked(state: AuthAttemptState | null, now: number): boolean {
 }
 
 /** The state after one more failure: window-aware counter + threshold lock.
- * An already-active lock keeps its original expiry — a later failure while
+ * An already-active lock keeps its original expiry; a later failure while
  * locked does not extend it (the app rejects locked keys before recording
  * anyway, so this only matters for direct callers). */
 export function nextFailureState(
@@ -127,7 +127,7 @@ export async function recordAuthFailure(
   // ever deleted on a successful login, so without this an attacker can
   // grow auth_attempts unboundedly with unique keys (distinct emails or
   // rotated IPs). A row is dead when its window elapsed AND it is not
-  // currently locking — nextFailureState would reset it anyway.
+  // currently locking (nextFailureState would reset it anyway).
   writesSinceSweep += 1;
   if (writesSinceSweep >= SWEEP_EVERY_WRITES) {
     writesSinceSweep = 0;
@@ -146,7 +146,7 @@ const SWEEP_EVERY_WRITES = 100;
 let writesSinceSweep = 0;
 
 /** Delete rows whose window has fully elapsed and that are not currently
- * locking a key (lockedUntil in the future keeps the row — it is active).
+ * locking a key (lockedUntil in the future keeps the row; it is active).
  * Best-effort table hygiene: bounds storage growth from anonymous abuse. */
 export async function sweepExpiredRows(
   now: number,

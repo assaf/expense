@@ -35,7 +35,7 @@ import {
 /**
  * Files carried from the home page (paste/upload) that are being uploaded as
  * editor drafts. Module scope so the guard survives StrictMode's dev
- * double-mount — without it a carried file would be uploaded and OCR'd
+ * double-mount; without it a carried file would be uploaded and OCR'd
  * twice, orphaning the first draft blob.
  */
 const draftUploadsInFlight = new WeakSet<File>();
@@ -47,7 +47,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
 
   // Create mode ships an empty date (the server can't know the user's
-  // timezone) — fall back to the browser's local today, which is what the
+  // timezone), so fall back to the browser's local today, which is what the
   // "new expense" form should default to. Edit mode uses the stored date.
   const [date, setDate] = useState(() => expense.date || todayDate());
   const [merchant, setMerchant] = useState(expense.merchant);
@@ -59,7 +59,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     imageVersion(expense),
   );
   // Edit mode: whether the expense has a stored image. Local state because
-  // the replace/delete fetch doesn't revalidate the loader — without it an
+  // the replace/delete fetch doesn't revalidate the loader. Without it an
   // expense that started imageless would never show the dropped image.
   const [hasImage, setHasImage] = useState(!!expense.imageFile);
   const [lightbox, setLightbox] = useState(false);
@@ -179,9 +179,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         );
       }
       // The upload returns before OCR runs (a slow scan must never block the
-      // draft); extract as a second request so fields fill when ready — same
+      // draft); extract as a second request so fields fill when ready, same
       // for images and PDFs. Extraction only fills fields the user hasn't
-      // typed yet — a slow response arriving after the user started editing
+      // typed yet: a slow response arriving after the user started editing
       // must not overwrite what they wrote.
       setDraftStage("ocr");
       fillFields(await ocrFile(file), fill);
@@ -258,7 +258,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   }
 
   // A dropped/picked/pasted receipt. Create mode holds it as a draft and
-  // attaches it on Save. Edit mode does the same — the new image shows in
+  // attaches it on Save. Edit mode does the same; the new image shows in
   // the editor but the row keeps its stored image until Save, so a reload
   // still shows the original. OCR re-reads the fields either way.
   async function replaceImage(file: File) {
@@ -280,7 +280,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     if (isNew) form.set("type", "receipt");
     // A pending draft (create: the uploaded receipt; edit: a replacement
     // held locally) is attached by the save action. Edit without one sends
-    // empty keys — the stored image is kept.
+    // empty keys; the stored image is kept.
     form.set("draftKey", draft?.key ?? "");
     form.set("draftMime", draft?.mime ?? "");
     form.set("draftOriginalName", draft?.originalName ?? "");
@@ -367,7 +367,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
                 aria-label="Remove receipt image"
                 onClick={async () => {
                   if (draft) {
-                    // A pending replacement — dropping it shows the stored
+                    // A pending replacement; dropping it shows the stored
                     // image again (or none, in create mode).
                     await removeDraft();
                     return;
@@ -469,7 +469,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       />
 
       <EditorActions
-        // Create mode: a fresh expense is expected to be incomplete — the
+        // Create mode: a fresh expense is expected to be incomplete. The
         // badge only means something while editing an existing row.
         complete={isNew ? true : complete}
         saving={fetcher.state !== "idle" || drafting}

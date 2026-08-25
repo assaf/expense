@@ -10,7 +10,7 @@ import { ulid } from "ulid";
 
 type ExpenseType = "receipt" | "mileage";
 
-/** IRS reimbursement type for a mileage expense — determines the rate
+/** IRS reimbursement type for a mileage expense; determines the rate
  * (with the trip date) from the global mileage_rates master table. */
 export type MileageType = "business" | "charity" | "medical" | "moving";
 
@@ -31,7 +31,7 @@ interface ExpenseBase {
   description: string;
   amount: string; // decimal string "12.34", "" when unset
   /** When this expense was reconciled against a credit card statement
-   * (see ReconciliationRun) — ISO timestamp, "" when not reconciled.
+   * (see ReconciliationRun); ISO timestamp, "" when not reconciled.
    * Set only by the reconciliation flow, never by a normal save. */
   reconciledAt: string;
   createdAt: string; // ISO timestamp
@@ -48,7 +48,7 @@ export interface ReceiptExpense extends ExpenseBase {
 
 export interface MileageExpense extends ExpenseBase {
   type: "mileage";
-  /** IRS reimbursement type — the rate is looked up from the global
+  /** IRS reimbursement type; the rate is looked up from the global
    * mileage_rates master table by (date, type). Defaults to "business". */
   mileageType: MileageType;
   locations: Location[];
@@ -140,7 +140,7 @@ export function geocodedLocations(
 
 export interface Report {
   name: string;
-  /** True once the report is closed — closing freezes it; deleting a closed
+  /** True once the report is closed. Closing freezes it; deleting a closed
    *  report (or one with several expenses) requires explicit confirmation. */
   closed: boolean;
 }
@@ -167,7 +167,7 @@ export interface Account {
 export interface User {
   id: string;
   accountId: string;
-  /** Login name — the email address, stored lowercase. */
+  /** Login name: the email address, stored lowercase. */
   email: string;
   /** When the email was verified (the emailed link was clicked); null means
    * the account can't sign in until it is. */
@@ -176,14 +176,14 @@ export interface User {
 }
 
 /** Settings stored as key/value rows in Postgres (a settings table).
- * Mileage rates are NOT here — they live in the global mileage_rates master table. */
+ * Mileage rates are NOT here; they live in the global mileage_rates master table. */
 export type Settings = {
   /** Home location used as the first/last stop of every mileage route. */
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
   /** True when the account completed FastMail onboarding and hasn't
-   * dismissed the welcome panel yet — the ONLY accounts that see the
+   * dismissed the welcome panel yet; the ONLY accounts that see the
    * panel are the ones the onboarding flow explicitly flags (the default
    * is hidden, so email-signup accounts never see it). */
   welcomePending: boolean;
@@ -266,7 +266,7 @@ export interface InboundSenderRecord {
 export interface EmailConnectionRecord {
   id: string;
   accountId: string;
-  /** "fastmail" — JMAP. More providers later (Gmail, …). */
+  /** "fastmail" means JMAP. More providers later (Gmail, …). */
   provider: string;
   emailAddress: string;
   /** "active" | "error" (renewal failures flag the row for Settings). */
@@ -316,10 +316,10 @@ export interface OAuthTokenRecord {
 // --- Reconciliation --------------------------------------------------------
 
 /** One parsed transaction line from a statement file. The amount is stored
- * absolute — the sign is carried by `direction` so a Chase-style signed CSV
+ * absolute; the sign is carried by `direction` so a Chase-style signed CSV
  * and a Citi-style Debit/Credit split normalize to the same shape. */
 export interface StatementRow {
-  /** 0-based index within the statement — the run's row key. */
+  /** 0-based index within the statement (the run's row key). */
   index: number;
   date: string; // YYYY-MM-DD
   description: string;
@@ -368,7 +368,7 @@ export type RowMatch =
     }
   | { status: "unmatched" };
 
-/** The user's decision for one statement row — overrides the auto match.
+/** The user's decision for one statement row; overrides the auto match.
  * No decision on a `matched` row means "keep the auto match"; no decision
  * on any other row means the line is discarded at completion. */
 export type ReconciliationDecision =

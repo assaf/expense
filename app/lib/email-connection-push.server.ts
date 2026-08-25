@@ -8,7 +8,7 @@ import { saveEmailConnectionSubscription } from "~/lib/db/email-connections";
  * Per-connection JMAP push subscriptions (connected email accounts).
  *
  * Same RFC 8291 Web Push scheme as the app's own receipts pipeline
- * (fastmail-push.server.ts) — and the SAME app-side keys
+ * (fastmail-push.server.ts), with the SAME app-side keys
  * (PUSH_PRIVATE_KEY/PUSH_AUTH): they are our decryption keys, not
  * per-tenant secrets. What makes a subscription per-connection is the push
  * URL (carries the connection id) and the deviceClientId, so the daily cron
@@ -28,7 +28,7 @@ function connectionPushUrl(connectionId: string): string {
   return `${PUBLIC_URL.replace(/\/+$/, "")}/api/email-connections-push?c=${connectionId}`;
 }
 
-/** Stable per-connection device id — `expense-conn-<connectionId>`. */
+/** Stable per-connection device id: `expense-conn-<connectionId>`. */
 function connectionDeviceClientId(connectionId: string): string {
   return `expense-conn-${connectionId}`;
 }

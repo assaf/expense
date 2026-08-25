@@ -18,7 +18,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
   const busy = fetcher.state !== "idle";
 
   // Handle a one-shot palette "upload reconcile statement" request that may
-  // have arrived before this page mounted — mount-time consume makes it
+  // have arrived before this page mounted; mount-time consume makes it
   // strictly one-shot. Only this kind is consumed; other kinds stay pending
   // for the page that handles them. Only refs are referenced, so `[]` deps
   // are complete.
@@ -40,7 +40,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
       ? fetcher.data.run
       : null;
 
-  // A successful upload redirects to the run — follow it so the URL stays
+  // A successful upload redirects to the run. Follow it so the URL stays
   // meaningful (reload keeps the session, unlike a bare /reconcile).
   useEffect(() => {
     if (uploaded)

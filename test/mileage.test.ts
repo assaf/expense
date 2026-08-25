@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
-/** Local-date string (YYYY-MM-DD) — matches the app's `todayDate()`. */
+/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
 function todayLocal(): string {
   const now = new Date();
   const tz = now.getTimezoneOffset() * 60_000;
@@ -27,7 +27,7 @@ describe("Mileage expense", () => {
       timeout: 10_000,
     });
     await expect(page.getByText("Mileage expense")).toBeVisible();
-    // The editor is a draft — nothing is persisted until Save.
+    // The editor is a draft: nothing is persisted until Save.
     expect(
       await testPrisma.expense.count({
         where: { accountId: TEST_ACCOUNT_ID },
@@ -96,7 +96,7 @@ describe("Mileage expense", () => {
               : { address: l.address, lat: null, lng: null },
           ),
           distanceMiles: "10.00",
-          amount: "7.60", // 10 × $0.76 — whatever the route returns, the
+          amount: "7.60", // 10 × $0.76; whatever the route returns, the
           // type/date changes below recompute from the IRS rate.
           coords: [
             [34.05, -118.24],
@@ -177,7 +177,7 @@ describe("Mileage expense", () => {
       });
     });
 
-    // Typing must NOT fire a route request — the map only updates after
+    // Typing must NOT fire a route request: the map only updates after
     // the field loses focus and the address geocodes successfully.
     await first.pressSequentially("1600 Amphitheatre Pkwy", { delay: 20 });
     await page.waitForTimeout(800);
@@ -217,7 +217,7 @@ describe("Mileage expense", () => {
   });
 
   it("leaves the category unset when no Travel category exists", async () => {
-    // The seeded categories have no Travel — the editor starts unset.
+    // The seeded categories have no Travel, so the editor starts unset.
     await page.goto("/", { waitUntil: "load" });
     await page.getByText("Add mileage").click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
@@ -360,7 +360,7 @@ describe("Mileage expense", () => {
     // The per-field spinner is visible while the geocode is in flight…
     await expect(spinner).toBeVisible();
     // …and so is the "Calculating route…" pill over the map (geocoding +
-    // OSRM can take a couple of seconds — the pill is the feedback).
+    // OSRM can take a couple of seconds; the pill is the feedback).
     await expect(page.getByText("Calculating route…")).toBeVisible();
     // …and once it resolves, the field shows the geocoded address, the
     // spinner is gone, and the pill disappears.
@@ -439,7 +439,7 @@ describe("Mileage expense", () => {
     await inputs.nth(1).blur();
     await expect(page.locator("input[type='number']")).toHaveValue("14");
 
-    // Emptying a stop and blurring recomputes the trip without it — the
+    // Emptying a stop and blurring recomputes the trip without it; the
     // latest request carries the blank address (the server drops it) and
     // the amount reflects the single remaining stop.
     await inputs.nth(1).fill("");
@@ -497,17 +497,17 @@ describe("Mileage expense", () => {
     await inputs.nth(1).blur();
     const marker = page.locator(".map-stop-bubble");
     await expect.poll(() => marker.count()).toBe(2);
-    // Hover ~12px from the marker's center — just inside the invisible 14px
-    // hit area but well outside the small visible dot — proving the bigger
+    // Hover ~12px from the marker's center: just inside the invisible 14px
+    // hit area but well outside the small visible dot, proving the bigger
     // target, not just a hover dead-center on the marker.
     const box = (await marker.first().boundingBox())!;
     await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 2);
     const tooltip = page.locator(".leaflet-tooltip");
     await expect(tooltip).toBeVisible();
-    // Street + city only — the state is left off the tooltip.
+    // Street + city only; the state is left off the tooltip.
     await expect(tooltip).toContainText("Start / end — 1600");
     await expect(tooltip).not.toContainText("Mountain View, CA");
-    // The address's HTML-like text is escaped — it shows literally as text,
+    // The address's HTML-like text is escaped, showing literally as text,
     // never as a real <b> element.
     await expect(tooltip).toContainText("<b>Amphitheatre</b>");
     await expect(tooltip.locator("b")).toHaveCount(0);
@@ -575,7 +575,7 @@ describe("Mileage expense", () => {
     expect(locations[0]?.lat).toBe(34.05);
     expect(locations[1]?.lat).toBe(34.05);
     // The computed route geometry is persisted with the expense, so every
-    // map shows the driving route — not straight point-to-point lines.
+    // map shows the driving route, not straight point-to-point lines.
     const route = saved?.route as {
       coords: [number, number][];
       returnCoords: [number, number][];
@@ -619,12 +619,12 @@ describe("Mileage expense", () => {
     await expect(page.getByText(/route unavailable/i)).toBeVisible({
       timeout: 15_000,
     });
-    // The amount stays empty — no stale value from a failed geocode.
+    // The amount stays empty: no stale value from a failed geocode.
     await expect(page.locator("input[type='number']")).toHaveValue("");
     // The "Calculating route…" pill disappears (doesn't spin forever).
     await expect(page.getByText("Calculating route…")).toHaveCount(0);
 
-    // Saving still works — the expense is saved without a route or amount.
+    // Saving still works; the expense is saved without a route or amount.
     await page.getByText("Save").click();
     await page.waitForURL((url) => url.pathname === "/", {
       timeout: 15_000,
@@ -634,7 +634,7 @@ describe("Mileage expense", () => {
       orderBy: { createdAt: "desc" },
     });
     expect(saved).not.toBeNull();
-    // No distance, no amount — but the expense still exists.
+    // No distance, no amount, but the expense still exists.
     expect(saved!.distanceMiles).toBeFalsy();
     expect(saved!.amount).toBeFalsy();
     await page.unroute("**/api/route");
@@ -671,7 +671,7 @@ describe("Mileage expense", () => {
 
     await first.pressSequentially("Nowhere Lane ZZ", { delay: 10 });
     await first.blur();
-    // The typed text is kept — never replaced with a guess.
+    // The typed text is kept, never replaced with a guess.
     expect(await first.inputValue()).toBe("Nowhere Lane ZZ");
     await expect(page.getByText(/couldn't find that address/i)).toBeVisible({
       timeout: 15_000,

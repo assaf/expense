@@ -13,14 +13,14 @@ import { decodeInlineAsset } from "~/lib/inline-asset";
  * serverless runtimes that have no system fonts.
  */
 
-/** The JetBrains Mono family name — used in SVG markup and resvg. */
+/** The JetBrains Mono family name, used in SVG markup and resvg. */
 export const JETBRAINS_MONO = "JetBrains Mono";
 
-/** The bundled JetBrains Mono woff2, decoded to bytes — embedded as an SVG
+/** The bundled JetBrains Mono woff2, decoded to bytes and embedded as an SVG
  * @font-face data URI and/or passed to resvg's fontdb. */
 export const jetbrainsMonoBytes = decodeInlineAsset(fontInline);
 
-/** resvg's font options shape — `fontBuffers` is supported at runtime
+/** resvg's font options shape: `fontBuffers` is supported at runtime
  * (resvg fontdb) but not yet in the published type defs, so the options
  * are extended via an intersection. */
 export type ResvgFontOptions = ResvgRenderOptions["font"] & {

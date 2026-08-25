@@ -6,7 +6,7 @@ import { formatShortDate } from "~/lib/format";
  * Agents & API (MCP): the OAuth-connected apps for this account. Each app
  * shows its name, client id, when it was last used, and when its access
  * expires; the remove button revokes every token for the app and drops the
- * consent. (Tokens are managed as a whole per app — no individual rows.)
+ * consent. (Tokens are managed as a whole per app; no individual rows.)
  */
 export function AgentsSection({
   oauthSessions,

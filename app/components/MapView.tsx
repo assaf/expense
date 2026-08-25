@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type LType from "leaflet";
 
 interface MapViewProps {
-  /** Polyline coordinates as [lat, lng] pairs — the outbound route. */
+  /** Polyline coordinates as [lat, lng] pairs: the outbound route. */
   coords: [number, number][];
   /** Return leg (last stop → start), drawn as a gray dashed line under
    *  the route. */
@@ -13,7 +13,7 @@ interface MapViewProps {
     lng: number;
     label?: string;
     tooltip?: string;
-    /** Bubble label — "S", "1", "2" … Rendered as HTML by the divIcon,
+    /** Bubble label ("S", "1", "2" …). Rendered as HTML by the divIcon,
      *  so the caller must pass digits/S only. */
     number?: string;
   }[];
@@ -106,13 +106,13 @@ export default function MapView({
     });
 
     // Return leg first (under the route), then the route casing + blue
-    // line, then the stop markers on top — a marker sitting on the line
+    // line, then the stop markers on top: a marker sitting on the line
     // stays hoverable (and its tooltip reachable) instead of being covered
     // by the casing.
     const allPoints: [number, number][] = [];
     const lineWeight = lineWidth === "thin" ? 1.5 : 4;
     if (returnCoords.length >= 2) {
-      // The dashed gray return leg reads as "driven, but the way back" —
+      // The dashed gray return leg reads as "driven, but the way back":
       // visually lighter than the measured outbound route.
       L.polyline(returnCoords, {
         color: "#6b7280",
@@ -127,7 +127,7 @@ export default function MapView({
     if (coords.length >= 2) {
       const casingWeight = lineWidth === "thin" ? 3 : 8;
       // A white casing under the blue line keeps the route readable over
-      // any background — it reads as one bold path instead of a thin line
+      // any background; it reads as one bold path instead of a thin line
       // that blends into the street grid.
       L.polyline(coords, {
         color: "#ffffff",
@@ -148,7 +148,7 @@ export default function MapView({
 
     if (showStops) {
       for (const stop of stops) {
-        // A generous invisible hit area is the real hover target — it makes
+        // A generous invisible hit area is the real hover target, making
         // the stops easy to point at. The visible marker (numbered bubble,
         // or plain amber dot) is drawn on top as a non-interactive layer:
         // Leaflet hit-tests by geometry, so the small marker never blocks a
@@ -166,7 +166,7 @@ export default function MapView({
         const tip = stop.tooltip ?? stop.label;
         if (tip) hit.bindTooltip(tip, { direction: "top" });
         if (stop.number !== undefined) {
-          // Numbered bubble (S, 1, 2, …) — replaces the plain dot so each
+          // Numbered bubble (S, 1, 2, …) replaces the plain dot so each
           // stop is identifiable on a busy route. The label is caller-
           // generated (digits/S) and rendered as HTML by the divIcon.
           L.marker([stop.lat, stop.lng], {

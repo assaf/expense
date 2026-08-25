@@ -4,9 +4,9 @@ import type { DropTarget } from "~/components/PageShell";
 /**
  * Depth-counted drag-and-drop target state. dragenter/dragleave fire for
  * every child element crossed, so track depth instead of toggling on each
- * event — prevents the highlight from flickering. When `enabled` is false
+ * event, which prevents the highlight from flickering. When `enabled` is false
  * every handler is inert and the drop is left to the browser's default
- * (which ignores it) — used to keep closed reports read-only.
+ * (which ignores it); this is used to keep closed reports read-only.
  */
 export function useDropTarget({
   enabled = true,

@@ -17,14 +17,14 @@ import type { Route } from "./+types/api.email-connections-push";
  * Webhook for CONNECTED email accounts (per-connection JMAP push). Same
  * scheme as /api/inbound-push: FastMail POSTs an RFC 8291-encrypted body,
  * and successful decryption with the app's push keys is the auth. The
- * connection arrives as `?c=<connectionId>` in the URL — its own API token
+ * connection arrives as `?c=<connectionId>` in the URL; its own API token
  * authenticates the JMAP side (verification echo, later mailbox reads).
  *
  *  - PushVerification: echo the code back with the connection's token so
  *    the subscription becomes verified.
- *  - StateChange: stamp lastPushAt. (Draining the inbox — matching emails
- *    and creating expenses — is the phase-3 pipeline; until it lands, this
- *    route only records that pushes flow.)
+ *  - StateChange: stamp lastPushAt. Draining the inbox (matching emails and
+ *    creating expenses) is the phase-3 pipeline; until it lands, this
+ *    route only records that pushes flow.
  *
  * The daily cron (/api/email-connections-cron) renews subscriptions and is
  * the catch-up net.
@@ -46,7 +46,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   const connection = await readEmailConnectionById(connectionId);
   if (!connection) {
-    // A disconnected (or stale) subscription still pushing — nothing to do.
+    // A disconnected (or stale) subscription still pushing; nothing to do.
     console.warn("[email-connections-push] unknown connection", {
       connectionId,
     });
@@ -82,7 +82,7 @@ export async function action({ request }: Route.ActionArgs) {
     try {
       await touchEmailConnectionPush(connection.id);
       console.info("[email-connections-push] state change", { connectionId });
-      // Best effort — the daily cron is the catch-up net. A token revoked
+      // Best effort: the daily cron is the catch-up net. A token revoked
       // between push and drain shows up here and flags the connection.
       try {
         const result = await drainEmailConnection(connection);

@@ -14,7 +14,7 @@ import type { Route } from "./+types/expense.new";
 
 /**
  * The "new expense" editor. Unlike the edit route, nothing is written to the
- * database when this page opens — the expense is a skeleton in memory (with
+ * database when this page opens; the expense is a skeleton in memory (with
  * today's date) and only becomes a row when the user clicks Save. Uploaded
  * receipt images are held as drafts (see /api/expense) and attached on Save.
  */

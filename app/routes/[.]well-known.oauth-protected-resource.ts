@@ -2,7 +2,7 @@ import { publicOrigin } from "~/lib/oauth.server";
 import type { Route } from "./+types/[.]well-known.oauth-protected-resource";
 
 /**
- * GET /.well-known/oauth-protected-resource — RFC 9728 protected resource
+ * GET /.well-known/oauth-protected-resource: RFC 9728 protected resource
  * metadata. Advertised in the WWW-Authenticate header of /mcp 401s so
  * clients can discover the authorization server (same origin here).
  */

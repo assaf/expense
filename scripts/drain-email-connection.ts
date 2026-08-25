@@ -1,12 +1,12 @@
 /**
- * DEV ONLY — drain a connected mailbox into expenses (local extraction, no
+ * DEV ONLY. Drains a connected mailbox into expenses (local extraction, no
  * LLM). Defaults to the Inbox; pass --role trash to process mail already in
  * the Trash folder (e.g. to replay receipts moved there for testing).
  *
  *   pnpm drain:email --connection <id>                         # Inbox, 90d, batch 10
  *   pnpm drain:email --connection <id> --role trash --limit 2 # two trashed emails
  *
- * Side effects per processed receipt: creates an expense (partial — category
+ * Side effects per processed receipt: creates an expense (partial, category
  * unknown until you set it once), re-applies Trash (a no-op if already
  * trashed), and sends a confirmation email to the mailbox owner. Run this
  * against the dev DB; the dev server (localhost:4565) reads the same DB.
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
   }
   const token = decryptSecret(connection.tokenEnc);
 
-  // Stub the renderers (a 1x1 PNG) — the real ones use Vite's ?inline font
+  // Stub the renderers (a 1x1 PNG); the real ones use Vite's ?inline font
   // asset, which tsx can't resolve. Extraction, trash, and the confirmation
   // email stay real; only the saved receipt image is a stub.
   const TINY_PNG = Buffer.from(

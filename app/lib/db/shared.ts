@@ -8,7 +8,7 @@ export const isTest =
   typeof process !== "undefined" && process.env.VITEST === "true";
 
 /** Simple in-memory TTL cache. The read side gates with `isTest` to keep
- * tests deterministic — this helper only handles storage + expiry. */
+ * tests deterministic; this helper only handles storage + expiry. */
 export interface CacheStore<T> {
   get(key: string): T | undefined;
   set(key: string, value: T): void;
@@ -37,7 +37,7 @@ export function createCache<T>(ttlMs: number): CacheStore<T> {
  * `loader`, store, and return its result. Replaces the copy-pasted
  * `if (!isTest) { … get … } … set` choreography in the domain modules.
  *
- * An `undefined` loader result is deliberately NOT stored — a failed lookup
+ * An `undefined` loader result is deliberately NOT stored: a failed lookup
  * must keep querying until it succeeds (see findUserById / readAccount).
  */
 export async function cachedRead<T>(
@@ -56,7 +56,7 @@ export async function cachedRead<T>(
 }
 
 /** Invalidate one cache entry. Pass a pending mutation to invalidate only
- * after it settles, passing its result through — replaces the copy-pasted
+ * after it settles, passing its result through. This replaces the copy-pasted
  * `.then((r) => { cache.delete(key); return r; })` blocks. Like those
  * blocks, a rejected mutation leaves the stale entry in place. */
 export function bust<T>(cache: CacheStore<T>, key: string): void;

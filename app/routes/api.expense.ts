@@ -19,7 +19,7 @@ export const config = { maxDuration: 15 };
 
 /**
  * Serve a draft receipt image. Drafts live under temporary keys with no
- * expense row, so there is no /expense/:id/image route for them — the editor
+ * expense row, so there is no /expense/:id/image route for them; the editor
  * fetches this URL to show the rasterized preview of a PDF upload (an <img>
  * can't render a PDF blob). Scoped to the caller's account like every read.
  */
@@ -39,7 +39,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /**
- * Receipt image drafts — the home page's "Add receipt" opens the editor
+ * Receipt image drafts: the home page's "Add receipt" opens the editor
  * without creating anything, so an uploaded/pasted image has nowhere to live
  * until Save. These intents store the image blob (and OCR it) without an
  * expense row; the editor's Save action attaches the draft to the new
@@ -49,7 +49,7 @@ export async function action({ request }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request);
 
   if (intent === "draft-upload") {
-    // The draft is saved immediately — OCR never blocks the upload, so a
+    // The draft is saved immediately; OCR never blocks the upload, so a
     // slow scan or timeout can't prevent it (the editor runs a separate
     // "ocr" request for the fields, for images and PDFs alike). Only an
     // unreadable PDF fails the upload.
@@ -59,7 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
       "draft-upload",
     );
     if (saved instanceof Response) return saved;
-    // No expense row is created — the draft is just a stored blob; the
+    // No expense row is created. The draft is just a stored blob; the
     // editor's "ocr" request extracts and pre-fills the fields.
     return Response.json({
       ok: true,
@@ -80,8 +80,8 @@ export async function action({ request }: Route.ActionArgs) {
     // the editor can fill them in. PDFs store their draft before OCR
     // finishes (see draft-upload); this intent re-runs extraction on the
     // original file so the editor's fields fill in when the scan is ready.
-    // A failure only loses the fields — the draft or image is already
-    // stored — so the response is always ok. "draft-ocr" is the legacy
+    // A failure only loses the fields (the draft or image is already
+    // stored), so the response is always ok. "draft-ocr" is the legacy
     // name; both work.
     const uploaded = await readUploadOr400(form);
     if (uploaded instanceof Response) return uploaded;

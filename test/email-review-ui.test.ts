@@ -3,8 +3,8 @@ import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
 
-// The review page with no connection selected shows the fallback — the
-// test server has no connected mailboxes. The full flow (scan → list →
+// The review page with no connection selected shows the fallback (the
+// test server has no connected mailboxes). The full flow (scan → list →
 // process/ignore) is covered at the unit level in test/email-review.test.ts.
 describe("Email review page", () => {
   let page: Page;

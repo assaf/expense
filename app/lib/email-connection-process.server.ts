@@ -18,7 +18,7 @@ import { captureError, captureWarning } from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
 // Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
 // chromium) are lazy-loaded inside realExtractionDeps so importing this
-// module never pulls them — scripts/tests that inject stub deps stay light.
+// module never pulls them; scripts/tests that inject stub deps stay light.
 import {
   inboxEmailSummaries,
   moveConnectionEmailToTrash,
@@ -43,7 +43,7 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * The connected-account processing pipeline: new mail in the user's Inbox →
  * rule match → receipt extraction → expense → Trash + a confirmation email
  * to the mailbox owner. Every decision lands in EmailProcessLog (the
- * health/audit log); errors leave the email in the Inbox untouched — the
+ * health/audit log); errors leave the email in the Inbox untouched: the
  * user still sees it, so an expense is never silently lost.
  *
  * Differences from the receipts-by-email pipeline (processInboundEvent):
@@ -52,14 +52,14 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  *  - unmatched / not-a-receipt / error emails are left in place and never
  *    answered (replying to merchants is wrong; notifying the user about
  *    every marketing email is noise)
- *  - success moves the email to Trash (recoverable — never destroy) and
+ *  - success moves the email to Trash (recoverable, never destroyed) and
  *    notifies the mailbox owner, from their own mailbox, with the edit link
  */
 
 // --- Adapter (the mailbox operations; injectable for tests) -------------------
 
 export interface ConnectionMailAdapter {
-  /** Recent Inbox emails — the drain's lookback query (oldest first) or
+  /** Recent Inbox emails: the drain's lookback query (oldest first) or
    * the review scan's newest-first batch (pass `descending`). */
   inboxEmailSummaries(opts: {
     afterIso?: string;
@@ -84,7 +84,7 @@ const mimeCache = createMimeInboundCache();
 
 /** The extraction/render collaborators the pipeline needs on top of the
  * adapter (tests inject fakes; the real ones come from receipt-ai/-ocr/
- * -render). downloadAttachment is NOT here — it is adapter-backed. */
+ * -render). downloadAttachment is NOT here; it is adapter-backed. */
 export type ConnectionDeps = Pick<
   InboundDeps,
   | "classifyAttachment"
@@ -128,7 +128,7 @@ export function connectionInboundDeps(
 ): InboundDeps {
   return {
     ...mimeFetchDeps(mimeCache, adapter, {
-      // Cache keys are namespaced per connection — one shared cache serves
+      // Cache keys are namespaced per connection so one shared cache serves
       // every connected account in the process.
       cacheKey: (emailId) => `${connectionId}:${emailId}`,
       foreignAttachmentSuffix: "not produced by the connection adapter",
@@ -269,7 +269,7 @@ export type ConnectionEmailResult =
 
 /**
  * Evaluate one Inbox email for a connected account. Content problems are
- * logged and returned, never thrown — only the drain's adapter failures
+ * logged and returned, never thrown; only the drain's adapter failures
  * propagate (they stop the batch).
  *
  * `options.review` is the inbox-review flow (/email-review): the user
@@ -305,14 +305,14 @@ export async function processConnectionEmail(
 
   // Atomic claim BEFORE any work: insert the log row with outcome
   // "processing". If another concurrent drain already claimed this
-  // emailId (unique violation), skip — this is the guard against the
+  // emailId (unique violation), skip. This is the guard against the
   // duplicate-expense race (two drains both read "fresh" and both process
   // the same email). The row is updated to the final outcome by `log`
   // below; bumpReceived is tied to the claim so the counter only moves
   // for the winning drain.
   //
   // Review mode: the scan already inserted the row as `pending-review`.
-  // Claim by flipping it to `processing` in place — if zero rows update,
+  // Claim by flipping it to `processing` in place; if zero rows update,
   // another drain/click claimed it first (or it left the list).
   if (review) {
     const claimed = await prisma.emailProcessLog.updateMany({
@@ -339,7 +339,7 @@ export async function processConnectionEmail(
   await bumpReceived(connection.id);
 
   // Our own notification emails (sent to self) must never be processed.
-  // Skipped in review mode: the user chose a specific email — a receipt
+  // Skipped in review mode: the user chose a specific email, and a receipt
   // they forwarded to themselves is legitimate; the loop guard below still
   // catches the app's own confirmations by header.
   if (!review && fromAddress === connection.emailAddress) {
@@ -353,7 +353,7 @@ export async function processConnectionEmail(
     return { status: "ignored", reason: "bounce" };
   }
 
-  // Rules decide what's even worth looking at — except in review mode,
+  // Rules decide what's even worth looking at, except in review mode,
   // where the user's explicit choice replaces the rule gate. A matched
   // rule still names a first-time merchant and sets the `matched` flag.
   const rule = await matchEmailRule(connection.accountId, summary.from ?? "");
@@ -372,7 +372,7 @@ export async function processConnectionEmail(
     // Loop guard: the app's own outbound confirmations carry the
     // X-Expense-Confirmation header. If one lands back in the Inbox (it's
     // self for the connected flow, but a rule could match its sender),
-    // skip it — never reprocess the app's own output. Header-based, stable.
+    // skip it: never reprocess the app's own output. Header-based, stable.
     if (hasOwnConfirmationHeader(email.headers)) {
       await log("ignored", true, "own confirmation");
       return { status: "ignored", reason: "own confirmation" };
@@ -381,7 +381,7 @@ export async function processConnectionEmail(
     // LOCAL gate before any model call: marketing/shipping mail from a
     // rule-matched sender is filtered by regex only (no LLM per webhook).
     // The extraction that follows may use the model; its isReceipt verdict
-    // stays as the backstop. Skipped in review mode — the user's explicit
+    // stays as the backstop. Skipped in review mode, where the user's
     // choice is the gate; extraction still rejects non-receipts.
     if (
       !review &&
@@ -397,7 +397,7 @@ export async function processConnectionEmail(
     const attachments = await deps.listAttachments(summary.id);
     const selected = await selectReceiptSource(email, attachments, deps);
     if (!selected.source) {
-      // Rule matched but there's nothing usable — ignore, leave in Inbox.
+      // Rule matched but there's nothing usable: ignore, leave in Inbox.
       await log("ignored", true, "no receipt content");
       return { status: "ignored", reason: "no receipt content" };
     }
@@ -423,7 +423,7 @@ export async function processConnectionEmail(
         };
       }
       // Body receipt whose total couldn't be parsed locally, or an
-      // attachment receipt — skip, leave in Inbox for manual review.
+      // attachment receipt: skip, leave in Inbox for manual review.
       await log("ignored", true, "not extractable locally");
       return { status: "ignored", reason: "not extractable locally" };
     }
@@ -439,7 +439,7 @@ export async function processConnectionEmail(
     });
 
     // Success (complete or partial): move to Trash, notify the owner.
-    // A Trash failure keeps the email in the Inbox — the log row prevents
+    // A Trash failure keeps the email in the Inbox; the log row prevents
     // a duplicate expense on the next drain, and the user still has the mail.
     await adapters.moveToTrash(summary.id);
     mimeCache.invalidate(`${connection.id}:${summary.id}`);
@@ -465,7 +465,7 @@ export async function processConnectionEmail(
     });
     if (saved.recentMatch) {
       // The same receipt was already imported within the recent window by
-      // the receipts-by-email pipeline (the forwarded copy) — the owner
+      // receipts-by-email pipeline (the forwarded copy), so the owner
       // already got a confirmation. Suppress this one; log + alert so a
       // false match stays visible.
       console.info(
@@ -536,12 +536,12 @@ export interface DrainOptions {
   /** Mailbox operations; defaults to the real JMAP adapter (user token). */
   adapter?: ConnectionMailAdapter;
   extractionDeps?: ConnectionDeps;
-  /** Lookback window for the Inbox query (default 3 days — pushes are
-   * near-real-time; this is the missed-push catch-up). */
+  /** Lookback window for the Inbox query (default 3 days; pushes are
+   * near-real-time, and this is the missed-push catch-up). */
   lookbackMs?: number;
   /** Max emails per query batch (default 10). */
   batchSize?: number;
-  /** Time budget before stopping mid-backlog (default 45s — headroom in 60s). */
+  /** Time budget before stopping mid-backlog (default 45s, headroom in 60s). */
   timeBudgetMs?: number;
 }
 
@@ -562,7 +562,7 @@ export interface DrainResult {
  * past the newest email it returned, so a batch with no fresh mail just
  * slides the window forward instead of stopping the drain. Without that,
  * a front of already-evaluated mail (ignored newsletters, self mail that
- * stays in the Inbox) blocks the catch-up from ever reaching newer mail —
+ * stays in the Inbox) blocks the catch-up from ever reaching newer mail:
  * the Shopify bill sat behind a wall of seen email and was never reached
  * by the cron.
  * Counters: receivedCount bumps per newly-evaluated email, processedCount
@@ -623,7 +623,7 @@ export async function drainEmailConnection(
     const nextMs = Number.isNaN(newestMs) ? cursorMs : newestMs + 1;
 
     if (fresh.length === 0) {
-      // Nothing new in this batch: advance past it and keep scanning —
+      // Nothing new in this batch: advance past it and keep scanning;
       // newer mail may still be waiting behind this wall of seen email.
       if (nextMs <= cursorMs) break; // no forward progress (defensive)
       cursorMs = nextMs;

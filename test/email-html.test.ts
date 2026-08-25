@@ -7,13 +7,13 @@ import { htmlToText } from "~/lib/html-text";
  * HTML email fixtures. Each `.html` file in test/fixtures/emails/ is a
  * receipt email with no PDF/image attachment (the body is the receipt),
  * paired with a `<name>.yaml` carrying the ground truth: `date,amount,
- * merchant,text` — the receipt's date, total, and merchant name plus the
+ * merchant,text`, holding the receipt's date, total, and merchant name plus the
  * full extracted text. This test reduces each email body to text with the
  * same `htmlToText` the inbound pipeline uses, and asserts it recovers the
  * date, amount, merchant, and the full text.
  *
  * Comparison is normalized to [A-Z0-9] (case/spacing/punctuation-insensitive)
- * — HTML source and rendering differ across email clients, so exact
+ * because HTML source and rendering differ across email clients; exact
  * whitespace carries no meaning.
  */
 
@@ -27,7 +27,7 @@ function normalize(s: string): string {
  * Personal identifiers that must never appear in the fixtures' HTML source
  * or extracted text. Redacted by scripts/redact-emails.py: the account
  * holder's name, emails on their domains, home street/unit/zip, card suffix,
- * and account numbers. Names are word-boundary matched — "arkin" is a
+ * and account numbers. Names are word-boundary matched: "arkin" is a
  * substring of "PARKING", which is a merchant.
  */
 const PII_NAMES = /\b(assaf|arkin)\b/i;

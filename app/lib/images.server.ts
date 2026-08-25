@@ -7,7 +7,7 @@ import { normalizeStoredImage, resizeToJpeg } from "~/lib/image-normalize";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
- * Receipt image storage — Postgres BYTEA only (`image_blobs` table). No
+ * Receipt image storage, Postgres BYTEA only (`image_blobs` table). No
  * external storage service; every image lives in the database.
  *
  * Every key is namespaced per account: `images/{accountId}/{name}`. Two
@@ -41,9 +41,9 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/heic": ".heic",
 };
 
-/** Mime types the store accepts. Anything else — a browser-supplied
+/** Mime types the store accepts. Anything else (a browser-supplied
  * `text/html` or `image/svg+xml` from a crafted upload, an arbitrary MCP
- * `mime` arg, an odd Resend attachment type — is coerced to
+ * `mime` arg, an odd Resend attachment type) is coerced to
  * `application/octet-stream` at save time so the image route never serves
  * renderable content (HTML/SVG with scripts) at a same-origin URL.
  * PDFs are allowed: uploads are rasterized before storage, and a raw PDF
@@ -59,7 +59,7 @@ function storableMime(mime: string): string {
 }
 
 /** Mime for a filename's extension, or `fallback` when unknown. The single
- * mime-by-extension map for the app — the MCP capture path guesses the same
+ * mime-by-extension map for the app; the MCP capture path guesses the same
  * way (images.server is the source of truth). */
 export function mimeForFile(filename: string, fallback = ""): string {
   const ext = extname(filename).toLowerCase();
@@ -99,7 +99,7 @@ const MAX_NAME_ATTEMPTS = 6;
 /**
  * Return a name for the account namespace that is not already taken,
  * preferring `baseName` but switching to GUID-suffixed alternatives when it
- * collides with an existing image. The exact name is unimportant — only that
+ * collides with an existing image. The exact name is unimportant; only that
  * it never conflicts.
  */
 async function uniqueName(
@@ -120,8 +120,8 @@ async function uniqueName(
 /**
  * Build the convention filename (bare, no namespace):
  *   {YYYY-MM-DD}_{REPORT}_{FILENAME}.{ext}
- * Returns "" when date, report, or original name is missing — callers keep the
- * temporary name in that case and rename later once the expense is complete.
+ * Returns "" when date, report, or original name is missing; callers keep
+ * the temporary name then and rename later once the expense is complete.
  */
 function conventionImageName(
   date: string,
@@ -130,7 +130,7 @@ function conventionImageName(
   mime: string,
 ): string {
   if (!date || !report || !originalName) return "";
-  // Prefer the extension that matches the *stored* mime — saveImage may have
+  // Prefer the extension that matches the *stored* mime: saveImage may have
   // converted the format (e.g. PNG → JPEG), and the stored ext should be
   // honest about the bytes. Falls back to the original name's extension.
   const ext = extForMime(mime) || extname(originalName).toLowerCase();
@@ -161,8 +161,8 @@ export function imageResponseHeaders(
 
 /**
  * Read an uploaded image file from a form's `file` field, or null when
- * absent/empty. The mime falls back to the filename extension then to PNG —
- * the same resolution saveImage applies — so files whose type the browser
+ * absent/empty. The mime falls back to the filename extension then to PNG,
+ * the same resolution saveImage applies, so files whose type the browser
  * leaves empty (e.g. HEIC) are labeled honestly before normalization.
  */
 export async function readUploadedFile(
@@ -185,8 +185,8 @@ export async function readUploadedFile(
 
 /**
  * Largest receipt file the upload path accepts (bytes). Matches the MCP
- * capture cap: bigger than any real receipt — a phone photo or a scanned
- * PDF — while bounding the request body `request.formData()` must buffer
+ * capture cap: bigger than any real receipt (a phone photo or a scanned
+ * PDF) while bounding the request body `request.formData()` must buffer
  * and sharp must decode. The platform body limit is a backstop, not the
  * check.
  */
@@ -196,7 +196,7 @@ export type UploadedFileResult =
   | { ok: true; buffer: Buffer; mime: string; originalName: string }
   | { ok: false; error: "missing" | "too-large" };
 
-/** User-facing error message for a rejected upload — shared by the draft
+/** User-facing error message for a rejected upload, shared by the draft
  * and image-replace routes so they can't drift apart. */
 export function uploadErrorMessage(error: "missing" | "too-large"): string {
   return error === "too-large"
@@ -240,7 +240,7 @@ export async function saveImage(
     extForMime(resolvedMime) ||
     ".png";
 
-  // Precompute the 160px thumbnail at save time — the list page hammers
+  // Precompute the 160px thumbnail at save time; the list page hammers
   // this and on-the-fly sharp resizing was the biggest CPU consumer.
   const thumbnail = await resizeToJpeg(storedBuffer, {
     maxWidth: 160,

@@ -16,7 +16,7 @@ import type { Account, User } from "~/lib/types";
 
 // --- Accounts --------------------------------------------------------------
 
-/** Short-lived in-process cache for readAccount — an account's invite code
+/** Short-lived in-process cache for readAccount: an account's invite code
  * and name rarely change once set. 5-minute TTL; cache miss or regeneration
  * re-queries. */
 const accountCache = createCache<Account>(300_000);
@@ -28,7 +28,7 @@ export async function readAccount(id: string): Promise<Account | undefined> {
   });
 }
 
-/** One member of an account, as shown in Settings — never secrets. */
+/** One member of an account, as shown in Settings, never secrets. */
 interface AccountMember {
   email: string;
   /** When the emailed verification link was clicked; null = can't sign in yet. */
@@ -38,7 +38,7 @@ interface AccountMember {
 
 /**
  * Everyone who joined the account, oldest first. The Settings member list
- * reads only this — password hashes and verification tokens never leave
+ * reads only this; password hashes and verification tokens never leave
  * the store.
  */
 export async function readAccountUsers(
@@ -57,7 +57,7 @@ export async function readAccountUsers(
 }
 
 /**
- * The bootstrap user (oldest user) — the MCP smoke check issues an OAuth
+ * The bootstrap user (oldest user); the MCP smoke check issues an OAuth
  * token for them directly. Undefined only when the database has no users.
  */
 export async function readBootstrapUser(): Promise<User | undefined> {
@@ -149,7 +149,7 @@ export async function createUser(input: {
     createdAt: new Date().toISOString(),
   };
   // The registering email becomes an allowed "receipts by email" sender by
-  // default — the account can remove it or add more addresses in Settings.
+  // default; the account can remove it or add more addresses in Settings.
   await prisma.$transaction([
     prisma.user.create({
       data: {
@@ -200,7 +200,7 @@ export async function findUserByEmail(
   return row ? rowToUser(row) : undefined;
 }
 
-/** Short-lived in-process cache for findUserById — every request re-resolves
+/** Short-lived in-process cache for findUserById. Every request re-resolves
  * the session's user (requireUser), and image-heavy pages fire dozens of
  * those per render; caching the lookup for a few seconds cuts the connection
  * churn that exhausts the Supabase pooler under load. Only successful
@@ -216,7 +216,7 @@ export async function findUserById(id: string): Promise<User | undefined> {
       const row = await prisma.user.findUnique({ where: { id } });
       return row ? rowToUser(row) : undefined;
     },
-    // Unlike the other caches, the user cache keeps serving under VITEST —
+    // Unlike the other caches, the user cache keeps serving under VITEST:
     // every request re-resolves the session user, and tests count on the
     // same connection-churn relief production gets.
     { evenInTests: true },
@@ -232,7 +232,7 @@ export async function getPasswordHash(userId: string): Promise<string> {
   return row?.passwordHash ?? "";
 }
 
-/** Replace a user's stored password hash — the login path rehashes with
+/** Replace a user's stored password hash; the login path rehashes with
  * the current scrypt cost when the stored hash used older parameters (see
  * `needsRehash` in passwords.ts). */
 export async function updateUserPasswordHash(
@@ -297,7 +297,7 @@ export async function verifyUserEmailAddress(
 /** Outcome of a re-signup attempt against an existing email. */
 export type ReplaceUnverifiedOutcome =
   | { status: "replaced" }
-  /** The email belongs to a verified account — it can't be replaced. */
+  /** The email belongs to a verified account, which can't be replaced. */
   | { status: "verified" }
   | { status: "no-user" };
 
@@ -315,11 +315,11 @@ export async function deleteUnverifiedUser(
     where: { accountId: user.accountId },
   });
   if (accountUserCount <= 1) {
-    // The throwaway account holds only this user — drop it (cascades the
+    // The throwaway account holds only this user; drop it (cascades the
     // user and every account-scoped row).
     await prisma.account.delete({ where: { id: user.accountId } });
   } else {
-    // The user joined an existing account — drop just the user and its
+    // The user joined an existing account: drop just the user and its
     // receipts-by-email sender rows (the address claim is abandoned too).
     await prisma.$transaction([
       prisma.user.delete({ where: { id: user.id } }),
@@ -380,7 +380,7 @@ export type PasswordResetOutcome =
   | { status: "invalid" };
 
 /** Consume an emailed password-reset token: set the new password hash and
- * clear the token (single-use — a replayed link reports invalid). 7-day
+ * clear the token (single-use; a replayed link reports invalid). 7-day
  * TTL, mirroring the account-verification link; a stale token is cleared
  * on first use so it can't be retried. */
 export async function resetUserPasswordWithToken(

@@ -3,7 +3,7 @@ import { Card } from "~/components/ui/Card";
 import { cn } from "~/lib/cn";
 
 interface AuthCardProps {
-  /** Center the card's text — for icon-tile screens whose copy centers
+  /** Center the card's text, for icon-tile screens whose copy centers
    * itself (check-your-email, verification results). */
   center?: boolean;
   children: ReactNode;

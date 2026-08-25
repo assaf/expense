@@ -77,7 +77,7 @@ describe("extraction cache store", () => {
   it("scopes cached results per account", async () => {
     const key = extractionCacheKey({ text: "MERCHANT: Amazon\nTOTAL: 9.99" })!;
     await writeCachedExtraction(TEST_ACCOUNT_ID, key, result);
-    // Same input hash, other account — must not see the cached result.
+    // Same input hash, other account; must not see the cached result.
     expect(await readCachedExtraction(OTHER_ACCOUNT_ID, key)).toBeNull();
   });
 

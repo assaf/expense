@@ -105,7 +105,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const open = expenses.filter((e) => !closed.has(e.report));
   const sorted = sortExpenses(open);
   // Which rows look like each other (both sides of a pair). Matched against
-  // ALL expenses — including rows in closed reports — so a re-uploaded
+  // ALL expenses (including rows in closed reports), so a re-uploaded
   // receipt still warns when the original was already filed.
   const matchesByExpense = groupDuplicateMatches(expenses, dismissed);
   // The mileage-rate highlight is eligible when the account has rates; the
@@ -120,7 +120,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           ? -1
           : a.name.localeCompare(b.name),
     );
-  // The feature highlight that shows at the bottom of the list — picked at
+  // The feature highlight that shows at the bottom of the list, picked at
   // random from the ones this account's data can render, so every return
   // visit surfaces something different.
   const highlightData: HighlightData = {
@@ -164,14 +164,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /**
- * Never cache the home page — it switches between landing (anonymous) and
+ * Never cache the home page: it switches between landing (anonymous) and
  * expense list (authenticated) based on the session cookie. Browsers and
  * CDNs must revalidate on every request and segment by cookie so an
  * authenticated user never sees the cached landing page.
  */
 export function headers({ loaderHeaders }: Route.HeadersArgs) {
   if (loaderHeaders.has("Cache-Control")) {
-    // Already set by the loader (authenticated response) — keep it.
+    // Already set by the loader (authenticated response); keep it.
     return { Vary: "Cookie" };
   }
   return {
@@ -181,7 +181,7 @@ export function headers({ loaderHeaders }: Route.HeadersArgs) {
 }
 
 /** List-level actions: dismiss a duplicate warning or delete a row.
- * Deleting from the list still goes through the confirm dialog — deletion
+ * Deleting from the list still goes through the confirm dialog; deletion
  * has no undo, so it always asks first. */
 export async function action({ request }: Route.ActionArgs) {
   const user = await requireUser(request);
@@ -239,7 +239,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
   };
 }
 
-/** Text fields the search box filters on — the merchant (or "mileage" with
+/** Text fields the search box filters on: the merchant (or "mileage" with
  * the route addresses for mileage rows), description, category, and the
  * amount formatted as "$x.xx" so a query like "$7" matches "$7.50". */
 function searchableText(e: ReturnType<typeof toListItem>): string {
@@ -353,7 +353,7 @@ function ExpenseList({
     onFile: uploadImage,
     message: "Receipt file detected — drop to upload",
   });
-  // "Today" in the browser's own timezone — the server runs UTC and must
+  // "Today" in the browser's own timezone; the server runs UTC and must
   // not guess the user's day, so everything that depends on it (the future
   // badge, the mileage-rate tip) is computed client-side after mount.
   const [today, setToday] = useState<string | null>(null);
@@ -367,7 +367,7 @@ function ExpenseList({
         : "",
     [today, rates],
   );
-  // Id of the expense created just now — the create action redirects here
+  // Id of the expense created just now. The create action redirects here
   // with `?new=<id>`; the row stays highlighted for three seconds.
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -378,7 +378,7 @@ function ExpenseList({
   const fetcher = useFetcher();
 
   // Handle one-shot palette requests this page owns (open the receipt file
-  // picker / focus the search box). Only handled kinds are consumed — an
+  // picker / focus the search box). Only handled kinds are consumed; an
   // upload-reconcile request fired from here must survive for the reconcile
   // page, which mounts after the palette navigates. setState setters and
   // refs are stable, so `[]` deps are exhaustive.
@@ -445,7 +445,7 @@ function ExpenseList({
 
   usePasteImage(uploadImage);
 
-  /** Open the editor without creating anything — the row appears on Save. */
+  /** Open the editor without creating anything. The row appears on Save. */
   function createExpense(type: "receipt" | "mileage") {
     void navigate(
       type === "receipt" ? "/expense/new" : "/expense/new?type=mileage",
@@ -457,7 +457,7 @@ function ExpenseList({
     void navigate("/expense/new", { state: { file } });
   }
 
-  /** Dismiss every duplicate warning on a row — "not a duplicate" is a
+  /** Dismiss every duplicate warning on a row: "not a duplicate" is a
    * one-click, permanent dismissal for the pair (no confirm needed: it
    * only hides a warning, it never deletes anything). */
   function dismissDuplicate(expenseId: string, otherIds: string[]) {
@@ -468,7 +468,7 @@ function ExpenseList({
     void fetcher.submit(form, { method: "post" });
   }
 
-  /** Delete a row from the list — always after the confirm dialog. */
+  /** Delete a row from the list, always after the confirm dialog. */
   function removeExpense() {
     if (!confirmDeleteId) return;
     const form = new FormData();
@@ -478,7 +478,7 @@ function ExpenseList({
     void fetcher.submit(form, { method: "post" });
   }
 
-  /** Reset both list filters — the report chips and the search box. */
+  /** Reset both list filters (the report chips and the search box). */
   function clearFilters() {
     setSelectedReport(null);
     setQuery("");
@@ -694,7 +694,7 @@ function ExpenseRow({
   onRemove,
 }: {
   expense: ReturnType<typeof toListItem>;
-  /** Browser-local today (null before mount — SSR renders without the
+  /** Browser-local today (null before mount; SSR renders without the
    * badge; the server must not guess the user's timezone). */
   today: string | null;
   isNew?: boolean;
@@ -707,7 +707,7 @@ function ExpenseRow({
   const future = Boolean(today && expense.date && expense.date > today);
 
   // A newly added expense sorts near the top, but the list may have been
-  // scrolled — bring the highlighted row into view.
+  // scrolled, so bring the highlighted row into view.
   useEffect(() => {
     if (isNew) {
       rowRef.current?.scrollIntoView({
@@ -860,8 +860,8 @@ function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
     );
   }
 
-  // Mileage rows all share the same generic route image — a stylized
-  // A → B → back trip — instead of the real route: the tiny tile can't
+  // Mileage rows all share the same generic route image (a stylized
+  // A → B → back trip) instead of the real route: the tiny tile can't
   // show real driving directions usefully, and the list stays consistent.
   return (
     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-200 dark:bg-gray-600">
