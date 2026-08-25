@@ -61,9 +61,11 @@ import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
  * VERIFIED inbound sender matches the From address (an added-but-unverified
  * address gets a "verify first" reply and no import).
  *
- * When anything fails or the result is incomplete, a reply email explains
- * what happened. Successful imports don't email (the expense appears in the
- * app). Each email id (the JMAP id) is tracked in `inbound_emails` so a
+ * Replies: failures and incomplete imports get an explanatory email;
+ * successful imports get a confirmation with the extracted details and the
+ * ORIGINAL receipt — the body text quoted below the details, or the
+ * original image/PDF attached (`confirmationEmail`, `saveExpenseFromExtraction`).
+ * Each email id (the JMAP id) is tracked in `inbound_emails` so a
  * concurrent push/cron drain never creates duplicate expenses.
  */
 
@@ -640,10 +642,11 @@ function confirmationText(opts: ConfirmationEmailOptions): string {
   return parts.join("\n\n");
 }
 
-/** The subject, HTML, and plain-text for a confirmation reply, so the
- * subject line and the in-body heading always match. Exported for the
- * connected-account pipeline, which sends the same confirmation to the
- * mailbox owner. */
+/** The subject, HTML, and plain-text alternative for a confirmation reply,
+ * so the subject line and the in-body heading always match. The plain text
+ * mirrors the HTML for clients that don't render it, and carries the quoted
+ * original receipt with ">" prefixes. Exported for the connected-account
+ * pipeline, which sends the same confirmation to the mailbox owner. */
 export function confirmationEmail(opts: ConfirmationEmailOptions): {
   subject: string;
   html: string;
@@ -1171,7 +1174,15 @@ interface ReportSummaryStats {
   after: { count: number; total: string };
 }
 
-/** A saved expense plus everything its confirmation email needs. */
+/** A saved expense plus everything its confirmation email needs.
+ *
+ * The confirmation has two audiences with different receipts:
+ * - The SENDER's reply always carries the ORIGINAL receipt — the original
+ *   file (`originalAttachment`, image/PDF source) or the original body
+ *   text (`quotedOriginal`, body source). Never the stored processed image.
+ * - The connected pipeline's owner-inbox confirmation carries the STORED
+ *   image (`receiptAttachment`) — the original email is already in the
+ *   owner's Inbox, so the original would be redundant there. */
 interface SavedExpense {
   expenseId: string;
   missing: string[];
@@ -1179,16 +1190,18 @@ interface SavedExpense {
   report: string;
   reportStats?: ReportSummaryStats;
   /** The original receipt file (image/PDF attachment source) to attach to
-   * the confirmation reply — the sender's file, not the rendered image. */
+   * the sender's confirmation reply — the sender's file, not the rendered
+   * image. */
   originalAttachment?: {
     content: string;
     filename: string;
     contentType?: string;
   };
-  /** The original email body text (body source) to quote in the reply. */
-  originalText?: string;
-  /** The stored receipt image as an attachment (used by the connected
-   * pipeline's owner-inbox confirmation). */
+  /** The original email body text (body source) to quote in the sender's
+   * confirmation reply. */
+  quotedOriginal?: string;
+  /** The stored receipt image as an attachment (connected pipeline's
+   * owner-inbox confirmation only). */
   receiptAttachment?: { content: string; filename: string };
   /** A matching receipt was imported within the recent window (the other
    * pipeline) — suppress this confirmation to avoid duplicate responses. */
@@ -1254,21 +1267,17 @@ export async function saveExpenseFromExtraction(opts: {
   };
   await upsertExpense(expense, opts.accountId);
 
-  // The stored receipt image for the connected pipeline's owner-inbox
-  // confirmation (base64 attachment); the sender reply below uses the
-  // original source instead.
+  // The sender's reply carries the ORIGINAL receipt, never the stored
+  // processed image: the original file for an attachment source, the
+  // original body text for a body source. (The stored-image attachment
+  // above exists only for the connected pipeline's owner-inbox
+  // confirmation, where the original email is already in the Inbox.)
   const receiptAttachment = await receiptImageAttachment(
     opts.accountId,
     imageFile,
   );
-
-  // The original receipt for the confirmation email: the original file
-  // (image/PDF attachment source) to attach, or the original body text to
-  // quote below the details (body source). The stored image is the
-  // processed/rendered form — the reply carries what the sender actually
-  // forwarded.
   let originalAttachment: SavedExpense["originalAttachment"];
-  let originalText: SavedExpense["originalText"];
+  let quotedOriginal: SavedExpense["quotedOriginal"];
   if (opts.originalSource.kind === "attachment") {
     const { buffer, contentType, filename } = opts.originalSource;
     originalAttachment = {
@@ -1277,7 +1286,7 @@ export async function saveExpenseFromExtraction(opts: {
       contentType: replyAttachmentContentType(buffer, contentType),
     };
   } else {
-    originalText = opts.originalSource.text;
+    quotedOriginal = opts.originalSource.text;
   }
 
   // The same receipt already imported within the recent window — the
@@ -1315,7 +1324,7 @@ export async function saveExpenseFromExtraction(opts: {
     report,
     reportStats,
     originalAttachment,
-    originalText,
+    quotedOriginal,
     receiptAttachment,
     recentMatch,
   };
@@ -1547,7 +1556,7 @@ export async function processInboundEvent(
         }),
         missing,
         reportStats,
-        quotedOriginal: saved.originalText,
+        quotedOriginal: saved.quotedOriginal,
       });
       await sendConfirmationOrSuppress({
         deps,
@@ -1582,7 +1591,7 @@ export async function processInboundEvent(
       }),
       missing: [],
       reportStats,
-      quotedOriginal: saved.originalText,
+      quotedOriginal: saved.quotedOriginal,
     });
     await sendConfirmationOrSuppress({
       deps,
