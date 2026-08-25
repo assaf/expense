@@ -487,6 +487,7 @@ export async function processConnectionEmail(
       await adapters.sendToOwner({
         subject: confirmation.subject,
         html: confirmation.html,
+        text: confirmation.text,
         attachments: saved.receiptAttachment
           ? [saved.receiptAttachment]
           : undefined,
