@@ -473,13 +473,44 @@ function replyHtml(title: string, paragraphs: string[]): string {
   });
 }
 
+/** The fields extracted for a receipt, with a dash for any blank value. */
+function fieldRow(label: string, value: string): string {
+  return `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td><td style="padding:4px 0">${escapeHtml(value || "\u2014")}</td></tr>`;
+}
+
+/** The confirmation's field list (label + display value), shared by the
+ * HTML and plain-text renderers so a new field can't drift between them. */
+function confirmationFields(
+  opts: ConfirmationEmailOptions,
+): [string, string][] {
+  return [
+    ["Date", formatDate(opts.date, { long: true })],
+    ["Merchant", opts.merchant],
+    ["Amount", opts.amount ? formatAmount(opts.amount) : ""],
+    ["Category", opts.category],
+    ["Report", opts.report],
+    ...(opts.description
+      ? ([["Description", opts.description]] as [string, string][])
+      : []),
+  ];
+}
+
 /** Longest original-receipt text quoted in a confirmation reply — the
  * parsed email body can be a whole thread; a receipt is never this big. */
 const QUOTED_ORIGINAL_MAX_CHARS = 4000;
 
-/** The fields extracted for a receipt, with a dash for any blank value. */
-function fieldRow(label: string, value: string): string {
-  return `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td><td style="padding:4px 0">${escapeHtml(value || "\u2014")}</td></tr>`;
+/** The quoted-original text, capped at QUOTED_ORIGINAL_MAX_CHARS. Returns
+ * the text to quote and whether it was truncated (the renderers append a
+ * truncation note). */
+function cappedQuotedOriginal(text: string): {
+  quoted: string;
+  truncated: boolean;
+} {
+  const truncated = text.length > QUOTED_ORIGINAL_MAX_CHARS;
+  return {
+    quoted: truncated ? text.slice(0, QUOTED_ORIGINAL_MAX_CHARS) : text,
+    truncated,
+  };
 }
 
 /**
@@ -549,14 +580,9 @@ function confirmationHtml(
   subject: string,
 ): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
-  const rows = [
-    fieldRow("Date", formatDate(opts.date, { long: true })),
-    fieldRow("Merchant", opts.merchant),
-    fieldRow("Amount", opts.amount ? formatAmount(opts.amount) : ""),
-    fieldRow("Category", opts.category),
-    fieldRow("Report", opts.report),
-    ...(opts.description ? [fieldRow("Description", opts.description)] : []),
-  ].join("");
+  const rows = confirmationFields(opts)
+    .map(([label, value]) => fieldRow(label, value))
+    .join("");
 
   const blocks: string[] = [
     `<p style="margin:8px 0">${escapeHtml(
@@ -578,10 +604,7 @@ function confirmationHtml(
   if (opts.quotedOriginal) {
     // The original receipt, quoted verbatim below the details so the
     // sender can compare. Line breaks preserved; truncated for sanity.
-    const truncated = opts.quotedOriginal.length > QUOTED_ORIGINAL_MAX_CHARS;
-    const quoted = truncated
-      ? opts.quotedOriginal.slice(0, QUOTED_ORIGINAL_MAX_CHARS)
-      : opts.quotedOriginal;
+    const { quoted, truncated } = cappedQuotedOriginal(opts.quotedOriginal);
     blocks.push(
       `<div style="margin:16px 0 4px;font-size:13px;font-weight:600;color:#374151">Original receipt</div>`,
       `<blockquote style="margin:0;padding:10px 14px;border-left:3px solid #d1d5db;background:#f9fafb;color:#374151;font-size:13px;line-height:1.5;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${escapeHtml(quoted)}${truncated ? `<div style="margin-top:8px;color:#9ca3af">… receipt text truncated</div>` : ""}</blockquote>`,
@@ -604,16 +627,7 @@ function confirmationHtml(
  * HTML, then the original receipt quoted with ">" prefixes (the email
  * convention for quoted text). */
 function confirmationText(opts: ConfirmationEmailOptions): string {
-  const rows = [
-    ["Date", formatDate(opts.date, { long: true })],
-    ["Merchant", opts.merchant],
-    ["Amount", opts.amount ? formatAmount(opts.amount) : ""],
-    ["Category", opts.category],
-    ["Report", opts.report],
-    ...(opts.description
-      ? ([["Description", opts.description]] as [string, string][])
-      : []),
-  ]
+  const rows = confirmationFields(opts)
     .map(([label, value]) => `${label}: ${value || "\u2014"}`)
     .join("\n");
 
@@ -628,10 +642,7 @@ function confirmationText(opts: ConfirmationEmailOptions): string {
   }
   if (opts.notes) parts.push(opts.notes);
   if (opts.quotedOriginal) {
-    const truncated = opts.quotedOriginal.length > QUOTED_ORIGINAL_MAX_CHARS;
-    const quoted = truncated
-      ? opts.quotedOriginal.slice(0, QUOTED_ORIGINAL_MAX_CHARS)
-      : opts.quotedOriginal;
+    const { quoted, truncated } = cappedQuotedOriginal(opts.quotedOriginal);
     parts.push(
       `Original receipt:\n${quoted
         .split("\n")
