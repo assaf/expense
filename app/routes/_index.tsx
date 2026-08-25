@@ -637,13 +637,13 @@ function ExpenseList({
       {expenses.length === 0 ? (
         <EmptyState>
           <p>
-            Nothing here yet. Add your first receipt or log a drive — it takes
+            Nothing here yet. Add your first receipt or log a drive; it takes
             under a minute.
           </p>
           {!hasEmailConnection ? (
             <p className="mt-2 text-sm">
               Or connect your FastMail account and receipts from your inbox are
-              added automatically — no forwarding.
+              added automatically, no forwarding.
             </p>
           ) : null}
         </EmptyState>

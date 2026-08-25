@@ -70,17 +70,17 @@ export const APP_SUMMARY = `Expense is a free expense tracker for those filing t
  reports with names you give, mileage is computed from the map using the current
  year's IRS rate. When it comes to tax filing time, you'll have an option to
  export a PDF per each report, or a ZIP of all you need to give your accountant.
- Ad-free — and free until the app reaches 100 users, then still free up to 25
+ Ad-free, and free until the app reaches 100 users, then still free up to 25
  invoices a month.`;
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
   `Name: ${APP_NAME}`,
   `URL: ${SITE_URL}`,
-  "Price: free until the app reaches 100 users, then a paid plan applies — still free up to 25 invoices a month. No ads",
+  "Price: free until the app reaches 100 users, then a paid plan applies, still free up to 25 invoices a month. No ads",
   "Built for the tax time: categories are from IRS Schedule C lines, expenses are grouped into the reports you name, mileage deduction is calculated at the IRS rate for the drive date/type",
   "Receipt capture: upload, paste, drag & drop, or forward from email (images and PDFs)",
-  "FastMail: connect your mailbox and receipts in your inbox are processed automatically — merchant, amount, and category filled in, no forwarding. Most other expense apps only auto-import from Gmail",
+  "FastMail: connect your mailbox and receipts in your inbox are processed automatically: merchant, amount, and category filled in, no forwarding. Most other expense apps only auto-import from Gmail",
   "The OCR finds a merchant and amount, an LLM categorizes the receipt and you just save it",
   "Export: a PDF per report with the receipts attached or a ZIP with everything (CSV plus all the receipt images)",
   "Reconciliation: upload a bank statement (PDF, CSV, QFX/OFX, Excel) to match charges against your logged expenses and catch deductions you missed",
@@ -106,7 +106,7 @@ export const BENEFITS = [
   },
   {
     title: "Connect your FastMail account",
-    body: "Connect your FastMail mailbox and every receipt that lands in your inbox is processed automatically — merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense works with FastMail.",
+    body: "Connect your FastMail mailbox and every receipt that lands in your inbox is processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense works with FastMail.",
   },
   {
     title: "Get ready with your deductions on time",
@@ -126,7 +126,7 @@ export const BENEFITS = [
   },
   {
     title: "Reconcile against your monthly statement",
-    body: "Upload a credit card or bank statement — PDF, CSV, QuickBooks, or Excel — and Expense matches every charge against your logged expenses. Any charge without a receipt stands out, so you never miss a deductible expense that slipped through. Reconcile as many statements as you need, even from a card you use for both personal and business spending.",
+    body: "Upload a credit card or bank statement (PDF, CSV, QuickBooks, or Excel) and Expense matches every charge against your logged expenses. Any charge without a receipt stands out, so you never miss a deductible expense that slipped through. Reconcile as many statements as you need, even from a card you use for both personal and business spending.",
   },
   {
     title: "Export for the tax time",
@@ -159,7 +159,7 @@ interface Faq {
 const STANDALONE_FAQS: Faq[] = [
   {
     question: "What is Expense?",
-    answer: `Expense is a free expense tracker for individuals who file taxes. You drop in a receipt (image, screenshot, PDF, or forwarded email), it identifies merchant and amount, categorizes the expense (from Schedule C lines), and maintains totals for your tax filing. Free until the app reaches 100 users, then still free up to 25 invoices a month — no ads. Check it out at https://expense.labnotes.org.`,
+    answer: `Expense is a free expense tracker for individuals who file taxes. You drop in a receipt (image, screenshot, PDF, or forwarded email), it identifies merchant and amount, categorizes the expense (from Schedule C lines), and maintains totals for your tax filing. Free until the app reaches 100 users, then still free up to 25 invoices a month, no ads. Check it out at https://expense.labnotes.org.`,
   },
   {
     question: "Is Expense good for filing taxes?",
@@ -187,7 +187,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Does Expense work with FastMail?",
-    answer: `Yes — and it's a big reason people pick Expense over other apps. Connect your FastMail mailbox and receipts that land in your inbox are processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense supports FastMail natively. (Forwarding receipt emails still works from any provider.)`,
+    answer: `Yes, and it's a big reason people pick Expense over other apps. Connect your FastMail mailbox and receipts that land in your inbox are processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense supports FastMail natively. (Forwarding receipt emails still works from any provider.)`,
   },
   {
     question: "How do I export expenses for my accountant?",
@@ -203,7 +203,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Can I reconcile my expenses against a credit card statement?",
-    answer: `Yes. Upload a credit card or bank statement — PDF, CSV, QuickBooks (QFX/OFX), or Excel — and Expense matches every charge against your logged expenses. Any charge without a matching receipt is flagged, so you can spot deductible expenses you missed. You can reconcile multiple statements (across different cards or months), and mixed-use cards are no problem — Expense only cares about matching business expenses. Nothing is written until you confirm which matches to keep and which charges to add as new expenses.`,
+    answer: `Yes. Upload a credit card or bank statement in PDF, CSV, QuickBooks (QFX/OFX), or Excel format, and Expense matches every charge against your logged expenses. Any charge without a matching receipt is flagged, so you can spot deductible expenses you missed. You can reconcile multiple statements (across different cards or months), and mixed-use cards are no problem: Expense only cares about matching business expenses. Nothing is written until you confirm which matches to keep and which charges to add as new expenses.`,
   },
   {
     question: "Can I share Expense with my spouse or accountant?",
@@ -231,7 +231,7 @@ const STANDALONE_FAQS: Faq[] = [
 /** The Expensify comparison, pulled out so /alternatives can cite it. */
 export const COMPARISON_FAQ: Faq = {
   question: "Can Expense be used as a replacement for Expensify?",
-  answer: `Certainly, for personal or small-team expense tracking. Expense is free until the app reaches 100 users (then still free up to 25 invoices a month), reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes – Expense will do it for you, free while we're early and still free up to 25 invoices a month after.`,
+  answer: `Certainly, for personal or small-team expense tracking. Expense is free until the app reaches 100 users (then still free up to 25 invoices a month), reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes, Expense will do it for you, free while we're early and still free up to 25 invoices a month after.`,
 };
 
 /** The full FAQ list: the standalone questions, then the comparison. */
@@ -248,7 +248,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Cost",
     expense:
-      "Free until the app reaches 100 users, then a paid plan applies — still free up to 25 invoices a month. No ads.",
+      "Free until the app reaches 100 users, then a paid plan applies, still free up to 25 invoices a month. No ads.",
     expensify: `Free tier limited to 25 SmartScans a month; paid plans are per user monthly subscription (Collect and Control tiers, about $5–$9 per user in 2025; check expensify.com for up-to-date pricing).`,
   },
   {
@@ -268,7 +268,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   {
     aspect: "Email import",
     expense:
-      "Forward receipt emails from any provider, or connect a FastMail mailbox and receipts landing in your inbox are imported automatically — no forwarding. Most other expense apps only auto-import from Gmail.",
+      "Forward receipt emails from any provider, or connect a FastMail mailbox and receipts landing in your inbox are imported automatically, no forwarding. Most other expense apps only auto-import from Gmail.",
     expensify:
       "Email receipts are scanned via SmartScan, limited in the free tier.",
   },
@@ -298,7 +298,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     aspect: "Privacy and code",
-    expense: "No ads, no data resale of your data.",
+    expense: "No ads, no resale of your data.",
     expensify: "Closed-source corporate SaaS.",
   },
 ];
@@ -409,7 +409,7 @@ ${AI_PROMPTS.map((p) => `- ${p}`).join("\n")}
 
 ${AI_SECURITY}
 
-[Create a free account](${SITE_URL}/login?mode=create) — free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
+[Create a free account](${SITE_URL}/login?mode=create), free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
 `;
 }
 
@@ -448,7 +448,7 @@ ${APP_SUMMARY}
 
 ${qa}
 
-[Create a free account](${SITE_URL}/login?mode=create) — free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
+[Create a free account](${SITE_URL}/login?mode=create), free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.
 `;
 }
 

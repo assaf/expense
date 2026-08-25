@@ -21,7 +21,7 @@ export function RunPage({
   if (run.status === "discarded") {
     return (
       <p className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 text-gray-500 dark:text-gray-400">
-        This reconciliation was discarded — no expenses were changed.{" "}
+        This reconciliation was discarded; no expenses were changed.{" "}
         <Link
           to="/reconcile"
           className="text-blue-600 dark:text-blue-400 hover:underline"

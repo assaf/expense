@@ -135,10 +135,10 @@ export default function OnboardingPage({
           {stepTwo
             ? email
               ? state.step === "attach"
-                ? `The mailbox ${email} already has an Expense account — but you can connect it to whichever account you sign in with.`
+                ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
                 : `We found your address from the token: ${email}. Set a password to create your account.`
               : ""
-            : "We automatically import and process your expenses from your inbox — no manual forwarding. Your token proves you own the mailbox, so there's no verification email."}
+            : "We automatically import and process your expenses from your inbox, no manual forwarding. Your token proves you own the mailbox, so there's no verification email."}
         </p>
         <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
           Step {stepTwo ? 2 : 1} of 2
@@ -228,8 +228,8 @@ export default function OnboardingPage({
           </label>
           <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
             {state.step === "attach"
-              ? "Prefilled from your token — change it to the email you sign in with."
-              : "Your account email is the address from your token — the token proves you own it."}
+              ? "Prefilled from your token; change it to the email you sign in with."
+              : "Your account email is the address from your token; the token proves you own it."}
           </p>
           <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
             Password
@@ -247,7 +247,7 @@ export default function OnboardingPage({
           </label>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {state.step === "create"
-              ? "At least 8 characters. This is your sign-in password — the token stays stored encrypted and is only used to read your inbox."
+              ? "At least 8 characters. This is your sign-in password; the token stays stored encrypted and is only used to read your inbox."
               : "Your password is checked against the account you sign in with; the mailbox connects to it."}
           </p>
           {state.step === "attach" ? (

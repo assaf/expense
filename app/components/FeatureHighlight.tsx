@@ -64,7 +64,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Add a receipt without typing",
     body: () => (
       <>
-        Upload or paste (⌘V) a receipt image or PDF — or drag one anywhere on
+        Upload or paste (⌘V) a receipt image or PDF, or drag one anywhere on
         this page. Merchant, amount, and category fill in automatically.
       </>
     ),
@@ -76,7 +76,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Expense starts with the IRS Schedule C categories, but you can add your
-        own anytime in Settings — for clients, projects, or whatever makes your
+        own anytime in Settings, for clients, projects, or whatever makes your
         taxes clearer. New categories are offered automatically when receipts
         are parsed.
       </>
@@ -89,7 +89,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Connect your FastMail account and receipts landing in your inbox are
-        processed for you — merchant, amount, and category filled in, no
+        processed for you: merchant, amount, and category filled in, no
         forwarding needed.
       </>
     ),
@@ -104,7 +104,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inboundAddress}
         </span>{" "}
-        and it is added automatically — PDF and image attachments supported.
+        and it is added automatically (PDF and image attachments supported).
         Only emails from verified sender addresses are imported; add yours on
         the Email page.
       </>
@@ -116,7 +116,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Let your AI assistant lend a hand",
     body: (data) => (
       <>
-        Point any MCP client — Claude, OpenAI, or another assistant — at{" "}
+        Point any MCP client (Claude, OpenAI, or another assistant) at{" "}
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.mcpUrl}
         </span>
@@ -131,7 +131,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Mileage measured from where you start",
     body: () => (
       <>
-        Set a start/end location — home, office, or wherever you choose — and
+        Set a start/end location (home, office, or wherever you choose) and
         every drive is measured as a round trip from there. Change it anytime in
         Settings.
       </>
@@ -143,7 +143,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Mileage rates come from the IRS",
     body: (data) => (
       <>
-        Rates update automatically from the IRS —{" "}
+        Rates update automatically from the IRS:{" "}
         {data.mileageRate ? (
           <span className="font-semibold text-gray-700 dark:text-gray-200">
             ${data.mileageRate}/mi
@@ -163,7 +163,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Create as many reports as you need and export any of them as a PDF.
-        Close the ones you have filed, or delete ones you no longer use — all on
+        Close the ones you have filed, or delete ones you no longer use, all on
         the Reports page.
       </>
     ),
@@ -178,7 +178,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inviteCode}
         </span>{" "}
-        and they can join your account — everyone sees the same expenses,
+        and they can join your account; everyone sees the same expenses,
         reports, and settings.
       </>
     ),
@@ -189,7 +189,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Reconcile against your statement",
     body: () => (
       <>
-        Upload a credit card statement — PDF, QuickBooks, CSV, or Excel — and
+        Upload a credit card statement (PDF, QuickBooks, CSV, or Excel) and
         Expense matches it against your logged expenses. Catch deductions you
         missed and find discrepancies.
       </>

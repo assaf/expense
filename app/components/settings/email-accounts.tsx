@@ -152,7 +152,7 @@ function ConnectForm() {
       setToken("");
       setNotice({
         ok: true,
-        text: `${data.address} connected — expenses will import automatically.`,
+        text: `${data.address} connected; expenses will import automatically.`,
       });
     } else if (data.error) {
       setNotice({ ok: false, text: data.error });

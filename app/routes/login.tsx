@@ -42,7 +42,7 @@ function safeNext(raw: string | null): string {
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
     "Sign in to Expense",
-    "Sign in to Expense — free expense tracking for tax season, with receipt OCR, mileage, and PDF/ZIP export.",
+    "Sign in to Expense. Free expense tracking for tax season: receipt OCR, mileage, and PDF/ZIP export.",
     "/login",
   );
 }
@@ -188,7 +188,7 @@ export default function LoginPage() {
           </p>
           <p>
             Once you're in, connect your FastMail account and receipts from your
-            inbox are imported automatically — no forwarding.
+            inbox are imported automatically, no forwarding.
           </p>
           <p>Can't find it? Check spam, or resend below.</p>
         </div>
@@ -215,7 +215,7 @@ export default function LoginPage() {
   const titles: Record<Mode, { title: string; blurb: string }> = {
     signin: {
       title: "Sign in to Expense",
-      blurb: "Expense tracking for tax season — receipts, mileage, exports.",
+      blurb: "Expense tracking for tax season: receipts, mileage, exports.",
     },
     create: {
       title: "Create your account",

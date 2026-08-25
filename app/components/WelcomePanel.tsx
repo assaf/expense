@@ -34,7 +34,7 @@ export function WelcomePanel({ inboundAddress }: { inboundAddress: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-            You're all set — your inbox is connected
+            You're all set: your inbox is connected
           </h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
             Receipts from your mailbox now import automatically. Everything else
@@ -68,7 +68,7 @@ export function WelcomePanel({ inboundAddress }: { inboundAddress: string }) {
           />
           <span>
             Forward any receipt email to{" "}
-            <span className="font-mono text-xs">{inboundAddress}</span> — the
+            <span className="font-mono text-xs">{inboundAddress}</span> and the
             app adds it for you.
           </span>
         </li>

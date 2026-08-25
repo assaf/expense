@@ -145,9 +145,9 @@ export function ReviewInbox({
 
       {!scanning && scanAtCap ? (
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-          Receipts are scanned from your 50 most recent emails — older mail
-          isn't included. Forward older receipts to your receipts address or add
-          them manually.
+          Receipts are scanned from your 50 most recent emails; older mail isn't
+          included. Forward older receipts to your receipts address or add them
+          manually.
         </p>
       ) : null}
 
@@ -177,7 +177,7 @@ export function ReviewInbox({
           <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
             {items.length} receipt
             {items.length === 1 ? "" : "s"} found. Process the ones that are
-            expenses; ignore the rest — each action asks for confirmation first.
+            expenses; ignore the rest. Each action asks for confirmation first.
           </p>
           <ul className="flex flex-col gap-2">
             {items.map((item) => (
@@ -311,7 +311,7 @@ function ReviewRow({
           onCancel={() => setConfirm(null)}
           deleting={busy}
         >
-          It stays in your inbox — it just won't appear on this list again.
+          It stays in your inbox; it just won't appear on this list again.
         </ConfirmDialog>
       ) : null}
 
@@ -337,7 +337,7 @@ function ReviewRow({
                 className="mt-0.5 h-4 w-4"
               />
               <span>
-                <b>Remember {item.rulePattern}</b> — future receipts from this
+                <b>Remember {item.rulePattern}</b>: future receipts from this
                 sender are imported automatically.
               </span>
             </label>

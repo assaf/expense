@@ -80,7 +80,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
         <h2 className="mb-2 text-lg font-semibold">Open reports</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Expenses can still be added or edited. Close a report when you're
-          ready to file — it freezes the expenses and you can export a PDF.
+          ready to file: it freezes the expenses and you can export a PDF.
         </p>
         <ReportSection reports={open} />
       </section>
@@ -105,7 +105,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
           Download everything (ZIP)
         </h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Every expense across all reports — all time — as a ZIP containing all
+          Every expense across all reports (all time) as a ZIP containing all
           receipt images and a CSV of every expense.
         </p>
         <Button asChild>

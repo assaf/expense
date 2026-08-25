@@ -89,7 +89,7 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json(
         {
           error:
-            "That file is too large — credit card statements are usually well under 1 MB.",
+            "That file is too large; credit card statements are usually well under 1 MB.",
         },
         { status: 400 },
       );

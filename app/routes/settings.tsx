@@ -172,7 +172,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </div>
           <div id="invite-code" className="scroll-mt-6">
             <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-              Invite code — share to let someone join this account
+              Invite code: share to let someone join this account
             </div>
             <div className="font-mono text-2xl font-bold tracking-widest">
               {inviteCode}
@@ -279,7 +279,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       <section id="start-location" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Start/end location</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Used as the start and end of every mileage route — trips are always
+          Used as the start and end of every mileage route; trips are always
           round trips back here.
         </p>
         <Form method="post" className="flex items-end gap-2">

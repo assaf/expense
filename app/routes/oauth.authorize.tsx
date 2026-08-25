@@ -67,7 +67,7 @@ export async function action({ request }: Route.ActionArgs) {
     !params.state
   ) {
     return errorPage(
-      "This authorization request is incomplete — start over from the app you're connecting.",
+      "This authorization request is incomplete; start over from the app you're connecting.",
     );
   }
   const client = await findOAuthClient(params.clientId);
@@ -139,12 +139,12 @@ export default function OAuthAuthorizePage({
             <span className="font-medium text-gray-800 dark:text-gray-100">
               {client.name}
             </span>{" "}
-            wants to access your expenses — capture receipts, log mileage,
-            answer spending questions, and build reports.
+            wants to access your expenses: capture receipts, log mileage, answer
+            spending questions, and build reports.
           </p>
           {previouslyConnected && (
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Previously connected — approving refreshes this connection's
+              Previously connected; approving refreshes this connection's
               access.
             </p>
           )}

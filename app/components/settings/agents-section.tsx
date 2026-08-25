@@ -25,7 +25,7 @@ export function AgentsSection({
     <section id="agents" className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-        Connect your AI assistant — Claude, OpenAI, or any MCP client — to this
+        Connect your AI assistant (Claude, OpenAI, or any MCP client) to this
         account. Point the client at the endpoint below and approve the
         connection in your browser by signing in. Agents can capture receipts,
         log mileage, answer “how much did I spend on …?”, build and export
@@ -40,7 +40,7 @@ export function AgentsSection({
             {mcpUrl}
           </div>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Point your MCP client here — it discovers the sign-in flow
+            Point your MCP client here; it discovers the sign-in flow
             automatically.
           </p>
         </div>

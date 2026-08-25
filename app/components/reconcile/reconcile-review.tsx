@@ -130,7 +130,7 @@ export function DraftReview({
         {droppedCount > 0 ? (
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
             {droppedCount} transaction{droppedCount === 1 ? "" : "s"} without a
-            decision will be left out — they are not added as expenses.
+            decision will be left out; they are not added as expenses.
           </p>
         ) : null}
       </section>
@@ -506,7 +506,7 @@ function ReviewRowCard({
               onChange={() => submit("none")}
               className="accent-gray-500"
             />
-            None of these — not one of my expenses
+            None of these (not one of my expenses)
           </label>
         </fieldset>
       ) : null}

@@ -53,7 +53,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
         <h2 className="mb-1 font-semibold">Upload a statement</h2>
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
           Download this month's transactions from your credit card website and
-          upload them here — CSV, QFX/OFX, QBO, XLSX, or PDF. Expense matches
+          upload them here: CSV, QFX/OFX, QBO, XLSX, or PDF. Expense matches
           every charge against your logged receipts; you review the close
           matches and decide what to keep. Nothing is changed until you finish.
         </p>

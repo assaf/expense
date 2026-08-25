@@ -213,7 +213,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
         </p>
         {emailConnections.length === 0 && inboundSenders.length > 0 ? (
           <p className="mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-            Forwarding works — but connect your FastMail account above and
+            Forwarding works, but connect your FastMail account above and
             receipts landing in your inbox are processed automatically, no
             forwarding needed.
           </p>
@@ -241,8 +241,8 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
             <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
               Receipts are imported only from <b>verified</b> addresses. Adding
               an address sends a verification link to that inbox. Once the link
-              is clicked, the address is locked to your account — no one else
-              can claim it — and receipts start importing.
+              is clicked, the address is locked to your account (no one else can
+              claim it) and receipts start importing.
             </p>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (

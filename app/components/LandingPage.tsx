@@ -133,7 +133,7 @@ export default function LandingPage() {
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500 dark:text-gray-400">
             Have a FastMail account? Connect it and receipts from your inbox are
-            processed automatically — no forwarding, and no Gmail required.
+            processed automatically, no forwarding and no Gmail required.
           </p>
           <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             By a freelancer. Open-source, no funding.
@@ -305,7 +305,7 @@ export default function LandingPage() {
            * larger heading, taller padding, transparent Sign in. */}
           <MarketingCta
             heading="Start collecting this year's expenses."
-            body="No credit card, no subscription. Free until we reach 100 users — then still free up to 25 invoices a month."
+            body="No credit card, no subscription. Free until we reach 100 users, then still free up to 25 invoices a month."
             secondaryLabel="Sign in"
             secondaryHref="/login"
             className="py-14"

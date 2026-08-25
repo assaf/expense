@@ -84,7 +84,7 @@ export function SenderRow({
         </p>
       ) : resendFetcher.data?.ok ? (
         <p className="text-xs text-green-700 dark:text-green-400">
-          Verification email sent — check that inbox and click the link.
+          Verification email sent. Check that inbox and click the link.
         </p>
       ) : resendFetcher.data?.error ? (
         <p className="text-xs text-red-600 dark:text-red-400">
@@ -121,7 +121,7 @@ export function AddSenderForm() {
       setAddress("");
       setNotice({
         ok: true,
-        text: `Verification email sent to ${data.address} — click the link in it and receipts from this address will start importing.`,
+        text: `Verification email sent to ${data.address}; click the link in it and receipts from this address will start importing.`,
       });
     } else if (data.error) {
       setNotice({ ok: false, text: data.error });

@@ -34,6 +34,6 @@ export const SIMPLE_FOOTER =
 /** The value-prop footer with a home-page link (verification emails). */
 export function valuePropFooter(home: string): string {
   return `<p style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:12px;color:#6b7280;font-size:12px;line-height:1.5">
-  <a href="${escapeHtml(home)}/" style="color:#2563eb;text-decoration:none;font-weight:600">Expense</a> — free expense tracking for tax season. Snap a photo, forward a receipt, or log mileage, and Expense sorts it into IRS Schedule C categories and ready-to-file reports.
+  <a href="${escapeHtml(home)}/" style="color:#2563eb;text-decoration:none;font-weight:600">Expense</a> is free expense tracking for tax season. Snap a photo, forward a receipt, or log mileage, and Expense sorts it into IRS Schedule C categories and ready-to-file reports.
 </p>`;
 }
