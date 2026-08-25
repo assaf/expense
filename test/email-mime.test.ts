@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRfc822Message, encodeHeader } from "~/lib/email-mime.server";
+import { emailShell } from "~/lib/email-layout.server";
 
 function decodeBase64(text: string): string {
   return Buffer.from(text.replace(/\s+/g, ""), "base64").toString("utf8");
@@ -108,6 +109,34 @@ describe("buildRfc822Message", () => {
     });
     const text = raw.toString("utf8");
     expect(text).toMatch(/Content-Type: image\/png; name="photo\.png"/);
+  });
+
+  it("strips CR/LF from To and In-Reply-To (header injection guard)", () => {
+    const raw = buildRfc822Message({
+      fromName: "Expense",
+      fromEmail: "receipts@labnotes.org",
+      to: "assaf@arkin.me\r\nBcc: pwn@evil.com",
+      subject: "Receipt",
+      html: "<p>hi</p>",
+      inReplyTo: "<orig@example.com>\r\nBcc: pwn2@evil.com",
+    });
+    const text = raw.toString("utf8");
+    // No injected header line survives.
+    expect(text).not.toMatch(/\r?\nBcc:/);
+    // The To header is the sanitized value (CR/LF → space, trimmed).
+    expect(text).toMatch(/^To: assaf@arkin\.me Bcc: pwn@evil\.com$/m);
+    expect(text).toMatch(
+      /^In-Reply-To: <orig@example\.com> Bcc: pwn2@evil\.com$/m,
+    );
+  });
+
+  it("escapes the email shell title (user data can reach headings)", () => {
+    const html = emailShell({
+      title: "<b>Office</b><script>alert(1)</script>",
+      body: "<p>x</p>",
+    });
+    expect(html).toContain("&lt;b&gt;Office&lt;/b&gt;&lt;script&gt;");
+    expect(html).not.toContain("<script>alert");
   });
 
   it("uses CRLF line endings throughout", () => {

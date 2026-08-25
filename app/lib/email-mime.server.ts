@@ -37,6 +37,13 @@ export function encodeHeader(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }
 
+/** Strip CR/LF from a raw header value so a crafted input (e.g. an inbound
+ * email's From header, which becomes our reply's To) can't inject extra
+ * headers into the outbound message. */
+function safeHeaderValue(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
 function base64Part(lines: string[]): string {
   return wrapBase64(Buffer.from(lines.join(CRLF), "utf8").toString("base64"));
 }
@@ -70,7 +77,7 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
   const headers = [
     header("Date", new Date().toUTCString()),
     header("From", from),
-    header("To", input.to),
+    header("To", safeHeaderValue(input.to)),
     header("Subject", encodeHeader(input.subject)),
     header("Message-ID", messageId),
     "MIME-Version: 1.0",
@@ -80,8 +87,9 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     "X-Expense-Confirmation: 1",
   ];
   if (input.inReplyTo) {
-    headers.push(header("In-Reply-To", input.inReplyTo));
-    headers.push(header("References", input.inReplyTo));
+    const inReplyTo = safeHeaderValue(input.inReplyTo);
+    headers.push(header("In-Reply-To", inReplyTo));
+    headers.push(header("References", inReplyTo));
   }
 
   const alternative = [

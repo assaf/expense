@@ -85,6 +85,15 @@ resolve early.
   private checks, per-hop redirect re-checks) + `readBodyLimited` streams the
   body with a hard cap so `capture_receipt` can't buffer an unbounded
   response into memory.
+- Prompt injection (receipts are third-party content): the receipt text is
+  fenced inside `<<<RECEIPT>>>` markers in `buildUserPrompt` (markers
+  stripped from the payload so crafted text can't close the fence early),
+  the system prompt declares the fence DATA-only, and the model's output is
+  bounded — free-text fields capped at 120/300 chars with fence markers
+  stripped (`boundedField`) so a steered response can't dump content or the
+  account's context into stored expense data or confirmation emails. The
+  attachment-classifier prompt carries the same data-only rule for
+  filenames.
 
 ## Operational notes
 

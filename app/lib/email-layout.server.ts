@@ -12,14 +12,16 @@ export function paragraph(text: string): string {
   return `<p style="margin:8px 0">${text}</p>`;
 }
 
-/** The email shell: base typography + title heading + body + footer. */
+/** The email shell: base typography + title heading + body + footer. The
+ * title is escaped (it can carry user data like category/report names);
+ * the body is already-built HTML whose callers escape their own inputs. */
 export function emailShell(opts: {
   title: string;
   body: string;
   footer?: string;
 }): string {
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;line-height:1.55;color:#1f2937;max-width:560px">
-<h2 style="font-size:18px;margin:0 0 12px">${opts.title}</h2>
+<h2 style="font-size:18px;margin:0 0 12px">${escapeHtml(opts.title)}</h2>
 ${opts.body}
 ${opts.footer ?? SIMPLE_FOOTER}
 </div>`;
