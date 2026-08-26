@@ -22,7 +22,6 @@ import {
   formatDate,
   mileageMerchant,
   merchantLabel,
-  yearOf,
   summarizeByReport,
 } from "~/lib/format";
 import Decimal from "decimal.js";
@@ -192,11 +191,6 @@ describe("Format helpers", () => {
         rates,
       ),
     ).toBe("Business");
-  });
-
-  it("gets year from date", () => {
-    expect(yearOf("2026-03-10")).toBe("2026");
-    expect(yearOf("")).toBe(String(new Date().getFullYear()));
   });
 
   it("summarizes expenses per report with exact totals", () => {

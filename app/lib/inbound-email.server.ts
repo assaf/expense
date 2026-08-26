@@ -34,7 +34,7 @@ import {
   confirmationEmail,
   confirmationNotes,
 } from "~/lib/email-confirmation.server";
-import { extractEmailAddress } from "~/lib/validation";
+import { domainOf, extractEmailAddress } from "~/lib/validation";
 import type { SendEmailOptions } from "~/lib/reply.server";
 import { upsertExpense, findRecentlyImportedMatch } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
@@ -620,12 +620,6 @@ async function bounceResult(
 // When a user forwards a receipt, the ORIGINAL sender (inside the forwarded
 // content) becomes a user-specific email rule: future mail from that sender
 // to a connected mailbox of the same workspace auto-imports.
-
-/** The bare domain of an address ("a@b.example.com" -> "b.example.com"). */
-function domainOf(address: string): string | null {
-  const domain = address.split("@")[1]?.toLowerCase();
-  return domain && domain.includes(".") ? domain : null;
-}
 
 const FORWARD_FROM_RE =
   /^[ \t]*From:[ \t]*(?:["']?[^"'\n<>]*["']?[ \t])?<?([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>?/im;

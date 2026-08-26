@@ -9,14 +9,12 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import {
-  formatAddress,
+  REQUEST_TIMEOUT_MS,
+  fetchRawRfc822,
   jmapBatch,
   jmapUploadBlob,
-  MAX_EMAIL_BYTES,
-  REQUEST_TIMEOUT_MS,
   type JmapCapability,
 } from "~/lib/jmap.server";
-import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
  * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
@@ -195,37 +193,13 @@ export async function rawEmail(id: string): Promise<RawEmail> {
     ids: [id],
     properties: ["blobId", "receivedAt", "subject", "from", "to", "messageId"],
   });
-  const email = list[0];
-  if (!email) throw new Error(`Email ${id} not found`);
-
-  // The top-level Email blob is the full RFC 5322 message; Fastmail serves
-  // it for both message/rfc822 and application/octet-stream.
-  const url = s.downloadUrl
-    .replace("{accountId}", s.accountId)
-    .replace("{blobId}", email.blobId ?? "")
-    .replace("{name}", "email.eml")
-    .replace("{type}", "message/rfc822");
-
-  const res = await fetch(url, {
-    headers: bearer(),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`email download failed: ${res.status} ${await res.text()}`);
-  }
-  return {
+  return fetchRawRfc822({
     id,
-    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
-      throw new Error(
-        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
-      );
-    }),
-    receivedAt: email.receivedAt ?? new Date().toISOString(),
-    subject: email.subject ?? "",
-    from: formatAddress(email.from?.[0]),
-    to: (email.to ?? []).map((a) => formatAddress(a) ?? "").filter(Boolean),
-    messageId: email.messageId ?? "",
-  };
+    email: list[0],
+    accountId: s.accountId,
+    downloadUrl: s.downloadUrl,
+    headers: bearer(),
+  });
 }
 
 /** True when an Email/get miss means the email is already gone: a

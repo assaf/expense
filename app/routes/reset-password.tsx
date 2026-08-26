@@ -3,6 +3,7 @@ import { Link, data } from "react-router";
 import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
+import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import {
   guardAnonymousAction,
@@ -130,8 +131,7 @@ export default function ResetPasswordPage({
       {state.view === "request" ? (
         <form method="post" className="flex flex-col gap-4">
           <input type="hidden" name="intent" value="request" />
-          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-            Email
+          <Field label="Email">
             <Input
               type="email"
               name="email"
@@ -142,7 +142,7 @@ export default function ResetPasswordPage({
               invalid={!!error}
               aria-invalid={error ? true : undefined}
             />
-          </label>
+          </Field>
           {error ? (
             <Alert icon className="font-medium">
               {error}
@@ -182,8 +182,7 @@ export default function ResetPasswordPage({
           <input type="hidden" name="intent" value="reset" />
           <input type="hidden" name="token" value={state.token} />
           <input type="hidden" name="email" value={state.email} />
-          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-            New password
+          <Field label="New password">
             <Input
               type="password"
               name="password"
@@ -193,7 +192,7 @@ export default function ResetPasswordPage({
               invalid={!!error}
               aria-invalid={error ? true : undefined}
             />
-          </label>
+          </Field>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             At least 8 characters. The link is single-use and expires in 7 days.
           </p>

@@ -4,7 +4,11 @@ import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import { extractEmailAddress, isEmail } from "~/lib/validation";
-import { VERIFICATION_RESEND_MS, VERIFICATION_TTL_MS } from "~/lib/db/shared";
+import {
+  accountFromRow,
+  VERIFICATION_RESEND_MS,
+  VERIFICATION_TTL_MS,
+} from "~/lib/db/shared";
 import type {
   Account,
   InboundEmailRecord,
@@ -102,12 +106,7 @@ export async function findVerifiedSenderAccount(
   });
   if (!account) return undefined;
   return {
-    account: {
-      id: account.id,
-      name: account.name,
-      inviteCode: account.inviteCode,
-      createdAt: toIso(account.createdAt),
-    },
+    account: accountFromRow(account),
     verifiedAt: toIso(verification.verifiedAt),
   };
 }

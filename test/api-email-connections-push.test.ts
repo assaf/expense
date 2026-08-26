@@ -11,7 +11,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   setConnectionVerificationCode: vi.fn(async () => {}),
-  readEmailConnectionById: vi.fn(async (): Promise<unknown> => ({
+  readEmailConnectionById: vi.fn(),
+  touchEmailConnectionPush: vi.fn(async () => {}),
+  setEmailConnectionStatus: vi.fn(async () => {}),
+}));
+
+/** The connected-mailbox row the push tests decrypt; tokenEnc is forged per
+ * test (the default active row, or the error-flag row). */
+function connection(overrides: Record<string, unknown> = {}) {
+  return {
     id: "conn1",
     provider: "fastmail",
     emailAddress: "mailbox@example.com",
@@ -22,12 +30,11 @@ const mocks = vi.hoisted(() => ({
     pushSubscriptionId: "sub-1",
     pushExpiresAt: null,
     createdAt: "2026-08-19T00:00:00.000Z",
-    tokenEnc: "", // forged per test below
+    tokenEnc: "enc",
     jmapAccountId: "jmap-1",
-  })),
-  touchEmailConnectionPush: vi.fn(async () => {}),
-  setEmailConnectionStatus: vi.fn(async () => {}),
-}));
+    ...overrides,
+  };
+}
 
 const env = vi.hoisted(() => {
   let keys: { privateKey: string; auth: string } | undefined;
@@ -133,20 +140,9 @@ describe("api.email-connections-push", () => {
     });
     mocks.readEmailConnectionById.mockClear();
     // Reset the default connection (tests may override per case).
-    mocks.readEmailConnectionById.mockImplementation(async () => ({
-      id: "conn1",
-      provider: "fastmail",
-      emailAddress: "mailbox@example.com",
-      status: "active",
-      receivedCount: 0,
-      processedCount: 0,
-      lastPushAt: null,
-      pushSubscriptionId: "sub-1",
-      pushExpiresAt: null,
-      createdAt: "2026-08-19T00:00:00.000Z",
-      tokenEnc: encryptSecret("fmu1-conn-tok"),
-      jmapAccountId: "jmap-1",
-    }));
+    mocks.readEmailConnectionById.mockImplementation(async () =>
+      connection({ tokenEnc: encryptSecret("fmu1-conn-tok") }),
+    );
   });
 
   it("echoes a PushVerification with the connection's decrypted token", async () => {
@@ -172,20 +168,9 @@ describe("api.email-connections-push", () => {
   });
 
   it("clears the error flag after a successful verification echo", async () => {
-    mocks.readEmailConnectionById.mockImplementation(async () => ({
-      id: "conn1",
-      provider: "fastmail",
-      emailAddress: "mailbox@example.com",
-      status: "error",
-      receivedCount: 0,
-      processedCount: 0,
-      lastPushAt: null,
-      pushSubscriptionId: "sub-1",
-      pushExpiresAt: null,
-      createdAt: "2026-08-19T00:00:00.000Z",
-      tokenEnc: encryptSecret("fmu1-conn-tok"),
-      jmapAccountId: "jmap-1",
-    }));
+    mocks.readEmailConnectionById.mockImplementation(async () =>
+      connection({ status: "error", tokenEnc: encryptSecret("fmu1-conn-tok") }),
+    );
     const res = await action(
       args(
         post(

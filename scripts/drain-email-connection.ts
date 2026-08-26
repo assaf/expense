@@ -11,12 +11,9 @@
  * trashed), and sends a confirmation email to the mailbox owner. Run this
  * against the dev DB; the dev server (localhost:4565) reads the same DB.
  */
+import { mailboxSummaries } from "../app/lib/email-connection-mail.server";
 import {
-  mailboxSummaries,
-  rawConnectionEmail,
-  moveConnectionEmailToTrash,
-} from "../app/lib/email-connection-mail.server";
-import {
+  connectionMailAdapter,
   drainEmailConnection,
   type ConnectionMailAdapter,
   type ConnectionDeps,
@@ -71,9 +68,9 @@ async function main(): Promise<void> {
   };
 
   const adapter: ConnectionMailAdapter = {
+    ...connectionMailAdapter(token),
+    // The dev drain can target any mailbox role, not just the Inbox.
     inboxEmailSummaries: (opts) => mailboxSummaries({ token, role, ...opts }),
-    rawEmail: (id) => rawConnectionEmail(token, id),
-    moveToTrash: (id) => moveConnectionEmailToTrash(token, id),
   };
 
   console.info(

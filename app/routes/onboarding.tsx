@@ -3,6 +3,7 @@ import { Link, data, redirect } from "react-router";
 import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
+import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import {
   guardAnonymousAction,
@@ -178,8 +179,7 @@ export default function OnboardingPage({
               </ol>
               <form method="post" className="flex flex-col gap-4">
                 <input type="hidden" name="intent" value="connect-token" />
-                <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-                  FastMail API token
+                <Field label="FastMail API token">
                   <Input
                     type="password"
                     name="token"
@@ -189,7 +189,7 @@ export default function OnboardingPage({
                     invalid={!!error}
                     aria-invalid={error ? true : undefined}
                   />
-                </label>
+                </Field>
                 {error ? (
                   <Alert icon className="font-medium">
                     {error}
@@ -214,8 +214,7 @@ export default function OnboardingPage({
         <form method="post" className="flex flex-col gap-4">
           <input type="hidden" name="intent" value={state.step} />
           <input type="hidden" name="token" value={token} />
-          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-            Account email
+          <Field label="Account email">
             <Input
               type="email"
               name="email"
@@ -225,14 +224,13 @@ export default function OnboardingPage({
               invalid={!!error}
               aria-invalid={error ? true : undefined}
             />
-          </label>
+          </Field>
           <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
             {state.step === "attach"
               ? "Prefilled from your token; change it to the email you sign in with."
               : "Your account email is the address from your token; the token proves you own it."}
           </p>
-          <label className="flex flex-col gap-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-            Password
+          <Field label="Password">
             <Input
               type="password"
               name="password"
@@ -244,7 +242,7 @@ export default function OnboardingPage({
               invalid={!!error}
               aria-invalid={error ? true : undefined}
             />
-          </label>
+          </Field>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {state.step === "create"
               ? "At least 8 characters. This is your sign-in password; the token stays stored encrypted and is only used to read your inbox."

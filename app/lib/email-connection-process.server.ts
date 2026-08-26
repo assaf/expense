@@ -556,6 +556,20 @@ export interface DrainResult {
 }
 
 /**
+ * The default mail adapter for a connected account: inbox summaries, raw
+ * email reads, and Trash moves, all with the account's token. Callers with
+ * their own needs override a method (the review scan swaps in a no-op
+ * Trash; the drain script swaps in a role-picked mailbox).
+ */
+export function connectionMailAdapter(token: string): ConnectionMailAdapter {
+  return {
+    inboxEmailSummaries: (opts) => inboxEmailSummaries({ token, ...opts }),
+    rawEmail: (id) => rawConnectionEmail(token, id),
+    moveToTrash: (id) => moveConnectionEmailToTrash(token, id),
+  };
+}
+
+/**
  * Drain new Inbox mail for one connection: evaluate each unseen email,
  * create expenses for receipts, Trash + notify on success. Bounded by a
  * time budget; the daily cron re-runs it as the catch-up net.
@@ -575,11 +589,7 @@ export async function drainEmailConnection(
   options: DrainOptions = {},
 ): Promise<DrainResult> {
   const token = decryptSecret(connection.tokenEnc);
-  const adapter: ConnectionMailAdapter = options.adapter ?? {
-    inboxEmailSummaries: (opts) => inboxEmailSummaries({ token, ...opts }),
-    rawEmail: (id) => rawConnectionEmail(token, id),
-    moveToTrash: (id) => moveConnectionEmailToTrash(token, id),
-  };
+  const adapter = options.adapter ?? connectionMailAdapter(token);
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);
 

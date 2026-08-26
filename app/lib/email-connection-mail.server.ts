@@ -3,15 +3,12 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import {
-  formatAddress,
+  fetchRawRfc822,
   jmapCall,
   jmapSessionForToken,
   jmapUploadBlob,
-  MAX_EMAIL_BYTES,
-  REQUEST_TIMEOUT_MS,
   type JmapTokenInfo,
 } from "~/lib/jmap.server";
-import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
  * Mail operations on a CONNECTED email account, all authenticated as the
@@ -32,7 +29,12 @@ interface MailboxList {
   list: Array<{ id: string; name?: string; role?: string }>;
 }
 
-async function mailboxIdByRole(token: string, role: string): Promise<string> {
+/** Resolve a mailbox id by its role ("inbox", "trash"); shared with the
+ * rule-inference scan, which reads the Inbox the same way. */
+export async function mailboxIdByRole(
+  token: string,
+  role: string,
+): Promise<string> {
   const responses = await jmapCall(token, [
     [
       "Mailbox/get",
@@ -173,43 +175,14 @@ export async function rawConnectionEmail(
     ],
   ]);
   const list = (responses[0]![1] as { list?: unknown[] }).list ?? [];
-  const email = list[0] as
-    | {
-        blobId?: string;
-        receivedAt?: string;
-        subject?: string;
-        from?: Array<{ name?: string; email?: string }>;
-        to?: Array<{ name?: string; email?: string }>;
-        messageId?: string;
-      }
-    | undefined;
-  if (!email) throw new Error(`Email ${id} not found`);
-
-  const url = s.downloadUrl
-    .replace("{accountId}", s.mailAccountId)
-    .replace("{blobId}", email.blobId ?? "")
-    .replace("{name}", "email.eml")
-    .replace("{type}", "message/rfc822");
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`email download failed: ${res.status} ${await res.text()}`);
-  }
-  return {
+  const email = list[0] as Parameters<typeof fetchRawRfc822>[0]["email"];
+  return fetchRawRfc822({
     id,
-    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
-      throw new Error(
-        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
-      );
-    }),
-    receivedAt: email.receivedAt ?? new Date().toISOString(),
-    subject: email.subject ?? "",
-    from: formatAddress(email.from?.[0]),
-    to: (email.to ?? []).map((a) => formatAddress(a) ?? "").filter(Boolean),
-    messageId: email.messageId ?? "",
-  };
+    email,
+    accountId: s.mailAccountId,
+    downloadUrl: s.downloadUrl,
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 // --- Trash ---------------------------------------------------------------------

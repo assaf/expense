@@ -6,9 +6,9 @@ import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import { all } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asNumericOf, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { asNumericOf, fromIso } from "~/lib/db/wire";
 import { isEmail } from "~/lib/validation";
-import { isTest } from "~/lib/db/shared";
+import { isTest, userFromRow } from "~/lib/db/shared";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import type { MileageType, User } from "~/lib/types";
 
@@ -205,22 +205,10 @@ async function ensureBootstrapUser(): Promise<User> {
         first.email,
         email,
       );
-      return {
-        id: first.id,
-        accountId: first.accountId,
-        email,
-        emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
-        createdAt: toIso(first.createdAt),
-      };
+      return { ...userFromRow(first), email };
     }
   }
-  return {
-    id: first.id,
-    accountId: first.accountId,
-    email: first.email,
-    emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
-    createdAt: toIso(first.createdAt),
-  };
+  return userFromRow(first);
 }
 
 /** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */

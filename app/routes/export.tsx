@@ -218,7 +218,8 @@ function ReportRow({ report }: { report: ReportSummary }) {
         <RemoveButton
           fetcher={removeFetcher}
           intent="removeReport"
-          name={report.name}
+          fields={{ name: report.name }}
+          label={`Remove ${report.name}`}
           confirm={confirmRemove}
         />
       </div>

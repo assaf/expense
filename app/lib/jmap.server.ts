@@ -1,3 +1,5 @@
+import { readBodyLimited } from "~/lib/ssrf.server";
+
 /**
  * JMAP client for user-supplied API tokens (connected email accounts,
  * Email page → Email accounts). FastMail today; the session handshake is the
@@ -263,4 +265,66 @@ export async function jmapCall(
 ): Promise<[string, unknown, string][]> {
   const s = await jmapSessionForToken(token);
   return jmapBatch(s.apiUrl, `Bearer ${token}`, methodCalls, capabilities);
+}
+
+/** The common shape of a downloaded RFC 5322 email: fastmail.server's
+ * RawEmail and email-connection-mail's RawConnectionEmail both use it. */
+export interface RawRfc822Email {
+  id: string;
+  raw: Buffer;
+  receivedAt: string;
+  subject: string;
+  from: string | null;
+  to: string[];
+  messageId: string;
+}
+
+/** Download an email's RFC 5322 blob and map its metadata to the common
+ * shape. Shared by both transports (the app's mailbox and connected
+ * accounts); the caller owns the Email/get lookup and the auth headers.
+ * The top-level Email blob is the full RFC 5322 message; FastMail serves it
+ * for both message/rfc822 and application/octet-stream. */
+export async function fetchRawRfc822(opts: {
+  id: string;
+  email:
+    | {
+        blobId?: string;
+        receivedAt?: string;
+        subject?: string;
+        from?: Array<{ name?: string; email?: string }>;
+        to?: Array<{ name?: string; email?: string }>;
+        messageId?: string;
+      }
+    | undefined;
+  accountId: string;
+  downloadUrl: string;
+  headers: Record<string, string>;
+}): Promise<RawRfc822Email> {
+  const email = opts.email;
+  if (!email) throw new Error(`Email ${opts.id} not found`);
+  const url = opts.downloadUrl
+    .replace("{accountId}", opts.accountId)
+    .replace("{blobId}", email.blobId ?? "")
+    .replace("{name}", "email.eml")
+    .replace("{type}", "message/rfc822");
+  const res = await fetch(url, {
+    headers: opts.headers,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`email download failed: ${res.status} ${await res.text()}`);
+  }
+  return {
+    id: opts.id,
+    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
+      throw new Error(
+        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
+      );
+    }),
+    receivedAt: email.receivedAt ?? new Date().toISOString(),
+    subject: email.subject ?? "",
+    from: formatAddress(email.from?.[0]),
+    to: (email.to ?? []).map((a) => formatAddress(a) ?? "").filter(Boolean),
+    messageId: email.messageId ?? "",
+  };
 }

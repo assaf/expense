@@ -1,5 +1,7 @@
 import { jmapCall, jmapSessionForToken } from "~/lib/jmap.server";
 import { looksLikeReceiptEmail } from "~/lib/email-classify";
+import { mailboxIdByRole } from "~/lib/email-connection-mail.server";
+import { domainOf } from "~/lib/validation";
 
 /**
  * Infer candidate GENERAL email rules from a connected inbox: senders whose
@@ -62,31 +64,6 @@ interface EmailEntry {
   preview?: string;
 }
 
-async function inboxMailboxId(token: string): Promise<string> {
-  const responses = await jmapCall(token, [
-    [
-      "Mailbox/get",
-      {
-        accountId: (await jmapSessionForToken(token)).mailAccountId,
-        ids: null,
-        properties: ["id", "role"],
-      },
-      "m0",
-    ],
-  ]);
-  const list =
-    (responses[0]![1] as { list?: Array<{ id: string; role?: string }> })
-      .list ?? [];
-  const inbox = list.find((b) => b.role === "inbox");
-  if (!inbox) throw new Error('No mailbox with role "inbox"');
-  return inbox.id;
-}
-
-function domainOf(address: string): string | null {
-  const domain = address.split("@")[1]?.toLowerCase();
-  return domain && domain.includes(".") ? domain : null;
-}
-
 /**
  * Scan the Inbox's recent mail and score senders by receipt-likeness.
  * Uses Email/query (Inbox, after the lookback) + Email/get with `preview`
@@ -113,7 +90,10 @@ export async function inferRuleCandidates(
       "Email/query",
       {
         accountId,
-        filter: { inMailbox: await inboxMailboxId(token), after: afterIso },
+        filter: {
+          inMailbox: await mailboxIdByRole(token, "inbox"),
+          after: afterIso,
+        },
         sort: [{ property: "receivedAt", isAscending: false }],
         limit: maxEmails,
       },

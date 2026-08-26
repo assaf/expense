@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { useFetcher } from "react-router";
+import { RemoveButton } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
@@ -64,17 +65,12 @@ export function SenderRow({
             </resendFetcher.Form>
           ) : null}
           {!isDefault ? (
-            <removeFetcher.Form method="post" className="contents">
-              <input type="hidden" name="intent" value="removeInboundSender" />
-              <input type="hidden" name="address" value={sender.address} />
-              <button
-                type="submit"
-                className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
-                aria-label={`Remove ${sender.address}`}
-              >
-                <Trash2 aria-hidden="true" className="h-4 w-4" />
-              </button>
-            </removeFetcher.Form>
+            <RemoveButton
+              fetcher={removeFetcher}
+              intent="removeInboundSender"
+              fields={{ address: sender.address }}
+              label={`Remove ${sender.address}`}
+            />
           ) : null}
         </div>
       </div>

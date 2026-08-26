@@ -7,8 +7,10 @@ import {
   hashToken,
 } from "~/lib/passwords";
 import {
+  accountFromRow,
   cachedRead,
   createCache,
+  userFromRow,
   VERIFICATION_RESEND_MS,
   VERIFICATION_TTL_MS,
 } from "~/lib/db/shared";
@@ -25,14 +27,7 @@ const accountCache = createCache<Account>(300_000);
 export async function readAccount(id: string): Promise<Account | undefined> {
   return cachedRead(accountCache, id, async () => {
     const row = await db.orm.public.Account.first({ id });
-    return row
-      ? {
-          id: row.id,
-          name: row.name,
-          inviteCode: row.inviteCode,
-          createdAt: toIso(row.createdAt),
-        }
-      : undefined;
+    return row ? accountFromRow(row) : undefined;
   });
 }
 
@@ -79,13 +74,7 @@ export async function readBootstrapUser(): Promise<User | undefined> {
     .orderBy([(u) => u.createdAt.asc(), (u) => u.id.asc()])
     .first();
   if (!first) return undefined;
-  return {
-    id: first.id,
-    accountId: first.accountId,
-    email: first.email,
-    emailVerifiedAt: toIsoOrNull(first.emailVerifiedAt),
-    createdAt: toIso(first.createdAt),
-  };
+  return userFromRow(first);
 }
 
 /** Create a new account. Throws if the name is already taken. */
@@ -121,14 +110,7 @@ export async function findAccountByInviteCode(
   const row = await db.orm.public.Account.where((a) =>
     a.inviteCode.eq(inviteCode),
   ).first();
-  return row
-    ? {
-        id: row.id,
-        name: row.name,
-        inviteCode: row.inviteCode,
-        createdAt: toIso(row.createdAt),
-      }
-    : undefined;
+  return row ? accountFromRow(row) : undefined;
 }
 
 /** Replace an account's invite code with a fresh one; returns the new code. */
@@ -198,39 +180,13 @@ export async function createUser(input: {
   return user;
 }
 
-/** Map a user row to the domain User shape (the password hash and
- * verification token columns are deliberately never exposed). */
-function rowToUser(row: {
-  id: string;
-  accountId: string;
-  email: string;
-  emailVerifiedAt: string | null;
-  createdAt: string;
-}): User {
-  return {
-    id: row.id,
-    accountId: row.accountId,
-    email: row.email,
-    emailVerifiedAt: row.emailVerifiedAt,
-    createdAt: row.createdAt,
-  };
-}
-
 export async function findUserByEmail(
   email: string,
 ): Promise<User | undefined> {
   const row = await db.orm.public.User.where((u) =>
     u.email.eq(email.trim().toLowerCase()),
   ).first();
-  return row
-    ? rowToUser({
-        id: row.id,
-        accountId: row.accountId,
-        email: row.email,
-        emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
-        createdAt: toIso(row.createdAt),
-      })
-    : undefined;
+  return row ? userFromRow(row) : undefined;
 }
 
 /** Short-lived in-process cache for findUserById. Every request re-resolves
@@ -247,15 +203,7 @@ export async function findUserById(id: string): Promise<User | undefined> {
     id,
     async () => {
       const row = await db.orm.public.User.first({ id });
-      return row
-        ? rowToUser({
-            id: row.id,
-            accountId: row.accountId,
-            email: row.email,
-            emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
-            createdAt: toIso(row.createdAt),
-          })
-        : undefined;
+      return row ? userFromRow(row) : undefined;
     },
     // Unlike the other caches, the user cache keeps serving under VITEST:
     // every request re-resolves the session user, and tests count on the

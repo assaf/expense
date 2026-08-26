@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Plug, PlugZap, Trash2 } from "lucide-react";
+import { ArrowRight, Plug, PlugZap } from "lucide-react";
 import { Link, useFetcher } from "react-router";
+import { RemoveButton } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
@@ -108,18 +109,13 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
           </Button>
-          <disconnectFetcher.Form method="post" className="contents">
-            <input type="hidden" name="intent" value="disconnectEmail" />
-            <input type="hidden" name="id" value={connection.id} />
-            <button
-              type="submit"
-              disabled={busy}
-              className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50"
-              aria-label={`Disconnect ${connection.emailAddress}`}
-            >
-              <Trash2 aria-hidden="true" className="h-4 w-4" />
-            </button>
-          </disconnectFetcher.Form>
+          <RemoveButton
+            fetcher={disconnectFetcher}
+            intent="disconnectEmail"
+            fields={{ id: connection.id }}
+            label={`Disconnect ${connection.emailAddress}`}
+            disabled={busy}
+          />
         </span>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">

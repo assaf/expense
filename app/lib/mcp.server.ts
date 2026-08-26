@@ -37,9 +37,11 @@ import { readSettings } from "~/lib/db/settings";
 import { normalizeAmount, sortExpenses, summarizeBy } from "~/lib/format";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
+  MAX_UPLOAD_BYTES,
   mimeForFile,
   renameImageToConvention,
   saveImage,
+  uploadErrorMessage,
 } from "~/lib/images.server";
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
@@ -81,9 +83,6 @@ import {
  * instance bound to that account, so the endpoint is fully stateless, holds
  * nothing between requests, and cold starts cost nothing.
  */
-
-/** The largest receipt bytes a capture tool accepts (matches a phone photo). */
-const MAX_CAPTURE_BYTES = 15_000_000;
 
 // --- HTTP handling ---------------------------------------------------------
 
@@ -983,7 +982,7 @@ async function captureReceipt(
     // would OOM the function before the guard trips).
     let data: Buffer;
     try {
-      data = await readBodyLimited(res, MAX_CAPTURE_BYTES);
+      data = await readBodyLimited(res, MAX_UPLOAD_BYTES);
     } catch (err) {
       const reason = err instanceof SsrfError ? err.message : "download failed";
       return fail(`Couldn't fetch ${args.url}: ${reason}.`);
@@ -1001,8 +1000,8 @@ async function captureReceipt(
   }
 
   if (buffer.length === 0) return fail("Empty image data.");
-  if (buffer.length > MAX_CAPTURE_BYTES) {
-    return fail("Image too large — receipts must be under 15MB.");
+  if (buffer.length > MAX_UPLOAD_BYTES) {
+    return fail(uploadErrorMessage("too-large"));
   }
 
   // Extraction: best-effort. The capture still succeeds without it.

@@ -603,7 +603,7 @@ export function parseJsonObject(raw: string): Record<string, unknown> {
     return JSON.parse(s) as Record<string, unknown>;
   } catch {
     throw new LLMError(
-      "DeepSeek returned invalid JSON",
+      "The model returned invalid JSON",
       502,
       raw.slice(0, 500),
     );

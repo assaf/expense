@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
+import { cn } from "~/lib/cn";
 import { AddNameForm } from "~/components/AddNameForm";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -178,21 +179,32 @@ export const RenameButton = forwardRef<
 });
 
 /**
- * The trash button for a named row (category/report): hidden intent/name
+ * The trash button for a settings row: hidden intent + row-identifying
  * inputs inside the row's own fetcher form, with an optional confirm
- * prompt before submitting.
+ * prompt before submitting. Shared by category/report rows, connected
+ * apps, connected mailboxes, and receipt senders.
  */
 export function RemoveButton({
   fetcher,
   intent,
-  name,
+  fields,
+  label,
   confirm,
+  disabled,
+  title,
+  className,
 }: {
   fetcher: ReturnType<typeof useFetcher>;
   intent: string;
-  name: string;
+  /** Hidden inputs carrying the row's identity, e.g. { name } or { id }. */
+  fields: Record<string, string>;
+  /** Accessible label, e.g. "Remove Groceries". */
+  label: string;
   /** When set, asks for confirmation with this message before deleting. */
   confirm?: string;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
 }) {
   return (
     <fetcher.Form
@@ -203,11 +215,18 @@ export function RemoveButton({
       }}
     >
       <input type="hidden" name="intent" value={intent} />
-      <input type="hidden" name="name" value={name} />
+      {Object.entries(fields).map(([fieldName, value]) => (
+        <input key={fieldName} type="hidden" name={fieldName} value={value} />
+      ))}
       <button
         type="submit"
-        className="text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
-        aria-label={`Remove ${name}`}
+        disabled={disabled}
+        className={cn(
+          "text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50",
+          className,
+        )}
+        aria-label={label}
+        title={title}
       >
         <Trash2 aria-hidden="true" className="h-4 w-4" />
       </button>
@@ -253,7 +272,8 @@ export function CategoryRow({ category }: { category: CategoryItem }) {
         <RemoveButton
           fetcher={removeFetcher}
           intent="removeCategory"
-          name={category.name}
+          fields={{ name: category.name }}
+          label={`Remove ${category.name}`}
           confirm={confirmRemove}
         />
       </div>

@@ -90,3 +90,11 @@ export function validateDateNotFuture(
   if (date > ceiling) return "Date cannot be in the future.";
   return null;
 }
+
+/** The bare domain of an address ("a@b.example.com" -> "b.example.com"),
+ * or null when there isn't a usable one. Shared by the forwarded-receipt
+ * rule learner and the inbox rule inference scan. */
+export function domainOf(address: string): string | null {
+  const domain = address.split("@")[1]?.toLowerCase();
+  return domain && domain.includes(".") ? domain : null;
+}

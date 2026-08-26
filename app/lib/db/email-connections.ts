@@ -39,24 +39,24 @@ const CONNECTION_FIELDS = [
   "createdAt",
 ] as const;
 
-function toView(
-  row: {
-    id: string;
-    accountId: string;
-    provider: string;
-    emailAddress: string;
-    status: string;
-    receivedCount: number;
-    processedCount: number;
-    lastPushAt: string | null;
-    pushSubscriptionId: string | null;
-    pushExpiresAt: string | null;
-    reviewScannedAt: string | null;
-    createdAt: string;
-  },
-  processedLast24h: number,
-  pendingReview: number,
-): EmailConnectionView {
+/** The columns every connection read maps, shared by the view and
+ * secret-bearing mappers so the two can't drift apart. */
+interface ConnectionRow {
+  id: string;
+  accountId: string;
+  provider: string;
+  emailAddress: string;
+  status: string;
+  receivedCount: number;
+  processedCount: number;
+  lastPushAt: string | null;
+  pushSubscriptionId: string | null;
+  pushExpiresAt: string | null;
+  reviewScannedAt: string | null;
+  createdAt: string;
+}
+
+function connectionBase(row: ConnectionRow) {
   return {
     id: row.id,
     accountId: row.accountId,
@@ -70,6 +70,16 @@ function toView(
     pushExpiresAt: toIsoOrNull(row.pushExpiresAt),
     reviewScannedAt: toIsoOrNull(row.reviewScannedAt),
     createdAt: toIso(row.createdAt),
+  };
+}
+
+function toView(
+  row: ConnectionRow,
+  processedLast24h: number,
+  pendingReview: number,
+): EmailConnectionView {
+  return {
+    ...connectionBase(row),
     processedLast24h,
     pendingReview,
   };
@@ -157,18 +167,7 @@ function rowWithSecret(row: {
   jmapAccountId: string;
 }): EmailConnectionWithSecret {
   return {
-    id: row.id,
-    accountId: row.accountId,
-    provider: row.provider,
-    emailAddress: row.emailAddress,
-    status: row.status,
-    receivedCount: row.receivedCount,
-    processedCount: row.processedCount,
-    lastPushAt: toIsoOrNull(row.lastPushAt),
-    pushSubscriptionId: row.pushSubscriptionId,
-    pushExpiresAt: toIsoOrNull(row.pushExpiresAt),
-    reviewScannedAt: toIsoOrNull(row.reviewScannedAt),
-    createdAt: toIso(row.createdAt),
+    ...connectionBase(row),
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
   };
@@ -242,24 +241,7 @@ export async function createEmailConnection(input: {
   });
   return {
     ok: true,
-    connection: toView(
-      {
-        id: row.id,
-        accountId: row.accountId,
-        provider: row.provider,
-        emailAddress: row.emailAddress,
-        status: row.status,
-        receivedCount: row.receivedCount,
-        processedCount: row.processedCount,
-        lastPushAt: row.lastPushAt,
-        pushSubscriptionId: row.pushSubscriptionId,
-        pushExpiresAt: row.pushExpiresAt,
-        reviewScannedAt: row.reviewScannedAt,
-        createdAt: row.createdAt,
-      },
-      0,
-      0,
-    ),
+    connection: toView(row, 0, 0),
   };
 }
 

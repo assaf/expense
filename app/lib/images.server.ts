@@ -198,8 +198,8 @@ export type UploadedFileResult =
   | { ok: true; buffer: Buffer; mime: string; originalName: string }
   | { ok: false; error: "missing" | "too-large" };
 
-/** User-facing error message for a rejected upload, shared by the draft
- * and image-replace routes so they can't drift apart. */
+/** User-facing error message for a rejected upload, shared by the draft,
+ * image-replace, and MCP capture paths so they can't drift apart. */
 export function uploadErrorMessage(error: "missing" | "too-large"): string {
   return error === "too-large"
     ? "Image too large — receipts must be under 15MB."

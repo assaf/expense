@@ -192,11 +192,6 @@ const pdfParams = {
   verbosity: 0,
 } as const;
 
-/** Detect a PDF by mime or magic bytes; covers mislabeled uploads. */
-function isPdfInput(buffer: Buffer, mime: string): boolean {
-  return isPdf({ buffer, mime });
-}
-
 /**
  * Open a PDF and run `fn` over each of the first 4 pages' text content,
  * returning the per-page results. Always destroys the document (pdfjs
@@ -484,7 +479,7 @@ export async function extractFromImage(input: {
   text: string;
   stored: { buffer: Buffer; mime: string };
 }> {
-  if (isPdfInput(input.buffer, input.mime)) {
+  if (isPdf({ buffer: input.buffer, mime: input.mime })) {
     const pdfText = await extractPdfText(input.buffer);
     const png = await renderPdfToPng(input.buffer);
     const known = input.knownMerchants;
@@ -541,11 +536,10 @@ export async function extractFromImage(input: {
       reports: input.reports,
     });
   };
-  if (RECEIPT_OCR_MODE === "deepseek") {
-    result = await visionExtraction();
-  } else if (RECEIPT_OCR_MODE === "tesseract") {
-    // Local OCR only: extract whenever the text has enough structure to
-    // name a total (same floor as the PDF path).
+  // OCR the stored image and extract only when the text has enough
+  // structure to name a total (same floor as the PDF path). Sets text
+  // either way: the caller's cache key and skip log carry the OCR output.
+  const extractFromOcr = async (): Promise<void> => {
     text = await ocrImage(stored.buffer);
     const usableOcr =
       text.trim().length >= 20 && parseReceiptAmount(text) !== null;
@@ -557,6 +551,13 @@ export async function extractFromImage(input: {
         reports: input.reports,
       });
     }
+  };
+  if (RECEIPT_OCR_MODE === "deepseek") {
+    result = await visionExtraction();
+  } else if (RECEIPT_OCR_MODE === "tesseract") {
+    // Local OCR only: extract whenever the text has enough structure to
+    // name a total (same floor as the PDF path).
+    await extractFromOcr();
   } else {
     // "auto" mode: the LLM reads the image; tesseract runs only when the
     // provider errors. The model is the better reader for photocopies,
@@ -566,17 +567,7 @@ export async function extractFromImage(input: {
       result = await visionExtraction();
     } catch (err) {
       console.error("[receipt-ocr] vision failed; falling back to OCR", err);
-      text = await ocrImage(stored.buffer);
-      const usableOcr =
-        text.trim().length >= 20 && parseReceiptAmount(text) !== null;
-      if (usableOcr) {
-        result = await extractReceipt({
-          accountId: input.accountId,
-          text,
-          categories: input.categories,
-          reports: input.reports,
-        });
-      }
+      await extractFromOcr();
     }
   }
   if (!result) {

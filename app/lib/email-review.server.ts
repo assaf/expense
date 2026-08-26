@@ -9,20 +9,16 @@ import {
 } from "~/lib/db/email-rules";
 import { extractEmailAddress } from "~/lib/validation";
 import {
-  connectionInboundDeps,
-  processConnectionEmail,
-  realExtractionDeps,
-  sendConnectionEmailToOwner,
   type ConnectionDeps,
   type ConnectionMailAdapter,
   type OwnerEmail,
+  connectionInboundDeps,
+  connectionMailAdapter,
+  processConnectionEmail,
+  realExtractionDeps,
+  sendConnectionEmailToOwner,
 } from "~/lib/email-connection-process.server";
-import {
-  inboxEmailSummaries,
-  moveConnectionEmailToTrash,
-  rawConnectionEmail,
-  type ConnectionEmailSummary,
-} from "~/lib/email-connection-mail.server";
+import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
@@ -140,9 +136,10 @@ export async function scanConnectionInbox(
   options: ScanOptions = {},
 ): Promise<ScanResult> {
   const token = decryptSecret(connection.tokenEnc);
+  // The scan only reads: nothing moves to Trash until the owner acts on
+  // the review list.
   const adapter: ConnectionMailAdapter = options.adapter ?? {
-    inboxEmailSummaries: (opts) => inboxEmailSummaries({ token, ...opts }),
-    rawEmail: (id) => rawConnectionEmail(token, id),
+    ...connectionMailAdapter(token),
     moveToTrash: () => Promise.resolve(),
   };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
@@ -360,11 +357,7 @@ export async function processReviewItem(input: {
   }
 
   const token = decryptSecret(connection.tokenEnc);
-  const adapter: ConnectionMailAdapter = input.adapter ?? {
-    inboxEmailSummaries: (opts) => inboxEmailSummaries({ token, ...opts }),
-    rawEmail: (id) => rawConnectionEmail(token, id),
-    moveToTrash: (id) => moveConnectionEmailToTrash(token, id),
-  };
+  const adapter = input.adapter ?? connectionMailAdapter(token);
   const summary: ConnectionEmailSummary = {
     id: emailId,
     receivedAt:

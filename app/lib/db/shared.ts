@@ -1,8 +1,46 @@
+import { toIso, toIsoOrNull } from "~/lib/db/wire";
+import type { Account, User } from "~/lib/types";
+
 /**
  * Cross-cutting helpers shared by the `db/*` domain modules: the test-mode
- * flag, the in-memory TTL cache, and the email-verification TTL constants
- * used by both the account and the receipts-by-email sender flows.
+ * flag, the in-memory TTL cache, the email-verification TTL constants
+ * used by both the account and the receipts-by-email sender flows, and the
+ * Account/User row mappers every read path shares.
  */
+
+/** Map an Account row to the domain shape (cache reads, invite lookups,
+ * verified-sender lookups all map the same columns). */
+export function accountFromRow(row: {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdAt: string;
+}): Account {
+  return {
+    id: row.id,
+    name: row.name,
+    inviteCode: row.inviteCode,
+    createdAt: toIso(row.createdAt),
+  };
+}
+
+/** Map a User row to the domain User (the password hash and verification
+ * token columns are deliberately never exposed). */
+export function userFromRow(row: {
+  id: string;
+  accountId: string;
+  email: string;
+  emailVerifiedAt: string | null;
+  createdAt: string;
+}): User {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    email: row.email,
+    emailVerifiedAt: toIsoOrNull(row.emailVerifiedAt),
+    createdAt: toIso(row.createdAt),
+  };
+}
 
 export const isTest =
   typeof process !== "undefined" && process.env.VITEST === "true";

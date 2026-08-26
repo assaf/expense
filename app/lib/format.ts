@@ -81,12 +81,6 @@ export function todayDate(): string {
   return new Date(now.getTime() - tzOffset).toISOString().slice(0, 10);
 }
 
-/** Calendar year for a YYYY-MM-DD date, or the current year if empty. */
-export function yearOf(date: string): string {
-  if (date && /^\d{4}/.test(date)) return date.slice(0, 4);
-  return String(new Date().getFullYear());
-}
-
 /** Build the mileage label, e.g. "32.00 mi @ $0.70 / mi". Without a rate
  * (no IRS period covers the trip's date/type) the distance still shows:
  * "32.00 mi". Half-cent rates keep their third decimal ("$0.235 / mi"). */

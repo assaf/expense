@@ -1,5 +1,6 @@
-import { KeyRound, Trash2 } from "lucide-react";
+import { KeyRound } from "lucide-react";
 import { useFetcher } from "react-router";
+import { RemoveButton } from "~/components/settings/name-list";
 import { formatShortDate } from "~/lib/format";
 
 /**
@@ -76,22 +77,14 @@ export function AgentsSection({
                         </div>
                       </div>
                     </div>
-                    <removeFetcher.Form method="post" className="contents">
-                      <input
-                        type="hidden"
-                        name="intent"
-                        value="disconnectOAuthClient"
-                      />
-                      <input type="hidden" name="clientId" value={client.id} />
-                      <button
-                        type="submit"
-                        className="shrink-0 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
-                        aria-label={`Remove ${client.name}`}
-                        title={`Remove ${client.name}`}
-                      >
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </button>
-                    </removeFetcher.Form>
+                    <RemoveButton
+                      fetcher={removeFetcher}
+                      intent="disconnectOAuthClient"
+                      fields={{ clientId: client.id }}
+                      label={`Remove ${client.name}`}
+                      title={`Remove ${client.name}`}
+                      className="shrink-0"
+                    />
                   </div>
                   <p className="mt-1 border-t border-gray-200 dark:border-gray-700 pl-8 pt-1.5 text-xs text-gray-500 dark:text-gray-400">
                     {expiresAt
