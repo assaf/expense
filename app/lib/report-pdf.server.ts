@@ -1,4 +1,3 @@
-import PDFDocument from "pdfkit";
 import { readImage } from "~/lib/images.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
 import { formatDate, mileageDistanceLabel, sortExpenses } from "~/lib/format";
@@ -30,6 +29,11 @@ export async function buildReportPdf(
     expenses.filter((e) => e.report === reportName),
     false,
   );
+
+  // pdfkit is heavy; load it only when a PDF is actually rendered (the
+  // export route, smoke, and MCP report tool are the only callers). The
+  // standard fonts ship via the vercel.json functions includeFiles entry.
+  const { default: PDFDocument } = await import("pdfkit");
 
   const doc = new PDFDocument({ margin: 50, size: "LETTER" });
   const pdf = pdfToBuffer(doc);

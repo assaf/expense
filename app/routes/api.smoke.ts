@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/react-router";
-import PDFDocument from "pdfkit";
 import { SMOKE_TEST_SECRET } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
@@ -43,7 +42,8 @@ function hasSmokeSecret(header: string | null): boolean {
 }
 
 /** A one-page LETTER PDF with the smoke text at 40pt (readable by OCR). */
-function makePdf(text: string): Promise<Buffer> {
+async function makePdf(text: string): Promise<Buffer> {
+  const { default: PDFDocument } = await import("pdfkit");
   const doc = new PDFDocument({ size: "LETTER" });
   const pdf = pdfToBuffer(doc);
   doc.fontSize(40).text(text);
