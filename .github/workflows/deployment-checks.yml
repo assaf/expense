@@ -219,10 +219,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [migrate-db]
-    if: success() && github.ref == 'refs/heads/main' &&
-      secrets.VERCEL_TOKEN != '' &&
-      secrets.SMOKE_TEST_SECRET != '' &&
-      secrets.VERCEL_PROTECTION_BYPASS != ''
+    # No secrets in this condition: the secrets context is rejected in
+    # job-level `if` (workflow file error). Missing secrets are handled
+    # inside the step below, which skips the gate with a notice.
+    if: success() && github.ref == 'refs/heads/main'
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
@@ -236,28 +236,36 @@ jobs:
         with:
           node-version: 24
 
-      # Poll the deployment API until the latest production deployment
-      # carries the pushed commit SHA (auto-deploy takes ~1-2 min after
-      # push). The commit is matched so a stale successful smoke can never
-      # pass for a broken new deployment.
-      - name: Wait for production deployment of this commit
+      # Wait for the production deployment of this commit (Vercel auto-
+      # deploys ~1-2 min after push), smoke it, and roll it back on
+      # failure. One step on purpose: the wait/rollback flow must not
+      # depend on cross-step state. Skipped with a notice when the smoke
+      # secrets aren't configured (CLI deploys still gate via
+      # scripts/deploy).
+      - name: Smoke production deployment + rollback on failure
         run: |
+          if [ -z "$SMOKE_TEST_SECRET" ] || [ -z "$VERCEL_PROTECTION_BYPASS" ] || [ -z "$VERCEL_TOKEN" ]; then
+            echo "Smoke secrets not configured as GitHub secrets — skipping the auto-deploy smoke gate."
+            echo "Add SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS to enable it."
+            exit 0
+          fi
+          URL=""
           for i in $(seq 1 60); do
             URL=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v6/deployments?teamId=$VERCEL_TEAM&target=production&limit=1" \
               | node -e 'let b="";process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{const j=JSON.parse(b);const d=j.deployments&&j.deployments[0];if(d&&d.meta&&d.meta.githubCommitSha==="'$GITHUB_SHA'"&&d.url){console.log("https://"+d.url)}else{process.exit(1)}})') \
-              && { echo "Deployment ready: $URL"; echo "$URL" > /tmp/deploy-url; exit 0; }
+              && break
             sleep 5
           done
-          echo "No production deployment for $GITHUB_SHA after 5 minutes" >&2
-          exit 1
-
-      - name: Smoke check
-        id: smoke
-        run: ./scripts/smoke-check "$(cat /tmp/deploy-url)"
-
-      - name: Roll back on smoke failure
-        if: steps.smoke.outcome == 'failure'
-        run: npx vercel@latest rollback "$(cat /tmp/deploy-url)" --yes --scope "$VERCEL_TEAM"
-        env:
-          CI: "true"
+          if [ -z "$URL" ]; then
+            echo "No production deployment for $GITHUB_SHA after 5 minutes" >&2
+            exit 1
+          fi
+          echo "Deployment ready: $URL"
+          if ./scripts/smoke-check "$URL"; then
+            echo "Smoke passed — deployment stays live."
+          else
+            echo "Smoke FAILED on $URL — rolling back to the previous deployment." >&2
+            npx vercel@latest rollback "$URL" --yes --scope "$VERCEL_TEAM" || echo "Rollback failed — check the Vercel dashboard." >&2
+            exit 1
+          fi
