@@ -14,10 +14,13 @@ import type { Route } from "./+types/api.smoke";
 /**
  * Post-deploy smoke test for the PDF + OCR + MCP pipelines (GET /api/smoke).
  *
- * Runs the exact code paths the receipt pipeline uses (pdfkit → pdfjs text
- * extraction → pdfjs rasterization → tesseract OCR), plus a real MCP
- * initialize → tools/list → tools/call round trip (see runMcpSmoke) inside
- * the deployed serverless bundle. Local/CI tests run against node_modules,
+ * Runs every lazy heavy dependency once: pdfkit (PDF render), pdfjs text
+ * extraction + rasterization, @napi-rs/canvas, sharp (image normalize),
+ * tesseract OCR, puppeteer + sparticuz-chromium (email-image render),
+ * @resvg/resvg-js (receipt-image render), plus a real MCP initialize →
+ * tools/list → tools/call round trip (see runMcpSmoke) inside the deployed
+ * serverless bundle. Rule: a heavy dep loaded lazily must appear here —
+ * local tests run against full node_modules and can't see tracer drops. Local/CI tests run against node_modules,
  * where every file is present; this is the only place the real Vercel bundle
  * is exercised, and Vercel's dependency tracer is exactly what drops files
  * (pdf.worker.mjs, tesseract wasm, MCP SDK modules) and breaks these
@@ -30,8 +33,9 @@ import type { Route } from "./+types/api.smoke";
  * sink (PDF rendering + OCR are expensive).
  */
 
-// Vercel: tesseract downloads eng.traineddata on the first cold start.
-export const config = { maxDuration: 15 };
+// Vercel: tesseract downloads eng.traineddata and the email-image step
+// inflates + launches the bundled chromium on the first cold start.
+export const config = { maxDuration: 30 };
 
 const SMOKE_TEXT = "SMOKE RECEIPT TOTAL $12.34";
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -86,6 +90,31 @@ export async function loader({ request }: Route.LoaderArgs) {
       return fail(`tesseract OCR did not recover the smoke text: "${ocrText}"`);
     }
 
+    // Email-image rendering: the puppeteer + sparticuz-chromium path the
+    // checks above don't touch. Runs only on the deployed (Linux) function;
+    // locally the sparticuz binary can't execute, so the unit suites cover
+    // this via the playwright path instead.
+    const { renderEmailImage } = await import("~/lib/email-render.server");
+    const emailPng = await renderEmailImage(SMOKE_TEXT, {});
+    if (!emailPng.subarray(0, 8).equals(PNG_MAGIC) || emailPng.length < 5_000) {
+      return fail(
+        `email-image rendering produced a bad PNG (${emailPng.length} bytes)`,
+      );
+    }
+
+    // Receipt-image rendering: exercises @resvg/resvg-js (the report +
+    // route-map stack), which no other step touches.
+    const { renderReceiptImage } = await import("~/lib/receipt-render.server");
+    const receiptPng = await renderReceiptImage(SMOKE_TEXT, {});
+    if (
+      !receiptPng.subarray(0, 8).equals(PNG_MAGIC) ||
+      receiptPng.length < 5_000
+    ) {
+      return fail(
+        `receipt-image rendering produced a bad PNG (${receiptPng.length} bytes)`,
+      );
+    }
+
     // MCP round trip: a fresh token (revoked immediately after) exercises
     // the endpoint the same way a client would, inside this bundle.
     const mcp = await runMcpSmoke();
@@ -95,6 +124,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       pdfText,
       ocrText,
       pngBytes: png.length,
+      emailPngBytes: emailPng.length,
+      receiptPngBytes: receiptPng.length,
       mcp,
       // Server Sentry init lives in the bundle (entry.server.tsx); this is
       // the one place the real deployed function is exercised, so report
