@@ -10,7 +10,9 @@ allowBuilds:
   "@sentry/node-cpu-profiler": false
   msgpackr-extract: true
   workerd: true
-  prisma: set this to true or false
+  prisma: true
+  # Needed for the lints middleware (app/lib/prisma.server.ts).
+  "@prisma/orm-family-sql": true
 
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.0
