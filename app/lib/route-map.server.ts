@@ -1,4 +1,3 @@
-import { Resvg } from "@resvg/resvg-js";
 import {
   JETBRAINS_MONO,
   jetbrainsMonoBytes,
@@ -234,7 +233,7 @@ async function renderTiled(
     y: worldY(lat, z) - oy,
   });
 
-  return renderSvg(
+  return await renderSvg(
     wrapSvg(
       `${tiles
         .map(
@@ -247,7 +246,7 @@ async function renderTiled(
 }
 
 /** The schematic fallback: the same route over a plain background. */
-function renderSchematic(geo: TripGeometry): Buffer {
+async function renderSchematic(geo: TripGeometry): Promise<Buffer> {
   const { midLon, midLat, minLon, maxLon, minLat, maxLat } = routeBounds(geo);
   const cos = Math.cos((midLat * Math.PI) / 180) || 1e-9;
   const spanX = Math.max(maxLon - minLon, 1e-9) * cos;
@@ -257,7 +256,7 @@ function renderSchematic(geo: TripGeometry): Buffer {
     x: WIDTH / 2 + (lon - midLon) * cos * scale,
     y: HEIGHT / 2 - (lat - midLat) * scale,
   });
-  return renderSvg(
+  return await renderSvg(
     wrapSvg(routeSvg(geo, px), { background: "#f8fafc", border: true }),
   );
 }
@@ -297,7 +296,9 @@ function wrapSvg(
 </svg>`;
 }
 
-function renderSvg(svg: string): Buffer {
+async function renderSvg(svg: string): Promise<Buffer> {
+  // @resvg/resvg-js is heavy and only used for report route maps.
+  const { Resvg } = await import("@resvg/resvg-js");
   const options = resvgFontOptions({
     fontBuffers: [jetbrainsMonoBytes],
     defaultFontFamily: JETBRAINS_MONO,

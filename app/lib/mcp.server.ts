@@ -1,10 +1,5 @@
 import { randomBytes } from "node:crypto";
-import {
-  createMcpHandler,
-  isLegacyRequest,
-  McpServer,
-  WebStandardStreamableHTTPServerTransport,
-} from "@modelcontextprotocol/server";
+import type { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import Decimal from "decimal.js";
 import { hasEnoughStops } from "~/lib/completeness";
@@ -87,7 +82,7 @@ import {
 // --- HTTP handling ---------------------------------------------------------
 
 /** Build the per-request server instance for the authenticated account. */
-function buildServer(accountId: string): McpServer {
+async function buildServer(accountId: string): Promise<McpServer> {
   return createMcpServer(accountId);
 }
 
@@ -96,21 +91,32 @@ function buildServer(accountId: string): McpServer {
  * and holds nothing between requests. `legacy: 'reject'` sends 2025-era
  * traffic to `serveLegacy` below, never here.
  */
-const modernHandler = createMcpHandler(
-  (ctx) => {
-    const accountId = ctx.authInfo?.extra?.accountId;
-    if (typeof accountId !== "string") {
-      // Unreachable: authenticateRequest runs before every handler.fetch.
-      throw new Error("[mcp] Missing account in authInfo");
-    }
-    return buildServer(accountId);
-  },
-  {
-    legacy: "reject",
-    responseMode: "json",
-    onerror: (error) => console.error("[mcp] %s", error.message),
-  },
-);
+let modernHandlerPromise: Promise<ReturnType<typeof createMcpHandler>> | null =
+  null;
+
+/** Build the strict handler on first /mcp request: the SDK is a large
+ * eager-graph dependency and MCP traffic is rare. */
+function getModernHandler(): Promise<ReturnType<typeof createMcpHandler>> {
+  modernHandlerPromise ??= import("@modelcontextprotocol/server").then(
+    ({ createMcpHandler }) =>
+      createMcpHandler(
+        (ctx) => {
+          const accountId = ctx.authInfo?.extra?.accountId;
+          if (typeof accountId !== "string") {
+            // Unreachable: authenticateRequest runs before every handler.fetch.
+            throw new Error("[mcp] Missing account in authInfo");
+          }
+          return buildServer(accountId);
+        },
+        {
+          legacy: "reject",
+          responseMode: "json",
+          onerror: (error) => console.error("[mcp] %s", error.message),
+        },
+      ),
+  );
+  return modernHandlerPromise;
+}
 
 /**
  * The 2025-era leg: one stateless transport per request (no session id
@@ -136,11 +142,13 @@ async function serveLegacy(
       { status: 405 },
     );
   }
+  const { WebStandardStreamableHTTPServerTransport } =
+    await import("@modelcontextprotocol/server");
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
-  const server = buildServer(auth.accountId);
+  const server = await buildServer(auth.accountId);
   await server.connect(transport);
   return transport.handleRequest(request, { authInfo: authInfoFor(auth) });
 }
@@ -174,8 +182,11 @@ function authInfoFor(auth: {
 export async function handleMcpRequest(request: Request): Promise<Response> {
   const auth = await authenticateRequest(request);
   if (auth instanceof Response) return auth;
+  const { isLegacyRequest } = await import("@modelcontextprotocol/server");
   if (await isLegacyRequest(request)) return serveLegacy(request, auth);
-  return modernHandler.fetch(request, { authInfo: authInfoFor(auth) });
+  return (await getModernHandler()).fetch(request, {
+    authInfo: authInfoFor(auth),
+  });
 }
 
 /**
@@ -459,7 +470,8 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
   }
 }
 
-function createMcpServer(accountId: string): McpServer {
+async function createMcpServer(accountId: string): Promise<McpServer> {
+  const { McpServer } = await import("@modelcontextprotocol/server");
   const server = new McpServer({ name: "expense", version: "0.1.0" });
 
   // --- capture_receipt -----------------------------------------------------

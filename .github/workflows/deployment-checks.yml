@@ -21,10 +21,10 @@ name: deployment-checks
 #     Two workflows meant up to two emails per push; one workflow means at
 #     most one.
 #
-# The post-deploy PDF/OCR/MCP smoke check runs ONLY from scripts/deploy
-# (CLI deploys), after the deployment is live; it curls /api/smoke on the
-# fresh deployment. It is not a GitHub Action because it needs a deployed
-# server to hit.
+# The post-deploy PDF/OCR/MCP smoke check runs after every production
+# deploy: from scripts/deploy (CLI deploys, with rollback on failure) and
+# from the pdf-ocr-smoke job below (auto-deploys on push to main, also with
+# rollback). Both share scripts/smoke-check against /api/smoke.
 #
 # The migrate-db job passes the prod DDL URL directly via the
 # DATABASE_URL_UNPOOLED GitHub secret (the same session-pooler URL
@@ -205,3 +205,59 @@ jobs:
           psql "$DATABASE_URL" -c 'SELECT 1' -tA
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+
+  # Post-deploy PDF/OCR/MCP smoke + auto-rollback for Vercel auto-deploys.
+  # Pushes to main deploy to production without scripts/deploy, so this job
+  # waits for the new production deployment (matched by the pushed commit
+  # SHA), runs the same smoke scripts/deploy uses, and rolls the deployment
+  # back if it fails. Broken code is live for minutes, not until the next
+  # deploy. Skips (with a missing-secret message in the logs) until the
+  # SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS GitHub secrets exist;
+  # VERCEL_TOKEN is already used by other jobs.
+  pdf-ocr-smoke:
+    name: Smoke prod + rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [migrate-db]
+    if: success() && github.ref == 'refs/heads/main' &&
+      secrets.VERCEL_TOKEN != '' &&
+      secrets.SMOKE_TEST_SECRET != '' &&
+      secrets.VERCEL_PROTECTION_BYPASS != ''
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
+      VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+      # Team scope for the Vercel API + CLI (matches the vercel env output).
+      VERCEL_TEAM: assafs-projects-a315fe37
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Poll the deployment API until the latest production deployment
+      # carries the pushed commit SHA (auto-deploy takes ~1-2 min after
+      # push). The commit is matched so a stale successful smoke can never
+      # pass for a broken new deployment.
+      - name: Wait for production deployment of this commit
+        run: |
+          for i in $(seq 1 60); do
+            URL=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?teamId=$VERCEL_TEAM&target=production&limit=1" \
+              | node -e 'let b="";process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{const j=JSON.parse(b);const d=j.deployments&&j.deployments[0];if(d&&d.meta&&d.meta.githubCommitSha==="'$GITHUB_SHA'"&&d.url){console.log("https://"+d.url)}else{process.exit(1)}})') \
+              && { echo "Deployment ready: $URL"; echo "$URL" > /tmp/deploy-url; exit 0; }
+            sleep 5
+          done
+          echo "No production deployment for $GITHUB_SHA after 5 minutes" >&2
+          exit 1
+
+      - name: Smoke check
+        id: smoke
+        run: ./scripts/smoke-check "$(cat /tmp/deploy-url)"
+
+      - name: Roll back on smoke failure
+        if: steps.smoke.outcome == 'failure'
+        run: npx vercel@latest rollback "$(cat /tmp/deploy-url)" --yes --scope "$VERCEL_TEAM"
+        env:
+          CI: "true"

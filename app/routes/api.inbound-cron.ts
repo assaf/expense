@@ -45,7 +45,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           schedule: { type: "crontab", value: "0 12 * * *" },
           // Vercel kills the lambda at maxDuration (60s); alert when a
           // tick outlives that window instead of the multi-hour default.
+          // Margin absorbs Vercel's 2-4 min cron latency so healthy runs
+          // don't log "missed" check-ins.
           maxRuntime: 1,
+          checkinMargin: 5,
         })
       : await runTick();
     console.info("[inbound-cron] tick complete", {

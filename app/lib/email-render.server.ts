@@ -27,8 +27,6 @@
  */
 
 import type { Browser } from "puppeteer-core";
-import puppeteer from "puppeteer-core";
-import chromiumSparticuz from "@sparticuz/chromium";
 import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline";
 import { escapeHtml } from "~/lib/escape";
 import { decodeInlineAsset } from "~/lib/inline-asset";
@@ -91,7 +89,10 @@ interface BrowserConfig {
   headless: boolean | "shell";
 }
 
-async function resolveBrowserConfig(): Promise<BrowserConfig> {
+async function resolveBrowserConfig(
+  puppeteer: (typeof import("puppeteer-core"))["default"],
+  chromiumSparticuz: (typeof import("@sparticuz/chromium"))["default"],
+): Promise<BrowserConfig> {
   const override = process.env.RENDER_BROWSER;
   if (override === "none") {
     throw new Error("RENDER_BROWSER=none — Chromium renderer disabled");
@@ -126,7 +127,14 @@ let browserPromise: Promise<Browser> | null = null;
 function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = (async () => {
-      const config = await resolveBrowserConfig();
+      // puppeteer-core + @sparticuz/chromium are heavy; load them only
+      // when an email is actually rendered to an image.
+      const [{ default: puppeteer }, { default: chromiumSparticuz }] =
+        await Promise.all([
+          import("puppeteer-core"),
+          import("@sparticuz/chromium"),
+        ]);
+      const config = await resolveBrowserConfig(puppeteer, chromiumSparticuz);
       return puppeteer.launch({
         args: config.args,
         executablePath: config.executablePath,

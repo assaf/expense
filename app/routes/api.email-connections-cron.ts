@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-router";
 import { PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
@@ -37,59 +38,81 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  const connections = await listAllEmailConnections();
-  const results: Array<{
-    id: string;
-    subscriptionId?: string;
-    created?: boolean;
-    drained?: { evaluated: number; created: number };
-    error?: string;
-  }> = [];
-  let failed = 0;
+  try {
+    const runTick = async () => {
+      const connections = await listAllEmailConnections();
+      const results: Array<{
+        id: string;
+        subscriptionId?: string;
+        created?: boolean;
+        drained?: { evaluated: number; created: number };
+        error?: string;
+      }> = [];
+      let failed = 0;
 
-  for (const connection of connections) {
-    try {
-      const sub = await ensureConnectionPushSubscription(connection);
-      if (connection.status === "error") {
-        await setEmailConnectionStatus(connection.id, "active");
+      for (const connection of connections) {
+        try {
+          const sub = await ensureConnectionPushSubscription(connection);
+          if (connection.status === "error") {
+            await setEmailConnectionStatus(connection.id, "active");
+          }
+          // Catch-up drain for anything a missed push left behind.
+          let drained: { evaluated: number; created: number } | undefined;
+          try {
+            const drain = await drainEmailConnection(connection);
+            drained = { evaluated: drain.evaluated, created: drain.created };
+          } catch (err) {
+            console.error("[email-connections-cron] drain failed", {
+              connectionId: connection.id,
+              err,
+            });
+          }
+          results.push({
+            id: connection.id,
+            subscriptionId: sub.subscriptionId,
+            created: sub.created,
+            drained,
+          });
+        } catch (err) {
+          failed++;
+          console.error("[email-connections-cron] renewal failed", {
+            connectionId: connection.id,
+            address: connection.emailAddress,
+            err,
+          });
+          await setEmailConnectionStatus(connection.id, "error");
+          results.push({ id: connection.id, error: String(err) });
+        }
       }
-      // Catch-up drain for anything a missed push left behind.
-      let drained: { evaluated: number; created: number } | undefined;
-      try {
-        const drain = await drainEmailConnection(connection);
-        drained = { evaluated: drain.evaluated, created: drain.created };
-      } catch (err) {
-        console.error("[email-connections-cron] drain failed", {
-          connectionId: connection.id,
-          err,
-        });
-      }
-      results.push({
-        id: connection.id,
-        subscriptionId: sub.subscriptionId,
-        created: sub.created,
-        drained,
-      });
-    } catch (err) {
-      failed++;
-      console.error("[email-connections-cron] renewal failed", {
-        connectionId: connection.id,
-        address: connection.emailAddress,
-        err,
-      });
-      await setEmailConnectionStatus(connection.id, "error");
-      results.push({ id: connection.id, error: String(err) });
-    }
+
+      return { total: connections.length, failed, results };
+    };
+
+    const result = await (Sentry.isInitialized()
+      ? Sentry.withMonitor("expense-email-connections-cron", runTick, {
+          schedule: { type: "crontab", value: "0 13 * * *" },
+          // Vercel kills the lambda at maxDuration (60s); alert when a
+          // tick outlives that window instead of the multi-hour default.
+          // Margin absorbs Vercel's 2-4 min cron latency so healthy runs
+          // don't log "missed" check-ins.
+          maxRuntime: 1,
+          checkinMargin: 5,
+        })
+      : runTick());
+
+    console.info("[email-connections-cron] tick complete", {
+      total: result.total,
+      failed: result.failed,
+    });
+    return Response.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("[email-connections-cron] tick failed:", err);
+    return Response.json({ error: "cron failed" }, { status: 500 });
+  } finally {
+    // Same flush requirement as /api/inbound-cron: the SDK's auto-flush is
+    // Edge-only, so on Node serverless the ok check-in is dropped when the
+    // lambda freezes after the response (the monitor would time out on
+    // every run). Flush explicitly before returning.
+    if (Sentry.isInitialized()) await Sentry.flush(3000);
   }
-
-  console.info("[email-connections-cron] tick complete", {
-    total: connections.length,
-    failed,
-  });
-  return Response.json({
-    ok: true,
-    total: connections.length,
-    failed,
-    results,
-  });
 }

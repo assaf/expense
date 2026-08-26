@@ -1,5 +1,4 @@
 import sharp from "sharp";
-import { Resvg } from "@resvg/resvg-js";
 import { escapeHtml } from "~/lib/escape";
 import {
   JETBRAINS_MONO,
@@ -149,6 +148,7 @@ export async function renderReceiptImage(
       options: resvgFontOptions({}),
     },
   ];
+  const { Resvg } = await import("@resvg/resvg-js");
   for (const attempt of resvgAttempts) {
     try {
       const png = new Resvg(svg, attempt.options).render().asPng();

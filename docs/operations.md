@@ -229,7 +229,24 @@ instrument file: Vercel never runs the `start` script, so that code never
 executes in the deployed function (the function config's `environment` is empty;
 server errors only ever reached Sentry locally this way). The post-deploy smoke
 check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
-production deployment boots with it false. Both vars must be set in Vercel;
+production deployment boots with it false.
+
+Sentry cron monitors (`Sentry.withMonitor` on the two daily crons) require an
+EXPLICIT `Sentry.flush()` before the route returns: the SDK's automatic
+`flushIfServerless` only works on Vercel's Edge runtime (its `vercelWaitUntil`
+helper returns early unless `EdgeRuntime` is defined), so on Node serverless
+the ok check-in envelope is dropped when the lambda freezes after responding
+and every run reports a monitor timeout. Both cron routes therefore flush in
+a `finally` block; keep that pattern when adding monitors. `checkinMargin` is
+set to 5 minutes on both monitors because Vercel fires crons 2-4 minutes late
+and the default margin logs every healthy run as "missed" first.
+
+Vendor tracer-bridge packages: when a dependency lazy-loads files Vercel's
+tracer can't follow (alias requires, binary assets), add a tiny
+`vendor/<name>/index.cjs` that `require`s the exact exported subpaths. As a
+node_modules `file:` dependency it ships un-bundled, so its requires stay
+literal and the tracer follows them with require conditions. Import it
+alongside the lazy dependency (see `vendor/pdfkit-standard-fonts`). Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
 `SENTRY_AUTH_TOKEN` is now SET (organization token, Vercel production env;
 create at Sentry → org settings → Auth Tokens). It lets the vite plugin

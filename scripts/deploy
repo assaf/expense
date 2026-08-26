@@ -76,8 +76,19 @@ else
     echo -e "\033[0;33mVERCEL_PROTECTION_BYPASS is not set — the smoke check cannot reach the protected deployment URL; skipping.\033[0m"
     echo "Create it in Vercel (Settings → Security → Protection Bypass for Automation) and add it as a production env var."
   else
-    # Shared with the CI workflow's pdf-ocr-smoke job (see scripts/smoke-check). scripts/smoke-check.
-    ./scripts/smoke-check "$DEPLOY_URL"
+    # Shared with the CI workflow's pdf-ocr-smoke job (see scripts/smoke-check).
+    # A failed smoke rolls the deployment back immediately: broken code is
+    # live for minutes instead of until the next deploy (two broken deploys
+    # stayed live for hours, see EXPENSE-Q).
+    if ./scripts/smoke-check "$DEPLOY_URL"; then
+      echo -e "\033[0;32mSmoke passed — deployment is live.\033[0m"
+    else
+      echo -e "\033[0;31mSmoke FAILED on ${DEPLOY_URL} — rolling back to the previous deployment.\033[0m" >&2
+      vercel rollback "$DEPLOY_URL" --yes || {
+        echo -e "\033[0;31mRollback failed — check the Vercel dashboard.\033[0m" >&2
+      }
+      exit 1
+    fi
   fi
 fi
 

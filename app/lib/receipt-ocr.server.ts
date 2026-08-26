@@ -1,9 +1,7 @@
 import { createRequire } from "node:module";
-import { createCanvas, type Canvas } from "@napi-rs/canvas";
+import type { Canvas } from "@napi-rs/canvas";
 import sharp from "sharp";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFPageProxy } from "pdfjs-dist";
-import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import { detectImageMime, isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import {
@@ -31,11 +29,26 @@ import type { Worker } from "tesseract.js";
  * annotated with a bundler ignore-hint; Vite and Vercel's tracer never
  * follow it, so the worker file is missing from the serverless bundle and
  * every PDF fails with "Setting up fake worker failed: Cannot find module
- * …pdf.worker.mjs". Statically importing the module and exposing its
- * WorkerMessageHandler makes pdfjs use it directly, with no file load, the
- * same code path its fake worker would have taken.
+ * …pdf.worker.mjs". Importing the module (dynamically, with a literal
+ * specifier the tracer follows) and exposing its WorkerMessageHandler makes
+ * pdfjs use it directly, with no file load, the same code path its fake
+ * worker would have taken.
  */
-globalThis.pdfjsWorker = pdfjsWorker;
+let pdfjsPromise: Promise<
+  typeof import("pdfjs-dist/legacy/build/pdf.mjs")
+> | null = null;
+
+/** Load pdfjs + its worker on first use; both stay out of the eager graph. */
+function loadPdfjs() {
+  pdfjsPromise ??= Promise.all([
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("pdfjs-dist/legacy/build/pdf.worker.mjs"),
+  ]).then(([pdfjs, worker]) => {
+    globalThis.pdfjsWorker = worker;
+    return pdfjs;
+  });
+  return pdfjsPromise;
+}
 
 /**
  * OCR + PDF handling for receipt attachments.
@@ -207,6 +220,7 @@ async function withPdfPages<T>(
   buffer: Buffer,
   fn: (tc: Awaited<ReturnType<PDFPageProxy["getTextContent"]>>) => T,
 ): Promise<T[]> {
+  const { getDocument } = await loadPdfjs();
   const task = getDocument({
     data: pdfData(buffer),
     ...pdfParams,
@@ -288,6 +302,10 @@ export async function extractPdfLines(buffer: Buffer): Promise<string[]> {
  * Used both as the stored receipt image and as the OCR input for scanned PDFs.
  */
 export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
+  const [{ getDocument }, { createCanvas }] = await Promise.all([
+    loadPdfjs(),
+    import("@napi-rs/canvas"),
+  ]);
   const task = getDocument({
     data: pdfData(buffer),
     ...pdfParams,
