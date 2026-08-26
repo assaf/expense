@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build --force && node scripts/include-pdfkit-fonts.mjs",
+    "build": "react-router build --force",
     "prebuild": "prisma contract emit",
     "check": "./scripts/check",
     "clean": "rm -rf node_modules/.vite .react-router build",
