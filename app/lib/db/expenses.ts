@@ -331,22 +331,25 @@ export async function findRecentlyImportedMatch(
 }
 
 /**
- * An imported receipt that already covers a bank-notification charge:
- * same amount on the same date, any merchant (the merchant receipt names
- * the store; the notification names the bank, so merchant can't be part
- * of the key). Inbox review uses this to supersede "a transaction was
- * charged" notifications when the real receipt got there first; no match
- * means the notification is the only record and stays on the review list.
- * Exact date only: a near-midnight miss keeps the notification on the
- * list (harmless) instead of risking a wrong supersede (data loss).
+ * Imported receipts covering bank-notification charges: same amount on
+ * the same date, any merchant (the merchant receipt names the store; the
+ * notification names the bank, so merchant can't be part of the key).
+ * ALL matches come back, not just the first: a day with several
+ * same-amount charges has several notifications, and each receipt covers
+ * exactly one charge, so inbox review pairs them one-to-one by count.
+ * The caller excludes expenses that were created from notifications
+ * themselves (they are a charge's record, not a cover). No match means
+ * the notification is the only record and stays on the review list.
+ * Exact date only: a near-midnight miss keeps the notification listed
+ * (harmless) instead of risking a wrong supersede (data loss).
  */
-export async function findChargeExpense(
+export async function findChargeExpenses(
   accountId: string,
   amounts: string[],
   date: string,
-): Promise<{ id: string } | undefined> {
-  if (amounts.length === 0) return undefined;
-  const row = await db.orm.public.Expense.where((e) =>
+): Promise<Array<{ id: string; createdAt: string }>> {
+  if (amounts.length === 0) return [];
+  const rows = await db.orm.public.Expense.where((e) =>
     and(
       e.accountId.eq(accountId),
       e._type.eq("receipt"),
@@ -354,9 +357,10 @@ export async function findChargeExpense(
       or(...amounts.map((amount) => e.amount.eq(asNumeric(amount)))),
     ),
   )
-    .select("id")
-    .first();
-  return row ? { id: row.id } : undefined;
+    .select("id", "createdAt")
+    .orderBy((e) => e.createdAt.asc())
+    .all();
+  return rows.map((r) => ({ id: r.id, createdAt: toIso(r.createdAt) }));
 }
 
 /** Escape LIKE/ILIKE wildcards so the pattern matches the literal text. */

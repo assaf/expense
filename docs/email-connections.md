@@ -292,22 +292,37 @@ Implementation (`app/lib/email-review.server.ts`, route
   account", CapitalOne today; `isTransactionNotification` in
   `email-classify.ts`): the same email is noise when the merchant also
   sends a receipt (z.ai) and the only record when they don't
-  (self-storage), so content can't decide. The scan checks each against
-  imported expenses: same amount on the same date, merchant ignored
-  (`findChargeExpense`; the international variant quotes two amounts and
-  either matching counts). A covered notification is logged
-  `review-ignored` with reason `superseded:<expenseId>` and never offered;
-  pending ones are re-checked every scan, so they drop off after the
-  merchant receipt is processed. Uncovered ones reach the list normally.
-  The state is self-healing both ways: superseded rows are also
-  re-checked, and one whose covering receipt was deleted returns to the
-  list on the next scan (a wrong supersede never loses the record).
-  Rows the user ignored by hand are never re-offered. The review page
-  shows the skips as an audit trail: "Bank notifications skipped", each
-  linked to the receipt that covered it; the emails stay in the Inbox.
-  Exact date only: a near-midnight miss keeps the notification listed
-  (the user ignores it by hand) rather than risk superseding the wrong
-  one.
+  (self-storage), so content can't decide. The scan matches them by
+  ARRIVAL TIMING (`decideNotifications` in `email-review.server.ts`),
+  which mirrors the mailbox's view of a charge: transaction posts → the
+  bank's alerts land within a minute (domestic + international
+  together) → the merchant's receipt email follows minutes later,
+  within an hour. The charge amount comes off the "Amount: $X" line
+  (card-currency, not the international variant's foreign amount);
+  notifications group by (date, amount) and cluster into bursts by
+  arrival (5-minute gap = new charge). Every successfully processed
+  email is stamped with the expense it created (`expense:<id>` on its
+  log row; `notification-expense:<id>` for notifications), and the row's
+  receivedAt is the EMAIL's arrival, so the receipt's arrival moment is
+  known. A receipt covers a burst when its email arrived within two
+  hours after the burst, and only the burst it FOLLOWS: a receipt
+  landing before a burst belongs to an earlier charge. So two
+  same-amount charges ten minutes apart with one receipt supersedes only
+  the first charge's burst; the second notification stays listed,
+  because its charge has no other record. Expenses with no arrival
+  record (hand-entered, forwarded through the receipts address, or
+  imported before the stamps existed) never cover anything, and expenses
+  created from notifications are their charge's record, never covers:
+  every ambiguity fails toward "stays listed", never a silent loss. A
+  covered burst is logged `review-ignored` with reason
+  `superseded:<expenseId>` and never offered; everything is re-decided
+  every scan, so notifications drop off once their receipt is imported
+  and RETURN if it is deleted. Rows the user ignored by hand are never
+  re-offered. The review page shows the skips as an audit trail: "Bank
+  notifications skipped", each linked to the receipt that covered it;
+  the emails stay in the Inbox. Residual ambiguity: two same-amount
+  charges within the 5-minute burst window, or a receipt delayed past
+  two hours (the notification stays listed; ignore it by hand).
   Keep notification senders OUT of the email rules: the auto-drain has
   no supersede check, so a rule would import notifications as expenses
   (the drain sees them before the merchant receipt arrives).

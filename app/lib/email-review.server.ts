@@ -2,7 +2,7 @@ import { htmlToText } from "~/lib/html-text";
 import {
   looksLikeReceiptEmail,
   isTransactionNotification,
-  notificationAmounts,
+  notificationChargeAmount,
 } from "~/lib/email-classify";
 import { FREE_MAIL_DOMAINS } from "~/lib/email-connection-infer.server";
 import { decryptSecret } from "~/lib/token-crypto.server";
@@ -11,7 +11,7 @@ import {
   matchEmailRule,
   ruleSenderMatches,
 } from "~/lib/db/email-rules";
-import { findChargeExpense } from "~/lib/db/expenses";
+import { findChargeExpenses } from "~/lib/db/expenses";
 import { extractEmailAddress } from "~/lib/validation";
 import {
   type ConnectionDeps,
@@ -52,12 +52,15 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * Bank transaction notifications ("A new transaction was charged to your
  * account") are special: the same email is noise when the merchant also
  * sends a receipt and the only record when they don't, so the content
- * can't decide. The scan checks each against imported expenses (same
- * amount on the same date, merchant ignored) and marks a covered one
- * `review-ignored` with reason `superseded:<expenseId>`; pending ones are
- * re-checked every scan, so they drop off once the merchant receipt is
- * processed, and superseded ones return to the list if their covering
- * receipt is deleted (the skip is visible on the page via
+ * can't decide. The scan decides them by arrival timing
+ * (`decideNotifications`), mirroring the mailbox's view of a charge:
+ * alerts land within a minute of the transaction, the receipt email
+ * minutes to an hour later. Notifications cluster into bursts (one
+ * charge) and pair with receipt emails that arrived shortly AFTER them;
+ * a covered burst is logged `review-ignored` with reason
+ * `superseded:<expenseId>`. The decisions are recomputed every scan, so
+ * notifications drop off once their receipt is imported and return if
+ * it is deleted (the skip is visible on the page via
  * `listSupersededItems`, never silent). User-ignored rows stay ignored.
  * Uncovered ones reach the list normally, which is how card-only
  * merchants (self-storage, parking) get their expenses.
@@ -143,6 +146,189 @@ export interface ScanOptions {
   budgetMs?: number;
 }
 
+/** The charge's timing, as the mailbox sees it: the transaction posts,
+ * the bank's alerts land within a minute (domestic and international
+ * together), and the merchant's receipt email follows minutes later,
+ * within an hour. Two notification emails closer together than this are
+ * one charge's alerts, not two charges. */
+const NOTIFICATION_BURST_MS = 5 * 60 * 1000;
+
+/** How long after a charge's alerts its receipt email may arrive and
+ * still cover them. Receipts lag the charge by minutes; subscriptions
+ * can take longer, so this is generous. A receipt arriving later leaves
+ * the notification listed: harmless and visible, never a silent loss. */
+const RECEIPT_LAG_MAX_MS = 2 * 60 * 60 * 1000;
+
+/** Clock-skew allowance. A receipt never arrives before its own charge's
+ * alerts, so a receipt landing before a burst belongs to an earlier
+ * charge and must not cover it. */
+const RECEIPT_LAG_MIN_MS = -2 * 60 * 1000;
+
+/** One bank-notification candidate collected by the scan's first pass. */
+interface NotificationCandidate {
+  summary: ConnectionEmailSummary;
+  fromAddress: string;
+  /** The charge amount off the Amount line; null when absent. */
+  amount: string | null;
+}
+
+/** A receipt email's arrival, from its process-log row ("expense:<id>"
+ * marks the expense it created; receivedAt is the email's arrival). */
+interface ReceiptArrival {
+  expenseId: string;
+  receivedAt: string;
+}
+
+/**
+ * Decide every collected bank notification for the scan, charge by
+ * charge, using the arrival timing: alerts land within a minute of the
+ * transaction, the receipt email minutes to an hour later.
+ *
+ * Notifications group by (date, charge amount) and cluster into bursts
+ * by arrival time (one burst = one charge). A receipt expense covers a
+ * burst when its EMAIL arrived within RECEIPT_LAG of the burst, and a
+ * receipt only covers the burst nearest BEFORE it (the receipt follows
+ * its own charge's alerts). So two same-amount charges ten minutes
+ * apart with one receipt: the receipt belongs to the earlier charge and
+ * the later charge's notification stays listed, exactly as it should.
+ * Expenses with no arrival record (hand-entered, forwarded through the
+ * receipts-by-email pipeline, or imported before receipts were stamped)
+ * never cover anything: every ambiguity fails toward "stays listed".
+ * Expenses created from notifications themselves are their charge's
+ * record ("notification-expense:<id>"), never covers.
+ */
+async function decideNotifications(
+  accountId: string,
+  connectionId: string,
+  input: {
+    notifications: NotificationCandidate[];
+    onSuperseded: (
+      summary: ConnectionEmailSummary,
+      fromAddress: string,
+      coverExpenseId: string,
+    ) => Promise<void>;
+    onPending: (
+      summary: ConnectionEmailSummary,
+      fromAddress: string,
+    ) => Promise<void>;
+  },
+): Promise<void> {
+  const { notifications, onSuperseded, onPending } = input;
+  if (notifications.length === 0) return;
+
+  // Receipt arrivals (expense:<id> rows) and notification-derived
+  // expenses (notification-expense:<id> rows) off this connection's log.
+  const markerRows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      or(l.error.like("expense:%"), l.error.like("notification-expense%")),
+    ),
+  )
+    .select("error", "receivedAt")
+    .all();
+  const markerId = (error: string | null, prefix: string): string | null =>
+    error !== null && error.startsWith(prefix)
+      ? error.slice(prefix.length).split(";")[0]!.trim()
+      : null;
+  const receiptArrivals: ReceiptArrival[] = [];
+  const notificationExpenseIds = new Set<string>();
+  for (const row of markerRows) {
+    const receiptId = markerId(row.error, "expense:");
+    if (receiptId && row.receivedAt !== null) {
+      receiptArrivals.push({
+        expenseId: receiptId,
+        receivedAt: toIso(row.receivedAt),
+      });
+    }
+    const notificationId = markerId(row.error, "notification-expense:");
+    if (notificationId) notificationExpenseIds.add(notificationId);
+  }
+
+  // Group by (date, amount): matching is per charge amount.
+  const groups = new Map<string, NotificationCandidate[]>();
+  for (const notification of notifications) {
+    if (notification.amount === null) {
+      // No parseable Amount line: never supersede what we can't match.
+      await onPending(notification.summary, notification.fromAddress);
+      continue;
+    }
+    const key = `${notification.summary.receivedAt.slice(0, 10)}|${notification.amount}`;
+    const group = groups.get(key);
+    if (group) group.push(notification);
+    else groups.set(key, [notification]);
+  }
+
+  for (const [key, group] of groups) {
+    const [date, amount] = key.split("|") as [string, string];
+
+    // The receipt emails that can cover this charge: their expenses match
+    // amount+date, they arrived on this connection, and they are not
+    // notification records. Everything else in the expense table is
+    // invisible to this matching on purpose (no arrival = no pairing).
+    const matchingExpenseIds = new Set(
+      (await findChargeExpenses(accountId, [amount], date))
+        .filter((expense) => !notificationExpenseIds.has(expense.id))
+        .map((expense) => expense.id),
+    );
+    const receipts = receiptArrivals
+      .filter((r) => matchingExpenseIds.has(r.expenseId))
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+
+    // Bursts in arrival order.
+    group.sort((a, b) =>
+      a.summary.receivedAt.localeCompare(b.summary.receivedAt),
+    );
+    const bursts: Array<{
+      notifications: NotificationCandidate[];
+      at: number;
+      coverExpenseId: string | null;
+    }> = [];
+    for (const notification of group) {
+      const at = Date.parse(notification.summary.receivedAt);
+      const current = bursts[bursts.length - 1];
+      if (current && at - current.at <= NOTIFICATION_BURST_MS) {
+        current.notifications.push(notification);
+      } else {
+        bursts.push({
+          notifications: [notification],
+          at,
+          coverExpenseId: null,
+        });
+      }
+    }
+
+    // Pair receipts to bursts: each receipt, in arrival order, covers
+    // the nearest uncovered burst it FOLLOWS (within the lag window).
+    // Receipts arriving before a burst belong to an earlier charge.
+    for (const receipt of receipts) {
+      const t = Date.parse(receipt.receivedAt);
+      let chosen: (typeof bursts)[number] | null = null;
+      for (const burst of bursts) {
+        if (burst.coverExpenseId !== null) continue;
+        const lag = t - burst.at;
+        if (lag >= RECEIPT_LAG_MIN_MS && lag <= RECEIPT_LAG_MAX_MS) {
+          chosen = burst; // keep scanning: the latest preceding burst wins
+        }
+      }
+      if (chosen) chosen.coverExpenseId = receipt.expenseId;
+    }
+
+    for (const burst of bursts) {
+      for (const notification of burst.notifications) {
+        if (burst.coverExpenseId) {
+          await onSuperseded(
+            notification.summary,
+            notification.fromAddress,
+            burst.coverExpenseId,
+          );
+        } else {
+          await onPending(notification.summary, notification.fromAddress);
+        }
+      }
+    }
+  }
+}
+
 /**
  * Scan a connected inbox for receipt-like emails and add them to the
  * review list (rows with outcome pending-review). One bounded batch: the
@@ -221,6 +407,119 @@ export async function scanConnectionInbox(
     candidates.push(summary);
   }
 
+  // Upsert a row to outcome pending-review: only when it is still
+  // recoverable (no row, or ignored/error/superseded), because a drain
+  // that processed the email between our row-read and this write owns
+  // the decision; flipping a created/processing row back would re-offer
+  // an already-imported receipt and risk a duplicate expense. The create
+  // path's P2002 means someone else claimed it meanwhile: skip.
+  const upsertPending = async (
+    summary: ConnectionEmailSummary,
+    fromAddress: string,
+  ): Promise<void> => {
+    const restored = await db.orm.public.EmailProcessLog.where((l) =>
+      and(
+        l.connectionId.eq(connection.id),
+        l.emailId.eq(summary.id),
+        or(
+          l.outcome.eq("ignored"),
+          l.outcome.eq("error"),
+          and(l.outcome.eq("review-ignored"), l.error.like("superseded%")),
+        ),
+      ),
+    ).updateAll({
+      outcome: "pending-review",
+      matched: false,
+      error: null,
+      receivedAt: fromIso(summary.receivedAt),
+      fromDisplay: summary.from,
+      fromAddress,
+      subject: summary.subject.slice(0, 500),
+    });
+    if (restored.length > 0) {
+      added += restored.length;
+      return;
+    }
+    try {
+      await db.orm.public.EmailProcessLog.create({
+        connectionId: connection.id,
+        emailId: summary.id,
+        fromAddress,
+        fromDisplay: summary.from,
+        subject: summary.subject.slice(0, 500),
+        matched: false,
+        outcome: "pending-review",
+        receivedAt: fromIso(summary.receivedAt),
+        createdAt: fromIso(new Date().toISOString()),
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) return; // claimed meanwhile; its call
+      throw err;
+    }
+    added++;
+  };
+
+  // Upsert a row to review-ignored with reason superseded:<id>. Same
+  // claim discipline: never touch a row a drain already decided.
+  const upsertSuperseded = async (
+    summary: ConnectionEmailSummary,
+    fromAddress: string,
+    coverExpenseId: string,
+  ): Promise<void> => {
+    const stilled = await db.orm.public.EmailProcessLog.where((l) =>
+      and(
+        l.connectionId.eq(connection.id),
+        l.emailId.eq(summary.id),
+        or(
+          l.outcome.eq("pending-review"),
+          l.outcome.eq("review-ignored"),
+          l.outcome.eq("ignored"),
+          l.outcome.eq("error"),
+        ),
+      ),
+    ).updateAll({
+      outcome: "review-ignored",
+      matched: false,
+      error: `superseded:${coverExpenseId}`,
+      receivedAt: fromIso(summary.receivedAt),
+      fromDisplay: summary.from,
+      fromAddress,
+      subject: summary.subject.slice(0, 500),
+    });
+    if (stilled.length > 0) {
+      superseded++;
+      return;
+    }
+    try {
+      await db.orm.public.EmailProcessLog.create({
+        connectionId: connection.id,
+        emailId: summary.id,
+        fromAddress,
+        fromDisplay: summary.from,
+        subject: summary.subject.slice(0, 500),
+        matched: false,
+        outcome: "review-ignored",
+        error: `superseded:${coverExpenseId}`,
+        receivedAt: fromIso(summary.receivedAt),
+        createdAt: fromIso(new Date().toISOString()),
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) return; // claimed meanwhile; its call
+      throw err;
+    }
+    superseded++;
+  };
+
+  // Pass 1: fetch + gate every candidate. Bank notifications are
+  // collected for pass 2 (their fate depends on the other notifications
+  // of the day, not just on their own content); everything else is
+  // listed right away.
+  const notificationCandidates: Array<{
+    summary: ConnectionEmailSummary;
+    fromAddress: string;
+    amount: string | null;
+  }> = [];
+
   for (const summary of candidates) {
     if (Date.now() - started > budgetMs) break;
     scanned++;
@@ -235,125 +534,31 @@ export async function scanConnectionInbox(
       continue; // not a receipt: no row, the next scan re-checks
     }
     const fromAddress = extractEmailAddress(summary.from ?? "");
-    const now = new Date().toISOString();
-    // A bank transaction notification that a real receipt already covers
-    // never reaches the list (and drops off on the next scan once the
-    // receipt is processed): same charge, better record. Without a cover
-    // it falls through and is offered like any other receipt, because
-    // for card-only merchants (self-storage, parking) it IS the receipt.
     if (isTransactionNotification(fromAddress, summary.subject)) {
-      const coveredBy = await findChargeExpense(
-        connection.accountId,
-        notificationAmounts(bodyText),
-        summary.receivedAt.slice(0, 10),
-      );
-      if (coveredBy) {
-        // Same claim discipline as the pending flip below: only move
-        // rows a drain didn't already decide, and lose the create race
-        // gracefully. The error carries the covering expense's id so the
-        // review page can link the notification to the receipt that
-        // replaced it ("superseded:<id>").
-        const stilled = await db.orm.public.EmailProcessLog.where((l) =>
-          and(
-            l.connectionId.eq(connection.id),
-            l.emailId.eq(summary.id),
-            or(
-              l.outcome.eq("pending-review"),
-              l.outcome.eq("review-ignored"),
-              l.outcome.eq("ignored"),
-              l.outcome.eq("error"),
-            ),
-          ),
-        ).updateAll({
-          outcome: "review-ignored",
-          matched: false,
-          error: `superseded:${coveredBy.id}`,
-          receivedAt: fromIso(summary.receivedAt),
-          fromDisplay: summary.from,
-          fromAddress,
-          subject: summary.subject.slice(0, 500),
-        });
-        if (stilled.length === 0) {
-          try {
-            await db.orm.public.EmailProcessLog.create({
-              connectionId: connection.id,
-              emailId: summary.id,
-              fromAddress,
-              fromDisplay: summary.from,
-              subject: summary.subject.slice(0, 500),
-              matched: false,
-              outcome: "review-ignored",
-              error: `superseded:${coveredBy.id}`,
-              receivedAt: fromIso(summary.receivedAt),
-              createdAt: fromIso(now),
-            });
-          } catch (err) {
-            if (isUniqueViolation(err)) continue; // claimed meanwhile
-            throw err;
-          }
-        }
-        superseded++;
-        continue;
-      }
-      // No cover: the notification is (again) the only record. Restore a
-      // row that a previous scan superseded so it returns to the list;
-      // fresh rows fall through to the pending upsert below.
-      const restored = await db.orm.public.EmailProcessLog.where((l) =>
-        and(
-          l.connectionId.eq(connection.id),
-          l.emailId.eq(summary.id),
-          l.outcome.eq("review-ignored"),
-          l.error.like("superseded%"),
-        ),
-      ).updateAll({
-        outcome: "pending-review",
-        error: null,
+      notificationCandidates.push({
+        summary,
+        fromAddress,
+        amount: notificationChargeAmount(bodyText),
       });
-      added += restored.length;
+      continue;
     }
-    // Mark the email as pending-review, but only when it is still
-    // recoverable (no row, or ignored/error): a drain that processed it
-    // between our row-read and this write owns the decision; flipping a
-    // created/processing row back to pending-review would re-offer an
-    // already-imported receipt and risk a duplicate expense. The create
-    // path's P2002 means someone else claimed it meanwhile: skip.
-    const flipped = await db.orm.public.EmailProcessLog.where((l) =>
-      and(
-        l.connectionId.eq(connection.id),
-        l.emailId.eq(summary.id),
-        or(l.outcome.eq("ignored"), l.outcome.eq("error")),
-      ),
-    ).updateAll({
-      outcome: "pending-review",
-      matched: false,
-      error: null,
-      receivedAt: fromIso(summary.receivedAt),
-      fromDisplay: summary.from,
-      fromAddress,
-      subject: summary.subject.slice(0, 500),
-    });
-    if (flipped.length === 0) {
-      try {
-        await db.orm.public.EmailProcessLog.create({
-          connectionId: connection.id,
-          emailId: summary.id,
-          fromAddress,
-          fromDisplay: summary.from,
-          subject: summary.subject.slice(0, 500),
-          matched: false,
-          outcome: "pending-review",
-          receivedAt: fromIso(summary.receivedAt),
-          createdAt: fromIso(now),
-        });
-      } catch (err) {
-        if (isUniqueViolation(err)) {
-          continue; // a drain claimed this email meanwhile; its call
-        }
-        throw err;
-      }
-    }
-    added++;
+    await upsertPending(summary, fromAddress);
   }
+
+  // Pass 2: bank notifications, matched charge by charge. A charge
+  // produces a BURST of notification emails (domestic + international
+  // arrive together), so one receipt covers a burst, not an email: with
+  // two same-amount charges in one day and one receipt, only the first
+  // burst is superseded and the second stays on the list (its charge
+  // has no other record). Expenses created from notifications
+  // themselves don't count as covers: they ARE their charge's record
+  // (the Extra Space case; marked "notification-expense:<id>" at
+  // process time).
+  await decideNotifications(connection.accountId, connection.id, {
+    notifications: notificationCandidates,
+    onSuperseded: upsertSuperseded,
+    onPending: upsertPending,
+  });
 
   // The list is now current through this scan's batch.
   await db.orm.public.EmailConnection.where({ id: connection.id }).update({

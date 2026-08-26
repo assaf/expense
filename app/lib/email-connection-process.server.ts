@@ -32,6 +32,7 @@ import { matchEmailRule } from "~/lib/db/email-rules";
 import {
   looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
+  isTransactionNotification,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -498,12 +499,31 @@ export async function processConnectionEmail(
       });
     }
 
+    // A notification processed into an expense is its charge's RECORD, not
+    // a cover for other notifications: inbox review's burst matching must
+    // not count it as a receipt that can supersede a sibling notification
+    // for a different same-amount charge. The marker carries the expense
+    // id so the review scan can exclude exactly this expense.
+    // Every processed email is stamped with the expense it created. The
+    // row's receivedAt is the EMAIL's arrival (written at scan/claim
+    // time, not processing time), so "expense:<id>" gives inbox review
+    // the receipt's arrival moment: the charge-time signal it matches
+    // bank-notification bursts against (alerts land within a minute of
+    // the charge, the receipt minutes to an hour later). Notifications
+    // get their own marker: their expense is the charge's RECORD, never
+    // a cover for sibling notifications.
+    const marker = isTransactionNotification(fromAddress, summary.subject)
+      ? `notification-expense:${saved.expenseId}`
+      : `expense:${saved.expenseId}`;
     await log(
       saved.missing.length > 0 ? "partial" : "created",
       true,
-      saved.missing.length > 0
-        ? `Missing: ${saved.missing.join(", ")}`
-        : undefined,
+      [
+        marker,
+        saved.missing.length > 0 ? `Missing: ${saved.missing.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("; ") || undefined,
     );
     if (saved.missing.length > 0) {
       return {

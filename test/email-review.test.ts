@@ -103,7 +103,15 @@ function fakeExtractionDeps(): ConnectionDeps {
  * Honours the `limit`/`descending` query shape so the scan's bounded-batch
  * behaviour is testable, and records every query call. */
 function fakeAdapter(
-  emails: Map<string, { from: string; subject: string; body: string }>,
+  emails: Map<
+    string,
+    {
+      from: string;
+      subject: string;
+      body: string;
+      receivedAt?: string;
+    }
+  >,
 ) {
   const trashed: string[] = [];
   const queries: Array<{
@@ -119,7 +127,7 @@ function fakeAdapter(
     }) => {
       queries.push(opts);
       let list = [...emails.entries()].map(([id, e]) =>
-        summary(id, e.from, e.subject),
+        summary(id, e.from, e.subject, e.receivedAt),
       );
       list = list.slice(0, opts.limit);
       return list;
@@ -216,11 +224,18 @@ describe("reviewSenderRulePattern", () => {
 });
 
 /** A receipt expense covering a charge (the merchant receipt that makes a
- * bank notification redundant). Distinct merchants so cleanup is safe. */
+ * bank notification redundant). Distinct merchants so cleanup is safe.
+ * `receivedAt` is the receipt EMAIL's arrival: a few minutes after the
+ * charge's alerts, the timing the supersede matching pairs on.
+ * `withEmail=false` simulates an expense with no email record behind it
+ * (hand-entered, forwarded, or predating the arrival stamps). */
 async function createCoveringExpense(
+  connectionId: string,
   merchant: string,
   amount: string,
   date = "2026-07-01",
+  receivedAt = "2026-07-01T10:05:00.000Z",
+  withEmail = true,
 ): Promise<string> {
   const id = `exp-${Math.random().toString(36).slice(2)}`;
   await testPrisma.expense.create({
@@ -242,6 +257,22 @@ async function createCoveringExpense(
       updatedAt: new Date().toISOString(),
     },
   });
+  if (withEmail) {
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId,
+        emailId: id,
+        fromAddress: `receipts@${merchant.toLowerCase().replace(/[^a-z]/g, "")}.example`,
+        fromDisplay: `${merchant} <receipts@${merchant.toLowerCase().replace(/[^a-z]/g, "")}.example>`,
+        subject: "Your receipt",
+        matched: true,
+        outcome: "created",
+        error: `expense:${id}`,
+        receivedAt,
+        createdAt: receivedAt,
+      },
+    });
+  }
   return id;
 }
 
@@ -274,7 +305,10 @@ describe("scanConnectionInbox", () => {
     conn = connection();
     await cleanupConnection();
     await testPrisma.expense.deleteMany({
-      where: { accountId: TEST_ACCOUNT_ID, merchant: { in: ["z.ai"] } },
+      where: {
+        accountId: TEST_ACCOUNT_ID,
+        merchant: { in: ["z.ai", "Second Cup", "Extra Space Storage"] },
+      },
     });
     await testPrisma.emailConnection.create({
       data: {
@@ -584,7 +618,7 @@ describe("scanConnectionInbox", () => {
   });
 
   it("supersedes a notification when an imported receipt covers the charge", async () => {
-    const expenseId = await createCoveringExpense("z.ai", "9.99");
+    const expenseId = await createCoveringExpense(conn.id, "z.ai", "9.99");
     const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
 
     const result = await scanConnectionInbox(conn, {
@@ -648,7 +682,7 @@ describe("scanConnectionInbox", () => {
     expect(first.pending).toBe(2);
 
     // The user processes the merchant receipt (here: directly seeded).
-    await createCoveringExpense("z.ai", "9.99");
+    await createCoveringExpense(conn.id, "z.ai", "9.99");
 
     const second = await scanConnectionInbox(conn, {
       adapter,
@@ -662,7 +696,7 @@ describe("scanConnectionInbox", () => {
   });
 
   it("restores a superseded notification when its covering receipt is deleted", async () => {
-    const expenseId = await createCoveringExpense("z.ai", "9.99");
+    const expenseId = await createCoveringExpense(conn.id, "z.ai", "9.99");
     const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
     const first = await scanConnectionInbox(conn, {
       adapter,
@@ -688,7 +722,7 @@ describe("scanConnectionInbox", () => {
   });
 
   it("never re-offers a notification the user ignored by hand", async () => {
-    await createCoveringExpense("z.ai", "9.99");
+    await createCoveringExpense(conn.id, "z.ai", "9.99");
     await testPrisma.emailProcessLog.create({
       data: {
         connectionId: conn.id,
@@ -718,10 +752,340 @@ describe("scanConnectionInbox", () => {
     expect((await logRow(conn.id, "n1"))?.error).toBe("user ignored");
   });
 
+  it("supersedes only the covered burst when two same-amount charges share a day", async () => {
+    // Two $9.99 charges hours apart, one receipt: the receipt covers its
+    // own charge's burst only; the other charge's notification is its
+    // only record and must stay on the list.
+    await createCoveringExpense(conn.id, "z.ai", "9.99");
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "A new transaction was charged to your account.\nAmount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "A new transaction was charged to your account.\nAmount: $9.99",
+            receivedAt: "2026-07-01T15:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(1);
+    expect(result.pending).toBe(1);
+    expect((await logRow(conn.id, "a1"))?.outcome).toBe("review-ignored");
+    expect((await logRow(conn.id, "b1"))?.outcome).toBe("pending-review");
+  });
+
+  it("supersedes both bursts when each charge has its receipt", async () => {
+    await createCoveringExpense(conn.id, "z.ai", "9.99");
+    await createCoveringExpense(
+      conn.id,
+      "Second Cup",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T15:10:00.000Z",
+    );
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T15:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(2);
+    expect(result.pending).toBe(0);
+  });
+
+  it("treats same-amount notifications within minutes as one charge (one burst)", async () => {
+    // The z.ai shape: a domestic and an international alert for the same
+    // charge, moments apart. One receipt covers the whole burst.
+    await createCoveringExpense(conn.id, "z.ai", "9.99");
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "a2",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject:
+              "A new international transaction was charged to your account",
+            body: "Transaction amount: 1,500 JPY\nAmount: $9.99",
+            receivedAt: "2026-07-01T09:01:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(2);
+    expect(result.pending).toBe(0);
+  });
+
+  it("keeps a notification whose receipt email arrived more than two hours late", async () => {
+    // The charge's receipt lagged past the pairing window; the
+    // notification stays listed rather than risk pairing it with an
+    // unrelated later receipt.
+    await createCoveringExpense(
+      conn.id,
+      "z.ai",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T13:00:00.000Z",
+    );
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(0);
+    expect(result.pending).toBe(2);
+  });
+
+  it("keeps a notification whose matching receipt email arrived before it", async () => {
+    // A receipt landing before a burst belongs to an earlier charge.
+    await createCoveringExpense(
+      conn.id,
+      "z.ai",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T07:00:00.000Z",
+    );
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(0);
+    expect(result.pending).toBe(2);
+  });
+
+  it("keeps a notification when the matching expense has no email record", async () => {
+    // Hand-entered, forwarded through the receipts address, or imported
+    // before arrivals were stamped: no arrival time, no pairing.
+    await createCoveringExpense(
+      conn.id,
+      "z.ai",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T10:05:00.000Z",
+      false,
+    );
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(0);
+    expect(result.pending).toBe(2);
+  });
+
+  it("pairs a receipt with the burst it follows, not an earlier one", async () => {
+    // Two charges twenty minutes apart; only the second sent a receipt.
+    // The receipt follows ITS OWN charge's alerts, so the first charge's
+    // notification stays listed even though the receipt arrived well
+    // within two hours of it too.
+    await createCoveringExpense(
+      conn.id,
+      "Second Cup",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T09:25:00.000Z",
+    );
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:20:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(1);
+    expect(result.pending).toBe(1);
+    expect((await logRow(conn.id, "a1"))?.outcome).toBe("pending-review");
+    expect((await logRow(conn.id, "b1"))?.outcome).toBe("review-ignored");
+  });
+
+  it("keeps the second charge listed when two same-amount charges are minutes apart", async () => {
+    // The tight case: two $9.99 charges ten minutes apart, one receipt.
+    // The receipt belongs to the first charge (it arrived before the
+    // second charge even happened), so the second notification stays.
+    await createCoveringExpense(
+      conn.id,
+      "z.ai",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T09:05:00.000Z",
+    );
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:10:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(1);
+    expect(result.pending).toBe(1);
+    expect((await logRow(conn.id, "a1"))?.outcome).toBe("review-ignored");
+    expect((await logRow(conn.id, "b1"))?.outcome).toBe("pending-review");
+  });
+
+  it("keeps a notification when the matching expense came from a notification", async () => {
+    // The Extra Space charge was processed from its own notification;
+    // that expense is its record, not a cover for a sibling $149
+    // notification about a different charge later the same day.
+    const expenseId = await createCoveringExpense(
+      conn.id,
+      "Extra Space Storage",
+      "149.00",
+      "2026-07-01",
+      "2026-07-01T08:05:00.000Z",
+    );
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "processed-notification",
+        fromAddress: "capitalone@service.capitalone.com",
+        fromDisplay: "Capital One <capitalone@service.capitalone.com>",
+        subject: "A new transaction was charged to your account",
+        matched: true,
+        outcome: "created",
+        error: `notification-expense:${expenseId}`,
+        receivedAt: "2026-07-01T08:00:00.000Z",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $149.00",
+            receivedAt: "2026-07-01T15:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(0);
+    expect(result.pending).toBe(1);
+    expect((await logRow(conn.id, "b1"))?.outcome).toBe("pending-review");
+  });
+
   it("keeps a notification whose charge matches no expense on that date", async () => {
     // Same amount, different day: too weak to supersede on (the charge
     // may be a different one), so the notification stays on the list.
-    await createCoveringExpense("z.ai", "9.99", "2026-06-30");
+    await createCoveringExpense(conn.id, "z.ai", "9.99", "2026-06-30");
     const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
 
     const result = await scanConnectionInbox(conn, {

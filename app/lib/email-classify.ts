@@ -81,24 +81,19 @@ export function isTransactionNotification(
 }
 
 /**
- * Every $ amount in a notification body, normalized to plain decimals
- * ("9.99"): a notification can quote more than one (an international
- * charge lists the foreign amount and the card-currency amount), and any
- * of them matching an imported expense means the charge is covered.
+ * The charge amount off a notification's "Amount: $9.99" line, normalized
+ * to a plain decimal. The international variant quotes the foreign amount
+ * too ("Transaction amount: 1,500 JPY"), but only the $-marked card-
+ * currency line is the charge as it lands on the statement, and only that
+ * can match the merchant receipt's amount. Null when no such line exists;
+ * the caller then treats the notification as uncoverable (it stays on
+ * the review list).
  */
-export function notificationAmounts(bodyText: string): string[] {
-  const seen: Record<string, true> = {};
-  const amounts: string[] = [];
-  for (const match of bodyText.matchAll(
-    /\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g,
-  )) {
-    const amount = match[1]!.replace(/,/g, "");
-    if (!seen[amount]) {
-      seen[amount] = true;
-      amounts.push(amount);
-    }
-  }
-  return amounts;
+export function notificationChargeAmount(bodyText: string): string | null {
+  const match = bodyText.match(
+    /amount[^:\n]*:\s*\$([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i,
+  );
+  return match ? match[1]!.replace(/,/g, "") : null;
 }
 
 export interface EmailClassifyInput {

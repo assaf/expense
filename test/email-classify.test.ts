@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isTransactionNotification,
-  notificationAmounts,
+  notificationChargeAmount,
   looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
 } from "~/lib/email-classify";
@@ -129,16 +129,26 @@ describe("isTransactionNotification", () => {
   });
 });
 
-describe("notificationAmounts", () => {
-  it("collects and normalizes every dollar amount", () => {
+describe("notificationChargeAmount", () => {
+  it("reads the Amount line and normalizes it", () => {
     expect(
-      notificationAmounts(
-        "A new transaction was charged to your account.\nAmount: $1,234.56\nAvailable credit: $9.99",
+      notificationChargeAmount(
+        "A new transaction was charged to your account.\nAmount: $1,234.56",
       ),
-    ).toEqual(["1234.56", "9.99"]);
+    ).toBe("1234.56");
   });
 
-  it("is empty without a dollar-marked amount", () => {
-    expect(notificationAmounts("Transaction amount: 1500 JPY")).toEqual([]);
+  it("skips the foreign-currency line of an international notification", () => {
+    expect(
+      notificationChargeAmount("Transaction amount: 1,500 JPY\nAmount: $9.99"),
+    ).toBe("9.99");
+  });
+
+  it("ignores amounts not on an Amount line", () => {
+    expect(notificationChargeAmount("Available credit: $500.00")).toBeNull();
+  });
+
+  it("is null without any amount line", () => {
+    expect(notificationChargeAmount("Your card was charged.")).toBeNull();
   });
 });
