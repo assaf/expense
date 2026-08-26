@@ -36,6 +36,8 @@ interface ReviewItemView {
   error: string | null;
   hasRule: boolean;
   rulePattern: string;
+  /** The charge amount off a bank notification, when this is one. */
+  amount?: string | null;
 }
 
 interface SupersededItemView {
@@ -52,7 +54,7 @@ interface ReviewInboxProps {
   superseded: SupersededItemView[];
   /** Pending bank notifications: charges whose only record is the card
    * alert, with no expense yet. */
-  uncovered: Array<ReviewItemView & { amount: string | null }>;
+  uncovered: ReviewItemView[];
   scannedAt: string | null;
 }
 
@@ -289,12 +291,9 @@ export function ReviewInbox({
 /** Group review items by their month, newest first, for the
  * charges-without-expenses section. */
 function groupByMonth(
-  items: Array<ReviewItemView & { amount: string | null }>,
-): Array<[string, Array<ReviewItemView & { amount: string | null }>]> {
-  const byMonth = new Map<
-    string,
-    Array<ReviewItemView & { amount: string | null }>
-  >();
+  items: ReviewItemView[],
+): Array<[string, ReviewItemView[]]> {
+  const byMonth = new Map<string, ReviewItemView[]>();
   for (const item of items) {
     const month = new Date(item.receivedAt).toLocaleString("en-US", {
       month: "long",
@@ -365,26 +364,33 @@ function ReviewRow({
             {item.fromAddress}
           </p>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setConfirm("ignore")}
-            disabled={busy}
-          >
-            <EyeOff aria-hidden="true" className="h-4 w-4" /> Ignore
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setRememberSender(!item.hasRule);
-              setConfirm("process");
-            }}
-            disabled={busy}
-          >
-            <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Process
-          </Button>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {item.amount !== null && item.amount !== undefined ? (
+            <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+              ${item.amount}
+            </span>
+          ) : null}
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirm("ignore")}
+              disabled={busy}
+            >
+              <EyeOff aria-hidden="true" className="h-4 w-4" /> Ignore
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setRememberSender(!item.hasRule);
+                setConfirm("process");
+              }}
+              disabled={busy}
+            >
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Process
+            </Button>
+          </div>
         </div>
       </div>
 
