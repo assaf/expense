@@ -1,4 +1,3 @@
-import sharp from "sharp";
 import { escapeHtml } from "~/lib/escape";
 import {
   JETBRAINS_MONO,
@@ -93,6 +92,7 @@ function embedFontFace(svg: string): string {
 
 /** True when the PNG has any pixel darker than near-white (i.e. real ink). */
 export async function hasInk(png: Buffer): Promise<boolean> {
+  const sharp = (await import("sharp")).default;
   try {
     const stats = await sharp(png).stats();
     return stats.channels.slice(0, 3).some((c) => c.min < 250);
@@ -120,6 +120,7 @@ export async function renderReceiptImage(
   text: string,
   opts: { subject?: string } = {},
 ): Promise<Buffer> {
+  const sharp = (await import("sharp")).default;
   const svg = buildReceiptSvg(text, opts);
   const failures: string[] = [];
 

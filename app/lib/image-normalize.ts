@@ -1,4 +1,4 @@
-import sharp, { type Metadata } from "sharp";
+import type { Metadata } from "sharp";
 
 /**
  * Receipt image normalization for storage (resize + light compression),
@@ -52,6 +52,7 @@ const RASTER_FORMATS = new Set([
 export async function normalizeStoredImage(
   buffer: Buffer,
 ): Promise<{ buffer: Buffer; mime: string } | null> {
+  const sharp = (await import("sharp")).default;
   let meta: Metadata | undefined;
   try {
     meta = await sharp(buffer, {
@@ -94,6 +95,7 @@ export async function resizeIfWider(
   buffer: Buffer,
   maxWidth: number,
 ): Promise<Buffer | null> {
+  const sharp = (await import("sharp")).default;
   const meta = await sharp(buffer, {
     limitInputPixels: MAX_DECODE_PIXELS,
   })
@@ -126,6 +128,7 @@ export async function resizeToJpeg(
     flatten?: boolean;
   },
 ): Promise<Buffer> {
+  const sharp = (await import("sharp")).default;
   let img = sharp(buffer, { limitInputPixels: MAX_DECODE_PIXELS })
     .rotate()
     .resize({

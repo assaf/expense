@@ -1,6 +1,5 @@
 import { createRequire } from "node:module";
 import type { Canvas } from "@napi-rs/canvas";
-import sharp from "sharp";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { detectImageMime, isPdf } from "~/lib/file-types";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
@@ -67,6 +66,7 @@ function loadPdfjs() {
 
 /** Normalize an image for OCR: decode, flatten alpha, cap width at 3000px. */
 async function normalizeImage(buffer: Buffer): Promise<Buffer> {
+  const sharp = (await import("sharp")).default;
   const resized = await resizeIfWider(buffer, 3000);
   if (resized === null) return buffer; // not decodable by sharp: pass through
   return sharp(resized)
@@ -88,6 +88,7 @@ async function toBrowserImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ buffer: Buffer; mime: string }> {
+  const sharp = (await import("sharp")).default;
   // Attachments often arrive as application/octet-stream with a UUID
   // filename (no extension to sniff). Recover the real image type from the
   // bytes so the stored receipt serves with a displayable mime and the
