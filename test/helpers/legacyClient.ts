@@ -440,7 +440,12 @@ export function makeTestClient(): {
     allowExitOnIdle: true,
   });
   return {
-    client: postgres<Contract>({ contractJson, pg: pool }),
+    client: postgres<Contract>({
+      contractJson,
+      pg: pool,
+      middleware: [],
+      // oxlint-disable-next-line typescript/no-explicit-any
+    } as any),
     disconnect: () => pool.end(),
   };
 }

@@ -48,12 +48,12 @@ const pool = new Pool({
   allowExitOnIdle: true,
 });
 
-const db = postgres<Contract>({
+const _opts = {
   contractJson,
   pg: pool,
   middleware: [lints()],
-  // Only log errors; match the old client's `log: ["error"]`.
-  // (Prisma 8 surfaces middleware/telemetry separately; keep it off.)
-});
+  // oxlint-disable-next-line typescript/no-explicit-any
+} as any;
+const db = postgres<Contract>(_opts);
 export { db };
 export default db;

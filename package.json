@@ -57,10 +57,10 @@
     "lucide-react": "^1.34.0",
     "pdfjs-dist": "^6.2.108",
     "pdfkit": "^0.20.1",
-    "pg": "8.22.0",
+    "pg": "8.23.0",
     "portless": "^0.15.6",
     "postal-mime": "^3.0.0",
-    "puppeteer-core": "^25.8.0",
+    "puppeteer-core": "^25.9.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0",
@@ -80,7 +80,7 @@
     "@types/leaflet": "^1.9.22",
     "@types/node": "^26.3.0",
     "@types/pdfkit": "^0.17.6",
-    "@types/pg": "8.20.4",
+    "@types/pg": "8.23.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "knip": "^6.32.2",
@@ -97,7 +97,7 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@11.23.0",
+  "packageManager": "pnpm@11.24.0",
   "knip": {
     "ignoreFiles": [
       "test/helpers/pinned-clock.mjs"
