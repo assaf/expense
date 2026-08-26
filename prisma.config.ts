@@ -14,9 +14,15 @@ export default definePrismaConfig({
     contract: "./prisma/contract.prisma",
     db: {
       get connection() {
-        return (
-          process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? ""
-        );
+        // The app's DATABASE_URL may carry `?sslmode=no-verify` for
+        // Vercel ↔ Supabase transaction pooler (port 6543). The v8
+        // driver interprets that as "no SSL" (unlike pg which skips
+        // cert verification but still encrypts), causing ESSLREQUIRED
+        // on the session pooler (port 5432). CLI DDL commands always
+        // use the session pooler, so strip the override.
+        const url =
+          process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "";
+        return url.replace(/[?&]sslmode=[^&]*/g, "");
       },
     },
     migrations: {
