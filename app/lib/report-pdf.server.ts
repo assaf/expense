@@ -32,8 +32,12 @@ export async function buildReportPdf(
 
   // pdfkit is heavy; load it only when a PDF is actually rendered (the
   // export route, smoke, and MCP report tool are the only callers). The
-  // standard fonts ship via the vercel.json functions includeFiles entry.
-  const { default: PDFDocument } = await import("pdfkit");
+  // fonts wrapper is a tracing bridge: importing it makes Vercel's tracer
+  // ship the .cjs standard fonts that pdfkit loads at render time.
+  const [{ default: PDFDocument }] = await Promise.all([
+    import("pdfkit"),
+    import("@expense/pdfkit-standard-fonts"),
+  ]);
 
   const doc = new PDFDocument({ margin: 50, size: "LETTER" });
   const pdf = pdfToBuffer(doc);

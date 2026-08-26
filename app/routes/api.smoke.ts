@@ -43,7 +43,10 @@ function hasSmokeSecret(header: string | null): boolean {
 
 /** A one-page LETTER PDF with the smoke text at 40pt (readable by OCR). */
 async function makePdf(text: string): Promise<Buffer> {
-  const { default: PDFDocument } = await import("pdfkit");
+  const [{ default: PDFDocument }] = await Promise.all([
+    import("pdfkit"),
+    import("@expense/pdfkit-standard-fonts"),
+  ]);
   const doc = new PDFDocument({ size: "LETTER" });
   const pdf = pdfToBuffer(doc);
   doc.fontSize(40).text(text);
