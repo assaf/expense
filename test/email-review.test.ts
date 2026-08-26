@@ -3,6 +3,7 @@ import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import {
   scanConnectionInbox,
   listReviewItems,
+  listSupersededItems,
   ignoreReviewItem,
   processReviewItem,
   reviewSenderRulePattern,
@@ -214,12 +215,67 @@ describe("reviewSenderRulePattern", () => {
   });
 });
 
+/** A receipt expense covering a charge (the merchant receipt that makes a
+ * bank notification redundant). Distinct merchants so cleanup is safe. */
+async function createCoveringExpense(
+  merchant: string,
+  amount: string,
+  date = "2026-07-01",
+): Promise<string> {
+  const id = `exp-${Math.random().toString(36).slice(2)}`;
+  await testPrisma.expense.create({
+    data: {
+      id,
+      accountId: TEST_ACCOUNT_ID,
+      _type: "receipt",
+      date,
+      report: "",
+      category: "",
+      description: "",
+      amount,
+      merchant,
+      imageFile: "",
+      imageMime: "",
+      originalName: "",
+      locations: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  return id;
+}
+
+const NOTIFICATION_EMAILS = new Map<
+  string,
+  { from: string; subject: string; body: string }
+>([
+  [
+    "n1",
+    {
+      from: "Capital One <capitalone@service.capitalone.com>",
+      subject: "A new transaction was charged to your account",
+      body: "A new transaction was charged to your account.\nAmount: $9.99",
+    },
+  ],
+  [
+    "n2",
+    {
+      from: "Capital One <capitalone@service.capitalone.com>",
+      subject: "A new international transaction was charged to your account",
+      body: "Transaction amount: 1,500 JPY\nAmount: $9.99",
+    },
+  ],
+]);
+
 describe("scanConnectionInbox", () => {
   let conn: ReturnType<typeof connection>;
 
   beforeEach(async () => {
     conn = connection();
     await cleanupConnection();
+    await testPrisma.expense.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: { in: ["z.ai"] } },
+    });
     await testPrisma.emailConnection.create({
       data: {
         id: conn.id,
@@ -525,6 +581,157 @@ describe("scanConnectionInbox", () => {
     expect(result.added).toBe(50);
     expect(result.pending).toBe(50);
     expect(result.atCap).toBe(true); // mailbox has more; older mail not offered
+  });
+
+  it("supersedes a notification when an imported receipt covers the charge", async () => {
+    const expenseId = await createCoveringExpense("z.ai", "9.99");
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.added).toBe(0);
+    expect(result.superseded).toBe(2);
+    expect(result.pending).toBe(0);
+    // Neither notification is offered; both are logged as superseded (with
+    // the covering expense's id, so the review page can link to it) and the
+    // drain never re-offers them either.
+    expect(await listReviewItems(conn.id)).toEqual([]);
+    for (const id of ["n1", "n2"]) {
+      const row = await logRow(conn.id, id);
+      expect(row?.outcome).toBe("review-ignored");
+      expect(row?.error).toBe(`superseded:${expenseId}`);
+    }
+    // The audit trail on the review page: what arrived, and what covered it.
+    const superseded = await listSupersededItems(conn.id);
+    expect(superseded.map((s) => s.emailId)).toEqual(["n1", "n2"]);
+    expect(superseded[0]?.expenseId).toBe(expenseId);
+  });
+
+  it("offers an uncovered notification: card-only merchants have no other receipt", async () => {
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "n1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "A new transaction was charged to your account.\nAmount: $149.00",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.added).toBe(1);
+    expect(result.superseded).toBe(0);
+    const items = await listReviewItems(conn.id);
+    expect(items.map((i) => i.emailId)).toEqual(["n1"]);
+  });
+
+  it("drops a pending notification on the next scan once the receipt is imported", async () => {
+    // First scan: no covering expense yet, so the notification is listed.
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+    const first = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+    expect(first.pending).toBe(2);
+
+    // The user processes the merchant receipt (here: directly seeded).
+    await createCoveringExpense("z.ai", "9.99");
+
+    const second = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+    expect(second.superseded).toBe(2);
+    expect(second.pending).toBe(0);
+    expect(await listReviewItems(conn.id)).toEqual([]);
+    expect((await logRow(conn.id, "n1"))?.outcome).toBe("review-ignored");
+  });
+
+  it("restores a superseded notification when its covering receipt is deleted", async () => {
+    const expenseId = await createCoveringExpense("z.ai", "9.99");
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+    const first = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+    expect(first.superseded).toBe(2);
+
+    await testPrisma.expense.deleteMany({
+      where: { id: expenseId },
+    });
+
+    const second = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+    // The cover is gone, so the notifications return to the list: a wrong
+    // supersede self-heals instead of losing the record.
+    expect(second.superseded).toBe(0);
+    expect(second.pending).toBe(2);
+    expect((await logRow(conn.id, "n1"))?.outcome).toBe("pending-review");
+  });
+
+  it("never re-offers a notification the user ignored by hand", async () => {
+    await createCoveringExpense("z.ai", "9.99");
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "n1",
+        fromAddress: "capitalone@service.capitalone.com",
+        fromDisplay: "Capital One <capitalone@service.capitalone.com>",
+        subject: "A new transaction was charged to your account",
+        matched: false,
+        outcome: "review-ignored",
+        error: "user ignored",
+        receivedAt: "2026-07-01T10:00:00.000Z",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    // n1 stays the user's decision even though a cover exists; n2 (no row)
+    // is superseded normally.
+    expect(result.superseded).toBe(1);
+    expect(result.pending).toBe(0);
+    expect((await logRow(conn.id, "n1"))?.error).toBe("user ignored");
+  });
+
+  it("keeps a notification whose charge matches no expense on that date", async () => {
+    // Same amount, different day: too weak to supersede on (the charge
+    // may be a different one), so the notification stays on the list.
+    await createCoveringExpense("z.ai", "9.99", "2026-06-30");
+    const { adapter } = fakeAdapter(NOTIFICATION_EMAILS);
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    expect(result.superseded).toBe(0);
+    expect(result.pending).toBe(2);
   });
 });
 

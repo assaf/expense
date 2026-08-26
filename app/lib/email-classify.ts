@@ -45,6 +45,62 @@ export function hasOwnConfirmationHeader(
   return false;
 }
 
+/** Senders whose "a transaction was charged" mail is a bank notification,
+ * not a merchant receipt (matched on the domain or any subdomain, the
+ * rule-sender style). Start small: one bank, exact wording. */
+const TRANSACTION_NOTIFICATION_SENDERS: Record<string, true> = {
+  "capitalone.com": true,
+};
+
+/** CapitalOne's charge alerts, domestic and international variants. */
+const TRANSACTION_NOTIFICATION_SUBJECT_RE =
+  /^a new (?:international )?transaction was charged/i;
+
+/**
+ * Is this a bank transaction notification ("A new transaction was charged
+ * to your account")? These are indistinguishable from each other by
+ * content: the same email is noise when the merchant also sends a receipt
+ * (the z.ai case) and the only record when they don't (self-storage and
+ * other card-only charges). So the email alone can never decide; callers
+ * check it against already-imported expenses (same amount, same date)
+ * and supersede it when a real receipt covers the charge.
+ */
+export function isTransactionNotification(
+  fromAddress: string,
+  subject: string,
+): boolean {
+  const domain = fromAddress.split("@")[1] ?? "";
+  const senderKnown =
+    TRANSACTION_NOTIFICATION_SENDERS[domain] === true ||
+    Object.keys(TRANSACTION_NOTIFICATION_SENDERS).some((s) =>
+      domain.endsWith(`.${s}`),
+    );
+  return (
+    senderKnown && TRANSACTION_NOTIFICATION_SUBJECT_RE.test(subject.trim())
+  );
+}
+
+/**
+ * Every $ amount in a notification body, normalized to plain decimals
+ * ("9.99"): a notification can quote more than one (an international
+ * charge lists the foreign amount and the card-currency amount), and any
+ * of them matching an imported expense means the charge is covered.
+ */
+export function notificationAmounts(bodyText: string): string[] {
+  const seen: Record<string, true> = {};
+  const amounts: string[] = [];
+  for (const match of bodyText.matchAll(
+    /\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g,
+  )) {
+    const amount = match[1]!.replace(/,/g, "");
+    if (!seen[amount]) {
+      seen[amount] = true;
+      amounts.push(amount);
+    }
+  }
+  return amounts;
+}
+
 export interface EmailClassifyInput {
   subject: string;
   /** Plain text of the body (empty for attachment-only emails). */

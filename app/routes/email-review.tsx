@@ -9,6 +9,7 @@ import { readEmailConnection } from "~/lib/db/email-connections";
 import {
   ignoreReviewItem,
   listReviewItems,
+  listSupersededItems,
   processReviewItem,
   reviewSenderRulePattern,
   rulesForReview,
@@ -38,9 +39,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!connection) {
     return { connection: null, items: [], scannedAt: null, onboarding };
   }
-  const [items, rules] = await Promise.all([
+  const [items, rules, superseded] = await Promise.all([
     listReviewItems(connection.id),
     rulesForReview(user.accountId),
+    listSupersededItems(connection.id),
   ]);
   return {
     connection: {
@@ -52,6 +54,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       ...item,
       hasRule: senderHasRule(rules, item.fromAddress),
       rulePattern: reviewSenderRulePattern(item.fromAddress),
+    })),
+    superseded: superseded.map((item) => ({
+      emailId: item.emailId,
+      receivedAt: item.receivedAt,
+      fromDisplay: item.fromDisplay,
+      subject: item.subject,
+      expenseId: item.expenseId,
     })),
     scannedAt: connection.reviewScannedAt,
     onboarding,
@@ -119,7 +128,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
-  const { connection, items, scannedAt, onboarding } = loaderData;
+  const { connection, items, superseded, scannedAt, onboarding } = loaderData;
   if (!connection) {
     return (
       <PageShell
@@ -166,6 +175,7 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
       <ReviewInbox
         connectionId={connection.id}
         items={items}
+        superseded={superseded}
         scannedAt={scannedAt}
       />
     </PageShell>

@@ -1,4 +1,4 @@
-import { and } from "@prisma/orm-postgres/orm-client";
+import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asJson, asNumeric, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { normalizeMerchant } from "~/lib/duplicates";
@@ -328,6 +328,35 @@ export async function findRecentlyImportedMatch(
     .select("id", "createdAt")
     .first();
   return row ? { id: row.id, createdAt: toIso(row.createdAt) } : undefined;
+}
+
+/**
+ * An imported receipt that already covers a bank-notification charge:
+ * same amount on the same date, any merchant (the merchant receipt names
+ * the store; the notification names the bank, so merchant can't be part
+ * of the key). Inbox review uses this to supersede "a transaction was
+ * charged" notifications when the real receipt got there first; no match
+ * means the notification is the only record and stays on the review list.
+ * Exact date only: a near-midnight miss keeps the notification on the
+ * list (harmless) instead of risking a wrong supersede (data loss).
+ */
+export async function findChargeExpense(
+  accountId: string,
+  amounts: string[],
+  date: string,
+): Promise<{ id: string } | undefined> {
+  if (amounts.length === 0) return undefined;
+  const row = await db.orm.public.Expense.where((e) =>
+    and(
+      e.accountId.eq(accountId),
+      e._type.eq("receipt"),
+      e.date.eq(date),
+      or(...amounts.map((amount) => e.amount.eq(asNumeric(amount)))),
+    ),
+  )
+    .select("id")
+    .first();
+  return row ? { id: row.id } : undefined;
 }
 
 /** Escape LIKE/ILIKE wildcards so the pattern matches the literal text. */

@@ -7,7 +7,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Badge } from "~/components/ui/Badge";
@@ -38,9 +38,18 @@ interface ReviewItemView {
   rulePattern: string;
 }
 
+interface SupersededItemView {
+  emailId: string;
+  receivedAt: string;
+  fromDisplay: string | null;
+  subject: string;
+  expenseId: string | null;
+}
+
 interface ReviewInboxProps {
   connectionId: string;
   items: ReviewItemView[];
+  superseded: SupersededItemView[];
   scannedAt: string | null;
 }
 
@@ -49,6 +58,7 @@ interface ScanResult {
   result?: {
     scanned: number;
     added: number;
+    superseded: number;
     pending: number;
     finished: boolean;
     atCap: boolean;
@@ -69,6 +79,7 @@ function senderLabel(item: ReviewItemView): string {
 export function ReviewInbox({
   connectionId,
   items,
+  superseded,
   scannedAt,
 }: ReviewInboxProps) {
   const scanFetcher = useFetcher<ScanResult>();
@@ -199,6 +210,42 @@ export function ReviewInbox({
             {scannedAt ? ` ${formatShortDate(scannedAt)}` : ""}.
           </p>
         </>
+      ) : null}
+
+      {superseded.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+            Bank notifications skipped ({superseded.length})
+          </h2>
+          <p className="mt-1 mb-3 text-sm text-gray-500 dark:text-gray-400">
+            Each was covered by an imported receipt for the same amount on the
+            same date. The emails stay in your Inbox untouched.
+          </p>
+          <ul className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
+            {superseded.map((item) => (
+              <li
+                key={item.emailId}
+                className="flex flex-wrap items-baseline gap-x-2"
+              >
+                <span className="text-gray-500 dark:text-gray-400">
+                  {formatShortDate(item.receivedAt)}
+                </span>
+                <span>{item.fromDisplay ?? ""}</span>
+                <span className="text-gray-500 dark:text-gray-400">
+                  {item.subject}
+                </span>
+                {item.expenseId ? (
+                  <Link
+                    to={`/expense/${item.expenseId}`}
+                    className="text-blue-600 underline underline-offset-2 dark:text-blue-400"
+                  >
+                    View the receipt that covered it
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   );

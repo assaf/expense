@@ -288,6 +288,29 @@ Implementation (`app/lib/email-review.server.ts`, route
   is re-examined (recovering emails the pipeline couldn't handle is a
   core purpose). `reviewScannedAt` on the connection row stamps that the
   list is current.
+- **Bank notifications** ("A new transaction was charged to your
+  account", CapitalOne today; `isTransactionNotification` in
+  `email-classify.ts`): the same email is noise when the merchant also
+  sends a receipt (z.ai) and the only record when they don't
+  (self-storage), so content can't decide. The scan checks each against
+  imported expenses: same amount on the same date, merchant ignored
+  (`findChargeExpense`; the international variant quotes two amounts and
+  either matching counts). A covered notification is logged
+  `review-ignored` with reason `superseded:<expenseId>` and never offered;
+  pending ones are re-checked every scan, so they drop off after the
+  merchant receipt is processed. Uncovered ones reach the list normally.
+  The state is self-healing both ways: superseded rows are also
+  re-checked, and one whose covering receipt was deleted returns to the
+  list on the next scan (a wrong supersede never loses the record).
+  Rows the user ignored by hand are never re-offered. The review page
+  shows the skips as an audit trail: "Bank notifications skipped", each
+  linked to the receipt that covered it; the emails stay in the Inbox.
+  Exact date only: a near-midnight miss keeps the notification listed
+  (the user ignores it by hand) rather than risk superseding the wrong
+  one.
+  Keep notification senders OUT of the email rules: the auto-drain has
+  no supersede check, so a rule would import notifications as expenses
+  (the drain sees them before the merchant receipt arrives).
 - **Process** (`processReviewItem` → `processConnectionEmail` with
   `{ review: true }`): review mode is the auto-pipeline minus the rule
   gate and the local receipt gate (the user's explicit choice replaces

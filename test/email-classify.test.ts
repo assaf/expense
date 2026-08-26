@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  isTransactionNotification,
+  notificationAmounts,
   looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
 } from "~/lib/email-classify";
@@ -83,5 +85,60 @@ describe("hasOwnConfirmationHeader", () => {
 
   it("returns false for empty headers", () => {
     expect(hasOwnConfirmationHeader({})).toBe(false);
+  });
+});
+
+describe("isTransactionNotification", () => {
+  it("matches CapitalOne charge alerts, domestic and international", () => {
+    expect(
+      isTransactionNotification(
+        "capitalone@service.capitalone.com",
+        "A new transaction was charged to your account",
+      ),
+    ).toBe(true);
+    expect(
+      isTransactionNotification(
+        "capitalone@alerts.capitalone.com",
+        "A new international transaction was charged to your account",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects other subjects from the same sender", () => {
+    expect(
+      isTransactionNotification(
+        "capitalone@service.capitalone.com",
+        "Your statement is available",
+      ),
+    ).toBe(false);
+    expect(
+      isTransactionNotification(
+        "capitalone@service.capitalone.com",
+        "Re: A new transaction was charged to your account",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects the same wording from other senders", () => {
+    expect(
+      isTransactionNotification(
+        "notify@chase.com",
+        "A new transaction was charged to your account",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("notificationAmounts", () => {
+  it("collects and normalizes every dollar amount", () => {
+    expect(
+      notificationAmounts(
+        "A new transaction was charged to your account.\nAmount: $1,234.56\nAvailable credit: $9.99",
+      ),
+    ).toEqual(["1234.56", "9.99"]);
+  });
+
+  it("is empty without a dollar-marked amount", () => {
+    expect(notificationAmounts("Transaction amount: 1500 JPY")).toEqual([]);
   });
 });

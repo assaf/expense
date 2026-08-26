@@ -1,5 +1,9 @@
 import { htmlToText } from "~/lib/html-text";
-import { looksLikeReceiptEmail } from "~/lib/email-classify";
+import {
+  looksLikeReceiptEmail,
+  isTransactionNotification,
+  notificationAmounts,
+} from "~/lib/email-classify";
 import { FREE_MAIL_DOMAINS } from "~/lib/email-connection-infer.server";
 import { decryptSecret } from "~/lib/token-crypto.server";
 import {
@@ -7,6 +11,7 @@ import {
   matchEmailRule,
   ruleSenderMatches,
 } from "~/lib/db/email-rules";
+import { findChargeExpense } from "~/lib/db/expenses";
 import { extractEmailAddress } from "~/lib/validation";
 import {
   type ConnectionDeps,
@@ -43,6 +48,19 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * are never double-processed by a drain, and emails the pipeline already
  * created or ignored stay out of the list (the scan re-examines only
  * undecided or recoverable rows).
+ *
+ * Bank transaction notifications ("A new transaction was charged to your
+ * account") are special: the same email is noise when the merchant also
+ * sends a receipt and the only record when they don't, so the content
+ * can't decide. The scan checks each against imported expenses (same
+ * amount on the same date, merchant ignored) and marks a covered one
+ * `review-ignored` with reason `superseded:<expenseId>`; pending ones are
+ * re-checked every scan, so they drop off once the merchant receipt is
+ * processed, and superseded ones return to the list if their covering
+ * receipt is deleted (the skip is visible on the page via
+ * `listSupersededItems`, never silent). User-ignored rows stay ignored.
+ * Uncovered ones reach the list normally, which is how card-only
+ * merchants (self-storage, parking) get their expenses.
  */
 
 /** The scan examines at most this many of the most recent Inbox emails per
@@ -105,6 +123,8 @@ export interface ScanResult {
   scanned: number;
   /** New emails added to the review list this pass. */
   added: number;
+  /** Bank notifications superseded by an already-imported receipt. */
+  superseded: number;
   /** Total waiting on the list now. */
   pending: number;
   /** True when the batch was fully examined; false means the time budget
@@ -149,6 +169,7 @@ export async function scanConnectionInbox(
   const started = Date.now();
   let scanned = 0;
   let added = 0;
+  let superseded = 0;
 
   const summaries = await adapter.inboxEmailSummaries({
     limit: SCAN_MAX_EMAILS,
@@ -162,7 +183,7 @@ export async function scanConnectionInbox(
       l.emailId.in(summaries.map((s) => s.id)),
     ),
   )
-    .select("emailId", "outcome", "error")
+    .select("emailId", "outcome", "error", "subject", "fromAddress")
     .all();
   const byId = new Map(rows.map((r) => [r.emailId, r]));
 
@@ -172,7 +193,24 @@ export async function scanConnectionInbox(
     if (row) {
       // Already decided (created/partial/processing/pending-review/
       // review-ignored) or definitively not a receipt → skip.
-      if (row.outcome !== "ignored" && row.outcome !== "error") continue;
+      if (row.outcome !== "ignored" && row.outcome !== "error") {
+        // Exception: a bank transaction notification whose supersede
+        // state depends on other expenses, so it is never final. A
+        // pending one may become covered by a receipt imported since it
+        // was listed; a superseded one may lose its cover (the receipt
+        // was deleted) and return to the list. Rows the user ignored by
+        // hand stay ignored: that decision is theirs, not a match's.
+        const notification = isTransactionNotification(
+          row.fromAddress ?? "",
+          row.subject ?? "",
+        );
+        const superseded = (row.error ?? "").startsWith("superseded");
+        const recheck =
+          notification &&
+          (row.outcome === "pending-review" ||
+            (row.outcome === "review-ignored" && superseded));
+        if (!recheck) continue;
+      }
       if (
         row.outcome === "ignored" &&
         IGNORED_SKIP_REASONS.has(row.error ?? "")
@@ -198,6 +236,81 @@ export async function scanConnectionInbox(
     }
     const fromAddress = extractEmailAddress(summary.from ?? "");
     const now = new Date().toISOString();
+    // A bank transaction notification that a real receipt already covers
+    // never reaches the list (and drops off on the next scan once the
+    // receipt is processed): same charge, better record. Without a cover
+    // it falls through and is offered like any other receipt, because
+    // for card-only merchants (self-storage, parking) it IS the receipt.
+    if (isTransactionNotification(fromAddress, summary.subject)) {
+      const coveredBy = await findChargeExpense(
+        connection.accountId,
+        notificationAmounts(bodyText),
+        summary.receivedAt.slice(0, 10),
+      );
+      if (coveredBy) {
+        // Same claim discipline as the pending flip below: only move
+        // rows a drain didn't already decide, and lose the create race
+        // gracefully. The error carries the covering expense's id so the
+        // review page can link the notification to the receipt that
+        // replaced it ("superseded:<id>").
+        const stilled = await db.orm.public.EmailProcessLog.where((l) =>
+          and(
+            l.connectionId.eq(connection.id),
+            l.emailId.eq(summary.id),
+            or(
+              l.outcome.eq("pending-review"),
+              l.outcome.eq("review-ignored"),
+              l.outcome.eq("ignored"),
+              l.outcome.eq("error"),
+            ),
+          ),
+        ).updateAll({
+          outcome: "review-ignored",
+          matched: false,
+          error: `superseded:${coveredBy.id}`,
+          receivedAt: fromIso(summary.receivedAt),
+          fromDisplay: summary.from,
+          fromAddress,
+          subject: summary.subject.slice(0, 500),
+        });
+        if (stilled.length === 0) {
+          try {
+            await db.orm.public.EmailProcessLog.create({
+              connectionId: connection.id,
+              emailId: summary.id,
+              fromAddress,
+              fromDisplay: summary.from,
+              subject: summary.subject.slice(0, 500),
+              matched: false,
+              outcome: "review-ignored",
+              error: `superseded:${coveredBy.id}`,
+              receivedAt: fromIso(summary.receivedAt),
+              createdAt: fromIso(now),
+            });
+          } catch (err) {
+            if (isUniqueViolation(err)) continue; // claimed meanwhile
+            throw err;
+          }
+        }
+        superseded++;
+        continue;
+      }
+      // No cover: the notification is (again) the only record. Restore a
+      // row that a previous scan superseded so it returns to the list;
+      // fresh rows fall through to the pending upsert below.
+      const restored = await db.orm.public.EmailProcessLog.where((l) =>
+        and(
+          l.connectionId.eq(connection.id),
+          l.emailId.eq(summary.id),
+          l.outcome.eq("review-ignored"),
+          l.error.like("superseded%"),
+        ),
+      ).updateAll({
+        outcome: "pending-review",
+        error: null,
+      });
+      added += restored.length;
+    }
     // Mark the email as pending-review, but only when it is still
     // recoverable (no row, or ignored/error): a drain that processed it
     // between our row-read and this write owns the decision; flipping a
@@ -250,6 +363,9 @@ export async function scanConnectionInbox(
   return {
     scanned,
     added,
+    /** Bank notifications dropped because an imported receipt already
+     * covers the same charge (same amount, same date). */
+    superseded,
     pending,
     finished: Date.now() - started <= budgetMs,
     atCap: summaries.length >= SCAN_MAX_EMAILS,
@@ -293,6 +409,45 @@ export async function listReviewItems(
     fromDisplay: r.fromDisplay,
     subject: r.subject,
     error: r.error,
+  }));
+}
+
+/** A superseded bank notification, for the review page's audit trail:
+ * what arrived, when, and which receipt replaced it. */
+export interface SupersededItem {
+  emailId: string;
+  receivedAt: string;
+  fromDisplay: string | null;
+  subject: string;
+  /** The receipt expense that covered the charge, when the row knows it. */
+  expenseId: string | null;
+}
+
+/** Recently superseded bank notifications, newest first. The email itself
+ * stays in the Inbox; this list is the visible record of the skip. */
+export async function listSupersededItems(
+  connectionId: string,
+  limit = 10,
+): Promise<SupersededItem[]> {
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      l.outcome.eq("review-ignored"),
+      l.error.like("superseded%"),
+    ),
+  )
+    .select("emailId", "receivedAt", "fromDisplay", "subject", "error")
+    .orderBy((l) => l.receivedAt.desc())
+    .limit(limit)
+    .all();
+  return rows.map((r) => ({
+    emailId: r.emailId,
+    receivedAt: r.receivedAt === null ? "" : toIso(r.receivedAt),
+    fromDisplay: r.fromDisplay,
+    subject: r.subject,
+    expenseId: r.error?.startsWith("superseded:")
+      ? r.error.slice("superseded:".length)
+      : null,
   }));
 }
 
