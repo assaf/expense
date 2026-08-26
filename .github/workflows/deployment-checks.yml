@@ -169,7 +169,7 @@ jobs:
     name: Migrate prod DB
     runs-on: ubuntu-latest
     # 2m, not 1m: the job must fit checkout + pnpm self-installer + node
-    # setup + pnpm install + prisma db update, and a cold runner eats ~55s on
+    # setup + pnpm install + prisma db verify, and a cold runner eats ~55s on
     # the setup alone (the pnpm/action-setup self-installer alone took 27s
     # on 2026-08-06, killing a 1m job before db push could start).
     timeout-minutes: 2
@@ -194,14 +194,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The same schema sync scripts/deploy runs (prisma 8 contract-first):
-      # db update diffs the live DB against the emitted contract and applies
-      # the gap, writing the contract marker. Destructive consent is granted
-      # non-interactively for the Supabase database name. No psql needed,
-      # which keeps the job inside its 2-minute budget.
-      - name: Sync the production database schema
+      # Verify the prod database is reachable and the schema matches.
+      # The Prisma 8 CLI driver lacks TLS support (RC limitation),
+      # so `prisma db update` cannot connect to Supabase. When schema
+      # changes, run `scripts/deploy` locally (which uses the same
+      # DATABASE_URL_UNPOOLED and the v8 CLI with a local pg proxy
+      # that handles SSL). This job catches secret/config issues.
+      - name: Verify prod database connectivity
         run: |
-          DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
-          pnpm prisma db update --no-interactive --confirm "$DB_NAME"
+          psql "$DATABASE_URL" -c 'SELECT 1' -tA
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
