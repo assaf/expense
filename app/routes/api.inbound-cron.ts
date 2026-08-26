@@ -43,6 +43,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     const result = Sentry.isInitialized()
       ? await Sentry.withMonitor("expense-inbound-cron", runTick, {
           schedule: { type: "crontab", value: "0 12 * * *" },
+          // Vercel kills the lambda at maxDuration (60s); alert when a
+          // tick outlives that window instead of the multi-hour default.
+          maxRuntime: 1,
         })
       : await runTick();
     console.info("[inbound-cron] tick complete", {
@@ -55,5 +58,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   } catch (err) {
     console.error("[inbound-cron] tick failed:", err);
     return Response.json({ error: "cron failed" }, { status: 500 });
+  } finally {
+    // The SDK's flushIfServerless only flushes on the Edge runtime; on
+    // Node serverless the ok check-in is dropped when the lambda freezes
+    // after the response, so the monitor timed out on every run. Flush
+    // explicitly so the check-in lands before we return.
+    if (Sentry.isInitialized()) await Sentry.flush(3000);
   }
 }
