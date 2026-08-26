@@ -2,7 +2,7 @@ import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asJson, asNumeric, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { normalizeMerchant } from "~/lib/duplicates";
-import { deleteImage, readImage } from "~/lib/images.server";
+import { deleteImage, mimeForFile } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import type { KnownMerchant } from "~/lib/receipt-ai.server";
 import {
@@ -55,29 +55,49 @@ export async function readExpenseImage(
   id: string,
   accountId: string,
 ): Promise<ExpenseImageRow | undefined> {
-  const expense = await db.orm.public.Expense.where((e) =>
-    and(e.id.eq(id), e.accountId.eq(accountId)),
-  )
-    .select("_type", "imageFile", "imageMime", "updatedAt")
-    .first();
-  if (!expense) return undefined;
+  // Single query via SQL-builder outerLeftJoin (saves a second round trip
+  // per image tile on the list page, which historically exhausted the
+  // Supabase pooler).
+  const plan = db.sql.public.expenses
+    .outerLeftJoin(db.sql.public.image_blobs.as("ib"), (f, fns) =>
+      fns.and(
+        fns.eq(f.expenses.accountId, f.ib.accountId),
+        fns.eq(f.expenses.imageFile, f.ib.key),
+      ),
+    )
+    .select("id", "imageFile", "imageMime", "updatedAt")
+    .select("_type", (f) => f.expenses.type)
+    .select("blobMime", (f) => f.ib.mime)
+    .select("blobData", (f) => f.ib.data)
+    .select("thumbnail", (f) => f.ib.thumbnail)
+    .where((f, fns) =>
+      fns.and(
+        fns.eq(f.expenses.id, id),
+        fns.eq(f.expenses.accountId, accountId),
+      ),
+    )
+    .limit(1)
+    .build();
+
+  const rows = await db.runtime().query(plan);
+  const r = rows[0];
+  if (!r) return undefined;
+
   const base: ExpenseImageRow = {
-    type: expense._type,
-    imageFile: expense.imageFile,
-    imageMime: expense.imageMime,
-    updatedAt: toIso(expense.updatedAt),
+    type: r._type,
+    imageFile: r.imageFile,
+    imageMime: r.imageMime,
+    updatedAt: toIso(r.updatedAt),
     blobMime: null,
     blobData: null,
     thumbnail: null,
   };
-  if (!expense.imageFile) return base;
-  const blob = await readImage(accountId, expense.imageFile);
-  if (!blob) return base;
+  if (!r.blobData) return base;
   return {
     ...base,
-    blobMime: blob.mime,
-    blobData: new Uint8Array(blob.buffer),
-    thumbnail: blob.thumbnail ? new Uint8Array(blob.thumbnail) : null,
+    blobMime: r.blobMime || mimeForFile(r.imageFile),
+    blobData: r.blobData,
+    thumbnail: r.thumbnail ?? null,
   };
 }
 
