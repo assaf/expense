@@ -253,7 +253,7 @@ jobs:
           for i in $(seq 1 60); do
             URL=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v6/deployments?teamId=$VERCEL_TEAM&target=production&limit=1" \
-              | node -e 'let b="";process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{const j=JSON.parse(b);const d=j.deployments&&j.deployments[0];if(d&&d.meta&&d.meta.githubCommitSha==="'$GITHUB_SHA'"&&d.url){console.log("https://"+d.url)}else{process.exit(1)}})') \
+              | node -e 'let b="";process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{const j=JSON.parse(b);const d=j.deployments&&j.deployments[0];if(d&&d.state==="READY"&&d.meta&&d.meta.githubCommitSha==="'$GITHUB_SHA'"&&d.url){console.log("https://"+d.url)}else{process.exit(1)}})') \
               && break
             sleep 5
           done

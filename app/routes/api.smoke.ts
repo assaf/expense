@@ -108,7 +108,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     const receiptPng = await renderReceiptImage(SMOKE_TEXT, {});
     if (
       !receiptPng.subarray(0, 8).equals(PNG_MAGIC) ||
-      receiptPng.length < 5_000
+      // A compact text receipt renders ~3KB; the floor only guards
+      // against a degenerate/blank render (renderReceiptImage already
+      // rejects blank output internally via hasInk).
+      receiptPng.length < 1_000
     ) {
       return fail(
         `receipt-image rendering produced a bad PNG (${receiptPng.length} bytes)`,
