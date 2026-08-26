@@ -30,6 +30,7 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@napi-rs/canvas": "^1.0.8",
+    "@prisma/orm-family-sql": "8.0.0-rc.7",
     "@prisma/orm-postgres": "8.0.0-rc.7",
     "@react-router/dev": "^8.3.0",
     "@react-router/fs-routes": "^8.3.0",

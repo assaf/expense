@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import postgres from "@prisma/orm-postgres/runtime";
+import { lints } from "@prisma/orm-family-sql/runtime";
 import type { Contract } from "../../prisma/contract.d";
 import contractJson from "../../prisma/contract.json" with { type: "json" };
 import { DATABASE_URL } from "~/lib/env";
@@ -50,6 +51,7 @@ const pool = new Pool({
 const db = postgres<Contract>({
   contractJson,
   pg: pool,
+  middleware: [lints()],
   // Only log errors; match the old client's `log: ["error"]`.
   // (Prisma 8 surfaces middleware/telemetry separately; keep it off.)
 });
