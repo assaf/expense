@@ -366,7 +366,7 @@ function ReviewRow({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {item.amount !== null && item.amount !== undefined ? (
-            <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+            <span className="text-sm font-semibold tabular-nums font-figures text-gray-900 dark:text-gray-100">
               ${item.amount}
             </span>
           ) : null}

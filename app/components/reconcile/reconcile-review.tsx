@@ -277,7 +277,7 @@ function RowFacts({ row }: { row: StatementRow }) {
           {formatDate(row.date)}
         </div>
       </div>
-      <span className="shrink-0 font-semibold tabular-nums">
+      <span className="shrink-0 font-semibold tabular-nums font-figures">
         {formatAmount(row.amount)}
       </span>
     </div>

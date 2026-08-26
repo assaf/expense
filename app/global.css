@@ -6,10 +6,46 @@
 @plugin "@tailwindcss/forms";
 
 @theme {
-  --font-sans: "Inter", "ui-sans-serif", "system-ui", "sans-serif";
+  --font-sans: "Nebula Sans", "ui-sans-serif", "system-ui", "sans-serif";
+  --font-figures: "Nebula Sans", var(--font-sans);
   --color-ink: #111827;
   --color-paper: #ffffff;
   --color-incomplete: #fef3c7;
+}
+
+/* Self-hosted Nebula Sans (SIL OFL, based on Source Sans): the app
+ * typeface, 400-700 like the Inter it replaced. Tabular figures are
+ * built in, so tabular-nums on money renders real tnum glyphs. */
+@font-face {
+  font-family: "Nebula Sans";
+  src: url("/fonts/nebula-sans/NebulaSans-Book.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nebula Sans";
+  src: url("/fonts/nebula-sans/NebulaSans-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nebula Sans";
+  src: url("/fonts/nebula-sans/NebulaSans-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Nebula Sans";
+  src: url("/fonts/nebula-sans/NebulaSans-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 html,
