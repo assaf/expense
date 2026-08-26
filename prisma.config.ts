@@ -22,10 +22,11 @@ export default definePrismaConfig({
         // session pooler, so rewrite to `sslmode=require`.
         const url =
           process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL ?? "";
+        const sep = url.includes("?") ? "&" : "?";
         if (url.includes("sslmode=")) {
           return url.replace(/sslmode=[^&]*/, "sslmode=require");
         }
-        return url;
+        return `${url}${sep}sslmode=require`;
       },
     },
     migrations: {
