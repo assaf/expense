@@ -1,7 +1,6 @@
 import { createRequire } from "node:module";
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import sharp from "sharp";
-import { createWorker } from "tesseract.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFPageProxy } from "pdfjs-dist";
 import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
@@ -24,6 +23,7 @@ import {
   type KnownMerchant,
 } from "./receipt-ai.server";
 import type { ExtractionResult } from "./receipt-ai.server";
+import type { Worker } from "tesseract.js";
 
 /**
  * pdfjs runs its "fake worker" on the main thread. It normally loads
@@ -137,10 +137,15 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
  * on error: a failed recognize can leave the worker in a bad state, and the
  * next call recreates it.
  */
-let ocrWorker: Awaited<ReturnType<typeof createWorker>> | null = null;
+let ocrWorker: Worker | null = null;
 
 async function getOcrWorker() {
   if (!ocrWorker) {
+    // tesseract.js is heavy; load it only when OCR actually runs (the
+    // package, wasm core, and traineddata all load on first worker
+    // creation). Importing here keeps cold starts of non-OCR requests
+    // from parsing it.
+    const { createWorker } = await import("tesseract.js");
     ocrWorker = await createWorker(["eng"], 1, {
       workerPath: TESSERACT_NODE_WORKER,
       langPath: "https://tessdata.projectnaptha.com/4.0.0",
