@@ -33,7 +33,7 @@ import type {
 } from "@prisma/orm-postgres/contract/types";
 
 export type StorageHash =
-  StorageHashBase<"026b53230ca086c538c5bd85b046a76dddecd36ed8086c03b4b3590f64aea678">;
+  StorageHashBase<"4e60646a4e1f0ee514f7543b4c7e007d0334d22f2fb70c2122f99b9b11de37ca">;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<"3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2">;
@@ -579,7 +579,6 @@ export type FieldOutputTypes = {
       readonly error: CodecTypes["pg/text@1"]["output"] | null;
       readonly reason: CodecTypes["pg/text@1"]["output"] | null;
       readonly expenseId: CodecTypes["pg/text@1"]["output"] | null;
-      readonly chargeAmount: CodecTypes["pg/text@1"]["output"] | null;
       readonly createdAt: TimestampString<3>;
       readonly fromDisplay: CodecTypes["pg/text@1"]["output"] | null;
       readonly receivedAt: TimestampString<3> | null;
@@ -799,7 +798,6 @@ export type FieldInputTypes = {
       readonly error: CodecTypes["pg/text@1"]["input"] | null;
       readonly reason: CodecTypes["pg/text@1"]["input"] | null;
       readonly expenseId: CodecTypes["pg/text@1"]["input"] | null;
-      readonly chargeAmount: CodecTypes["pg/text@1"]["input"] | null;
       readonly createdAt: CodecTypes["pg/timestamp-string@1"]["input"];
       readonly fromDisplay: CodecTypes["pg/text@1"]["input"] | null;
       readonly receivedAt: CodecTypes["pg/timestamp-string@1"]["input"] | null;
@@ -1029,7 +1027,6 @@ export type StorageColumnTypes = {
       readonly tokenEnc: CodecTypes["pg/text@1"]["output"];
     };
     readonly email_process_log: {
-      readonly chargeAmount: CodecTypes["pg/text@1"]["output"] | null;
       readonly connectionId: CodecTypes["pg/text@1"]["output"];
       readonly createdAt: TimestampString<3>;
       readonly emailId: CodecTypes["pg/text@1"]["output"];
@@ -1249,7 +1246,6 @@ export type StorageColumnInputTypes = {
       readonly tokenEnc: CodecTypes["pg/text@1"]["input"];
     };
     readonly email_process_log: {
-      readonly chargeAmount: CodecTypes["pg/text@1"]["input"] | null;
       readonly connectionId: CodecTypes["pg/text@1"]["input"];
       readonly createdAt: CodecTypes["pg/timestamp-string@1"]["input"];
       readonly emailId: CodecTypes["pg/text@1"]["input"];
@@ -1880,11 +1876,6 @@ type ContractBase = Omit<
                   readonly nullable: true;
                 };
                 readonly expenseId: {
-                  readonly nativeType: "text";
-                  readonly codecId: "pg/text@1";
-                  readonly nullable: true;
-                };
-                readonly chargeAmount: {
                   readonly nativeType: "text";
                   readonly codecId: "pg/text@1";
                   readonly nullable: true;
@@ -3700,13 +3691,6 @@ type ContractBase = Omit<
                   readonly codecId: "pg/text@1";
                 };
               };
-              readonly chargeAmount: {
-                readonly nullable: true;
-                readonly type: {
-                  readonly kind: "scalar";
-                  readonly codecId: "pg/text@1";
-                };
-              };
               readonly createdAt: {
                 readonly nullable: false;
                 readonly type: {
@@ -3758,7 +3742,6 @@ type ContractBase = Omit<
                 readonly error: { readonly column: "error" };
                 readonly reason: { readonly column: "reason" };
                 readonly expenseId: { readonly column: "expenseId" };
-                readonly chargeAmount: { readonly column: "chargeAmount" };
                 readonly createdAt: { readonly column: "createdAt" };
                 readonly fromDisplay: { readonly column: "fromDisplay" };
                 readonly receivedAt: { readonly column: "receivedAt" };

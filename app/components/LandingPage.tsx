@@ -12,7 +12,7 @@ import {
 import { Link } from "react-router";
 import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
-import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
+import { SitePage } from "~/components/SitePage";
 import { BENEFITS, BLOG_URL, SITE_URL } from "~/lib/seo-content";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -109,11 +109,10 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
+    <SitePage>
       <script type="application/ld+json">
         {JSON.stringify(SOFTWARE_SCHEMA)}
       </script>
-      <SiteHeader />
 
       <main>
         {/* Hero */}
@@ -314,8 +313,6 @@ export default function LandingPage() {
           />
         </section>
       </main>
-
-      <SiteFooter />
-    </div>
+    </SitePage>
   );
 }

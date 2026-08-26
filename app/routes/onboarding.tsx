@@ -1,6 +1,6 @@
 import { KeyRound, PlugZap, ReceiptText } from "lucide-react";
 import { Link, data, redirect } from "react-router";
-import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
+import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
@@ -125,26 +125,24 @@ export default function OnboardingPage({
 
   return (
     <AuthCard>
-      <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <AuthTile>
-          <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
-        </AuthTile>
-        <h1 className="text-xl font-bold">
-          {stepTwo ? "Set your password" : "Connect your FastMail account"}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {stepTwo
+      <AuthHeader
+        icon={
+          <AuthTile>
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
+          </AuthTile>
+        }
+        title={stepTwo ? "Set your password" : "Connect your FastMail account"}
+        blurb={
+          stepTwo
             ? email
               ? state.step === "attach"
                 ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
                 : `We found your address from the token: ${email}. Set a password to create your account.`
               : ""
-            : "We automatically import and process your expenses from your inbox, no manual forwarding. Your token proves you own the mailbox, so there's no verification email."}
-        </p>
-        <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
-          Step {stepTwo ? 2 : 1} of 2
-        </p>
-      </div>
+            : "We automatically import and process your expenses from your inbox, no manual forwarding. Your token proves you own the mailbox, so there's no verification email."
+        }
+        note={`Step ${stepTwo ? 2 : 1} of 2`}
+      />
 
       {!stepTwo ? (
         <>

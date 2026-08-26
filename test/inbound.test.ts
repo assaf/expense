@@ -36,6 +36,7 @@ import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,
   testPrisma,
+  allowSender as sharedAllowSender,
 } from "./helpers/seedTestData";
 
 /** A real 1x1 transparent PNG used as fake image/PDF render output. */
@@ -214,18 +215,8 @@ async function allowSender(
   createdAt = new Date().toISOString(),
   verified = true,
 ): Promise<void> {
-  const normalized = address.toLowerCase();
-  await testPrisma.inboundSender.createMany({
-    data: [{ accountId, address: normalized, createdAt }],
-    skipDuplicates: true,
-  });
-  if (verified) {
-    await testPrisma.inboundSenderVerification.createMany({
-      data: [{ address: normalized, accountId, verifiedAt: createdAt }],
-      skipDuplicates: true,
-    });
-  }
-  usedSenders.push({ accountId, address: normalized });
+  await sharedAllowSender(accountId, address, createdAt, verified);
+  usedSenders.push({ accountId, address: address.toLowerCase() });
 }
 
 beforeEach(async () => {

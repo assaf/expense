@@ -1,3 +1,4 @@
+import { TRANSACTION_NOTIFICATION_SENDERS } from "~/data/notification-senders";
 /**
  * Local (no-LLM) classification for connected-account email: does this
  * email look like a receipt/order confirmation worth processing?
@@ -46,15 +47,13 @@ export function hasOwnConfirmationHeader(
 }
 
 /** Senders whose "a transaction was charged" mail is a bank notification,
- * not a merchant receipt (matched on the domain or any subdomain, the
- * rule-sender style). Start small: one bank, exact wording. */
-const TRANSACTION_NOTIFICATION_SENDERS: Record<string, true> = {
-  "capitalone.com": true,
-};
-
-/** CapitalOne's charge alerts, domestic and international variants. */
-const TRANSACTION_NOTIFICATION_SUBJECT_RE =
-  /^a new (?:international )?transaction was charged/i;
+ * not a merchant receipt: the seed table in app/data/notification-senders.ts
+ * (a domain + its subject pattern per bank). Compiled once here, per
+ * entry, so adding a bank is a data edit. */
+const TRANSACTION_NOTIFICATION_SUBJECT_RES =
+  TRANSACTION_NOTIFICATION_SENDERS.map(
+    (seed) => new RegExp(seed.subjectRe, "i"),
+  );
 
 /**
  * Is this a bank transaction notification ("A new transaction was charged
@@ -70,13 +69,12 @@ export function isTransactionNotification(
   subject: string,
 ): boolean {
   const domain = fromAddress.split("@")[1] ?? "";
-  const senderKnown =
-    TRANSACTION_NOTIFICATION_SENDERS[domain] === true ||
-    Object.keys(TRANSACTION_NOTIFICATION_SENDERS).some((s) =>
-      domain.endsWith(`.${s}`),
-    );
+  const senderIndex = TRANSACTION_NOTIFICATION_SENDERS.findIndex(
+    (seed) => domain === seed.domain || domain.endsWith(`.${seed.domain}`),
+  );
   return (
-    senderKnown && TRANSACTION_NOTIFICATION_SUBJECT_RE.test(subject.trim())
+    senderIndex >= 0 &&
+    TRANSACTION_NOTIFICATION_SUBJECT_RES[senderIndex]!.test(subject.trim())
   );
 }
 

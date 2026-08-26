@@ -47,17 +47,43 @@ const SESSION_COOKIE = "expense_session";
 let sharedBrowser: Browser | undefined;
 let sharedContext: BrowserContext | undefined;
 
-async function getSharedContext(): Promise<BrowserContext> {
+async function getSharedBrowser(): Promise<Browser> {
   if (!sharedBrowser) {
     sharedBrowser = await chromium.launch({ headless: true });
   }
+  return sharedBrowser;
+}
+
+async function getSharedContext(): Promise<BrowserContext> {
+  const browser = await getSharedBrowser();
   if (!sharedContext) {
-    sharedContext = await sharedBrowser.newContext({
+    sharedContext = await browser.newContext({
       baseURL: "http://localhost:5199",
       viewport: { width: 1024, height: 780 },
     });
   }
   return sharedContext;
+}
+
+export interface FreshPageOptions {
+  viewport?: { width: number; height: number };
+  deviceScaleFactor?: number;
+}
+
+/** A fresh context (no session cookie, no shared state) with the clock
+ * frozen, for flows the signed-in shared context can't serve: login,
+ * signup, onboarding, multi-account. Each call gets its own context, so
+ * a page's cookies never leak into the next call. Pass viewport options
+ * for pages that need them (screenshots). */
+export async function freshPage(options: FreshPageOptions = {}): Promise<Page> {
+  const browser = await getSharedBrowser();
+  const context = await browser.newContext({
+    baseURL: "http://localhost:5199",
+    ...options,
+  });
+  const page = await context.newPage();
+  await freezePageClock(page);
+  return page;
 }
 
 /** Close the per-file browser, if any. Registered in testSuiteSetup's

@@ -4,8 +4,7 @@ import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
 import {
   consumeCommandRequest,
-  onCommandRequest,
-  type CommandRequest,
+  useCommandRequest,
 } from "~/lib/command-requests";
 import { formatDate } from "~/lib/format";
 import type { ReconciliationRunRecord } from "~/lib/types";
@@ -22,17 +21,11 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
   // strictly one-shot. Only this kind is consumed; other kinds stay pending
   // for the page that handles them. Only refs are referenced, so `[]` deps
   // are complete.
-  useEffect(() => {
-    const handle = (request: CommandRequest) => {
-      if (request.kind !== "upload-reconcile") return;
-      consumeCommandRequest();
-      fileInputRef.current?.click();
-    };
-    const unsubscribe = onCommandRequest(handle);
-    const pending = consumeCommandRequest();
-    if (pending) handle(pending);
-    return unsubscribe;
-  }, []);
+  useCommandRequest((request) => {
+    if (request.kind !== "upload-reconcile") return;
+    consumeCommandRequest();
+    fileInputRef.current?.click();
+  });
   const error =
     fetcher.data && "error" in fetcher.data ? fetcher.data.error : null;
   const uploaded =

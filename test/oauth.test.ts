@@ -1,8 +1,8 @@
 import { expect } from "playwright/test";
-import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import type { Page } from "playwright";
+import { afterAll, describe, it } from "vitest";
 import { generateCodeVerifier, pkceChallenge } from "~/lib/oauth.server";
-import { freezePageClock, signIn } from "./helpers/launchBrowser";
+import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const baseURL = "http://localhost:5199";
@@ -15,14 +15,8 @@ const CALLBACK = "http://127.0.0.1:5199/callback";
  * token on /mcp.
  */
 describe("MCP OAuth", () => {
-  let browser: Browser;
-
-  beforeAll(async () => {
-    browser = await chromium.launch({ headless: true });
-  });
-
   afterAll(async () => {
-    await browser?.close();
+    await closeBrowser();
     // Clients cascade to their codes, tokens, and consents.
     await testPrisma.oAuthClient.deleteMany({
       where: { name: { startsWith: "oauth-test" } },
@@ -63,9 +57,7 @@ describe("MCP OAuth", () => {
 
   /** Sign in through the real login form and return the page. */
   async function signedInPage(email: string, password: string): Promise<Page> {
-    const context = await browser.newContext({ baseURL });
-    const page = await context.newPage();
-    await freezePageClock(page);
+    const page = await freshPage();
     await signIn(page, email, password);
     return page;
   }

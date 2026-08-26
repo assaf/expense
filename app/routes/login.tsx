@@ -1,7 +1,7 @@
 import { MailCheck, ReceiptText } from "lucide-react";
 import { Link, redirect, useFetcher, useSearchParams } from "react-router";
 import { useState } from "react";
-import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
+import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
@@ -233,15 +233,15 @@ export default function LoginPage() {
 
   return (
     <AuthCard>
-      <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <AuthTile>
-          <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
-        </AuthTile>
-        <h1 className="text-xl font-bold">{titles[mode].title}</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {titles[mode].blurb}
-        </p>
-      </div>
+      <AuthHeader
+        icon={
+          <AuthTile>
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
+          </AuthTile>
+        }
+        title={titles[mode].title}
+        blurb={titles[mode].blurb}
+      />
 
       <fetcher.Form method="post" className="flex flex-col gap-4">
         <input type="hidden" name="mode" value={mode} />

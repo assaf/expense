@@ -11,13 +11,12 @@
  * Inside the normal suite (`pnpm test`) the whole describe block is skipped,
  * so it never slows or pollutes the regular test run.
  */
-import { chromium } from "playwright";
 import sharp from "sharp";
 import { ulid } from "ulid";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
-import { freezePageClock, signIn } from "./helpers/launchBrowser";
+import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
 const ACCOUNT = "acct_screenshot";
@@ -421,15 +420,11 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       launched = true;
     }
 
-    const browser = await chromium.launch({ headless: true });
     try {
-      const context = await browser.newContext({
-        baseURL,
+      const page = await freshPage({
         viewport: { width: 1440, height: 940 },
         deviceScaleFactor: 2,
       });
-      const page = await context.newPage();
-      await freezePageClock(page);
       const pageErrors: string[] = [];
       page.on("pageerror", (err) => pageErrors.push(String(err)));
       await signIn(page, TEST_EMAIL, TEST_PASSWORD);
@@ -468,7 +463,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       console.info("wrote public/screenshot-expense.png");
       expect(pageErrors).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser();
       if (launched) await closeServer();
     }
   }, 180_000);

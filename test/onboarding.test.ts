@@ -1,14 +1,6 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { expect as pwExpect } from "playwright/test";
-import { chromium, type Browser, type Page } from "playwright";
+import type { Page } from "playwright";
 import { ulid } from "ulid";
 import {
   OTHER_ACCOUNT_ID,
@@ -18,7 +10,7 @@ import {
   seedTestData,
   testPrisma,
 } from "./helpers/seedTestData";
-import { freezePageClock, signIn } from "./helpers/launchBrowser";
+import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import { createAccount, createUser } from "~/lib/db/accounts";
 import { createEmailConnection } from "~/lib/db/email-connections";
 import { createAccountWithUser } from "~/lib/auth.server";
@@ -367,23 +359,12 @@ afterAll(async () => {
  * or mock the JMAP call). That logic is covered by the unit tests above.
  */
 describe("FastMail onboarding UI", () => {
-  let browser: Browser;
-
-  beforeAll(async () => {
-    browser = await chromium.launch({ headless: true });
-  });
-
   afterAll(async () => {
-    await browser?.close();
+    await closeBrowser();
   });
 
   async function openPage(): Promise<Page> {
-    const context = await browser.newContext({
-      baseURL: "http://localhost:5199",
-    });
-    const page = await context.newPage();
-    await freezePageClock(page);
-    return page;
+    return freshPage();
   }
 
   it("links from the sign-up flow into the FastMail onboarding", async () => {

@@ -326,6 +326,19 @@ Implementation (`app/lib/email-review.server.ts`, route
   Keep notification senders OUT of the email rules: the auto-drain has
   no supersede check, so a rule would import notifications as expenses
   (the drain sees them before the merchant receipt arrives).
+- **Charges with no expense** (`listUncoveredCharges` in
+  `email-review.server.ts`): the charge-side bookend to the superseded
+  audit. Every pending bank notification on the connection is listed on
+  the review page in a "Bank charges with no expense" section (month
+  grouped), each actionable like a review item (process/ignore, without
+  the remember-sender option: accepting a bank as a rule is always
+  wrong). The list re-runs the cover pairing on load, so a pending
+  notification whose receipt arrived meanwhile is flipped to superseded
+  and leaves the section, even for emails long past the scan's 50-email
+  window (their charge amount is stored on the log row at scan time,
+  `chargeAmount`, since the email may leave the Inbox). This is where a
+  card-only charge that would otherwise be silently lost (ignored Extra
+  Space alerts) stays visible until the user acts.
 - **Process** (`processReviewItem` → `processConnectionEmail` with
   `{ review: true }`): review mode is the auto-pipeline minus the rule
   gate and the local receipt gate (the user's explicit choice replaces

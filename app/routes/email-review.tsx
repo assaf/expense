@@ -10,12 +10,14 @@ import {
   ignoreReviewItem,
   listReviewItems,
   listSupersededItems,
+  listUncoveredCharges,
   processReviewItem,
   reviewSenderRulePattern,
   rulesForReview,
   scanInboxForReview,
   senderHasRule,
 } from "~/lib/email-review.server";
+import { isTransactionNotification } from "~/lib/email-classify";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/email-review";
 
@@ -39,10 +41,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!connection) {
     return { connection: null, items: [], scannedAt: null, onboarding };
   }
-  const [items, rules, superseded] = await Promise.all([
+  const [items, rules, superseded, uncovered] = await Promise.all([
     listReviewItems(connection.id),
     rulesForReview(user.accountId),
     listSupersededItems(connection.id),
+    listUncoveredCharges(connection),
   ]);
   return {
     connection: {
@@ -50,7 +53,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       emailAddress: connection.emailAddress,
       reviewScannedAt: connection.reviewScannedAt,
     },
-    items: items.map((item) => ({
+    // Bank notifications have their own section below (charges with no
+    // expense): keep them out of the receipt list so nothing shows twice.
+    items: items
+      .filter(
+        (item) => !isTransactionNotification(item.fromAddress, item.subject),
+      )
+      .map((item) => ({
+        ...item,
+        hasRule: senderHasRule(rules, item.fromAddress),
+        rulePattern: reviewSenderRulePattern(item.fromAddress),
+      })),
+    uncovered: uncovered.map((item) => ({
       ...item,
       hasRule: senderHasRule(rules, item.fromAddress),
       rulePattern: reviewSenderRulePattern(item.fromAddress),
@@ -128,7 +142,8 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
-  const { connection, items, superseded, scannedAt, onboarding } = loaderData;
+  const { connection, items, superseded, uncovered, scannedAt, onboarding } =
+    loaderData;
   if (!connection) {
     return (
       <PageShell
@@ -176,6 +191,7 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
         connectionId={connection.id}
         items={items}
         superseded={superseded}
+        uncovered={uncovered}
         scannedAt={scannedAt}
       />
     </PageShell>

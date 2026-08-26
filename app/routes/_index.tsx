@@ -30,8 +30,7 @@ import { Logo } from "~/components/Logo";
 import { WelcomePanel } from "~/components/WelcomePanel";
 import {
   consumeCommandRequest,
-  onCommandRequest,
-  type CommandRequest,
+  useCommandRequest,
 } from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
@@ -382,24 +381,18 @@ function ExpenseList({
   // upload-reconcile request fired from here must survive for the reconcile
   // page, which mounts after the palette navigates. setState setters and
   // refs are stable, so `[]` deps are exhaustive.
-  useEffect(() => {
-    const handle = (request: CommandRequest) => {
-      if (request.kind === "upload-expense") {
-        consumeCommandRequest();
-        fileRef.current?.click();
-      } else if (request.kind === "search-expenses") {
-        consumeCommandRequest();
-        setSelectedReport(null);
-        setQuery(request.query);
-        setDebouncedQuery(request.query);
-        searchRef.current?.focus();
-      }
-    };
-    const pending = consumeCommandRequest();
-    if (pending) handle(pending);
-    const unsubscribe = onCommandRequest(handle);
-    return unsubscribe;
-  }, []);
+  useCommandRequest((request) => {
+    if (request.kind === "upload-expense") {
+      consumeCommandRequest();
+      fileRef.current?.click();
+    } else if (request.kind === "search-expenses") {
+      consumeCommandRequest();
+      setSelectedReport(null);
+      setQuery(request.query);
+      setDebouncedQuery(request.query);
+      searchRef.current?.focus();
+    }
+  });
 
   // Consume `?new=<id>` from the create redirect: start the highlight and
   // drop the query param so a reload doesn't re-highlight (replace keeps it

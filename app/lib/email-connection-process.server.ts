@@ -32,7 +32,6 @@ import { matchEmailRule } from "~/lib/db/email-rules";
 import {
   looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
-  isTransactionNotification,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -162,6 +161,13 @@ async function logEmailDecision(input: {
   subject: string;
   matched: boolean;
   outcome: LogOutcome;
+  /** Why the row landed on its outcome (ignored reasons, partial's
+   * "Missing: ..." list). Distinct from `error`, which holds failure
+   * text for outcome "error" / retryable pending rows. */
+  reason?: string;
+  /** The expense this decision is about (see the column comment). */
+  expenseId?: string;
+  /** Failure text; the UI surfaces it on pending items. */
   error?: string;
 }): Promise<void> {
   const now = new Date().toISOString();
@@ -173,6 +179,8 @@ async function logEmailDecision(input: {
   ).updateAll({
     matched: input.matched,
     outcome: input.outcome,
+    reason: input.reason ?? null,
+    expenseId: input.expenseId ?? null,
     error: input.error ?? null,
   });
   if (updated.length === 0) {
@@ -183,6 +191,8 @@ async function logEmailDecision(input: {
       subject: input.subject.slice(0, 500),
       matched: input.matched,
       outcome: input.outcome,
+      reason: input.reason ?? null,
+      expenseId: input.expenseId ?? null,
       error: input.error ?? null,
       createdAt: fromIso(now),
     });
@@ -296,7 +306,11 @@ export async function processConnectionEmail(
 ): Promise<ConnectionEmailResult> {
   const review = options.review === true;
   const fromAddress = extractEmailAddress(summary.from ?? "");
-  const log = (outcome: LogOutcome, matched: boolean, error?: string) =>
+  const log = (
+    outcome: LogOutcome,
+    matched: boolean,
+    opts: { reason?: string; expenseId?: string; error?: string } = {},
+  ) =>
     logEmailDecision({
       connectionId: connection.id,
       emailId: summary.id,
@@ -304,7 +318,9 @@ export async function processConnectionEmail(
       subject: summary.subject,
       matched,
       outcome,
-      error,
+      reason: opts.reason,
+      expenseId: opts.expenseId,
+      error: opts.error,
     });
 
   // Atomic claim BEFORE any work: insert the log row with outcome
@@ -346,13 +362,13 @@ export async function processConnectionEmail(
   // they forwarded to themselves is legitimate; the loop guard below still
   // catches the app's own confirmations by header.
   if (!review && fromAddress === connection.emailAddress) {
-    await log("ignored", false, "self");
+    await log("ignored", false, { reason: "self" });
     return { status: "ignored", reason: "self" };
   }
 
   // Bounces/autoreplies: never import, never answer.
   if (looksLikeBounce({ subject: summary.subject, from: summary.from ?? "" })) {
-    await log("ignored", false, "bounce");
+    await log("ignored", false, { reason: "bounce" });
     return { status: "ignored", reason: "bounce" };
   }
 
@@ -368,7 +384,7 @@ export async function processConnectionEmail(
   try {
     const email = await deps.fetchReceivedEmail(summary.id);
     if (isDeliveryNotification(email.headers)) {
-      await log("ignored", true, "bounce");
+      await log("ignored", true, { reason: "bounce" });
       return { status: "ignored", reason: "bounce" };
     }
 
@@ -377,7 +393,7 @@ export async function processConnectionEmail(
     // self for the connected flow, but a rule could match its sender),
     // skip it: never reprocess the app's own output. Header-based, stable.
     if (hasOwnConfirmationHeader(email.headers)) {
-      await log("ignored", true, "own confirmation");
+      await log("ignored", true, { reason: "own confirmation" });
       return { status: "ignored", reason: "own confirmation" };
     }
 
@@ -393,7 +409,7 @@ export async function processConnectionEmail(
         bodyText: email.text ?? htmlToText(email.html ?? ""),
       })
     ) {
-      await log("ignored", true, "not a receipt (local)");
+      await log("ignored", true, { reason: "not a receipt (local)" });
       return { status: "ignored", reason: "not a receipt (local)" };
     }
 
@@ -401,7 +417,7 @@ export async function processConnectionEmail(
     const selected = await selectReceiptSource(email, attachments, deps);
     if (!selected.source) {
       // Rule matched but there's nothing usable: ignore, leave in Inbox.
-      await log("ignored", true, "no receipt content");
+      await log("ignored", true, { reason: "no receipt content" });
       return { status: "ignored", reason: "no receipt content" };
     }
 
@@ -419,7 +435,7 @@ export async function processConnectionEmail(
         // Review mode: the user chose this email but nothing readable came
         // out of it (not a receipt, no total, unreadable attachment). Stay
         // on the list so they can retry or ignore; surface the reason.
-        await log("pending-review", true, "no receipt content");
+        await log("pending-review", true, { error: "no receipt content" });
         return {
           status: "error",
           error: "We couldn't read a receipt from this email.",
@@ -427,7 +443,7 @@ export async function processConnectionEmail(
       }
       // Body receipt whose total couldn't be parsed locally, or an
       // attachment receipt: skip, leave in Inbox for manual review.
-      await log("ignored", true, "not extractable locally");
+      await log("ignored", true, { reason: "not extractable locally" });
       return { status: "ignored", reason: "not extractable locally" };
     }
 
@@ -506,25 +522,19 @@ export async function processConnectionEmail(
     // id so the review scan can exclude exactly this expense.
     // Every processed email is stamped with the expense it created. The
     // row's receivedAt is the EMAIL's arrival (written at scan/claim
-    // time, not processing time), so "expense:<id>" gives inbox review
+    // time, not processing time), so the expenseId gives inbox review
     // the receipt's arrival moment: the charge-time signal it matches
     // bank-notification bursts against (alerts land within a minute of
-    // the charge, the receipt minutes to an hour later). Notifications
-    // get their own marker: their expense is the charge's RECORD, never
-    // a cover for sibling notifications.
-    const marker = isTransactionNotification(fromAddress, summary.subject)
-      ? `notification-expense:${saved.expenseId}`
-      : `expense:${saved.expenseId}`;
-    await log(
-      saved.missing.length > 0 ? "partial" : "created",
-      true,
-      [
-        marker,
-        saved.missing.length > 0 ? `Missing: ${saved.missing.join(", ")}` : "",
-      ]
-        .filter(Boolean)
-        .join("; ") || undefined,
-    );
+    // the charge, the receipt minutes to an hour later). Notification
+    // rows are recognizable by their subject/fromAddress (a notification
+    // is the charge's RECORD, never a cover for sibling notifications).
+    await log(saved.missing.length > 0 ? "partial" : "created", true, {
+      expenseId: saved.expenseId,
+      reason:
+        saved.missing.length > 0
+          ? `Missing: ${saved.missing.join(", ")}`
+          : undefined,
+    });
     if (saved.missing.length > 0) {
       return {
         status: "partial",
@@ -544,9 +554,9 @@ export async function processConnectionEmail(
       // Review mode: keep the item on the list (outcome back to
       // pending-review) so the user can retry or ignore; the error message
       // is recorded on the row and surfaced in the UI.
-      await log("pending-review", true, message);
+      await log("pending-review", true, { error: message });
     } else {
-      await log("error", true, message);
+      await log("error", true, { error: message });
     }
     return { status: "error", error: message };
   }

@@ -1,6 +1,6 @@
 import { KeyRound, MailCheck, ReceiptText } from "lucide-react";
 import { Link, data } from "react-router";
-import { AuthCard, AuthTile } from "~/components/auth/AuthCard";
+import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
@@ -104,29 +104,31 @@ export default function ResetPasswordPage({
 
   return (
     <AuthCard>
-      <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <AuthTile>
-          <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
-        </AuthTile>
-        <h1 className="text-xl font-bold">
-          {state.view === "done"
+      <AuthHeader
+        icon={
+          <AuthTile>
+            <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
+          </AuthTile>
+        }
+        title={
+          state.view === "done"
             ? "Password set"
             : state.view === "reset"
               ? "Set a new password"
               : state.view === "requested"
                 ? "Check your inbox"
-                : "Reset your password"}
-        </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {state.view === "request"
+                : "Reset your password"
+        }
+        blurb={
+          state.view === "request"
             ? "We'll email a single-use link to set a new one."
             : state.view === "requested"
               ? "If an account exists for that email, a reset link is on its way. It expires in 7 days."
               : state.view === "reset"
                 ? "Choose a new password for this account."
-                : `Password updated for ${state.email}.`}
-        </p>
-      </div>
+                : `Password updated for ${state.email}.`
+        }
+      />
 
       {state.view === "request" ? (
         <form method="post" className="flex flex-col gap-4">

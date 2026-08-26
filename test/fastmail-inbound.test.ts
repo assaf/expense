@@ -15,7 +15,11 @@ import type { RawEmail } from "~/lib/fastmail.server";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import type { Expense, ReceiptExpense } from "~/lib/types";
-import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
+import {
+  TEST_ACCOUNT_ID,
+  allowSender as sharedAllowSender,
+  testPrisma,
+} from "./helpers/seedTestData";
 
 /** A real 1x1 transparent PNG used as fake image/render output. */
 const TINY_PNG = Buffer.from(
@@ -214,21 +218,8 @@ function findReceipt(
 const usedEmailIds: string[] = [];
 const usedExpenseIds: string[] = [];
 
-async function allowSender(accountId: string, address: string): Promise<void> {
-  const normalized = address.toLowerCase();
-  await testPrisma.inboundSender.createMany({
-    data: [
-      { accountId, address: normalized, createdAt: new Date().toISOString() },
-    ],
-    skipDuplicates: true,
-  });
-  await testPrisma.inboundSenderVerification.createMany({
-    data: [
-      { address: normalized, accountId, verifiedAt: new Date().toISOString() },
-    ],
-    skipDuplicates: true,
-  });
-}
+const allowSender = (accountId: string, address: string) =>
+  sharedAllowSender(accountId, address);
 
 beforeEach(async () => {
   clearMimeCache();

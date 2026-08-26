@@ -244,3 +244,26 @@ export async function seedTestData() {
   // Mileage expenses live entirely in the expenses table; the derived
   // mileage table was dropped.
 }
+
+/** Create (or ensure) a verified inbound sender for a test: the From
+ * address rows the receipts-by-email pipeline checks. `verified: false`
+ * leaves the sender pending (row without a verification). Shared by the
+ * inbound suites; callers keep their own cleanup bookkeeping. */
+export async function allowSender(
+  accountId: string,
+  address: string,
+  createdAt = new Date().toISOString(),
+  verified = true,
+): Promise<void> {
+  const normalized = address.toLowerCase();
+  await testPrisma.inboundSender.createMany({
+    data: [{ accountId, address: normalized, createdAt }],
+    skipDuplicates: true,
+  });
+  if (verified) {
+    await testPrisma.inboundSenderVerification.createMany({
+      data: [{ address: normalized, accountId, verifiedAt: createdAt }],
+      skipDuplicates: true,
+    });
+  }
+}

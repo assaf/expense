@@ -1,9 +1,9 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import { expect } from "playwright/test";
-import { chromium, type Browser, type Page } from "playwright";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import type { Page } from "playwright";
+import { afterAll, describe, it } from "vitest";
 import { ulid } from "ulid";
-import { freezePageClock, signIn } from "./helpers/launchBrowser";
+import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
@@ -16,25 +16,14 @@ import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { hashPassword, hashToken, verifyPassword } from "~/lib/passwords";
 import { createAccountWithUser } from "~/lib/auth.server";
 
-const baseURL = "http://localhost:5199";
-
 describe("Access control", () => {
-  let browser: Browser;
-
-  beforeAll(async () => {
-    browser = await chromium.launch({ headless: true });
-  });
-
   afterAll(async () => {
-    await browser?.close();
+    await closeBrowser();
   });
 
   /** A fresh context: no session cookie, no shared state. */
   async function openPage(): Promise<Page> {
-    const context = await browser.newContext({ baseURL });
-    const page = await context.newPage();
-    await freezePageClock(page);
-    return page;
+    return freshPage();
   }
 
   /** A fresh context signed in as the seeded testuser. */
@@ -252,13 +241,13 @@ describe("Access control", () => {
   });
 
   it("protects resource routes (PDF export) too", async () => {
-    const context = await browser.newContext({ baseURL });
+    const page = await freshPage();
     // Unauthenticated: the export endpoint must not hand out the PDF.
-    const res = await context.request.get("/export/report/2026%20Test.pdf", {
+    const res = await page.request.get("/export/report/2026%20Test.pdf", {
       maxRedirects: 0,
     });
     expect([302, 401, 404]).toContain(res.status());
-    await context.close();
+    await page.context().close();
   });
 
   it("creates a brand-new account at signup with no shared data", async () => {

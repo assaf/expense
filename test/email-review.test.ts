@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import {
   scanConnectionInbox,
   listReviewItems,
   listSupersededItems,
+  listUncoveredCharges,
   ignoreReviewItem,
   processReviewItem,
   reviewSenderRulePattern,
 } from "~/lib/email-review.server";
-import type { ConnectionDeps } from "~/lib/email-connection-process.server";
-import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
-import { encryptSecret } from "~/lib/token-crypto.server";
 import { addEmailRule, matchEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import {
+  fakeAdapter,
+  fakeExtractionDeps,
+  logRow,
+  cleanupConnection,
+  connection,
+} from "./helpers/email-test-fixtures";
 
 /**
  * The inbox review flow: scan a connected inbox for receipt-like emails,
@@ -34,158 +38,6 @@ vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   >()),
   deliverConnectionEmailToInbox: mocks.deliverConnectionEmailToInbox,
 }));
-
-const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
-
-function connection() {
-  return {
-    id: `conn-${Math.random().toString(36).slice(2)}`,
-    accountId: TEST_ACCOUNT_ID,
-    provider: "fastmail",
-    emailAddress: "mailbox@example.com",
-    status: "active",
-    receivedCount: 0,
-    processedCount: 0,
-    lastPushAt: null,
-    pushSubscriptionId: null,
-    pushExpiresAt: null,
-    reviewScannedAt: null,
-    createdAt: "2026-08-19T00:00:00.000Z",
-    tokenEnc: encryptSecret("fmu1-conn-tok"),
-    jmapAccountId: "jmap-1",
-  };
-}
-
-function summary(
-  id: string,
-  from: string,
-  subject: string,
-  receivedAt = "2026-07-01T10:00:00.000Z",
-): ConnectionEmailSummary {
-  return { id, receivedAt, subject, from };
-}
-
-/** Deterministic fake "model": reads MERCHANT:/TOTAL:/CATEGORY: markers. */
-function fakeExtract(text?: string): ExtractionResult {
-  const t = text ?? "";
-  return {
-    isReceipt: t.includes("TOTAL:") || t.includes("MERCHANT:"),
-    merchant: t.match(/MERCHANT:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
-    description: "",
-    amount: t.match(/TOTAL:\s*\$?([0-9]+(?:\.[0-9]{1,2})?)/i)?.[1] ?? "",
-    currency: "USD",
-    category: t.match(/CATEGORY:\s*([^\n]+)/i)?.[1]?.trim() ?? "",
-    report: "",
-    confidence: "high",
-    notes: "",
-  };
-}
-
-function fakeExtractionDeps(): ConnectionDeps {
-  return {
-    classifyAttachment: async () => null,
-    extractReceipt: async (input) => fakeExtract(input.text),
-    extractFromImage: async () => ({
-      result: fakeExtract("MERCHANT: Photo Shop\nTOTAL: 5.00"),
-      text: "",
-      stored: { buffer: TINY_PNG, mime: "image/png" },
-    }),
-    renderReceiptImage: async () => TINY_PNG,
-    renderEmailImage: async () => TINY_PNG,
-    renderTextEmail: async () => TINY_PNG,
-  };
-}
-
-/** A fake mailbox adapter over an in-memory set of raw RFC 822 emails.
- * Honours the `limit`/`descending` query shape so the scan's bounded-batch
- * behaviour is testable, and records every query call. */
-function fakeAdapter(
-  emails: Map<
-    string,
-    {
-      from: string;
-      subject: string;
-      body: string;
-      receivedAt?: string;
-    }
-  >,
-) {
-  const trashed: string[] = [];
-  const queries: Array<{
-    afterIso?: string;
-    limit: number;
-    descending?: boolean;
-  }> = [];
-  const adapter = {
-    inboxEmailSummaries: async (opts: {
-      afterIso?: string;
-      limit: number;
-      descending?: boolean;
-    }) => {
-      queries.push(opts);
-      let list = [...emails.entries()].map(([id, e]) =>
-        summary(id, e.from, e.subject, e.receivedAt),
-      );
-      list = list.slice(0, opts.limit);
-      return list;
-    },
-    rawEmail: async (id: string) => {
-      const e = emails.get(id);
-      if (!e) throw new Error(`email ${id} not found`);
-      const raw = Buffer.from(
-        [
-          `From: ${e.from}`,
-          "To: mailbox@example.com",
-          `Subject: ${e.subject}`,
-          "Date: Tue, 01 Jul 2026 10:00:00 +0000",
-          "Message-ID: <msg@example.com>",
-          "Content-Type: text/plain; charset=utf-8",
-          "",
-          e.body,
-        ].join("\r\n"),
-      );
-      return {
-        id,
-        raw,
-        receivedAt: "2026-07-01T10:00:00.000Z",
-        subject: e.subject,
-        from: e.from,
-        to: ["mailbox@example.com"],
-        messageId: "<msg@example.com>",
-      };
-    },
-    moveToTrash: async (id: string) => {
-      trashed.push(id);
-    },
-  };
-  return { adapter, trashed, queries };
-}
-
-async function cleanupConnection() {
-  // emailAddress is globally unique: clear by address, not id.
-  const rows = await testPrisma.emailConnection.findMany({
-    where: { emailAddress: "mailbox@example.com" },
-    select: { id: true },
-  });
-  await testPrisma.emailProcessLog.deleteMany({
-    where: { connectionId: { in: rows.map((r) => r.id) } },
-  });
-  await testPrisma.emailConnection.deleteMany({
-    where: { emailAddress: "mailbox@example.com" },
-  });
-  await testPrisma.emailRule.deleteMany({
-    where: { accountId: TEST_ACCOUNT_ID, source: "review" },
-  });
-}
-
-async function logRow(connectionId: string, emailId: string) {
-  return testPrisma.emailProcessLog.findUnique({
-    where: { connectionId_emailId: { connectionId, emailId } },
-  });
-}
 
 async function createPendingItem(
   connectionId: string,
@@ -267,7 +119,7 @@ async function createCoveringExpense(
         subject: "Your receipt",
         matched: true,
         outcome: "created",
-        error: `expense:${id}`,
+        expenseId: id,
         receivedAt,
         createdAt: receivedAt,
       },
@@ -481,7 +333,7 @@ describe("scanConnectionInbox", () => {
           subject: "Undelivered Mail",
           matched: false,
           outcome: "ignored",
-          error: "bounce",
+          reason: "bounce",
           createdAt: new Date().toISOString(),
         },
         {
@@ -491,7 +343,7 @@ describe("scanConnectionInbox", () => {
           subject: "Your receipt",
           matched: false,
           outcome: "ignored",
-          error: "self",
+          reason: "self",
           createdAt: new Date().toISOString(),
         },
       ],
@@ -637,7 +489,8 @@ describe("scanConnectionInbox", () => {
     for (const id of ["n1", "n2"]) {
       const row = await logRow(conn.id, id);
       expect(row?.outcome).toBe("review-ignored");
-      expect(row?.error).toBe(`superseded:${expenseId}`);
+      expect(row?.reason).toBe("superseded");
+      expect(row?.expenseId).toBe(expenseId);
     }
     // The audit trail on the review page: what arrived, and what covered it.
     const superseded = await listSupersededItems(conn.id);
@@ -732,7 +585,7 @@ describe("scanConnectionInbox", () => {
         subject: "A new transaction was charged to your account",
         matched: false,
         outcome: "review-ignored",
-        error: "user ignored",
+        reason: "user ignored",
         receivedAt: "2026-07-01T10:00:00.000Z",
         createdAt: new Date().toISOString(),
       },
@@ -749,7 +602,7 @@ describe("scanConnectionInbox", () => {
     // is superseded normally.
     expect(result.superseded).toBe(1);
     expect(result.pending).toBe(0);
-    expect((await logRow(conn.id, "n1"))?.error).toBe("user ignored");
+    expect((await logRow(conn.id, "n1"))?.reason).toBe("user ignored");
   });
 
   it("supersedes only the covered burst when two same-amount charges share a day", async () => {
@@ -1052,7 +905,7 @@ describe("scanConnectionInbox", () => {
         subject: "A new transaction was charged to your account",
         matched: true,
         outcome: "created",
-        error: `notification-expense:${expenseId}`,
+        expenseId,
         receivedAt: "2026-07-01T08:00:00.000Z",
         createdAt: new Date().toISOString(),
       },
@@ -1080,6 +933,96 @@ describe("scanConnectionInbox", () => {
     expect(result.superseded).toBe(0);
     expect(result.pending).toBe(1);
     expect((await logRow(conn.id, "b1"))?.outcome).toBe("pending-review");
+  });
+
+  it("lists uncovered charges and flips covered ones to superseded (feed)", async () => {
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "a1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+        [
+          "b1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $149.00",
+            receivedAt: "2026-07-01T15:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    // First scan: both charges uncovered.
+    const first = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+    expect(first.pending).toBe(2);
+
+    // The 9.99 charge gets its receipt; the 149 charge stays card-only.
+    await createCoveringExpense(
+      conn.id,
+      "z.ai",
+      "9.99",
+      "2026-07-01",
+      "2026-07-01T09:05:00.000Z",
+    );
+
+    const feed = await listUncoveredCharges(conn);
+    // The covered charge dropped off the feed AND moved to the audit; the
+    // card-only charge remains, with its amount.
+    expect(feed.map((c) => c.emailId)).toEqual(["b1"]);
+    expect(feed[0]?.amount).toBe("149.00");
+    expect((await logRow(conn.id, "a1"))?.reason).toBe("superseded");
+    expect((await logRow(conn.id, "a1"))?.expenseId).not.toBeNull();
+    const superseded = await listSupersededItems(conn.id);
+    expect(superseded.map((s) => s.emailId)).toEqual(["a1"]);
+  });
+
+  it("lists only notification rows in the feed (receipts are not charges)", async () => {
+    // A plain receipt pending (not a notification) must not appear as a
+    // charge with no expense.
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "r1",
+        fromAddress: "no_reply@email.apple.com",
+        fromDisplay: "Apple <no_reply@email.apple.com>",
+        subject: "Your receipt",
+        matched: false,
+        outcome: "pending-review",
+        receivedAt: "2026-07-01T10:00:00.000Z",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "n1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $12.00",
+            receivedAt: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+    });
+
+    const feed = await listUncoveredCharges(conn);
+    expect(feed.map((c) => c.emailId)).toEqual(["n1"]);
   });
 
   it("keeps a notification whose charge matches no expense on that date", async () => {

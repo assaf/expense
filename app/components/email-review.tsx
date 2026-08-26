@@ -50,6 +50,9 @@ interface ReviewInboxProps {
   connectionId: string;
   items: ReviewItemView[];
   superseded: SupersededItemView[];
+  /** Pending bank notifications: charges whose only record is the card
+   * alert, with no expense yet. */
+  uncovered: Array<ReviewItemView & { amount: string | null }>;
   scannedAt: string | null;
 }
 
@@ -80,6 +83,7 @@ export function ReviewInbox({
   connectionId,
   items,
   superseded,
+  uncovered,
   scannedAt,
 }: ReviewInboxProps) {
   const scanFetcher = useFetcher<ScanResult>();
@@ -212,6 +216,37 @@ export function ReviewInbox({
         </>
       ) : null}
 
+      {uncovered.length > 0 ? (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+            Bank charges with no expense ({uncovered.length})
+          </h2>
+          <p className="mt-1 mb-3 text-sm text-gray-500 dark:text-gray-400">
+            These card charges have no receipt yet; the alert email is their
+            only record. Process the ones that are expenses, ignore the rest.
+            The emails stay in your Inbox either way.
+          </p>
+          {groupByMonth(uncovered).map(([month, charges]) => (
+            <div key={month} className="mb-3">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                {month}
+              </p>
+              <ul className="flex flex-col gap-2">
+                {charges.map((item) => (
+                  <li key={item.emailId}>
+                    <ReviewRow
+                      connectionId={connectionId}
+                      item={item}
+                      allowRememberSender={false}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       {superseded.length > 0 ? (
         <section className="mt-8">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -251,12 +286,38 @@ export function ReviewInbox({
   );
 }
 
+/** Group review items by their month, newest first, for the
+ * charges-without-expenses section. */
+function groupByMonth(
+  items: Array<ReviewItemView & { amount: string | null }>,
+): Array<[string, Array<ReviewItemView & { amount: string | null }>]> {
+  const byMonth = new Map<
+    string,
+    Array<ReviewItemView & { amount: string | null }>
+  >();
+  for (const item of items) {
+    const month = new Date(item.receivedAt).toLocaleString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    const group = byMonth.get(month);
+    if (group) group.push(item);
+    else byMonth.set(month, [item]);
+  }
+  return [...byMonth.entries()].sort(([a], [b]) => b.localeCompare(a));
+}
+
 function ReviewRow({
   connectionId,
   item,
+  allowRememberSender = true,
 }: {
   connectionId: string;
   item: ReviewItemView;
+  /** Hides the "remember this sender" checkbox: accepting a bank as an
+   * auto-import sender would turn every notification into an expense. */
+  allowRememberSender?: boolean;
 }) {
   const fetcher = useFetcher<ItemResult>();
   const [confirm, setConfirm] = useState<"process" | "ignore" | null>(null);
@@ -285,7 +346,7 @@ function ReviewRow({
             <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
               {senderLabel(item)}
             </span>
-            {!item.hasRule ? (
+            {allowRememberSender && !item.hasRule ? (
               <Badge
                 tone="purple"
                 icon={<Sparkles aria-hidden="true" className="h-3 w-3" />}
@@ -375,7 +436,7 @@ function ReviewRow({
             An expense is created from the receipt, and the email moves to Trash
             (recoverable). A confirmation with an edit link lands in your inbox.
           </p>
-          {!item.hasRule ? (
+          {allowRememberSender && !item.hasRule ? (
             <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-gray-50 dark:bg-gray-900 p-2">
               <input
                 type="checkbox"

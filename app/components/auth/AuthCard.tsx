@@ -27,6 +27,34 @@ export function AuthCard({ center, children }: AuthCardProps) {
   );
 }
 
+/** The centered header block of an auth card: logo tile, title, blurb,
+ * and an optional note line (a step counter, a re-connect reminder).
+ * `icon` is the whole tile, so consent pages can use their own colors. */
+export function AuthHeader({
+  icon,
+  title,
+  blurb,
+  note,
+}: {
+  icon: ReactNode;
+  title: ReactNode;
+  blurb?: ReactNode;
+  note?: ReactNode;
+}) {
+  return (
+    <div className="mb-6 flex flex-col items-center gap-2 text-center">
+      {icon}
+      <h1 className="text-xl font-bold">{title}</h1>
+      {blurb ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{blurb}</p>
+      ) : null}
+      {note ? (
+        <p className="text-xs text-gray-500 dark:text-gray-400">{note}</p>
+      ) : null}
+    </div>
+  );
+}
+
 /** The dark rounded logo tile at the top of an auth card. */
 export function AuthTile({ children }: { children: ReactNode }) {
   return (

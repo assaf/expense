@@ -139,6 +139,20 @@ model EmailProcessLog {
   matched      Boolean
   outcome      String
   error        String?
+  // Why the row landed on its outcome (ignored/superseded reasons,
+  // partial's "Missing: ..." list). Distinct from error, which holds
+  // failure text for outcome = error / retryable pending rows.
+  reason       String?
+  // The expense this decision is about: the one the email created
+  // (created/partial) or the receipt that superseded it
+  // (review-ignored + reason "superseded"). Plain string on purpose, no
+  // FK: covering expenses can be deleted, and the row must survive.
+  expenseId    String?
+  // The charge amount off a bank notification's "Amount: $X" line,
+  // parsed at scan time (the email may leave the inbox later). Written
+  // on notification rows so the charges-without-expenses view can group
+  // by (date, amount) without refetching old mail.
+  chargeAmount String?
   createdAt    TimestampString(3)
   fromDisplay  String?
   receivedAt   TimestampString(3)?
