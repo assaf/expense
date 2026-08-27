@@ -203,3 +203,21 @@ describe("validateDateNotFuture", () => {
     expect(validateDateNotFuture("2026-01")).toContain("valid");
   });
 });
+
+describe("thrown error envelopes carry statusText for error boundaries", () => {
+  it("notFound sets statusText + keeps the JSON envelope", () => {
+    const res = notFound();
+    expect(res.status).toBe(404);
+    expect(res.statusText).toBe("Not found");
+  });
+
+  it("badRequest mirrors the message into statusText", () => {
+    const res = badRequest("Bad intent");
+    expect(res.status).toBe(400);
+    expect(res.statusText).toBe("Bad intent");
+  });
+
+  it("unknownIntent sets statusText", () => {
+    expect(unknownIntent().statusText).toBe("Unknown intent.");
+  });
+});

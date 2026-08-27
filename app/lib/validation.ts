@@ -24,7 +24,10 @@ export function formString(form: FormData, key: string): string {
 
 /** Standard 400 response for an unrecognized form action intent. */
 export function unknownIntent(): Response {
-  return Response.json({ error: "Unknown intent." }, { status: 400 });
+  return Response.json(
+    { error: "Unknown intent." },
+    { status: 400, statusText: "Unknown intent." },
+  );
 }
 
 /** JSON error envelope ({ error }, 400) shared by every route so the shape
@@ -32,14 +35,17 @@ export function unknownIntent(): Response {
  * route-helpers.server) so lightweight routes (webhooks whose tests mock
  * ~/lib/env narrowly) don't pull in the auth/Prisma module graph. */
 export function badRequest(error: string): Response {
-  return Response.json({ error }, { status: 400 });
+  return Response.json({ error }, { status: 400, statusText: error });
 }
 
 /** JSON 404 envelope. Loader/action callers throw it; React Router renders
  * the nearest error boundary, which never reads the body text, so the JSON
  * shape only matters to API-style routes that return it directly. */
 export function notFound(): Response {
-  return Response.json({ error: "Not found" }, { status: 404 });
+  return Response.json(
+    { error: "Not found" },
+    { status: 404, statusText: "Not found" },
+  );
 }
 
 /**

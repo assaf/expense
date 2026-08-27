@@ -182,12 +182,30 @@ export default function App() {
   );
 }
 
+/** Render the error boundary's message: statusText when present, else a
+ * data payload that may be a string or a JSON envelope ({ error }). The
+ * old String(data) rendered JSON envelopes as "[object Object]". */
+function boundaryMessage(error: unknown): string {
+  if (!isRouteErrorResponse(error)) return "Something went wrong.";
+  if (error.statusText) return error.statusText;
+  const data: unknown = error.data;
+  if (typeof data === "string" && data) return data;
+  if (data && typeof data === "object") {
+    const envelope = data as { error?: unknown; message?: unknown };
+    if (typeof envelope.error === "string" && envelope.error) {
+      return envelope.error;
+    }
+    if (typeof envelope.message === "string" && envelope.message) {
+      return envelope.message;
+    }
+  }
+  return `Request failed (${error.status}).`;
+}
+
 export function ErrorBoundary() {
   const error = useRouteError();
   const status = isRouteErrorResponse(error) ? error.status : 500;
-  const message = isRouteErrorResponse(error)
-    ? error.statusText || error.data
-    : "Something went wrong.";
+  const message = boundaryMessage(error);
 
   return (
     <html lang="en">
