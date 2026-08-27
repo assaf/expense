@@ -241,6 +241,11 @@ a `finally` block; keep that pattern when adding monitors. `checkinMargin` is
 set to 5 minutes on both monitors because Vercel fires crons 2-4 minutes late
 and the default margin logs every healthy run as "missed" first.
 
+`vercel env pull` REDACTS sensitive env vars as the literal string
+`[SENSITIVE]` — scripts that need real secrets (EMAIL_TOKEN_ENCRYPTION_KEY,
+FASTMAIL_TOKEN, SENTRY_AUTH_TOKEN) must source them from `.env` or read
+them from the Vercel dashboard, not from a pulled env file.
+
 Vendor tracer-bridge packages: when a dependency lazy-loads files Vercel's
 tracer can't follow (alias requires, binary assets), add a tiny
 `vendor/<name>/index.cjs` that `require`s the exact exported subpaths. As a

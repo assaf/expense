@@ -149,10 +149,18 @@ and llms.txt) and with in-app nudges:
   lookback, cursor-scanned over receivedAt; an all-seen batch slides the
   window forward instead of stopping, so a front of ignored mail never
   blocks newer mail from the catch-up; EmailProcessLog = idempotency). Per email: self/bounce guards
-  → rule match (no match = ignore, untouched) → **local classification**
-  (`app/lib/email-classify.ts`, regex only, no LLM: marketing and
-  shipping mail from rule-matched senders is filtered before any model
-  call, so a webhook never costs a DeepSeek request for junk) → the shared
+  → rule match (no match = ignore, untouched) → **precision-first
+  classification** (`classifyReceiptEmail` in
+  `app/lib/email-classify.ts`, regex only, no LLM): bank-notification
+  senders (the notification-senders seed domains), payment-status
+  subjects (payment received/processing, upcoming invoice, purchase
+  approved, statement credit, charged twice), and marketing/shipping mail
+  are all skipped in place; a receipt-signal subject (receipt/invoice/
+  order confirmation/payment) imports; everything else is **uncertain**
+  and also skipped — a body amount alone never promotes non-receipt mail
+  into an expense, and uncertain emails stay in the Inbox for review or
+  manual add (the LLM fallback for the uncertain class is a designed
+  extension, not wired) → the shared
   receipt core
   (same extraction/render/save as receipts-by-email; see
   `selectReceiptSource`/`extractReceiptFromSource`/`saveExpenseFromExtraction`
