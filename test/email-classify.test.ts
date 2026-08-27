@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyReceiptEmail,
   hasOwnConfirmationHeader,
   isBankNotificationSender,
   isTransactionNotification,
@@ -170,5 +171,55 @@ describe("notificationChargeAmount", () => {
 
   it("is null without any amount line", () => {
     expect(notificationChargeAmount("Your card was charged.")).toBeNull();
+  });
+});
+
+describe("classifyReceiptEmail", () => {
+  const classify = (fromAddress: string, subject: string, bodyText = "") =>
+    classifyReceiptEmail({ fromAddress, subject, bodyText });
+
+  it("bank notification senders are never receipts", () => {
+    expect(
+      classify(
+        "capitalone@notification.capitalone.com",
+        "A new transaction was charged to your account",
+        "Amount: $165.00",
+      ).verdict,
+    ).toBe("not-receipt");
+  });
+
+  it("payment status notices are never receipts even with amounts", () => {
+    for (const subject of [
+      "Your payment has been received",
+      "Your rent payment is processing",
+      "Your upcoming 1Password invoice (zoeloft).",
+      "Large Purchase Approved",
+      "Your $25.00 statement credit is on the way!",
+      "It looks like you were charged twice",
+    ]) {
+      expect(classify("x@vendor.com", subject, "$99.00").verdict).toBe(
+        "not-receipt",
+      );
+    }
+  });
+
+  it("receipt-signal subjects classify as receipts", () => {
+    expect(
+      classify(
+        "receipts+acct@stripe.com",
+        "Your zai receipt [#1636-1604]",
+        "Total: $20.00",
+      ).verdict,
+    ).toBe("receipt");
+  });
+
+  it("bland subjects with body amounts stay uncertain", () => {
+    expect(
+      classify(
+        "news@vendor.com",
+        "Run the latest models for open-weight prices",
+        "Now only $0.20 on AWS.",
+      ).verdict,
+    ).toBe("uncertain");
   });
 });

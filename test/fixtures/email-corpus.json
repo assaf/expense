@@ -1,0 +1,488 @@
+[
+ {
+  "id": "Stn0ADFjrKpF",
+  "subject": "A new transaction was charged to Jennifer's account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T15:59:03Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to Jennifer's account"
+ },
+ {
+  "id": "Stn0AEnrW-ON",
+  "subject": "A new transaction was charged to Jennifer's account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T15:58:37Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to Jennifer's account"
+ },
+ {
+  "id": "Stn0AWFwBCI3",
+  "subject": "Run latest GPT 5.6 models for open-weight level prices on AWS Bedrock",
+  "from": "ajfranza@amazon.com",
+  "receivedAt": "2026-08-27T15:53:37Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Run latest GPT 5.6 models for open-weight level prices on AW"
+ },
+ {
+  "id": "Stn0DklZHOyV",
+  "subject": "Your zai receipt [#1636-1604]",
+  "from": "receipts+acct_1Rh0IhRp8MKof9Wn@stripe.com",
+  "receivedAt": "2026-08-27T14:54:12Z",
+  "body": "",
+  "label": "receipt",
+  "logSubject": "Your zai receipt [#1636-1604]"
+ },
+ {
+  "id": "Stn0Dop7vto7",
+  "subject": "A new transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T14:53:02Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to your account"
+ },
+ {
+  "id": "Stn0DovksAdV",
+  "subject": "A new international transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T14:53:00Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new international transaction was charged to your account"
+ },
+ {
+  "id": "Stn29zOan3sk",
+  "subject": "Your zai receipt [#1507-8487]",
+  "from": "receipts+acct_1Rh0IhRp8MKof9Wn@stripe.com",
+  "receivedAt": "2026-08-26T00:57:41Z",
+  "body": "",
+  "label": "receipt",
+  "logSubject": "Your zai receipt [#1507-8487]"
+ },
+ {
+  "id": "Stn2A2av79LF",
+  "subject": "A new transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-26T00:56:29Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to your account"
+ },
+ {
+  "id": "Stn2A2e4UuwV",
+  "subject": "A new international transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-26T00:56:28Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new international transaction was charged to your account"
+ },
+ {
+  "id": "Stn2If8ERfU3",
+  "subject": "Your zai receipt [#1774-5071]",
+  "from": "receipts+acct_1Rh0IhRp8MKof9Wn@stripe.com",
+  "receivedAt": "2026-08-25T22:18:33Z",
+  "body": "",
+  "label": "receipt",
+  "logSubject": "Your zai receipt [#1774-5071]"
+ },
+ {
+  "id": "Stn2Ij8AYMZo",
+  "subject": "A new transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-25T22:17:25Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to your account"
+ },
+ {
+  "id": "Stn2IjF8hHmV",
+  "subject": "A new international transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-25T22:17:23Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new international transaction was charged to your account"
+ },
+ {
+  "id": "Stn3bI9nmEOk",
+  "subject": "Your zai receipt [#1937-4923]",
+  "from": "receipts+acct_1Rh0IhRp8MKof9Wn@stripe.com",
+  "receivedAt": "2026-08-24T20:46:06Z",
+  "body": "",
+  "label": "receipt",
+  "logSubject": "Your zai receipt [#1937-4923]"
+ },
+ {
+  "id": "Stn3bM5CSuN3",
+  "subject": "A new transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-24T20:44:59Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new transaction was charged to your account"
+ },
+ {
+  "id": "Stn3bM5ejf2Z",
+  "subject": "A new international transaction was charged to your account",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-24T20:44:59Z",
+  "body": "",
+  "label": "ignored:bank notification (normalized)",
+  "logSubject": "A new international transaction was charged to your account"
+ },
+ {
+  "id": "Stn0-LTcmpVJ",
+  "subject": "Favorite Agent out the sandbox story ever - AgentNews#26",
+  "from": "adi@newsletter.agentmail.to",
+  "receivedAt": "2026-08-27T19:18:17Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Favorite Agent out the sandbox story ever - AgentNews#26"
+ },
+ {
+  "id": "Stn004Eltook",
+  "subject": "LADWP Power Savers Program Event Scheduled",
+  "from": "ladwp@energyhub.com",
+  "receivedAt": "2026-08-27T19:04:53Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "LADWP Power Savers Program Event Scheduled"
+ },
+ {
+  "id": "Stn00BRuL14N",
+  "subject": "Hi, Assaf",
+  "from": "customerservice@eml.cigar.com",
+  "receivedAt": "2026-08-27T19:02:49Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Hi, Assaf"
+ },
+ {
+  "id": "Stn01Nloerac",
+  "subject": "Large Purchase Approved",
+  "from": "AmericanExpress@welcome.americanexpress.com",
+  "receivedAt": "2026-08-27T18:40:58Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Large Purchase Approved"
+ },
+ {
+  "id": "Stn03Xqr4PNF",
+  "subject": "Things 3 3.23.2 (32302501) for macOS is now available to test.",
+  "from": "testflight_no_reply@email.apple.com",
+  "receivedAt": "2026-08-27T18:01:26Z",
+  "body": "",
+  "label": "ignored:not a receipt (local)",
+  "logSubject": "Things 3 3.23.2 (32302501) for macOS is now available to tes"
+ },
+ {
+  "id": "Stn06WF2Exq7",
+  "subject": "You have 1 keywords with 363,064 new conversations this week",
+  "from": "noreply_at_redditmail_com_dh9vc6kn5f_136108f4@privaterelay.appleid.com",
+  "receivedAt": "2026-08-27T17:06:55Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "You have 1 keywords with 363,064 new conversations this week"
+ },
+ {
+  "id": "Stn07AvjeHgN",
+  "subject": "\u2615\ufe0f Nvidia is buying Hugging Face for $12.9B",
+  "from": "techpresso_at_dupple_com_rxbf36dnre1bsz_d42s0356@icloud.com",
+  "receivedAt": "2026-08-27T16:54:42Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "\u2615\ufe0f Nvidia is buying Hugging Face for $12.9B"
+ },
+ {
+  "id": "Stn07NK3k89V",
+  "subject": "Gift subscription improvements",
+  "from": "hello@ghost.org",
+  "receivedAt": "2026-08-27T16:51:09Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Gift subscription improvements"
+ },
+ {
+  "id": "Stn08WVVYMR3",
+  "subject": "Your Raycast Pro trial ended",
+  "from": "team@raycast.com",
+  "receivedAt": "2026-08-27T16:30:12Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Your Raycast Pro trial ended"
+ },
+ {
+  "id": "Stn08dkzdtMs",
+  "subject": "Your payment has been received",
+  "from": "no_reply@post.applecard.apple",
+  "receivedAt": "2026-08-27T16:27:50Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Your payment has been received"
+ },
+ {
+  "id": "Stn08gYKQC87",
+  "subject": "Your rent payment is processing",
+  "from": "notifications@alerts.biltrewards.com",
+  "receivedAt": "2026-08-27T16:27:02Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Your rent payment is processing"
+ },
+ {
+  "id": "Stn08juA-Hhs",
+  "subject": "Your upcoming 1Password invoice (zoeloft).",
+  "from": "hello@1password.com",
+  "receivedAt": "2026-08-27T16:26:04Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Your upcoming 1Password invoice (zoeloft)."
+ },
+ {
+  "id": "Stn09L9YUQJw",
+  "subject": "Thanks for coming out to Batter Up Vancouver!",
+  "from": "dunky@hustlefund.vc",
+  "receivedAt": "2026-08-27T16:15:07Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Thanks for coming out to Batter Up Vancouver!"
+ },
+ {
+  "id": "Stn09Y85Dr-R",
+  "subject": "Top 5 AI Fundraising Assistants I\u2019d Use in 2026",
+  "from": "evalyze@substack.com",
+  "receivedAt": "2026-08-27T16:11:24Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Top 5 AI Fundraising Assistants I\u2019d Use in 2026"
+ },
+ {
+  "id": "Stn09lL0AlyR",
+  "subject": "\ud83d\ude80\u00a0Kipper, NanoCount, Finch Health Intelligence, Video Transcript API",
+  "from": "newsletter@pitchwall.co",
+  "receivedAt": "2026-08-27T16:07:20Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "\ud83d\ude80\u00a0Kipper, NanoCount, Finch Health Intelligence, Video Trans"
+ },
+ {
+  "id": "Stn0AEKVKueR",
+  "subject": "\u26a0\ufe0f Receipt accepted: $165.00 \u2014 needs attention",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T15:58:45Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\u26a0\ufe0f Receipt accepted: $165.00 \u2014 needs attention"
+ },
+ {
+  "id": "Stn0AVanL1O-",
+  "subject": "\ud83d\udc4d Receipt accepted: $0.20 \u2014 Medical \u2014 2026 Medical",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T15:53:48Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\ud83d\udc4d Receipt accepted: $0.20 \u2014 Medical \u2014 2026 Medical"
+ },
+ {
+  "id": "Stn0BUVkgmCB",
+  "subject": "Stay safe by not giving imposters access to your device",
+  "from": "donotreply@email.schwab.com",
+  "receivedAt": "2026-08-27T15:35:47Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Stay safe by not giving imposters access to your device"
+ },
+ {
+  "id": "Stn0C_19eoV-",
+  "subject": "Join Tim Breidigan on Intelligence.com",
+  "from": "connectors@intelligence.com",
+  "receivedAt": "2026-08-27T15:15:53Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Join Tim Breidigan on Intelligence.com"
+ },
+ {
+  "id": "Stn0Cf2E9k5k",
+  "subject": "Google Alert - Daily Digest",
+  "from": "googlealerts-noreply@google.com",
+  "receivedAt": "2026-08-27T15:14:10Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Google Alert - Daily Digest"
+ },
+ {
+  "id": "Stn0DZGW0AwF",
+  "subject": "[assaf/expense] Run succeeded: deployment-checks - main (603dae9)",
+  "from": "notifications@github.com",
+  "receivedAt": "2026-08-27T14:57:46Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "[assaf/expense] Run succeeded: deployment-checks - main (603"
+ },
+ {
+  "id": "Stn0DkJ3UdZ7",
+  "subject": "\ud83d\udc4d Receipt accepted: $20.00 \u2014 Software & Subscription \u2014 2026 Business",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T14:54:20Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\ud83d\udc4d Receipt accepted: $20.00 \u2014 Software & Subscription \u2014 2026"
+ },
+ {
+  "id": "Stn0DmZKvQ3B",
+  "subject": "Re: [EXPENSE] EXPENSE-P - [email-connections] duplicate confirmation suppressed \u2014 same rec",
+  "from": "noreply@md.getsentry.com",
+  "receivedAt": "2026-08-27T14:53:41Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Re: [EXPENSE] EXPENSE-P - [email-connections] duplicate conf"
+ },
+ {
+  "id": "Stn0DoNo70FN",
+  "subject": "\ud83d\udc4d Receipt accepted: $20.00 \u2014 Software & Subscription \u2014 2026 Business",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T14:53:10Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\ud83d\udc4d Receipt accepted: $20.00 \u2014 Software & Subscription \u2014 2026"
+ },
+ {
+  "id": "Stn0Eqdt0VhV",
+  "subject": "GLM-5.3 is here, Come see what's new",
+  "from": "notifications@account.z.ai",
+  "receivedAt": "2026-08-27T14:34:11Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "GLM-5.3 is here, Come see what's new"
+ },
+ {
+  "id": "Stn0EvHcj5bk",
+  "subject": "Will Meta\u2019s changes actually make social media safer for kids? NewsGuard AI\u2019s Daily Digest",
+  "from": "digest@newsguardtech.com",
+  "receivedAt": "2026-08-27T14:32:52Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Will Meta\u2019s changes actually make social media safer for kid"
+ },
+ {
+  "id": "Stn0GOANkb9V",
+  "subject": "Turn G2 into a top 5 traffic source for Rentail.space",
+  "from": "digitalteam@g2.com",
+  "receivedAt": "2026-08-27T14:05:59Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Turn G2 into a top 5 traffic source for Rentail.space"
+ },
+ {
+  "id": "Stn0HYnLG2EF",
+  "subject": "You've hit your Cron monitors limit",
+  "from": "noreply@md.getsentry.com",
+  "receivedAt": "2026-08-27T13:44:37Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "You've hit your Cron monitors limit"
+ },
+ {
+  "id": "Stn0LWPOSsZB",
+  "subject": "Re: [EXPENSE] EXPENSE-M - Cron failure: expense-inbound-cron",
+  "from": "noreply@md.getsentry.com",
+  "receivedAt": "2026-08-27T12:32:00Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Re: [EXPENSE] EXPENSE-M - Cron failure: expense-inbound-cron"
+ },
+ {
+  "id": "Stn0LqCN6PV-",
+  "subject": "Re: [EXPENSE] EXPENSE-M - Cron failure: expense-inbound-cron",
+  "from": "noreply@md.getsentry.com",
+  "receivedAt": "2026-08-27T12:26:02Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Re: [EXPENSE] EXPENSE-M - Cron failure: expense-inbound-cron"
+ },
+ {
+  "id": "Stn0MdLJp623",
+  "subject": "\u26a0\ufe0f Receipt accepted: $20.00 \u2014 needs attention",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T12:11:24Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\u26a0\ufe0f Receipt accepted: $20.00 \u2014 needs attention"
+ },
+ {
+  "id": "Stn0MdvTmul7",
+  "subject": "It looks like you were charged twice",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T12:11:14Z",
+  "body": "",
+  "label": "ignored:bank notification, restored to inbox",
+  "logSubject": "It looks like you were charged twice"
+ },
+ {
+  "id": "Stn0MxfPnEY3",
+  "subject": "\ud83c\udf08  Prisma 8, one-click deploys, and a new Prisma",
+  "from": "hello@prisma.io",
+  "receivedAt": "2026-08-27T12:05:34Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "\ud83c\udf08  Prisma 8, one-click deploys, and a new Prisma"
+ },
+ {
+  "id": "Stn0Q-bp8r5w",
+  "subject": "the Olympic runner secret",
+  "from": "dunky@hustlefund.vc",
+  "receivedAt": "2026-08-27T11:09:45Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "the Olympic runner secret"
+ },
+ {
+  "id": "Stn0W5yo5TvN",
+  "subject": "Things 3 3.23.2 (32302500) for macOS is now available to test.",
+  "from": "testflight_no_reply@email.apple.com",
+  "receivedAt": "2026-08-27T09:17:59Z",
+  "body": "",
+  "label": "ignored:not a receipt (local)",
+  "logSubject": "Things 3 3.23.2 (32302500) for macOS is now available to tes"
+ },
+ {
+  "id": "Stn0YmhPSAx7",
+  "subject": "\u26a0\ufe0f Receipt accepted: $25.00 \u2014 needs attention",
+  "from": "assaf@labnotes.org",
+  "receivedAt": "2026-08-27T08:28:49Z",
+  "body": "",
+  "label": "ignored:self",
+  "logSubject": "\u26a0\ufe0f Receipt accepted: $25.00 \u2014 needs attention"
+ },
+ {
+  "id": "Stn0YnE32UWw",
+  "subject": "Your $25.00 statement credit is on the way!",
+  "from": "capitalone@notification.capitalone.com",
+  "receivedAt": "2026-08-27T08:28:40Z",
+  "body": "",
+  "label": "ignored:bank notification, restored to inbox",
+  "logSubject": "Your $25.00 statement credit is on the way!"
+ },
+ {
+  "id": "Stn0dgzh8QXw",
+  "subject": "Are your API secrets as safe as you think?",
+  "from": "growth@growth.twilio.com",
+  "receivedAt": "2026-08-27T06:40:30Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Are your API secrets as safe as you think?"
+ },
+ {
+  "id": "Stn0i2siY4Ys",
+  "subject": "Holp, MakeAutomation, TagTally, Lignique, Ticketping, and more",
+  "from": "team@betalist.com",
+  "receivedAt": "2026-08-27T05:20:39Z",
+  "body": "",
+  "label": "ignored:",
+  "logSubject": "Holp, MakeAutomation, TagTally, Lignique, Ticketping, and mo"
+ }
+]

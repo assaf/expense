@@ -30,9 +30,8 @@ import {
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import {
+  classifyReceiptEmail,
   hasOwnConfirmationHeader,
-  isBankNotificationSender,
-  looksLikeReceiptEmail,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -398,30 +397,21 @@ export async function processConnectionEmail(
       return { status: "ignored", reason: "own confirmation" };
     }
 
-    // Bank notification senders (notification-senders.ts seed domains):
-    // account alerts are not merchant receipts. Charge alerts are handled
-    // by inbox review (supersede + charges feed); every other alert stays
-    // in the Inbox untouched. Skipped in review mode, where the user's
-    // explicit choice is the gate.
-    if (!review && isBankNotificationSender(summary.from ?? "")) {
-      await log("ignored", true, { reason: "bank notification" });
-      return { status: "ignored", reason: "bank notification" };
-    }
-
-    // LOCAL gate before any model call: marketing/shipping mail from a
-    // rule-matched sender is filtered by regex only (no LLM per webhook).
-    // The extraction that follows may use the model; its isReceipt verdict
-    // stays as the backstop. Skipped in review mode, where the user's
-    // choice is the gate; extraction still rejects non-receipts.
-    if (
-      !review &&
-      !looksLikeReceiptEmail({
-        subject: summary.subject,
-        bodyText: email.text ?? htmlToText(email.html ?? ""),
-      })
-    ) {
-      await log("ignored", true, { reason: "not a receipt (local)" });
-      return { status: "ignored", reason: "not a receipt (local)" };
+    // PRECISION-FIRST gate for the auto drain: a "receipt" verdict must
+    // never fire for non-receipt mail, even with amounts in the body
+    // (bank alerts, payment-status notices, newsletters with prices were
+    // all misimported by the old body-amount rule). not-receipt AND
+    // uncertain both skip: the email stays in the Inbox untouched.
+    // Review mode keeps the looser gate — the user's explicit choice is
+    // the gate there.
+    const classification = classifyReceiptEmail({
+      fromAddress: summary.from ?? "",
+      subject: summary.subject,
+      bodyText: email.text ?? htmlToText(email.html ?? ""),
+    });
+    if (!review && classification.verdict !== "receipt") {
+      await log("ignored", true, { reason: classification.reason });
+      return { status: "ignored", reason: classification.reason };
     }
 
     const attachments = await deps.listAttachments(summary.id);

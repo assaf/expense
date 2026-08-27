@@ -238,7 +238,7 @@ describe("processConnectionEmail", () => {
       },
     );
     expect(result.status).toBe("ignored");
-    expect((result as { reason: string }).reason).toBe("not a receipt (local)");
+    expect((result as { reason: string }).reason).toBe("no receipt signal");
     expect(trashed).toEqual([]);
     expect(extractReceipt).not.toHaveBeenCalled();
     expect((await logRow(conn.id, "e4"))?.matched).toBe(true);
@@ -296,6 +296,47 @@ describe("processConnectionEmail", () => {
     expect((await logRow(conn.id, "e8"))?.outcome).toBe("ignored");
   });
 
+  it("ignores newsletters with prices even from rule-matched senders", async () => {
+    await addEmailRule({
+      accountId: "",
+      sender: "apple.com",
+      source: "seed",
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e10",
+          {
+            from: "Apple <news@email.apple.com>",
+            subject: "Run the latest models for open-weight prices",
+            body: "Now only $0.20 on AWS. Amazon.com has deals.",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
+    deps.extractReceipt = extractReceipt;
+    const result = await processConnectionEmail(
+      conn,
+      summary(
+        "e10",
+        "Apple <news@email.apple.com>",
+        "Run the latest models for open-weight prices",
+      ),
+      deps,
+      {
+        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("ignored");
+    expect((result as { reason: string }).reason).toBe("no receipt signal");
+    expect(trashed).toEqual([]);
+    expect(extractReceipt).not.toHaveBeenCalled();
+    expect((await logRow(conn.id, "e10"))?.outcome).toBe("ignored");
+  });
+
   it("ignores bank notification senders (Capital One alerts are not receipts)", async () => {
     await addEmailRule({
       accountId: "",
@@ -331,7 +372,9 @@ describe("processConnectionEmail", () => {
       },
     );
     expect(result.status).toBe("ignored");
-    expect((result as { reason: string }).reason).toBe("bank notification");
+    expect((result as { reason: string }).reason).toBe(
+      "bank notification sender",
+    );
     expect(trashed).toEqual([]);
     expect(extractReceipt).not.toHaveBeenCalled();
     expect((await logRow(conn.id, "e9"))?.outcome).toBe("ignored");

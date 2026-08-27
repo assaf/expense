@@ -76,6 +76,57 @@ export function isBankNotificationSender(fromAddress: string): boolean {
   );
 }
 
+export type ReceiptEmailVerdict = "receipt" | "not-receipt" | "uncertain";
+
+export interface ReceiptEmailClassification {
+  verdict: ReceiptEmailVerdict;
+  reason: string;
+}
+
+/**
+ * Precision-first classification for the auto-drain. A "receipt" verdict
+ * must NEVER fire for non-receipt mail, even when the body mentions an
+ * amount: bank alerts, payment-status notices, and newsletters with
+ * prices have all been misimported this way. "uncertain" means the rules
+ * can't tell — the auto-drain skips these and leaves the email in the
+ * Inbox for review (the corpus shows they are newsletters and account
+ * notices); an LLM fallback can be wired here later if recall suffers.
+ */
+export function classifyReceiptEmail(input: {
+  fromAddress: string;
+  subject: string;
+  bodyText: string;
+}): ReceiptEmailClassification {
+  const subject = input.subject.trim();
+
+  // Bank notification senders: charge alerts are handled by inbox review
+  // (supersede + charges feed); every other account alert stays in the
+  // Inbox untouched. Their subjects often mention amounts — not receipts.
+  if (isBankNotificationSender(input.fromAddress)) {
+    return { verdict: "not-receipt", reason: "bank notification sender" };
+  }
+
+  // Money-adjacent account status notices, never purchases: payment
+  // received/processing, upcoming invoice, purchase approved, statement
+  // credit, duplicate-charge warnings.
+  if (
+    /(payment (has been )?(received|processing)|payment is processing|upcoming[^.]{0,30}invoice|purchase (was )?approved|statement credit|(you were |was )?charged twice|fraud(ulent)? (charge|alert))/i.test(
+      subject,
+    )
+  ) {
+    return { verdict: "not-receipt", reason: "payment status notice" };
+  }
+
+  // Receipt-signal subjects: order/receipt/invoice confirmations.
+  if (hasReceiptSubjectSignal(subject)) {
+    return { verdict: "receipt", reason: "receipt-signal subject" };
+  }
+
+  // Anything else is uncertain even with an amount in the body: the
+  // amount alone never promotes non-receipt mail into an expense.
+  return { verdict: "uncertain", reason: "no receipt signal" };
+}
+
 export function isTransactionNotification(
   fromAddress: string,
   subject: string,
@@ -110,6 +161,17 @@ export interface EmailClassifyInput {
   subject: string;
   /** Plain text of the body (empty for attachment-only emails). */
   bodyText: string;
+}
+
+/**
+ * Does the SUBJECT alone signal a receipt/invoice/order confirmation?
+ * The auto-drain requires this on top of looksLikeReceiptEmail: a money
+ * amount in the body rescued bank alerts and newsletters with prices into
+ * junk expenses. Review mode doesn't use it (the user's explicit choice
+ * is the gate).
+ */
+export function hasReceiptSubjectSignal(subject: string): boolean {
+  return RECEIPT_SUBJECT_RE.test(subject.trim());
 }
 
 /**
