@@ -29,6 +29,7 @@ import {
 } from "~/lib/email-connection-mail.server";
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
+import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import {
   classifyReceiptEmail,
   hasOwnConfirmationHeader,
@@ -422,13 +423,18 @@ export async function processConnectionEmail(
       return { status: "ignored", reason: "no receipt content" };
     }
 
+    // Receipt verdict → the local fast path (no model). Uncertain → the
+    // LLM extraction runs and its isReceipt verdict gates the import (the
+    // rules couldn't tell; the model is the fallback). Review mode keeps
+    // the LLM available too — the user's explicit choice is the gate.
     const extracted = await extractReceiptFromSource({
       accountId: connection.accountId,
       email,
       attachments,
       source: selected.source,
       deps,
-      localOnly: !review,
+      localOnly: !review && classification.verdict === "receipt",
+      review,
       ruleSender: rule?.sender,
     });
     if (!extracted) {
@@ -446,6 +452,33 @@ export async function processConnectionEmail(
       // attachment receipt: skip, leave in Inbox for manual review.
       await log("ignored", true, { reason: "not extractable locally" });
       return { status: "ignored", reason: "not extractable locally" };
+    }
+
+    // Duplicate guard (auto mode): the same receipt (merchant + amount +
+    // date) imported within the recent window — two copies of one email
+    // arrived, or the push and the drain raced. Skip the import entirely:
+    // the email stays in the Inbox and the duplicate is surfaced via
+    // captureWarning (the designed duplicate alarm, EXPENSE-P).
+    if (!review) {
+      const duplicate = await findRecentlyImportedMatch(connection.accountId, {
+        merchant: extracted.extraction.merchant,
+        amount: extracted.extraction.amount,
+        date: selected.expenseDate,
+        description: extracted.extraction.description,
+        excludeExpenseId: "",
+      });
+      if (duplicate) {
+        await log("ignored", true, { reason: "duplicate of a recent import" });
+        captureWarning(
+          "[email-connections] duplicate receipt skipped — same receipt imported recently",
+          {
+            connectionId: connection.id,
+            emailId: summary.id,
+            matchedExpenseId: duplicate.id,
+          },
+        );
+        return { status: "ignored", reason: "duplicate" };
+      }
     }
 
     const saved = await saveExpenseFromExtraction({

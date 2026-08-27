@@ -77,10 +77,18 @@ export function createMimeInboundCache(): MimeInboundCache {
         if (Date.now() - entry.fetchedAt < PARSE_TTL_MS) return entry;
         parseCache.delete(key);
       }
+      // A rejected download/parse must not stay cached: the retry drain
+      // would re-serve the same failure instead of re-fetching (the
+      // Apple Card screenshot sat unprocessed for days this way).
       const promise = (async () => {
-        const raw = await adapter.rawEmail(id);
-        const email = await PostalMime.parse(raw.raw);
-        return { raw, email, fetchedAt: Date.now() };
+        try {
+          const raw = await adapter.rawEmail(id);
+          const email = await PostalMime.parse(raw.raw);
+          return { raw, email, fetchedAt: Date.now() };
+        } catch (err) {
+          parseCache.delete(key);
+          throw err;
+        }
       })();
       if (parseCache.size >= PARSE_CACHE_MAX) {
         const oldest = parseCache.keys().next().value;

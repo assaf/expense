@@ -111,16 +111,17 @@ describe("processConnectionEmail", () => {
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
   });
 
-  it("suppresses the second confirmation when the same receipt was already imported recently", async () => {
+  it("skips the second copy of the same receipt and leaves it in the Inbox", async () => {
     // Cross-pipeline overlap: the same receipt exists in the Inbox AND as
-    // the user's forward to the receipts address. Both are imported (two
-    // different emails), but the owner must get one confirmation, not two.
+    // the user's forward to the receipts address. The duplicate guard
+    // skips the second import entirely: one expense, one confirmation,
+    // and the duplicate copy stays in the Inbox untouched.
     await addEmailRule({
       accountId: "",
       sender: "dedupco.com",
       source: "seed",
     });
-    const { adapter } = fakeAdapter(
+    const { adapter, trashed } = fakeAdapter(
       new Map([
         [
           "e1",
@@ -162,10 +163,20 @@ describe("processConnectionEmail", () => {
       depsFor(adapter, conn.id),
       adapters,
     );
-    expect(second.status).toBe("partial");
-    // The second import saved its own expense row but the confirmation is
-    // suppressed; still exactly one notification to the owner.
+    // The duplicate guard skips the import: no second expense, no second
+    // confirmation, and the copy stays in the Inbox (recoverable).
+    expect(second.status).toBe("ignored");
+    expect((second as { reason: string }).reason).toBe("duplicate");
+    // Only the first copy was trashed (imported); the duplicate stays.
+    expect(trashed).toEqual(["e1"]);
     expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
+    expect((await logRow(conn.id, "e2"))?.reason).toBe(
+      "duplicate of a recent import",
+    );
+    const expenses = await readExpenses(conn.accountId);
+    expect(
+      expenses.filter((e) => e.type === "receipt" && e.merchant === "Dedupco"),
+    ).toHaveLength(1);
   });
 
   it("ignores emails with no matching rule and leaves them in the Inbox", async () => {

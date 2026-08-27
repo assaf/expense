@@ -238,6 +238,38 @@ export async function unprocessedReceiptIds(limit: number): Promise<string[]> {
 }
 
 /** Mark a receipt email as processed + read (both `$`-keywords). */
+/**
+ * One bounded retry for a receipt email whose pipeline failed: clear the
+ * processed keyword (so the next drain re-enumerates it) and mark it
+ * retried. A SECOND failure flips it to permanently skipped — unbounded
+ * retries of a poison email would block the receivedAt-ordered queue.
+ */
+export async function markReceiptRetry(id: string): Promise<void> {
+  const s = await jmapSession();
+  const { list } = await call<
+    { accountId: string; ids: string[]; properties: string[] },
+    { list: Array<{ keywords?: Record<string, boolean> }> }
+  >("Email/get", {
+    accountId: s.accountId,
+    ids: [id],
+    properties: ["keywords"],
+  });
+  const keywords: Record<string, boolean> = { ...list[0]?.keywords };
+  if (keywords["$receipt-retried"]) {
+    await markReceiptProcessed(id);
+    return;
+  }
+  delete keywords[RECEIPT_PROCESSED_KEYWORD];
+  keywords["$receipt-retried"] = true;
+  await call<{ accountId: string; update: Record<string, unknown> }, unknown>(
+    "Email/set",
+    {
+      accountId: s.accountId,
+      update: { [id]: { keywords } },
+    },
+  );
+}
+
 export async function markReceiptProcessed(id: string): Promise<void> {
   const s = await jmapSession();
   await call<{ accountId: string; update: Record<string, unknown> }, unknown>(

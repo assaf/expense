@@ -2,6 +2,7 @@ import {
   destroyEmail,
   isEmailNotFoundError,
   markReceiptProcessed,
+  markReceiptRetry,
   rawEmail,
   unprocessedReceiptIds,
   type RawEmail,
@@ -54,6 +55,7 @@ export interface FastmailAdapter {
   unprocessedReceiptIds(limit: number): Promise<string[]>;
   /** Set the `$receipt-processed` keyword (mark-before-process). */
   markProcessed(id: string): Promise<void>;
+  markRetry(id: string): Promise<void>;
   /** Permanently delete an email after a successful import. */
   destroyEmail(id: string): Promise<void>;
 }
@@ -62,6 +64,7 @@ const realFastmailAdapter: FastmailAdapter = {
   rawEmail,
   unprocessedReceiptIds,
   markProcessed: markReceiptProcessed,
+  markRetry: markReceiptRetry,
   destroyEmail,
 };
 
@@ -229,7 +232,6 @@ export async function processUnprocessedReceipts(
     if (ids.length === 0) break;
 
     for (const id of ids) {
-      await adapter.markProcessed(id);
       try {
         const data = await receiptEmailData(id, adapter);
         // Loop guard: the app's own outbound mail carries the
@@ -251,6 +253,9 @@ export async function processUnprocessedReceipts(
         }
         const result = await processInboundEvent(data, guardedDeps);
         if (result.status === "error") {
+          // Handled failure: the error reply went to the sender, so a
+          // re-drain would only re-send it. Mark permanently.
+          await adapter.markProcessed(id);
           failed++;
           console.info("[fastmail-inbound] processed email", {
             id,
@@ -276,6 +281,9 @@ export async function processUnprocessedReceipts(
           });
           continue;
         }
+        // Mark only after success: a processing failure leaves the email
+        // unmarked so the next drain retries it (bounded — see markRetry).
+        await adapter.markProcessed(id);
         await adapter.destroyEmail(id);
         invalidateMimeCache(id);
         destroyed++;
@@ -310,6 +318,10 @@ export async function processUnprocessedReceipts(
         // folder itself is the recovery path.
         failed++;
         captureError(err, { emailId: id });
+        // One bounded retry: un-mark + flag, so the next drain re-runs
+        // the pipeline (transient LLM/API failures self-heal). A second
+        // failure flips it to permanently skipped (markReceiptRetry).
+        await adapter.markRetry(id);
       }
     }
 

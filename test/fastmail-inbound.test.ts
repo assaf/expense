@@ -139,10 +139,12 @@ function recordingAdapter(emails: Map<string, RawEmail>): {
   marked: string[];
   destroyed: string[];
   downloaded: string[];
+  retried: string[];
 } {
   const marked: string[] = [];
   const destroyed: string[] = [];
   const downloaded: string[] = [];
+  const retried: string[] = [];
   const adapter: FastmailAdapter = {
     rawEmail: async (id) => {
       downloaded.push(id);
@@ -156,11 +158,22 @@ function recordingAdapter(emails: Map<string, RawEmail>): {
     markProcessed: async (id) => {
       marked.push(id);
     },
+    // Model the real bounded retry: first failure un-marks (the next drain
+    // re-lists it); a second failure flips it to permanently marked.
+    markRetry: async (id) => {
+      if (retried.includes(id)) {
+        if (!marked.includes(id)) marked.push(id);
+        return;
+      }
+      retried.push(id);
+      const i = marked.indexOf(id);
+      if (i >= 0) marked.splice(i, 1);
+    },
     destroyEmail: async (id) => {
       destroyed.push(id);
     },
   };
-  return { adapter, marked, destroyed, downloaded };
+  return { adapter, marked, destroyed, downloaded, retried };
 }
 
 /** Deterministic fake "model": reads MERCHANT:/TOTAL: markers (like inbound.test.ts). */
@@ -350,7 +363,7 @@ describe("processUnprocessedReceipts", () => {
     });
 
     expect(result).toEqual({ processed: 1, failed: 0, destroyed: 1 });
-    expect(marked).toEqual([id]); // mark-before-process
+    expect(marked).toEqual([id]); // marked after success
     expect(destroyed).toEqual([id]);
 
     // The expense really was created (from the attachment path).
@@ -403,18 +416,17 @@ describe("processUnprocessedReceipts", () => {
     expect(destroyed).toEqual([]); // stays in the folder for review
   });
 
-  it("does not destroy when processing throws", async () => {
+  it("un-marks + flags for retry when processing throws", async () => {
     const id = "fm-proc-3";
-    const { adapter, destroyed } = recordingAdapter(
+    const { adapter, destroyed, marked, retried } = recordingAdapter(
       new Map([[id, rawEmailOf(id)]]),
     );
     const deps = fastmailInboundDeps(adapter);
-    const pipelineDeps: InboundDeps = {
-      ...deps,
-      ...fakeDeps(),
-      fetchReceivedEmail: async () => {
-        throw new Error("JMAP went away");
-      },
+    const pipelineDeps: InboundDeps = { ...deps, ...fakeDeps() };
+    // The failure happens in receiptEmailData, which reads the email
+    // through the adapter's rawEmail.
+    adapter.rawEmail = async () => {
+      throw new Error("DeepSeek API 502: empty content");
     };
 
     const result = await processUnprocessedReceipts({
@@ -424,6 +436,54 @@ describe("processUnprocessedReceipts", () => {
 
     expect(result).toEqual({ processed: 0, failed: 1, destroyed: 0 });
     expect(destroyed).toEqual([]);
+    // The bounded retry: un-marked + flagged, so the next drain re-runs
+    // the pipeline instead of skipping it forever.
+    expect(marked).toEqual([]);
+    expect(retried).toEqual([id]);
+  });
+
+  it("retries a transient failure once, then permanently skips a second one", async () => {
+    const id = "fm-retry-1";
+    let failFetch = true;
+    const { adapter, marked, retried } = recordingAdapter(
+      new Map([[id, rawEmailOf(id)]]),
+    );
+    const deps = fastmailInboundDeps(adapter);
+    const pipelineDeps: InboundDeps = { ...deps, ...fakeDeps() };
+    const realRaw = adapter.rawEmail.bind(adapter);
+    adapter.rawEmail = async (drainId: string) => {
+      if (failFetch) throw new Error("DeepSeek API 502: empty content");
+      return realRaw(drainId);
+    };
+
+    // First drain: the transient failure un-marks + flags for retry.
+    const first = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+    expect(first).toEqual({ processed: 0, failed: 1, destroyed: 0 });
+    expect(retried).toEqual([id]);
+    expect(marked).toEqual([]);
+
+    // Second drain: still failing → the retry is exhausted, the email is
+    // permanently marked (the bounded behavior) and never re-enumerated.
+    const second = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+    expect(second).toEqual({ processed: 0, failed: 1, destroyed: 0 });
+    expect(marked).toEqual([id]);
+
+    // Third drain: even with the failure gone, the marked email stays
+    // skipped — the recovery path is forwarding it again (or a manual
+    // add), not an unbounded retry loop.
+    failFetch = false;
+    const skippedThird = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+    expect(skippedThird).toEqual({ processed: 0, failed: 0, destroyed: 0 });
+    expect(marked).toEqual([id]);
   });
 
   it("skips + destroys its own confirmation emails (loop guard)", async () => {

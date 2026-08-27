@@ -796,6 +796,11 @@ export async function extractReceiptFromSource(opts: {
    * call). Body receipts parse via the known-merchant or rule-merchant
    * path; attachment receipts return null (skip for manual review). */
   localOnly?: boolean;
+  /** Review mode: the user explicitly picked this email, so usable data
+   * imports even when the extractor wouldn't call it a receipt. The auto
+   * drains (review unset) require isReceipt — a body amount alone never
+   * promotes non-receipt mail into an expense. */
+  review?: boolean;
   /** The matched rule's sender domain, used to name a first-time merchant
    * when localOnly is set. Required for the rule-merchant local path. */
   ruleSender?: string;
@@ -945,10 +950,16 @@ export async function extractReceiptFromSource(opts: {
     }
   }
 
-  // Classify as receipt? If the model says it isn't one and gave nothing
-  // usable, don't create an expense.
-  const hasUsableData = Boolean(extraction.merchant || extraction.amount);
-  if (!extraction.isReceipt && !hasUsableData) {
+  // Classify as receipt? The auto drains require the extractor's
+  // isReceipt verdict — a body amount alone never promotes non-receipt
+  // mail (bank alerts, newsletters) into an expense. Review mode keeps
+  // the looser gate: the user explicitly picked the email.
+  if (opts.review) {
+    const hasUsableData = Boolean(extraction.merchant || extraction.amount);
+    if (!extraction.isReceipt && !hasUsableData) {
+      return null;
+    }
+  } else if (!extraction.isReceipt) {
     return null;
   }
   return { extraction, receiptImage, imageMime, originalName, renderError };
