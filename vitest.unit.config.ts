@@ -24,6 +24,7 @@ export default defineConfig({
       "test/statements.test.ts",
       "test/receipt-pdf.test.ts",
       "test/email-classify.test.ts",
+      "test/llm-alert.test.ts",
       "test/email-corpus.test.ts",
       "test/email-mime.test.ts",
       "test/format.test.ts",

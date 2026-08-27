@@ -23,6 +23,7 @@ export default defineConfig({
       "test/validation.test.ts",
       "test/email-classify.test.ts",
       "test/email-corpus.test.ts",
+      "test/llm-alert.test.ts",
       "test/email-mime.test.ts",
       "test/format.test.ts",
       "test/duplicates.test.ts",

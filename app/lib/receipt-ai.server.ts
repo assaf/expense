@@ -11,8 +11,10 @@ import {
   LLM_VISION_MAX_TOKENS,
   LLM_VISION_MODEL,
   LLM_MODEL,
+  APP_EMAIL,
 } from "~/lib/env";
 import { normalizeAmount } from "~/lib/format";
+import { sendEmail } from "~/lib/reply.server";
 
 /**
  * Receipt data extraction via an OpenAI-compatible chat-completions API,
@@ -422,7 +424,7 @@ export interface ExtractionResult {
   notes: string;
 }
 
-class LLMError extends Error {
+export class LLMError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -516,6 +518,45 @@ function buildUserPrompt(input: ExtractionInput): string {
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/**
+ * Owner alert for account-level LLM failures (401 invalid/revoked key,
+ * 402 insufficient balance). These are persistent — every forwarded
+ * receipt stays unprocessed until the key is fixed — so email the owner
+ * (Sentry alone sat unnoticed for days). Transient failures (5xx,
+ * timeouts, empty content) are Sentry-only. Deduped to one email per
+ * 24h per instance; failures never propagate to the caller.
+ */
+let llmAlertSentAt = 0;
+const LLM_ALERT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
+  if (!(err instanceof LLMError)) return;
+  if (err.status !== 401 && err.status !== 402) return;
+  if (!APP_EMAIL) return;
+  if (now - llmAlertSentAt < LLM_ALERT_INTERVAL_MS) return;
+  llmAlertSentAt = now;
+  const cause =
+    err.status === 402
+      ? "the DeepSeek account has an insufficient balance"
+      : "the DeepSeek API key is invalid or was revoked";
+  void sendEmail({
+    to: APP_EMAIL,
+    subject: "Expense: receipt AI is unavailable — fix the DeepSeek key",
+    text:
+      `Receipt extraction is failing: ${cause}\n\n` +
+      `Error: ${err.message}\n\n` +
+      "Forwarded receipts will stay in the Receipts folder (and bank " +
+      "alerts in the Inbox) until this is fixed. Sentry has the details.",
+    html:
+      `<p>Receipt extraction is failing: <strong>${cause}</strong>.</p>` +
+      `<p>Error: <code>${err.message}</code></p>` +
+      "<p>Forwarded receipts will stay in the Receipts folder (and bank " +
+      "alerts in the Inbox) until this is fixed. Sentry has the details.</p>",
+  }).catch((sendErr) =>
+    console.error("[llm] availability alert failed:", sendErr),
+  );
+}
+
 async function chatCompletion(
   messages: ChatMessage[],
   opts: {
@@ -576,11 +617,13 @@ async function chatCompletion(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new LLMError(
+    const err = new LLMError(
       `${providerLabel} API ${res.status}: ${text.slice(0, 500)}`,
       res.status,
       text,
     );
+    maybeAlertLlmUnusable(err);
+    throw err;
   }
   const data = (await res.json()) as {
     choices?: { message?: { content?: string } }[];
