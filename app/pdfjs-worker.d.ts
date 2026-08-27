@@ -1,6 +1,6 @@
 /**
  * pdfjs-dist ships type declarations only for its main entry (pdf.mjs), not
- * for its worker module. `receipt-ocr.server.ts` statically imports the
+ * for its worker module. `receipt-ocr.server.ts` imports the worker
  * worker so the serverless bundle ships it (see the `globalThis.pdfjsWorker`
  * note there). The worker's `WorkerMessageHandler` is what pdfjs's main-thread
  * fake worker runs the document parsing with.

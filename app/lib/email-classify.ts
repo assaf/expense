@@ -170,7 +170,7 @@ export interface EmailClassifyInput {
  * junk expenses. Review mode doesn't use it (the user's explicit choice
  * is the gate).
  */
-export function hasReceiptSubjectSignal(subject: string): boolean {
+function hasReceiptSubjectSignal(subject: string): boolean {
   return RECEIPT_SUBJECT_RE.test(subject.trim());
 }
 

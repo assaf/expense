@@ -55,7 +55,7 @@ export function consumeCommandRequest(): CommandRequest | null {
 }
 
 /** Subscribe to requests. Returns an unsubscribe function. */
-export function onCommandRequest(listener: Listener): () => void {
+function onCommandRequest(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }

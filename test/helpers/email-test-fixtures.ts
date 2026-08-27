@@ -13,7 +13,7 @@ import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server"
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./seedTestData";
 
-export const TINY_PNG = Buffer.from(
+const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
@@ -47,7 +47,7 @@ export function summary(
 }
 
 /** Deterministic fake "model": reads MERCHANT:/TOTAL:/CATEGORY: markers. */
-export function fakeExtract(text?: string): ExtractionResult {
+function fakeExtract(text?: string): ExtractionResult {
   const t = text ?? "";
   return {
     isReceipt: t.includes("TOTAL:") || t.includes("MERCHANT:"),
