@@ -30,8 +30,9 @@ import {
 import { decryptSecret } from "~/lib/token-crypto.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import {
-  looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
+  isBankNotificationSender,
+  looksLikeReceiptEmail,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -395,6 +396,16 @@ export async function processConnectionEmail(
     if (hasOwnConfirmationHeader(email.headers)) {
       await log("ignored", true, { reason: "own confirmation" });
       return { status: "ignored", reason: "own confirmation" };
+    }
+
+    // Bank notification senders (notification-senders.ts seed domains):
+    // account alerts are not merchant receipts. Charge alerts are handled
+    // by inbox review (supersede + charges feed); every other alert stays
+    // in the Inbox untouched. Skipped in review mode, where the user's
+    // explicit choice is the gate.
+    if (!review && isBankNotificationSender(summary.from ?? "")) {
+      await log("ignored", true, { reason: "bank notification" });
+      return { status: "ignored", reason: "bank notification" };
     }
 
     // LOCAL gate before any model call: marketing/shipping mail from a

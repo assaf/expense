@@ -296,6 +296,47 @@ describe("processConnectionEmail", () => {
     expect((await logRow(conn.id, "e8"))?.outcome).toBe("ignored");
   });
 
+  it("ignores bank notification senders (Capital One alerts are not receipts)", async () => {
+    await addEmailRule({
+      accountId: "",
+      sender: "capitalone.com",
+      source: "seed",
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e9",
+          {
+            from: "capitalone@notification.capitalone.com",
+            subject: "It looks like you were charged twice",
+            body: "Amount: $20.00",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const extractReceipt = vi.fn((input) => deps.extractReceipt(input));
+    deps.extractReceipt = extractReceipt;
+    const result = await processConnectionEmail(
+      conn,
+      summary(
+        "e9",
+        "capitalone@notification.capitalone.com",
+        "It looks like you were charged twice",
+      ),
+      deps,
+      {
+        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("ignored");
+    expect((result as { reason: string }).reason).toBe("bank notification");
+    expect(trashed).toEqual([]);
+    expect(extractReceipt).not.toHaveBeenCalled();
+    expect((await logRow(conn.id, "e9"))?.outcome).toBe("ignored");
+  });
+
   it("extracts a first-time receipt locally without ever calling the model", async () => {
     await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
     const { adapter, trashed } = fakeAdapter(

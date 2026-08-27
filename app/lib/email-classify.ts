@@ -64,6 +64,18 @@ const TRANSACTION_NOTIFICATION_SUBJECT_RES =
  * check it against already-imported expenses (same amount, same date)
  * and supersede it when a real receipt covers the charge.
  */
+/** Is this sender a bank's notification address (the seed domains in
+ * notification-senders.ts)? Bank notification mail is never a merchant
+ * receipt: charge alerts are handled by inbox review (supersede + charges
+ * feed), and every other account alert should stay in the Inbox untouched.
+ * The auto-drain skips these; review mode still lets the user decide. */
+export function isBankNotificationSender(fromAddress: string): boolean {
+  const domain = fromAddress.split("@")[1] ?? "";
+  return TRANSACTION_NOTIFICATION_SENDERS.some(
+    (seed) => domain === seed.domain || domain.endsWith(`.${seed.domain}`),
+  );
+}
+
 export function isTransactionNotification(
   fromAddress: string,
   subject: string,

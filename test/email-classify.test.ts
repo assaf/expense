@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  isTransactionNotification,
-  notificationChargeAmount,
-  looksLikeReceiptEmail,
   hasOwnConfirmationHeader,
+  isBankNotificationSender,
+  isTransactionNotification,
+  looksLikeReceiptEmail,
+  notificationChargeAmount,
 } from "~/lib/email-classify";
 
 /** The local (no-LLM) gate that decides whether extraction runs at all. */
@@ -85,6 +86,25 @@ describe("hasOwnConfirmationHeader", () => {
 
   it("returns false for empty headers", () => {
     expect(hasOwnConfirmationHeader({})).toBe(false);
+  });
+});
+
+describe("isBankNotificationSender", () => {
+  it("matches bank notification subdomains", () => {
+    expect(
+      isBankNotificationSender("capitalone@notification.capitalone.com"),
+    ).toBe(true);
+    expect(isBankNotificationSender("capitalone@service.capitalone.com")).toBe(
+      true,
+    );
+    expect(isBankNotificationSender("capitalone@alerts.capitalone.com")).toBe(
+      true,
+    );
+  });
+
+  it("rejects non-bank senders", () => {
+    expect(isBankNotificationSender("billing@apple.com")).toBe(false);
+    expect(isBankNotificationSender("news@github.com")).toBe(false);
   });
 });
 
