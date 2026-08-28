@@ -48,6 +48,7 @@ import {
   formatAmount,
   formatDate,
   sortExpenses,
+  summarizeAmounts,
   summarizeByReport,
   todayDate,
 } from "~/lib/format";
@@ -72,7 +73,8 @@ import {
   readSettings,
   writeSettings,
 } from "~/lib/db/settings";
-import type { Expense } from "~/lib/types";
+import type { Expense, Location, MileageType } from "~/lib/types";
+import type { DuplicateReason } from "~/lib/duplicates";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/_index";
 
@@ -213,7 +215,35 @@ export async function action({ request }: Route.ActionArgs) {
   return unknownIntent();
 }
 
-function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
+/** One list row: the thin Expense projection the client filters, sums,
+ * and renders. */
+interface ExpenseListItem {
+  id: string;
+  type: "receipt" | "mileage";
+  mileageType: MileageType;
+  date: string;
+  amount: string;
+  category: string;
+  report: string;
+  description: string;
+  complete: boolean;
+  reconciled: boolean;
+  imageFile: string;
+  updatedAt: string;
+  locations: Location[];
+  distanceMiles: string;
+  merchant: string;
+  duplicates: {
+    expenseId: string;
+    reason: DuplicateReason;
+    label: string;
+  }[];
+}
+
+function toListItem(
+  e: Expense,
+  matches: DuplicateMatch[] | undefined,
+): ExpenseListItem {
   return {
     id: e.id,
     type: e.type,
@@ -241,7 +271,7 @@ function toListItem(e: Expense, matches: DuplicateMatch[] | undefined) {
 /** Text fields the search box filters on: the merchant (or "mileage" with
  * the route addresses for mileage rows), description, category, and the
  * amount formatted as "$x.xx" so a query like "$7" matches "$7.50". */
-function searchableText(e: ReturnType<typeof toListItem>): string {
+function searchableText(e: ExpenseListItem): string {
   const parts = [
     e.type === "receipt"
       ? e.merchant
@@ -254,11 +284,65 @@ function searchableText(e: ReturnType<typeof toListItem>): string {
   return parts.join(" ").toLowerCase();
 }
 
-/** Case-insensitive word filter: every whitespace-separated word in the
- * query must appear somewhere in the row's searchable text; "" matches
- * everything (all rows). */
-function matchesSearch(e: ReturnType<typeof toListItem>, query: string) {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+/** The recognized search operators. */
+const FILTER_KEYS = ["report", "category", "merchant"] as const;
+type FilterKey = (typeof FILTER_KEYS)[number];
+
+/**
+ * Parsed search query. `report:` / `category:` / `merchant:` set exact
+ * filters (case-insensitive); an operator's value runs to the next
+ * recognized prefix, so spaced names work: `report:2026 business`. Free
+ * text (before any operator, or under an unknown prefix) ANDs words
+ * against the row's searchable text, as always. Same-key values OR
+ * together; keys AND together. `report:` with no value is a no-op, and
+ * colon-bearing free text ("10:30") is untouched.
+ */
+function parseQuery(query: string): {
+  filters: Record<FilterKey, string[]>;
+  words: string[];
+} {
+  const filters: Record<FilterKey, string[]> = {
+    report: [],
+    category: [],
+    merchant: [],
+  };
+  const words: string[] = [];
+  let key: FilterKey | null = null;
+  let parts: string[] = [];
+  const flush = () => {
+    if (key && parts.length > 0) filters[key].push(parts.join(" "));
+    key = null;
+    parts = [];
+  };
+  for (const token of query.trim().toLowerCase().split(/\s+/)) {
+    if (!token) continue;
+    const op = /^(report|category|merchant):(.*)$/.exec(token);
+    if (op && (FILTER_KEYS as readonly string[]).includes(op[1])) {
+      flush();
+      key = op[1] as FilterKey;
+      if (op[2]) parts.push(op[2]);
+    } else if (key) {
+      parts.push(token);
+    } else {
+      words.push(token);
+    }
+  }
+  flush();
+  return { filters, words };
+}
+
+function matchesSearch(e: ExpenseListItem, query: string) {
+  const { filters, words } = parseQuery(query);
+  if (
+    (filters.report.length > 0 &&
+      !filters.report.some((v) => v === e.report.toLowerCase())) ||
+    (filters.category.length > 0 &&
+      !filters.category.some((v) => v === e.category.toLowerCase())) ||
+    (filters.merchant.length > 0 &&
+      !filters.merchant.some((v) => v === e.merchant.toLowerCase()))
+  ) {
+    return false;
+  }
   if (words.length === 0) return true;
   const haystack = searchableText(e);
   return words.every((word) => haystack.includes(word));
@@ -337,7 +421,7 @@ function ExpenseList({
   hasEmailConnection,
   highlight,
 }: {
-  expenses: ReturnType<typeof toListItem>[];
+  expenses: ExpenseListItem[];
   rates: MileageRateEntry[];
   reports: { name: string; count: number; total: string }[];
   welcomePending: boolean;
@@ -435,6 +519,35 @@ function ExpenseList({
       ),
     [expenses, selectedReport, debouncedQuery],
   );
+  const searchTotal = useMemo(
+    () => summarizeAmounts(filtered).total,
+    [filtered],
+  );
+  // The search box's suggestion set: every merchant and category in the
+  // account, most-used first, so "how much on XYZ" is a pick, not typing.
+  const suggestions = useMemo(() => {
+    const merchants = new Map<string, number>();
+    const categories = new Map<string, number>();
+    const reports = new Map<string, number>();
+    for (const e of expenses) {
+      if (e.type === "receipt" && e.merchant) {
+        merchants.set(e.merchant, (merchants.get(e.merchant) ?? 0) + 1);
+      }
+      if (e.category) {
+        categories.set(e.category, (categories.get(e.category) ?? 0) + 1);
+      }
+      if (e.report) {
+        reports.set(e.report, (reports.get(e.report) ?? 0) + 1);
+      }
+    }
+    const byCount = (a: [string, number], b: [string, number]) =>
+      b[1] - a[1] || a[0].localeCompare(b[0]);
+    return {
+      merchants: [...merchants.entries()].toSorted(byCount),
+      categories: [...categories.entries()].toSorted(byCount),
+      reports: [...reports.entries()].toSorted(byCount),
+    };
+  }, [expenses]);
 
   usePasteImage(uploadImage);
 
@@ -556,11 +669,11 @@ function ExpenseList({
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
           />
           <Input
-            ref={searchRef}
+            list="expense-search-suggestions"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search amount, merchant, description, or category"
+            placeholder="Search, or report: category: merchant: to filter"
             aria-label="Search expenses"
             className="h-10 w-full pl-9 pr-9 text-sm"
           />
@@ -574,6 +687,43 @@ function ExpenseList({
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
           ) : null}
+          <datalist id="expense-search-suggestions">
+            {suggestions.merchants.map(([name, count]) => (
+              <option
+                key={`merchant:${name}`}
+                value={name}
+                label={countLabel(count)}
+              />
+            ))}
+            {suggestions.categories.map(([name, count]) => (
+              <option
+                key={`category:${name}`}
+                value={name}
+                label={`${countLabel(count)} in this category`}
+              />
+            ))}
+            {suggestions.reports.map(([name, count]) => (
+              <option
+                key={`report:${name}`}
+                value={`report:${name}`}
+                label={`${countLabel(count)} as a report`}
+              />
+            ))}
+            {suggestions.merchants.map(([name, count]) => (
+              <option
+                key={`op-merchant:${name}`}
+                value={`merchant:${name}`}
+                label={`${countLabel(count)} as a merchant`}
+              />
+            ))}
+            {suggestions.categories.map(([name, count]) => (
+              <option
+                key={`op-category:${name}`}
+                value={`category:${name}`}
+                label={`${countLabel(count)} in this category`}
+              />
+            ))}
+          </datalist>
         </div>
       </div>
 
@@ -612,7 +762,7 @@ function ExpenseList({
         <div className="mb-3 flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
           <span role="status" aria-live="polite">
             {debouncedQuery
-              ? `Showing ${filtered.length} of ${expenses.length} expenses`
+              ? `Showing ${filtered.length} of ${expenses.length} expenses · ${formatAmount(searchTotal)} total`
               : selectedReport === "Unassigned"
                 ? "Showing unassigned expenses"
                 : `Showing ${selectedReport} expenses`}
@@ -686,7 +836,7 @@ function ExpenseRow({
   onDismiss,
   onRemove,
 }: {
-  expense: ReturnType<typeof toListItem>;
+  expense: ExpenseListItem;
   /** Browser-local today (null before mount; SSR renders without the
    * badge; the server must not guess the user's timezone). */
   today: string | null;
@@ -830,7 +980,7 @@ function ExpenseRow({
   );
 }
 
-function Thumbnail({ expense }: { expense: ReturnType<typeof toListItem> }) {
+function Thumbnail({ expense }: { expense: ExpenseListItem }) {
   if (expense.type === "receipt") {
     return (
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-700">

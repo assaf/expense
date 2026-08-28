@@ -174,3 +174,21 @@ export function summarizeByReport(
     (e) => e.report || (opts.includeUnassigned ? "Unassigned" : ""),
   );
 }
+
+/** Count + exact total over already-filtered rows (the expense list's
+ * search-total line). Accepts any row shape with an `amount` (the list
+ * page's thin rows qualify); empty amounts contribute nothing to the
+ * total but still count as rows. */
+export function summarizeAmounts(rows: readonly { amount: string }[]): {
+  count: number;
+  total: Decimal;
+} {
+  let count = 0;
+  let total = new Decimal(0);
+  for (const row of rows) {
+    count++;
+    const amt = parseAmount(row.amount);
+    if (amt !== null) total = total.add(amt);
+  }
+  return { count, total };
+}
