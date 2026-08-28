@@ -90,6 +90,31 @@ describe("Expense search", () => {
     ).toBeVisible();
   });
 
+  it("filters by description content via the operator", async () => {
+    await search("description:printer");
+    await expect(page.locator("main ul li")).toHaveCount(1);
+    await expect(
+      page.getByText("Showing 1 of 6 expenses · $15.99 total"),
+    ).toBeVisible();
+  });
+
+  it("matches a description phrase via the operator", async () => {
+    // The mileage row's description, not a receipt.
+    await search("description:client visit");
+    await expect(page.locator("main ul li")).toHaveCount(1);
+    await expect(
+      page.getByText("Showing 1 of 6 expenses · $22.40 total"),
+    ).toBeVisible();
+  });
+
+  it("matches mileage route addresses", async () => {
+    await search("coding");
+    await expect(page.locator("main ul li")).toHaveCount(1);
+    await expect(
+      page.locator("main ul li").getByText("Business · 32.00 mi"),
+    ).toBeVisible();
+  });
+
   it("filters by a spaced report name via the operator", async () => {
     await search("report:2026 test");
     await expect(page.locator("main ul li")).toHaveCount(4);

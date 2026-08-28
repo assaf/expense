@@ -285,17 +285,19 @@ function searchableText(e: ExpenseListItem): string {
 }
 
 /** The recognized search operators. */
-const FILTER_KEYS = ["report", "category", "merchant"] as const;
+const FILTER_KEYS = ["report", "category", "merchant", "description"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
 
 /**
  * Parsed search query. `report:` / `category:` / `merchant:` set exact
- * filters (case-insensitive); an operator's value runs to the next
- * recognized prefix, so spaced names work: `report:2026 business`. Free
- * text (before any operator, or under an unknown prefix) ANDs words
- * against the row's searchable text, as always. Same-key values OR
- * together; keys AND together. `report:` with no value is a no-op, and
- * colon-bearing free text ("10:30") is untouched.
+ * filters (case-insensitive); `description:` substring-matches the free
+ * text description. An operator's value runs to the next recognized
+ * prefix, so spaced values work: `report:2026 business`,
+ * `description:printer paper`. Free text (before any operator, or under
+ * an unknown prefix) ANDs words against the row's searchable text, as
+ * always. Same-key values OR together; keys AND together. An operator
+ * with no value is a no-op, and colon-bearing free text ("10:30") is
+ * untouched.
  */
 function parseQuery(query: string): {
   filters: Record<FilterKey, string[]>;
@@ -305,6 +307,7 @@ function parseQuery(query: string): {
     report: [],
     category: [],
     merchant: [],
+    description: [],
   };
   const words: string[] = [];
   let key: FilterKey | null = null;
@@ -316,7 +319,7 @@ function parseQuery(query: string): {
   };
   for (const token of query.trim().toLowerCase().split(/\s+/)) {
     if (!token) continue;
-    const op = /^(report|category|merchant):(.*)$/.exec(token);
+    const op = /^(report|category|merchant|description):(.*)$/.exec(token);
     if (op && (FILTER_KEYS as readonly string[]).includes(op[1])) {
       flush();
       key = op[1] as FilterKey;
@@ -339,7 +342,9 @@ function matchesSearch(e: ExpenseListItem, query: string) {
     (filters.category.length > 0 &&
       !filters.category.some((v) => v === e.category.toLowerCase())) ||
     (filters.merchant.length > 0 &&
-      !filters.merchant.some((v) => v === e.merchant.toLowerCase()))
+      !filters.merchant.some((v) => v === e.merchant.toLowerCase())) ||
+    (filters.description.length > 0 &&
+      !filters.description.some((v) => e.description.toLowerCase().includes(v)))
   ) {
     return false;
   }
@@ -673,7 +678,7 @@ function ExpenseList({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search, or report: category: merchant: to filter"
+            placeholder="Search, or report: category: merchant: description: to filter"
             aria-label="Search expenses"
             className="h-10 w-full pl-9 pr-9 text-sm"
           />
