@@ -67,16 +67,18 @@ import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
  * merchants (self-storage, parking) get their expenses.
  */
 
-/** The scan examines at most this many of the most recent Inbox emails per
- * pass, deliberately bounded: a scan stays short (a handful of fetches)
- * and can't be hammered into downloading a whole backlog. Email older than
- * the most recent 50 isn't offered by review; rule-matched senders are
- * still caught by the auto-drain. */
-const SCAN_MAX_EMAILS = 50;
+/** The scan offers Inbox email from the last 90 days, newest first (the
+ * same lookback the sender-rule inference uses). Anything older isn't
+ * offered by review; rule-matched senders are still caught by the
+ * auto-drain. The message count is a safety cap on top of the window
+ * (500, like the inference scan); the time budget below is what actually
+ * stops a pathological mailbox. */
+const SCAN_WINDOW_DAYS = 90;
+const SCAN_MAX_EMAILS = 500;
 
 /** Max time one scan request spends before returning partial results
- * (defensive; 50 fetches normally take seconds, and this catches a slow
- * mailbox/network). */
+ * (defensive; a few hundred fetches normally take seconds, and this
+ * catches a slow mailbox/network). */
 const REVIEW_BUDGET_MS = 45_000;
 
 /** Ignored-row reasons that mean "definitely not a receipt": the scan
@@ -134,8 +136,9 @@ export interface ScanResult {
   /** True when the batch was fully examined; false means the time budget
    * hit mid-batch; run the scan again to continue. */
   finished: boolean;
-  /** True when the mailbox had at least SCAN_MAX_EMAILS recent emails, so
-   * the list may be missing older receipts (the scan is capped by design). */
+  /** True when the mailbox had at least SCAN_MAX_EMAILS emails in the
+   * 90-day window, so the list may be missing older receipts (the scan is
+   * capped by design). */
   atCap: boolean;
 }
 
@@ -145,6 +148,9 @@ export interface ScanOptions {
   extractionDeps?: ConnectionDeps;
   /** Time budget before stopping (default REVIEW_BUDGET_MS). */
   budgetMs?: number;
+  /** Wall-clock anchor for the scan window; tests pin it so fixture
+   * arrival dates stay inside the window. Defaults to real time. */
+  now?: number;
 }
 
 /** The charge's timing, as the mailbox sees it: the transaction posts,
@@ -523,11 +529,12 @@ async function writeSupersededRow(
 
 /**
  * Scan a connected inbox for receipt-like emails and add them to the
- * review list (rows with outcome pending-review). One bounded batch: the
- * 50 most recent Inbox emails (newest first) are examined; already-decided
- * rows are skipped without a fetch. Stamps reviewScannedAt so the page
- * knows the list is current. A re-scan re-examines the same 50 (cheap,
- * decided rows skip) and picks up mail that arrived since.
+ * review list (rows with outcome pending-review). One bounded batch:
+ * Inbox email from the last 90 days, newest first, at most 500 messages;
+ * already-decided rows are skipped without a fetch. Stamps
+ * reviewScannedAt so the page knows the list is current. A re-scan
+ * re-examines the same batch (cheap, decided rows skip) and picks up
+ * mail that arrived since.
  */
 export async function scanConnectionInbox(
   connection: EmailConnectionWithSecret,
@@ -550,6 +557,9 @@ export async function scanConnectionInbox(
   let superseded = 0;
 
   const summaries = await adapter.inboxEmailSummaries({
+    afterIso: new Date(
+      (options.now ?? started) - SCAN_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString(),
     limit: SCAN_MAX_EMAILS,
     descending: true,
   });
@@ -799,7 +809,7 @@ export interface UncoveredCharge {
  * Every pending bank notification for the connection: charges whose only
  * record is the card alert (self-storage, parking). Covered pending
  * notifications are flipped to superseded here, so the list self-cleans
- * as receipts arrive even for emails long past the scan's 50-email
+ * as receipts arrive even for emails long past the scan's 90-day
  * window; the rest return as items. This is the charge-side bookend to
  * the superseded audit: nothing is lost silently.
  */

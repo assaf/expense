@@ -39,6 +39,12 @@ vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   deliverConnectionEmailToInbox: mocks.deliverConnectionEmailToInbox,
 }));
 
+/**
+ * Pins the scan window: fixture arrival dates (2026-07-01 and friends)
+ * must stay inside the 90-day lookback whenever the suite runs.
+ */
+const SCAN_NOW = Date.parse("2026-07-15T00:00:00.000Z");
+
 async function createPendingItem(
   connectionId: string,
   emailId: string,
@@ -210,14 +216,18 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.added).toBe(2);
     expect(result.pending).toBe(2);
     expect(result.finished).toBe(true);
     expect(result.atCap).toBe(false); // small mailbox: everything was scanned
-    // One bounded query: the 50 most recent emails, newest first.
-    expect(queries).toEqual([{ limit: 50, descending: true }]);
+    // One bounded query: the 90-day window ending at SCAN_NOW, newest
+    // first, 500 messages max.
+    expect(queries).toEqual([
+      { afterIso: "2026-04-16T00:00:00.000Z", limit: 500, descending: true },
+    ]);
 
     const items = await listReviewItems(conn.id);
     const byId = new Map(items.map((i) => [i.emailId, i]));
@@ -314,6 +324,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     // Only e4 was new; e1 was already on the list (counted as pending).
@@ -375,6 +386,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.added).toBe(0);
@@ -431,6 +443,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     const items = await listReviewItems(conn.id);
@@ -440,33 +453,80 @@ describe("scanConnectionInbox", () => {
     expect((await logRow(conn.id, "e2"))?.outcome).toBe("pending-review");
   });
 
-  it("examines at most 50 emails per scan pass", async () => {
-    // 60 receipt-like emails; the adapter honors the limit, so only the
-    // most recent 50 are examined; the scan stays bounded and fast.
+  it("caps the batch at 500 emails within the 90-day window", async () => {
+    // 505 emails inside the window plus one from before it: the adapter
+    // honours the query, so 504 in-window messages are offered and the
+    // batch stops at 500. Non-receipt bodies keep the pass cheap (no
+    // rows written); the query shape and counters are what's pinned.
     const emails = new Map<
       string,
-      { from: string; subject: string; body: string }
+      { from: string; subject: string; body: string; receivedAt?: string }
     >();
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 505; i++) {
       emails.set(`e${i}`, {
         from: `Sender ${i} <noreply@store${i}.example>`,
-        subject: "Your receipt",
-        body: `MERCHANT: Store ${i}\nTOTAL: ${i + 1}.00`,
+        subject: "Big sale this week",
+        body: "Unsubscribe now to stop receiving these.",
       });
     }
+    emails.set("stale", {
+      from: "Old <noreply@old.example>",
+      subject: "Your receipt",
+      body: "MERCHANT: Old\nTOTAL: 1.00",
+      receivedAt: "2026-03-01T10:00:00.000Z",
+    });
     const { adapter, queries } = fakeAdapter(emails);
 
     const result = await scanConnectionInbox(conn, {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
-    expect(queries).toEqual([{ limit: 50, descending: true }]);
-    expect(result.scanned).toBe(50);
-    expect(result.added).toBe(50);
-    expect(result.pending).toBe(50);
+    expect(queries).toEqual([
+      { afterIso: "2026-04-16T00:00:00.000Z", limit: 500, descending: true },
+    ]);
+    expect(result.scanned).toBe(500); // 504 in the window, capped at 500
+    expect(result.added).toBe(0);
+    expect(result.finished).toBe(true);
     expect(result.atCap).toBe(true); // mailbox has more; older mail not offered
+  });
+
+  it("offers only email from the last 90 days", async () => {
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "recent",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 9.99",
+          },
+        ],
+        [
+          "stale",
+          {
+            from: "Old <noreply@old.example>",
+            subject: "Your receipt",
+            body: "MERCHANT: Old\nTOTAL: 1.00",
+            receivedAt: "2026-03-01T10:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+      now: SCAN_NOW,
+    });
+
+    // The stale receipt predates the window and is never examined.
+    expect(result.scanned).toBe(1);
+    const items = await listReviewItems(conn.id);
+    expect(items.map((i) => i.emailId)).toEqual(["recent"]);
   });
 
   it("supersedes a notification when an imported receipt covers the charge", async () => {
@@ -477,6 +537,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.added).toBe(0);
@@ -516,6 +577,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.added).toBe(1);
@@ -531,6 +593,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
     expect(first.pending).toBe(2);
 
@@ -541,6 +604,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
     expect(second.superseded).toBe(2);
     expect(second.pending).toBe(0);
@@ -555,6 +619,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
     expect(first.superseded).toBe(2);
 
@@ -566,6 +631,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
     // The cover is gone, so the notifications return to the list: a wrong
     // supersede self-heals instead of losing the record.
@@ -596,6 +662,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     // n1 stays the user's decision even though a cover exists; n2 (no row)
@@ -637,6 +704,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(1);
@@ -681,6 +749,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(2);
@@ -719,6 +788,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(2);
@@ -742,6 +812,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(0);
@@ -763,6 +834,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(0);
@@ -786,6 +858,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(0);
@@ -831,6 +904,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(1);
@@ -877,6 +951,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(1);
@@ -928,6 +1003,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(0);
@@ -963,6 +1039,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
     expect(first.pending).toBe(2);
 
@@ -1019,6 +1096,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     const feed = await listUncoveredCharges(conn);
@@ -1035,6 +1113,7 @@ describe("scanConnectionInbox", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       budgetMs: 5000,
+      now: SCAN_NOW,
     });
 
     expect(result.superseded).toBe(0);

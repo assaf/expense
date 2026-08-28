@@ -162,9 +162,9 @@ export function ReviewInbox({
 
       {!scanning && scanAtCap ? (
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-          Receipts are scanned from your 50 most recent emails; older mail isn't
-          included. Forward older receipts to your receipts address or add them
-          manually.
+          The scan covers your last 90 days of email, up to the 500 most recent;
+          older mail isn't included. Forward older receipts to your receipts
+          address or add them manually.
         </p>
       ) : null}
 

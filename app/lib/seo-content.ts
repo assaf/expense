@@ -101,12 +101,28 @@ export const BENEFITS = [
     body: "Take a photo, take a screenshot, import a receipt or forward a receipt email. The OCR finds the merchant and price while the LLM suggests the category and you just approve it.",
   },
   {
+    title: "AI invoice & receipt extraction",
+    body: "Drop in a photo, screenshot, or PDF and the OCR and AI pull out the merchant, amount, date, and category, then file the expense. Receipts and invoices alike, whether uploaded, pasted, or forwarded by email. You just review and approve the result.",
+  },
+  {
     title: "Email receipts effortless",
     body: "Send an email receipt to your account and an expense will be automatically recorded, dated based on the original email for accuracy.",
   },
   {
     title: "Connect your FastMail account",
     body: "Connect your FastMail mailbox and every receipt that lands in your inbox is processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense works with FastMail.",
+  },
+  {
+    title: "Smart pre-classification",
+    body: "Every email is screened locally before any AI runs: receipt-like mail gets processed, newsletters and bank alerts are ignored, and merchants you have paid before skip the model entirely. Less noise, faster imports.",
+  },
+  {
+    title: "Retroactive scan (last 90 days)",
+    body: "Connect a mailbox and Expense doesn't just watch for new mail: it scans back through your inbox and surfaces the receipt emails already sitting there, so your records start the day you connect, not the day after.",
+  },
+  {
+    title: "Capture PDF attachments",
+    body: "A receipt email with a PDF attached is captured whole: the attachment is pulled out, read, and stored with the expense, not just the text in the email body. Works for image attachments too.",
   },
   {
     title: "Get ready with your deductions on time",

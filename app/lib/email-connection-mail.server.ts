@@ -64,7 +64,7 @@ export interface ConnectionEmailSummary {
 /**
  * Recent emails in a mailbox (by role). The drain passes an `afterIso`
  * lookback window (oldest first); the review scan passes `descending`
- * instead to take the most recent emails first. Already-evaluated emails
+ * with its own 90-day `afterIso`, newest first. Already-evaluated emails
  * are skipped by the caller via the EmailProcessLog (idempotency), not by
  * the query.
  */

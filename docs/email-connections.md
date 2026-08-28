@@ -278,12 +278,12 @@ count; a never-scanned connection auto-scans on first visit.
 Implementation (`app/lib/email-review.server.ts`, route
 `app/routes/email-review.tsx`, UI `app/components/email-review.tsx`):
 
-- **Scan** (`scanConnectionInbox`): one bounded batch, the 50 most
-  recent Inbox emails (newest first, 45s defensive budget). Deliberately
-  capped so a scan stays short (a handful of fetches) and can't be
-  hammered into downloading a whole backlog; email older than the most
-  recent 50 isn't offered by review (rule-matched senders are still caught
-  by the auto-drain). For each undecided email it fetches + parses the raw message
+- **Scan** (`scanConnectionInbox`): one bounded batch, Inbox email from
+  the last 90 days, newest first, capped at 500 messages (45s defensive
+  budget). Bounded so a scan can't be hammered into downloading a whole
+  backlog; email older than the window isn't offered by review
+  (rule-matched senders are still caught by the auto-drain).
+  For each undecided email it fetches + parses the raw message
   and runs the same local classifier as the pipeline
   (`looksLikeReceiptEmail`); matches are upserted on `EmailProcessLog` as
   `outcome = "pending-review"` with the receivedAt + full From header
@@ -342,7 +342,7 @@ Implementation (`app/lib/email-review.server.ts`, route
   the remember-sender option: accepting a bank as a rule is always
   wrong). The list re-runs the cover pairing on load, so a pending
   notification whose receipt arrived meanwhile is flipped to superseded
-  and leaves the section, even for emails long past the scan's 50-email
+  and leaves the section, even for emails long past the scan's 90-day
   window (their charge amount is stored on the log row at scan time,
   `chargeAmount`, since the email may leave the Inbox). This is where a
   card-only charge that would otherwise be silently lost (ignored Extra

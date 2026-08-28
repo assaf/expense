@@ -88,8 +88,8 @@ export type FakeEmail = {
 };
 
 /** A fake mailbox adapter over an in-memory set of raw RFC 822 emails.
- * Honours the `limit`/`descending` query shape so the scan's bounded-batch
- * behaviour is testable, and records every query call. */
+ * Honours the `limit`/`descending`/`afterIso` query shape so the scan's
+ * bounded-window behaviour is testable, and records every query call. */
 export function fakeAdapter(emails: Map<string, FakeEmail>) {
   const trashed: string[] = [];
   const queries: Array<{
@@ -107,6 +107,17 @@ export function fakeAdapter(emails: Map<string, FakeEmail>) {
       let list = [...emails.entries()].map(([id, e]) =>
         summary(id, e.from, e.subject, e.receivedAt),
       );
+      if (opts.descending) {
+        // Stable sort: equal timestamps keep insertion order.
+        list.sort(
+          (a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt),
+        );
+      }
+      if (opts.afterIso) {
+        // Exclusive lower bound, like the JMAP `after` filter.
+        const after = Date.parse(opts.afterIso);
+        list = list.filter((s) => Date.parse(s.receivedAt) > after);
+      }
       list = list.slice(0, opts.limit);
       return list;
     },
