@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   ListChecks,
   Mail,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -493,7 +494,9 @@ function ExpenseList({
     const timer = setTimeout(() => setDebouncedQuery(query), 200);
     return () => clearTimeout(timer);
   }, [query]);
-
+  // The summary line spins while the debounce has yet to apply the typed
+  // query (the 200ms gap between typing and the filtered numbers).
+  const filtering = query !== debouncedQuery;
   // The list filter runs client-side: the search box matches text
   // (amount, merchant, description, category) plus the field operators.
   const filtered = useMemo(
@@ -703,10 +706,24 @@ function ExpenseList({
       </div>
 
       <div className="mb-3 text-sm text-gray-600 dark:text-gray-300">
-        <span role="status" aria-live="polite">
-          {debouncedQuery
-            ? `Showing ${filtered.length} of ${expenses.length} expenses · ${formatAmount(searchTotal)} total`
-            : `${countLabel(expenses.length)} · ${formatAmount(allTotal)} total`}
+        <span
+          role="status"
+          aria-live="polite"
+          className="inline-flex items-center gap-2"
+        >
+          {filtering ? (
+            <>
+              <Loader2
+                aria-hidden="true"
+                className="h-3.5 w-3.5 animate-spin"
+              />
+              Filtering…
+            </>
+          ) : debouncedQuery ? (
+            `Showing ${filtered.length} of ${expenses.length} expenses · ${formatAmount(searchTotal)} total`
+          ) : (
+            `${countLabel(expenses.length)} · ${formatAmount(allTotal)} total`
+          )}
         </span>
       </div>
 
