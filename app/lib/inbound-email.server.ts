@@ -54,6 +54,7 @@ import { saveImage, readImage, deleteImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { convertToUsd, type FxConversion } from "~/lib/fx.server";
+import { withConversionNote } from "~/lib/fx-note";
 
 /**
  * Inbound email pipeline (receipts by email).
@@ -1078,7 +1079,12 @@ export async function saveExpenseFromExtraction(opts: {
     date: opts.expenseDate,
     report,
     category,
-    description: extraction.description,
+    description: withConversionNote(extraction.description, {
+      currency: receiptCurrency,
+      originalAmount: receiptCurrency !== "USD" ? extraction.amount : "",
+      fxRate: conversion ? conversion.fxRate : "",
+      rateDate: conversion ? conversion.rateDate : "",
+    }),
     amount: conversion ? conversion.amount : extraction.amount,
     merchant: extraction.merchant,
     imageFile,

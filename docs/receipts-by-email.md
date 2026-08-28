@@ -63,7 +63,10 @@ for the expense date (the IRS payment-date rule; `app/lib/fx.server.ts`
 via Frankfurter, no key, weekends roll back to the prior business day).
 The confirmation email states the original amount, the rate, and the USD
 total; when no rate is available the amount is stored as-is and the email
-says so instead.
+says so instead. The expense's description also gains a "(Converted from
+EUR 50.00 at 1.1699 USD/EUR, ECB rate for …)" note (`app/lib/fx-note.ts`),
+so exports and report PDFs document the conversion; the note is
+strip-and-append, never duplicated on re-imports or edits.
 
 **Runaway protection (three layers, all still live):**
 

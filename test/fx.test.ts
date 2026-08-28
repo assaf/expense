@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convertToUsd, usdRate } from "~/lib/fx.server";
+import {
+  conversionNote,
+  readConversionNote,
+  withConversionNote,
+} from "~/lib/fx-note";
 
 /**
  * Foreign-currency → USD conversion. The Frankfurter fetch is stubbed (the
@@ -167,5 +172,154 @@ describe("usdRate against the Frankfurter API", () => {
       rateDate: "2026-03-13",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("conversion description note", () => {
+  it("formats the applied conversion with rate and as-of date", () => {
+    expect(
+      conversionNote({
+        currency: "EUR",
+        originalAmount: "50.00",
+        fxRate: "1.1699",
+        rateDate: "2026-08-21",
+      }),
+    ).toBe(
+      "(Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+    );
+  });
+
+  it("omits the as-of date when unknown and covers the no-rate case", () => {
+    expect(
+      conversionNote({
+        currency: "EUR",
+        originalAmount: "50.00",
+        fxRate: "1.1699",
+        rateDate: "",
+      }),
+    ).toBe("(Converted from EUR 50.00 at 1.1699 USD/EUR.)");
+    expect(
+      conversionNote({
+        currency: "JPY",
+        originalAmount: "15000.00",
+        fxRate: "",
+        rateDate: "",
+      }),
+    ).toBe("(Amount is in JPY; no exchange rate was available, stored as-is.)");
+
+    expect(
+      conversionNote({
+        currency: "USD",
+        originalAmount: "",
+        fxRate: "",
+        rateDate: "",
+      }),
+    ).toBe("");
+  });
+
+  it("trims the numeric(10,6) wire precision from the rate", () => {
+    expect(
+      conversionNote({
+        currency: "EUR",
+        originalAmount: "50.00",
+        fxRate: "1.169900",
+        rateDate: "2026-08-21",
+      }),
+    ).toBe(
+      "(Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+    );
+    // And a re-save over the 6dp note normalizes it instead of stacking.
+    expect(
+      withConversionNote(
+        "Team lunch (Converted from EUR 50.00 at 1.169900 USD/EUR, ECB rate for 2026-08-21.)",
+        {
+          currency: "EUR",
+          originalAmount: "50.00",
+          fxRate: "1.169900",
+          rateDate: "2026-08-21",
+        },
+      ),
+    ).toBe(
+      "Team lunch (Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+    );
+  });
+
+  it("appends to user text and is idempotent across re-saves", () => {
+    const fx = {
+      currency: "EUR",
+      originalAmount: "50.00",
+      fxRate: "1.1699",
+      rateDate: "2026-08-21",
+    };
+    const once = withConversionNote("Team lunch in Paris", fx);
+    expect(once).toBe(
+      "Team lunch in Paris (Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+    );
+    expect(withConversionNote(once, fx)).toBe(once);
+    expect(withConversionNote("", fx)).toBe(
+      once.replace("Team lunch in Paris ", ""),
+    );
+  });
+
+  it("replaces the note in place when a re-convert changes the rate", () => {
+    const before = withConversionNote("Team lunch", {
+      currency: "EUR",
+      originalAmount: "50.00",
+      fxRate: "1.1645",
+      rateDate: "2026-08-27",
+    });
+    const after = withConversionNote(before, {
+      currency: "EUR",
+      originalAmount: "50.00",
+      fxRate: "1.1699",
+      rateDate: "2026-08-21",
+    });
+    expect(after).toBe(
+      "Team lunch (Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+    );
+  });
+
+  it("clears a stale note when the receipt turns out to be USD, and keeps stored-as-is wording", () => {
+    const foreign = withConversionNote("Coffee", {
+      currency: "EUR",
+      originalAmount: "4.50",
+      fxRate: "1.1645",
+      rateDate: "2026-08-27",
+    });
+    expect(
+      withConversionNote(foreign, {
+        currency: "USD",
+        originalAmount: "",
+        fxRate: "",
+        rateDate: "",
+      }),
+    ).toBe("Coffee");
+    expect(
+      withConversionNote("Coffee", {
+        currency: "GBP",
+        originalAmount: "3.20",
+        fxRate: "",
+        rateDate: "",
+      }),
+    ).toBe(
+      "Coffee (Amount is in GBP; no exchange rate was available, stored as-is.)",
+    );
+  });
+
+  it("reads the rate and as-of date back out of a stored description", () => {
+    expect(
+      readConversionNote(
+        "Team lunch (Converted from EUR 50.00 at 1.1699 USD/EUR, ECB rate for 2026-08-21.)",
+      ),
+    ).toEqual({ fxRate: "1.1699", rateDate: "2026-08-21" });
+    expect(
+      readConversionNote("Trip (Converted from EUR 50.00 at 1.1699 USD/EUR.)"),
+    ).toEqual({ fxRate: "1.1699", rateDate: "" });
+    expect(readConversionNote("No note here")).toBeNull();
+    expect(
+      readConversionNote(
+        "Coffee (Amount is in GBP; no exchange rate was available, stored as-is.)",
+      ),
+    ).toBeNull();
   });
 });

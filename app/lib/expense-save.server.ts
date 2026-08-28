@@ -6,6 +6,7 @@ import {
 } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
+import { withConversionNote } from "~/lib/fx-note";
 import { addReport, findOpenReport } from "~/lib/db/reports";
 import {
   EMPTY_ROUTE,
@@ -147,6 +148,16 @@ export async function saveExpenseFromForm(
   const originalAmount = normalizeAmount(formString(form, "originalAmount"));
   const fxRateRaw = formString(form, "fxRate").trim();
   const fxRate = /^\d+(?:\.\d{1,6})?$/.test(fxRateRaw) ? fxRateRaw : "";
+  const fxRateDate = formString(form, "fxRateDate");
+  // The description carries the human-readable conversion note. The editor
+  // already composes it live; strip+append here is idempotent and keeps a
+  // stale client honest (the note always matches the saved metadata).
+  const receiptDescription = withConversionNote(description, {
+    currency,
+    originalAmount,
+    fxRate,
+    rateDate: /^\d{4}-\d{2}-\d{2}$/.test(fxRateDate) ? fxRateDate : "",
+  });
   const receipt: ReceiptExpense = {
     ...(existing && existing.type === "receipt"
       ? existing
@@ -154,7 +165,7 @@ export async function saveExpenseFromForm(
     date,
     report,
     category,
-    description,
+    description: receiptDescription,
     amount,
     merchant: formString(form, "merchant").trim(),
     // A draft image (held by /api/expense) becomes the expense's image on

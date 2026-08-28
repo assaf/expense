@@ -23,14 +23,15 @@ import {
   ErrorBanner,
   Lightbox,
   ReportCategoryFields,
+  useEditorFlow,
+  useFormKeys,
   Shell,
   TransitionOverlay,
   fetcherError,
   submitDelete,
-  useEditorFlow,
-  useFormKeys,
   type EditorData,
 } from "./editor-shared";
+import { readConversionNote, withConversionNote } from "~/lib/fx-note";
 
 /**
  * Files carried from the home page (paste/upload) that are being uploaded as
@@ -78,12 +79,14 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   // always holds the USD value; changing the date re-converts at that
   // day's rate (the IRS payment-date rule) unless the amount was
   // hand-edited, which is the user's assertion (the mileage rule).
-  const [fx, setFx] = useState({
+  const [fx, setFx] = useState(() => ({
     currency: expense.currency || "USD",
     originalAmount: expense.originalAmount,
     fxRate: expense.fxRate,
-    rateDate: "",
-  });
+    // The as-of date isn't a column; it lives in the description note the
+    // last save wrote. Seed it back so an unrelated re-save doesn't drop it.
+    rateDate: readConversionNote(expense.description)?.rateDate ?? "",
+  }));
   const drop = useDropTarget({
     enabled: !reportClosed,
     accepts: isReceiptFile,
@@ -264,16 +267,20 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     setAmount((prev) => pick(fields.amount, prev));
     setCategory((prev) => pick(fields.category, prev));
     setReport((prev) => pick(fields.report, prev));
-    setFx((prev) => {
-      const captured = prev.currency !== "USD" || prev.originalAmount !== "";
-      if (mode === "empty-only" && captured) return prev;
-      return {
-        currency: fields.currency || "USD",
-        originalAmount: fields.originalAmount || "",
-        fxRate: fields.fxRate || "",
-        rateDate: fields.rateDate || "",
-      };
-    });
+    const nextFx =
+      mode === "empty-only" &&
+      (fx.currency !== "USD" || fx.originalAmount !== "")
+        ? fx
+        : {
+            currency: fields.currency || "USD",
+            originalAmount: fields.originalAmount || "",
+            fxRate: fields.fxRate || "",
+            rateDate: fields.rateDate || "",
+          };
+    setFx(nextFx);
+    // The description carries the note the user will see in exports and
+    // reports; keep it in lockstep with the metadata.
+    setDescription((prev) => withConversionNote(prev, nextFx));
   }
 
   /** Re-convert the receipt's printed amount after the expense date
@@ -301,15 +308,19 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       };
       if (seq !== fxSeq.current) return;
       if (!json.available) {
-        setFx((prev) => ({ ...prev, fxRate: "", rateDate: "" }));
+        const nextFx = { ...fx, fxRate: "", rateDate: "" };
+        setFx(nextFx);
+        setDescription((prev) => withConversionNote(prev, nextFx));
         return;
       }
       setAmount(json.amount ?? "");
-      setFx((prev) => ({
-        ...prev,
+      const nextFx = {
+        ...fx,
         fxRate: json.fxRate ?? "",
         rateDate: json.rateDate ?? "",
-      }));
+      };
+      setFx(nextFx);
+      setDescription((prev) => withConversionNote(prev, nextFx));
     } catch {
       // Keep the previous conversion; the metadata still explains it.
     }
@@ -366,6 +377,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     form.set("currency", fx.currency);
     form.set("originalAmount", fx.originalAmount);
     form.set("fxRate", fx.fxRate);
+    form.set("fxRateDate", fx.rateDate);
     void fetcher.submit(form, { method: "post" });
   }
 

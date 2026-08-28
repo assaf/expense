@@ -43,6 +43,7 @@ import {
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
 import { convertToUsd } from "~/lib/fx.server";
+import { withConversionNote } from "~/lib/fx-note";
 import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
@@ -1110,7 +1111,12 @@ async function captureReceipt(
     date,
     report,
     category,
-    description: args.description ?? "",
+    description: withConversionNote(args.description ?? "", {
+      currency: receiptCurrency,
+      originalAmount: receiptCurrency !== "USD" ? originalAmount : "",
+      fxRate: conversion ? conversion.fxRate : "",
+      rateDate: conversion ? conversion.rateDate : "",
+    }),
     amount,
     merchant,
     imageFile: saved.filename,
