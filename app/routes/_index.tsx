@@ -49,7 +49,6 @@ import {
   formatDate,
   sortExpenses,
   summarizeAmounts,
-  summarizeByReport,
   todayDate,
 } from "~/lib/format";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
@@ -112,15 +111,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   // The mileage-rate highlight is eligible when the account has rates; the
   // actual rate is computed CLIENT-side from the browser's local today (the
   // server runs UTC and must not guess the user's timezone).
-  const reports = [...summarizeByReport(open, { includeUnassigned: true })]
-    .map(([name, s]) => ({ name, count: s.count, total: s.total.toFixed(2) }))
-    .toSorted((a, b) =>
-      a.name === "Unassigned"
-        ? 1
-        : b.name === "Unassigned"
-          ? -1
-          : a.name.localeCompare(b.name),
-    );
   // The feature highlight that shows at the bottom of the list, picked at
   // random from the ones this account's data can render, so every return
   // visit surfaces something different.
@@ -141,7 +131,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       mode: "app" as const,
       expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
       rates,
-      reports,
       welcomePending: settings.welcomePending,
       hasEmailConnection: emailConnections.length > 0,
       // While the account has no connected mailbox, boost the connect-email
@@ -410,7 +399,6 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
     <ExpenseList
       expenses={loaderData.expenses}
       rates={loaderData.rates}
-      reports={loaderData.reports}
       welcomePending={loaderData.welcomePending}
       hasEmailConnection={loaderData.hasEmailConnection}
       highlight={loaderData.highlight}
@@ -421,19 +409,16 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
 function ExpenseList({
   expenses,
   rates,
-  reports,
   welcomePending,
   hasEmailConnection,
   highlight,
 }: {
   expenses: ExpenseListItem[];
   rates: MileageRateEntry[];
-  reports: { name: string; count: number; total: string }[];
   welcomePending: boolean;
   hasEmailConnection: boolean;
   highlight: { id: HighlightId; data: HighlightData };
 }) {
-  const [selectedReport, setSelectedReport] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const drop = useDropTarget({
@@ -476,7 +461,6 @@ function ExpenseList({
       fileRef.current?.click();
     } else if (request.kind === "search-expenses") {
       consumeCommandRequest();
-      setSelectedReport(null);
       setQuery(request.query);
       setDebouncedQuery(request.query);
       searchRef.current?.focus();
@@ -510,24 +494,17 @@ function ExpenseList({
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Both list filters run client-side: the report chips narrow by report,
-  // the search box by text (amount, merchant, description, category).
+  // The list filter runs client-side: the search box matches text
+  // (amount, merchant, description, category) plus the field operators.
   const filtered = useMemo(
-    () =>
-      expenses.filter(
-        (e) =>
-          (selectedReport === null ||
-            (selectedReport === "Unassigned"
-              ? e.report === ""
-              : e.report === selectedReport)) &&
-          matchesSearch(e, debouncedQuery),
-      ),
-    [expenses, selectedReport, debouncedQuery],
+    () => expenses.filter((e) => matchesSearch(e, debouncedQuery)),
+    [expenses, debouncedQuery],
   );
   const searchTotal = useMemo(
     () => summarizeAmounts(filtered).total,
     [filtered],
   );
+  const allTotal = useMemo(() => summarizeAmounts(expenses).total, [expenses]);
   // The search box's suggestion set: every merchant and category in the
   // account, most-used first, so "how much on XYZ" is a pick, not typing.
   const suggestions = useMemo(() => {
@@ -587,13 +564,6 @@ function ExpenseList({
     form.set("id", confirmDeleteId);
     setConfirmDeleteId(null);
     void fetcher.submit(form, { method: "post" });
-  }
-
-  /** Reset both list filters (the report chips and the search box). */
-  function clearFilters() {
-    setSelectedReport(null);
-    setQuery("");
-    setDebouncedQuery("");
   }
 
   return (
@@ -732,55 +702,13 @@ function ExpenseList({
         </div>
       </div>
 
-      {reports.length > 0 ? (
-        <section
-          aria-label="Report summaries"
-          className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4"
-        >
-          <h2 className="sr-only">Report summaries</h2>
-          {reports.map((r) => {
-            const active = selectedReport === r.name;
-            return (
-              <button
-                key={r.name}
-                type="button"
-                onClick={() => setSelectedReport(active ? null : r.name)}
-                aria-pressed={active}
-                className={`rounded-xl border p-3 text-left transition-colors ${active ? "border-blue-500 bg-blue-50 dark:bg-blue-900/60 ring-1 ring-blue-500" : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600"}`}
-              >
-                <div className="truncate text-sm font-medium text-gray-700 dark:text-gray-200">
-                  {r.name}
-                </div>
-                <div className="text-lg font-semibold tabular-nums">
-                  {formatAmount(r.total)}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {countLabel(r.count)}
-                </div>
-              </button>
-            );
-          })}
-        </section>
-      ) : null}
-
-      {selectedReport !== null || debouncedQuery ? (
-        <div className="mb-3 flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
-          <span role="status" aria-live="polite">
-            {debouncedQuery
-              ? `Showing ${filtered.length} of ${expenses.length} expenses · ${formatAmount(searchTotal)} total`
-              : selectedReport === "Unassigned"
-                ? "Showing unassigned expenses"
-                : `Showing ${selectedReport} expenses`}
-          </span>
-          <button
-            type="button"
-            className="text-blue-600 dark:text-blue-400 hover:underline"
-            onClick={clearFilters}
-          >
-            Show all
-          </button>
-        </div>
-      ) : null}
+      <div className="mb-3 text-sm text-gray-600 dark:text-gray-300">
+        <span role="status" aria-live="polite">
+          {debouncedQuery
+            ? `Showing ${filtered.length} of ${expenses.length} expenses · ${formatAmount(searchTotal)} total`
+            : `${countLabel(expenses.length)} · ${formatAmount(allTotal)} total`}
+        </span>
+      </div>
 
       {expenses.length === 0 ? (
         <EmptyState>

@@ -67,16 +67,21 @@ describe("Closed reports", () => {
   });
 
   it("hides closed reports and their expenses from the home page", async () => {
-    // The open report's card and expense are shown…
-    await expect(page.getByRole("button", { name: /Open Q3/ })).toBeVisible();
+    // The open report's expense is shown; the closed report's is not.
     await expect(page.getByText("Open Report Shop")).toBeVisible();
-    // …the closed report's card and expense are not.
-    await expect(page.getByRole("button", { name: /Closed Q3/ })).toHaveCount(
-      0,
-    );
     await expect(page.getByText("Closed Report Shop")).toHaveCount(0);
+    // The closed report is not offered as a search suggestion either.
+    await expect(
+      page.locator(
+        "#expense-search-suggestions option[value='report:Closed Q3']",
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.locator(
+        "#expense-search-suggestions option[value='report:Open Q3']",
+      ),
+    ).toHaveCount(1);
     // Seeded fixtures are untouched.
-    await expect(page.getByRole("button", { name: /2026 Test/ })).toBeVisible();
     await expect(page.getByText("Test Store")).toBeVisible();
   });
 

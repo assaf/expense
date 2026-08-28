@@ -14,11 +14,10 @@ describe("Home page", () => {
     await expect(page.locator("h1")).toContainText("Expense");
   });
 
-  it("shows report summary cards", async () => {
-    // Should have cards for seeded reports
-    await expect(page.locator("section button").first()).toBeVisible();
-    // "2026 Test" report summary card should be present
-    await expect(page.getByRole("button", { name: /2026 Test/ })).toBeVisible();
+  it("shows the total count and amount of all expenses", async () => {
+    // Six seeded expenses (the 0.00 row counts toward the number, adds
+    // nothing to the sum: 42.50 + 15.99 + 22.40 + 99.99 + 12.00).
+    await expect(page.getByText("6 expenses · $192.88 total")).toBeVisible();
   });
 
   it("shows the add receipt button", async () => {

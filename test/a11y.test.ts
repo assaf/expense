@@ -178,20 +178,6 @@ describe("Accessibility", () => {
       await mileage.close();
     });
 
-    it("sets aria-pressed on report filter chips", async () => {
-      const home = await goto("/");
-      // Find a report chip that isn't selected (aria-pressed="false").
-      const chip = home.getByRole("button", { name: /2026 Test/ }).first();
-      await expect(chip).toHaveAttribute("aria-pressed", "false");
-      // Click to select it.
-      await chip.click();
-      await expect(chip).toHaveAttribute("aria-pressed", "true");
-      // Click again to deselect.
-      await chip.click();
-      await expect(chip).toHaveAttribute("aria-pressed", "false");
-      await home.close();
-    });
-
     it("has properly labelled expense rows", async () => {
       const home = await goto("/");
       // Find the Test Store row specifically (seeded merchant).
