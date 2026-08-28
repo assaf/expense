@@ -76,7 +76,7 @@ export function isBankNotificationSender(fromAddress: string): boolean {
   );
 }
 
-export type ReceiptEmailVerdict = "receipt" | "not-receipt" | "uncertain";
+type ReceiptEmailVerdict = "receipt" | "not-receipt" | "uncertain";
 
 export interface ReceiptEmailClassification {
   verdict: ReceiptEmailVerdict;

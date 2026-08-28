@@ -8,6 +8,7 @@ import {
   accountFromRow,
   VERIFICATION_RESEND_MS,
   VERIFICATION_TTL_MS,
+  withinWindow,
 } from "~/lib/db/shared";
 import type {
   Account,
@@ -266,10 +267,7 @@ export async function verifyInboundSenderAddress(
     s.verificationTokenHash.eq(hashToken(rawToken)),
   ).first();
   if (!row) return { status: "invalid" };
-  const sentAt = row.verificationSentAt
-    ? Date.parse(toIso(row.verificationSentAt))
-    : 0;
-  if (!Number.isFinite(sentAt) || Date.now() - sentAt > VERIFICATION_TTL_MS) {
+  if (!withinWindow(row.verificationSentAt, VERIFICATION_TTL_MS)) {
     return { status: "expired", address: row.address };
   }
   const account = await db.orm.public.Account.first({ id: row.accountId });
@@ -398,17 +396,12 @@ export async function ensureInboundSenderForUser(
   const existing = await db.orm.public.InboundSender.where((s) =>
     and(s.accountId.eq(accountId), s.address.eq(address)),
   ).first();
-  if (existing?.verificationTokenHash) {
-    const sentAt = existing.verificationSentAt
-      ? Date.parse(toIso(existing.verificationSentAt))
-      : 0;
-    if (
-      Number.isFinite(sentAt) &&
-      Date.now() - sentAt < VERIFICATION_RESEND_MS
-    ) {
-      // A fresh verification email is already in flight; don't re-send.
-      return { token: null, verified: false, claimedByOther: false };
-    }
+  if (
+    existing?.verificationTokenHash &&
+    withinWindow(existing.verificationSentAt, VERIFICATION_RESEND_MS)
+  ) {
+    // A fresh verification email is already in flight; don't re-send.
+    return { token: null, verified: false, claimedByOther: false };
   }
   const token = await mintSenderToken(accountId, address);
   return { token, verified: false, claimedByOther: false };

@@ -122,3 +122,22 @@ export function bust<T, R>(
 export const VERIFICATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Don't re-send a verification email for one address more than once a day. */
 export const VERIFICATION_RESEND_MS = 24 * 60 * 60 * 1000;
+
+/** True when `sentAt` is set and fresher than `window` (ms). Timestamps
+ * arrive as TimestampString wire text ("2026-07-15 12:00:03.602", space
+ * separator, no zone): toIso normalizes that to a UTC instant before the
+ * comparison, since Date.parse would read it as local time. TTL expiry
+ * checks read `!withinWindow(x, TTL)`; resend limits read
+ * `withinWindow(x, RESEND)`, so the missing-timestamp polarity lives
+ * here instead of in eight hand-rolled comparisons. */
+export function withinWindow(
+  sentAt: Date | string | null | undefined,
+  window: number,
+): boolean {
+  if (!sentAt) return false;
+  const sent =
+    typeof sentAt === "string"
+      ? Date.parse(sentAt.includes(" ") ? toIso(sentAt) : sentAt)
+      : sentAt.getTime();
+  return Number.isFinite(sent) && Date.now() - sent < window;
+}

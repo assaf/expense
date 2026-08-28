@@ -28,18 +28,20 @@ export async function loader({ request }: Route.LoaderArgs) {
 function copyFor(
   outcome: Awaited<ReturnType<typeof loader>>,
 ): VerificationCopy {
+  const forwarding = (address: string, accountName: string) => (
+    <p>
+      Receipts forwarded from <b className="font-mono">{address}</b> to{" "}
+      <b className="font-mono">{outcome.forwardTo}</b> will be added to the{" "}
+      <b>{accountName}</b> account on Expense.
+    </p>
+  );
   switch (outcome.status) {
     case "verified":
       return {
         title: "Email verified",
         body: (
           <>
-            <p>
-              Receipts forwarded from{" "}
-              <b className="font-mono">{outcome.address}</b> to{" "}
-              <b className="font-mono">{outcome.forwardTo}</b> will be added to
-              the <b>{outcome.accountName}</b> account on Expense.
-            </p>
+            {forwarding(outcome.address, outcome.accountName)}
             <p>
               No other account can use this address anymore. Forward a receipt
               to the expense email to try it out.
@@ -52,12 +54,7 @@ function copyFor(
         title: "Already verified",
         body: (
           <>
-            <p>
-              Receipts forwarded from{" "}
-              <b className="font-mono">{outcome.address}</b> to{" "}
-              <b className="font-mono">{outcome.forwardTo}</b> will be added to
-              the <b>{outcome.accountName}</b> account on Expense.
-            </p>
+            {forwarding(outcome.address, outcome.accountName)}
             <p>This link has already been used. No further action is needed.</p>
           </>
         ),

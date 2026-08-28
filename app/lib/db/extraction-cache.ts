@@ -3,7 +3,8 @@ import { ulid } from "ulid";
 
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, fromIso, toIso } from "~/lib/db/wire";
+import { asJson, fromIso } from "~/lib/db/wire";
+import { withinWindow } from "~/lib/db/shared";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 
 /**
@@ -47,7 +48,7 @@ export async function readCachedExtraction(
     and(r.accountId.eq(accountId), r.hash.eq(hash)),
   ).first();
   if (!row) return null;
-  if (Date.now() - Date.parse(toIso(row.createdAt)) > TTL_MS) {
+  if (!withinWindow(row.createdAt, TTL_MS)) {
     await db.orm.public.ReceiptExtraction.where((r) =>
       and(r.accountId.eq(accountId), r.hash.eq(hash)),
     )

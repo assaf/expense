@@ -1388,7 +1388,12 @@ export async function processInboundEvent(
     const reportStats = saved.reportStats;
     const expenseId = saved.expenseId;
 
-    if (missing.length > 0) {
+    // Both outcomes share the same confirmation tail; only the missing
+    // list, the render-error note, and the stored status differ.
+    const finish = async (
+      status: "partial" | "created",
+      missingFields: string[],
+    ) => {
       const confirmation = confirmationEmail({
         expenseId,
         date: expenseDate,
@@ -1401,9 +1406,9 @@ export async function processInboundEvent(
           notes: extraction.notes,
           currency: saved.currency,
           fx: saved.fx,
-          renderError,
+          renderError: missingFields.length > 0 ? renderError : undefined,
         }),
-        missing,
+        missing: missingFields,
         reportStats,
         quotedOriginal: saved.quotedOriginal,
       });
@@ -1419,47 +1424,16 @@ export async function processInboundEvent(
         emailId: data.email_id,
         accountId: account.id,
         subject,
-        status: "partial",
-        error: `Missing: ${missing.join(", ")}`,
+        status,
+        error: missing.length > 0 ? `Missing: ${missing.join(", ")}` : "",
       });
-      return { status: "partial", expenseId, missing };
-    }
-
-    // Successful import: send a confirmation email with the details.
-    const confirmation = confirmationEmail({
-      expenseId,
-      date: expenseDate,
-      merchant: extraction.merchant,
-      amount: saved.fx?.amount ?? extraction.amount,
-      category,
-      report,
-      description: extraction.description,
-      notes: confirmationNotes({
-        notes: extraction.notes,
-        currency: saved.currency,
-        fx: saved.fx,
-      }),
-      missing: [],
-      reportStats,
-      quotedOriginal: saved.quotedOriginal,
-    });
-    await sendConfirmationOrSuppress({
-      deps,
-      data,
-      confirmation,
-      originalAttachment: saved.originalAttachment,
-      recentMatch: saved.recentMatch,
-    });
-
-    await learnRuleFromForward(account.id, email, attachments, deps);
-    await upsertInboundEmail({
-      emailId: data.email_id,
-      accountId: account.id,
-      subject,
-      status: "created",
-      error: "",
-    });
-    return { status: "created", expenseId };
+      if (status === "partial") {
+        return { status, expenseId, missing: missingFields } as const;
+      }
+      return { status, expenseId } as const;
+    };
+    if (missing.length > 0) return finish("partial", missing);
+    return finish("created", []);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[inbound] processing failed:", err);

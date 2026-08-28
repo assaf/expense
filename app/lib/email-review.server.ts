@@ -417,34 +417,46 @@ function emailFromSummary(
   };
 }
 
-/** Upsert a row to outcome pending-review, carrying the parsed charge
- * amount when the email is a bank notification. Only when the row is
- * still recoverable (no row, or ignored/error/superseded): a drain that
- * processed the email between the caller's read and this write owns the
- * decision; flipping a created/processing row back would re-offer an
- * already-imported receipt and risk a duplicate expense. The create
- * path's P2002 means someone else claimed it meanwhile: skip. Returns
- * "raced" in that case so callers don't count the row. */
-async function writePendingRow(
+/** Shared claim discipline for the review upserts: update every
+ * recoverable row for the email, else create it. "Recoverable" is the
+ * caller's list: a plain outcome, or an outcome matched with a reason
+ * (only a superseded review-ignored row may flip back to pending; a
+ * row the user ignored by hand stays ignored). Flipping a
+ * created/processing row would re-offer an already-imported receipt and
+ * risk a duplicate expense; the create path's P2002 means someone else
+ * claimed it meanwhile: skip. Returns "raced" in that case so callers
+ * don't count the row. */
+async function upsertReviewRow(
   connectionId: string,
   email: ReviewEmailLike,
   chargeAmount: string | null,
+  recoverable: Array<
+    | { outcome: "ignored" | "error" | "pending-review" | "review-ignored" }
+    | { outcome: "review-ignored"; reason: string }
+  >,
+  patch: {
+    outcome: "pending-review" | "review-ignored";
+    reason: string | null;
+    expenseId: string | null;
+  },
 ): Promise<"written" | "raced"> {
-  const restored = await db.orm.public.EmailProcessLog.where((l) =>
+  const updated = await db.orm.public.EmailProcessLog.where((l) =>
     and(
       l.connectionId.eq(connectionId),
       l.emailId.eq(email.emailId),
       or(
-        l.outcome.eq("ignored"),
-        l.outcome.eq("error"),
-        and(l.outcome.eq("review-ignored"), l.reason.eq("superseded")),
+        ...recoverable.map((match) =>
+          "reason" in match
+            ? and(l.outcome.eq(match.outcome), l.reason.eq(match.reason))
+            : l.outcome.eq(match.outcome),
+        ),
       ),
     ),
   ).updateAll({
-    outcome: "pending-review",
+    outcome: patch.outcome,
     matched: false,
-    reason: null,
-    expenseId: null,
+    reason: patch.reason,
+    expenseId: patch.expenseId,
     error: null,
     chargeAmount,
     receivedAt: fromIso(email.receivedAt),
@@ -452,7 +464,7 @@ async function writePendingRow(
     fromAddress: email.fromAddress,
     subject: email.subject.slice(0, 500),
   });
-  if (restored.length > 0) return "written";
+  if (updated.length > 0) return "written";
   try {
     await db.orm.public.EmailProcessLog.create({
       connectionId,
@@ -461,7 +473,9 @@ async function writePendingRow(
       fromDisplay: email.fromDisplay,
       subject: email.subject.slice(0, 500),
       matched: false,
-      outcome: "pending-review",
+      outcome: patch.outcome,
+      reason: patch.reason,
+      expenseId: patch.expenseId,
       chargeAmount,
       receivedAt: fromIso(email.receivedAt),
       createdAt: fromIso(new Date().toISOString()),
@@ -473,58 +487,52 @@ async function writePendingRow(
   return "written";
 }
 
+/** Upsert a row to outcome pending-review, carrying the parsed charge
+ * amount when the email is a bank notification. Only rows still
+ * recoverable flip: ignored, error, or a superseded review-ignored row. */
+async function writePendingRow(
+  connectionId: string,
+  email: ReviewEmailLike,
+  chargeAmount: string | null,
+): Promise<"written" | "raced"> {
+  return upsertReviewRow(
+    connectionId,
+    email,
+    chargeAmount,
+    [
+      { outcome: "ignored" },
+      { outcome: "error" },
+      { outcome: "review-ignored", reason: "superseded" },
+    ],
+    { outcome: "pending-review", reason: null, expenseId: null },
+  );
+}
+
 /** Upsert a row to review-ignored with reason "superseded" and the
- * covering expense id. Same claim discipline as writePendingRow. */
+ * covering expense id. Any undecided row flips; a created/processing row
+ * is owned by the drain and is left alone. */
 async function writeSupersededRow(
   connectionId: string,
   email: ReviewEmailLike,
   chargeAmount: string | null,
   coverExpenseId: string,
 ): Promise<"written" | "raced"> {
-  const stilled = await db.orm.public.EmailProcessLog.where((l) =>
-    and(
-      l.connectionId.eq(connectionId),
-      l.emailId.eq(email.emailId),
-      or(
-        l.outcome.eq("pending-review"),
-        l.outcome.eq("review-ignored"),
-        l.outcome.eq("ignored"),
-        l.outcome.eq("error"),
-      ),
-    ),
-  ).updateAll({
-    outcome: "review-ignored",
-    matched: false,
-    reason: "superseded",
-    expenseId: coverExpenseId,
-    error: null,
+  return upsertReviewRow(
+    connectionId,
+    email,
     chargeAmount,
-    receivedAt: fromIso(email.receivedAt),
-    fromDisplay: email.fromDisplay,
-    fromAddress: email.fromAddress,
-    subject: email.subject.slice(0, 500),
-  });
-  if (stilled.length > 0) return "written";
-  try {
-    await db.orm.public.EmailProcessLog.create({
-      connectionId,
-      emailId: email.emailId,
-      fromAddress: email.fromAddress,
-      fromDisplay: email.fromDisplay,
-      subject: email.subject.slice(0, 500),
-      matched: false,
+    [
+      { outcome: "pending-review" },
+      { outcome: "review-ignored" },
+      { outcome: "ignored" },
+      { outcome: "error" },
+    ],
+    {
       outcome: "review-ignored",
       reason: "superseded",
       expenseId: coverExpenseId,
-      chargeAmount,
-      receivedAt: fromIso(email.receivedAt),
-      createdAt: fromIso(new Date().toISOString()),
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) return "raced"; // claimed meanwhile
-    throw err;
-  }
-  return "written";
+    },
+  );
 }
 
 /**

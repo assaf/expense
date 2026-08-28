@@ -14,6 +14,7 @@ import {
   userFromRow,
   VERIFICATION_RESEND_MS,
   VERIFICATION_TTL_MS,
+  withinWindow,
 } from "~/lib/db/shared";
 import { initStore, seedDefaultCategories } from "~/lib/db/seed";
 import type { Account, User } from "~/lib/types";
@@ -266,8 +267,7 @@ export async function verifyUserEmailAddress(
   if (row.emailVerifiedAt) {
     return { status: "already-verified", email: row.email };
   }
-  const sentAt = row.verificationSentAt;
-  if (!sentAt || Date.now() - Date.parse(toIso(sentAt)) > VERIFICATION_TTL_MS) {
+  if (!withinWindow(row.verificationSentAt, VERIFICATION_TTL_MS)) {
     return { status: "expired", email: row.email };
   }
   await db.orm.public.User.where({ id: row.id }).update({
@@ -330,11 +330,7 @@ export async function resendUserVerification(
     .select("emailVerifiedAt", "verificationSentAt")
     .first();
   if (!row || row.emailVerifiedAt) return { status: "already-verified" };
-  if (
-    row.verificationSentAt &&
-    Date.now() - Date.parse(toIso(row.verificationSentAt)) <
-      VERIFICATION_RESEND_MS
-  ) {
+  if (withinWindow(row.verificationSentAt, VERIFICATION_RESEND_MS)) {
     return { status: "rate-limited" };
   }
   const token = generateOpaqueToken();
@@ -373,8 +369,7 @@ export async function resetUserPasswordWithToken(
     u.passwordResetTokenHash.eq(hashToken(rawToken)),
   ).first();
   if (!row) return { status: "invalid" };
-  const sentAt = row.passwordResetSentAt;
-  if (!sentAt || Date.now() - Date.parse(toIso(sentAt)) > VERIFICATION_TTL_MS) {
+  if (!withinWindow(row.passwordResetSentAt, VERIFICATION_TTL_MS)) {
     await db.orm.public.User.where({ id: row.id }).update({
       passwordResetTokenHash: null,
       passwordResetSentAt: null,
@@ -402,11 +397,7 @@ export async function passwordResetRecentlySent(
   const row = await db.orm.public.User.where({ id: userId })
     .select("passwordResetSentAt")
     .first();
-  return Boolean(
-    row?.passwordResetSentAt &&
-    Date.now() - Date.parse(toIso(row.passwordResetSentAt)) <
-      VERIFICATION_RESEND_MS,
-  );
+  return withinWindow(row?.passwordResetSentAt, VERIFICATION_RESEND_MS);
 }
 
 /** Has a verification email for this address been sent within the
@@ -416,9 +407,5 @@ export async function verificationRecentlySent(
   email: string,
 ): Promise<boolean> {
   const row = await db.orm.public.User.where((u) => u.email.eq(email)).first();
-  return Boolean(
-    row?.verificationSentAt &&
-    Date.now() - Date.parse(toIso(row.verificationSentAt)) <
-      VERIFICATION_RESEND_MS,
-  );
+  return withinWindow(row?.verificationSentAt, VERIFICATION_RESEND_MS);
 }

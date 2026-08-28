@@ -4,9 +4,10 @@
     "vitest.noglobal.config.ts",
     "prisma/contract.prisma",
     "migrations/**",
-    "scripts/check-dark-mode.mjs"
+    "scripts/check-dark-mode.mjs",
+    "vendor/**"
   ],
-  "ignoreBinaries": [],
+  "ignoreBinaries": ["cloc"],
   "ignoreDependencies": [
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend"
