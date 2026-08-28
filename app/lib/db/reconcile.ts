@@ -260,7 +260,7 @@ export async function completeReconciliationRun(
   // must not hold a sharp/render pass.
   const images = new Map<
     number,
-    { filename: string; mime: string; originalName: string }
+    { filename: string; mime: string; originalName: string; sha256: string }
   >();
   for (const [i, res] of resolutions) {
     if (res.kind !== "new") continue;
@@ -362,6 +362,7 @@ export async function completeReconciliationRun(
         imageFile: image.filename,
         imageMime: image.mime,
         originalName: image.originalName,
+        imageSha256: image.sha256,
         reconciledAt: now,
         createdAt: now,
         updatedAt: now,

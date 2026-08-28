@@ -314,7 +314,7 @@ describe("MCP endpoint", () => {
         width: 40,
         height: 20,
         channels: 3,
-        background: { r: 255, g: 255, b: 255 },
+        background: { r: 240, g: 240, b: 240 },
       },
     })
       .png()
@@ -341,6 +341,41 @@ describe("MCP endpoint", () => {
       },
     });
     expect(row?.date).toBe(serverUtcNow.slice(0, 10));
+  });
+
+  it("reports a duplicate instead of importing the same image twice", async () => {
+    const png = await sharp({
+      create: {
+        width: 40,
+        height: 20,
+        channels: 3,
+        background: { r: 10, g: 200, b: 90 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const first = await modernCallTool(accessToken, "capture_receipt", {
+      imageData: png.toString("base64"),
+      mime: "image/png",
+      filename: "dup-check.png",
+      date: "2026-04-29",
+      report: "2026 Test",
+    });
+    expect(first.isError).toBe(false);
+    expect(first.payload.captured).toBe(true);
+    const second = await modernCallTool(accessToken, "capture_receipt", {
+      imageData: png.toString("base64"),
+      mime: "image/png",
+      filename: "dup-check.png",
+      date: "2026-04-29",
+      report: "2026 Test",
+    });
+    expect(second.isError).toBe(false);
+    // Same bytes: the fingerprint matches the first expense, nothing new
+    // is stored, and the assistant is told which expense it duplicates.
+    expect(second.payload.captured).toBe(false);
+    expect(second.payload.duplicate).toBe(true);
+    expect(second.payload.duplicateOf).toBe(first.payload.expenseId);
   });
 
   it("rejects header/body mismatch on modern requests", async () => {
@@ -426,7 +461,7 @@ describe("MCP endpoint", () => {
         width: 40,
         height: 20,
         channels: 3,
-        background: { r: 255, g: 255, b: 255 },
+        background: { r: 200, g: 200, b: 200 },
       },
     })
       .png()

@@ -138,7 +138,7 @@ export const BENEFITS = [
   },
   {
     title: "Duplicates detection",
-    body: "If you upload the same receipt twice, or resend the email receipt, you will be warned about a duplicate before it messes up your totals.",
+    body: "Every receipt image is fingerprinted with SHA-256 when it's stored. The same file arriving twice, by any route (upload, forward, connected inbox), is recognized as one receipt: auto-imports skip the second copy, and manual uploads get a duplicate warning before it messes up your totals.",
   },
   {
     title: "Reconcile against your monthly statement",
@@ -215,7 +215,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "What happens if I upload the same receipt twice?",
-    answer: `You will get a visual warning and you can discard it or mark as "not a duplicate". This covers re-uploaded file and sending the same email twice.`,
+    answer: `You will get a visual warning and you can discard it or mark as "not a duplicate". This covers re-uploaded file and sending the same email twice; every stored image also carries a SHA-256 fingerprint, so the same file arriving by a different route is caught too.`,
   },
   {
     question: "Can I reconcile my expenses against a credit card statement?",

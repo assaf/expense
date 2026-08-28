@@ -28,7 +28,10 @@ import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
  */
 
 /** Why two expenses look like the same entry. */
-export type DuplicateReason = "same-date-merchant-amount" | "same-route";
+export type DuplicateReason =
+  | "same-image"
+  | "same-date-merchant-amount"
+  | "same-route";
 
 /** One existing expense that looks like the same entry as another. */
 export interface DuplicateMatch {
@@ -58,11 +61,6 @@ export function findDuplicates(
   );
 }
 
-/**
- * One pass over every expense: which others each one looks like. Used by the
- * home list loader to badge duplicate rows on both sides of a pair; the
- * create editor's `findDuplicates` is the same grouping for one candidate.
- */
 export function groupDuplicateMatches(
   expenses: readonly Expense[],
   dismissed: ReadonlySet<string> = new Set(),
@@ -72,23 +70,32 @@ export function groupDuplicateMatches(
     { reason: DuplicateReason; expenses: Expense[] }
   >();
   for (const e of expenses) {
-    const keyed = matchKey(e);
-    if (!keyed) continue;
-    const bucket = byKey.get(keyed.key) ?? {
-      reason: keyed.reason,
-      expenses: [],
-    };
-    bucket.expenses.push(e);
-    byKey.set(keyed.key, bucket);
+    for (const keyed of matchKeys(e)) {
+      const bucket = byKey.get(keyed.key) ?? {
+        reason: keyed.reason,
+        expenses: [],
+      };
+      bucket.expenses.push(e);
+      byKey.set(keyed.key, bucket);
+    }
   }
 
   const matches = new Map<string, DuplicateMatch[]>();
+  // Directional: a pair reports a→b AND b→a; two buckets sharing the pair
+  // (same image AND same fields) report it once per direction, from the
+  // strongest reason. matchKeys orders the image key first and each
+  // expense registers its image key before its content key, so the image
+  // bucket is always met first.
+  const reported = new Set<string>();
   for (const bucket of byKey.values()) {
     if (bucket.expenses.length < 2) continue;
     for (const e of bucket.expenses) {
       for (const other of bucket.expenses) {
         if (other.id === e.id) continue;
         if (dismissed.has(duplicatePairKey(e.id, other.id))) continue;
+        const direction = `${e.id}>${other.id}`;
+        if (reported.has(direction)) continue;
+        reported.add(direction);
         const list = matches.get(e.id) ?? [];
         list.push({ expense: other, reason: bucket.reason });
         matches.set(e.id, list);
@@ -112,11 +119,25 @@ export function duplicateLabel(e: Expense): string {
 }
 
 /**
- * The normalized key two expenses share exactly when they are duplicates.
- * Null when the entry is too incomplete to compare.
+ * Every key the expense matches duplicates on, strongest first. A receipt
+ * can carry two: the image fingerprint (the same bytes, whatever the
+ * fields say) and the content key (date + merchant + amount + the rest).
+ * Mileage has one (date + ordered route + distance).
  */
-function matchKey(e: Expense): { key: string; reason: DuplicateReason } | null {
-  return e.type === "receipt" ? receiptKey(e) : mileageKey(e);
+function matchKeys(
+  e: Expense,
+): Array<{ key: string; reason: DuplicateReason }> {
+  if (e.type === "mileage") {
+    const keyed = mileageKey(e);
+    return keyed ? [keyed] : [];
+  }
+  const keys: Array<{ key: string; reason: DuplicateReason }> = [];
+  if (e.imageSha256) {
+    keys.push({ key: `image|${e.imageSha256}`, reason: "same-image" });
+  }
+  const content = receiptKey(e);
+  if (content) keys.push(content);
+  return keys;
 }
 
 function receiptKey(

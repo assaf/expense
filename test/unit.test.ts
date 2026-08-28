@@ -53,6 +53,7 @@ const makeReceipt = (
   imageFile: "receipt.jpg",
   imageMime: "image/jpeg",
   originalName: "receipt.jpg",
+  imageSha256: "",
   reconciledAt: "",
   createdAt: "",
   updatedAt: "",

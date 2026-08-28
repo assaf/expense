@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -214,7 +214,10 @@ export function pdfImageName(originalName: string): string {
 
 /**
  * Persist an uploaded image buffer under a temporary (id-based) key in the
- * account's namespace. Returns the storage key written and the mime type.
+ * account's namespace. Returns the storage key written, the mime type, and
+ * the SHA-256 of the bytes actually stored (post-normalization), also kept
+ * on the blob row: it is the duplicate-detection fingerprint (the expense
+ * row carries a copy), and re-hashing a blob never requires reading it.
  *
  * `(accountId, key)` is the primary key, so the database itself rejects a
  * duplicate name. A free name is picked first, and a fresh GUID is retried if
@@ -225,7 +228,7 @@ export async function saveImage(
   buffer: Buffer,
   mime: string,
   originalName: string,
-): Promise<{ filename: string; mime: string }> {
+): Promise<{ filename: string; mime: string; sha256: string }> {
   const resolvedMime = mime || mimeForFile(originalName) || "image/png";
 
   // Normalize before persisting: downscale past 1024px, flatten, re-encode
@@ -250,6 +253,7 @@ export async function saveImage(
     quality: 80,
   }).catch(() => null as Buffer | null);
 
+  const sha256 = createHash("sha256").update(storedBuffer).digest("hex");
   const base = `${ulid()}${ext}`;
   let name = await uniqueName(accountId, base, (key) =>
     pgExists(accountId, key),
@@ -261,9 +265,14 @@ export async function saveImage(
         key: namespacedKey(accountId, name),
         mime: storedMime,
         data: new Uint8Array(storedBuffer),
+        sha256,
         ...(thumbnail ? { thumbnail: new Uint8Array(thumbnail) } : {}),
       });
-      return { filename: namespacedKey(accountId, name), mime: storedMime };
+      return {
+        filename: namespacedKey(accountId, name),
+        mime: storedMime,
+        sha256,
+      };
     } catch (error) {
       if (!isUniqueViolation(error) || attempt >= MAX_NAME_ATTEMPTS) {
         throw error;
@@ -298,6 +307,22 @@ export async function renameImageToConvention(
     and(b.accountId.eq(accountId), b.key.eq(currentFile)),
   ).updateAll({ key: to });
   return to;
+}
+
+/** The stored bytes' SHA-256, "" for a missing/legacy blob (pre-fingerprint
+ * rows have a null column). The editor's Save resolves the expense row's
+ * copy from here: one tiny column read, never the bytes. */
+export async function readImageSha256(
+  accountId: string,
+  filename: string,
+): Promise<string> {
+  if (!filename) return "";
+  const row = await db.orm.public.ImageBlob.where((b) =>
+    and(b.accountId.eq(accountId), b.key.eq(filename)),
+  )
+    .select("sha256")
+    .first();
+  return row?.sha256 ?? "";
 }
 
 export async function readImage(

@@ -36,7 +36,11 @@ import {
 } from "~/lib/email-confirmation.server";
 import { domainOf, extractEmailAddress } from "~/lib/validation";
 import type { SendEmailOptions } from "~/lib/reply.server";
-import { upsertExpense, findRecentlyImportedMatch } from "~/lib/db/expenses";
+import {
+  upsertExpense,
+  findRecentlyImportedMatch,
+  findSameImageExpense,
+} from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   findPendingSenderRow,
@@ -46,7 +50,7 @@ import {
 } from "~/lib/db/inbound";
 import { addEmailRule } from "~/lib/db/email-rules";
 import { readReportSummary } from "~/lib/db/reports";
-import { saveImage, readImage } from "~/lib/images.server";
+import { saveImage, readImage, deleteImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 
@@ -1018,7 +1022,7 @@ export async function saveExpenseFromExtraction(opts: {
    * original: quoted text for a body source, the original file for an
    * attachment source. */
   originalSource: ReceiptSource;
-}): Promise<SavedExpense> {
+}): Promise<SavedExpense | { duplicateOf: string }> {
   const { extraction, receiptImage } = opts;
   const missing: string[] = [];
   if (!opts.expenseDate) missing.push("date");
@@ -1027,6 +1031,7 @@ export async function saveExpenseFromExtraction(opts: {
 
   let imageFile = "";
   let imageMime = opts.imageMime;
+  let imageSha256 = "";
   if (receiptImage) {
     const saved = await saveImage(
       opts.accountId,
@@ -1038,6 +1043,7 @@ export async function saveExpenseFromExtraction(opts: {
     // saveImage may have re-encoded the format (e.g. PNG → JPEG), so record
     // the mime of the bytes actually stored, not the renderer's mime.
     imageMime = saved.mime;
+    imageSha256 = saved.sha256;
   } else {
     missing.push("receipt image");
   }
@@ -1061,7 +1067,18 @@ export async function saveExpenseFromExtraction(opts: {
     imageFile,
     imageMime,
     originalName: opts.originalName,
+    imageSha256,
   };
+  // The exact same image bytes already belong to an expense: importing
+  // again would duplicate it, whatever the extracted fields say. The
+  // just-stored blob is dropped (the first copy stays with its expense);
+  // the caller decides the outcome (auto paths skip, review keeps the
+  // item listed).
+  const sameImage = await findSameImageExpense(opts.accountId, imageSha256);
+  if (sameImage) {
+    await deleteImage(opts.accountId, imageFile);
+    return { duplicateOf: sameImage.id };
+  }
   await upsertExpense(expense, opts.accountId);
 
   // The sender's reply carries the ORIGINAL receipt, never the stored
@@ -1330,6 +1347,12 @@ export async function processInboundEvent(
       originalName: extracted.originalName,
       originalSource: selected.source,
     });
+    if ("duplicateOf" in saved) {
+      // The same receipt image was already imported (any route): no second
+      // expense, no confirmation. The email is destroyed like every other
+      // decided outcome, so re-forwarding can't loop.
+      return { status: "duplicate" };
+    }
     const { missing, category, report } = saved;
     const expenseDate = selected.expenseDate;
     const extraction = extracted.extraction;

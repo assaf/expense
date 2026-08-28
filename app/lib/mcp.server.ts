@@ -12,6 +12,7 @@ import {
 import { findUserById, readBootstrapUser } from "~/lib/db/accounts";
 import { readCategories } from "~/lib/db/categories";
 import {
+  findSameImageExpense,
   readExpense,
   readExpenses,
   readPriorMerchants,
@@ -33,6 +34,7 @@ import { normalizeAmount, sortExpenses, summarizeBy } from "~/lib/format";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
   MAX_UPLOAD_BYTES,
+  deleteImage,
   mimeForFile,
   renameImageToConvention,
   saveImage,
@@ -1061,6 +1063,20 @@ async function captureReceipt(
   const { date, report, serverUtcNow } = input;
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
+  // The same image bytes are already an expense: drop the just-stored
+  // copy and report the duplicate instead of importing it twice.
+  const duplicateOf = saved.sha256
+    ? await findSameImageExpense(accountId, saved.sha256)
+    : undefined;
+  if (duplicateOf) {
+    await deleteImage(accountId, saved.filename);
+    return ok({
+      captured: false,
+      duplicate: true,
+      duplicateOf: duplicateOf.id,
+      serverUtcNow,
+    });
+  }
   const expense: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date,
@@ -1072,6 +1088,7 @@ async function captureReceipt(
     imageFile: saved.filename,
     imageMime: saved.mime,
     originalName,
+    imageSha256: saved.sha256,
   };
   if (date && report && originalName) {
     expense.imageFile = await renameImageToConvention(

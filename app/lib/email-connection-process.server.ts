@@ -490,6 +490,31 @@ export async function processConnectionEmail(
       originalName: extracted.originalName,
       originalSource: selected.source,
     });
+    if ("duplicateOf" in saved) {
+      // The same receipt image is already an expense (any import route).
+      // Review keeps the item listed with the reason so the user decides;
+      // auto drops it exactly like the content guard above.
+      if (review) {
+        await log("pending-review", true, {
+          error: "The same receipt image was already imported.",
+        });
+        return {
+          status: "error",
+          error:
+            "The same receipt image was already imported as another expense.",
+        };
+      }
+      await log("ignored", true, { reason: "duplicate image" });
+      captureWarning(
+        "[email-connections] duplicate receipt skipped — same image already imported",
+        {
+          connectionId: connection.id,
+          emailId: summary.id,
+          matchedExpenseId: saved.duplicateOf,
+        },
+      );
+      return { status: "ignored", reason: "duplicate" };
+    }
 
     // Success (complete or partial): move to Trash, notify the owner.
     // A Trash failure keeps the email in the Inbox; the log row prevents

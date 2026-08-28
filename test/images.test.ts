@@ -5,10 +5,17 @@ import {
   saveImage,
   renameImageToConvention,
   readImage,
+  readImageSha256,
   readUploadedFile,
   MAX_UPLOAD_BYTES,
   uploadErrorMessage,
 } from "~/lib/images.server";
+import {
+  upsertExpense,
+  readExpense,
+  findSameImageExpense,
+} from "~/lib/db/expenses";
+import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { normalizeStoredImage, resizeIfWider } from "~/lib/image-normalize";
 import {
   testPrisma,
@@ -108,6 +115,57 @@ describe("saveImage", () => {
       });
       expect(row).not.toBeNull();
     }
+  });
+
+  it("fingerprints the stored bytes with SHA-256 on the blob row", async () => {
+    // Undecodable bytes pass through unnormalized, so equal inputs store
+    // equal bytes: the fingerprints match even though the keys differ.
+    const a = await saveImage(
+      TEST_ACCOUNT_ID,
+      BUFFER,
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    const b = await saveImage(
+      TEST_ACCOUNT_ID,
+      BUFFER,
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    const c = await saveImage(
+      TEST_ACCOUNT_ID,
+      Buffer.from("different-receipt-bytes"),
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    createdKeys.push(a.filename, b.filename, c.filename);
+    expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(a.sha256).toBe(b.sha256);
+    expect(a.sha256).not.toBe(c.sha256);
+    const row = await testPrisma.imageBlob.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, key: a.filename },
+    });
+    expect(row!.sha256).toBe(a.sha256);
+  });
+
+  it("reads a blob's fingerprint back without touching the bytes", async () => {
+    const saved = await saveImage(
+      TEST_ACCOUNT_ID,
+      BUFFER,
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    createdKeys.push(saved.filename);
+    await expect(
+      readImageSha256(TEST_ACCOUNT_ID, saved.filename),
+    ).resolves.toBe(saved.sha256);
+    // Another account's namespace: no match. Missing key: "".
+    await expect(
+      readImageSha256(OTHER_ACCOUNT_ID, saved.filename),
+    ).resolves.toBe("");
+    await expect(readImageSha256(TEST_ACCOUNT_ID, "nope.jpg")).resolves.toBe(
+      "",
+    );
   });
 
   it("passes through bytes it cannot decode (no re-encode crash)", async () => {
@@ -431,5 +489,51 @@ describe("pixel cap on decode", () => {
     expect(resized).not.toBeNull();
     const normalized = await normalizeStoredImage(png);
     expect(normalized?.mime).toBe("image/jpeg");
+  });
+});
+
+describe("image fingerprint dedupe", () => {
+  it("round-trips the fingerprint through the expense row", async () => {
+    const saved = await saveImage(
+      TEST_ACCOUNT_ID,
+      BUFFER,
+      "image/jpeg",
+      "receipt.jpg",
+    );
+    createdKeys.push(saved.filename);
+    const expense = {
+      ...(newExpenseShell("receipt") as ReceiptExpense),
+      date: "2026-01-15",
+      report: "2026 Test",
+      category: "Testing",
+      description: "",
+      amount: "42.50",
+      merchant: "Fingerprint Store",
+      imageFile: saved.filename,
+      imageMime: saved.mime,
+      originalName: "receipt.jpg",
+      imageSha256: saved.sha256,
+    };
+    await upsertExpense(expense, TEST_ACCOUNT_ID);
+    try {
+      const reread = await readExpense(expense.id, TEST_ACCOUNT_ID);
+      if (!reread || reread.type !== "receipt") {
+        throw new Error("Expected the receipt expense back");
+      }
+      expect(reread.imageSha256).toBe(saved.sha256);
+      await expect(
+        findSameImageExpense(TEST_ACCOUNT_ID, saved.sha256),
+      ).resolves.toMatchObject({ id: expense.id });
+      await expect(
+        findSameImageExpense(TEST_ACCOUNT_ID, "f".repeat(64)),
+      ).resolves.toBeUndefined();
+      await expect(
+        findSameImageExpense(TEST_ACCOUNT_ID, ""),
+      ).resolves.toBeUndefined();
+    } finally {
+      await testPrisma.expense
+        .deleteMany({ where: { id: expense.id } })
+        .catch(() => {});
+    }
   });
 });

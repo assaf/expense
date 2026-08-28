@@ -44,6 +44,10 @@ export interface ReceiptExpense extends ExpenseBase {
   imageFile: string; // storage key (bare filename, or `images/...` blob pathname)
   imageMime: string;
   originalName: string;
+  /** SHA-256 hex of the stored image bytes, "" when none or a legacy row.
+   * The duplicate-detection fingerprint: same bytes = same receipt image,
+   * whatever route it arrived by. */
+  imageSha256: string;
 }
 
 export interface MileageExpense extends ExpenseBase {
@@ -227,6 +231,7 @@ export function newExpenseShell(type: Expense["type"]): Expense {
       imageFile: "",
       imageMime: "",
       originalName: "",
+      imageSha256: "",
     };
     return receipt;
   }

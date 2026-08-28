@@ -78,6 +78,7 @@ model Expense {
   imageFile                              String
   imageMime                              String
   originalName                           String
+  imageSha256                            String?
   distanceMiles                          Numeric(10, 2)?
   locations                              Jsonb
   createdAt                              TimestampString(3)
@@ -181,6 +182,7 @@ model ImageBlob {
   data      Bytes
   accountId String
   thumbnail Bytes?
+  sha256    String?
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "image_blobs_accountId_fkey", index: false)
 
   @@id([accountId, key], map: "image_blobs_pkey")

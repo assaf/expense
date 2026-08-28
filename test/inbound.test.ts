@@ -1126,12 +1126,11 @@ describe("processInboundEvent (body receipt)", () => {
     expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
   });
 
-  it("suppresses the second confirmation when the same receipt was already imported recently", async () => {
-    // The cross-pipeline overlap: the inbox original is imported first
-    // (connected-account pipeline), then the user's forwarded copy (the
-    // receipts pipeline). Different emails, same receipt content, yet the
-    // second import still saves the expense but must NOT send a second
-    // confirmation (one response per receipt).
+  it("rejects the same image twice as a duplicate (hash fingerprint)", async () => {
+    // Two different emails carrying the same receipt image: the stored
+    // bytes fingerprint to the same SHA-256, so the second import creates
+    // no expense and sends no reply. The email is destroyed like every
+    // decided outcome, so re-forwarding can't loop.
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () => receivedEmail({});
     const first = await processInboundEvent(
@@ -1148,10 +1147,39 @@ describe("processInboundEvent (body receipt)", () => {
       deps,
     );
     usedEmailIds.push("email-2");
+    expect(second).toMatchObject({ status: "duplicate" });
+    expect(deps.sent).toHaveLength(1);
+  });
+
+  it("still suppresses a same-content confirmation when the image bytes differ", async () => {
+    // The 30-minute content guard is the fallback for receipts whose
+    // images are NOT byte-identical (two photos of one paper receipt): the
+    // second import saves the expense but sends no second confirmation.
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () => receivedEmail({});
+    const first = await processInboundEvent(
+      eventData({ email_id: "email-1", message_id: "<msg-1@example.com>" }),
+      deps,
+    );
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(first));
+    expect(first).toMatchObject({ status: "created" });
+    expect(deps.sent).toHaveLength(1);
+
+    // A different image for the second email: the fingerprint misses, the
+    // content key (merchant + amount + date) matches.
+    const otherBytes = await renderReceiptImage(
+      "MERCHANT: Amazon\nTOTAL: 42.50\n(copy 2)",
+    );
+    deps.renderEmailImage = async () => otherBytes;
+    deps.renderTextEmail = async () => otherBytes;
+    const second = await processInboundEvent(
+      eventData({ email_id: "email-2", message_id: "<msg-2@example.com>" }),
+      deps,
+    );
+    usedEmailIds.push("email-2");
     usedExpenseIds.push(expenseIdOf(second));
     expect(second).toMatchObject({ status: "created" });
-    // The receipt was imported (a second expense row), but the
-    // confirmation is suppressed; still exactly one response.
     expect(deps.sent).toHaveLength(1);
   });
 

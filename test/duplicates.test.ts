@@ -21,6 +21,7 @@ const makeReceipt = (
   imageFile: "receipt.jpg",
   imageMime: "image/jpeg",
   originalName: "receipt.jpg",
+  imageSha256: "",
   reconciledAt: "",
   createdAt: "2026-01-16T00:00:00.000Z",
   updatedAt: "2026-01-16T00:00:00.000Z",
@@ -330,5 +331,54 @@ describe("duplicate helpers", () => {
     expect(duplicateLabel(makeMileage())).toBe(
       "a 32.00 mi trip on Mar 10, 2026",
     );
+  });
+});
+
+describe("image fingerprint matching", () => {
+  it("matches the same image bytes across different fields", () => {
+    const a = makeReceipt({
+      id: "a",
+      imageSha256: "h1",
+      merchant: "A",
+      amount: "1.00",
+      date: "2026-01-01",
+    });
+    const b = makeReceipt({
+      id: "b",
+      imageSha256: "h1",
+      merchant: "B",
+      amount: "9.99",
+      date: "2026-02-02",
+    });
+    const matches = findDuplicates(b, [a]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ expense: a, reason: "same-image" });
+  });
+
+  it("reports a pair sharing image and content once, as same-image", () => {
+    const a = makeReceipt({ id: "a", imageSha256: "h1" });
+    const b = makeReceipt({ id: "b", imageSha256: "h1" });
+    const matches = findDuplicates(b, [a]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.reason).toBe("same-image");
+    const groups = groupDuplicateMatches([a, b]);
+    expect(groups.get("a")).toHaveLength(1);
+    expect(groups.get("b")).toHaveLength(1);
+  });
+
+  it("falls back to the content key for rows without a fingerprint", () => {
+    const a = makeReceipt({ id: "a", imageSha256: "" });
+    const b = makeReceipt({ id: "b", imageSha256: "" });
+    const matches = findDuplicates(b, [a]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.reason).toBe("same-date-merchant-amount");
+  });
+
+  it("different fingerprints with the same content still match on content", () => {
+    const a = makeReceipt({ id: "a", imageSha256: "h1" });
+    const b = makeReceipt({ id: "b", imageSha256: "h2" });
+    const matches = findDuplicates(b, [a]);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.reason).toBe("same-date-merchant-amount");
   });
 });

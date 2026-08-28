@@ -1139,6 +1139,11 @@ describe("processReviewItem", () => {
       },
     });
     mocks.deliverConnectionEmailToInbox.mockClear();
+    // Processed receipts persist otherwise; with the image fingerprint,
+    // a previous test's identical image reads as a duplicate.
+    await testPrisma.expense.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
   });
 
   it("creates an expense for a sender with no rule, trashes, and logs created", async () => {
@@ -1244,12 +1249,22 @@ describe("processReviewItem", () => {
         ],
       ]),
     );
+    // The shared fixture renders every body to the same constant PNG; e2
+    // needs its own bytes, or the image fingerprint refuses it as a
+    // duplicate of e1 before the sender-rule flow ever runs.
+    const differentRender = async () => Buffer.from("apple-image-bytes");
+    const extractionDeps2 = {
+      ...fakeExtractionDeps(),
+      renderReceiptImage: differentRender,
+      renderEmailImage: differentRender,
+      renderTextEmail: differentRender,
+    };
     const result2 = await processReviewItem({
       connection: conn,
       emailId: "e2",
       acceptSender: true,
       adapter: adapter2,
-      extractionDeps: fakeExtractionDeps(),
+      extractionDeps: extractionDeps2,
     });
     expect(result2.ok).toBe(true);
     expect(

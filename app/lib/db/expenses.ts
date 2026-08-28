@@ -214,6 +214,7 @@ export async function readDuplicateCandidates(
   )
     .select(
       "id",
+      "imageSha256",
       "_type",
       "date",
       "merchant",
@@ -242,6 +243,7 @@ export async function readDuplicateCandidates(
         imageFile: "",
         imageMime: "",
         originalName: "",
+        imageSha256: r.imageSha256 ?? "",
       };
     }
     return {
@@ -326,6 +328,27 @@ export async function findRecentlyImportedMatch(
     ),
   )
     .select("id", "createdAt")
+    .first();
+  return row ? { id: row.id, createdAt: toIso(row.createdAt) } : undefined;
+}
+
+/**
+ * An expense whose stored image has this exact SHA-256: the same receipt
+ * file seen before, whatever route it arrived by or what the extracted
+ * fields say. Permanent, no time window: bytes don't stop being the same
+ * bytes. Oldest match first (the original import). Legacy rows predate
+ * fingerprints and never match.
+ */
+export async function findSameImageExpense(
+  accountId: string,
+  sha256: string,
+): Promise<{ id: string; createdAt: string } | undefined> {
+  if (!sha256) return undefined;
+  const row = await db.orm.public.Expense.where((e) =>
+    and(e.accountId.eq(accountId), e.imageSha256.eq(sha256)),
+  )
+    .select("id", "createdAt")
+    .orderBy((e) => e.createdAt.asc())
     .first();
   return row ? { id: row.id, createdAt: toIso(row.createdAt) } : undefined;
 }
@@ -524,6 +547,7 @@ export function expenseData(e: Expense): ExpenseWrite {
       imageFile: e.imageFile,
       imageMime: e.imageMime,
       originalName: e.originalName,
+      imageSha256: e.imageSha256 || null,
       distanceMiles: null,
       locations: [],
       route: null,
@@ -535,6 +559,7 @@ export function expenseData(e: Expense): ExpenseWrite {
     imageFile: "",
     imageMime: "",
     originalName: "",
+    imageSha256: null,
     distanceMiles: e.distanceMiles === "" ? null : asNumeric(e.distanceMiles),
     locations: asJson(e.locations),
     route: e.route === null ? null : asJson(e.route),
@@ -593,6 +618,7 @@ function rowToExpense(row: {
   imageFile: string;
   imageMime: string;
   originalName: string;
+  imageSha256: string | null;
   distanceMiles: string | null;
   mileageType: string;
   locations: unknown;
@@ -613,6 +639,7 @@ function rowToExpense(row: {
       imageFile: row.imageFile ?? "",
       imageMime: row.imageMime ?? "",
       originalName: row.originalName ?? "",
+      imageSha256: row.imageSha256 ?? "",
     };
     return receipt;
   }

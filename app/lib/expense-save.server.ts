@@ -1,5 +1,9 @@
 import { normalizeAmount } from "~/lib/format";
-import { deleteImage, renameImageToConvention } from "~/lib/images.server";
+import {
+  deleteImage,
+  readImageSha256,
+  renameImageToConvention,
+} from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
 import { addReport, findOpenReport } from "~/lib/db/reports";
@@ -177,6 +181,10 @@ export async function saveExpenseFromForm(
       receipt.originalName,
       receipt.imageMime,
     );
+    // The fingerprint rides with the blob (saveImage writes it); the row
+    // carries a copy so duplicate checks stay a single indexed query. A
+    // legacy blob (pre-fingerprint) reads back "" and matches nothing.
+    receipt.imageSha256 = await readImageSha256(accountId, receipt.imageFile);
   }
   await upsertExpense(receipt, accountId);
   return { error: null, id: receipt.id };

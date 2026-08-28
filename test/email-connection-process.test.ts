@@ -36,6 +36,15 @@ const mocks = vi.hoisted(() => ({
   sendConnectionEmail: vi.fn(async (..._args: unknown[]) => true),
 }));
 
+/**
+ * Covers the fixture emails' fixed 2026-07-01 arrivals no matter when the
+ * suite runs: the fixture adapter now honours the drain's `afterIso`
+ * window, and the default 3-day lookback would filter them out against
+ * the real clock.
+ */
+const FIXTURE_LOOKBACK_MS =
+  Date.now() - Date.parse("2026-07-01T10:00:00.000Z") + 60_000;
+
 function depsFor(adapter: ConnectionMailAdapter, connectionId: string) {
   return connectionInboundDeps(connectionId, adapter, fakeExtractionDeps());
 }
@@ -46,6 +55,11 @@ describe("processConnectionEmail", () => {
   beforeEach(async () => {
     conn = connection();
     await cleanupConnection();
+    // Processed receipts persist otherwise; with the image fingerprint, a
+    // previous test's identical image reads as a real duplicate.
+    await testPrisma.expense.deleteMany({
+      where: { accountId: conn.accountId },
+    });
     await testPrisma.emailConnection.create({
       data: {
         id: conn.id,
@@ -596,6 +610,9 @@ describe("drainEmailConnection", () => {
   beforeEach(async () => {
     conn = connection();
     await cleanupConnection();
+    await testPrisma.expense.deleteMany({
+      where: { accountId: conn.accountId },
+    });
     await testPrisma.emailConnection.create({
       data: {
         id: conn.id,
@@ -636,7 +653,11 @@ describe("drainEmailConnection", () => {
       ]),
     );
 
-    const first = await drainEmailConnection(conn, { adapter, batchSize: 10 });
+    const first = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
     expect(first).toEqual({
       evaluated: 2,
       created: 0,
@@ -652,7 +673,11 @@ describe("drainEmailConnection", () => {
     expect(row?.processedCount).toBe(1);
 
     // Second drain: everything already evaluated, no new counters, no new expenses.
-    const second = await drainEmailConnection(conn, { adapter, batchSize: 10 });
+    const second = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
     expect(second.evaluated).toBe(0);
     const after = await testPrisma.emailConnection.findUnique({
       where: { id: conn.id },
@@ -694,7 +719,11 @@ describe("drainEmailConnection", () => {
     expect(result.status).toBe("error");
     // Drain now sees the email as already evaluated (error outcome):
     // the catch-up cron does not retry errors (they stay visible in the Inbox).
-    const drain = await drainEmailConnection(conn, { adapter, batchSize: 10 });
+    const drain = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
     expect(drain.evaluated).toBe(0);
   });
 
@@ -772,6 +801,7 @@ describe("drainEmailConnection", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       batchSize: 1,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
     });
     expect(first).toEqual({
       evaluated: 1,
@@ -796,6 +826,7 @@ describe("drainEmailConnection", () => {
       adapter,
       extractionDeps: fakeExtractionDeps(),
       batchSize: 1,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
     });
     expect(second.evaluated).toBe(1);
     expect(second.created + second.partial).toBe(1);

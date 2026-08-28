@@ -90,6 +90,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     expense.imageFile = "";
     expense.imageMime = "";
     expense.originalName = "";
+    expense.imageSha256 = "";
     expense.updatedAt = new Date().toISOString();
     await upsertExpense(expense, user.accountId);
     return Response.json({ ok: true, imageFile: "" });
