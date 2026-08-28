@@ -75,11 +75,11 @@ export async function action({ request }: Route.ActionArgs) {
   } else {
     await guardAnonymousAction(request, "signin");
   }
-  // cap them per IP, independent of outcome (sign-in keeps its per-email
-  // lockout). Five attempts inside 15 minutes lock the IP.
-  if (mode === "create" || mode === "join" || mode === "resend-verification") {
-    await guardAnonymousAction(request);
-  }
+  // Every attempt counts, recorded before the work: five inside 15
+  // minutes lock the IP. Successes consume the budget too (a burst of
+  // signups sends real emails), so counting only failures missed the
+  // expensive path entirely.
+  await recordAnonymousAttempt(request, mode === "signin" ? "signin" : "");
 
   try {
     if (mode === "create") {
@@ -123,9 +123,6 @@ export async function action({ request }: Route.ActionArgs) {
     const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
-    // Count under the same scope the guard used: signin failures must not
-    // consume the signup/join/resend budget for this IP (and vice versa).
-    await recordAnonymousAttempt(request, mode === "signin" ? "signin" : "");
     const message =
       error instanceof Error ? error.message : "Something went wrong";
     console.warn("Auth failed (%s): %s", mode, message);

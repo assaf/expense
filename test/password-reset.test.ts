@@ -191,6 +191,36 @@ describe("password reset UI", () => {
     ).toBeVisible();
     await page.close();
   });
+  it("caps reset attempts per IP (scrypt runs only for live tokens)", async () => {
+    const page = await openPage();
+    const ip = `198.51.100.${Math.floor(Math.random() * 200) + 2}`;
+    // Five invalid-token attempts burn the per-IP budget; each pays a
+    // token lookup, never a scrypt derivation. The sixth is locked before
+    // any work and surfaces as the error boundary.
+    for (let i = 0; i < 5; i++) {
+      const res = await page.request.post("/reset-password", {
+        form: {
+          intent: "reset",
+          token: `wrong-${ulid()}`,
+          email: `reset-${ulid().toLowerCase()}@example.com`,
+          password: "a valid password",
+        },
+        headers: { "x-forwarded-for": ip },
+      });
+      expect(res.status()).toBe(200);
+    }
+    const locked = await page.request.post("/reset-password", {
+      form: {
+        intent: "reset",
+        token: `wrong-${ulid()}`,
+        email: `reset-${ulid().toLowerCase()}@example.com`,
+        password: "a valid password",
+      },
+      headers: { "x-forwarded-for": ip },
+    });
+    expect(locked.status()).toBeGreaterThanOrEqual(500);
+    await page.close();
+  });
 });
 
 afterAll(async () => {

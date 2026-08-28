@@ -13,6 +13,7 @@ import {
   LLM_MODEL,
   APP_EMAIL,
 } from "~/lib/env";
+import { escapeHtml } from "~/lib/escape";
 import { normalizeAmount } from "~/lib/format";
 import { sendEmail } from "~/lib/reply.server";
 
@@ -548,8 +549,8 @@ export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
       "Forwarded receipts will stay in the Receipts folder (and bank " +
       "alerts in the Inbox) until this is fixed. Sentry has the details.",
     html:
-      `<p>Receipt extraction is failing: <strong>${cause}</strong>.</p>` +
-      `<p>Error: <code>${err.message}</code></p>` +
+      `<p>Receipt extraction is failing: <strong>${escapeHtml(cause)}</strong>.</p>` +
+      `<p>Error: <code>${escapeHtml(err.message)}</code></p>` +
       "<p>Forwarded receipts will stay in the Receipts folder (and bank " +
       "alerts in the Inbox) until this is fixed. Sentry has the details.</p>",
   }).catch((sendErr) =>

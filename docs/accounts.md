@@ -23,7 +23,10 @@ reads and writes are scoped; see `app/lib/db/`).
   (see docs/email-connections.md → FastMail onboarding).
   Re-signing up with the same email while the account is still unverified
   deletes the throwaway account and its old link (`deleteUnverifiedUser`)
-  and starts fresh. Users created before this requirement (and the
+  and starts fresh, unless the verification email went out within the last
+  day: then the re-signup is refused and the sent link stays live, so the
+  replace flow can't be used to re-send email on demand. Users created
+  before this requirement (and the
   APP_EMAIL bootstrap user) are grandfathered as verified (`emailVerifiedAt`
   backfilled by the migration / `scripts/migrate-prod`).
 - **Password recovery** (`/reset-password`, public): "Forgot password?"

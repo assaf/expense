@@ -70,13 +70,19 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "reset") {
+    // The confirm step derives a full scrypt hash when the token is live,
+    // so cap it per IP like the request email above: every attempt counts,
+    // not just failures.
+    await guardAnonymousAction(request);
     const token = formString(form, "token");
     const email = formString(form, "email").trim().toLowerCase();
     const password = formString(form, "password");
     try {
       const result = await resetPasswordWithToken(token, password);
+      await recordAnonymousAttempt(request);
       return data({ view: "done", email: result.email } satisfies ActionData);
     } catch (error) {
+      await recordAnonymousAttempt(request);
       const message =
         error instanceof Error ? error.message : "Something went wrong";
       return data({

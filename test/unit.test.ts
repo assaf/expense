@@ -155,6 +155,16 @@ describe("Format helpers", () => {
     expect(parseAmount("")).toBe(null);
     expect(parseAmount("abc")).toBe(null);
   });
+  it("parseAmount rejects e-notation beyond money scale", () => {
+    // toFixed renders the full digit expansion, so an unbounded exponent is
+    // a heap-exhaustion DoS (11 bytes in, gigabytes allocated); the bound
+    // lives at the parse, not at each entry point.
+    expect(parseAmount("1e15")).not.toBe(null);
+    expect(parseAmount("1e16")).toBe(null);
+    expect(parseAmount("1e999999999")).toBe(null);
+    expect(parseAmount("123456789012345.67")).not.toBe(null);
+    expect(normalizeAmount("1e999999999")).toBe("");
+  });
 
   it("normalizeAmount rounds to 2 decimals (exact half-up)", () => {
     expect(normalizeAmount("42.5")).toBe("42.50");

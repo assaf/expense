@@ -56,6 +56,14 @@ describe("maybeAlertLlmUnusable", () => {
     maybeAlertLlmUnusable(llmError(401), Date.now());
     expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
   });
+  it("escapes the provider error body before it reaches the email HTML", () => {
+    const hostile = 'DeepSeek API 401: <img src=x onerror="alert(1)">';
+    maybeAlertLlmUnusable(new llmErrorCtor(hostile, 401, ""), Date.now());
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
+    const input = mocks.sendEmail.mock.calls[0][0];
+    expect(input.html).toContain("&lt;img src=x");
+    expect(input.html).not.toContain("<img src=x");
+  });
 
   it("does not alert on transient failures (502 empty content, 429, 500)", () => {
     maybeAlertLlmUnusable(llmError(502), Date.now());

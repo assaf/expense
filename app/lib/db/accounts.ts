@@ -4,6 +4,7 @@ import { fromIso, fromIsoOrNull, toIso, toIsoOrNull } from "~/lib/db/wire";
 import {
   generateInviteCode,
   generateOpaqueToken,
+  hashPassword,
   hashToken,
 } from "~/lib/passwords";
 import {
@@ -365,7 +366,7 @@ export type PasswordResetOutcome =
  * on first use so it can't be retried. */
 export async function resetUserPasswordWithToken(
   rawToken: string,
-  passwordHash: string,
+  password: string,
 ): Promise<PasswordResetOutcome> {
   if (!rawToken) return { status: "invalid" };
   const row = await db.orm.public.User.where((u) =>
@@ -380,6 +381,10 @@ export async function resetUserPasswordWithToken(
     });
     return { status: "expired", email: row.email };
   }
+  // Derived only after the token row validates: the reset route is
+  // anonymous, so an invalid or expired token must not buy a full scrypt
+  // derivation (the per-IP throttle bounds the rate; this bounds the cost).
+  const passwordHash = await hashPassword(password);
   await db.orm.public.User.where({ id: row.id }).update({
     passwordHash,
     passwordResetTokenHash: null,
@@ -400,6 +405,20 @@ export async function passwordResetRecentlySent(
   return Boolean(
     row?.passwordResetSentAt &&
     Date.now() - Date.parse(toIso(row.passwordResetSentAt)) <
+      VERIFICATION_RESEND_MS,
+  );
+}
+
+/** Has a verification email for this address been sent within the
+ * once-a-day resend window? The signup path refuses a same-day re-signup
+ * so the replace flow can't be used to re-send on demand. */
+export async function verificationRecentlySent(
+  email: string,
+): Promise<boolean> {
+  const row = await db.orm.public.User.where((u) => u.email.eq(email)).first();
+  return Boolean(
+    row?.verificationSentAt &&
+    Date.now() - Date.parse(toIso(row.verificationSentAt)) <
       VERIFICATION_RESEND_MS,
   );
 }

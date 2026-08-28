@@ -28,6 +28,7 @@ import {
   setUserVerificationToken,
   type ReplaceUnverifiedOutcome,
   updateUserPasswordHash,
+  verificationRecentlySent,
 } from "~/lib/db/accounts";
 import { ensureInboundSenderForUser } from "~/lib/db/inbound";
 import { initStore } from "~/lib/db/seed";
@@ -366,6 +367,15 @@ async function replaceUnverifiedSignup(email: string): Promise<void> {
   if (existing?.emailVerifiedAt) {
     throw new Error("That email is already in use.");
   }
+  if (existing && (await verificationRecentlySent(email))) {
+    // The pending signup's verification email just went out: refuse the
+    // re-signup instead of deleting the account and sending again, or
+    // anyone could re-trigger the emails at will. The link already in the
+    // inbox is still good (7-day TTL).
+    throw new Error(
+      "We emailed a verification link to this address recently. Use that link to finish signing up.",
+    );
+  }
   if (existing) {
     const outcome: ReplaceUnverifiedOutcome = await deleteUnverifiedUser(email);
     if (outcome.status !== "replaced") {
@@ -499,10 +509,9 @@ export async function resetPasswordWithToken(
       `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
     );
   }
-  const outcome = await resetUserPasswordWithToken(
-    rawToken,
-    await hashPassword(password),
-  );
+  // The hash is derived inside the store call, after the token row
+  // validates: an invalid token must not buy a scrypt derivation.
+  const outcome = await resetUserPasswordWithToken(rawToken, password);
   if (outcome.status === "invalid") {
     throw new Error("This reset link is no longer valid — request a new one.");
   }

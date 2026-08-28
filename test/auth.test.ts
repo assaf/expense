@@ -132,6 +132,53 @@ describe("Access control", () => {
     expect(plain.status()).toBe(200);
     await page.close();
   });
+  it("refuses a re-signup while the verification email is fresh, keeping the sent link alive", async () => {
+    const page = await openPage();
+    const email = `replace-throttle-${ulid()}@example.com`.toLowerCase();
+    await signUp(page, "Replace Throttle", email, TEST_PASSWORD);
+    // A second signup for the same address inside the once-a-day resend
+    // window is refused instead of deleting the pending account and
+    // re-sending: an unlimited replace loop is unlimited verification
+    // email on demand. The refusal keeps the original row, so the link
+    // already in the inbox still verifies.
+    // Same flow as signUp, but the server refuses inside the resend
+    // window: the form re-renders with the error instead of the
+    // "Check your email" screen.
+    await page.goto("/login", { waitUntil: "load", timeout: 15_000 });
+    await page.getByRole("button", { name: "Create a new account" }).click();
+    await page.fill('input[name="accountName"]', "Replace Again");
+    await page.fill('input[name="email"]', email);
+    await page.fill('input[name="password"]', TEST_PASSWORD);
+    await page.click('button[type="submit"]');
+    await expect(page.getByRole("alert")).toContainText(/verification link/i, {
+      timeout: 15_000,
+    });
+    await verifyEmail(page, email, `still-live-${ulid()}`);
+    await page.close();
+  });
+
+  it("caps successful signups per IP, not just failures", async () => {
+    const page = await openPage();
+    const ip = `198.51.100.${Math.floor(Math.random() * 200) + 2}`;
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const res = await page.request.post("http://localhost:5199/login", {
+        form: {
+          mode: "create",
+          accountName: `Rate Limit ${i}`,
+          email: `ratelimit-${ulid()}@example.com`,
+          password: TEST_PASSWORD,
+        },
+        headers: { "x-forwarded-for": ip },
+      });
+      statuses.push(res.status());
+    }
+    // Five attempts consume the per-IP budget (successes count too, since
+    // each sends real email); the sixth is locked before any work.
+    expect(statuses.slice(0, 5)).toEqual([200, 200, 200, 200, 200]);
+    expect(statuses[5]).toBeGreaterThanOrEqual(500);
+    await page.close();
+  });
 
   it("navigates from the landing footer to public pages without a login redirect", async () => {
     // Client-side Link clicks fetch /<page>.data, so the root loader must
@@ -391,7 +438,11 @@ describe("Access control", () => {
       where: { id: firstUser.id },
       data: {
         verificationTokenHash: hashToken("old-link-token"),
-        verificationSentAt: new Date().toISOString(),
+        // A re-signup is refused while the emailed link is fresh (the
+        // once-a-day window); an email from yesterday can still be replaced.
+        verificationSentAt: new Date(
+          Date.now() - 25 * 60 * 60 * 1000,
+        ).toISOString(),
       },
     });
 
