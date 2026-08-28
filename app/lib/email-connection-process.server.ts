@@ -526,13 +526,14 @@ export async function processConnectionEmail(
       expenseId: saved.expenseId,
       date: selected.expenseDate,
       merchant: extracted.extraction.merchant,
-      amount: extracted.extraction.amount,
+      amount: saved.fx?.amount ?? extracted.extraction.amount,
       category: saved.category,
       report: saved.report,
       description: extracted.extraction.description,
       notes: confirmationNotes({
         notes: extracted.extraction.notes,
-        currency: extracted.extraction.currency,
+        currency: saved.currency,
+        fx: saved.fx,
         renderError: extracted.renderError,
       }),
       intro: review

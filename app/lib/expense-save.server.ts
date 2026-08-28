@@ -135,6 +135,18 @@ export async function saveExpenseFromForm(
   }
 
   const draftKey = formString(form, "draftKey");
+  // Foreign-currency provenance from the editor: the OCR/draft flow fills
+  // these when the receipt isn't USD. The amount field already holds the
+  // USD value (the editor converts at the chosen date, live); the form's
+  // metadata documents that conversion. The rate is a plain decimal (the
+  // fx module's precision, up to 6dp); anything else means "no rate".
+  const currency = (() => {
+    const raw = formString(form, "currency").toUpperCase();
+    return /^[A-Z]{3}$/.test(raw) ? raw : "USD";
+  })();
+  const originalAmount = normalizeAmount(formString(form, "originalAmount"));
+  const fxRateRaw = formString(form, "fxRate").trim();
+  const fxRate = /^\d+(?:\.\d{1,6})?$/.test(fxRateRaw) ? fxRateRaw : "";
   const receipt: ReceiptExpense = {
     ...(existing && existing.type === "receipt"
       ? existing
@@ -159,6 +171,9 @@ export async function saveExpenseFromForm(
           originalName: formString(form, "draftOriginalName"),
         }
       : {}),
+    currency,
+    originalAmount: currency !== "USD" ? originalAmount : "",
+    fxRate: currency !== "USD" ? fxRate : "",
     updatedAt: now,
   };
   if (

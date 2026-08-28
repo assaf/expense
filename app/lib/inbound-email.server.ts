@@ -53,6 +53,7 @@ import { readReportSummary } from "~/lib/db/reports";
 import { saveImage, readImage, deleteImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
+import { convertToUsd, type FxConversion } from "~/lib/fx.server";
 
 /**
  * Inbound email pipeline (receipts by email).
@@ -1007,6 +1008,11 @@ interface SavedExpense {
   /** A matching receipt was imported within the recent window (the other
    * pipeline), so suppress this confirmation to avoid duplicate responses. */
   recentMatch?: { id: string; createdAt: string };
+  /** The receipt's detected currency ("USD" when none), with the applied
+   * USD conversion when one happened (null when the receipt was already
+   * USD or no exchange rate was found). The confirmation email reports it. */
+  currency: string;
+  fx: FxConversion | null;
 }
 
 /** Build and save the expense from extracted data (date always comes from
@@ -1056,18 +1062,32 @@ export async function saveExpenseFromExtraction(opts: {
   });
   if (!category) missing.push("category");
 
+  // A foreign-currency receipt is converted to USD at the exchange rate for
+  // the payment date (the IRS rule; ECB reference rates via Frankfurter).
+  // No rate (unsupported currency, outage, future date) stores the receipt's
+  // amount as-is, keeping the detected currency so the UI can say why.
+  const receiptCurrency = (extraction.currency || "USD").toUpperCase();
+  const conversion = await convertToUsd(
+    extraction.amount,
+    receiptCurrency,
+    opts.expenseDate,
+  );
+
   const expense: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date: opts.expenseDate,
     report,
     category,
     description: extraction.description,
-    amount: extraction.amount,
+    amount: conversion ? conversion.amount : extraction.amount,
     merchant: extraction.merchant,
     imageFile,
     imageMime,
     originalName: opts.originalName,
     imageSha256,
+    currency: receiptCurrency,
+    originalAmount: receiptCurrency !== "USD" ? extraction.amount : "",
+    fxRate: conversion ? conversion.fxRate : "",
   };
   // The exact same image bytes already belong to an expense: importing
   // again would duplicate it, whatever the extracted fields say. The
@@ -1120,7 +1140,7 @@ export async function saveExpenseFromExtraction(opts: {
   if (report) {
     const summary = await readReportSummary(opts.accountId, report);
     if (summary) {
-      const amt = extraction.amount ? Number(extraction.amount) : 0;
+      const amt = expense.amount ? Number(expense.amount) : 0;
       reportStats = {
         before: {
           count: summary.count - 1,
@@ -1141,6 +1161,8 @@ export async function saveExpenseFromExtraction(opts: {
     quotedOriginal,
     receiptAttachment,
     recentMatch,
+    currency: receiptCurrency,
+    fx: conversion,
   };
 }
 
@@ -1365,13 +1387,14 @@ export async function processInboundEvent(
         expenseId,
         date: expenseDate,
         merchant: extraction.merchant,
-        amount: extraction.amount,
+        amount: saved.fx?.amount ?? extraction.amount,
         category,
         report,
         description: extraction.description,
         notes: confirmationNotes({
           notes: extraction.notes,
-          currency: extraction.currency,
+          currency: saved.currency,
+          fx: saved.fx,
           renderError,
         }),
         missing,
@@ -1401,13 +1424,14 @@ export async function processInboundEvent(
       expenseId,
       date: expenseDate,
       merchant: extraction.merchant,
-      amount: extraction.amount,
+      amount: saved.fx?.amount ?? extraction.amount,
       category,
       report,
       description: extraction.description,
       notes: confirmationNotes({
         notes: extraction.notes,
-        currency: extraction.currency,
+        currency: saved.currency,
+        fx: saved.fx,
       }),
       missing: [],
       reportStats,

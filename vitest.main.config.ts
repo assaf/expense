@@ -25,6 +25,7 @@ export default defineConfig({
       "test/email-corpus.test.ts",
       "test/llm-alert.test.ts",
       "test/email-mime.test.ts",
+      "test/fx.test.ts",
       "test/format.test.ts",
       "test/duplicates.test.ts",
       "test/excel.test.ts",

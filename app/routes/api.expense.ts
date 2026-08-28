@@ -11,6 +11,7 @@ import {
   readUploadOr400,
 } from "~/lib/receipt-ocr.server";
 import { formString, notFound, unknownIntent } from "~/lib/validation";
+import { convertToUsd } from "~/lib/fx.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.expense";
 
@@ -82,7 +83,8 @@ export async function action({ request }: Route.ActionArgs) {
     // original file so the editor's fields fill in when the scan is ready.
     // A failure only loses the fields (the draft or image is already
     // stored), so the response is always ok. "draft-ocr" is the legacy
-    // name; both work.
+    // name; both work. The editor's current date rides along so a foreign
+    // currency converts at that day's rate.
     const uploaded = await readUploadOr400(form);
     if (uploaded instanceof Response) return uploaded;
     const { buffer, mime } = uploaded;
@@ -91,14 +93,9 @@ export async function action({ request }: Route.ActionArgs) {
         user.accountId,
         buffer,
         mime,
+        formString(form, "date"),
       );
-      return Response.json({
-        ok: true,
-        merchant: ocr.merchant,
-        amount: ocr.amount,
-        category: ocr.category,
-        report: ocr.report,
-      });
+      return Response.json({ ok: true, ...ocr });
     } catch (err) {
       captureWarning("[ocr] receipt extraction failed", { error: err });
       return Response.json({
@@ -107,8 +104,31 @@ export async function action({ request }: Route.ActionArgs) {
         amount: "",
         category: "",
         report: "",
+        currency: "USD",
+        originalAmount: "",
+        fxRate: "",
+        rateDate: "",
       });
     }
+  }
+
+  if (intent === "fx") {
+    // Re-convert a foreign-currency receipt after the editor's date
+    // changed, so the stored amount always uses the rate for the payment
+    // date (the IRS rule). Returns available:false when no rate exists for
+    // that date (weekends roll back automatically; the future doesn't).
+    const currency = formString(form, "currency").toUpperCase();
+    const originalAmount = formString(form, "amount");
+    const date = formString(form, "date");
+    const conversion = await convertToUsd(originalAmount, currency, date);
+    if (!conversion) return Response.json({ ok: true, available: false });
+    return Response.json({
+      ok: true,
+      available: true,
+      amount: conversion.amount,
+      fxRate: conversion.fxRate,
+      rateDate: conversion.rateDate,
+    });
   }
 
   return unknownIntent();

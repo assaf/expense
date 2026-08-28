@@ -13,6 +13,7 @@ import { escapeHtml } from "~/lib/escape";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import { emailShell, SIMPLE_FOOTER } from "~/lib/email-layout.server";
 import { PUBLIC_URL } from "~/lib/env";
+import type { FxConversion } from "~/lib/fx.server";
 
 /** The fields extracted for a receipt, with a dash for any blank value. */
 function fieldRow(label: string, value: string): string {
@@ -217,17 +218,24 @@ export function confirmationEmail(opts: ConfirmationEmailOptions): {
   };
 }
 /** The free-text notes under a confirmation's summary: the extraction's own
- * notes plus caveats (non-USD amount, body-render failure). Empty pieces
- * drop out. Shared by both pipelines' confirmation builders. */
+ * notes plus caveats (foreign currency and its conversion, body-render
+ * failure). Empty pieces drop out. Shared by both pipelines' confirmation
+ * builders. */
 export function confirmationNotes(opts: {
   notes?: string | null;
+  /** The receipt's detected currency, "USD" when none was detected. */
   currency?: string | null;
+  /** The conversion applied at import; null when the receipt was USD or no
+   * exchange rate was available (the amount is then stored as-is). */
+  fx?: FxConversion | null;
   renderError?: string | null;
 }): string {
   return [
     opts.notes,
     opts.currency && opts.currency !== "USD"
-      ? `Amount is in ${opts.currency} — the app assumes USD.`
+      ? opts.fx
+        ? `Receipt in ${opts.fx.currency}: ${opts.fx.currency} ${opts.fx.originalAmount} → $${opts.fx.amount} (ECB reference rate ${opts.fx.fxRate} on ${opts.fx.rateDate}).`
+        : `Amount is in ${opts.currency} — no exchange rate was available, so it was stored as-is (treated as USD).`
       : "",
     opts.renderError
       ? `The email body could not be rendered as a receipt image (${opts.renderError}). You can attach a photo in the app.`

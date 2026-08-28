@@ -363,6 +363,10 @@ export async function completeReconciliationRun(
         imageMime: image.mime,
         originalName: image.originalName,
         imageSha256: image.sha256,
+        // Statement rows are the card's USD charge; no conversion happened.
+        currency: "USD",
+        originalAmount: "",
+        fxRate: "",
         reconciledAt: now,
         createdAt: now,
         updatedAt: now,

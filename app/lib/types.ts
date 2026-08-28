@@ -48,6 +48,17 @@ export interface ReceiptExpense extends ExpenseBase {
    * The duplicate-detection fingerprint: same bytes = same receipt image,
    * whatever route it arrived by. */
   imageSha256: string;
+  /** ISO 4217 code of the currency the receipt was issued in, uppercased.
+   * "USD" for dollar receipts, legacy rows, and mileage expenses. When it
+   * isn't USD, `amount` is the USD conversion (ECB reference rate for the
+   * expense date) and `originalAmount`/`fxRate` record the conversion. */
+  currency: string;
+  /** The amount as printed on the receipt, in `currency` ("" when the
+   * receipt is USD or legacy). The USD value lives in `amount`. */
+  originalAmount: string;
+  /** USD per 1 unit of `currency`, as used for the conversion; "" when no
+   * conversion happened (USD receipt, legacy row, or no rate was found). */
+  fxRate: string;
 }
 
 export interface MileageExpense extends ExpenseBase {
@@ -232,6 +243,9 @@ export function newExpenseShell(type: Expense["type"]): Expense {
       imageMime: "",
       originalName: "",
       imageSha256: "",
+      currency: "USD",
+      originalAmount: "",
+      fxRate: "",
     };
     return receipt;
   }

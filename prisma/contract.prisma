@@ -74,6 +74,9 @@ model Expense {
   category                               String
   description                            String
   amount                                 Numeric(10, 2)?
+  currency                               String                @default("USD")
+  originalAmount                         Numeric(10, 2)?
+  fxRate                                 Numeric(10, 6)?
   merchant                               String
   imageFile                              String
   imageMime                              String

@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import type { Canvas } from "@napi-rs/canvas";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { detectImageMime, isPdf } from "~/lib/file-types";
+import { convertToUsd } from "~/lib/fx.server";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import {
   pdfImageName,
@@ -608,20 +609,33 @@ export async function extractFromImage(input: {
  * straight from the extraction, and the category as the merchant's previous
  * category when one exists (a merchant the user already categorized is
  * reused, not re-guessed), else the suggested category mapped onto one the
- * account already uses. Throws when extraction fails, and callers decide
- * whether that is fatal (it isn't for drafts or edit-mode re-reads).
- * Shared by the draft upload (/api/expense) and the editor's image replace
- * (/expense/:id/image).
+ * account already uses. A foreign-currency receipt converts `amount` to USD
+ * at the exchange rate for `date` (the editor's current date field; the IRS
+ * payment-date rule) and returns the conversion metadata for the editor to
+ * carry through to the save. Throws when extraction fails, and callers
+ * decide whether that is fatal (it isn't for drafts or edit-mode re-reads).
+ * Shared by the draft upload (/api/expense) and the editor's image replace.
  */
 export async function extractUploadedReceiptFields(
   accountId: string,
   buffer: Buffer,
   mime: string,
+  /** YYYY-MM-DD the receipt is being dated as (browser-local today in the
+   * editor); "" skips conversion since no rate can be keyed to it. */
+  date = "",
 ): Promise<{
   merchant: string;
+  /** USD (converted when the receipt is foreign); "" when unread. */
   amount: string;
   category: string;
   report: string;
+  /** The receipt's detected currency ("USD" when none or unmarked). */
+  currency: string;
+  /** Printed amount in `currency`, set whenever the receipt isn't USD. */
+  originalAmount: string;
+  /** The applied rate and its as-of date; "" when no conversion happened. */
+  fxRate: string;
+  rateDate: string;
 }> {
   const context = await readExtractionContext(accountId);
   const { result } = await extractFromImage({
@@ -637,10 +651,16 @@ export async function extractUploadedReceiptFields(
     category: result.category,
     report: result.report,
   });
+  const receiptCurrency = (result.currency || "USD").toUpperCase();
+  const conversion = await convertToUsd(result.amount, receiptCurrency, date);
   return {
     merchant: result.merchant,
-    amount: result.amount,
+    amount: conversion ? conversion.amount : result.amount,
     category: resolved.category,
     report: resolved.report,
+    currency: receiptCurrency,
+    originalAmount: receiptCurrency !== "USD" ? result.amount : "",
+    fxRate: conversion ? conversion.fxRate : "",
+    rateDate: conversion ? conversion.rateDate : "",
   };
 }

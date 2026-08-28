@@ -58,6 +58,13 @@ back from the mail server, the bounce looks like an unknown sender, gets
 another reply, bounces again: an infinite Sent-folder loop (Aug 2026: a
 run of this produced hundreds of "Receipt not imported" emails in Sent).
 
+Foreign-currency receipts are converted to USD at the ECB reference rate
+for the expense date (the IRS payment-date rule; `app/lib/fx.server.ts`
+via Frankfurter, no key, weekends roll back to the prior business day).
+The confirmation email states the original amount, the rate, and the USD
+total; when no rate is available the amount is stored as-is and the email
+says so instead.
+
 **Runaway protection (three layers, all still live):**
 
 1. The bounce guard above is the durable stop: it drops DSNs and

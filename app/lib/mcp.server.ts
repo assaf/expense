@@ -42,6 +42,7 @@ import {
 } from "~/lib/images.server";
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
+import { convertToUsd } from "~/lib/fx.server";
 import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
@@ -482,7 +483,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     "capture_receipt",
     {
       description:
-        "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. Returns the extracted fields and the new expense id.",
+        "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. A non-USD amount is converted to USD at the ECB reference rate for the expense date. Returns the extracted fields and the new expense id.",
       inputSchema: z.object({
         imageData: z
           .string()
@@ -514,7 +515,13 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
           .string()
           .optional()
           .describe(
-            'Amount override as a decimal string, e.g. "42.50" (otherwise extracted).',
+            'Amount as a decimal string in `currency`, e.g. "42.50" (otherwise extracted).',
+          ),
+        currency: z
+          .string()
+          .optional()
+          .describe(
+            'ISO 4217 code of the amount\'s currency, e.g. "EUR". Defaults to the currency extracted from the receipt, else USD. A non-USD amount is stored as its USD conversion.',
           ),
         category: z
           .string()
@@ -918,7 +925,13 @@ function serializeExpense(e: Expense) {
     description: e.description,
     amount: e.amount || null,
     ...(e.type === "receipt"
-      ? { merchant: e.merchant || null }
+      ? {
+          merchant: e.merchant || null,
+          currency: e.currency || "USD",
+          // Set together, only for a receipt captured in another currency.
+          originalAmount: e.originalAmount || null,
+          fxRate: e.fxRate || null,
+        }
       : {
           mileageType: e.mileageType,
           distanceMiles: e.distanceMiles || null,
@@ -965,6 +978,7 @@ async function captureReceipt(
     url?: string;
     merchant?: string;
     amount?: string;
+    currency?: string;
     category?: string;
     date?: string;
     report?: string;
@@ -1024,6 +1038,7 @@ async function captureReceipt(
     isReceipt: boolean;
     merchant: string;
     amount: string;
+    currency: string;
     category: string;
     confidence: string;
     notes: string;
@@ -1040,6 +1055,7 @@ async function captureReceipt(
       isReceipt: result.isReceipt,
       merchant: result.merchant,
       amount: result.amount,
+      currency: result.currency,
       category: result.category,
       confidence: result.confidence,
       notes: result.notes,
@@ -1057,10 +1073,22 @@ async function captureReceipt(
     knownMerchants,
     categories,
   );
-  const amount = normalizeAmount(args.amount ?? extracted?.amount ?? "");
   const input = await validatedExpenseInput(accountId, args);
   if (!input.ok) return input.result;
   const { date, report, serverUtcNow } = input;
+  // The receipt currency: explicit arg wins, else what the receipt reads,
+  // else USD. A non-USD amount converts at the ECB rate for the expense
+  // date (the IRS payment-date rule); no rate keeps the amount as-is.
+  const receiptCurrency = (
+    args.currency?.trim() ||
+    extracted?.currency ||
+    "USD"
+  ).toUpperCase();
+  const originalAmount = normalizeAmount(
+    args.amount ?? extracted?.amount ?? "",
+  );
+  const conversion = await convertToUsd(originalAmount, receiptCurrency, date);
+  const amount = conversion ? conversion.amount : originalAmount;
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
   // The same image bytes are already an expense: drop the just-stored
@@ -1089,6 +1117,9 @@ async function captureReceipt(
     imageMime: saved.mime,
     originalName,
     imageSha256: saved.sha256,
+    currency: receiptCurrency,
+    originalAmount: receiptCurrency !== "USD" ? originalAmount : "",
+    fxRate: conversion ? conversion.fxRate : "",
   };
   if (date && report && originalName) {
     expense.imageFile = await renameImageToConvention(
@@ -1107,13 +1138,16 @@ async function captureReceipt(
       ? "Receipt stored, but extraction failed — merchant/amount/category were not filled in."
       : !extracted.isReceipt
         ? "The content may not be a receipt — captured anyway with the fields found."
-        : null;
+        : receiptCurrency !== "USD" && !conversion
+          ? `Amount is in ${receiptCurrency} — no exchange rate was available, stored as-is (treated as USD).`
+          : null;
   return ok({
     captured: true,
     expenseId: expense.id,
     extracted,
     resolved: { merchant, amount, category, date, report },
     serverUtcNow,
+    ...(conversion ? { fx: conversion } : {}),
     ...(warning ? { warning } : {}),
   });
 }

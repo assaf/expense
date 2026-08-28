@@ -1,6 +1,13 @@
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, asNumeric, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import {
+  asJson,
+  asNumeric,
+  asNumericOf,
+  fromIso,
+  toIso,
+  toIsoOrNull,
+} from "~/lib/db/wire";
 import { normalizeMerchant } from "~/lib/duplicates";
 import { deleteImage, mimeForFile } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
@@ -244,6 +251,10 @@ export async function readDuplicateCandidates(
         imageMime: "",
         originalName: "",
         imageSha256: r.imageSha256 ?? "",
+        // Currency metadata isn't part of duplicate detection.
+        currency: "USD",
+        originalAmount: "",
+        fxRate: "",
       };
     }
     return {
@@ -548,6 +559,12 @@ export function expenseData(e: Expense): ExpenseWrite {
       imageMime: e.imageMime,
       originalName: e.originalName,
       imageSha256: e.imageSha256 || null,
+      currency: e.currency || "USD",
+      // originalAmount/fxRate are the receipt-currency provenance; mileage
+      // and USD receipts have none ("" is the domain's "no value" sentinel).
+      originalAmount:
+        e.originalAmount === "" ? null : asNumeric(e.originalAmount),
+      fxRate: e.fxRate === "" ? null : asNumericOf<10, 6>(e.fxRate),
       distanceMiles: null,
       locations: [],
       route: null,
@@ -560,6 +577,10 @@ export function expenseData(e: Expense): ExpenseWrite {
     imageMime: "",
     originalName: "",
     imageSha256: null,
+    // Mileage amounts are always USD (the IRS rate table is dollar-based).
+    currency: "USD",
+    originalAmount: null,
+    fxRate: null,
     distanceMiles: e.distanceMiles === "" ? null : asNumeric(e.distanceMiles),
     locations: asJson(e.locations),
     route: e.route === null ? null : asJson(e.route),
@@ -619,6 +640,9 @@ function rowToExpense(row: {
   imageMime: string;
   originalName: string;
   imageSha256: string | null;
+  currency: string | null;
+  originalAmount: string | null;
+  fxRate: string | null;
   distanceMiles: string | null;
   mileageType: string;
   locations: unknown;
@@ -640,6 +664,11 @@ function rowToExpense(row: {
       imageMime: row.imageMime ?? "",
       originalName: row.originalName ?? "",
       imageSha256: row.imageSha256 ?? "",
+      // Legacy rows predate the currency columns; they were captured as
+      // plain numbers with no conversion record.
+      currency: row.currency ?? "USD",
+      originalAmount: row.originalAmount ?? "",
+      fxRate: row.fxRate ?? "",
     };
     return receipt;
   }

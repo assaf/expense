@@ -73,6 +73,17 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<"convert" | "ocr" | null>(null);
+  // Foreign-currency provenance: what the receipt reads (currency +
+  // printed amount) and the applied USD conversion. The amount field
+  // always holds the USD value; changing the date re-converts at that
+  // day's rate (the IRS payment-date rule) unless the amount was
+  // hand-edited, which is the user's assertion (the mileage rule).
+  const [fx, setFx] = useState({
+    currency: expense.currency || "USD",
+    originalAmount: expense.originalAmount,
+    fxRate: expense.fxRate,
+    rateDate: "",
+  });
   const drop = useDropTarget({
     enabled: !reportClosed,
     accepts: isReceiptFile,
@@ -81,6 +92,8 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   });
   const fileRef = useRef<HTMLInputElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
+  const manualAmount = useRef(false);
+  const fxSeq = useRef(0);
 
   const complete = useMemo(
     () => isComplete({ ...expense, date, merchant, amount, report, category }),
@@ -184,6 +197,8 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       // typed yet: a slow response arriving after the user started editing
       // must not overwrite what they wrote.
       setDraftStage("ocr");
+      // A fresh scan supersedes any hand edit of the previous fill.
+      manualAmount.current = false;
       fillFields(await ocrFile(file), fill);
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
@@ -201,6 +216,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     const form = new FormData();
     form.set("intent", "ocr");
     form.set("file", file);
+    // The date the receipt is being filed under: the server converts a
+    // foreign amount at that day's rate.
+    form.set("date", date);
     try {
       const res = await fetch("/api/expense", { method: "POST", body: form });
       if (!res.ok) return null;
@@ -209,6 +227,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         amount?: string;
         category?: string;
         report?: string;
+        currency?: string;
+        originalAmount?: string;
+        fxRate?: string;
+        rateDate?: string;
       };
     } catch {
       return null;
@@ -218,13 +240,20 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   /** Apply extracted fields to the form. Create mode fills only what's
    * still empty (a slow OCR response must never overwrite typing); edit
    * mode lets a confident extraction replace the old receipt's values,
-   * keeping whatever the scan left blank. */
+   * keeping whatever the scan left blank. The currency metadata follows
+   * the same rule: create mode adopts it until something was captured,
+   * override mode replaces it wholesale (a USD replacement clears a
+   * previous receipt's conversion). */
   function fillFields(
     fields: {
       merchant?: string;
       amount?: string;
       category?: string;
       report?: string;
+      currency?: string;
+      originalAmount?: string;
+      fxRate?: string;
+      rateDate?: string;
     } | null,
     mode: "empty-only" | "override",
   ) {
@@ -235,6 +264,55 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     setAmount((prev) => pick(fields.amount, prev));
     setCategory((prev) => pick(fields.category, prev));
     setReport((prev) => pick(fields.report, prev));
+    setFx((prev) => {
+      const captured = prev.currency !== "USD" || prev.originalAmount !== "";
+      if (mode === "empty-only" && captured) return prev;
+      return {
+        currency: fields.currency || "USD",
+        originalAmount: fields.originalAmount || "",
+        fxRate: fields.fxRate || "",
+        rateDate: fields.rateDate || "",
+      };
+    });
+  }
+
+  /** Re-convert the receipt's printed amount after the expense date
+   * changed, so the stored amount uses the rate for the payment date (the
+   * IRS rule). A hand-edited amount is the user's USD assertion and stops
+   * the auto-recompute; a superseded response is dropped by sequence. */
+  async function reconvertFx(newDate: string) {
+    if (fx.currency === "USD" || !fx.originalAmount || manualAmount.current) {
+      return;
+    }
+    const seq = ++fxSeq.current;
+    const form = new FormData();
+    form.set("intent", "fx");
+    form.set("currency", fx.currency);
+    form.set("amount", fx.originalAmount);
+    form.set("date", newDate);
+    try {
+      const res = await fetch("/api/expense", { method: "POST", body: form });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        available?: boolean;
+        amount?: string;
+        fxRate?: string;
+        rateDate?: string;
+      };
+      if (seq !== fxSeq.current) return;
+      if (!json.available) {
+        setFx((prev) => ({ ...prev, fxRate: "", rateDate: "" }));
+        return;
+      }
+      setAmount(json.amount ?? "");
+      setFx((prev) => ({
+        ...prev,
+        fxRate: json.fxRate ?? "",
+        rateDate: json.rateDate ?? "",
+      }));
+    } catch {
+      // Keep the previous conversion; the metadata still explains it.
+    }
   }
 
   async function deleteDraftBlob(key: string) {
@@ -284,6 +362,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     form.set("draftKey", draft?.key ?? "");
     form.set("draftMime", draft?.mime ?? "");
     form.set("draftOriginalName", draft?.originalName ?? "");
+    // Foreign-currency provenance (USD/""/"" for a dollar receipt).
+    form.set("currency", fx.currency);
+    form.set("originalAmount", fx.originalAmount);
+    form.set("fxRate", fx.fxRate);
     void fetcher.submit(form, { method: "post" });
   }
 
@@ -430,12 +512,30 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
 
       <DateAmountFields
         date={date}
-        onDate={setDate}
+        onDate={(d) => {
+          setDate(d);
+          void reconvertFx(d);
+        }}
         amount={amount}
         onAmount={setAmount}
         amountRef={amountRef}
+        onManualAmount={() => (manualAmount.current = true)}
         disabled={reportClosed}
       />
+
+      {fx.currency !== "USD" ? (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          {fx.originalAmount
+            ? `Receipt in ${fx.currency} ${fx.originalAmount}${
+                fx.fxRate
+                  ? ` · converted at ${fx.fxRate} USD/${fx.currency}${
+                      fx.rateDate ? ` (rate for ${fx.rateDate})` : ""
+                    }`
+                  : " · no exchange rate available, stored as-is"
+              }`
+            : `Receipt in ${fx.currency} (amount not read)`}
+        </p>
+      ) : null}
 
       <Field label="Merchant" className="mt-4">
         <Input
