@@ -1,16 +1,17 @@
-import type { ReactElement } from "react";
-import { UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID } from "~/lib/env";
+import { useRouteLoaderData } from "react-router";
 
 /**
  * The Umami analytics tag, rendered only on the public marketing and login
  * surfaces. Never rendered inside the signed-in app: tracking stops at the
- * front door, the account itself stays untracked. Inert until both env vars
- * are set (UMAMI_SCRIPT_URL, UMAMI_WEBSITE_ID); without them nothing loads
- * and nothing is tracked.
+ * front door, the account itself stays untracked. Values come from the root
+ * loader (server-resolved, see umami.server.ts); inert until both are set.
  */
-export function UmamiTag(): ReactElement | null {
-  if (!UMAMI_SCRIPT_URL || !UMAMI_WEBSITE_ID) return null;
-  return (
-    <script defer src={UMAMI_SCRIPT_URL} data-website-id={UMAMI_WEBSITE_ID} />
-  );
+export function UmamiTag() {
+  const data = useRouteLoaderData("root") as {
+    umami?: { scriptUrl: string; websiteId: string };
+  };
+  const scriptUrl = data?.umami?.scriptUrl ?? "";
+  const websiteId = data?.umami?.websiteId ?? "";
+  if (!scriptUrl || !websiteId) return null;
+  return <script defer src={scriptUrl} data-website-id={websiteId} />;
 }

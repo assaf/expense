@@ -14,6 +14,7 @@ import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
+import { umamiConfig } from "~/lib/umami.server";
 import type { Route } from "./+types/root";
 
 /** Inline script that runs before first paint; applies the `dark` class
@@ -80,6 +81,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     user: user ? { id: user.id } : null,
     reportNames,
+    // Public values (the tag is public HTML), resolved server-side so the
+    // client bundle never imports env.ts (it touches node:fs).
+    umami: umamiConfig,
     // Clickjacking denial is a real HTTP header from the route's headers()
     // export below, never from this loader data object.
   };
