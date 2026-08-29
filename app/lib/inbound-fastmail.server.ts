@@ -1,6 +1,7 @@
 import {
   destroyEmail,
   isEmailNotFoundError,
+  isEmailUpdateGoneError,
   markReceiptProcessed,
   markReceiptRetry,
   rawEmail,
@@ -302,11 +303,13 @@ export async function processUnprocessedReceipts(
       } catch (err) {
         // A concurrent drain (a burst of pushes, or the cron overlapping a
         // push) can list an email that another drain destroys before this
-        // one fetches it; rawEmail then reports "Email … not found". Gone
-        // is the desired end state, so skip silently instead of Sentry
-        // noise (EXPENSE-K). Everything else stays the marked-and-skipped
-        // path below.
-        if (isEmailNotFoundError(err)) {
+        // one fetches it; rawEmail then reports "Email … not found". The
+        // same race a step later hits markProcessed's Email/set update,
+        // which reports notUpdated notFound instead (EXPENSE-T). Gone is
+        // the desired end state either way, so skip silently instead of
+        // Sentry noise. Everything else stays the marked-and-skipped path
+        // below.
+        if (isEmailNotFoundError(err) || isEmailUpdateGoneError(err)) {
           invalidateMimeCache(id);
           destroyed++;
           continue;

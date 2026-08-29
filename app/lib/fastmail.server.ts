@@ -174,6 +174,18 @@ export function isEmailNotFoundError(err: unknown): boolean {
   return err instanceof Error && /^Email \S+ not found$/.test(err.message);
 }
 
+/** True when an Email/set update reports the email as already gone: a
+ * concurrent drain destroyed it between this drain's fetch and its
+ * mark-processed call. Processed is the desired end state, not an
+ * error (EXPENSE-T). */
+export function isEmailUpdateGoneError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    err.message.startsWith("JMAP Email/set notUpdated:") &&
+    err.message.includes('"type":"notFound"')
+  );
+}
+
 /**
  * Query receipt emails in the Receipts folder that have not been processed
  * yet (oldest first). `inMailbox` scopes the query to the folder the rule

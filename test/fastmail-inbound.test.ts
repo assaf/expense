@@ -559,6 +559,48 @@ describe("processUnprocessedReceipts", () => {
     expect(destroyed).toEqual([]);
   });
 
+  it("skips silently when the email is destroyed before mark-processed", async () => {
+    // The drain fetched and processed the email, but a concurrent drain
+    // destroyed it before markProcessed's Email/set update landed; the
+    // update comes back notUpdated notFound (EXPENSE-T). Processed is
+    // still the desired end state.
+    const id = "fm-proc-6";
+    // Unique Message-ID: this test runs the full pipeline (it only fails
+    // at mark-processed), so it must not collide with the shared fixture
+    // identity other tests key their log rows on.
+    const email: RawEmail = {
+      ...rawEmailOf(id),
+      messageId: "<fm-proc-6@forwarder.example.com>",
+    };
+    const { adapter, destroyed, marked } = recordingAdapter(
+      new Map([[id, email]]),
+    );
+    adapter.markProcessed = async () => {
+      throw new Error(
+        `JMAP Email/set notUpdated: {"${id}":{"type":"notFound"}}`,
+      );
+    };
+    const deps = fastmailInboundDeps(adapter);
+    const pipelineDeps: InboundDeps = { ...deps, ...fakeDeps() };
+
+    const result = await processUnprocessedReceipts({
+      adapter,
+      deps: pipelineDeps,
+    });
+
+    expect(result).toEqual({ processed: 0, failed: 0, destroyed: 1 });
+    expect(destroyed).toEqual([]);
+    expect(marked).toEqual([]); // nothing to mark; the email is gone
+    // The pipeline imported before the race hit; register the artifacts
+    // so afterEach drops them and later tests' dedupe sees a clean slate.
+    usedEmailIds.push(id);
+    const created = findReceipt(
+      await readExpenses(TEST_ACCOUNT_ID),
+      "Photo Shop",
+    );
+    if (created) usedExpenseIds.push(created.id);
+  });
+
   it("is idempotent — a re-fired push for the same email becomes a duplicate", async () => {
     const id = "fm-proc-4";
     const { adapter, marked, destroyed } = recordingAdapter(
