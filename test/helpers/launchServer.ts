@@ -4,17 +4,64 @@
  * spawns react-router-serve, and polls the port until ready.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import { createServer, type Server } from "node:http";
 import { existsSync, statSync } from "node:fs";
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 let serverProcess: ChildProcess | undefined;
+let mockJmap: Server | undefined;
+
+/**
+ * Local mock of FastMail's JMAP session endpoint, so browser tests can
+ * drive the connect and onboarding flows without the spawned server ever
+ * reaching api.fastmail.com (the suite forbids outbound network). Any
+ * Bearer token verifies; the username is derived from the token so each
+ * test gets a distinct mailbox address. Every other path 404s, so a stray
+ * drain fails fast locally instead of hanging.
+ */
+async function startMockJmap(): Promise<string> {
+  const server = createServer((req, res) => {
+    const auth = req.headers.authorization ?? "";
+    if (req.url === "/jmap/session" && auth.startsWith("Bearer ")) {
+      const suffix =
+        auth
+          .slice(7)
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .slice(-8) || "default";
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          username: `mock-${suffix}@fastmail.test`,
+          apiUrl: "http://127.0.0.1:9/jmap/api",
+          uploadUrl: "http://127.0.0.1:9/jmap/upload",
+          downloadUrl: "http://127.0.0.1:9/jmap/download",
+          primaryAccounts: { "urn:ietf:params:jmap:mail": "mock-mail-acct" },
+        }),
+      );
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  const listening = Promise.withResolvers<void>();
+  server.listen(0, "127.0.0.1", () => listening.resolve());
+  await listening.promise;
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("mock JMAP server did not bind a port");
+  }
+  mockJmap = server;
+  return `http://127.0.0.1:${address.port}`;
+}
+
 let serverPort = 5199;
 
 export async function launchServer(): Promise<string> {
   await ensureBuild();
   await findAvailablePort();
+  const jmapBase = await startMockJmap();
   const env = {
     ...process.env,
     NODE_ENV: "test",
@@ -31,6 +78,9 @@ export async function launchServer(): Promise<string> {
     // change the OAuth metadata issuer to the production origin; tests
     // assert on the request/forwarded origin instead.
     PUBLIC_URL: "",
+    // Point the user-token JMAP client at the local mock (see
+    // startMockJmap) so connect and onboarding flows stay offline.
+    JMAP_SESSION_URL: `${jmapBase}/jmap/session`,
     // Pin the server's clock to the suite-wide pinned instant (see
     // pinned-clock.mjs / frozen-time.ts) so server-computed "today" matches
     // the frozen test and browser clocks.
@@ -121,6 +171,8 @@ export async function closeServer(): Promise<void> {
     if (serverProcess?.killed === false) serverProcess.kill("SIGKILL");
     serverProcess = undefined;
   }
+  mockJmap?.close();
+  mockJmap = undefined;
 }
 
 async function findAvailablePort() {
@@ -137,10 +189,3 @@ async function isPortAvailable(port: number): Promise<boolean> {
       .listen(port, "127.0.0.1");
   });
 }
-
-function cleanup() {
-  void closeServer();
-}
-process.on("exit", cleanup);
-process.on("SIGINT", cleanup);
-process.on("SIGTERM", cleanup);

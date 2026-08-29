@@ -1,17 +1,15 @@
 import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
- * JMAP client for user-supplied API tokens (connected email accounts,
- * Email page → Email accounts). FastMail today; the session handshake is the
- * same for any JMAP provider, only the endpoint differs.
- *
- * Distinct from fastmail.server.ts, which is the app's OWN FastMail mailbox
- * (one global token, module-level session cache). Here every call is scoped
- * to one user's token; sessions are cached per token (a cache entry is
- * evicted when its lookup fails, so revoked tokens don't stick).
+ * Session endpoint override: the test suite points this at a local mock
+ * (see launchServer.ts) so connect and onboarding flows stay offline. Read
+ * at call time from process.env, not via env.ts — importing env.ts here
+ * makes this module re-run env.ts's test network guard on every
+ * vi.resetModules() re-import, which clobbers the fetch stubs the
+ * token-crypto tests install.
  */
-
-const FASTMAIL_SESSION_URL = "https://api.fastmail.com/jmap/session";
+const FASTMAIL_SESSION_URL =
+  process.env.JMAP_SESSION_URL || "https://api.fastmail.com/jmap/session";
 
 /** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts, the
  * app's own mailbox, and this module's per-token client) abort hung
