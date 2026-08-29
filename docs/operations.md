@@ -237,9 +237,12 @@ EXPLICIT `Sentry.flush()` before the route returns: the SDK's automatic
 helper returns early unless `EdgeRuntime` is defined), so on Node serverless
 the ok check-in envelope is dropped when the lambda freezes after responding
 and every run reports a monitor timeout. Both cron routes therefore flush in
-a `finally` block; keep that pattern when adding monitors. `checkinMargin` is
-set to 5 minutes on both monitors because Vercel fires crons 2-4 minutes late
-and the default margin logs every healthy run as "missed" first.
+a `finally` block; keep that pattern when adding monitors.
+
+`checkinMargin` is set to 30 minutes on both monitors because Vercel fires
+crons late (2-4 minutes typically, but observed ~25 minutes late on
+2026-08-29); the original 5-minute margin logged every late fire as a
+false "missed" check-in while the tick itself ran healthy.
 
 `vercel env pull` REDACTS sensitive env vars as the literal string
 `[SENSITIVE]` — scripts that need real secrets (EMAIL_TOKEN_ENCRYPTION_KEY,
