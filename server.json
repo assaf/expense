@@ -1,13 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.assaf/expense",
+  "name": "org.labnotes/expense",
   "title": "Expense",
-  "description": "Receipt tracker with no friction: receipts arrive by email and file themselves",
+  "description": "Personal expense tracker for tax season: capture receipts from a photo, paste, PDF, or forwarded email; log mileage at IRS rates; reconcile bank statements; export reports. Assistants connect over Streamable HTTP with OAuth 2.1 to capture, query, and report on spending.",
   "version": "1.0.0",
-  "repository": {
-    "url": "https://github.com/assaf/expense",
-    "source": "github"
-  },
   "remotes": [
     {
       "type": "streamable-http",
