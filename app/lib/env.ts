@@ -178,6 +178,15 @@ export const SMOKE_TEST_SECRET = env.SMOKE_TEST_SECRET ?? "";
  */
 export const PUBLIC_URL = env.PUBLIC_URL ?? "";
 
+/**
+ * Umami analytics on the public marketing and login pages (signup
+ * attribution: Umami records the visit's referrer, and the login page fires
+ * a "signup" event). Both vars must be set for the script to load; tests
+ * never set them, so the suite stays network-clean.
+ */
+export const UMAMI_SCRIPT_URL = env.UMAMI_SCRIPT_URL ?? "";
+export const UMAMI_WEBSITE_ID = env.UMAMI_WEBSITE_ID ?? "";
+
 /** Parse an integer env var, clamped to [min, max], with a fallback when
  * unset or unparseable. */
 function clampInt(

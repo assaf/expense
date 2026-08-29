@@ -1,7 +1,8 @@
 import { MailCheck, ReceiptText } from "lucide-react";
 import { Link, redirect, useFetcher, useSearchParams } from "react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
+import { UmamiTag } from "~/components/umami";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
@@ -141,7 +142,6 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 }
-
 export default function LoginPage() {
   const fetcher = useFetcher<ActionData>();
   // The landing page links straight to the signup form: /login?mode=create.
@@ -163,6 +163,23 @@ export default function LoginPage() {
   const pendingEmail = data && "ok" in data ? data.email : null;
   const busy = fetcher.state !== "idle";
 
+  // Conversion event for Umami: fire once per successful signup or invite
+  // join, carrying the ?ref= source. window.umami exists only when the
+  // UmamiTag script loaded (env vars set); optional chaining keeps this a
+  // no-op otherwise. The ref guard stops a resend to the same email from
+  // double-counting.
+  const trackedEmail = useRef("");
+  useEffect(() => {
+    if (!pendingEmail || dismissed || trackedEmail.current === pendingEmail) {
+      return;
+    }
+    trackedEmail.current = pendingEmail;
+    const w = window as unknown as {
+      umami?: { track?: (name: string, data?: Record<string, string>) => void };
+    };
+    w.umami?.track?.("signup", { ref: searchParams.get("ref") ?? "" });
+  }, [pendingEmail, dismissed, searchParams]);
+
   const resend = () => {
     const formData = new FormData();
     formData.set("mode", "resend-verification");
@@ -175,6 +192,7 @@ export default function LoginPage() {
   if (pendingEmail && !dismissed) {
     return (
       <AuthCard center>
+        <UmamiTag />
         <div className="mb-4 flex items-center justify-center">
           <AuthTile>
             <MailCheck aria-hidden="true" className="h-6 w-6 text-white" />
@@ -234,6 +252,7 @@ export default function LoginPage() {
 
   return (
     <AuthCard>
+      <UmamiTag />
       <AuthHeader
         icon={
           <AuthTile>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { UmamiTag } from "~/components/umami";
 import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
 
 /**
@@ -9,6 +10,7 @@ import { SiteFooter, SiteHeader } from "~/components/SiteChrome";
 export function SitePage({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
+      <UmamiTag />
       <SiteHeader />
       {children}
       <SiteFooter />
