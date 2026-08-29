@@ -63,7 +63,7 @@ import {
 } from "~/lib/mileage-rates";
 import { SITE_URL } from "~/lib/seo-content";
 import { usePasteImage } from "~/lib/use-paste-image";
-import { readAccount } from "~/lib/db/accounts";
+import { countAccounts, readAccount } from "~/lib/db/accounts";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import { listEmailConnections } from "~/lib/db/email-connections";
 import { readReports } from "~/lib/db/reports";
@@ -82,7 +82,9 @@ import type { Route } from "./+types/_index";
 export async function loader({ request }: Route.LoaderArgs) {
   // Anonymous visitors see the landing page; signed-in users see the app.
   if (!(await isAuthenticated(request))) {
-    return data({ mode: "landing" as const });
+    // The landing page shows how many of the 100 free spots are claimed.
+    const signupCount = await countAccounts();
+    return data({ mode: "landing" as const, signupCount });
   }
   const user = await requireUser(request);
   const [
@@ -396,7 +398,9 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
   return loaderData.mode === "landing" ? (
-    <LandingPage />
+    <LandingPage
+      signupCount={loaderData.mode === "landing" ? loaderData.signupCount : 0}
+    />
   ) : (
     <ExpenseList
       expenses={loaderData.expenses}

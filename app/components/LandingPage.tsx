@@ -139,7 +139,11 @@ function BrowserFrame({
     </figure>
   );
 }
-export default function LandingPage() {
+export default function LandingPage({
+  signupCount = 0,
+}: {
+  signupCount?: number;
+}) {
   return (
     <SitePage>
       <script type="application/ld+json">
@@ -178,6 +182,11 @@ export default function LandingPage() {
             No credit card required. Your data stays in your account. Export and
             leave anytime.
           </p>
+          {signupCount > 0 ? (
+            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+              {signupCount} of 100 free spots claimed.
+            </p>
+          ) : null}
         </section>
 
         {/* App screenshot */}

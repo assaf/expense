@@ -83,6 +83,10 @@ export async function action({ request }: Route.ActionArgs) {
 
   try {
     if (mode === "create") {
+      // Marketing posts link here with ?ref=; knowing which channels convert
+      // decides where the next post goes.
+      const ref = url.searchParams.get("ref");
+      if (ref) console.info("[signup] ref: %s", ref);
       const result = await createAccountWithUser(
         {
           accountName: formString(form, "accountName"),

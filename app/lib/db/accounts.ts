@@ -131,6 +131,15 @@ export async function regenerateInviteCode(accountId: string): Promise<string> {
   return code;
 }
 
+/** How many accounts exist. The landing page shows this against the
+ * "free until 100 users" promise, so it counts accounts, not users. */
+export async function countAccounts(): Promise<number> {
+  const agg = await db.orm.public.Account.aggregate((a) => ({
+    count: a.count(),
+  }));
+  return agg.count;
+}
+
 // --- Users ----------------------------------------------------------------
 
 /** Create a user in an account. Throws if the email is already taken.
