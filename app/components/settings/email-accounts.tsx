@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, Plug, PlugZap } from "lucide-react";
+import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Link, useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
 import { formatShortDate } from "~/lib/format";
@@ -44,7 +46,7 @@ export function EmailAccountsSection({
         </Link>{" "}
         to go through the receipts already there.
       </p>
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <Card className="p-4">
         {configured ? (
           <>
             <ul className="flex flex-col gap-2">
@@ -66,7 +68,7 @@ export function EmailAccountsSection({
             (missing <code>EMAIL_TOKEN_ENCRYPTION_KEY</code>).
           </p>
         )}
-      </div>
+      </Card>
     </section>
   );
 }
@@ -102,9 +104,9 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
             >
               Review{" "}
               {connection.pendingReview > 0 ? (
-                <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                <Badge tone="blue" className="px-1.5 font-semibold">
                   {connection.pendingReview}
-                </span>
+                </Badge>
               ) : null}
               <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
             </Link>
@@ -136,24 +138,12 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
 function ConnectForm() {
   const fetcher = useFetcher<ConnectResult>();
   const [token, setToken] = useState("");
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
   const busy = fetcher.state !== "idle";
-
-  useEffect(() => {
-    const data = fetcher.data;
-    if (!data) return;
-    if (data.ok && data.address) {
-      setToken("");
-      setNotice({
-        ok: true,
-        text: `${data.address} connected; expenses will import automatically.`,
-      });
-    } else if (data.error) {
-      setNotice({ ok: false, text: data.error });
-    }
-  }, [fetcher.data]);
+  const { notice, setNotice } = useFetcherNotice(
+    fetcher.data,
+    (address) => `${address} connected; expenses will import automatically.`,
+    () => setToken(""),
+  );
 
   return (
     <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">

@@ -6,7 +6,7 @@ import {
 } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
-import { withConversionNote } from "~/lib/fx-note";
+import { fxProvenance, withConversionNote } from "~/lib/fx-note";
 import { addReport, findOpenReport } from "~/lib/db/reports";
 import {
   EMPTY_ROUTE,
@@ -149,15 +149,16 @@ export async function saveExpenseFromForm(
   const fxRateRaw = formString(form, "fxRate").trim();
   const fxRate = /^\d+(?:\.\d{1,6})?$/.test(fxRateRaw) ? fxRateRaw : "";
   const fxRateDate = formString(form, "fxRateDate");
+  const rateDate = /^\d{4}-\d{2}-\d{2}$/.test(fxRateDate) ? fxRateDate : "";
+  const fx = fxProvenance(
+    currency,
+    originalAmount,
+    fxRate ? { fxRate, rateDate } : null,
+  );
   // The description carries the human-readable conversion note. The editor
   // already composes it live; strip+append here is idempotent and keeps a
   // stale client honest (the note always matches the saved metadata).
-  const receiptDescription = withConversionNote(description, {
-    currency,
-    originalAmount,
-    fxRate,
-    rateDate: /^\d{4}-\d{2}-\d{2}$/.test(fxRateDate) ? fxRateDate : "",
-  });
+  const receiptDescription = withConversionNote(description, fx);
   const receipt: ReceiptExpense = {
     ...(existing && existing.type === "receipt"
       ? existing
@@ -183,8 +184,8 @@ export async function saveExpenseFromForm(
         }
       : {}),
     currency,
-    originalAmount: currency !== "USD" ? originalAmount : "",
-    fxRate: currency !== "USD" ? fxRate : "",
+    originalAmount: fx.originalAmount,
+    fxRate: fx.fxRate,
     updatedAt: now,
   };
   if (

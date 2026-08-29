@@ -1,4 +1,5 @@
 import { AuthCard, AuthHeader } from "~/components/auth/AuthCard";
+import { Button } from "~/components/ui/Button";
 import { ShieldCheck } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { requireUser } from "~/lib/auth.server";
@@ -159,22 +160,23 @@ export default function OAuthAuthorizePage({
         <input type="hidden" name="redirect_uri" value={redirectUri} />
         <input type="hidden" name="code_challenge" value={codeChallenge} />
         <input type="hidden" name="state" value={state} />
-        <button
+        <Button
           type="submit"
           name="decision"
           value="approve"
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+          className="border-transparent font-semibold dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
         >
           Allow
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
           name="decision"
           value="deny"
-          className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 dark:bg-gray-700"
+          variant="ghost"
+          className="text-gray-500 dark:bg-gray-700 dark:text-gray-400"
         >
           Deny
-        </button>
+        </Button>
       </Form>
     </AuthCard>
   );

@@ -3,7 +3,7 @@ import { createECDH, randomBytes } from "node:crypto";
 
 /**
  * ensureConnectionPushSubscription: the per-connection renewal logic.
- * The JMAP transport (jmapCall) and the DB write are mocked; the token
+ * The JMAP wire ops (jmapPush*) and the DB write are mocked; the token
  * decryption is real (EMAIL_TOKEN_ENCRYPTION_KEY from the vitest env).
  */
 
@@ -28,8 +28,7 @@ vi.mock("~/lib/db/email-connections", async (importOriginal) => ({
   saveEmailConnectionSubscription: mocks.save,
 }));
 
-// A scriptable JMAP endpoint: PushSubscription/get returns `list`,
-// PushSubscription/set create/destroy records the calls.
+// Scriptable JMAP push ops: list reads `state.subs`; create/destroy mutate it.
 const jmap = vi.hoisted(() => {
   const state = {
     subs: [] as Array<{
@@ -42,45 +41,35 @@ const jmap = vi.hoisted(() => {
   };
   return {
     state,
-    calls: [] as unknown[][],
-    jmapCall: vi.fn(async (_token: string, methodCalls: unknown[][]) => {
-      jmap.calls.push(methodCalls);
-      const [name, args] = methodCalls[0] as [string, Record<string, unknown>];
-      if (name === "PushSubscription/get") {
-        return [["PushSubscription/get", { list: state.subs }, "m0"]];
-      }
-      if (name === "PushSubscription/set") {
-        if (args.destroy) {
-          state.destroyed.push(...(args.destroy as string[]));
-          state.subs = state.subs.filter(
-            (s) => !state.destroyed.includes(s.id),
-          );
-          return [["PushSubscription/set", { destroyed: args.destroy }, "m0"]];
-        }
-        if (args.create) {
-          const id = `sub-${state.subs.length + 1}`;
-          const created = (
-            args.create as Record<string, Record<string, unknown>>
-          ).sub1!;
-          state.subs.push({
-            id,
-            deviceClientId: created.deviceClientId as string,
-            expires: created.expires as string,
-            url: created.url as string,
-          });
-          return [
-            ["PushSubscription/set", { created: { sub1: { id } } }, "m0"],
-          ];
-        }
-        return [["PushSubscription/set", {}, "m0"]];
-      }
-      throw new Error(`unexpected JMAP call ${name}`);
+    jmapPushList: vi.fn(async () => state.subs.map((s) => ({ ...s }))),
+    jmapPushCreate: vi.fn(
+      async (
+        _token: string,
+        opts: { url: string; deviceClientId: string; expires: string },
+      ) => {
+        const id = `sub-${state.subs.length + 1}`;
+        state.subs.push({
+          id,
+          deviceClientId: opts.deviceClientId,
+          expires: opts.expires,
+          url: opts.url,
+        });
+        return id;
+      },
+    ),
+    jmapPushVerify: vi.fn(async () => {}),
+    jmapPushDestroy: vi.fn(async (_token: string, id: string) => {
+      state.destroyed.push(id);
+      state.subs = state.subs.filter((s) => s.id !== id);
     }),
   };
 });
 
 vi.mock("~/lib/jmap.server", () => ({
-  jmapCall: jmap.jmapCall,
+  jmapPushList: jmap.jmapPushList,
+  jmapPushCreate: jmap.jmapPushCreate,
+  jmapPushVerify: jmap.jmapPushVerify,
+  jmapPushDestroy: jmap.jmapPushDestroy,
 }));
 
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
@@ -100,7 +89,6 @@ describe("ensureConnectionPushSubscription", () => {
   beforeEach(() => {
     jmap.state.subs = [];
     jmap.state.destroyed = [];
-    jmap.calls = [];
     mocks.save.mockClear();
   });
 

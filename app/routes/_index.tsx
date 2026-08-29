@@ -29,6 +29,7 @@ import {
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
 import { WelcomePanel } from "~/components/WelcomePanel";
+import { cardSurface } from "~/components/ui/Card";
 import {
   consumeCommandRequest,
   useCommandRequest,
@@ -50,8 +51,8 @@ import {
   formatDate,
   sortExpenses,
   summarizeAmounts,
-  todayDate,
 } from "~/lib/format";
+import { useToday } from "~/lib/use-today";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import {
@@ -430,10 +431,7 @@ function ExpenseList({
   // "Today" in the browser's own timezone; the server runs UTC and must
   // not guess the user's day, so everything that depends on it (the future
   // badge, the mileage-rate tip) is computed client-side after mount.
-  const [today, setToday] = useState<string | null>(null);
-  useEffect(() => {
-    setToday(todayDate());
-  }, []);
+  const today = useToday();
   const mileageRate = useMemo(
     () =>
       today
@@ -820,7 +818,7 @@ function ExpenseRow({
           isNew
             ? "border-blue-400 bg-blue-100 dark:bg-blue-900/40 ring-2 ring-blue-400 dark:ring-blue-500"
             : expense.complete
-              ? "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+              ? cardSurface
               : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950"
         }`}
       >

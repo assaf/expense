@@ -19,11 +19,7 @@ import { readEmailConnectionById } from "../app/lib/db/email-connections";
 import { addEmailRule, listGeneralEmailRules } from "../app/lib/db/email-rules";
 import { decryptSecret } from "../app/lib/token-crypto.server";
 import { db } from "../app/lib/prisma.server";
-
-function arg(name: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i !== -1 ? process.argv[i + 1] : undefined;
-}
+import { arg } from "./lib/args";
 
 async function main(): Promise<void> {
   const connectionId = arg("connection");

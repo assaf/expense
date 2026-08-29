@@ -43,7 +43,7 @@ import {
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
 import { convertToUsd } from "~/lib/fx.server";
-import { withConversionNote } from "~/lib/fx-note";
+import { fxProvenance, withConversionNote } from "~/lib/fx-note";
 import { reconcileForMcp } from "~/lib/reconcile.server";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
@@ -1106,26 +1106,22 @@ async function captureReceipt(
       serverUtcNow,
     });
   }
+  const fx = fxProvenance(receiptCurrency, originalAmount, conversion);
   const expense: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date,
     report,
     category,
-    description: withConversionNote(args.description ?? "", {
-      currency: receiptCurrency,
-      originalAmount: receiptCurrency !== "USD" ? originalAmount : "",
-      fxRate: conversion ? conversion.fxRate : "",
-      rateDate: conversion ? conversion.rateDate : "",
-    }),
+    description: withConversionNote(args.description ?? "", fx),
     amount,
     merchant,
     imageFile: saved.filename,
     imageMime: saved.mime,
     originalName,
     imageSha256: saved.sha256,
-    currency: receiptCurrency,
-    originalAmount: receiptCurrency !== "USD" ? originalAmount : "",
-    fxRate: conversion ? conversion.fxRate : "",
+    currency: fx.currency,
+    originalAmount: fx.originalAmount,
+    fxRate: fx.fxRate,
   };
   if (date && report && originalName) {
     expense.imageFile = await renameImageToConvention(

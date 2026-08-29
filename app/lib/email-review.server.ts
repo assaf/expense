@@ -27,7 +27,7 @@ import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server"
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
-import { fromIso, toIso } from "~/lib/db/wire";
+import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { captureError } from "~/lib/errors.server";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -478,7 +478,7 @@ async function upsertReviewRow(
       expenseId: patch.expenseId,
       chargeAmount,
       receivedAt: fromIso(email.receivedAt),
-      createdAt: fromIso(new Date().toISOString()),
+      createdAt: nowWire(),
     });
   } catch (err) {
     if (isUniqueViolation(err)) return "raced"; // claimed meanwhile
@@ -705,7 +705,7 @@ export async function scanConnectionInbox(
 
   // The list is now current through this scan's batch.
   await db.orm.public.EmailConnection.where({ id: connection.id }).update({
-    reviewScannedAt: fromIso(new Date().toISOString()),
+    reviewScannedAt: nowWire(),
   });
   const pending = await countPendingReview(connection.id);
   return {

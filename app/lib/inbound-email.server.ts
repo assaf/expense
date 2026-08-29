@@ -54,7 +54,7 @@ import { saveImage, readImage, deleteImage } from "~/lib/images.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { convertToUsd, type FxConversion } from "~/lib/fx.server";
-import { withConversionNote } from "~/lib/fx-note";
+import { fxProvenance, withConversionNote } from "~/lib/fx-note";
 
 /**
  * Inbound email pipeline (receipts by email).
@@ -1074,26 +1074,22 @@ export async function saveExpenseFromExtraction(opts: {
     opts.expenseDate,
   );
 
+  const fx = fxProvenance(receiptCurrency, extraction.amount, conversion);
   const expense: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date: opts.expenseDate,
     report,
     category,
-    description: withConversionNote(extraction.description, {
-      currency: receiptCurrency,
-      originalAmount: receiptCurrency !== "USD" ? extraction.amount : "",
-      fxRate: conversion ? conversion.fxRate : "",
-      rateDate: conversion ? conversion.rateDate : "",
-    }),
+    description: withConversionNote(extraction.description, fx),
     amount: conversion ? conversion.amount : extraction.amount,
     merchant: extraction.merchant,
     imageFile,
     imageMime,
     originalName: opts.originalName,
     imageSha256,
-    currency: receiptCurrency,
-    originalAmount: receiptCurrency !== "USD" ? extraction.amount : "",
-    fxRate: conversion ? conversion.fxRate : "",
+    currency: fx.currency,
+    originalAmount: fx.originalAmount,
+    fxRate: fx.fxRate,
   };
   // The exact same image bytes already belong to an expense: importing
   // again would duplicate it, whatever the extracted fields say. The
@@ -1230,7 +1226,7 @@ export async function processInboundEvent(
   data: EmailReceivedData,
   deps: InboundDeps,
 ): Promise<ProcessResult> {
-  const subject = data.subject ?? "";
+  const subject = data.subject;
   const fromEmail = extractEmailAddress(data.from);
 
   // Self-reply guard: if the sender is the receipts address (what the app

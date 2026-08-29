@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { fromIso } from "~/lib/db/wire";
+import { nowWire } from "~/lib/db/wire";
 import { EMAIL_SHAPE_RE, extractEmailAddress } from "~/lib/validation";
 
 /**
@@ -92,7 +92,7 @@ export async function addEmailRule(input: {
     accountId: input.accountId,
     sender,
     source: input.source,
-    createdAt: fromIso(new Date().toISOString()),
+    createdAt: nowWire(),
   });
   return {
     ok: true,

@@ -262,9 +262,156 @@ export async function jmapCall(
   token: string,
   methodCalls: unknown[][],
   capabilities: JmapCapability[] = [],
+  opts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<[string, unknown, string][]> {
   const s = await jmapSessionForToken(token);
-  return jmapBatch(s.apiUrl, `Bearer ${token}`, methodCalls, capabilities);
+  return jmapBatch(
+    s.apiUrl,
+    `Bearer ${token}`,
+    methodCalls,
+    capabilities,
+    opts,
+  );
+}
+
+// --- PushSubscription + Email/import (shared by both auth flavors) ----------
+
+/** A FastMail push subscription (PushSubscription/get). */
+export interface PushSubscriptionInfo {
+  id: string;
+  deviceClientId: string;
+  expires: string | null;
+  url: string;
+}
+
+/** PushSubscription/get response args. */
+interface PushListArgs {
+  list?: PushSubscriptionInfo[];
+}
+
+/** PushSubscription/set create response args. */
+interface PushCreateArgs {
+  created?: Record<string, { id: string } | null>;
+}
+
+/** Email/import response args. */
+interface ImportArgs {
+  created?: Record<string, { id: string } | null>;
+}
+
+/** List the account's push subscriptions (PushSubscription/get). */
+export async function jmapPushList(
+  token: string,
+): Promise<PushSubscriptionInfo[]> {
+  const responses = await jmapCall(token, [["PushSubscription/get", {}, "m0"]]);
+  // JMAP methodResponses arrive as untyped wire tuples; assert the args
+  // shape once per call and read typed fields from the named const.
+  const args = responses[0]![1] as PushListArgs;
+  return args.list ?? [];
+}
+
+/** Create a push subscription (PushSubscription/set); returns the new id.
+ * Throws when FastMail rejects the create. */
+export async function jmapPushCreate(
+  token: string,
+  opts: {
+    url: string;
+    deviceClientId: string;
+    p256dh: string;
+    auth: string;
+    expires: string;
+  },
+  jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
+): Promise<string> {
+  const responses = await jmapCall(
+    token,
+    [
+      [
+        "PushSubscription/set",
+        {
+          create: {
+            sub1: {
+              deviceClientId: opts.deviceClientId,
+              url: opts.url,
+              types: ["Email"],
+              keys: { p256dh: opts.p256dh, auth: opts.auth },
+              expires: opts.expires,
+            },
+          },
+        },
+        "m0",
+      ],
+    ],
+    [],
+    jmapOpts,
+  );
+  const args = responses[0]![1] as PushCreateArgs;
+  const id = args.created?.["sub1"]?.id;
+  if (!id) throw new Error("PushSubscription/set created no subscription");
+  return id;
+}
+
+/** Echo FastMail's PushVerification code back (completes the handshake). */
+export async function jmapPushVerify(
+  token: string,
+  subscriptionId: string,
+  code: string,
+  jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
+): Promise<void> {
+  await jmapCall(
+    token,
+    [
+      [
+        "PushSubscription/set",
+        { update: { [subscriptionId]: { verificationCode: code } } },
+        "m0",
+      ],
+    ],
+    [],
+    jmapOpts,
+  );
+}
+
+/** Destroy a push subscription (PushSubscription/set destroy). */
+export async function jmapPushDestroy(
+  token: string,
+  subscriptionId: string,
+  jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
+): Promise<void> {
+  await jmapCall(
+    token,
+    [["PushSubscription/set", { destroy: [subscriptionId] }, "m0"]],
+    [],
+    jmapOpts,
+  );
+}
+
+/** Import a raw message blob into a mailbox (Email/import); returns the new
+ * email id. Shared by the receipts pipeline's Sent-box write and the
+ * connected accounts' Inbox write. */
+export async function jmapImportEmail(
+  token: string,
+  opts: { blobId: string; mailboxId: string },
+): Promise<string> {
+  const responses = await jmapCall(token, [
+    [
+      "Email/import",
+      {
+        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        emails: {
+          e1: {
+            blobId: opts.blobId,
+            mailboxIds: opts.mailboxId ? { [opts.mailboxId]: true } : {},
+          },
+        },
+      },
+      "m0",
+    ],
+  ]);
+  const args = responses[0]![1] as ImportArgs;
+  const created = args.created?.["e1"];
+  if (!created) throw new Error("Email/import did not create the message");
+  return created.id;
 }
 
 /** The common shape of a downloaded RFC 5322 email: fastmail.server's

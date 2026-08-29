@@ -14,6 +14,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 
 /**
  * One rotating "did you know?" card at the bottom of the home page. The
@@ -244,7 +245,7 @@ export function FeatureHighlight({
 }) {
   const { icon: Icon, title, body, cta } = HIGHLIGHTS[id];
   return (
-    <aside className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+    <Card className="mt-6 p-4">
       <div className="flex items-start gap-3">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-gray-800 text-blue-600 dark:text-blue-400">
           <Icon aria-hidden="true" className="h-4 w-4" />
@@ -266,6 +267,6 @@ export function FeatureHighlight({
           <Link to={cta.to}>{cta.label}</Link>
         </Button>
       </div>
-    </aside>
+    </Card>
   );
 }

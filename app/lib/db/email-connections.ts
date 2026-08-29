@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type { EmailConnectionRecord } from "~/lib/types";
 
 /**
@@ -237,7 +237,7 @@ export async function createEmailConnection(input: {
     jmapAccountId: input.jmapAccountId,
     tokenEnc: input.tokenEnc,
     status: "active",
-    createdAt: fromIso(new Date().toISOString()),
+    createdAt: nowWire(),
   });
   return {
     ok: true,
@@ -279,7 +279,7 @@ export async function saveEmailConnectionSubscription(
 /** A push arrived: stamp lastPushAt (the "last handled webhook" stat). */
 export async function touchEmailConnectionPush(id: string): Promise<void> {
   await db.orm.public.EmailConnection.where({ id }).update({
-    lastPushAt: fromIso(new Date().toISOString()),
+    lastPushAt: nowWire(),
   });
 }
 

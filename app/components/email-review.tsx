@@ -8,7 +8,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Link, useFetcher } from "react-router";
+import { Alert } from "~/components/ui/Alert";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Badge } from "~/components/ui/Badge";
 import { EmptyState } from "~/components/ui/EmptyState";
@@ -119,9 +121,9 @@ export function ReviewInbox({
   return (
     <div>
       {scanning ? (
-        <div
+        <Card
           role="status"
-          className="mb-4 flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-sm text-gray-600 dark:text-gray-300"
+          className="mb-4 flex items-center gap-2 p-4 text-sm text-gray-600 dark:text-gray-300"
         >
           <Loader2
             aria-hidden="true"
@@ -129,21 +131,18 @@ export function ReviewInbox({
           />
           Scanning your inbox for receipts… this can take a minute for a busy
           mailbox.
-        </div>
+        </Card>
       ) : null}
 
       {scanError ? (
-        <div
-          role="alert"
-          className="mb-4 flex flex-col gap-2 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-700 dark:text-red-400"
-        >
+        <Alert bordered className="mb-4 flex flex-col items-start gap-2">
           <span>{scanError}</span>
           <span>
             <Button variant="secondary" size="sm" onClick={scanAgain}>
               <RefreshCw aria-hidden="true" className="h-4 w-4" /> Try again
             </Button>
           </span>
-        </div>
+        </Alert>
       ) : null}
 
       {!scanning && scanTimedOut ? (
@@ -338,7 +337,7 @@ function ReviewRow({
   };
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+    <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -458,6 +457,6 @@ function ReviewRow({
           ) : null}
         </ConfirmDialog>
       ) : null}
-    </div>
+    </Card>
   );
 }

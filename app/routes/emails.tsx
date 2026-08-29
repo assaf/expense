@@ -6,6 +6,7 @@ import {
   AddSenderForm,
   SenderRow,
 } from "~/components/settings/receipts-by-email";
+import { Card } from "~/components/ui/Card";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
@@ -65,6 +66,17 @@ export function meta(): Route.MetaDescriptors {
 export async function action({ request }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request);
 
+  // Both send paths share the same email: the verification link for a
+  // pending sender address, addressed with the account's display name.
+  const sendVerification = async (address: string, token: string) => {
+    const account = await readAccount(user.accountId);
+    await sendVerificationEmail({
+      to: address,
+      token,
+      origin: new URL(request.url).origin,
+      accountName: account?.name ?? "",
+    });
+  };
   switch (intent) {
     case "addInboundSender": {
       const result = await addInboundSender(
@@ -76,13 +88,7 @@ export async function action({ request }: Route.ActionArgs) {
       // flowing once the mailbox owner clicks it. `token: null` means the
       // address was already verified for this account; nothing to send.
       if (result.token) {
-        const account = await readAccount(user.accountId);
-        await sendVerificationEmail({
-          to: result.address,
-          token: result.token,
-          origin: new URL(request.url).origin,
-          accountName: account?.name ?? "",
-        });
+        await sendVerification(result.address, result.token);
       }
       return Response.json({ ok: true, address: result.address });
     }
@@ -92,13 +98,9 @@ export async function action({ request }: Route.ActionArgs) {
         formString(form, "address"),
       );
       if (!result.ok) return Response.json(result);
-      const account = await readAccount(user.accountId);
-      await sendVerificationEmail({
-        to: result.address,
-        token: result.token,
-        origin: new URL(request.url).origin,
-        accountName: account?.name ?? "",
-      });
+      if (result.token) {
+        await sendVerification(result.address, result.token);
+      }
       return Response.json({ ok: true, address: result.address });
     }
     case "removeInboundSender": {
@@ -218,7 +220,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
             forwarding needed.
           </p>
         ) : null}
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <Card className="p-4">
           {inboundAddress ? (
             <div className="mb-4">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -261,7 +263,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
             </ul>
           </div>
           <AddSenderForm />
-        </div>
+        </Card>
       </section>
     </PageShell>
   );

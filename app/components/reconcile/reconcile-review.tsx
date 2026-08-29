@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { BadgeCheck, Loader2, Plus } from "lucide-react";
 import { Link, useFetcher } from "react-router";
 import { SelectField } from "~/components/editor/editor-shared";
+import { Badge } from "~/components/ui/Badge";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
@@ -84,7 +85,7 @@ export function DraftReview({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+      <Card className="p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate font-semibold">{run.fileName}</div>
@@ -133,7 +134,7 @@ export function DraftReview({
             decision will be left out; they are not added as expenses.
           </p>
         ) : null}
-      </section>
+      </Card>
 
       {autoMatched.length > 0 ? (
         <section>
@@ -268,9 +269,13 @@ function RowFacts({ row }: { row: StatementRow }) {
         <div className="truncate font-medium">
           {row.description || "(no description)"}
           {row.direction === "refund" ? (
-            <span className="ml-2 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+            <Badge
+              tone="gray"
+              square
+              className="ml-2 text-gray-500 dark:text-gray-400"
+            >
               refund / credit
-            </span>
+            </Badge>
           ) : null}
         </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -483,9 +488,9 @@ function ReviewRowCard({
               <span className="min-w-0 flex-1 truncate">
                 {c.merchant} · {formatDate(c.date)} · {formatAmount(c.amount)}
                 {c.exactDate && c.exactAmount ? (
-                  <span className="ml-2 rounded bg-green-100 dark:bg-green-900/60 px-1.5 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+                  <Badge tone="green" square className="ml-2">
                     exact
-                  </span>
+                  </Badge>
                 ) : null}
               </span>
               <Link
@@ -584,7 +589,7 @@ function NewExpenseForm({
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+    <Card className="flex flex-wrap items-end gap-3 rounded-lg p-3">
       <Field label="Merchant" className="min-w-40 flex-1">
         <Input
           value={merchant}
@@ -645,6 +650,6 @@ function NewExpenseForm({
         ) : null}
         Add
       </Button>
-    </div>
+    </Card>
   );
 }

@@ -1,4 +1,5 @@
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
+import { Card } from "~/components/ui/Card";
 import {
   APP_NAME,
   APP_SUMMARY,
@@ -45,15 +46,12 @@ export default function FaqPage() {
     >
       <div className="mt-10 flex flex-col gap-4">
         {FAQS.map((f) => (
-          <article
-            key={f.question}
-            className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
-          >
+          <Card key={f.question} className="p-5">
             <h2 className="font-semibold text-ink">{f.question}</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
               {f.answer}
             </p>
-          </article>
+          </Card>
         ))}
       </div>
 

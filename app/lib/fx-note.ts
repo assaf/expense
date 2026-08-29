@@ -21,6 +21,27 @@ export interface ConversionNoteFields {
   rateDate: string;
 }
 
+/** The provenance quad for a captured receipt: the receipt's currency plus
+ * the printed amount and applied rate when the receipt is foreign, "" when
+ * not (USD receipts carry no provenance). `conversion` is null when no rate
+ * was available; a foreign currency with no rate stays stored-as-is. One
+ * copy of the invariant for every capture path (email, MCP, manual save,
+ * editor preview): build it once, feed it to `withConversionNote` and the
+ * expense row alike. */
+export function fxProvenance(
+  currency: string,
+  originalAmount: string,
+  conversion: { fxRate: string; rateDate: string } | null,
+): ConversionNoteFields {
+  const foreign = currency !== "USD";
+  return {
+    currency,
+    originalAmount: foreign ? originalAmount : "",
+    fxRate: foreign && conversion ? conversion.fxRate : "",
+    rateDate: foreign && conversion ? conversion.rateDate : "",
+  };
+}
+
 /** Matches exactly what `conversionNote` emits (with one leading space when
  * appended after user text). Kept in lockstep with the two templates below:
  * a formatting change here must be mirrored there. */

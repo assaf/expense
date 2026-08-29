@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
+import { Card } from "~/components/ui/Card";
 import {
   APP_NAME,
   APP_SUMMARY,
@@ -55,15 +56,12 @@ export default function AboutPage() {
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {BENEFITS.map((b) => (
-            <div
-              key={b.title}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
-            >
+            <Card key={b.title} className="p-5">
               <h3 className="font-semibold text-ink">{b.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 {b.body}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
       </section>

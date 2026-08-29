@@ -1,6 +1,12 @@
 import { ulid } from "ulid";
 import { db } from "~/lib/prisma.server";
-import { fromIso, fromIsoOrNull, toIso, toIsoOrNull } from "~/lib/db/wire";
+import {
+  fromIso,
+  nowWire,
+  fromIsoOrNull,
+  toIso,
+  toIsoOrNull,
+} from "~/lib/db/wire";
 import {
   generateInviteCode,
   generateOpaqueToken,
@@ -240,7 +246,7 @@ export async function setUserVerificationToken(
 ): Promise<void> {
   await db.orm.public.User.where({ id: userId }).update({
     verificationTokenHash: hashToken(rawToken),
-    verificationSentAt: fromIso(new Date().toISOString()),
+    verificationSentAt: nowWire(),
   });
 }
 
@@ -271,7 +277,7 @@ export async function verifyUserEmailAddress(
     return { status: "expired", email: row.email };
   }
   await db.orm.public.User.where({ id: row.id }).update({
-    emailVerifiedAt: fromIso(new Date().toISOString()),
+    emailVerifiedAt: nowWire(),
   });
   return { status: "verified", email: row.email };
 }
@@ -346,7 +352,7 @@ export async function setUserPasswordResetToken(
 ): Promise<void> {
   await db.orm.public.User.where({ id: userId }).update({
     passwordResetTokenHash: hashToken(rawToken),
-    passwordResetSentAt: fromIso(new Date().toISOString()),
+    passwordResetSentAt: nowWire(),
   });
 }
 

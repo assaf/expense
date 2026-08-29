@@ -13,6 +13,10 @@ const variants = {
   blue: "rounded-xl border border-blue-200 bg-blue-50/50 dark:border-gray-600 dark:bg-blue-900/50",
 };
 
+/** The default surface recipe, for call sites that compose class strings
+ * instead of rendering <Card> (conditional classNames). */
+export const cardSurface = variants.default;
+
 type CardVariant = keyof typeof variants;
 
 interface CardProps extends ComponentProps<"div"> {

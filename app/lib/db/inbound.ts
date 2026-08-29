@@ -1,7 +1,7 @@
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
-import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import { extractEmailAddress, isEmail } from "~/lib/validation";
 import {
@@ -278,7 +278,7 @@ export async function verifyInboundSenderAddress(
       await tx.orm.public.InboundSenderVerification.create({
         address: row.address,
         accountId: row.accountId,
-        verifiedAt: fromIso(new Date().toISOString()),
+        verifiedAt: nowWire(),
       });
       // The address is now exclusively this account's; drop rivals' pending rows.
       await tx.orm.public.InboundSender.where((s) =>

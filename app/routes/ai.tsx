@@ -1,5 +1,7 @@
 import { Bot, Link2, ShieldCheck, Sparkles } from "lucide-react";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
+import { cardSurface, Card } from "~/components/ui/Card";
+import { cn } from "~/lib/cn";
 import {
   AI_CAPABILITIES,
   AI_PROMPTS,
@@ -54,15 +56,12 @@ export default function AiPage() {
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {AI_CAPABILITIES.map((c) => (
-            <div
-              key={c.title}
-              className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5"
-            >
+            <Card key={c.title} className="p-5">
               <h3 className="font-semibold text-ink">{c.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 {c.body}
               </p>
-            </div>
+            </Card>
           ))}
         </div>
       </section>
@@ -119,7 +118,7 @@ export default function AiPage() {
           {AI_PROMPTS.map((prompt) => (
             <li
               key={prompt}
-              className="flex items-start gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
+              className={cn(cardSurface, "flex items-start gap-2 p-4")}
             >
               <Sparkles
                 aria-hidden="true"
@@ -135,7 +134,7 @@ export default function AiPage() {
 
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">Security</h2>
-        <div className="mt-6 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+        <Card className="mt-6 flex items-start gap-3 p-5">
           <ShieldCheck
             aria-hidden="true"
             className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
@@ -143,7 +142,7 @@ export default function AiPage() {
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
             {AI_SECURITY}
           </p>
-        </div>
+        </Card>
       </section>
 
       <MarketingCta

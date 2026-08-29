@@ -9,11 +9,18 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import {
-  REQUEST_TIMEOUT_MS,
   fetchRawRfc822,
   jmapBatch,
+  jmapImportEmail,
+  jmapPushCreate,
+  jmapPushDestroy,
+  jmapPushList,
+  jmapPushVerify,
+  jmapSessionForToken,
   jmapUploadBlob,
   type JmapCapability,
+  type JmapTokenInfo,
+  type PushSubscriptionInfo,
 } from "~/lib/jmap.server";
 
 /**
@@ -29,59 +36,17 @@ import {
  * in the Receipts folder" (the daily cron is the catch-up net).
  */
 
-const SESSION_URL = "https://api.fastmail.com/jmap/session";
-
 /** Keyword marking an email as already processed (one-way on Fastmail: it
  * can be set but not removed, so mark-before-process is the idempotency
  * pattern; the inbound_emails table is the second, DB-level guard). */
 const RECEIPT_PROCESSED_KEYWORD = "$receipt-processed";
-
-interface Session {
-  apiUrl: string;
-  uploadUrl: string;
-  downloadUrl: string;
-  accountId: string;
-  username: string;
-}
-
-interface SessionResponse {
-  apiUrl: string;
-  uploadUrl: string;
-  downloadUrl: string;
-  username: string;
-  primaryAccounts: Record<string, string>;
-}
-
-let sessionCache: Session | null = null;
-let sessionPromise: Promise<Session> | null = null;
-
 function bearer(): Record<string, string> {
   return { Authorization: `Bearer ${FASTMAIL_TOKEN}` };
 }
 
-async function jmapSession(): Promise<Session> {
-  if (sessionCache) return sessionCache;
-  sessionPromise ??= (async () => {
-    const res = await fetch(SESSION_URL, {
-      headers: bearer(),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!res.ok) {
-      throw new Error(`JMAP session failed: ${res.status} ${await res.text()}`);
-    }
-    const j = (await res.json()) as SessionResponse;
-    const accountId = j.primaryAccounts["urn:ietf:params:jmap:mail"];
-    if (!accountId) throw new Error("JMAP session missing mail account");
-    sessionCache = {
-      apiUrl: j.apiUrl,
-      uploadUrl: j.uploadUrl,
-      downloadUrl: j.downloadUrl,
-      accountId,
-      username: j.username,
-    };
-    return sessionCache;
-  })();
-  return sessionPromise;
+/** The app mailbox's JMAP session; jmap.server caches it per instance. */
+function jmapSession(): Promise<JmapTokenInfo> {
+  return jmapSessionForToken(FASTMAIL_TOKEN);
 }
 
 /**
@@ -130,7 +95,7 @@ async function listMailboxes(): Promise<Mailbox[]> {
     { accountId: string; ids: null; properties: string[] },
     { list: Mailbox[] }
   >("Mailbox/get", {
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     ids: null,
     properties: ["id", "name"],
   });
@@ -189,14 +154,14 @@ export async function rawEmail(id: string): Promise<RawEmail> {
       }>;
     }
   >("Email/get", {
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     ids: [id],
     properties: ["blobId", "receivedAt", "subject", "from", "to", "messageId"],
   });
   return fetchRawRfc822({
     id,
     email: list[0],
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     downloadUrl: s.downloadUrl,
     headers: bearer(),
   });
@@ -226,7 +191,7 @@ export async function unprocessedReceiptIds(limit: number): Promise<string[]> {
     },
     { ids: string[] }
   >("Email/query", {
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     filter: {
       inMailbox: mailboxId,
       notKeyword: RECEIPT_PROCESSED_KEYWORD,
@@ -250,7 +215,7 @@ export async function markReceiptRetry(id: string): Promise<void> {
     { accountId: string; ids: string[]; properties: string[] },
     { list: Array<{ keywords?: Record<string, boolean> }> }
   >("Email/get", {
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     ids: [id],
     properties: ["keywords"],
   });
@@ -264,7 +229,7 @@ export async function markReceiptRetry(id: string): Promise<void> {
   await call<{ accountId: string; update: Record<string, unknown> }, unknown>(
     "Email/set",
     {
-      accountId: s.accountId,
+      accountId: s.mailAccountId,
       update: { [id]: { keywords } },
     },
   );
@@ -275,7 +240,7 @@ export async function markReceiptProcessed(id: string): Promise<void> {
   await call<{ accountId: string; update: Record<string, unknown> }, unknown>(
     "Email/set",
     {
-      accountId: s.accountId,
+      accountId: s.mailAccountId,
       update: {
         [id]: {
           [`keywords/${RECEIPT_PROCESSED_KEYWORD}`]: true,
@@ -290,26 +255,15 @@ export async function markReceiptProcessed(id: string): Promise<void> {
 export async function destroyEmail(id: string): Promise<void> {
   const s = await jmapSession();
   await call<{ accountId: string; destroy: string[] }, unknown>("Email/set", {
-    accountId: s.accountId,
+    accountId: s.mailAccountId,
     destroy: [id],
   });
 }
 
 // --- Push subscriptions ------------------------------------------------------
 
-export interface PushSubscription {
-  id: string;
-  deviceClientId: string;
-  expires: string | null;
-  url: string;
-}
-
-export async function listSubscriptions(): Promise<PushSubscription[]> {
-  const { list } = await call<
-    Record<string, never>,
-    { list: PushSubscription[] }
-  >("PushSubscription/get", {});
-  return list;
+export async function listSubscriptions(): Promise<PushSubscriptionInfo[]> {
+  return jmapPushList(FASTMAIL_TOKEN);
 }
 
 export async function createSubscription(opts: {
@@ -319,41 +273,25 @@ export async function createSubscription(opts: {
   deviceClientId: string;
   expires: string;
 }): Promise<string> {
-  const { created } = await call<
-    { create: Record<string, unknown> },
-    { created: Record<string, { id: string }> }
-  >("PushSubscription/set", {
-    create: {
-      sub1: {
-        deviceClientId: opts.deviceClientId,
-        url: opts.url,
-        types: ["Email"],
-        keys: { p256dh: opts.p256dh, auth: opts.auth },
-        expires: opts.expires,
-      },
-    },
+  return jmapPushCreate(FASTMAIL_TOKEN, opts, {
+    tolerateNotFoundDestroy: true,
   });
-  return created["sub1"]?.id ?? "";
 }
 
 export async function setVerificationCode(
   id: string,
   code: string,
 ): Promise<void> {
-  await call<{ update: Record<string, unknown> }, unknown>(
-    "PushSubscription/set",
-    {
-      update: { [id]: { verificationCode: code } },
-    },
-  );
-}
-
-export async function destroySubscription(id: string): Promise<void> {
-  await call<{ destroy: string[] }, unknown>("PushSubscription/set", {
-    destroy: [id],
+  return jmapPushVerify(FASTMAIL_TOKEN, id, code, {
+    tolerateNotFoundDestroy: true,
   });
 }
 
+export async function destroySubscription(id: string): Promise<void> {
+  return jmapPushDestroy(FASTMAIL_TOKEN, id, {
+    tolerateNotFoundDestroy: true,
+  });
+}
 // --- Sending (EmailSubmission/set) ------------------------------------------
 
 export interface FastmailIdentity {
@@ -377,7 +315,7 @@ async function listIdentities(): Promise<FastmailIdentity[]> {
         saveSentToMailboxId?: string;
       }>;
     }
-  >("Identity/get", { accountId: (await jmapSession()).accountId }, [
+  >("Identity/get", { accountId: (await jmapSession()).mailAccountId }, [
     "urn:ietf:params:jmap:submission",
   ]);
   return list
@@ -418,30 +356,10 @@ async function uploadBlob(raw: Buffer): Promise<string> {
   const s = await jmapSession();
   return jmapUploadBlob(
     s.uploadUrl,
-    s.accountId,
+    s.mailAccountId,
     `Bearer ${FASTMAIL_TOKEN}`,
     raw,
   );
-}
-
-/** Import a sent message into the given mailbox (the identity's Sent box). */
-async function importEmail(blobId: string, mailboxId: string): Promise<string> {
-  const s = await jmapSession();
-  const { created } = await call<
-    { accountId: string; emails: Record<string, unknown> },
-    { created: Record<string, { id: string } | null> }
-  >("Email/import", {
-    accountId: s.accountId,
-    emails: {
-      e1: {
-        blobId,
-        mailboxIds: mailboxId ? { [mailboxId]: true } : {},
-      },
-    },
-  });
-  const email = created["e1"];
-  if (!email) throw new Error("Email/import did not create the message");
-  return email.id;
 }
 
 /** Submit a message for sending (Fastmail delivers via SMTP). Fastmail
@@ -450,7 +368,7 @@ async function submitEmail(identityId: string, emailId: string): Promise<void> {
   await call<{ accountId: string; create: Record<string, unknown> }, unknown>(
     "EmailSubmission/set",
     {
-      accountId: (await jmapSession()).accountId,
+      accountId: (await jmapSession()).mailAccountId,
       create: {
         k1: {
           identityId,
@@ -476,7 +394,8 @@ export interface JmapSendDeps {
 const realJmapSendDeps: JmapSendDeps = {
   listIdentities,
   uploadBlob,
-  importEmail,
+  importEmail: (blobId: string, mailboxId: string) =>
+    jmapImportEmail(FASTMAIL_TOKEN, { blobId, mailboxId }),
   submitEmail,
 };
 

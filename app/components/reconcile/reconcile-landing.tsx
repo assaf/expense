@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, X } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { cardSurface, Card } from "~/components/ui/Card";
 import {
   consumeCommandRequest,
   useCommandRequest,
 } from "~/lib/command-requests";
+import { cn } from "~/lib/cn";
 import { formatDate } from "~/lib/format";
 import type { ReconciliationRunRecord } from "~/lib/types";
 
@@ -42,7 +44,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
+      <Card className="p-6">
         <h2 className="mb-1 font-semibold">Upload a statement</h2>
         <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
           Download this month's transactions from your credit card website and
@@ -88,7 +90,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
             ) : null}
           </div>
         </fetcher.Form>
-      </section>
+      </Card>
 
       {(() => {
         const inProgress = runs.filter((r) => r.status === "draft");
@@ -102,7 +104,10 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                   {inProgress.map((run) => (
                     <li
                       key={run.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
+                      className={cn(
+                        cardSurface,
+                        "flex items-center justify-between gap-3 p-3",
+                      )}
                     >
                       <Link
                         to={`/reconcile?run=${run.id}`}
@@ -136,7 +141,10 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                     <li key={run.id}>
                       <Link
                         to={`/reconcile?run=${run.id}`}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-600"
+                        className={cn(
+                          cardSurface,
+                          "flex items-center justify-between gap-3 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-600",
+                        )}
                       >
                         <div className="min-w-0">
                           <div className="truncate font-medium">

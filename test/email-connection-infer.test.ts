@@ -4,63 +4,54 @@ import { inferRuleCandidates } from "~/lib/email-connection-infer.server";
 import { addEmailRule, listGeneralEmailRules } from "~/lib/db/email-rules";
 
 /**
- * Rule inference from a connected inbox: the JMAP transport is a scriptable
- * fake (Mailbox/get → inbox id, Email/query → ids, Email/get → entries);
- * scoring/grouping and the freemail/self exclusions are the logic under
- * test. `--apply` behavior (addEmailRule source=inferred) is covered too.
+ * Rule inference from a connected inbox: mailboxSummaries is a scriptable
+ * fake (canned inbox summaries); scoring/grouping and the freemail/self
+ * exclusions are the logic under test. `--apply` behavior (addEmailRule
+ * source=inferred) is covered too.
  */
 
-const jmap = vi.hoisted(() => {
-  interface FakeEntry {
-    from: Array<{ email: string }>;
+const mail = vi.hoisted(() => {
+  interface FakeSummary {
+    from: string | null;
     subject: string;
     preview: string;
   }
-  const state: { entries: FakeEntry[] } = {
+  const state: { entries: FakeSummary[] } = {
     entries: [],
   };
   return {
     state,
-    jmapCall: vi.fn(async (_token: string, methodCalls: unknown[][]) => {
-      const [name, args] = methodCalls[0] as [string, Record<string, unknown>];
-      if (name === "Mailbox/get") {
-        return [
-          ["Mailbox/get", { list: [{ id: "inbox-1", role: "inbox" }] }, "m0"],
-        ];
-      }
-      if (name === "Email/query") {
-        return [
-          ["Email/query", { ids: state.entries.map((_, i) => `e${i}`) }, "m0"],
-        ];
-      }
-      if (name === "Email/get") {
-        return [["Email/get", { list: state.entries }, "m0"]];
-      }
-      throw new Error(`unexpected JMAP call ${name} ${JSON.stringify(args)}`);
-    }),
+    mailboxSummaries: vi.fn(
+      async (opts: { token: string; role: string; includePreview?: boolean }) =>
+        state.entries.map((e, i) => ({
+          id: `e${i}`,
+          receivedAt: new Date().toISOString(),
+          subject: e.subject,
+          from: e.from,
+          preview: opts.includePreview ? e.preview : undefined,
+        })),
+    ),
   };
 });
 
-vi.mock("~/lib/jmap.server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("~/lib/jmap.server")>()),
-  jmapCall: jmap.jmapCall,
-  jmapSessionForToken: async () => ({ mailAccountId: "acct-1" }),
+vi.mock("~/lib/email-connection-mail.server", () => ({
+  mailboxSummaries: mail.mailboxSummaries,
 }));
 
 const OWNER = "owner@example.com";
 
 function entry(from: string, subject: string, preview: string) {
-  return { from: [{ email: from }], subject, preview };
+  return { from, subject, preview };
 }
 
 describe("inferRuleCandidates", () => {
   beforeEach(() => {
-    jmap.state.entries = [];
-    jmap.jmapCall.mockClear();
+    mail.state.entries = [];
+    mail.mailboxSummaries.mockClear();
   });
 
   it("recommends domains whose mail is consistently receipt-like", async () => {
-    jmap.state.entries = [
+    mail.state.entries = [
       entry("no_reply@email.apple.com", "Your receipt from Apple", ""),
       entry("no_reply@email.apple.com", "Your order #123", ""),
       entry("receipts@stripe.com", "Payment received", "Total: $12.00"),
@@ -83,7 +74,7 @@ describe("inferRuleCandidates", () => {
   });
 
   it("never recommends freemail domains or the owner's own domain", async () => {
-    jmap.state.entries = [
+    mail.state.entries = [
       entry("friend@gmail.com", "Your receipt from dinner", "Total: $20.00"),
       entry("friend@gmail.com", "Re: your invoice", "Total: $5.00"),
       entry("me@example.com", "Your order", "Total: $1.00"),
@@ -93,17 +84,19 @@ describe("inferRuleCandidates", () => {
     expect(candidates).toEqual([]);
   });
 
-  it("passes the JMAP accountId on every method call", async () => {
-    jmap.state.entries = [
+  it("scans the inbox newest-first with previews via mailboxSummaries", async () => {
+    mail.state.entries = [
       entry("a@shop.example", "Your order", "Total: $1.00"),
     ];
     await inferRuleCandidates("tok", OWNER);
-    for (const call of jmap.jmapCall.mock.calls) {
-      const [name, args] = call[1]![0] as [string, Record<string, unknown>];
-      if (name !== "PushSubscription/get") {
-        expect(args.accountId).toBe("acct-1");
-      }
-    }
+    expect(mail.mailboxSummaries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "tok",
+        role: "inbox",
+        descending: true,
+        includePreview: true,
+      }),
+    );
   });
 
   it("returns nothing on an empty inbox", async () => {
@@ -112,7 +105,7 @@ describe("inferRuleCandidates", () => {
   });
 
   it("uses preview text as the body signal", async () => {
-    jmap.state.entries = [
+    mail.state.entries = [
       entry("billing@saas.example", "Your subscription", "Order total: $49.00"),
       entry("billing@saas.example", "Your subscription", "Order total: $49.00"),
     ];
@@ -154,7 +147,7 @@ describe("apply path (addEmailRule as inferred general rule)", () => {
     await addEmailRule({
       accountId: "",
       sender: "acme.com",
-      source: "inferred",
+      source: "forward",
     });
     const userRule = await addEmailRule({
       accountId: TEST_ACCOUNT_ID,

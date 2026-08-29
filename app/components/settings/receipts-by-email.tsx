@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
+import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
@@ -103,26 +104,16 @@ export function AddSenderForm() {
     address?: string;
   }>();
   const [address, setAddress] = useState("");
-  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(
-    null,
-  );
   const busy = fetcher.state !== "idle";
 
-  // A successful add leaves the row in the list with its own status. Clear
-  // the input; the notice carries the "email sent" confirmation.
-  useEffect(() => {
-    const data = fetcher.data;
-    if (!data) return;
-    if (data.ok && data.address) {
-      setAddress("");
-      setNotice({
-        ok: true,
-        text: `Verification email sent to ${data.address}; click the link in it and receipts from this address will start importing.`,
-      });
-    } else if (data.error) {
-      setNotice({ ok: false, text: data.error });
-    }
-  }, [fetcher.data]);
+  // A successful add leaves the row in the list with its own status; the
+  // notice carries the "email sent" confirmation.
+  const { notice, setNotice } = useFetcherNotice(
+    fetcher.data,
+    (address) =>
+      `Verification email sent to ${address}; click the link in it and receipts from this address will start importing.`,
+    () => setAddress(""),
+  );
 
   return (
     <div>

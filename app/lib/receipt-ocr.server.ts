@@ -3,6 +3,7 @@ import type { Canvas } from "@napi-rs/canvas";
 import type { PDFPageProxy } from "pdfjs-dist";
 import { detectImageMime, isPdf } from "~/lib/file-types";
 import { convertToUsd } from "~/lib/fx.server";
+import { fxProvenance } from "~/lib/fx-note";
 import { resizeIfWider, STORED_IMAGE_MAX_WIDTH } from "~/lib/image-normalize";
 import {
   pdfImageName,
@@ -658,9 +659,6 @@ export async function extractUploadedReceiptFields(
     amount: conversion ? conversion.amount : result.amount,
     category: resolved.category,
     report: resolved.report,
-    currency: receiptCurrency,
-    originalAmount: receiptCurrency !== "USD" ? result.amount : "",
-    fxRate: conversion ? conversion.fxRate : "",
-    rateDate: conversion ? conversion.rateDate : "",
+    ...fxProvenance(receiptCurrency, result.amount, conversion),
   };
 }

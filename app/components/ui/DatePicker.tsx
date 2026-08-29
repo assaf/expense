@@ -292,7 +292,10 @@ export function DatePicker({
                   setFocused(toISO(d));
                   setViewMonth(month);
                 }}
-                className="rounded-md border border-gray-300 bg-white px-1.5 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:border-blue-400 dark:focus:ring-blue-400"
+                className={cn(
+                  inputVariants(),
+                  "rounded-md px-1.5 py-1 text-sm",
+                )}
               >
                 {MONTHS.map((m, i) => (
                   <option key={m} value={i}>
@@ -317,7 +320,10 @@ export function DatePicker({
                   setFocused(toISO(d));
                   setViewYear(year);
                 }}
-                className="w-20 rounded-md border border-gray-300 bg-white px-1.5 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:focus:border-blue-400 dark:focus:ring-blue-400"
+                className={cn(
+                  inputVariants(),
+                  "w-20 rounded-md px-1.5 py-1 text-sm",
+                )}
               />
             </div>
             <button

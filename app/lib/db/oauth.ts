@@ -1,6 +1,6 @@
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type {
   OAuthClientRecord,
   OAuthCodeRecord,
@@ -55,11 +55,11 @@ export async function saveOAuthConsent(
   clientId: string,
 ): Promise<void> {
   await db.orm.public.OAuthConsent.upsert({
-    update: { grantedAt: fromIso(new Date().toISOString()) },
+    update: { grantedAt: nowWire() },
     create: {
       userId,
       clientId,
-      grantedAt: fromIso(new Date().toISOString()),
+      grantedAt: nowWire(),
     },
     conflictOn: { userId, clientId },
   });
@@ -91,7 +91,7 @@ export async function createOAuthCode(input: {
     ...input,
     expiresAt: fromIso(input.expiresAt),
     used: false,
-    createdAt: fromIso(new Date().toISOString()),
+    createdAt: nowWire(),
   });
 }
 
@@ -169,7 +169,7 @@ export async function findOAuthToken(
 export async function revokeOAuthToken(tokenHash: string): Promise<void> {
   await db.orm.public.OAuthToken.where((t) =>
     and(t.tokenHash.eq(tokenHash), t.revokedAt.isNull()),
-  ).updateAll({ revokedAt: fromIso(new Date().toISOString()) });
+  ).updateAll({ revokedAt: nowWire() });
 }
 
 /**
@@ -245,7 +245,7 @@ export async function disconnectOAuthClient(
   await db.transaction(async (tx) => {
     await tx.orm.public.OAuthToken.where((t) =>
       and(t.userId.eq(userId), t.clientId.eq(clientId), t.revokedAt.isNull()),
-    ).updateAll({ revokedAt: fromIso(new Date().toISOString()) });
+    ).updateAll({ revokedAt: nowWire() });
     await tx.orm.public.OAuthConsent.where((c) =>
       and(c.userId.eq(userId), c.clientId.eq(clientId)),
     ).deleteAll();

@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { asJson, fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { renameImageToConvention, saveImage } from "~/lib/images.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { validateDateNotFuture } from "~/lib/validation";
@@ -94,7 +94,7 @@ export async function createReconciliationRun(
     createdCount: 0,
     skipped: asJson(input.skipped),
     data: asJson(data),
-    createdAt: fromIso(new Date().toISOString()),
+    createdAt: nowWire(),
   });
   return runToRecord(row);
 }
@@ -189,7 +189,7 @@ export async function discardReconciliationRun(
     and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
   ).updateAll({
     status: "discarded",
-    completedAt: fromIso(new Date().toISOString()),
+    completedAt: nowWire(),
   });
   return res.length > 0;
 }

@@ -2,13 +2,16 @@ import { FileArchive, FileDown, Lock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { redirect, useFetcher } from "react-router";
 import { AddNameForm } from "~/components/AddNameForm";
+import { cn } from "~/lib/cn";
 import { PageShell } from "~/components/PageShell";
 import {
   RemoveButton,
   RenameButton,
   RenameForm,
 } from "~/components/settings/name-list";
+import { Badge } from "~/components/ui/Badge";
 import { Button } from "~/components/ui/Button";
+import { cardSurface } from "~/components/ui/Card";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { countLabel, formatAmount } from "~/lib/format";
@@ -148,7 +151,7 @@ function ReportRow({ report }: { report: ReportSummary }) {
 
   if (editing) {
     return (
-      <li className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+      <li className={cn(cardSurface, "p-3")}>
         <RenameForm
           intent="renameReport"
           name={report.name}
@@ -161,37 +164,32 @@ function ReportRow({ report }: { report: ReportSummary }) {
   const confirmRemove = reportDeleteConfirm(report);
 
   return (
-    <li className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+    <li className={cn(cardSurface, "flex items-center justify-between p-3")}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-medium">{report.name}</span>
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-              report.closed
-                ? "bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300"
-                : "bg-green-100 dark:bg-green-900/60 text-green-700 dark:text-green-400"
-            }`}
-          >
+          <Badge tone={report.closed ? "gray" : "green"} className="shrink-0">
             {report.closed ? "Closed" : "Open"}
-          </span>
+          </Badge>
         </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">
           {countLabel(report.count)} · {formatAmount(report.total)}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <a
-          href={`/export/report/${encodeURIComponent(report.name)}.pdf`}
-          data-umami-event="file-download"
-          data-umami-event-file={`${report.name}.pdf`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 px-2.5 py-1 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-        >
-          <FileDown aria-hidden="true" className="h-4 w-4" /> PDF
-        </a>
+        <Button asChild variant="secondary" size="sm">
+          <a
+            href={`/export/report/${encodeURIComponent(report.name)}.pdf`}
+            data-umami-event="file-download"
+            data-umami-event-file={`${report.name}.pdf`}
+            className="gap-1.5"
+          >
+            <FileDown aria-hidden="true" className="h-4 w-4" /> PDF
+          </a>
+        </Button>
 
         <toggleFetcher.Form method="post" className="contents">
           <input type="hidden" name="intent" value="setReportClosed" />
-          <input type="hidden" name="name" value={report.name} />
           <input
             type="hidden"
             name="closed"

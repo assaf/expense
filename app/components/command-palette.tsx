@@ -32,8 +32,18 @@ import {
   useNavigate,
   type FetcherWithComponents,
 } from "react-router";
+import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { requestCommand } from "~/lib/command-requests";
+import { cn } from "~/lib/cn";
+
+/** The palette overlay + panel surface, shared by the kbar palette and the
+ * category prompt so the two can't drift. Callers add their own extras
+ * (overflow, padding) on top of the panel. */
+const PALETTE_POSITIONER =
+  "fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-4 pt-[18vh]";
+const PALETTE_PANEL =
+  "w-full max-w-[600px] rounded-lg bg-[rgb(252_252_252)] text-[rgb(28_28_29)] shadow-[0px_6px_20px_rgb(0_0_0/20%)] dark:bg-[rgb(28_28_29)] dark:text-[rgba(252_252_252/0.9)] dark:shadow-none";
 
 /** The Settings route action response for `intent=addCategory`. */
 type AddCategoryResult =
@@ -273,8 +283,8 @@ function Palette({ reportNames }: { reportNames: string[] }) {
   return (
     <>
       <KBarPortal>
-        <KBarPositioner className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-4 pt-[18vh]">
-          <KBarAnimator className="w-full max-w-[600px] overflow-hidden rounded-lg bg-[rgb(252_252_252)] text-[rgb(28_28_29)] shadow-[0px_6px_20px_rgb(0_0_0/20%)] dark:bg-[rgb(28_28_29)] dark:text-[rgba(252_252_252/0.9)] dark:shadow-none">
+        <KBarPositioner className={PALETTE_POSITIONER}>
+          <KBarAnimator className={cn(PALETTE_PANEL, "overflow-hidden")}>
             {prompting === "category" ? null : (
               <>
                 <div className="flex items-center gap-3 py-1 pl-4 pr-3">
@@ -403,11 +413,8 @@ function CategoryPrompt({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-4 pt-[18vh]">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-[600px] rounded-lg bg-[rgb(252_252_252)] p-4 text-[rgb(28_28_29)] shadow-[0px_6px_20px_rgb(0_0_0/20%)] dark:bg-[rgb(28_28_29)] dark:text-[rgba(252_252_252/0.9)] dark:shadow-none"
-      >
+    <div className={PALETTE_POSITIONER}>
+      <form onSubmit={submit} className={cn(PALETTE_PANEL, "p-4")}>
         <div className="flex items-center gap-2">
           <FolderPlus aria-hidden="true" className="h-4 w-4 text-gray-400" />
           <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
@@ -446,23 +453,20 @@ function CategoryPrompt({
               {error}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            size="sm"
             disabled={busy || name.trim().length === 0}
-            className="flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-100 dark:text-gray-900"
+            className="dark:bg-gray-100 dark:text-gray-900"
           >
             {busy ? (
               <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
             ) : null}
             {busy ? "Adding…" : "Add"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

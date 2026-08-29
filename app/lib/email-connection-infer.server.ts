@@ -1,6 +1,5 @@
-import { jmapCall, jmapSessionForToken } from "~/lib/jmap.server";
 import { looksLikeReceiptEmail } from "~/lib/email-classify";
-import { mailboxIdByRole } from "~/lib/email-connection-mail.server";
+import { mailboxSummaries } from "~/lib/email-connection-mail.server";
 import { domainOf } from "~/lib/validation";
 
 /**
@@ -58,12 +57,6 @@ export interface InferResult {
   candidates: RuleCandidate[];
 }
 
-interface EmailEntry {
-  from?: Array<{ name?: string; email?: string }>;
-  subject?: string;
-  preview?: string;
-}
-
 /**
  * Scan the Inbox's recent mail and score senders by receipt-likeness.
  * Uses Email/query (Inbox, after the lookback) + Email/get with `preview`
@@ -84,37 +77,24 @@ export async function inferRuleCandidates(
   );
 
   const afterIso = new Date(Date.now() - lookbackMs).toISOString();
-  const accountId = (await jmapSessionForToken(token)).mailAccountId;
-  const query = await jmapCall(token, [
-    [
-      "Email/query",
-      {
-        accountId,
-        filter: {
-          inMailbox: await mailboxIdByRole(token, "inbox"),
-          after: afterIso,
-        },
-        sort: [{ property: "receivedAt", isAscending: false }],
-        limit: maxEmails,
-      },
-      "m0",
-    ],
-  ]);
-  const ids = (query[0]![1] as { ids?: string[] }).ids ?? [];
-  if (ids.length === 0) return { scanned: 0, candidates: [] };
+  const summaries = await mailboxSummaries({
+    token,
+    role: "inbox",
+    afterIso,
+    limit: maxEmails,
+    descending: true,
+    includePreview: true,
+  });
+  if (summaries.length === 0) return { scanned: 0, candidates: [] };
 
-  const got = await jmapCall(token, [
-    [
-      "Email/get",
-      { accountId, ids, properties: ["from", "subject", "preview"] },
-      "m0",
-    ],
-  ]);
-  const list = (got[0]![1] as { list?: EmailEntry[] }).list ?? [];
-
+  // mailboxSummaries formats `from` for display ("Name <email>" or the
+  // bare email); the scan groups by the sender's domain, so pull the
+  // address back out of the formatted string.
+  const senderEmail = (from: string | null): string =>
+    from?.match(/<([^>]+)>/)?.[1] ?? from ?? "";
   const stats = new Map<string, { total: number; receiptLike: number }>();
-  for (const email of list) {
-    const address = email.from?.[0]?.email?.toLowerCase() ?? "";
+  for (const email of summaries) {
+    const address = senderEmail(email.from).toLowerCase();
     const domain = domainOf(address);
     if (!domain) continue;
     if (FREE_MAIL_DOMAINS.has(domain) || selfDomains.has(domain)) continue;
@@ -139,5 +119,5 @@ export async function inferRuleCandidates(
     }
   }
   candidates.sort((a, b) => b.receiptLike - a.receiptLike || b.total - a.total);
-  return { scanned: list.length, candidates };
+  return { scanned: summaries.length, candidates };
 }

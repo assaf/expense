@@ -221,7 +221,7 @@ export function useEditorFlow() {
  * when there is no error. */
 export function ErrorBanner({ error }: { error: string }) {
   if (!error) return null;
-  return <Alert className="mb-4 text-red-700 dark:text-red-400">{error}</Alert>;
+  return <Alert className="mb-4">{error}</Alert>;
 }
 
 /**
@@ -501,6 +501,10 @@ export function DescriptionField({
   );
 }
 
+/** The editors' save/cancel/delete row. `complete` drives the
+ * completeness badge: in create mode a fresh expense is expected to be
+ * incomplete, so the badge only means something while editing an
+ * existing row (callers pass `isNew ? true : complete`). */
 export function EditorActions({
   complete,
   saving,

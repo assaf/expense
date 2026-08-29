@@ -13,8 +13,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
+import type { ReactNode } from "react";
 import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
 import { BENEFITS, BLOG_URL, SITE_URL } from "~/lib/seo-content";
 
@@ -114,6 +116,29 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   },
 ];
 
+/** The browser-window mock framing both marketing screenshots: the
+ * traffic-light dot header over a full-width screenshot. */
+function BrowserFrame({
+  src,
+  alt,
+  children,
+}: {
+  src: string;
+  alt: string;
+  children?: ReactNode;
+}) {
+  return (
+    <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
+      <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+        <span className="h-3 w-3 rounded-full bg-red-400" />
+        <span className="h-3 w-3 rounded-full bg-amber-400" />
+        <span className="h-3 w-3 rounded-full bg-green-400" />
+      </div>
+      <img src={src} alt={alt} className="w-full" />
+      {children}
+    </figure>
+  );
+}
 export default function LandingPage() {
   return (
     <SitePage>
@@ -157,18 +182,10 @@ export default function LandingPage() {
 
         {/* App screenshot */}
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
-          <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
-            <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
-              <span className="h-3 w-3 rounded-full bg-red-400" />
-              <span className="h-3 w-3 rounded-full bg-amber-400" />
-              <span className="h-3 w-3 rounded-full bg-green-400" />
-            </div>
-            <img
-              src="/screenshot-hero.png"
-              alt="The Expense home page: report totals, receipts with thumbnails, and a mileage entry"
-              className="w-full"
-            />
-          </figure>
+          <BrowserFrame
+            src="/screenshot-hero.png"
+            alt="The Expense home page: report totals, receipts with thumbnails, and a mileage entry"
+          />
         </section>
 
         {/* Features */}
@@ -187,10 +204,7 @@ export default function LandingPage() {
             </p>
             <div className="mx-auto mt-12 flex max-w-2xl flex-col gap-3">
               {FEATURES.map((f) => (
-                <div
-                  key={f.title}
-                  className="flex items-start gap-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"
-                >
+                <Card key={f.title} className="flex items-start gap-4 p-5">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-700">
                     <f.icon aria-hidden="true" className="h-5 w-5 text-ink" />
                   </div>
@@ -200,7 +214,7 @@ export default function LandingPage() {
                       {f.body}
                     </p>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
@@ -235,17 +249,10 @@ export default function LandingPage() {
                 ))}
               </ol>
             </div>
-            <figure className="overflow-hidden rounded-xl bg-white shadow-xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
-              <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
-                <span className="h-3 w-3 rounded-full bg-red-400" />
-                <span className="h-3 w-3 rounded-full bg-amber-400" />
-                <span className="h-3 w-3 rounded-full bg-green-400" />
-              </div>
-              <img
-                src="/screenshot-expense.png"
-                alt="The receipt editor: OCR and AI filled in merchant, amount, and category"
-                className="w-full"
-              />
+            <BrowserFrame
+              src="/screenshot-expense.png"
+              alt="The receipt editor: OCR and AI filled in merchant, amount, and category"
+            >
               <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
                 <Sparkles
                   aria-hidden="true"
@@ -254,7 +261,7 @@ export default function LandingPage() {
                 The receipt editor: OCR and AI filled in merchant, amount, and
                 category.
               </figcaption>
-            </figure>
+            </BrowserFrame>
           </div>
         </section>
 
@@ -263,7 +270,7 @@ export default function LandingPage() {
           id="ai-assistants"
           className="mx-auto max-w-6xl px-4 pb-20 sm:px-6"
         >
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 sm:p-12 dark:border-gray-700 dark:bg-gray-800">
+          <Card className="rounded-2xl p-8 sm:p-12">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
               <Bot aria-hidden="true" className="h-4 w-4" /> AI-native
             </div>
@@ -302,7 +309,7 @@ export default function LandingPage() {
               allow access, and it is connected. Disconnect any time with one
               click in the Settings menu.
             </p>
-          </div>
+          </Card>
         </section>
 
         {/* CTA */}

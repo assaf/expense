@@ -43,6 +43,13 @@ export function fromIsoOrNull(iso: string | null): TimestampString<3> | null {
   return iso === null ? null : (iso as TimestampString<3>);
 }
 
+/** The current instant as a timestamp write value. One name for the
+ * fromIso-of-now incantation every create/update site used to spell
+ * out. */
+export function nowWire(): TimestampString<3> {
+  return fromIso(new Date().toISOString());
+}
+
 /** Decimal text → numeric write value (the codec is string pass-through). */
 export function asNumericOf<P extends number, S extends number>(
   text: string,

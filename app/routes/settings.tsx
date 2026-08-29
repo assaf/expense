@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Check, MapPin, LogOut, RefreshCw, Settings } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
+import { Card } from "~/components/ui/Card";
 import { PageShell } from "~/components/PageShell";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
@@ -26,7 +27,8 @@ import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
-import { formatShortDate, todayDate } from "~/lib/format";
+import { formatShortDate } from "~/lib/format";
+import { useToday } from "~/lib/use-today";
 import {
   MILEAGE_TYPE_LABELS,
   MILEAGE_TYPES,
@@ -135,10 +137,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   // The "current rate" line depends on the browser's local today (the
   // server runs UTC); computed client-side after mount.
-  const [today, setToday] = useState<string | null>(null);
-  useEffect(() => {
-    setToday(todayDate());
-  }, []);
+  const today = useToday();
   const currentRates = useMemo(
     () => (today ? currentMileageRates(rates, today) : null),
     [today, rates],
@@ -155,7 +154,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           Everyone in this account shares expenses, reports, categories, and
           settings.
         </p>
-        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+        <Card className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -230,7 +229,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
               emailed verification link yet.
             </p>
           </div>
-        </div>
+        </Card>
       </section>
 
       <NameList

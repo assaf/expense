@@ -19,8 +19,9 @@ const TONE_CLASSES: Record<BadgeTone, string> = {
 
 interface BadgeProps extends ComponentProps<"span"> {
   tone: BadgeTone;
-  /** Square tag style (category labels): rounded corners, regular weight,
-   * tighter padding. Ignores `tone`; only the gray variant exists. */
+  /** Square tag style (category labels, inline facts): rounded corners,
+   * tighter padding, no weight bump. `tone` picks the color pair, as for
+   * the pill. */
   square?: boolean;
   /** Optional leading icon (already aria-hidden by the caller). */
   icon?: ReactNode;
@@ -41,7 +42,7 @@ export function Badge({
     <span
       className={cn(
         square
-          ? "rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs"
+          ? cn("rounded px-1.5 py-0.5 text-xs", TONE_CLASSES[tone])
           : cn(
               "rounded-full px-2 py-0.5 text-xs font-medium",
               TONE_CLASSES[tone],

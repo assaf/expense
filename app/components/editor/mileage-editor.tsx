@@ -482,7 +482,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
           </div>
         ) : null}
         {routeError ? (
-          <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-700 dark:text-red-400">
+          <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 bg-red-50 dark:bg-red-950 px-3 py-2 text-sm text-red-600 dark:text-red-400">
             <AlertTriangle aria-hidden="true" className="h-4 w-4" />
             {routeError}
           </div>
@@ -618,8 +618,6 @@ export function MileageEditor({ data }: { data: EditorData }) {
       />
 
       <EditorActions
-        // Create mode: a fresh expense is expected to be incomplete. The
-        // badge only means something while editing an existing row.
         complete={isNew ? true : complete}
         saving={fetcher.state !== "idle"}
         onCancel={doCancel}

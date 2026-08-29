@@ -154,6 +154,69 @@ function ms(days: number): number {
   return days * 24 * 60 * 60 * 1000;
 }
 
+/** What a push-ops adapter provides: list/create/destroy bound to one auth
+ * flavor. The per-flavor plumbing (token, keys, endpoints) lives in the
+ * closures; the renewal algorithm here is shared. */
+export interface EnsurePushSubscriptionIo {
+  list(): Promise<
+    { id: string; deviceClientId: string; expires: string | null }[]
+  >;
+  create(opts: {
+    url: string;
+    deviceClientId: string;
+    expires: string;
+  }): Promise<string>;
+  destroy(id: string): Promise<void>;
+  url: string;
+  deviceClientId: string;
+}
+
+/** The result of a renewal pass: the live subscription's id and expiry, and
+ * whether this pass created it. */
+export interface LivePushSubscription {
+  id: string;
+  expires: string;
+  created: boolean;
+}
+
+/** The renewal algorithm both push flavors share: destroy our subscriptions
+ * that expired (or expire within RENEW_WITHIN_DAYS), keep one live, else
+ * create a fresh SUBSCRIPTION_LIFETIME_DAYS subscription. Lists fresh after
+ * destroying, so a subscription another instance created in between is
+ * kept, not duplicated. Recreating triggers a fresh PushVerification push
+ * to the flavor's own webhook. */
+export async function ensurePushSubscription(
+  io: EnsurePushSubscriptionIo,
+): Promise<LivePushSubscription> {
+  const notBefore = Date.now() + ms(RENEW_WITHIN_DAYS);
+  const ours = (await io.list()).filter(
+    (s) => s.deviceClientId === io.deviceClientId,
+  );
+  for (const s of ours) {
+    if (!s.expires || new Date(s.expires).getTime() < notBefore) {
+      await io.destroy(s.id);
+    }
+  }
+  const remaining = (await io.list()).filter(
+    (s) => s.deviceClientId === io.deviceClientId,
+  );
+  const live = remaining.find(
+    (s) => s.expires && new Date(s.expires).getTime() >= notBefore,
+  );
+  if (live?.expires) {
+    return { id: live.id, expires: live.expires, created: false };
+  }
+  const expires = new Date(
+    Date.now() + ms(SUBSCRIPTION_LIFETIME_DAYS),
+  ).toISOString();
+  const id = await io.create({
+    url: io.url,
+    deviceClientId: io.deviceClientId,
+    expires,
+  });
+  return { id, expires, created: true };
+}
+
 /**
  * Make sure a live, verified subscription for our deviceClientId exists.
  * Self-heals an expired (or soon-expiring) subscription; recreating it
@@ -165,38 +228,12 @@ export async function ensureSubscription(): Promise<string> {
   }
   const p256dh = p256dhFromPrivate(PUSH_PRIVATE_KEY);
   const auth = PUSH_AUTH;
-
-  const subs = await listSubscriptions();
-  const ours = subs.filter((s) => s.deviceClientId === DEVICE_CLIENT_ID);
-
-  for (const s of ours) {
-    const expiring =
-      !s.expires ||
-      new Date(s.expires).getTime() < Date.now() + ms(RENEW_WITHIN_DAYS);
-    if (expiring) {
-      await destroySubscription(s.id);
-    }
-  }
-
-  const remaining = (await listSubscriptions()).filter(
-    (s) => s.deviceClientId === DEVICE_CLIENT_ID,
-  );
-  const live = remaining.find(
-    (s) =>
-      s.expires &&
-      new Date(s.expires).getTime() >= Date.now() + ms(RENEW_WITHIN_DAYS),
-  );
-  if (live) return live.id;
-
-  const expires = new Date(
-    Date.now() + ms(SUBSCRIPTION_LIFETIME_DAYS),
-  ).toISOString();
-  const id = await createSubscription({
+  const { id } = await ensurePushSubscription({
     url: pushUrl(),
-    p256dh,
-    auth,
     deviceClientId: DEVICE_CLIENT_ID,
-    expires,
+    list: () => listSubscriptions(),
+    destroy: destroySubscription,
+    create: (opts) => createSubscription({ ...opts, p256dh, auth }),
   });
   return id;
 }

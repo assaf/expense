@@ -1,6 +1,7 @@
 import { KeyRound } from "lucide-react";
 import { useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
+import { Card } from "~/components/ui/Card";
 import { formatShortDate } from "~/lib/format";
 
 /**
@@ -32,7 +33,7 @@ export function AgentsSection({
         log mileage, answer “how much did I spend on …?”, build and export
         reports, and reconcile bank statements against logged expenses.
       </p>
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+      <Card className="p-4">
         <div className="mb-4">
           <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
             Endpoint
@@ -100,7 +101,7 @@ export function AgentsSection({
             from connecting again; it can reconnect by signing in again.
           </p>
         </div>
-      </div>
+      </Card>
     </section>
   );
 }

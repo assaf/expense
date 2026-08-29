@@ -4,7 +4,9 @@ import {
 } from "~/lib/email-mime.server";
 import {
   fetchRawRfc822,
+  formatAddress,
   jmapCall,
+  jmapImportEmail,
   jmapSessionForToken,
   jmapUploadBlob,
   type JmapTokenInfo,
@@ -59,6 +61,9 @@ export interface ConnectionEmailSummary {
   receivedAt: string;
   subject: string;
   from: string | null;
+  /** First ~50 words of the body; present only when the query asked for
+   * it (opts.includePreview). */
+  preview?: string;
 }
 
 /**
@@ -76,6 +81,9 @@ export async function mailboxSummaries(opts: {
   limit: number;
   /** Newest-first (default: oldest-first, the drain's cursor contract). */
   descending?: boolean;
+  /** Also fetch the body preview (the rule-inference scan's classifier
+   * input). Off by default: previews cost extra wire bytes. */
+  includePreview?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
   const mailboxId = await mailboxIdByRole(opts.token, opts.role);
   const query = await jmapCall(opts.token, [
@@ -101,7 +109,13 @@ export async function mailboxSummaries(opts: {
       {
         accountId: (await jmapSessionForToken(opts.token)).mailAccountId,
         ids,
-        properties: ["id", "receivedAt", "subject", "from"],
+        properties: [
+          "id",
+          "receivedAt",
+          "subject",
+          "from",
+          ...(opts.includePreview ? ["preview"] : []),
+        ],
       },
       "m0",
     ],
@@ -113,17 +127,15 @@ export async function mailboxSummaries(opts: {
       receivedAt?: string;
       subject?: string;
       from?: Array<{ name?: string; email?: string }>;
+      preview?: string;
     };
     const first = email.from?.[0];
     return {
       id: email.id,
       receivedAt: email.receivedAt ?? new Date().toISOString(),
       subject: email.subject ?? "",
-      from: first?.email
-        ? first.name
-          ? `${first.name} <${first.email}>`
-          : first.email
-        : null,
+      from: formatAddress(first),
+      ...(opts.includePreview ? { preview: email.preview ?? "" } : {}),
     };
   });
 }
@@ -210,32 +222,6 @@ export async function moveConnectionEmailToTrash(
   ]);
 }
 
-async function importEmail(
-  token: string,
-  blobId: string,
-  mailboxId: string,
-): Promise<string> {
-  const responses = await jmapCall(token, [
-    [
-      "Email/import",
-      {
-        accountId: (await jmapSessionForToken(token)).mailAccountId,
-        emails: {
-          e1: { blobId, mailboxIds: mailboxId ? { [mailboxId]: true } : {} },
-        },
-      },
-      "m0",
-    ],
-  ]);
-  const created = (
-    responses[0]![1] as {
-      created?: Record<string, { id: string } | null>;
-    }
-  ).created?.["e1"];
-  if (!created) throw new Error("Email/import did not create the message");
-  return created.id;
-}
-
 /**
  * Deliver an email straight into the account's Inbox by writing it via JMAP
  * Email/import, with no EmailSubmission and no Identity/get. FastMail API tokens
@@ -268,7 +254,7 @@ export async function deliverConnectionEmailToInbox(
       `Bearer ${token}`,
       raw,
     );
-    await importEmail(token, blobId, inboxId);
+    await jmapImportEmail(token, { blobId, mailboxId: inboxId });
     console.info("[email-connections] confirmation delivered to Inbox", {
       to: input.to,
       subject: input.subject,

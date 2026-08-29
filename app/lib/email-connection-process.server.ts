@@ -38,7 +38,7 @@ import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
-import { fromIso } from "~/lib/db/wire";
+import { fromIso, nowWire } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -222,7 +222,7 @@ async function claimEmailForProcessing(
       matched: false,
       outcome: "processing",
       error: null,
-      createdAt: fromIso(new Date().toISOString()),
+      createdAt: nowWire(),
     });
     return true;
   } catch (err) {
