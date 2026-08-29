@@ -29,10 +29,12 @@ describe("feature highlights", () => {
     expect(availableHighlights(EMPTY).sort()).toEqual([
       "capture",
       "categories",
+      "command-palette",
       "connect-email",
       "mileage-location",
       "reconcile",
       "reports",
+      "search-operators",
     ]);
   });
 

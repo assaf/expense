@@ -1,5 +1,6 @@
 import {
   Bot,
+  Command,
   CreditCard,
   FileText,
   Fuel,
@@ -7,6 +8,7 @@ import {
   MapPinned,
   Plug,
   ReceiptText,
+  Search,
   Tags,
   Users,
 } from "lucide-react";
@@ -23,10 +25,10 @@ import { Card } from "~/components/ui/Card";
  * every return visit surfaces a different feature without the card ever
  * getting in the way of adding expenses.
  */
-
 export type HighlightId =
   | "capture"
   | "categories"
+  | "command-palette"
   | "connect-email"
   | "email"
   | "mcp"
@@ -34,7 +36,8 @@ export type HighlightId =
   | "mileage-rate"
   | "reports"
   | "invite"
-  | "reconcile";
+  | "reconcile"
+  | "search-operators";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
  * empty strings; the matching highlights are excluded from the pool.
@@ -56,7 +59,9 @@ interface HighlightDef {
   icon: LucideIcon;
   title: string;
   body: (data: HighlightData) => ReactNode;
-  cta: { label: string; to: string };
+  /** Keyboard-driven features have no page to link to; the instruction
+   * (press ⌘K) is the action. Omit when a link would be noise. */
+  cta?: { label: string; to: string };
 }
 
 const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
@@ -83,6 +88,28 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       </>
     ),
     cta: { label: "Manage categories", to: "/settings#categories" },
+  },
+  "command-palette": {
+    icon: Command,
+    title: "Get anywhere from the keyboard",
+    body: () => (
+      <>
+        Press ⌘K and type what you want: jump to a page, add a receipt or
+        mileage, search expenses, export a report. Power keys work too: g then r
+        opens Reports, a starts a new receipt.
+      </>
+    ),
+  },
+  "search-operators": {
+    icon: Search,
+    title: "Search narrows by report, category, or merchant",
+    body: () => (
+      <>
+        Prefix your search and pick from suggestions: report: Q3, category:
+        meals, merchant: Amazon, description: webinar. Combine prefixes to stack
+        filters, and the status line totals every match exactly.
+      </>
+    ),
   },
   "connect-email": {
     icon: Plug,
@@ -207,9 +234,11 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   const pool: HighlightId[] = [
     "capture",
     "categories",
+    "command-palette",
     "mileage-location",
-    "reports",
     "reconcile",
+    "reports",
+    "search-operators",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.
   if (!data.hasEmailConnection) pool.push("connect-email");
@@ -262,11 +291,13 @@ export function FeatureHighlight({
           </p>
         </div>
       </div>
-      <div className="mt-3 pl-12">
-        <Button asChild variant="secondary" size="sm">
-          <Link to={cta.to}>{cta.label}</Link>
-        </Button>
-      </div>
+      {cta && (
+        <div className="mt-3 pl-12">
+          <Button asChild variant="secondary" size="sm">
+            <Link to={cta.to}>{cta.label}</Link>
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
