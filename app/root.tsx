@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import type { LinksFunction } from "react-router";
 import {
   Links,
@@ -180,6 +181,7 @@ export default function App() {
         <Outlet />
         {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
         <ScrollRestoration />
+        {process.env.NODE_ENV === "production" ? <Analytics /> : null}
         <Scripts />
       </body>
     </html>
