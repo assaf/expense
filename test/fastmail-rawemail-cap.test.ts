@@ -37,6 +37,30 @@ const EMAIL_GET = {
     ],
   ],
 };
+/** RFC 8621 types Email/get's messageId as String[]; FastMail sends the
+ * array form, which must never reach the reply envelope as a non-string
+ * (EXPENSE-S: "value.replace is not a function" on every confirmation). */
+const EMAIL_GET_ARRAY_MESSAGE_ID = {
+  methodResponses: [
+    [
+      "Email/get",
+      {
+        list: [
+          {
+            id: "email-1",
+            blobId: "blob-1",
+            receivedAt: "2026-06-01T00:00:00Z",
+            subject: "Receipt",
+            from: [{ name: "Store", email: "store@example.net" }],
+            to: [],
+            messageId: ["<m1@example.net>", "<dup@example.net>"],
+          },
+        ],
+      },
+      "m0",
+    ],
+  ],
+};
 
 /** Stub fetch: session answered once; every other URL consumes the queue.
  * Response instances pass through untouched (needed for streamed bodies). */
@@ -94,5 +118,15 @@ describe("rawEmail size cap", () => {
     stubFetch([EMAIL_GET, new Response(small, { status: 200 })]);
     const email = await rawEmail("email-1");
     expect(email.raw.toString("utf8")).toBe(small);
+  });
+
+  it("normalizes the JMAP String[] messageId to a single string", async () => {
+    const small = "From: store@example.net\r\n\r\nreceipt body";
+    stubFetch([
+      EMAIL_GET_ARRAY_MESSAGE_ID,
+      new Response(small, { status: 200 }),
+    ]);
+    const email = await rawEmail("email-1");
+    expect(email.messageId).toBe("<m1@example.net>");
   });
 });

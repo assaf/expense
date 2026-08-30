@@ -438,7 +438,10 @@ export async function fetchRawRfc822(opts: {
         subject?: string;
         from?: Array<{ name?: string; email?: string }>;
         to?: Array<{ name?: string; email?: string }>;
-        messageId?: string;
+        // RFC 8621 types Email/get's messageId as String[] (Message-ID can
+        // repeat); FastMail sends an array where a string was assumed, and
+        // the raw value reached safeHeaderValue as a non-string (EXPENSE-S).
+        messageId?: string | string[];
       }
     | undefined;
   accountId: string;
@@ -470,6 +473,8 @@ export async function fetchRawRfc822(opts: {
     subject: email.subject ?? "",
     from: formatAddress(email.from?.[0]),
     to: (email.to ?? []).map((a) => formatAddress(a) ?? "").filter(Boolean),
-    messageId: email.messageId ?? "",
+    messageId: Array.isArray(email.messageId)
+      ? (email.messageId[0] ?? "")
+      : (email.messageId ?? ""),
   };
 }

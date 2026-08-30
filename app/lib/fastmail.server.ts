@@ -150,7 +150,7 @@ export async function rawEmail(id: string): Promise<RawEmail> {
         subject?: string;
         from?: Array<{ name?: string; email?: string }>;
         to?: Array<{ name?: string; email?: string }>;
-        messageId?: string;
+        messageId?: string | string[];
       }>;
     }
   >("Email/get", {
