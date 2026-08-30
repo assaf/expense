@@ -1,4 +1,5 @@
 import { KeyRound, MailCheck, ReceiptText } from "lucide-react";
+import { errorMessage } from "~/lib/errors.server";
 import { Link, data } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
@@ -6,13 +7,13 @@ import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import {
-  guardAnonymousAction,
-  recordAnonymousAttempt,
+  guardAnonymousAttempt,
   rejectCrossSitePost,
   requestPasswordReset,
   resetPasswordWithToken,
 } from "~/lib/auth.server";
 import {
+  formEmail,
   formString,
   isEmail,
   MAX_PASSWORD_LENGTH,
@@ -54,11 +55,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "request") {
     // Anonymous work (an email send per request); cap per IP like signup.
-    // Recorded BEFORE the work, matching login: a concurrent burst must see
-    // the attempt while the email send is still in flight.
-    await guardAnonymousAction(request);
-    await recordAnonymousAttempt(request);
-    const email = formString(form, "email").trim().toLowerCase();
+    await guardAnonymousAttempt(request);
+    const email = formEmail(form);
     if (!isEmail(email)) {
       return data({
         view: "request",
@@ -72,19 +70,16 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "reset") {
     // The confirm step derives a full scrypt hash when the token is live,
-    // so cap it per IP like the request email above: every attempt counts,
-    // not just failures, and the count lands before the scrypt work.
-    await guardAnonymousAction(request);
-    await recordAnonymousAttempt(request);
+    // so cap it per IP like the request email above.
+    await guardAnonymousAttempt(request);
     const token = formString(form, "token");
-    const email = formString(form, "email").trim().toLowerCase();
+    const email = formEmail(form);
     const password = formString(form, "password");
     try {
       const result = await resetPasswordWithToken(token, password);
       return data({ view: "done", email: result.email } satisfies ActionData);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Something went wrong";
+      const message = errorMessage(error);
       return data({
         view: "reset",
         token,

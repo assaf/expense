@@ -1,4 +1,5 @@
 import { MailCheck, ReceiptText } from "lucide-react";
+import { errorMessage } from "~/lib/errors.server";
 import { Link, redirect, useFetcher, useSearchParams } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
@@ -10,16 +11,15 @@ import { Input } from "~/components/ui/Input";
 import {
   createAccountWithUser,
   EmailNotVerifiedError,
-  guardAnonymousAction,
+  guardAnonymousAttempt,
   isAuthenticated,
   joinAccountWithInviteCode,
   login,
-  recordAnonymousAttempt,
   rejectCrossSitePost,
   resendAccountVerification,
 } from "~/lib/auth.server";
 import { pageMeta } from "~/lib/seo-content";
-import { formString, MAX_PASSWORD_LENGTH } from "~/lib/validation";
+import { formEmail, formString, MAX_PASSWORD_LENGTH } from "~/lib/validation";
 import type { Route } from "./+types/login";
 
 type Mode = "signin" | "create" | "join" | "resend-verification";
@@ -62,25 +62,17 @@ export async function action({ request }: Route.ActionArgs) {
   const mode = formString(form, "mode") as Mode;
   const url = new URL(request.url);
   const next = safeNext(url.searchParams.get("next"));
-  const email = formString(form, "email").trim().toLowerCase();
+  const email = formEmail(form);
   const password = formString(form, "password");
   // Absolute origin for the verification link in the emailed message.
   const origin = new URL(request.url).origin;
 
-  // cap them per IP, independent of outcome. Sign-in keeps its per-email
-  // lockout AND gets its own per-IP throttle (scope "signin"): without it
-  // one IP could force unlimited scrypt derivations, and the per-email
-  // lockout would be remotely triggerable by any 5 requests.
-  if (mode === "create" || mode === "join" || mode === "resend-verification") {
-    await guardAnonymousAction(request);
-  } else {
-    await guardAnonymousAction(request, "signin");
-  }
-  // Every attempt counts, recorded before the work: five inside 15
-  // minutes lock the IP. Successes consume the budget too (a burst of
-  // signups sends real emails), so counting only failures missed the
-  // expensive path entirely.
-  await recordAnonymousAttempt(request, mode === "signin" ? "signin" : "");
+  // Both flows do anonymous work (signups send emails, sign-in derives
+  // scrypt), so every attempt is capped per IP, independent of outcome.
+  // Sign-in keeps its own throttle scope: without it one IP could force
+  // unlimited scrypt derivations, and the per-email lockout would be
+  // remotely triggerable by any 5 requests.
+  await guardAnonymousAttempt(request, mode === "signin" ? "signin" : "");
 
   try {
     if (mode === "create") {
@@ -128,8 +120,7 @@ export async function action({ request }: Route.ActionArgs) {
     const cookie = await login(email, password, origin);
     return redirect(next, { headers: { "Set-Cookie": cookie } });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Something went wrong";
+    const message = errorMessage(error);
     console.warn("Auth failed (%s): %s", mode, message);
     const unverifiedEmail =
       error instanceof EmailNotVerifiedError ? error.email : undefined;

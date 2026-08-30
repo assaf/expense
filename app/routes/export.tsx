@@ -16,12 +16,12 @@ import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { countLabel, formatAmount } from "~/lib/format";
 import {
-  addReport,
   readReportSummaries,
   removeReport,
   renameReport,
   setReportClosed,
 } from "~/lib/db/reports";
+import { addReportAction } from "~/lib/expense-save.server";
 import type { ReportSummary } from "~/lib/db/reports";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/export";
@@ -40,11 +40,8 @@ export async function action({ request }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request);
 
   switch (intent) {
-    case "addReport": {
-      const name = formString(form, "name").trim();
-      const result = await addReport(user.accountId, name);
-      return Response.json(result.ok ? { ok: true, name } : result);
-    }
+    case "addReport":
+      return addReportAction(form, user.accountId);
     case "removeReport":
       await removeReport(user.accountId, formString(form, "name"));
       break;

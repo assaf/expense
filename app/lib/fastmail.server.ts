@@ -11,7 +11,7 @@ import {
 import {
   fetchRawRfc822,
   getEmailMetadata,
-  jmapBatch,
+  jmapCall,
   jmapImportEmail,
   jmapPushCreate,
   jmapPushDestroy,
@@ -50,26 +50,6 @@ function jmapSession(): Promise<JmapTokenInfo> {
   return jmapSessionForToken(FASTMAIL_TOKEN);
 }
 
-/**
- * POST a batch of method calls; throws on the first per-call error.
- * `capabilities` adds to the standard core + mail capabilities. Thin
- * adapter over the shared `jmapBatch` core (jmap.server.ts) with this
- * client's idempotent-delete tolerance.
- */
-async function jmapApi(
-  methodCalls: unknown[][],
-  capabilities: JmapCapability[] = [],
-): Promise<[string, unknown, string][]> {
-  const s = await jmapSession();
-  return jmapBatch(
-    s.apiUrl,
-    `Bearer ${FASTMAIL_TOKEN}`,
-    methodCalls,
-    capabilities,
-    { tolerateNotFoundDestroy: true },
-  );
-}
-
 /** Unwrap the args of the first method response. */
 function firstArgs(responses: [string, unknown, string][]): unknown {
   const first = responses[0];
@@ -82,7 +62,13 @@ async function call<Args, Result>(
   args: Args,
   capabilities?: JmapCapability[],
 ): Promise<Result> {
-  return firstArgs(await jmapApi([[name, args, "m0"]], capabilities)) as Result;
+  // tolerateNotFoundDestroy: destroying an already-removed object is the
+  // desired end state for this client's idempotent deletes.
+  return firstArgs(
+    await jmapCall(FASTMAIL_TOKEN, [[name, args, "m0"]], capabilities, {
+      tolerateNotFoundDestroy: true,
+    }),
+  ) as Result;
 }
 
 interface Mailbox {

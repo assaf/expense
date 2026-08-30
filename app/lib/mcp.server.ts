@@ -606,38 +606,41 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     },
   );
 
-  // --- list_expenses -------------------------------------------------------
+  // --- list_expenses / expense_summary -------------------------------------
+
+  // Both tools feed the same filterExpenses, so the seven filter fields
+  // are defined once; adding a filter can no longer reach one tool and
+  // silently miss the other.
+  const expenseFilterSchema = z.object({
+    dateFrom: z
+      .string()
+      .optional()
+      .describe("Inclusive start date YYYY-MM-DD."),
+    dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
+    category: z
+      .string()
+      .optional()
+      .describe("Exact category name (case-insensitive)."),
+    merchant: z
+      .string()
+      .optional()
+      .describe(
+        "Substring match on merchant (receipts) or stop addresses (mileage).",
+      ),
+    report: z.string().optional().describe("Exact report name."),
+    unreported: z
+      .boolean()
+      .optional()
+      .describe("Only expenses not in any report."),
+    type: z.enum(["receipt", "mileage"]).optional(),
+  });
 
   server.registerTool(
     "list_expenses",
     {
       description:
         "Query expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first. Amounts are decimal strings.",
-      inputSchema: z.object({
-        dateFrom: z
-          .string()
-          .optional()
-          .describe("Inclusive start date YYYY-MM-DD."),
-        dateTo: z
-          .string()
-          .optional()
-          .describe("Inclusive end date YYYY-MM-DD."),
-        category: z
-          .string()
-          .optional()
-          .describe("Exact category name (case-insensitive)."),
-        merchant: z
-          .string()
-          .optional()
-          .describe(
-            "Substring match on merchant (receipts) or stop addresses (mileage).",
-          ),
-        report: z.string().optional().describe("Exact report name."),
-        unreported: z
-          .boolean()
-          .optional()
-          .describe("Only expenses not in any report."),
-        type: z.enum(["receipt", "mileage"]).optional(),
+      inputSchema: expenseFilterSchema.extend({
         limit: z
           .number()
           .int()
@@ -666,15 +669,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     {
       description:
         'Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to "how much did I spend on X?".',
-      inputSchema: z.object({
-        dateFrom: z.string().optional(),
-        dateTo: z.string().optional(),
-        category: z.string().optional(),
-        merchant: z.string().optional(),
-        report: z.string().optional(),
-        unreported: z.boolean().optional(),
-        type: z.enum(["receipt", "mileage"]).optional(),
-      }),
+      inputSchema: expenseFilterSchema,
     },
     async (args) => {
       const expenses = filterExpenses(await readExpenses(accountId), args);

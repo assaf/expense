@@ -22,6 +22,13 @@ export function formString(form: FormData, key: string): string {
   return v instanceof File ? "" : (v ?? "");
 }
 
+/** Read the email identity field, normalized at the form boundary: emails
+ * are stored and compared lowercased server-side, so every auth route
+ * normalizes the same way. */
+export function formEmail(form: FormData): string {
+  return formString(form, "email").trim().toLowerCase();
+}
+
 /** Standard 400 response for an unrecognized form action intent. */
 export function unknownIntent(): Response {
   return Response.json(

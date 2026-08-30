@@ -57,3 +57,13 @@ export function captureErrorOnce(
   }
   captureError(error, extra);
 }
+
+/** User-presentable message from an unknown thrown value. The fallback
+ * keeps internal error details out of UI responses when the throw is not
+ * an Error (strings, objects); routes render the result verbatim. */
+export function errorMessage(
+  error: unknown,
+  fallback = "Something went wrong",
+): string {
+  return error instanceof Error ? error.message : fallback;
+}

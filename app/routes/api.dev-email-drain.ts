@@ -1,7 +1,6 @@
-import { CRON_SECRET } from "~/lib/env";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
 import { readEmailConnectionById } from "~/lib/db/email-connections";
-import { safeEqual } from "~/lib/passwords";
+import { assertCronSecret } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.dev-email-drain";
 
 /**
@@ -24,14 +23,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (process.env.NODE_ENV === "production") {
     return Response.json({ error: "dev only" }, { status: 404 });
   }
-  if (
-    !safeEqual(
-      request.headers.get("authorization") ?? "",
-      `Bearer ${CRON_SECRET}`,
-    )
-  ) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const denied = assertCronSecret(request);
+  if (denied) return denied;
   const url = new URL(request.url);
   const connectionId = url.searchParams.get("connection");
   if (!connectionId) {

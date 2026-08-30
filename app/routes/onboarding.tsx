@@ -1,15 +1,12 @@
 import { KeyRound, PlugZap, ReceiptText } from "lucide-react";
+import { errorMessage } from "~/lib/errors.server";
 import { Link, data, redirect } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
-import {
-  guardAnonymousAction,
-  recordAnonymousAttempt,
-  rejectCrossSitePost,
-} from "~/lib/auth.server";
+import { guardAnonymousAttempt, rejectCrossSitePost } from "~/lib/auth.server";
 import { isAuthenticated } from "~/lib/auth.server";
 import {
   completeOnboarding,
@@ -17,6 +14,7 @@ import {
 } from "~/lib/onboarding.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
+  formEmail,
   formString,
   MAX_PASSWORD_LENGTH,
   unknownIntent,
@@ -57,10 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "connect-token") {
     // Anonymous work (a FastMail session call per request); cap per IP.
-    // Recorded BEFORE the work, matching login: a concurrent burst must see
-    // the attempt while the outbound call is still in flight.
-    await guardAnonymousAction(request);
-    await recordAnonymousAttempt(request);
+    await guardAnonymousAttempt(request);
     if (!isTokenCryptoConfigured()) {
       return data(
         {
@@ -91,10 +86,9 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "create" || intent === "attach") {
     // Also anonymous work: verifyJmapToken makes an outbound FastMail call
     // (and success hashes a password), so cap it per IP like connect-token.
-    await guardAnonymousAction(request);
-    await recordAnonymousAttempt(request);
+    await guardAnonymousAttempt(request);
     const token = formString(form, "token");
-    const email = formString(form, "email").trim().toLowerCase();
+    const email = formEmail(form);
     const password = formString(form, "password");
     try {
       const outcome = await completeOnboarding({ token, email, password });
@@ -103,8 +97,7 @@ export async function action({ request }: Route.ActionArgs) {
         { headers: { "Set-Cookie": outcome.sessionCookie } },
       );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Something went wrong";
+      const message = errorMessage(error);
       return data({
         step: intent,
         email,

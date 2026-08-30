@@ -245,6 +245,23 @@ export async function recordAnonymousAttempt(
 }
 
 /**
+ * The anonymous-throttle unit of work: reject when the IP is locked out,
+ * then count this attempt BEFORE the work it caps (an email send, a scrypt
+ * derivation, an outbound call). Counting before the work means a
+ * concurrent burst sees the attempt while the slow operation is still in
+ * flight, and successes consume the budget too (a burst of signups sends
+ * real emails). The two calls are one semantic operation; use this wrapper
+ * rather than pairing them by hand at each call site.
+ */
+export async function guardAnonymousAttempt(
+  request: Request,
+  scope = "",
+): Promise<void> {
+  await guardAnonymousAction(request, scope);
+  await recordAnonymousAttempt(request, scope);
+}
+
+/**
  * Validate credentials and, on success, return the Set-Cookie header value
  * for the session. Throws on invalid credentials or an unverified email
  * (EmailNotVerifiedError). Pass the result to
