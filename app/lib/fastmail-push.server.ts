@@ -1,5 +1,6 @@
 import { createECDH, randomBytes, type ECDH } from "node:crypto";
 import { decrypt as eceDecrypt } from "http_ece";
+import { z } from "zod";
 import {
   DEVICE_CLIENT_ID,
   PUSH_AUTH,
@@ -58,11 +59,12 @@ export function ecdhFromPrivate(privateKey: string): ECDH {
   return ecdh;
 }
 
-export interface PushPayload {
-  "@type": string;
-  [key: string]: unknown;
-}
-
+/** The decrypted push envelope. Decryption is the auth (only FastMail
+ * holds the key material), and the schema pins the event shape so a
+ * changed payload is rejected loudly instead of silently no-oping the
+ * drain. Extra event fields are kept (loose object). */
+const pushPayloadSchema = z.looseObject({ "@type": z.string() });
+export type PushPayload = z.infer<typeof pushPayloadSchema>;
 /** Decrypt an RFC 8291 (aes128gcm) Web Push body from Fastmail. */
 export function decryptPushBody(
   ciphertext: Buffer,
@@ -75,7 +77,13 @@ export function decryptPushBody(
     privateKey: ecdh,
     authSecret,
   });
-  return JSON.parse(plain.toString("utf8")) as PushPayload;
+  const parsed = pushPayloadSchema.safeParse(
+    JSON.parse(plain.toString("utf8")),
+  );
+  if (!parsed.success) {
+    throw new Error("push payload shape mismatch");
+  }
+  return parsed.data;
 }
 
 /** Public push endpoint: `<PUBLIC_URL>/api/inbound-push`. */
@@ -132,19 +140,18 @@ export interface PushVerification {
   verificationCode: string;
 }
 
+const pushVerificationSchema = z.object({
+  pushSubscriptionId: z.string(),
+  verificationCode: z.string(),
+});
+
 /** Narrow the PushVerification fields out of a decrypted payload;
  * undefined when either field is missing or not a string. */
 export function pushVerificationOf(
   payload: PushPayload,
 ): PushVerification | undefined {
-  const { pushSubscriptionId, verificationCode } = payload;
-  if (
-    typeof pushSubscriptionId !== "string" ||
-    typeof verificationCode !== "string"
-  ) {
-    return undefined;
-  }
-  return { pushSubscriptionId, verificationCode };
+  const parsed = pushVerificationSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
 }
 
 const SUBSCRIPTION_LIFETIME_DAYS = 30;

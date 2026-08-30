@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { z } from "zod";
 
 import { mileageAmount } from "~/lib/mileage-rates";
 import { geocodedLocations, type Location } from "~/lib/types";
@@ -12,24 +13,60 @@ const METERS_PER_MILE = 1609.344;
  * with the report-map tile fetcher (route-map.server.ts). */
 export const MAP_USER_AGENT = "expense-personal/1.0 (assaf@labnotes.org)";
 
-interface NominatimResult {
-  lat: string;
-  lon: string;
-  display_name: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    county?: string;
-    state?: string;
-    country?: string;
-    /** State-level ISO code, e.g. "US-CA": the reliable source for the
-     * postal abbreviation. */
-    "ISO3166-2-lvl4"?: string;
-  };
-}
+/** A Nominatim coordinate: a string that parses to a finite number. A
+ * junk value must fall back to "no match", never become NaN lat/lng on a
+ * mileage expense. */
+const coordString = z
+  .string()
+  .refine((s) => s.trim() !== "" && Number.isFinite(Number(s)))
+  .transform(Number);
+
+const nominatimResultSchema = z.object({
+  lat: coordString,
+  lon: coordString,
+  display_name: z.string(),
+  address: z
+    .object({
+      house_number: z.string().optional(),
+      road: z.string().optional(),
+      city: z.string().optional(),
+      town: z.string().optional(),
+      village: z.string().optional(),
+      county: z.string().optional(),
+      state: z.string().optional(),
+      country: z.string().optional(),
+      /** State-level ISO code, e.g. "US-CA": the reliable source for the
+       * postal abbreviation. */
+      "ISO3166-2-lvl4": z.string().optional(),
+    })
+    .optional(),
+});
+type NominatimResult = z.infer<typeof nominatimResultSchema>;
+
+/** The OSRM route response. `distance` must be a finite number: it is
+ * divided straight into miles and multiplied by the IRS rate, and an
+ * unchecked 200-with-error body would otherwise store NaN money. */
+const osrmResponseSchema = z.object({
+  routes: z.array(
+    z.object({
+      distance: z.number().finite(),
+      geometry: z
+        .object({
+          coordinates: z.array(
+            z.tuple([z.number().finite(), z.number().finite()]),
+          ),
+        })
+        .optional(),
+    }),
+  ),
+  // OSRM always sends waypoints; requiring them keeps the split-index
+  // access below honest (a body without them falls back to Haversine).
+  waypoints: z.array(
+    z.object({
+      location: z.tuple([z.number(), z.number()]).optional(),
+    }),
+  ),
+});
 
 /** US state + DC names → postal abbreviations. Fallback when the geocoder's
  * ISO3166-2-lvl4 code is missing; non-US states keep their full name. */
@@ -203,14 +240,17 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) return noMatch;
-    const json = (await res.json()) as NominatimResult[];
-    const hit = json[0];
+    const parsed = z
+      .array(nominatimResultSchema)
+      .safeParse(await res.json().catch(() => null));
+    if (!parsed.success) return noMatch;
+    const hit = parsed.data[0];
     if (!hit) return noMatch;
     return {
       location: {
         address: preserveHouseNumber(address, canonicalAddress(hit) || address),
-        lat: Number(hit.lat),
-        lng: Number(hit.lon),
+        lat: hit.lat,
+        lng: hit.lon,
       },
       locality: localityHint(hit),
     };
@@ -306,21 +346,20 @@ async function computeRouteDistance(
       signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) {
-      const json = (await res.json()) as {
-        routes?: {
-          distance: number;
-          geometry?: { coordinates: [number, number][] };
-        }[];
-        waypoints?: { location?: [number, number] }[];
-      };
-      const route = json.routes?.[0];
+      const parsed = osrmResponseSchema.safeParse(
+        await res.json().catch(() => null),
+      );
+      const json = parsed.success ? parsed.data : null;
+      const route = json?.routes[0];
       if (route && route.geometry) {
         const geom = route.geometry.coordinates;
         // The last real waypoint is second-to-last in the response (the
         // final entry is the repeated start). Its snapped location lies on
         // the geometry, so the nearest index is where the return leg
         // begins. Split exactly there.
-        const lastStop = json.waypoints?.[json.waypoints.length - 2]?.location;
+        const lastStop = json
+          ? json.waypoints[json.waypoints.length - 2]?.location
+          : undefined;
         let split = geom.length;
         if (lastStop) {
           let best = Infinity;

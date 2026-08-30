@@ -155,6 +155,24 @@ describe("verifyJmapToken", () => {
     vi.unstubAllGlobals();
   });
 
+  it("reports network when the session document has an unexpected shape", async () => {
+    // The session's URLs feed .replace() templates and every later JMAP
+    // fetch (EXPENSE-S class): a wrong shape must fail the verify loudly,
+    // not poison the cached session.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ apiUrl: 42 }), { status: 200 }),
+      ),
+    );
+    const { verifyJmapToken } = await loadJmap();
+    const result = await verifyJmapToken("fmu1-shape");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("network");
+    vi.unstubAllGlobals();
+  });
+
   it("JmapTokenInfo stays a flat, serializable shape", async () => {
     const info: JmapTokenInfo = {
       username: "a@b.c",

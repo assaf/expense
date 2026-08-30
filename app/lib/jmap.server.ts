@@ -56,13 +56,18 @@ export type JmapTokenVerification =
       message: string;
     };
 
-interface SessionResponse {
-  apiUrl: string;
-  uploadUrl: string;
-  downloadUrl: string;
-  username: string;
-  primaryAccounts: Record<string, string>;
-}
+/** The RFC 8621 session document, narrowed to what the app uses. Zod
+ * validated at the wire boundary: the URLs from here feed .replace()
+ * templates and every later fetch, and the session is cached per token
+ * for the instance lifetime, so one wrong shape would poison them all
+ * (the same failure class as EXPENSE-S). */
+const sessionResponseSchema = z.object({
+  apiUrl: z.string(),
+  uploadUrl: z.string(),
+  downloadUrl: z.string(),
+  username: z.string(),
+  primaryAccounts: z.record(z.string(), z.string()),
+});
 
 async function loadSession(token: string): Promise<JmapTokenVerification> {
   let res: Response;
@@ -92,9 +97,9 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
       message: `FastMail returned ${res.status} — try again in a moment.`,
     };
   }
-  let j: SessionResponse;
+  let body: unknown;
   try {
-    j = (await res.json()) as SessionResponse;
+    body = await res.json();
   } catch {
     return {
       ok: false,
@@ -102,6 +107,15 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
       message: "FastMail returned an unreadable session response.",
     };
   }
+  const parsed = sessionResponseSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: "network",
+      message: "FastMail returned an unreadable session response.",
+    };
+  }
+  const j = parsed.data;
   const mailAccountId = j.primaryAccounts["urn:ietf:params:jmap:mail"];
   if (!mailAccountId) {
     return {

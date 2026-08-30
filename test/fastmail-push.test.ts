@@ -7,6 +7,7 @@ import {
   ecdhFromPrivate,
   generatePushKeys,
   p256dhFromPrivate,
+  pushVerificationOf,
 } from "~/lib/fastmail-push.server";
 
 describe("push keys", () => {
@@ -85,5 +86,39 @@ describe("decryptPushBody", () => {
     expect(() =>
       decryptPushBody(ciphertext, ours.privateKey, ours.auth),
     ).toThrow();
+  });
+});
+
+describe("push payload shape", () => {
+  it("rejects a decrypted payload without the @type envelope", async () => {
+    const keys = generatePushKeys();
+    const sender = createECDH("prime256v1");
+    sender.generateKeys();
+    const ciphertext = encrypt(
+      Buffer.from(JSON.stringify({ pushSubscriptionId: "42" }), "utf8"),
+      {
+        version: "aes128gcm",
+        dh: p256dhFromPrivate(keys.privateKey),
+        privateKey: sender,
+        authSecret: keys.auth,
+      },
+    );
+    expect(() =>
+      decryptPushBody(ciphertext, keys.privateKey, keys.auth),
+    ).toThrow(/push payload shape mismatch/);
+  });
+
+  it("pushVerificationOf narrows only well-formed verification events", () => {
+    expect(
+      pushVerificationOf({
+        "@type": "PushVerification",
+        pushSubscriptionId: "42",
+        verificationCode: "abc123",
+      }),
+    ).toEqual({ pushSubscriptionId: "42", verificationCode: "abc123" });
+    expect(
+      pushVerificationOf({ "@type": "PushVerification", verificationCode: 1 }),
+    ).toBeUndefined();
+    expect(pushVerificationOf({ "@type": "StateChange" })).toBeUndefined();
   });
 });

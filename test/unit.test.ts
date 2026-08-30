@@ -746,6 +746,12 @@ describe("recomputeMileage money math", () => {
               },
             },
           ],
+          // OSRM always sends waypoints (start, stops, repeated start).
+          waypoints: [
+            { location: [-118.2, 34.05] },
+            { location: [-118.1, 34.06] },
+            { location: [-118.2, 34.05] },
+          ],
         }),
       }),
     );
