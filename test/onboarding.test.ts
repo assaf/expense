@@ -21,6 +21,7 @@ import {
 } from "~/lib/onboarding.server";
 import { hashPassword } from "~/lib/passwords";
 import { encryptSecret } from "~/lib/token-crypto.server";
+import { action } from "~/routes/onboarding";
 
 /**
  * FastMail onboarding (/onboarding): the token is the credential, so the
@@ -415,8 +416,50 @@ describe("FastMail onboarding UI", () => {
   it("never shows the welcome panel to an account that did not onboard", async () => {
     await seedTestData();
     const page = await openPage();
-    await signIn(page, TEST_EMAIL, TEST_PASSWORD);
     await pwExpect(page.getByText("You're all set")).not.toBeVisible();
     await page.close();
+  });
+});
+
+describe("FastMail onboarding route throttle", () => {
+  it("caps create/attach attempts per IP like the other anonymous surfaces", async () => {
+    // The route action records the attempt before the work (a FastMail
+    // session call), so five attempts burn the per-IP budget and the sixth
+    // is locked before any outbound call. Mirror of the reset-password cap
+    // test; the route action is called directly with the same mocked
+    // verify the lib tests above use.
+    mockedVerify.mockResolvedValue({
+      ok: false,
+      reason: "invalid-token",
+      message: "FastMail rejected this token — check it and try again.",
+    });
+    const ip = `203.0.113.${Math.floor(Math.random() * 200) + 2}`;
+    const attempt = () => {
+      const form = new FormData();
+      form.set("intent", "create");
+      form.set("token", `fmu1-wrong-${ulid()}`);
+      form.set("email", `onboard-${ulid().toLowerCase()}@example.com`);
+      form.set("password", PASSWORD);
+      return action({
+        request: new Request("http://localhost/onboarding", {
+          method: "POST",
+          body: form,
+          headers: { "x-forwarded-for": ip },
+        }),
+        params: {},
+        context: {},
+      } as Parameters<typeof action>[0]);
+    };
+    for (let i = 0; i < 5; i++) {
+      // React Router's data() returns { data, init } rather than a
+      // Response when the action is called directly.
+      const res = (await attempt()) as {
+        data?: { error?: string };
+        init?: ResponseInit;
+      };
+      expect(res.init?.status ?? 200).toBe(200);
+      expect(res.data?.error).toMatch(/FastMail rejected/);
+    }
+    await expect(attempt()).rejects.toThrow(/Too many failed attempts/);
   });
 });

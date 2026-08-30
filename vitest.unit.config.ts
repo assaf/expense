@@ -30,6 +30,8 @@ export default defineConfig({
       "test/fx.test.ts",
       "test/format.test.ts",
       "test/duplicates.test.ts",
+      "test/within-window.test.ts",
+      "test/jmap-email-schema.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",
