@@ -2,7 +2,7 @@ import {
   pushVerificationOf,
   readFastMailPush,
 } from "~/lib/fastmail-push.server";
-import { decryptSecret } from "~/lib/token-crypto.server";
+import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { setConnectionVerificationCode } from "~/lib/email-connection-push.server";
 import {
   readEmailConnectionById,
@@ -62,7 +62,7 @@ export async function action({ request }: Route.ActionArgs) {
         verificationCode: "",
       };
     try {
-      const token = decryptSecret(connection.tokenEnc);
+      const token = await connectionAccessToken(connection);
       await setConnectionVerificationCode(token, subscriptionId, code);
       if (connection.status === "error") {
         await setEmailConnectionStatus(connection.id, "active");

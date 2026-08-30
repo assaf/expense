@@ -56,6 +56,37 @@ export async function verifyOnboardingToken(
   };
 }
 
+/**
+ * Named shape of the step-two state for the OAuth onboarding path: the
+ * callback already verified the mailbox live, so resolving it only
+ * decides create vs attach — no second network verification.
+ */
+export interface OAuthOnboardingState {
+  email: string;
+  existing: "none" | "verified" | "unverified";
+}
+
+export async function oauthOnboardingState(
+  username: string,
+): Promise<OAuthOnboardingState> {
+  const email = username.toLowerCase();
+  const user = await findUserByEmail(email);
+  return {
+    email,
+    existing: !user ? "none" : user.emailVerifiedAt ? "verified" : "unverified",
+  };
+}
+
+/** Decrypted OAuth credentials handed to completeOnboarding by the
+ * onboarding action (read out of the fmPending session). */
+export interface OAuthCredentials {
+  username: string;
+  mailAccountId: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+}
+
 export interface OnboardingOutcome {
   sessionCookie: string;
   connectionId: string;
@@ -84,14 +115,34 @@ export interface OnboardingOutcome {
  * mailbox can't be connected.
  */
 export async function completeOnboarding(input: {
-  token: string;
+  /** Pasted API token; verified live here. */
+  token?: string;
+  /**
+   * OAuth credentials from the fmPending session (the callback already
+   * verified the access token live seconds earlier; no second network
+   * verification). Exactly one of token/oauth is required.
+   */
+  oauth?: OAuthCredentials;
   email: string;
   password: string;
 }): Promise<OnboardingOutcome> {
+  if (Boolean(input.token) === Boolean(input.oauth)) {
+    throw new Error(
+      "Provide exactly one of an API token or an OAuth connection.",
+    );
+  }
   await initStore();
-  const verification = await verifyJmapToken(input.token);
-  if (!verification.ok) throw new Error(verification.message);
-  const mailboxAddress = verification.info.username;
+  let mailboxAddress: string;
+  let mailAccountId: string;
+  if (input.oauth) {
+    mailboxAddress = input.oauth.username.toLowerCase();
+    mailAccountId = input.oauth.mailAccountId;
+  } else {
+    const verification = await verifyJmapToken(input.token ?? "");
+    if (!verification.ok) throw new Error(verification.message);
+    mailboxAddress = verification.info.username;
+    mailAccountId = verification.info.mailAccountId;
+  }
   const email = input.email.trim().toLowerCase();
 
   const existing = await findUserByEmail(email);
@@ -162,8 +213,14 @@ export async function completeOnboarding(input: {
     accountId,
     provider: "fastmail",
     emailAddress: mailboxAddress,
-    jmapAccountId: verification.info.mailAccountId,
-    tokenEnc: encryptSecret(input.token),
+    jmapAccountId: mailAccountId,
+    tokenEnc: input.oauth
+      ? encryptSecret(input.oauth.accessToken)
+      : encryptSecret(input.token ?? ""),
+    refreshTokenEnc: input.oauth
+      ? encryptSecret(input.oauth.refreshToken)
+      : undefined,
+    tokenExpiresAt: input.oauth ? input.oauth.expiresAt : undefined,
   });
   if (!created.ok) {
     if (createdFresh) {

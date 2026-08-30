@@ -27,7 +27,7 @@ import {
   type ConnectionEmailSummary,
   type RawConnectionEmail,
 } from "~/lib/email-connection-mail.server";
-import { decryptSecret } from "~/lib/token-crypto.server";
+import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import {
@@ -678,7 +678,7 @@ export async function drainEmailConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
-  const token = decryptSecret(connection.tokenEnc);
+  const token = await connectionAccessToken(connection);
   const adapter = options.adapter ?? connectionMailAdapter(token);
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);

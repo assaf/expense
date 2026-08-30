@@ -26,10 +26,13 @@ import {
 } from "~/lib/db/email-connections";
 import { verifyJmapToken } from "~/lib/jmap.server";
 import {
-  decryptSecret,
   encryptSecret,
   isTokenCryptoConfigured,
 } from "~/lib/token-crypto.server";
+import {
+  connectionAccessToken,
+  isFastMailOAuthConfigured,
+} from "~/lib/fastmail-oauth.server";
 import { destroyConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/emails";
@@ -44,18 +47,47 @@ import type { Route } from "./+types/emails";
  *    email there parses and adds it (only from verified sender addresses).
  */
 
+const OAUTH_ERROR_TEXT: Record<string, string> = {
+  state: "The FastMail connection attempt expired or did not match; try again.",
+  denied: "FastMail consent was not granted; nothing was connected.",
+  exchange: "FastMail could not exchange the authorization; try again.",
+  verify:
+    "FastMail approved the connection but the token failed verification; try again.",
+  unconfigured:
+    "Connecting with FastMail is not configured on this deployment.",
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const [inboundSenders, emailConnections] = await Promise.all([
     listInboundSenders(user.accountId),
     listEmailConnections(user.accountId),
   ]);
+  // Post-OAuth-redirect landing params (set by fastmail-oauth-callback).
+  const params = new URL(request.url).searchParams;
+  const connected = params.get("connected");
+  const oauthError = params.get("oauthError");
+  const oauthNotice = connected
+    ? connected === "1"
+      ? {
+          ok: true,
+          text: `${params.get("address") ?? "The mailbox"} connected; expenses will import automatically.`,
+        }
+      : { ok: false, text: params.get("reason") ?? "Could not connect." }
+    : oauthError
+      ? {
+          ok: false,
+          text: OAUTH_ERROR_TEXT[oauthError] ?? "Could not connect.",
+        }
+      : null;
   return {
     userEmail: user.email,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     inboundSenders,
     emailConnections,
     emailAccountsConfigured: isTokenCryptoConfigured(),
+    oauthConfigured: isFastMailOAuthConfigured(),
+    oauthNotice,
   };
 }
 
@@ -155,7 +187,7 @@ export async function action({ request }: Route.ActionArgs) {
         // disconnects. The orphaned subscription dies at expiry and its
         // pushes hit the webhook's unknown-connection path.
         try {
-          const token = decryptSecret(connection.tokenEnc);
+          const token = await connectionAccessToken(connection);
           if (connection.pushSubscriptionId) {
             await destroyConnectionPushSubscription(
               token,
@@ -184,6 +216,8 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function EmailsPage({ loaderData }: Route.ComponentProps) {
   const {
+    oauthConfigured,
+    oauthNotice,
     userEmail,
     inboundAddress,
     inboundSenders,
@@ -204,6 +238,8 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
       <EmailAccountsSection
         connections={emailConnections}
         configured={emailAccountsConfigured}
+        oauthConfigured={oauthConfigured}
+        oauthNotice={oauthNotice}
       />
 
       <section id="receipts-by-email" className="mb-8 scroll-mt-6">

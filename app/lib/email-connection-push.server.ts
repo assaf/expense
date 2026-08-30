@@ -9,7 +9,7 @@ import {
   jmapPushList,
   jmapPushVerify,
 } from "~/lib/jmap.server";
-import { decryptSecret } from "~/lib/token-crypto.server";
+import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { saveEmailConnectionSubscription } from "~/lib/db/email-connections";
 
 /**
@@ -77,7 +77,7 @@ export async function ensureConnectionPushSubscription(connection: {
   if (!PUBLIC_URL) {
     throw new Error("PUBLIC_URL is required for FastMail push");
   }
-  const token = decryptSecret(connection.tokenEnc);
+  const token = await connectionAccessToken(connection);
   const result = await ensurePushSubscription({
     url: connectionPushUrl(connection.id),
     deviceClientId: connectionDeviceClientId(connection.id),

@@ -10,6 +10,34 @@ push webhook + renewal cron, rules + processing pipeline, rule inference
 from an existing inbox), plus the inbox review flow (/email-review), plus
 the first-run FastMail onboarding (/onboarding).**
 
+## Connecting via OAuth
+
+The token-paste flow has an OAuth 2.0 alternative ("Connect with
+FastMail"), gated on `FASTMAIL_OAUTH_CLIENT_ID`: unset (today), the buttons
+are hidden and paste is the only path; set, an Authorization Code + PKCE
+public client flow runs instead (FastMail registers clients manually, no
+client secret exists). Authorization + token endpoints are FastMail's
+(`api.fastmail.com/oauth/authorize|refresh`); the code lives in
+`app/lib/fastmail-oauth.server.ts`, with `/connect-fastmail` (entry) and
+`/fastmail-oauth-callback` (redirect target) routes.
+
+- **Storage**: same `EmailConnection` row as a pasted token, plus
+  `refreshTokenEnc` + `tokenExpiresAt` (null for API-token rows). All
+  consumers go through `connectionAccessToken`, which decrypts and returns
+  the access token for legacy rows unchanged, and for OAuth rows refreshes
+  via the token endpoint 60s before expiry, persisting the ROTATED refresh
+  token (FastMail revokes stale ones; reuse revokes the whole grant).
+- **Requested scopes**: `urn:ietf:params:jmap:core` + `urn:ietf:params:
+jmap:mail` only (no `jmap:submission`: confirmations are imported, not
+  sent).
+- **Onboarding**: the anonymous path parks the ENCRYPTED credentials on
+  the session (`fmPending`, 10-minute TTL) and the onboarding flow consumes
+  them; the callback always verifies the new access token against
+  `jmap/session` before anything is stored.
+- **Disconnect does not revoke the grant server-side**, same caveat as
+  API tokens: users revoke at FastMail (Settings → Privacy & Security →
+  Authorized connections).
+
 ## FastMail onboarding (/onboarding)
 
 First-run flow for users who connect their own mailbox instead of signing

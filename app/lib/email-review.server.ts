@@ -5,7 +5,7 @@ import {
   notificationChargeAmount,
 } from "~/lib/email-classify";
 import { FREE_MAIL_DOMAINS } from "~/lib/email-connection-infer.server";
-import { decryptSecret } from "~/lib/token-crypto.server";
+import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import {
   addEmailRule,
   matchEmailRule,
@@ -548,7 +548,7 @@ export async function scanConnectionInbox(
   connection: EmailConnectionWithSecret,
   options: ScanOptions = {},
 ): Promise<ScanResult> {
-  const token = decryptSecret(connection.tokenEnc);
+  const token = await connectionAccessToken(connection);
   // The scan only reads: nothing moves to Trash until the owner acts on
   // the review list.
   const adapter: ConnectionMailAdapter = options.adapter ?? {
@@ -959,7 +959,7 @@ export async function processReviewItem(input: {
     return { ok: false, error: "This email is not on the review list." };
   }
 
-  const token = decryptSecret(connection.tokenEnc);
+  const token = await connectionAccessToken(connection);
   const adapter = input.adapter ?? connectionMailAdapter(token);
   const summary: ConnectionEmailSummary = {
     id: emailId,

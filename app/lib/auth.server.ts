@@ -58,9 +58,12 @@ if (!SESSION_SECRET) {
 }
 
 const SESSION_COOKIE = "expense_session";
+/** The session key holding the signed-in user id (cookie-session based;
+ * the whole session serializes into the signed cookie). */
+export const SESSION_USER_KEY = "userId";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
-const sessionStorage = createCookieSessionStorage({
+export const sessionStorage = createCookieSessionStorage({
   cookie: {
     name: SESSION_COOKIE,
     httpOnly: true,
@@ -78,7 +81,7 @@ export async function requireUser(request: Request): Promise<User> {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
-  const userId = session.get("userId");
+  const userId = session.get(SESSION_USER_KEY);
   const user =
     typeof userId === "string" ? await findUserById(userId) : undefined;
   if (!user) {
@@ -102,7 +105,7 @@ export async function isAuthenticated(request: Request): Promise<boolean> {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
-  const userId = session.get("userId");
+  const userId = session.get(SESSION_USER_KEY);
   return (
     typeof userId === "string" && (await findUserById(userId)) !== undefined
   );
@@ -111,7 +114,7 @@ export async function isAuthenticated(request: Request): Promise<boolean> {
 /** The Set-Cookie value for the given user's session. */
 async function commitUserSession(userId: string): Promise<string> {
   const session = await sessionStorage.getSession();
-  session.set("userId", userId);
+  session.set(SESSION_USER_KEY, userId);
   return sessionStorage.commitSession(session);
 }
 

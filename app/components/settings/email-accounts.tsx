@@ -27,9 +27,17 @@ interface ConnectResult {
 export function EmailAccountsSection({
   connections,
   configured,
+  oauthConfigured,
+  oauthNotice,
 }: {
   connections: EmailConnectionView[];
   configured: boolean;
+  /** FASTMAIL_OAUTH_CLIENT_ID is set (resolved server-side in the loader;
+   * env.ts never runs in the browser). */
+  oauthConfigured: boolean;
+  /** Landing notice from the OAuth callback redirect (connected=0/1 or
+   * oauthError params). */
+  oauthNotice: { ok: boolean; text: string } | null;
 }) {
   return (
     <section id="email-accounts" className="mb-8 scroll-mt-6">
@@ -60,7 +68,15 @@ export function EmailAccountsSection({
                 ))
               )}
             </ul>
-            <ConnectForm />
+            {oauthNotice ? (
+              <p
+                role="status"
+                className={`mb-2 text-xs ${oauthNotice.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+              >
+                {oauthNotice.text}
+              </p>
+            ) : null}
+            <ConnectForm oauthConfigured={oauthConfigured} />
           </>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -135,7 +151,7 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
   );
 }
 
-function ConnectForm() {
+function ConnectForm({ oauthConfigured }: { oauthConfigured: boolean }) {
   const fetcher = useFetcher<ConnectResult>();
   const [token, setToken] = useState("");
   const busy = fetcher.state !== "idle";
@@ -150,6 +166,19 @@ function ConnectForm() {
       <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
         Connect a FastMail account
       </div>
+      {oauthConfigured ? (
+        <div className="mb-3">
+          <Button asChild size="sm">
+            <a href="/connect-fastmail?next=emails">
+              <Plug aria-hidden="true" className="h-4 w-4" />
+              Connect with FastMail
+            </a>
+          </Button>
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+            or paste an API token
+          </p>
+        </div>
+      ) : null}
       <ol className="mb-2 list-decimal space-y-0.5 pl-5 text-xs text-gray-500 dark:text-gray-400">
         <li>
           Open{" "}

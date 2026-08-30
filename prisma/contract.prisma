@@ -119,6 +119,8 @@ model EmailConnection {
   emailAddress       String
   jmapAccountId      String
   tokenEnc           String
+  refreshTokenEnc   String?
+  tokenExpiresAt    TimestampString(3)?
   status             String            @default("active")
   receivedCount      Int               @default(0)
   processedCount     Int               @default(0)

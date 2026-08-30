@@ -148,6 +148,9 @@ export async function findEmailConnectionByAddress(
 export interface EmailConnectionWithSecret extends EmailConnectionRecord {
   tokenEnc: string;
   jmapAccountId: string;
+  /** OAuth only; null/absent for legacy API-token connections. */
+  refreshTokenEnc?: string | null;
+  tokenExpiresAt?: string | null;
 }
 
 function rowWithSecret(row: {
@@ -165,11 +168,15 @@ function rowWithSecret(row: {
   createdAt: string;
   tokenEnc: string;
   jmapAccountId: string;
+  refreshTokenEnc: string | null;
+  tokenExpiresAt: string | null;
 }): EmailConnectionWithSecret {
   return {
     ...connectionBase(row),
     tokenEnc: row.tokenEnc,
     jmapAccountId: row.jmapAccountId,
+    refreshTokenEnc: row.refreshTokenEnc,
+    tokenExpiresAt: toIsoOrNull(row.tokenExpiresAt),
   };
 }
 
@@ -217,6 +224,8 @@ export async function createEmailConnection(input: {
   emailAddress: string;
   jmapAccountId: string;
   tokenEnc: string;
+  refreshTokenEnc?: string;
+  tokenExpiresAt?: string;
 }): Promise<CreateEmailConnectionResult> {
   const address = input.emailAddress.trim().toLowerCase();
   const existing = await findEmailConnectionByAddress(address);
@@ -236,6 +245,8 @@ export async function createEmailConnection(input: {
     emailAddress: address,
     jmapAccountId: input.jmapAccountId,
     tokenEnc: input.tokenEnc,
+    refreshTokenEnc: input.refreshTokenEnc,
+    tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
     status: "active",
     createdAt: nowWire(),
   });
@@ -289,4 +300,22 @@ export async function setEmailConnectionStatus(
   status: "active" | "error",
 ): Promise<void> {
   await db.orm.public.EmailConnection.where({ id }).update({ status });
+}
+
+/**
+ * Persist rotated OAuth credentials. The refresh token rotates on every
+ * exchange (FastMail revokes the old one), so whatever the token endpoint
+ * returns must be saved before the next call; null clears a field.
+ */
+export async function updateEmailConnectionTokens(input: {
+  id: string;
+  tokenEnc: string;
+  refreshTokenEnc?: string | null;
+  tokenExpiresAt?: string | null;
+}): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id: input.id }).update({
+    tokenEnc: input.tokenEnc,
+    refreshTokenEnc: input.refreshTokenEnc ?? null,
+    tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
+  });
 }

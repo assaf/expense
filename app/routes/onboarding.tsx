@@ -1,15 +1,28 @@
 import { KeyRound, PlugZap, ReceiptText } from "lucide-react";
 import { errorMessage } from "~/lib/errors.server";
-import { Link, data, redirect } from "react-router";
+import { Link, data, redirect, useFetcher } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
-import { guardAnonymousAttempt, rejectCrossSitePost } from "~/lib/auth.server";
+import {
+  guardAnonymousAttempt,
+  rejectCrossSitePost,
+  sessionStorage,
+} from "~/lib/auth.server";
 import { isAuthenticated } from "~/lib/auth.server";
+import { decryptSecret } from "~/lib/token-crypto.server";
+import {
+  FM_PENDING_SESSION_KEY,
+  isFastMailOAuthConfigured,
+  type FmPendingConnection,
+} from "~/lib/fastmail-oauth.server";
 import {
   completeOnboarding,
+  oauthOnboardingState,
+  type OAuthCredentials,
+  type OAuthOnboardingState,
   verifyOnboardingToken,
 } from "~/lib/onboarding.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
@@ -38,11 +51,45 @@ import type { Route } from "./+types/onboarding";
 
 type ActionData =
   | { step: "token"; error?: string }
-  | { step: "create" | "attach"; email: string; token: string; error?: string };
+  | {
+      step: "create" | "attach";
+      email: string;
+      /** Empty on the OAuth path: the credential lives in the fmPending
+       * session, not in the form. */
+      token?: string;
+      error?: string;
+    };
 
-export async function loader({ request }: Route.LoaderArgs) {
+interface LoaderData {
+  configured: boolean;
+  oauthConfigured: boolean;
+  oauthConnected?: OAuthOnboardingState;
+}
+export async function loader({
+  request,
+}: Route.LoaderArgs): Promise<LoaderData> {
   if (await isAuthenticated(request)) throw redirect("/emails");
-  return { configured: isTokenCryptoConfigured() };
+  const session = await sessionStorage.getSession(
+    request.headers.get("Cookie"),
+  );
+  const pending = session.get(FM_PENDING_SESSION_KEY) as
+    | FmPendingConnection
+    | undefined;
+  if (pending) {
+    // The OAuth callback verified the mailbox and parked its encrypted
+    // credentials here; skip straight to the create/attach step. The
+    // session value stays intact until the flow completes (or is
+    // restarted) so form errors can retry without a re-connect.
+    return {
+      configured: isTokenCryptoConfigured(),
+      oauthConfigured: false,
+      oauthConnected: await oauthOnboardingState(pending.username),
+    };
+  }
+  return {
+    configured: isTokenCryptoConfigured(),
+    oauthConfigured: isFastMailOAuthConfigured() && isTokenCryptoConfigured(),
+  };
 }
 
 export function meta(): Route.MetaDescriptors {
@@ -87,11 +134,46 @@ export async function action({ request }: Route.ActionArgs) {
     // Also anonymous work: verifyJmapToken makes an outbound FastMail call
     // (and success hashes a password), so cap it per IP like connect-token.
     await guardAnonymousAttempt(request);
-    const token = formString(form, "token");
+    const token = formString(form, "token").trim();
     const email = formEmail(form);
     const password = formString(form, "password");
+    let oauth: OAuthCredentials | undefined;
+    if (!token) {
+      const session = await sessionStorage.getSession(
+        request.headers.get("Cookie"),
+      );
+      const pending = session.get(FM_PENDING_SESSION_KEY) as
+        | FmPendingConnection
+        | undefined;
+      if (pending) {
+        // The callback verified the access token live moments ago;
+        // decrypt the parked credentials for this server call only.
+        oauth = {
+          username: pending.username,
+          mailAccountId: pending.mailAccountId,
+          accessToken: decryptSecret(pending.tokenEnc),
+          refreshToken: decryptSecret(pending.refreshTokenEnc),
+          expiresAt: pending.expiresAt,
+        };
+      }
+    }
+    if (!token && !oauth) {
+      return data({
+        step: intent,
+        email,
+        error: "Your FastMail connection expired. Connect again.",
+      } satisfies ActionData);
+    }
     try {
-      const outcome = await completeOnboarding({ token, email, password });
+      const outcome = await completeOnboarding({
+        token: token || undefined,
+        oauth,
+        email,
+        password,
+      });
+      // The login session cookie replaces the whole cookie session, which
+      // also clears fmPending (cookie sessions serialize their full
+      // contents on every commit).
       return redirect(
         `/email-review?onboarding=1&connection=${outcome.connectionId}`,
         { headers: { "Set-Cookie": outcome.sessionCookie } },
@@ -101,10 +183,21 @@ export async function action({ request }: Route.ActionArgs) {
       return data({
         step: intent,
         email,
-        token,
         error: message,
       } satisfies ActionData);
     }
+  }
+
+  if (intent === "oauth-restart") {
+    // Abandon the parked OAuth credentials (e.g. the wrong mailbox got
+    // connected) and drop back to step 1.
+    const session = await sessionStorage.getSession(
+      request.headers.get("Cookie"),
+    );
+    session.unset(FM_PENDING_SESSION_KEY);
+    throw redirect("/onboarding", {
+      headers: { "Set-Cookie": await sessionStorage.commitSession(session) },
+    });
   }
 
   return unknownIntent();
@@ -114,11 +207,19 @@ export default function OnboardingPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
+  const restartFetcher = useFetcher();
   const state: ActionData = actionData ?? { step: "token" };
-  const stepTwo = state.step === "create" || state.step === "attach";
+  const oauth = loaderData.oauthConnected;
+  const step: "create" | "attach" | "token" = oauth
+    ? oauth.existing === "verified"
+      ? "attach"
+      : "create"
+    : state.step;
+  const stepTwo = step !== "token";
   const error = state.error ?? null;
-  const email = stepTwo ? state.email : "";
-  const token = stepTwo ? state.token : "";
+  const email = "email" in state ? state.email : (oauth?.email ?? "");
+  // On the OAuth path the credential stays in the fmPending session.
+  const token = "token" in state && !oauth ? state.token : "";
 
   return (
     <AuthCard>
@@ -131,11 +232,15 @@ export default function OnboardingPage({
         title={stepTwo ? "Set your password" : "Connect your FastMail account"}
         blurb={
           stepTwo
-            ? email
-              ? state.step === "attach"
-                ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
-                : `We found your address from the token: ${email}. Set a password to create your account.`
-              : ""
+            ? oauth
+              ? step === "attach"
+                ? `Connected as ${email} via FastMail. This mailbox already has an Expense account; sign in to connect it to whichever account you use.`
+                : `Connected as ${email} via FastMail. Set a password to create your account.`
+              : email
+                ? step === "attach"
+                  ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
+                  : `We found your address from the token: ${email}. Set a password to create your account.`
+                : ""
             : "We automatically import and process your expenses from your inbox, no manual forwarding. Your token proves you own the mailbox, so there's no verification email."
         }
         note={`Step ${stepTwo ? 2 : 1} of 2`}
@@ -149,6 +254,19 @@ export default function OnboardingPage({
             </Alert>
           ) : (
             <>
+              {loaderData.oauthConfigured ? (
+                <div className="mb-4 flex flex-col items-center gap-1.5">
+                  <Button asChild size="lg" className="w-full">
+                    <a href="/connect-fastmail?next=onboarding">
+                      <PlugZap aria-hidden="true" className="h-5 w-5" />
+                      Connect with FastMail
+                    </a>
+                  </Button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    or paste an API token
+                  </p>
+                </div>
+              ) : null}
               <ol className="mb-4 list-decimal space-y-0.5 pl-5 text-xs text-gray-500 dark:text-gray-400">
                 <li>
                   Open{" "}
@@ -207,8 +325,8 @@ export default function OnboardingPage({
         </>
       ) : (
         <form method="post" className="flex flex-col gap-4">
-          <input type="hidden" name="intent" value={state.step} />
-          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="intent" value={step} />
+          {!oauth ? <input type="hidden" name="token" value={token} /> : null}
           <Field label="Account email">
             <Input
               type="email"
@@ -221,9 +339,11 @@ export default function OnboardingPage({
             />
           </Field>
           <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
-            {state.step === "attach"
-              ? "Prefilled from your token; change it to the email you sign in with."
-              : "Your account email is the address from your token; the token proves you own it."}
+            {oauth
+              ? "Prefilled from your FastMail connection; change it to the email you sign in with."
+              : step === "attach"
+                ? "Prefilled from your token; change it to the email you sign in with."
+                : "Your account email is the address from your token; the token proves you own it."}
           </p>
           <Field label="Password">
             <Input
@@ -231,7 +351,7 @@ export default function OnboardingPage({
               name="password"
               maxLength={MAX_PASSWORD_LENGTH}
               autoComplete={
-                state.step === "attach" ? "current-password" : "new-password"
+                step === "attach" ? "current-password" : "new-password"
               }
               required
               invalid={!!error}
@@ -239,11 +359,11 @@ export default function OnboardingPage({
             />
           </Field>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            {state.step === "create"
-              ? "At least 8 characters. This is your sign-in password; the token stays stored encrypted and is only used to read your inbox."
+            {step === "create"
+              ? "At least 8 characters. This is your sign-in password; your FastMail connection stays stored encrypted and is only used to read your inbox."
               : "Your password is checked against the account you sign in with; the mailbox connects to it."}
           </p>
-          {state.step === "attach" ? (
+          {step === "attach" ? (
             <Link
               to={`/reset-password?email=${encodeURIComponent(email)}`}
               className="self-end text-xs text-gray-500 dark:text-gray-400 hover:underline"
@@ -257,7 +377,7 @@ export default function OnboardingPage({
             </Alert>
           ) : null}
           <Button type="submit" size="lg" className="mt-2 w-full">
-            {state.step === "attach"
+            {step === "attach"
               ? "Sign in & connect mailbox"
               : "Create my account"}
           </Button>
@@ -266,12 +386,24 @@ export default function OnboardingPage({
               aria-hidden="true"
               className="h-3.5 w-3.5 text-gray-400"
             />
-            <Link
-              to="/onboarding"
-              className="text-gray-500 dark:text-gray-400 hover:underline"
-            >
-              Not {email}? Start over
-            </Link>
+            {oauth ? (
+              <restartFetcher.Form method="post">
+                <input type="hidden" name="intent" value="oauth-restart" />
+                <button
+                  type="submit"
+                  className="text-gray-500 dark:text-gray-400 hover:underline"
+                >
+                  Not {email}? Start over
+                </button>
+              </restartFetcher.Form>
+            ) : (
+              <Link
+                to="/onboarding"
+                className="text-gray-500 dark:text-gray-400 hover:underline"
+              >
+                Not {email}? Start over
+              </Link>
+            )}
           </div>
         </form>
       )}
