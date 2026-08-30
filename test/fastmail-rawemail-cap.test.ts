@@ -105,7 +105,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("rawEmail size cap", () => {
+describe("rawEmail", () => {
   it("rejects mail over MAX_EMAIL_BYTES with a clear error", async () => {
     stubFetch([EMAIL_GET, new Response(dripStream(16), { status: 200 })]);
     await expect(rawEmail("email-1")).rejects.toThrow(
@@ -126,7 +126,18 @@ describe("rawEmail size cap", () => {
       EMAIL_GET_ARRAY_MESSAGE_ID,
       new Response(small, { status: 200 }),
     ]);
+
     const email = await rawEmail("email-1");
     expect(email.messageId).toBe("<m1@example.net>");
+  });
+  it("throws a loud error when Email/get returns an unexpected shape", async () => {
+    stubFetch([
+      {
+        methodResponses: [["Email/get", { list: [{ messageId: 42 }] }, "m0"]],
+      },
+    ]);
+    await expect(rawEmail("email-1")).rejects.toThrow(
+      /Email\/get response shape mismatch/,
+    );
   });
 });

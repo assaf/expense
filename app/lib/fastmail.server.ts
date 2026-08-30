@@ -10,6 +10,7 @@ import {
 } from "~/lib/email-mime.server";
 import {
   fetchRawRfc822,
+  getEmailMetadata,
   jmapBatch,
   jmapImportEmail,
   jmapPushCreate,
@@ -141,26 +142,14 @@ export interface RawEmail {
  */
 export async function rawEmail(id: string): Promise<RawEmail> {
   const s = await jmapSession();
-  const { list } = await call<
-    { accountId: string; ids: string[]; properties: string[] },
-    {
-      list: Array<{
-        blobId?: string;
-        receivedAt?: string;
-        subject?: string;
-        from?: Array<{ name?: string; email?: string }>;
-        to?: Array<{ name?: string; email?: string }>;
-        messageId?: string | string[];
-      }>;
-    }
-  >("Email/get", {
+  const email = await getEmailMetadata({
+    token: FASTMAIL_TOKEN,
     accountId: s.mailAccountId,
-    ids: [id],
-    properties: ["blobId", "receivedAt", "subject", "from", "to", "messageId"],
+    id,
   });
   return fetchRawRfc822({
     id,
-    email: list[0],
+    email,
     accountId: s.mailAccountId,
     downloadUrl: s.downloadUrl,
     headers: bearer(),

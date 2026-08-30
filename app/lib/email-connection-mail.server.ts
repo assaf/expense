@@ -5,6 +5,7 @@ import {
 import {
   fetchRawRfc822,
   formatAddress,
+  getEmailMetadata,
   jmapCall,
   jmapImportEmail,
   jmapSessionForToken,
@@ -168,26 +169,11 @@ export async function rawConnectionEmail(
   id: string,
 ): Promise<RawConnectionEmail> {
   const s: JmapTokenInfo = await jmapSessionForToken(token);
-  const responses = await jmapCall(token, [
-    [
-      "Email/get",
-      {
-        accountId: s.mailAccountId,
-        ids: [id],
-        properties: [
-          "blobId",
-          "receivedAt",
-          "subject",
-          "from",
-          "to",
-          "messageId",
-        ],
-      },
-      "m0",
-    ],
-  ]);
-  const list = (responses[0]![1] as { list?: unknown[] }).list ?? [];
-  const email = list[0] as Parameters<typeof fetchRawRfc822>[0]["email"];
+  const email = await getEmailMetadata({
+    token,
+    accountId: s.mailAccountId,
+    id,
+  });
   return fetchRawRfc822({
     id,
     email,

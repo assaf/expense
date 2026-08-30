@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { readBodyLimited } from "~/lib/ssrf.server";
 
 /**
@@ -412,6 +414,67 @@ export async function jmapImportEmail(
   return created.id;
 }
 
+const jmapAddressSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().optional(),
+});
+
+/** RFC 8621 Email/get shape for the properties both raw-email readers
+ * request. Message-ID is String[] (the header can repeat); a bare string
+ * is tolerated because test mocks and smaller JMAP servers have shipped
+ * both. The rest is nullable: JMAP returns null for absent headers. */
+const jmapEmailMetadataSchema = z.object({
+  blobId: z.string().nullish(),
+  receivedAt: z.string().nullish(),
+  subject: z.string().nullish(),
+  from: z.array(jmapAddressSchema).nullish(),
+  to: z.array(jmapAddressSchema).nullish(),
+  messageId: z.union([z.array(z.string()), z.string()]).nullish(),
+});
+export type EmailMetadata = z.infer<typeof jmapEmailMetadataSchema>;
+
+/** Email/get for one message id, zod-validated at the wire boundary. This
+ * is where FastMail's real response shape enters the app (EXPENSE-S: the
+ * String[] messageId was typed as string, reached the reply envelope, and
+ * killed every confirmation send with "value.replace is not a function").
+ * A missing id returns undefined (fetchRawRfc822 turns that into "Email
+ * not found"); a response that doesn't match the schema throws, so the
+ * next wire-format surprise is loud instead of a swallowed warning. */
+export async function getEmailMetadata(opts: {
+  token: string;
+  accountId: string;
+  id: string;
+}): Promise<EmailMetadata | undefined> {
+  const responses = await jmapCall(opts.token, [
+    [
+      "Email/get",
+      {
+        accountId: opts.accountId,
+        ids: [opts.id],
+        properties: [
+          "blobId",
+          "receivedAt",
+          "subject",
+          "from",
+          "to",
+          "messageId",
+        ],
+      },
+      "m0",
+    ],
+  ]);
+  const parsed = z
+    .object({ list: z.array(jmapEmailMetadataSchema) })
+    .safeParse(responses[0]![1]);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new Error(
+      `Email/get response shape mismatch: ${issue?.path.join(".") || "(root)"} ${issue?.message ?? "invalid"}`,
+    );
+  }
+  return parsed.data.list[0];
+}
+
 /** The common shape of a downloaded RFC 5322 email: fastmail.server's
  * RawEmail and email-connection-mail's RawConnectionEmail both use it. */
 export interface RawRfc822Email {
@@ -431,19 +494,7 @@ export interface RawRfc822Email {
  * for both message/rfc822 and application/octet-stream. */
 export async function fetchRawRfc822(opts: {
   id: string;
-  email:
-    | {
-        blobId?: string;
-        receivedAt?: string;
-        subject?: string;
-        from?: Array<{ name?: string; email?: string }>;
-        to?: Array<{ name?: string; email?: string }>;
-        // RFC 8621 types Email/get's messageId as String[] (Message-ID can
-        // repeat); FastMail sends an array where a string was assumed, and
-        // the raw value reached safeHeaderValue as a non-string (EXPENSE-S).
-        messageId?: string | string[];
-      }
-    | undefined;
+  email: EmailMetadata | undefined;
   accountId: string;
   downloadUrl: string;
   headers: Record<string, string>;
