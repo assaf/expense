@@ -163,6 +163,7 @@ export default function App() {
             defer
             src="https://cloud.umami.is/script.js"
             data-website-id="262a3181-12ef-46cb-902a-9bc2462413da"
+            data-exclude-search="true"
           ></script>
         ) : null}
       </head>
@@ -181,7 +182,17 @@ export default function App() {
         <Outlet />
         {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
         <ScrollRestoration />
-        {process.env.NODE_ENV === "production" ? <Analytics /> : null}
+        {/* Emailed links carry single-use tokens in ?token= (reset,
+        verification, sender claim). Strip the query so the tracker records
+        paths only, never credentials. */}
+        {process.env.NODE_ENV === "production" ? (
+          <Analytics
+            beforeSend={(event) => ({
+              ...event,
+              url: event.url.split(/[?#]/)[0],
+            })}
+          />
+        ) : null}
         <Scripts />
       </body>
     </html>

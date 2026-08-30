@@ -54,10 +54,12 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "request") {
     // Anonymous work (an email send per request); cap per IP like signup.
+    // Recorded BEFORE the work, matching login: a concurrent burst must see
+    // the attempt while the email send is still in flight.
     await guardAnonymousAction(request);
+    await recordAnonymousAttempt(request);
     const email = formString(form, "email").trim().toLowerCase();
     if (!isEmail(email)) {
-      await recordAnonymousAttempt(request);
       return data({
         view: "request",
         error: "Enter a valid email address",
@@ -65,24 +67,22 @@ export async function action({ request }: Route.ActionArgs) {
     }
     // Always the same outcome, whether or not the account exists.
     await requestPasswordReset(email, new URL(request.url).origin);
-    await recordAnonymousAttempt(request);
     return data({ view: "requested" } satisfies ActionData);
   }
 
   if (intent === "reset") {
     // The confirm step derives a full scrypt hash when the token is live,
     // so cap it per IP like the request email above: every attempt counts,
-    // not just failures.
+    // not just failures, and the count lands before the scrypt work.
     await guardAnonymousAction(request);
+    await recordAnonymousAttempt(request);
     const token = formString(form, "token");
     const email = formString(form, "email").trim().toLowerCase();
     const password = formString(form, "password");
     try {
       const result = await resetPasswordWithToken(token, password);
-      await recordAnonymousAttempt(request);
       return data({ view: "done", email: result.email } satisfies ActionData);
     } catch (error) {
-      await recordAnonymousAttempt(request);
       const message =
         error instanceof Error ? error.message : "Something went wrong";
       return data({

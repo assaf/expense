@@ -57,9 +57,11 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (intent === "connect-token") {
     // Anonymous work (a FastMail session call per request); cap per IP.
+    // Recorded BEFORE the work, matching login: a concurrent burst must see
+    // the attempt while the outbound call is still in flight.
     await guardAnonymousAction(request);
+    await recordAnonymousAttempt(request);
     if (!isTokenCryptoConfigured()) {
-      await recordAnonymousAttempt(request);
       return data(
         {
           step: "token",
@@ -70,14 +72,12 @@ export async function action({ request }: Route.ActionArgs) {
     }
     const token = formString(form, "token").trim();
     if (!token) {
-      await recordAnonymousAttempt(request);
       return data({
         step: "token",
         error: "Paste your FastMail API token first.",
       } satisfies ActionData);
     }
     const result = await verifyOnboardingToken(token);
-    await recordAnonymousAttempt(request);
     if (!result.ok) {
       return data({ step: "token", error: result.error } satisfies ActionData);
     }
@@ -89,6 +89,10 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "create" || intent === "attach") {
+    // Also anonymous work: verifyJmapToken makes an outbound FastMail call
+    // (and success hashes a password), so cap it per IP like connect-token.
+    await guardAnonymousAction(request);
+    await recordAnonymousAttempt(request);
     const token = formString(form, "token");
     const email = formString(form, "email").trim().toLowerCase();
     const password = formString(form, "password");
