@@ -78,8 +78,9 @@ describe("GET /api/inbound-cron", () => {
   });
 
   it("reports 503 when FastMail is not configured on the deployment", async () => {
-    // The unconfigured check comes before the secret check: a deployment
-    // without FastMail answers 503 to everything, cron secret or not.
+    // Auth comes first (an unauthenticated caller learns nothing about the
+    // deployment's config); with a valid secret, an unconfigured
+    // deployment answers 503 and never runs the tick.
     env.FASTMAIL_TOKEN = "";
     const res = await loader(args(cronRequest("Bearer cron-secret")));
     expect(res.status).toBe(503);

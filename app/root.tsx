@@ -133,7 +133,8 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
-  const { user, reportNames } = useRouteLoaderData<typeof loader>("root") ?? {};
+  const { user, reportNames, umami } =
+    useRouteLoaderData<typeof loader>("root") ?? {};
   useEffect(() => {
     if (!user) return;
     // Link this session's pageviews/events to the signed-in user. Safe even
@@ -155,14 +156,20 @@ export default function App() {
         <meta name="theme-color" content="#ffffff" />
         <Meta />
         <Links />
-        {/* Umami is production-only: no tracking script (or identify calls)
-        in dev; dev traffic would pollute the stats. */}
+        {/* Umami is production-only: no tracking script (or identify
+        calls) in dev; dev traffic would pollute the stats. This is the ONE
+        Umami integration: app-wide pageviews, conversion events (login
+        signup), and export-download events; the values come from the
+        loader (env-resolved, see umami.server.ts), so deployments without
+        the env vars simply don't track. Pageview URLs exclude the query
+        string: emailed links carry single-use tokens in ?token=, and the
+        tracker must never record them. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-        {process.env.NODE_ENV === "production" ? (
+        {process.env.NODE_ENV === "production" && umami?.scriptUrl ? (
           <script
             defer
-            src="https://cloud.umami.is/script.js"
-            data-website-id="262a3181-12ef-46cb-902a-9bc2462413da"
+            src={umami.scriptUrl}
+            data-website-id={umami.websiteId}
             data-exclude-search="true"
           ></script>
         ) : null}

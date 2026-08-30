@@ -1,5 +1,5 @@
-import * as Sentry from "@sentry/react-router";
 import { PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
+import { cronTick } from "~/lib/cron.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
@@ -7,7 +7,6 @@ import {
   listAllEmailConnections,
   setEmailConnectionStatus,
 } from "~/lib/db/email-connections";
-import { assertCronSecret } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/api.email-connections-cron";
 
 /**
@@ -18,28 +17,23 @@ import type { Route } from "./+types/api.email-connections-cron";
  * fails (revoked token, FastMail error) is flagged status=error so the
  * user sees "Needs attention" in Settings.
  *
- * Same auth as /api/inbound-cron: Vercel cron sends
- * `Authorization: Bearer <CRON_SECRET>`; everything else is rejected.
+ * Auth, monitoring, and the response envelopes are the shared cronTick
+ * helper (app/lib/cron.server.ts), same as /api/inbound-cron: Vercel cron
+ * sends `Authorization: Bearer <CRON_SECRET>`; everything else is rejected.
  */
 
 // Vercel: renewing many connections can exceed the 15s default.
 export const config = { maxDuration: 60 };
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const denied = assertCronSecret(request);
-  if (denied) return denied;
-  if (!PUSH_PRIVATE_KEY || !PUSH_AUTH || !isTokenCryptoConfigured()) {
-    return Response.json(
-      {
-        error:
-          "Email account connections are not configured on this deployment",
-      },
-      { status: 503 },
-    );
-  }
-
-  try {
-    const runTick = async () => {
+  return cronTick(request, {
+    name: "email-connections-cron",
+    crontab: "0 13 * * *",
+    configured:
+      Boolean(PUSH_PRIVATE_KEY && PUSH_AUTH) && isTokenCryptoConfigured(),
+    configuredError:
+      "Email account connections are not configured on this deployment",
+    run: async () => {
       const connections = await listAllEmailConnections();
       const results: Array<{
         id: string;
@@ -86,34 +80,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       }
 
       return { total: connections.length, failed, results };
-    };
-
-    const result = await (Sentry.isInitialized()
-      ? Sentry.withMonitor("expense-email-connections-cron", runTick, {
-          schedule: { type: "crontab", value: "0 13 * * *" },
-          // Vercel kills the lambda at maxDuration (60s); alert when a
-          // tick outlives that window instead of the multi-hour default.
-          // Margin absorbs Vercel cron lateness (observed ~25 min late on
-          // 2026-08-29, well past the old 5-min margin, which logged a
-          // false "missed" while the tick itself ran healthy).
-          maxRuntime: 1,
-          checkinMargin: 30,
-        })
-      : runTick());
-
-    console.info("[email-connections-cron] tick complete", {
-      total: result.total,
-      failed: result.failed,
-    });
-    return Response.json({ ok: true, ...result });
-  } catch (err) {
-    console.error("[email-connections-cron] tick failed:", err);
-    return Response.json({ error: "cron failed" }, { status: 500 });
-  } finally {
-    // Same flush requirement as /api/inbound-cron: the SDK's auto-flush is
-    // Edge-only, so on Node serverless the ok check-in is dropped when the
-    // lambda freezes after the response (the monitor would time out on
-    // every run). Flush explicitly before returning.
-    if (Sentry.isInitialized()) await Sentry.flush(3000);
-  }
+    },
+  });
 }

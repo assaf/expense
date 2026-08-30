@@ -3,7 +3,6 @@ import { errorMessage } from "~/lib/errors.server";
 import { Link, redirect, useFetcher, useSearchParams } from "react-router";
 import { useEffect, useRef, useState } from "react";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
-import { UmamiTag } from "~/components/umami";
 import { Button } from "~/components/ui/Button";
 import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
@@ -156,8 +155,8 @@ export default function LoginPage() {
 
   // Conversion event for Umami: fire once per successful signup or invite
   // join, carrying the ?ref= source. window.umami exists only when the
-  // UmamiTag script loaded (env vars set); optional chaining keeps this a
-  // no-op otherwise. The ref guard stops a resend to the same email from
+  // root layout loaded the Umami script (production + env vars set);
+  // optional chaining keeps this a no-op otherwise. The ref guard stops a
   // double-counting.
   const trackedEmail = useRef("");
   useEffect(() => {
@@ -183,7 +182,6 @@ export default function LoginPage() {
   if (pendingEmail && !dismissed) {
     return (
       <AuthCard center>
-        <UmamiTag />
         <div className="mb-4 flex items-center justify-center">
           <AuthTile>
             <MailCheck aria-hidden="true" className="h-6 w-6 text-white" />
@@ -243,7 +241,6 @@ export default function LoginPage() {
 
   return (
     <AuthCard>
-      <UmamiTag />
       <AuthHeader
         icon={
           <AuthTile>

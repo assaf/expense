@@ -231,18 +231,20 @@ server errors only ever reached Sentry locally this way). The post-deploy smoke
 check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
 production deployment boots with it false.
 
-Sentry cron monitors (`Sentry.withMonitor` on the two daily crons) require an
-EXPLICIT `Sentry.flush()` before the route returns: the SDK's automatic
-`flushIfServerless` only works on Vercel's Edge runtime (its `vercelWaitUntil`
-helper returns early unless `EdgeRuntime` is defined), so on Node serverless
-the ok check-in envelope is dropped when the lambda freezes after responding
-and every run reports a monitor timeout. Both cron routes therefore flush in
-a `finally` block; keep that pattern when adding monitors.
+Sentry cron monitors: both daily crons run through the shared `cronTick`
+helper (`app/lib/cron.server.ts`), which owns the `Sentry.withMonitor`
+wrapping and an EXPLICIT `Sentry.flush()` before the route returns. The
+flush is load-bearing: the SDK's automatic `flushIfServerless` only works on
+Vercel's Edge runtime (its `vercelWaitUntil` helper returns early unless
+`EdgeRuntime` is defined), so on Node serverless the ok check-in envelope is
+dropped when the lambda freezes after responding and every run reports a
+monitor timeout. Never hand-roll a cron route; add a `cronTick` call with a
+new monitor name and crontab instead.
 
-`checkinMargin` is set to 30 minutes on both monitors because Vercel fires
-crons late (2-4 minutes typically, but observed ~25 minutes late on
-2026-08-29); the original 5-minute margin logged every late fire as a
-false "missed" check-in while the tick itself ran healthy.
+`checkinMargin` is set to 30 minutes because Vercel fires crons late (2-4
+minutes typically, but observed ~25 minutes late on 2026-08-29); the
+original 5-minute margin logged every late fire as a false "missed" check-in
+while the tick itself ran healthy.
 
 `vercel env pull` REDACTS sensitive env vars as the literal string
 `[SENSITIVE]` — scripts that need real secrets (EMAIL_TOKEN_ENCRYPTION_KEY,
