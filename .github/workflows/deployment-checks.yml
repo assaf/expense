@@ -28,9 +28,10 @@ name: deployment-checks
 #
 # The migrate-db job passes the prod DDL URL directly via the
 # DATABASE_URL_UNPOOLED GitHub secret (the same session-pooler URL
-# scripts/deploy uses for schema DDL) and runs `prisma db push`. The CI
-# VERCEL_TOKEN can't read project settings (403 PROJECT_UNAUTHORIZED) so
-# `vercel env pull` doesn't work here.
+# scripts/deploy uses for schema DDL) and runs the same `prisma db
+# update` sync as scripts/deploy step 3. The CI VERCEL_TOKEN can't
+# read project settings (403 PROJECT_UNAUTHORIZED) so `vercel env
+# pull` doesn't work here.
 #
 # NOTE: the job names are stable; keep them that way.
 
@@ -169,7 +170,7 @@ jobs:
     name: Migrate prod DB
     runs-on: ubuntu-latest
     # 2m, not 1m: the job must fit checkout + pnpm self-installer + node
-    # setup + pnpm install + prisma db verify, and a cold runner eats ~55s on
+    # setup + pnpm install + prisma db update, and a cold runner eats ~55s on
     # the setup alone (the pnpm/action-setup self-installer alone took 27s
     # on 2026-08-06, killing a 1m job before db push could start).
     timeout-minutes: 2
@@ -194,17 +195,26 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Verify the prod database is reachable and the schema matches.
-      # The Prisma 8 CLI driver lacks TLS support (RC limitation),
-      # so `prisma db update` cannot connect to Supabase. When schema
-      # changes, run `scripts/deploy` locally (which uses the same
-      # DATABASE_URL_UNPOOLED and the v8 CLI with a local pg proxy
-      # that handles SSL). This job catches secret/config issues.
+      # Auto-deploys (git push to main) reach prod without scripts/deploy,
+      # so this job is the schema-sync path for them: same command and URL
+      # as scripts/deploy step 3. The psql precheck fails fast with a
+      # sharper error than prisma's on network/secret issues.
       - name: Verify prod database connectivity
         run: |
           psql "$DATABASE_URL" -c 'SELECT 1' -tA
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+
+      # The old "CLI driver lacks TLS" demotion is stale: the CLI reaches
+      # the session pooler with sslmode=no-verify (proven 2026-08-31 when
+      # EXPENSE-W's missing EmailConnection columns were synced by hand).
+      # Hard failure on any sync problem: a red run is the signal that a
+      # push landed schema-out-of-sync.
+      - name: Sync prod schema
+        run: |
+          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+          DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
+          pnpm prisma db update --no-interactive --confirm "$DB_NAME"
 
   # Post-deploy PDF/OCR/MCP smoke + auto-rollback for Vercel auto-deploys.
   # Pushes to main deploy to production without scripts/deploy, so this job
