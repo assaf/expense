@@ -73,6 +73,30 @@ describe("Email/get wire boundary", () => {
     expect(meta.messageId).toEqual(["<m1@example.com>"]);
   });
 
+  it("accepts null address names: RFC 8621 EmailAddress.name is String|null (EXPENSE-X)", async () => {
+    stubEmailGet({
+      list: [
+        {
+          id: "Md1b",
+          blobId: "Gb1b",
+          receivedAt: "2026-08-31T12:00:00Z",
+          subject: "Receipt",
+          from: [{ name: null, email: "noreply@store.example" }],
+          to: [{ name: null, email: "me@example.com" }],
+          messageId: ["<m1b@store.example>"],
+        },
+      ],
+    });
+    const meta = (await getMetadata("Md1b")) as {
+      from: { name: string | null; email?: string }[];
+      to: { name: string | null; email?: string }[];
+    };
+    // The null flows through to the consumers, which already treat a
+    // missing name as "format as the bare address".
+    expect(meta.from).toEqual([{ name: null, email: "noreply@store.example" }]);
+    expect(meta.to).toEqual([{ name: null, email: "me@example.com" }]);
+  });
+
   it("tolerates a bare-string messageId (smaller JMAP servers ship both)", async () => {
     stubEmailGet({ list: [{ id: "Md2", messageId: "<m2@example.com>" }] });
     const meta = (await getMetadata("Md2")) as { messageId: string };

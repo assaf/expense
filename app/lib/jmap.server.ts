@@ -31,7 +31,7 @@ export const MAX_EMAIL_BYTES = 15_000_000;
  * there is no name; null when there is no address at all). Shared by both
  * raw-email readers. */
 export function formatAddress(
-  a?: { name?: string; email?: string } | null,
+  a?: { name?: string | null; email?: string | null } | null,
 ): string | null {
   if (!a?.email) return null;
   return a.name ? `${a.name} <${a.email}>` : a.email;
@@ -429,8 +429,12 @@ export async function jmapImportEmail(
 }
 
 const jmapAddressSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().optional(),
+  // RFC 8621 EmailAddress.name is String|null: FastMail sends null when a
+  // participant has no display name (EXPENSE-X: name:null killed the whole
+  // Email/get parse). email stays optional: formatAddress maps a missing
+  // address to null and the callers tolerate it.
+  name: z.string().nullish(),
+  email: z.string().nullish(),
 });
 
 /** RFC 8621 Email/get shape for the properties both raw-email readers
