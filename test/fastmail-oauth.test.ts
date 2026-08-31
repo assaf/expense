@@ -504,6 +504,36 @@ describe("connect-fastmail entry", () => {
       createHash("sha256").update(parked.verifier).digest("base64url"),
     );
   });
+
+  it("caps entry minting at the shared per-IP anonymous budget", async () => {
+    // The guard skips empty-IP requests (every other test here), so this
+    // pins the throttle actually engaging on the new route: 5 attempts
+    // (AUTH_THRESHOLD) pass, the 6th trips guardLockout.
+    const oauthMod = await import("~/lib/fastmail-oauth.server");
+    vi.mocked(oauthMod.isFastMailOAuthConfigured).mockReturnValue(true);
+    vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
+    const { loader } = await import("~/routes/connect-fastmail");
+    const ip = "198.51.100.42";
+    const entry = () =>
+      loader(
+        entryArgs(
+          new Request("https://expense.test/connect-fastmail", {
+            headers: { "x-forwarded-for": ip },
+          }),
+        ),
+      ).catch((thrown: unknown) => thrown);
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const res = (await entry()) as Response;
+      expect(res.status).toBe(302);
+    }
+    // The entryArgs convention catches the thrown value: the tripped
+    // guard surfaces as a TooManyAttemptsError, not a redirect Response.
+    const sixth = (await entry()) as unknown;
+    expect(sixth).toBeInstanceOf(Error);
+    expect(sixth).not.toBeInstanceOf(Response);
+    expect((sixth as Error).message).toMatch(/Too many failed attempts/);
+  });
 });
 
 describe("onboarding via fmPending", () => {
