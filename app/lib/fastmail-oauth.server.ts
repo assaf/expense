@@ -165,7 +165,7 @@ export async function exchangeAuthorizationCode(input: {
   });
 }
 
-export async function refreshAccessToken(
+async function refreshAccessToken(
   refreshToken: string,
 ): Promise<OAuthTokenSet> {
   return requestTokenSet({

@@ -245,7 +245,7 @@ const STANDALONE_FAQS: Faq[] = [
 ];
 
 /** The Expensify comparison, pulled out so /alternatives can cite it. */
-export const COMPARISON_FAQ: Faq = {
+const COMPARISON_FAQ: Faq = {
   question: "Can Expense be used as a replacement for Expensify?",
   answer: `Certainly, for personal or small-team expense tracking. Expense is free until the app reaches 100 users (then still free up to 25 invoices a month), reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes, Expense will do it for you, free while we're early and still free up to 25 invoices a month after.`,
 };

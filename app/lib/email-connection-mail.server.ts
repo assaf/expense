@@ -36,10 +36,7 @@ interface MailboxList {
 
 /** Resolve a mailbox id by its role ("inbox", "trash"); shared with the
  * rule-inference scan, which reads the Inbox the same way. */
-export async function mailboxIdByRole(
-  token: string,
-  role: string,
-): Promise<string> {
+async function mailboxIdByRole(token: string, role: string): Promise<string> {
   const responses = await jmapCall(token, [
     [
       "Mailbox/get",

@@ -12,10 +12,7 @@ import type { ExpenseFilters } from "~/lib/expense-read-tools";
  */
 
 /** Keep only the expenses matching the shared filter fields. */
-export function filterExpenses(
-  expenses: Expense[],
-  f: ExpenseFilters,
-): Expense[] {
+function filterExpenses(expenses: Expense[], f: ExpenseFilters): Expense[] {
   return expenses.filter((e) => {
     if (f.dateFrom && (!e.date || e.date < f.dateFrom)) return false;
     if (f.dateTo && (!e.date || e.date > f.dateTo)) return false;
@@ -68,7 +65,7 @@ export function serializeExpense(e: Expense) {
  * breakdown (sorted by total, descending). The grand total is the exact sum
  * of the category buckets: every amount-bearing expense lands in exactly
  * one bucket. */
-export function summarizeExpenses(expenses: Expense[]): {
+function summarizeExpenses(expenses: Expense[]): {
   count: number;
   total: string;
   byCategory: { category: string; count: number; total: string }[];
