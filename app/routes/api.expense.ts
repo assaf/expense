@@ -34,7 +34,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   return new Response(image.buffer as BodyInit, {
     headers: imageResponseHeaders(
       image.mime || "image/png",
-      "public, max-age=300",
+      // Authenticated content (account-scoped draft): private keeps shared
+      // caches out of the loop; the browser still caches for 5 minutes.
+      "private, max-age=300",
     ),
   });
 }

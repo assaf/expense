@@ -9,11 +9,19 @@ Personal expense tracker (receipts + mileage). React Router v8 framework mode, T
 ```sh
 pnpm dev            # dev server
 pnpm check          # prisma contract emit + typegen + oxfmt/oxlint/tsc — run before committing
-pnpm test           # force-resets expense_test + suite (needs local Postgres: brew services start postgresql@18)
+pnpm test           # force-resets expense_test + full suite (needs local Postgres: brew services start postgresql@18)
+pnpm test:changed   # fast lane: only tests related to changes since HEAD (or a ref: pnpm test:changed main)
+pnpm test:related   # fast lane: tests importing the files you name (pnpm test:related app/lib/fx-note.ts)
 pnpm db:push        # sync dev DB to the contract (prisma db update)
 pnpm db:migrate     # apply planned migrations (prisma db migrate)
 pnpm build && pnpm start   # prod build + serve on :3000
 ```
+
+The fast lanes follow the static import graph (vitest `--changed`/`related`), so
+editing hub modules (`env.ts`, `auth.server.ts`, `mcp.server.ts`) correctly
+degenerates to the full suite, and dynamic-only import edges can be missed.
+They are for the dev loop only; `pnpm test` (and `./scripts/deploy`) stays the
+gate.
 
 `./scripts/deploy` (check → tests → db sync → vercel prod), `./scripts/clone` (prod → local), `pnpm setup:push` (FastMail push): `docs/operations.md` / `docs/deploy.md`.
 

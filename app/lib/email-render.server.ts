@@ -279,10 +279,19 @@ async function renderDocument(
     await page.setRequestInterception(true);
     page.on("request", (request) => {
       const url = request.url();
-      if (url.startsWith("http://") || url.startsWith("https://")) {
-        void request.abort();
-      } else {
+      // http(s) is the network case: blocked (static render, remote
+      // content off — like a locked-down email client). data:/blob:/
+      // about: are inert content schemes and pass. Everything else,
+      // notably file://, is aborted too (W-5): an email-controlled
+      // resource URL must never read server files into the render.
+      if (
+        url.startsWith("data:") ||
+        url.startsWith("blob:") ||
+        url.startsWith("about:")
+      ) {
         void request.continue();
+      } else {
+        void request.abort();
       }
     });
     const render = async (): Promise<Uint8Array> => {
