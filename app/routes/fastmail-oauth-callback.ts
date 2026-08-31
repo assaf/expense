@@ -1,6 +1,10 @@
 import { redirect } from "react-router";
 import type { Route } from "./+types/fastmail-oauth-callback";
-import { SESSION_USER_KEY, sessionStorage } from "~/lib/auth.server";
+import {
+  guardAnonymousAttempt,
+  SESSION_USER_KEY,
+  sessionStorage,
+} from "~/lib/auth.server";
 import { findUserById } from "~/lib/db/accounts";
 import { createEmailConnection } from "~/lib/db/email-connections";
 import { initStore } from "~/lib/db/seed";
@@ -61,6 +65,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!code) {
     return finish(`/${next}?oauthError=state`);
   }
+  // Each code exchange is two outbound FastMail calls; cap per IP like
+  // every other anonymous network path (empty-IP requests skip, so tests
+  // are unaffected).
+  await guardAnonymousAttempt(request, "fastmail-oauth-exchange");
 
   let tokens;
   try {

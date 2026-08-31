@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { redirect } from "react-router";
 import type { Route } from "./+types/connect-fastmail";
-import { sessionStorage } from "~/lib/auth.server";
+import { guardAnonymousAttempt, sessionStorage } from "~/lib/auth.server";
 import {
   buildAuthorizeUrl,
   fastMailOAuthClientId,
@@ -39,6 +39,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!isFastMailOAuthConfigured() || !isTokenCryptoConfigured()) {
     throw redirect(`${resumePath(rawNext)}?oauthError=unconfigured`);
   }
+  // Minting flow state costs a signed cookie write and enables two
+  // outbound FastMail calls downstream; cap it per IP like every other
+  // anonymous path (skips empty-IP requests, e.g. tests).
+  await guardAnonymousAttempt(request, "fastmail-oauth");
   const state = randomBytes(32).toString("base64url");
   const { verifier, challenge } = generatePkcePair();
   const session = await sessionStorage.getSession(
