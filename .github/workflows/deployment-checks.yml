@@ -225,15 +225,23 @@ jobs:
           IP=$(getent hosts "$HOST" | awk 'NR==1{print $1}')
           echo "pooler: $HOST ($IP:$PORT)"
           mkdir -p /tmp/pgb
-          printf '[databases]\npostgres = host=%s port=%s dbname=postgres\n[pgbouncer]\nlisten_addr = 127.0.0.1\nlisten_port = 6432\nauth_type = trust\nauth_file = /tmp/pgb/userlist.txt\nserver_tls_sslmode = require\npool_mode = session\nignore_startup_parameters = extra_float_digits,options\npidfile = /tmp/pgb/pgbouncer.pid\nlogfile = /tmp/pgb/pgbouncer.log\n' "$IP" "$PORT" > /tmp/pgb/pgbouncer.ini
+          printf '[databases]\npostgres = host=%s port=%s dbname=postgres\n[pgbouncer]\nlisten_addr = 127.0.0.1\nlisten_port = 6433\nauth_type = trust\nauth_file = /tmp/pgb/userlist.txt\nserver_tls_sslmode = require\npool_mode = session\nignore_startup_parameters = extra_float_digits,options\npidfile = /tmp/pgb/pgbouncer.pid\nlogfile = /tmp/pgb/pgbouncer.log\n' "$IP" "$PORT" > /tmp/pgb/pgbouncer.ini
           printf '"%s" "%s"\n' "$PGUSER" "$PGPASS" > /tmp/pgb/userlist.txt
           sudo apt-get install -y pgbouncer >/dev/null
+          # The package auto-starts a system pgbouncer on the default 6432
+          # with an empty userlist; stop it so ours owns its own port.
+          sudo systemctl stop pgbouncer 2>/dev/null || true
+          sudo systemctl disable pgbouncer 2>/dev/null || true
           pgbouncer -d /tmp/pgb/pgbouncer.ini
           DB_NAME=$(printf '%s' "$DATABASE_URL_UNPOOLED" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
-          export DATABASE_URL="postgres://$PGUSER:$PGPASS@127.0.0.1:6432/$DB_NAME?sslmode=disable"
+          export DATABASE_URL="postgres://$PGUSER:$PGPASS@127.0.0.1:6433/$DB_NAME?sslmode=disable"
           for i in 1 2 3 4 5; do
             psql "$DATABASE_URL" -c 'SELECT 1' -tA && break
-            if [ "$i" = 5 ]; then echo "pgbouncer never came up" >&2; exit 1; fi
+            if [ "$i" = 5 ]; then
+              echo "pgbouncer never came up; its log:" >&2
+              tail -n 20 /tmp/pgb/pgbouncer.log >&2 || true
+              exit 1
+            fi
             sleep 1
           done
           pnpm prisma db update --no-interactive --confirm "$DB_NAME"
