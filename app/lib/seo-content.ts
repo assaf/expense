@@ -85,7 +85,7 @@ export const KEY_FACTS = [
   "Export: a PDF per report with the receipts attached or a ZIP with everything (CSV plus all the receipt images)",
   "Reconciliation: upload a bank statement (PDF, CSV, QFX/OFX, Excel) to match charges against your logged expenses and catch deductions you missed",
   "Mileage: map-based drives at the IRS mileage rate for the drive date/type",
-  "AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth). The assistant can capture receipts, log mileage, answer your spending questions, and build and export reports",
+  "AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth); the assistant can capture receipts, log mileage, answer your spending questions, and build and export reports. In Chrome, the app also registers read-only in-page tools for browser agents (WebMCP)",
   "Multi-user accounts: collaborate on one account with an invite code",
   "Data remains in your account. No ads, no data resale",
 ];
@@ -154,7 +154,7 @@ export const BENEFITS = [
   },
   {
     title: "Use your personal AI assistant",
-    body: "You can connect your own AI assistant (Claude, OpenAI or any MCP-capable) with your account login. No token needed. Just drop a receipt in the chat and it will be uploaded and categorized for you, ask about flight spend, receive exact totals or build a report with the assistant. One-click disconnect in settings.",
+    body: "You can connect your own AI assistant (Claude, OpenAI or any MCP-capable) with your account login. No token needed. Just drop a receipt in the chat and it will be uploaded and categorized for you, ask about flight spend, receive exact totals or build a report with the assistant. One-click disconnect in settings. In Chrome, browser agents also get in-page read tools (WebMCP) without any setup.",
   },
   {
     title: "Your data belongs to you",
@@ -235,7 +235,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "Can I use Expense with an AI assistant?",
-    answer: `Yes. Expense supports the Model Context Protocol (MCP) at /mcp. Point any MCP client (e.g. Claude, OpenAI, or some other assistant) to this endpoint and approve the connection signing in with your account. The assistant can then capture receipts (images or PDFs) using the same OCR pipeline as the web app, log mileage, ask about your spending, group expenses into reports, and export a report as a PDF. At any time, you can disconnect any connected app, or revoke its access tokens from Settings.`,
+    answer: `Yes. Expense supports the Model Context Protocol (MCP) at /mcp. Point any MCP client (e.g. Claude, OpenAI, or some other assistant) to this endpoint and approve the connection signing in with your account. The assistant can then capture receipts (images or PDFs) using the same OCR pipeline as the web app, log mileage, ask about your spending, group expenses into reports, and export a report as a PDF. At any time, you can disconnect any connected app, or revoke its access tokens from Settings. Browsers with WebMCP (Chrome's origin trial) also get the same read tools in-page, using your signed-in session: nothing to connect or configure.`,
   },
   {
     question: "Who makes Expense?",
@@ -347,7 +347,7 @@ function wrap(text: string): string {
 
 /** One-paragraph summary of the MCP integration, quoted by /ai, /ai.md, llms.txt. */
 export const AI_SUMMARY =
-  "Expense follows the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp. Connect any MCP client like Claude, OpenAI, or some other assistant, then log in via OAuth authentication (no API keys necessary). Your assistant will be able to recognize receipts from photos and PDF files in the same way as the web application does, log drives according to the IRS rate, answer questions about spending based on your data, generate and export reports, and reconcile bank statements with your expenses.";
+  "Expense follows the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp. Connect any MCP client like Claude, OpenAI, or some other assistant, then log in via OAuth authentication (no API keys necessary). Your assistant will be able to recognize receipts from photos and PDF files in the same way as the web application does, log drives according to the IRS rate, answer questions about spending based on your data, generate and export reports, and reconcile bank statements with your expenses. In browsers with WebMCP (Chrome's origin trial), Expense also registers in-page read tools for the browser's own agent: same data, your signed-in session, no setup.";
 
 /** The five things an assistant can do (the /ai capability cards). */
 export const AI_CAPABILITIES = [
@@ -516,7 +516,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
-- [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, OpenAI, etc) and approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
+- [AI assistants: MCP server and in-page tools](${SITE_URL}/mcp): Connect any MCP client (Claude, OpenAI, etc) and approve the connection by signing in, or let a browser agent use the read-only in-page WebMCP tools. Either way the assistant can answer spending questions and build reports; the MCP server can also capture receipts, log mileage, and export reports.
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
 ## Optional

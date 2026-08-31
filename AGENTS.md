@@ -21,7 +21,7 @@ pnpm build && pnpm start   # prod build + serve on :3000
 
 - **Dark mode**: system-only; **every component adds `dark:` variants for all color classes** (map: `docs/dark-mode.md`). Use shared primitives (`Button`, `Input`, `Select`, `Card`, `EmptyState`).
 - **State**: all reads/writes via `app/lib/db/`, scoped by `accountId`; never read state client-side. Route types from `./+types/<name>`; alias `~/*` → `app/*`.
-- **MCP**: `/mcp` (Streamable HTTP, OAuth 2.1, Settings → Agents & API) exposes the store: capture_receipt (OCR/DeepSeek, sha256 cache), log_mileage, list_expenses, reports, reconcile. `docs/mcp.md`.
+- **MCP**: `/mcp` (Streamable HTTP, OAuth 2.1, Settings → Agents & API) exposes the store: capture_receipt (OCR/DeepSeek, sha256 cache), log_mileage, list_expenses, reports, reconcile. `docs/mcp.md`. **WebMCP (experiment)**: `app/lib/webmcp.ts` registers read-only in-page tools for Chrome's origin-trial API, backed by the session-authenticated JSON mirror `app/routes/api.webmcp.$resource.ts`.
 - **Maps**: Leaflet client-only dynamic import; Nominatim/OSRM, no keys.
 - **Validation**: plain helpers (`app/lib/validation.ts`, `app/lib/completeness.ts`); Zod only for MCP arg schemas.
 - **Security**: scrypt hashing; escape untrusted text (`escapeHtml`); sanitize filenames; authenticated responses `Cache-Control: private`; HTML denies framing (HSTS from Vercel); untrusted URL fetches only via `fetchPublicUrl` (SSRF checks per redirect hop).

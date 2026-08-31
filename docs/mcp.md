@@ -1,9 +1,13 @@
 # Expense MCP server
 
-The expense tracker speaks the [Model Context
-Protocol](https://modelcontextprotocol.io) over HTTP at `POST /mcp`. Any MCP
-client (Claude, OpenAI, etc) can connect, and with OAuth connecting is just
-**signing in with your account**. An agent connected to your account can do what
+The expense tracker exposes AI agents two ways. Over the wire, it speaks the
+[Model Context Protocol](https://modelcontextprotocol.io) over HTTP at
+`POST /mcp`: any MCP client (Claude, OpenAI, etc) can connect, and with OAuth
+connecting is just **signing in with your account**. In the browser, the app
+also registers read-only in-page tools with agents that support
+[WebMCP](https://webmachinelearning.github.io/webmcp/) (Chrome's origin
+trial); see [WebMCP experiment](#webmcp-experiment-in-page-tools) below.
+An agent connected to your account can do what
 the web app does, without the form:
 
 - **Capture a receipt**: drop a photo or PDF into the chat; it runs the same

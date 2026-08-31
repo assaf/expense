@@ -33,7 +33,7 @@ const AI_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
     `${APP_NAME}: connect your AI assistant`,
-    "Connect Claude, OpenAI, or any MCP client to Expense by signing in: capture receipts, log mileage, answer spending questions, build reports, and reconcile statements. No API keys.",
+    "Connect Claude, OpenAI, or any MCP client over the Expense MCP endpoint, or let a browser agent use Expense's in-page WebMCP tools: capture receipts, log mileage, answer spending questions, and build reports. No API keys.",
     "/ai",
   );
 }
@@ -107,6 +107,19 @@ export default function AiPage() {
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
           No headers or keys. The client discovers the sign-in flow itself.
           Claude and OpenAI connect the same way.
+        </p>
+      </section>
+
+      <section className="mt-14">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
+          In the browser (WebMCP)
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+          In browsers with WebMCP support (Chrome's origin trial), Expense also
+          registers read-only in-page tools for the browser's own agent while
+          you're signed in: list expenses, summarize spending, and list reports.
+          Same data as the MCP server, your signed-in session, no setup. It's
+          read-only; write actions still go through the MCP endpoint.
         </p>
       </section>
 

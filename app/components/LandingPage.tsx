@@ -290,7 +290,9 @@ export default function LandingPage({
               Expense uses the Model Context Protocol (MCP). Simply point
               Claude, OpenAI, or any other MCP client to your account, log in
               for authentication (no tokens to deal with), and let the assistant
-              do the mundane work:
+              do the mundane work. In Chrome, the app also registers in-page
+              tools so the browser's own agent can read your expenses without
+              any setup:
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {AGENT_EXAMPLES.map((example) => (

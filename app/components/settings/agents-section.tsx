@@ -33,6 +33,11 @@ export function AgentsSection({
         log mileage, answer “how much did I spend on …?”, build and export
         reports, and reconcile bank statements against logged expenses.
       </p>
+      <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+        Expense has an in-browser surface too (WebMCP): in Chrome, the app
+        registers read-only tools for the browser's own agent. They use your
+        signed-in session, so they end when you sign out.
+      </p>
       <Card className="p-4">
         <div className="mb-4">
           <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
