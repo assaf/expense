@@ -11,6 +11,7 @@ import {
   jmapSessionForToken,
   jmapUploadBlob,
   type JmapTokenInfo,
+  type RawRfc822Email,
 } from "~/lib/jmap.server";
 
 /**
@@ -152,16 +153,9 @@ export function inboxEmailSummaries(opts: {
 }
 
 // --- Raw email ----------------------------------------------------------------
-
-export interface RawConnectionEmail {
-  id: string;
-  raw: Buffer;
-  receivedAt: string;
-  subject: string;
-  from: string | null;
-  to: string[];
-  messageId: string;
-}
+/** A connected mailbox's raw email. Aliases the shared RawRfc822Email
+ * shape (jmap.server.ts); fetchRawRfc822 is the single builder for it. */
+export type RawConnectionEmail = RawRfc822Email;
 
 /** The full RFC 5322 source of an email (blob download), plus metadata. */
 export async function rawConnectionEmail(

@@ -6,9 +6,9 @@ import {
   readExpensesPage,
 } from "~/lib/expense-read.server";
 import {
-  EXPENSE_FILTER_FIELDS,
+  listExpensesInputSchema,
+  expenseFilterSchema,
   READ_TOOLS,
-  type ExpenseFilters,
 } from "~/lib/expense-read-tools";
 import { hasEnoughStops } from "~/lib/completeness";
 import {
@@ -622,46 +622,16 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   // --- list_expenses / expense_summary / list_reports ----------------------
 
   // The three read tools are thin adapters over the shared implementations
-  // in expense-read.server.ts, with input schemas derived from the shared
-  // filter spec in expense-read-tools.ts. The same implementations and
-  // spec back the WebMCP in-page tools, so both surfaces stay identical.
-  const expenseFilterSchema = z.object(
-    Object.fromEntries(
-      EXPENSE_FILTER_FIELDS.map((field) => {
-        let parsed: z.ZodTypeAny;
-        if (field.kind === "boolean") {
-          parsed = z.boolean().optional();
-        } else if (field.kind === "enum") {
-          parsed = z.enum(field.values as [string, ...string[]]).optional();
-        } else {
-          parsed = z.string().optional();
-        }
-        if (field.description) parsed = parsed.describe(field.description);
-        return [field.name, parsed];
-      }),
-    ),
-  );
-
+  // in expense-read.server.ts, validating with the shared zod schemas from
+  // expense-read-tools.ts. The same schemas and implementations back the
+  // WebMCP in-page tools, so both surfaces stay identical.
   server.registerTool(
     LIST_EXPENSES_SPEC.name,
     {
       description: LIST_EXPENSES_SPEC.description,
-      inputSchema: expenseFilterSchema.extend({
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(500)
-          .optional()
-          .describe("Max rows (default 100)."),
-      }),
+      inputSchema: listExpensesInputSchema,
     },
-    async (args) => {
-      // The derived shape keys are stringly typed (built via
-      // Object.fromEntries); the shared spec defines the real types.
-      const { limit, ...filters } = args as {
-        limit?: number;
-      } & ExpenseFilters;
+    async ({ limit, ...filters }) => {
       return ok(await readExpensesPage(accountId, filters, limit));
     },
   );

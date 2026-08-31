@@ -23,7 +23,7 @@ pnpm build && pnpm start   # prod build + serve on :3000
 - **State**: all reads/writes via `app/lib/db/`, scoped by `accountId`; never read state client-side. Route types from `./+types/<name>`; alias `~/*` → `app/*`.
 - **MCP**: `/mcp` (Streamable HTTP, OAuth 2.1, Settings → Agents & API) exposes the store: capture_receipt (OCR/DeepSeek, sha256 cache), log_mileage, list_expenses, reports, reconcile. `docs/mcp.md`. **WebMCP (experiment)**: `app/lib/webmcp.ts` registers read-only in-page tools for Chrome's origin-trial API, backed by the session-authenticated JSON mirror `app/routes/api.webmcp.$resource.ts`. Both share the read-tool contract (`app/lib/expense-read-tools.ts`) and implementations (`app/lib/expense-read.server.ts`).
 - **Maps**: Leaflet client-only dynamic import; Nominatim/OSRM, no keys.
-- **Validation**: plain helpers (`app/lib/validation.ts`, `app/lib/completeness.ts`); Zod only for MCP arg schemas.
+- **Validation**: plain helpers (`app/lib/validation.ts`, `app/lib/completeness.ts`) for form/domain validation; Zod is fine anywhere it earns its keep, and is the tool-contract language for the agent surfaces (MCP arg schemas, the WebMCP tool schemas derived via `z.toJSONSchema`, provider-response boundaries).
 - **Security**: scrypt hashing; escape untrusted text (`escapeHtml`); sanitize filenames; authenticated responses `Cache-Control: private`; HTML denies framing (HSTS from Vercel); untrusted URL fetches only via `fetchPublicUrl` (SSRF checks per redirect hop).
 - **Logging**: only `.assert`/`.error`/`.info`/`.warn`, prefixed with a context tag.
 

@@ -22,6 +22,7 @@ import {
   type JmapCapability,
   type JmapTokenInfo,
   type PushSubscriptionInfo,
+  type RawRfc822Email,
 } from "~/lib/jmap.server";
 
 /**
@@ -108,19 +109,9 @@ async function mailboxIdByName(name: string): Promise<string> {
 async function receiptsMailboxId(): Promise<string> {
   return mailboxIdByName(RECEIPTS_FOLDER);
 }
-
-export interface RawEmail {
-  id: string;
-  raw: Buffer;
-  receivedAt: string;
-  subject: string;
-  /** First From address, formatted "Name <email>" (or bare email, or null). */
-  from: string | null;
-  /** All To addresses as formatted strings. */
-  to: string[];
-  /** Message-ID header, if present. */
-  messageId: string;
-}
+/** The app mailbox's raw email. Aliases the shared RawRfc822Email shape
+ * (jmap.server.ts); fetchRawRfc822 is the single builder for it. */
+export type RawEmail = RawRfc822Email;
 
 /**
  * Fetch the full RFC 5322 source of an email by downloading its blob, plus

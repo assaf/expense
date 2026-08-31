@@ -493,15 +493,20 @@ export async function getEmailMetadata(opts: {
   return parsed.data.list[0];
 }
 
-/** The common shape of a downloaded RFC 5322 email: fastmail.server's
- * RawEmail and email-connection-mail's RawConnectionEmail both use it. */
+/** The common shape of a downloaded RFC 5322 email; both raw-email
+ * transports return it. fastmail.server (RawEmail) and
+ * email-connection-mail.server (RawConnectionEmail) alias this type, and
+ * fetchRawRfc822 is the one place that builds it. */
 export interface RawRfc822Email {
   id: string;
   raw: Buffer;
   receivedAt: string;
   subject: string;
+  /** First From address, formatted "Name <email>" (or bare email, or null). */
   from: string | null;
+  /** All To addresses as formatted strings. */
   to: string[];
+  /** Message-ID header, if present. */
   messageId: string;
 }
 

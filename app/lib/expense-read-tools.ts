@@ -1,11 +1,10 @@
 /**
  * The read-tool contract shared by the MCP server and the WebMCP in-page
- * tools: which read tools exist, their names, descriptions, filter fields,
- * and wire schemas. The MCP server builds its zod input schemas from
- * EXPENSE_FILTER_FIELDS, the WebMCP client builds its JSON schemas from the
- * same fields, and /api/webmcp parses query strings with
- * parseExpenseFilters. Adding a filter field or changing a description
- * here updates every surface at once.
+ * tools: which read tools exist, their names, descriptions, filter
+ * schemas, and wire shapes. The zod schemas below are the single source:
+ * the MCP server validates with them directly, and the WebMCP client gets
+ * its JSON schemas via z.toJSONSchema, so a field added here updates every
+ * surface at once.
  *
  * Isomorphic by design: imported by the browser bundle (webmcp.ts), so no
  * server-side imports here. New read tools still need a handler in
@@ -13,74 +12,68 @@
  * keeps their contract identical, not their registration automatic.
  */
 
-/** The shared filter fields of list_expenses / expense_summary. */
-export interface ExpenseFilters {
-  dateFrom?: string;
-  dateTo?: string;
-  category?: string;
-  merchant?: string;
-  report?: string;
-  unreported?: boolean;
-  type?: "receipt" | "mileage";
-}
+import { z } from "zod";
 
-export interface ExpenseFilterField {
-  name: keyof ExpenseFilters & string;
-  kind: "string" | "boolean" | "enum";
-  /** For kind "enum". */
-  values?: [string, ...string[]];
-  description?: string;
-}
-
-export const EXPENSE_FILTER_FIELDS: ExpenseFilterField[] = [
-  {
-    name: "dateFrom",
-    kind: "string",
-    description: "Inclusive start date YYYY-MM-DD.",
-  },
-  {
-    name: "dateTo",
-    kind: "string",
-    description: "Inclusive end date YYYY-MM-DD.",
-  },
-  {
-    name: "category",
-    kind: "string",
-    description: "Exact category name (case-insensitive).",
-  },
-  {
-    name: "merchant",
-    kind: "string",
-    description:
+/** Filters shared by list_expenses and expense_summary. Each field's
+ * description doubles as the tool-schema documentation for both surfaces. */
+export const expenseFilterSchema = z.object({
+  dateFrom: z.string().optional().describe("Inclusive start date YYYY-MM-DD."),
+  dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
+  category: z
+    .string()
+    .optional()
+    .describe("Exact category name (case-insensitive)."),
+  merchant: z
+    .string()
+    .optional()
+    .describe(
       "Substring match on merchant (receipts) or stop addresses (mileage).",
-  },
-  { name: "report", kind: "string", description: "Exact report name." },
-  {
-    name: "unreported",
-    kind: "boolean",
-    description: "Only expenses not in any report.",
-  },
-  { name: "type", kind: "enum", values: ["receipt", "mileage"] },
-];
+    ),
+  report: z.string().optional().describe("Exact report name."),
+  unreported: z
+    .boolean()
+    .optional()
+    .describe("Only expenses not in any report."),
+  type: z.enum(["receipt", "mileage"]).optional(),
+});
+export type ExpenseFilters = z.infer<typeof expenseFilterSchema>;
 
-/** Parse the shared filters from a URL query (the /api/webmcp transport). */
+/** list_expenses adds the page-size input; 1-500 mirrors the MCP zod and
+ * the readExpensesPage clamp. */
+export const listExpensesInputSchema = expenseFilterSchema.extend({
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Max rows (default 100)."),
+});
+
+/** Parse the shared filters from a URL query (the /api/webmcp transport).
+ * Every value arrives as a string, so the decoding is explicit: unknown
+ * and empty params are ignored, booleans pass only as bare "true", and
+ * the enum is an allowlist. Same semantics on both agent surfaces. */
 export function parseExpenseFilters(params: URLSearchParams): ExpenseFilters {
   const filters: ExpenseFilters = {};
-  for (const field of EXPENSE_FILTER_FIELDS) {
-    const raw = params.get(field.name);
-    if (raw === null || raw === "") continue;
-    // The kind check tells us which ExpenseFilters key field.name is, but
-    // TS can't narrow a union of keys through the loop; the casts mirror it.
-    if (field.kind === "boolean") {
-      if (raw === "true") filters[field.name as "unreported"] = true;
-    } else if (field.kind === "enum") {
-      if (field.values?.includes(raw)) {
-        filters[field.name as "type"] = raw as "receipt" | "mileage";
-      }
-    } else {
-      filters[field.name as "dateFrom"] = raw;
-    }
-  }
+  const raw = (key: string): string | undefined => {
+    const value = params.get(key);
+    return value === null || value === "" ? undefined : value;
+  };
+  const dateFrom = raw("dateFrom");
+  if (dateFrom !== undefined) filters.dateFrom = dateFrom;
+  const dateTo = raw("dateTo");
+  if (dateTo !== undefined) filters.dateTo = dateTo;
+  const category = raw("category");
+  if (category !== undefined) filters.category = category;
+  const merchant = raw("merchant");
+  if (merchant !== undefined) filters.merchant = merchant;
+  const report = raw("report");
+  if (report !== undefined) filters.report = report;
+  const unreported = raw("unreported");
+  if (unreported === "true") filters.unreported = true;
+  const type = raw("type");
+  if (type === "receipt" || type === "mileage") filters.type = type;
   return filters;
 }
 
@@ -92,7 +85,7 @@ export function filtersToQuery(
 ): string {
   const allowed = schema
     ? new Set(Object.keys((schema.properties as Record<string, unknown>) ?? {}))
-    : new Set(EXPENSE_FILTER_FIELDS.map((f) => f.name));
+    : new Set(Object.keys(expenseFilterSchema.shape));
   const params = new URLSearchParams();
   if (input && typeof input === "object") {
     for (const [key, value] of Object.entries(
@@ -112,28 +105,20 @@ export function filtersToQuery(
   return params.toString();
 }
 
-/** JSON Schema for the shared filters, for the WebMCP tool registration. */
+/** JSON Schema for the shared filters, for the WebMCP tool registration.
+ * Derived from the zod schemas so the two surfaces cannot drift; $schema
+ * and additionalProperties are stripped to keep the registered contract
+ * plain and open like it has always been. */
 export function expenseFilterJsonSchema({
   withLimit = false,
 }: { withLimit?: boolean } = {}): Record<string, unknown> {
-  const properties: Record<string, Record<string, unknown>> = {};
-  for (const field of EXPENSE_FILTER_FIELDS) {
-    const prop: Record<string, unknown> =
-      field.kind === "enum"
-        ? { type: "string", enum: field.values }
-        : { type: field.kind === "boolean" ? "boolean" : "string" };
-    if (field.description) prop.description = field.description;
-    properties[field.name] = prop;
-  }
-  if (withLimit) {
-    properties.limit = {
-      type: "number",
-      description: "Max rows, 1-500 (default 100).",
-    };
-  }
-  return { type: "object", properties };
+  const json = z.toJSONSchema(
+    withLimit ? listExpensesInputSchema : expenseFilterSchema,
+  ) as Record<string, unknown>;
+  delete json.$schema;
+  delete json.additionalProperties;
+  return json;
 }
-
 /** One read tool, described once for both surfaces. */
 export interface ReadToolSpec {
   name: string;

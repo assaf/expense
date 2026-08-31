@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
  */
 
 import {
-  EXPENSE_FILTER_FIELDS,
   READ_TOOLS,
   expenseFilterJsonSchema,
   filtersToQuery,
@@ -66,26 +65,43 @@ describe("filtersToQuery", () => {
 });
 
 describe("expenseFilterJsonSchema", () => {
-  it("describes every shared filter field", () => {
+  it("derives every shared filter field with its zod description", () => {
     const schema = expenseFilterJsonSchema() as {
-      type: string;
       properties: Record<string, { type: string; description?: string }>;
     };
-    for (const field of EXPENSE_FILTER_FIELDS) {
-      expect(schema.properties[field.name]).toBeDefined();
-    }
+    expect(Object.keys(schema.properties).sort()).toEqual(
+      [
+        "category",
+        "dateFrom",
+        "dateTo",
+        "merchant",
+        "report",
+        "type",
+        "unreported",
+      ].sort(),
+    );
     expect(schema.properties.type).toEqual({
       type: "string",
       enum: ["receipt", "mileage"],
     });
+    expect(schema.properties.unreported).toMatchObject({ type: "boolean" });
+    expect(schema.properties.merchant.description).toContain("Substring");
     expect(schema.properties.limit).toBeUndefined();
   });
 
-  it("adds the limit property only when asked", () => {
+  it("adds the bounded limit property only when asked", () => {
     const withLimit = expenseFilterJsonSchema({ withLimit: true }) as {
-      properties: Record<string, { type: string; description: string }>;
+      properties: Record<
+        string,
+        { type: string; minimum?: number; maximum?: number }
+      >;
     };
-    expect(withLimit.properties.limit).toMatchObject({ type: "number" });
+    expect(withLimit.properties.limit).toEqual({
+      type: "integer",
+      minimum: 1,
+      maximum: 500,
+      description: "Max rows (default 100).",
+    });
   });
 });
 
