@@ -318,6 +318,23 @@ describe("connectionAccessToken", () => {
     );
     expect(await both).toEqual(["at-rotated", "at-rotated"]);
   });
+  it("rejects a malformed 200 token response loudly, storing nothing", async () => {
+    const id = await seedExpiredConnection("Malformed");
+    const fetchMock = vi.fn(async () =>
+      Response.json({ token_type: "bearer" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stored = await readEmailConnectionById(id);
+    expect(stored).toBeDefined();
+    await expect(connectionAccessToken(stored!)).rejects.toThrow(
+      /unexpected shape/,
+    );
+
+    const row = await readEmailConnectionById(id);
+    expect(decryptSecret(row!.tokenEnc)).toBe("at-expired");
+    expect(decryptSecret(row!.refreshTokenEnc!)).toBe("rt-expired");
+  });
 });
 
 describe("fastmail-oauth-callback", () => {

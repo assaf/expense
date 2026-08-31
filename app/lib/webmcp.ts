@@ -51,23 +51,29 @@ async function api(path: string, signal?: AbortSignal): Promise<unknown> {
 export async function registerWebMcpTools(): Promise<void> {
   const mc = modelContext();
   if (!mc) return;
-  const existing = new Set((await mc.getTools()).map((t) => t.name));
-  await Promise.all(
-    READ_TOOLS.map((spec) => {
-      if (existing.has(spec.name)) return undefined;
-      return mc.registerTool({
-        name: spec.name,
-        description: spec.description,
-        ...(spec.inputSchema ? { inputSchema: spec.inputSchema } : {}),
-        annotations: { readOnlyHint: true },
-        execute: (input, { signal }) =>
-          api(
-            spec.inputSchema
-              ? `/api/webmcp/${spec.resource}?${filtersToQuery(input, spec.inputSchema)}`
-              : `/api/webmcp/${spec.resource}`,
-            signal,
-          ),
-      });
-    }),
-  );
+  try {
+    const existing = new Set((await mc.getTools()).map((t) => t.name));
+    await Promise.all(
+      READ_TOOLS.map((spec) => {
+        if (existing.has(spec.name)) return undefined;
+        return mc.registerTool({
+          name: spec.name,
+          description: spec.description,
+          ...(spec.inputSchema ? { inputSchema: spec.inputSchema } : {}),
+          annotations: { readOnlyHint: true },
+          execute: (input, { signal }) =>
+            api(
+              spec.inputSchema
+                ? `/api/webmcp/${spec.resource}?${filtersToQuery(input, spec.inputSchema)}`
+                : `/api/webmcp/${spec.resource}`,
+              signal,
+            ),
+        });
+      }),
+    );
+  } catch (err) {
+    // The origin-trial surface is a draft API; a browser that rejects
+    // mid-registration must cost a warning, never a page error.
+    console.warn("[webmcp] tool registration failed:", err);
+  }
 }

@@ -97,4 +97,17 @@ describe("registerWebMcpTools", () => {
     await registerWebMcpTools();
     expect(modelContext.registerTool).toHaveBeenCalledTimes(3);
   });
+
+  it("degrades a rejecting draft API to a warning, never a rejection", async () => {
+    installModelContext();
+    modelContext.getTools.mockRejectedValueOnce(new Error("api gone"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { registerWebMcpTools } = await import("~/lib/webmcp");
+    await expect(registerWebMcpTools()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[webmcp] tool registration failed:",
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
 });
