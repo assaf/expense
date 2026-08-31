@@ -10,10 +10,14 @@ import {
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { loader } from "~/routes/fastmail-oauth-callback";
 import type { Route } from "+types/app/routes/+types/fastmail-oauth-callback";
+import type { Route as ConnectRoute } from "+types/app/routes/+types/connect-fastmail";
+import type { Route as OnboardingRoute } from "+types/app/routes/+types/onboarding";
+import { action } from "~/routes/onboarding";
 import {
+  buildAuthorizeUrl,
   exchangeAuthorizationCode,
   FM_OAUTH_SESSION_KEY,
-  buildAuthorizeUrl,
+  FM_PENDING_SESSION_KEY,
   generatePkcePair,
   connectionAccessToken,
   type FmOAuthFlow,
@@ -25,11 +29,12 @@ import { testPrisma } from "./helpers/seedTestData";
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 
 /**
- * FastMail OAuth: pure-crypto units (PKCE), the connection token resolver
- * (legacy passthrough + refresh rotation against a stubbed token endpoint),
- * and the callback route (state check + signed-in happy path). The real
- * connect path is covered by the onboarding/email-connections suites; true
- * end-to-end consent needs a registered FastMail client id.
+ * FastMail OAuth: pure-crypto units (PKCE, authorize URL), the connection
+ * token resolver (legacy passthrough, fresh skip, refresh rotation +
+ * failure, concurrent dedup), the callback route (state check, consent
+ * denial, signed-in and anonymous paths), the env-gated entry route, and
+ * the onboarding flow's fmPending branch. True end-to-end consent needs a
+ * registered FastMail client id.
  */
 
 vi.mock("~/lib/jmap.server", () => ({
@@ -39,7 +44,14 @@ vi.mock("~/lib/jmap.server", () => ({
 vi.mock("~/lib/fastmail-oauth.server", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("~/lib/fastmail-oauth.server")>();
-  return { ...actual, exchangeAuthorizationCode: vi.fn() };
+  return {
+    ...actual,
+    exchangeAuthorizationCode: vi.fn(),
+    // Per-test overrides for the env-gated entry route (the client id
+    // const is baked in at env import; the accessors read it at call time).
+    isFastMailOAuthConfigured: vi.fn(actual.isFastMailOAuthConfigured),
+    fastMailOAuthClientId: vi.fn(actual.fastMailOAuthClientId),
+  };
 });
 
 const mockedVerify = vi.mocked(verifyJmapToken);
@@ -71,6 +83,11 @@ function loaderArgs(request: Request): Route.LoaderArgs {
   return { request } as Route.LoaderArgs;
 }
 
+// The entry loader only reads the request.
+function entryArgs(request: Request): ConnectRoute.LoaderArgs {
+  return { request } as ConnectRoute.LoaderArgs;
+}
+
 function callbackRequest(query: string, cookie: string): Request {
   return new Request(`https://expense.test/fastmail-oauth-callback?${query}`, {
     headers: { cookie },
@@ -96,6 +113,44 @@ async function seedUser() {
   return { account, user };
 }
 
+function okConnection(
+  created: Awaited<ReturnType<typeof createEmailConnection>>,
+) {
+  if (!created.ok) throw new Error(created.error);
+  return created.connection;
+}
+
+function seedExpiredConnection(prefix: string) {
+  return (async () => {
+    const account = await createAccount(`${prefix} ${ulid()}`);
+    return okConnection(
+      await createEmailConnection({
+        accountId: account.id,
+        provider: "fastmail",
+        emailAddress: `${prefix.toLowerCase()}.${ulid()}@example.com`,
+        jmapAccountId: "jmap-1",
+        tokenEnc: encryptSecret("at-expired"),
+        refreshTokenEnc: encryptSecret("rt-expired"),
+        tokenExpiresAt: new Date(Date.now() - 1000).toISOString(),
+      }),
+    ).id;
+  })();
+}
+
+describe("PKCE pair", () => {
+  it("produces an S256 challenge over the verifier", () => {
+    const { verifier, challenge } = generatePkcePair();
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
+    expect(challenge).toBe(
+      createHash("sha256").update(verifier).digest("base64url"),
+    );
+  });
+
+  it("is unique per call", () => {
+    expect(generatePkcePair().verifier).not.toBe(generatePkcePair().verifier);
+  });
+});
+
 describe("buildAuthorizeUrl", () => {
   it("encodes the authorization request", () => {
     const url = new URL(
@@ -116,27 +171,6 @@ describe("buildAuthorizeUrl", () => {
     expect(url.searchParams.get("scope")).toBe(
       "urn:ietf:params:jmap:core urn:ietf:params:jmap:mail",
     );
-  });
-});
-
-function okConnection(
-  created: Awaited<ReturnType<typeof createEmailConnection>>,
-) {
-  if (!created.ok) throw new Error(created.error);
-  return created.connection;
-}
-
-describe("PKCE pair", () => {
-  it("produces an S256 challenge over the verifier", () => {
-    const { verifier, challenge } = generatePkcePair();
-    expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
-    expect(challenge).toBe(
-      createHash("sha256").update(verifier).digest("base64url"),
-    );
-  });
-
-  it("is unique per call", () => {
-    expect(generatePkcePair().verifier).not.toBe(generatePkcePair().verifier);
   });
 });
 
@@ -198,18 +232,7 @@ describe("connectionAccessToken", () => {
   });
 
   it("refreshes an expired token and persists the rotated set", async () => {
-    const account = await createAccount(`Refresh ${ulid()}`);
-    const id = okConnection(
-      await createEmailConnection({
-        accountId: account.id,
-        provider: "fastmail",
-        emailAddress: `refresh.${ulid()}@example.com`,
-        jmapAccountId: "jmap-1",
-        tokenEnc: encryptSecret("at-expired"),
-        refreshTokenEnc: encryptSecret("rt-expired"),
-        tokenExpiresAt: new Date(Date.now() - 1000).toISOString(),
-      }),
-    ).id;
+    const id = await seedExpiredConnection("Refresh");
 
     let capturedBody = "";
     const fetchMock = vi.fn(
@@ -246,6 +269,54 @@ describe("connectionAccessToken", () => {
     expect(decryptSecret(rotated!.refreshTokenEnc!)).toBe("rt-rotated");
     // expiresAt lands roughly an hour out (60s refresh skew respects it).
     expect(Date.parse(rotated!.tokenExpiresAt!)).toBeGreaterThan(Date.now());
+  });
+
+  it("propagates refresh failure and leaves stored credentials untouched", async () => {
+    const id = await seedExpiredConnection("Fail");
+    const fetchMock = vi.fn(async () =>
+      Response.json({ error: "invalid_grant" }, { status: 400 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stored = await readEmailConnectionById(id);
+    expect(stored).toBeDefined();
+    await expect(connectionAccessToken(stored!)).rejects.toThrow(/HTTP 400/);
+    // Evicted from the in-flight cache on failure: a retry re-attempts.
+    await expect(connectionAccessToken(stored!)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const row = await readEmailConnectionById(id);
+    expect(decryptSecret(row!.tokenEnc)).toBe("at-expired");
+    expect(decryptSecret(row!.refreshTokenEnc!)).toBe("rt-expired");
+  });
+
+  it("dedupes concurrent refreshes into one endpoint call", async () => {
+    const id = await seedExpiredConnection("Dedup");
+    let release!: (res: Response) => void;
+    const fetchMock = vi.fn(
+      (_url: RequestInfo | URL, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const stored = await readEmailConnectionById(id);
+    expect(stored).toBeDefined();
+    const both = Promise.all([
+      connectionAccessToken(stored!),
+      connectionAccessToken(stored!),
+    ]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    release(
+      Response.json({
+        access_token: "at-rotated",
+        refresh_token: "rt-rotated",
+        token_type: "bearer",
+        expires_in: 3600,
+      }),
+    );
+    expect(await both).toEqual(["at-rotated", "at-rotated"]);
   });
 });
 
@@ -373,5 +444,160 @@ describe("updateEmailConnectionTokens", () => {
     expect(decryptSecret(row!.tokenEnc)).toBe("at-2");
     expect(row!.refreshTokenEnc).toBeNull();
     expect(row!.tokenExpiresAt).toBeNull();
+  });
+});
+
+describe("connect-fastmail entry", () => {
+  it("redirects to FastMail authorization and parks the flow on the session", async () => {
+    const oauthMod = await import("~/lib/fastmail-oauth.server");
+    vi.mocked(oauthMod.isFastMailOAuthConfigured).mockReturnValue(true);
+    vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
+    const { loader } = await import("~/routes/connect-fastmail");
+    // connect-fastmail throws the redirect; catch the thrown Response.
+    const res = (await loader(
+      entryArgs(
+        new Request("https://expense.test/connect-fastmail?next=emails"),
+      ),
+    ).catch((thrown: unknown) => thrown)) as Response;
+
+    expect(res.status).toBe(302);
+    const url = new URL(res.headers.get("location")!);
+    expect(url.origin + url.pathname).toBe(
+      "https://api.fastmail.com/oauth/authorize",
+    );
+    expect(url.searchParams.get("client_id")).toBe("test-client-id");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://expense.test/fastmail-oauth-callback",
+    );
+    expect(url.searchParams.get("scope")).toBe(
+      "urn:ietf:params:jmap:core urn:ietf:params:jmap:mail",
+    );
+
+    // The parked flow must carry the exact state sent to FastMail and a
+    // verifier matching the challenge in the URL.
+    const cookie = res.headers.get("set-cookie")!;
+    const session = await sessionStorage.getSession(cookie);
+    const parked = session.get(FM_OAUTH_SESSION_KEY) as FmOAuthFlow;
+    expect(parked.state).toBe(url.searchParams.get("state"));
+    expect(parked.next).toBe("emails");
+    expect(parked.verifier.length).toBeGreaterThanOrEqual(43);
+    expect(url.searchParams.get("code_challenge")).toBe(
+      createHash("sha256").update(parked.verifier).digest("base64url"),
+    );
+  });
+});
+
+describe("onboarding via fmPending", () => {
+  function pendingFor(username: string) {
+    return {
+      username,
+      mailAccountId: "jmap-pending",
+      tokenEnc: encryptSecret("oauth-at"),
+      refreshTokenEnc: encryptSecret("oauth-rt"),
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    };
+  }
+
+  function onboardForm(
+    intent: string,
+    email: string,
+    cookie?: string,
+  ): Request {
+    const form = new FormData();
+    form.set("intent", intent);
+    form.set("email", email);
+    form.set("password", PASSWORD);
+    return new Request("https://expense.test/onboarding", {
+      method: "POST",
+      body: form,
+      headers: cookie ? { cookie } : {},
+    });
+  }
+
+  it("creates a verified account from the parked OAuth credentials", async () => {
+    const address = `pending.${ulid().toLowerCase()}@example.com`;
+    const cookie = await sessionCookieWith([
+      FM_PENDING_SESSION_KEY,
+      pendingFor(address),
+    ]);
+    // The action returns the redirect Response directly.
+    const res = (await action({
+      request: onboardForm("create", address, cookie),
+    } as OnboardingRoute.ActionArgs)) as Response;
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain(
+      "/email-review?onboarding=1&connection=",
+    );
+    const user = await testPrisma.user.findUnique({
+      where: { email: address },
+    });
+    expect(user?.emailVerifiedAt).not.toBeNull();
+    const connection = await testPrisma.emailConnection.findUniqueOrThrow({
+      where: { emailAddress: address },
+    });
+    expect(decryptSecret(String(connection.tokenEnc))).toBe("oauth-at");
+    expect(decryptSecret(String(connection.refreshTokenEnc))).toBe("oauth-rt");
+    expect(connection.tokenExpiresAt).not.toBeNull();
+  });
+
+  it("attaches the parked mailbox to the existing account on attach", async () => {
+    const address = `attachp.${ulid().toLowerCase()}@example.com`;
+    const account = await createAccount(`AttachP ${ulid()}`);
+    await createUser({
+      accountId: account.id,
+      email: address,
+      passwordHash: await hashPassword(PASSWORD),
+      emailVerifiedAt: new Date().toISOString(),
+    });
+    const cookie = await sessionCookieWith([
+      FM_PENDING_SESSION_KEY,
+      pendingFor(address),
+    ]);
+    const res = (await action({
+      request: onboardForm("attach", address, cookie),
+    } as OnboardingRoute.ActionArgs)) as Response;
+
+    expect(res.status).toBe(302);
+    const connection = await testPrisma.emailConnection.findUniqueOrThrow({
+      where: { emailAddress: address },
+    });
+    expect(connection.accountId).toBe(account.id);
+  });
+
+  it("errors without a form token and without parked credentials", async () => {
+    // data() results arrive as { data, init } on a direct action call.
+    const res = (await action({
+      request: onboardForm("create", "orphan@example.com"),
+    } as OnboardingRoute.ActionArgs)) as { data?: { error?: string } };
+    expect(res.data?.error).toContain("expired");
+  });
+
+  it("oauth-restart clears the parked credentials", async () => {
+    const address = `restart.${ulid().toLowerCase()}@example.com`;
+    const cookie = await sessionCookieWith([
+      FM_PENDING_SESSION_KEY,
+      pendingFor(address),
+    ]);
+    const form = new FormData();
+    form.set("intent", "oauth-restart");
+    const request = new Request("https://expense.test/onboarding", {
+      method: "POST",
+      body: form,
+      headers: { cookie },
+    });
+    // The restart branch throws its redirect.
+    const res = (await action({ request } as OnboardingRoute.ActionArgs).catch(
+      (thrown: unknown) => thrown,
+    )) as Response;
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/onboarding");
+    const cleared = await sessionStorage.getSession(
+      res.headers.get("set-cookie") ?? "",
+    );
+    expect(cleared.get(FM_PENDING_SESSION_KEY)).toBeUndefined();
   });
 });

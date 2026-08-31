@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { redirect } from "react-router";
 import type { Route } from "./+types/connect-fastmail";
-import { FASTMAIL_OAUTH_CLIENT_ID } from "~/lib/env";
 import { sessionStorage } from "~/lib/auth.server";
 import {
   buildAuthorizeUrl,
+  fastMailOAuthClientId,
   FM_OAUTH_MAX_AGE_S,
   FM_OAUTH_SESSION_KEY,
   generatePkcePair,
@@ -53,7 +53,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   session.set(FM_OAUTH_SESSION_KEY, flow);
   throw redirect(
     buildAuthorizeUrl({
-      clientId: FASTMAIL_OAUTH_CLIENT_ID,
+      clientId: fastMailOAuthClientId(),
       redirectUri: `${url.origin}/fastmail-oauth-callback`,
       state,
       challenge,
