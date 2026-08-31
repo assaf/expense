@@ -173,6 +173,7 @@ export default function App() {
             data-exclude-search="true"
           ></script>
         ) : null}
+        <meta name="msvalidate.01" content="E606D66AC502D88D7B6E62982FF6CD98" />
       </head>
       <body>
         <a
