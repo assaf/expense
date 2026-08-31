@@ -1,0 +1,50 @@
+# Throwaway probe: find which TLS mode lets the Prisma 8 CLI reach the
+# Supabase session pooler from a Linux runner. Read-only commands only
+# (prisma db verify / psql SELECT 1); delete after the winning mode lands
+# in deployment-checks.yml.
+name: Probe DB TLS
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Show the URL's shape without the password.
+      - name: URL shape
+        run: echo "$DATABASE_URL_UNPOOLED" | sed -E 's|//[^@]+@|//***@|'
+
+      - name: 1. as-is (expect ESSLREQUIRED)
+        run: |
+          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+          pnpm prisma db verify || echo "RESULT as-is: FAILED"
+
+      - name: 2. sslmode=require
+        run: |
+          export DATABASE_URL="$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|\?.*$||')?sslmode=require"
+          pnpm prisma db verify || echo "RESULT require: FAILED"
+
+      - name: 3. sslmode=prefer
+        run: |
+          export DATABASE_URL="$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|\?.*$||')?sslmode=prefer"
+          pnpm prisma db verify || echo "RESULT prefer: FAILED"
+
+      - name: 4. socat TLS proxy + sslmode=disable
+        run: |
+          HOSTPORT=$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|^[^@]+@||; s|\?.*$||; s|/[a-z0-9_]+$||')
+          echo "upstream: $HOSTPORT"
+          socat TCP-LISTEN:5433,fork,reuseaddr OPENSSL:"$HOSTPORT",verify=0 &
+          sleep 1
+          export DATABASE_URL="$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|@[^/?]+|@127.0.0.1:5433|; s|\?.*$||')?sslmode=disable"
+          pnpm prisma db verify || echo "RESULT socat: FAILED"
