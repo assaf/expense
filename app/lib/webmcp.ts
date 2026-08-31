@@ -5,10 +5,14 @@
  *
  * `document.modelContext` is the standard surface the WebMCP explainer
  * (webmachinelearning/webmcp) and Chrome ship behind the origin trial.
- * The tools are the same three read tools the MCP endpoint serves, backed
- * by /api/webmcp/* with the browser session; nothing write-shaped is
- * exposed while this is an experiment.
+ * The tools are the same three read tools the MCP endpoint serves: the
+ * names, descriptions, and input schemas come from the shared contract in
+ * expense-read-tools.ts, and the data comes from /api/webmcp/* with the
+ * browser session. Nothing write-shaped is exposed while this is an
+ * experiment.
  */
+
+import { READ_TOOLS, filtersToQuery } from "~/lib/expense-read-tools";
 
 /** Minimal structural types for the (still draft) API surface. */
 interface WebMcpModelContext {
@@ -40,48 +44,6 @@ async function api(path: string, signal?: AbortSignal): Promise<unknown> {
   return response.json();
 }
 
-const EXPENSE_FILTERS = {
-  type: "object",
-  properties: {
-    dateFrom: {
-      type: "string",
-      description: "Inclusive start date YYYY-MM-DD.",
-    },
-    dateTo: { type: "string", description: "Inclusive end date YYYY-MM-DD." },
-    category: { type: "string", description: "Exact category name." },
-    merchant: {
-      type: "string",
-      description: "Substring match on merchant or stop addresses.",
-    },
-    report: { type: "string", description: "Exact report name." },
-    unreported: {
-      type: "boolean",
-      description: "Only expenses not in any report.",
-    },
-    type: { type: "string", enum: ["receipt", "mileage"] },
-  },
-} as const;
-
-function filtersToQuery(input: unknown): string {
-  const params = new URLSearchParams();
-  if (input && typeof input === "object") {
-    for (const [key, value] of Object.entries(
-      input as Record<string, unknown>,
-    )) {
-      if (value !== undefined && value !== null && value !== "") {
-        if (
-          typeof value === "string" ||
-          typeof value === "number" ||
-          typeof value === "boolean"
-        ) {
-          params.set(key, String(value));
-        }
-      }
-    }
-  }
-  return params.toString();
-}
-
 /**
  * Idempotent: skips entirely when the browser has no WebMCP API (or the
  * tools are already registered, e.g. after dev-server hot reload).
@@ -90,53 +52,22 @@ export async function registerWebMcpTools(): Promise<void> {
   const mc = modelContext();
   if (!mc) return;
   const existing = new Set((await mc.getTools()).map((t) => t.name));
-  const tool = (definition: {
-    name: string;
-    description: string;
-    inputSchema?: Record<string, unknown>;
-    execute: (
-      input: unknown,
-      options: { signal?: AbortSignal },
-    ) => Promise<unknown>;
-  }) => {
-    if (!existing.has(definition.name)) {
+  await Promise.all(
+    READ_TOOLS.map((spec) => {
+      if (existing.has(spec.name)) return undefined;
       return mc.registerTool({
-        ...definition,
+        name: spec.name,
+        description: spec.description,
+        ...(spec.inputSchema ? { inputSchema: spec.inputSchema } : {}),
         annotations: { readOnlyHint: true },
+        execute: (input, { signal }) =>
+          api(
+            spec.inputSchema
+              ? `/api/webmcp/${spec.resource}?${filtersToQuery(input, spec.inputSchema)}`
+              : `/api/webmcp/${spec.resource}`,
+            signal,
+          ),
       });
-    }
-  };
-
-  await Promise.all([
-    tool({
-      name: "list_expenses",
-      description:
-        "Query the signed-in user's expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first; amounts are decimal strings.",
-      inputSchema: {
-        ...EXPENSE_FILTERS,
-        properties: {
-          ...EXPENSE_FILTERS.properties,
-          limit: {
-            type: "number",
-            description: "Max rows, 1-500 (default 100).",
-          },
-        },
-      },
-      execute: (input, { signal }) =>
-        api(`/api/webmcp/expenses?${filtersToQuery(input)}`, signal),
     }),
-    tool({
-      name: "expense_summary",
-      description:
-        'Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to "how much did I spend on X?".',
-      inputSchema: EXPENSE_FILTERS,
-      execute: (input, { signal }) =>
-        api(`/api/webmcp/summary?${filtersToQuery(input)}`, signal),
-    }),
-    tool({
-      name: "list_reports",
-      description: "All reports with their expense counts and exact totals.",
-      execute: (_input, { signal }) => api("/api/webmcp/reports", signal),
-    }),
-  ]);
+  );
 }

@@ -1,7 +1,15 @@
 import { randomBytes } from "node:crypto";
 import type { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import Decimal from "decimal.js";
+import {
+  readExpenseSummary,
+  readExpensesPage,
+} from "~/lib/expense-read.server";
+import {
+  EXPENSE_FILTER_FIELDS,
+  READ_TOOLS,
+  type ExpenseFilters,
+} from "~/lib/expense-read-tools";
 import { hasEnoughStops } from "~/lib/completeness";
 import {
   isOAuthToken,
@@ -30,7 +38,7 @@ import {
 } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
-import { normalizeAmount, sortExpenses, summarizeBy } from "~/lib/format";
+import { normalizeAmount } from "~/lib/format";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
   MAX_UPLOAD_BYTES,
@@ -84,6 +92,11 @@ import {
  */
 
 // --- HTTP handling ---------------------------------------------------------
+
+/** The three read tools, described once in the shared contract module; the
+ * WebMCP client registers the same three from the same specs. */
+const [LIST_EXPENSES_SPEC, EXPENSE_SUMMARY_SPEC, LIST_REPORTS_SPEC] =
+  READ_TOOLS;
 
 /** Build the per-request server instance for the authenticated account. */
 async function buildServer(accountId: string): Promise<McpServer> {
@@ -606,40 +619,33 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     },
   );
 
-  // --- list_expenses / expense_summary -------------------------------------
+  // --- list_expenses / expense_summary / list_reports ----------------------
 
-  // Both tools feed the same filterExpenses, so the seven filter fields
-  // are defined once; adding a filter can no longer reach one tool and
-  // silently miss the other.
-  const expenseFilterSchema = z.object({
-    dateFrom: z
-      .string()
-      .optional()
-      .describe("Inclusive start date YYYY-MM-DD."),
-    dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
-    category: z
-      .string()
-      .optional()
-      .describe("Exact category name (case-insensitive)."),
-    merchant: z
-      .string()
-      .optional()
-      .describe(
-        "Substring match on merchant (receipts) or stop addresses (mileage).",
-      ),
-    report: z.string().optional().describe("Exact report name."),
-    unreported: z
-      .boolean()
-      .optional()
-      .describe("Only expenses not in any report."),
-    type: z.enum(["receipt", "mileage"]).optional(),
-  });
+  // The three read tools are thin adapters over the shared implementations
+  // in expense-read.server.ts, with input schemas derived from the shared
+  // filter spec in expense-read-tools.ts. The same implementations and
+  // spec back the WebMCP in-page tools, so both surfaces stay identical.
+  const expenseFilterSchema = z.object(
+    Object.fromEntries(
+      EXPENSE_FILTER_FIELDS.map((field) => {
+        let parsed: z.ZodTypeAny;
+        if (field.kind === "boolean") {
+          parsed = z.boolean().optional();
+        } else if (field.kind === "enum") {
+          parsed = z.enum(field.values as [string, ...string[]]).optional();
+        } else {
+          parsed = z.string().optional();
+        }
+        if (field.description) parsed = parsed.describe(field.description);
+        return [field.name, parsed];
+      }),
+    ),
+  );
 
   server.registerTool(
-    "list_expenses",
+    LIST_EXPENSES_SPEC.name,
     {
-      description:
-        "Query expenses with optional filters (date range, category, merchant, report, unreported-only, type). Returns newest first. Amounts are decimal strings.",
+      description: LIST_EXPENSES_SPEC.description,
       inputSchema: expenseFilterSchema.extend({
         limit: z
           .number()
@@ -651,39 +657,30 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
       }),
     },
     async (args) => {
-      const expenses = await readExpenses(accountId);
-      const filtered = filterExpenses(expenses, args);
-      const limited = sortExpenses(filtered).slice(0, args.limit ?? 100);
-      return ok({
-        count: filtered.length,
-        returned: limited.length,
-        expenses: limited.map(serializeExpense),
-      });
+      // The derived shape keys are stringly typed (built via
+      // Object.fromEntries); the shared spec defines the real types.
+      const { limit, ...filters } = args as {
+        limit?: number;
+      } & ExpenseFilters;
+      return ok(await readExpensesPage(accountId, filters, limit));
     },
   );
 
-  // --- expense_summary -----------------------------------------------------
-
   server.registerTool(
-    "expense_summary",
+    EXPENSE_SUMMARY_SPEC.name,
     {
-      description:
-        'Totals for expenses matching the filters: overall count + sum, and per-category breakdown. The answer to "how much did I spend on X?".',
+      description: EXPENSE_SUMMARY_SPEC.description,
       inputSchema: expenseFilterSchema,
     },
     async (args) => {
-      return ok(
-        summarizeExpenses(filterExpenses(await readExpenses(accountId), args)),
-      );
+      return ok(await readExpenseSummary(accountId, args));
     },
   );
 
-  // --- list_reports --------------------------------------------------------
-
   server.registerTool(
-    "list_reports",
+    LIST_REPORTS_SPEC.name,
     {
-      description: "All reports with their expense counts and exact totals.",
+      description: LIST_REPORTS_SPEC.description,
       inputSchema: z.object({}),
     },
     async () => {
@@ -857,106 +854,6 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
 }
 
 // --- Tool implementations --------------------------------------------------
-
-/** Shared filters for list_expenses and expense_summary, also used by the
- * /api/webmcp JSON mirror. */
-export interface ExpenseFilters {
-  dateFrom?: string;
-  dateTo?: string;
-  category?: string;
-  merchant?: string;
-  report?: string;
-  unreported?: boolean;
-  type?: "receipt" | "mileage";
-}
-export function filterExpenses(
-  expenses: Expense[],
-  f: ExpenseFilters,
-): Expense[] {
-  return expenses.filter((e) => {
-    if (f.dateFrom && (!e.date || e.date < f.dateFrom)) return false;
-    if (f.dateTo && (!e.date || e.date > f.dateTo)) return false;
-    if (f.category && e.category.toLowerCase() !== f.category.toLowerCase())
-      return false;
-    if (f.merchant) {
-      const q = f.merchant.toLowerCase();
-      const hay =
-        e.type === "receipt"
-          ? e.merchant
-          : e.locations.map((l) => l.address).join(" ");
-      if (!hay.toLowerCase().includes(q)) return false;
-    }
-    if (f.report && e.report !== f.report) return false;
-    if (f.unreported && e.report !== "") return false;
-    if (f.type && e.type !== f.type) return false;
-    return true;
-  });
-}
-
-/** The expense_summary payload: count + exact total, and the per-category
- * breakdown (sorted by total, descending). The grand total is the exact sum
- * of the category buckets: every amount-bearing expense lands in exactly
- * one bucket. */
-export function summarizeExpenses(expenses: Expense[]): {
-  count: number;
-  total: string;
-  byCategory: { category: string; count: number; total: string }[];
-} {
-  const byCategory = summarizeBy(
-    expenses,
-    (e) => e.category || "Uncategorized",
-  );
-  const total = [...byCategory.values()].reduce(
-    (sum, b) => sum.add(b.total),
-    new Decimal(0),
-  );
-  const breakdown = [...byCategory.entries()]
-    .sort((a, b) =>
-      b[1].total.greaterThan(a[1].total)
-        ? 1
-        : b[1].total.lessThan(a[1].total)
-          ? -1
-          : 0,
-    )
-    .map(([category, b]) => ({
-      category,
-      count: b.count,
-      total: b.total.toFixed(2),
-    }));
-  return {
-    count: expenses.length,
-    total: total.toFixed(2),
-    byCategory: breakdown,
-  };
-}
-
-/** The wire shape of an expense: JSON-safe, money as decimal strings. */
-export function serializeExpense(e: Expense) {
-  return {
-    id: e.id,
-    type: e.type,
-    date: e.date || null,
-    report: e.report || null,
-    category: e.category || null,
-    description: e.description,
-    amount: e.amount || null,
-    ...(e.type === "receipt"
-      ? {
-          merchant: e.merchant || null,
-          currency: e.currency || "USD",
-          // Set together, only for a receipt captured in another currency.
-          originalAmount: e.originalAmount || null,
-          fxRate: e.fxRate || null,
-        }
-      : {
-          mileageType: e.mileageType,
-          distanceMiles: e.distanceMiles || null,
-          stops: e.locations.map((l) => l.address).filter(Boolean),
-        }),
-    createdAt: e.createdAt,
-    updatedAt: e.updatedAt,
-  };
-}
 
 /** Shared prelude of the two write tools: resolve the expense date
  * (omitted means UTC today) and the trimmed report, then validate both.

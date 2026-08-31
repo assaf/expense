@@ -1,62 +1,42 @@
 import type { Route } from "./+types/api.webmcp.$resource";
 import { requireUser } from "~/lib/auth.server";
-import { readExpenses } from "~/lib/db/expenses";
 import { readReportSummaries } from "~/lib/db/reports";
-import { sortExpenses } from "~/lib/format";
 import {
-  filterExpenses,
-  serializeExpense,
-  summarizeExpenses,
-  type ExpenseFilters,
-} from "~/lib/mcp.server";
+  readExpenseSummary,
+  readExpensesPage,
+} from "~/lib/expense-read.server";
+import { parseExpenseFilters } from "~/lib/expense-read-tools";
 
 /**
- * Read-only JSON mirror of three MCP tools (list_expenses, expense_summary,
- * list_reports) for the WebMCP experiment: in-page tools registered on the
- * app shell (app/lib/webmcp.ts) fetch this with the browser session, so a
- * browser-side agent gets the same data shapes the MCP endpoint serves,
- * without any OAuth. Same filtering and serialization as the MCP tools, by
- * importing their implementations from mcp.server.ts.
+ * Read-only JSON mirror of three MCP read tools (list_expenses,
+ * expense_summary, list_reports) for the WebMCP experiment: in-page tools
+ * registered on the app shell (app/lib/webmcp.ts) fetch this with the
+ * browser session, so a browser-side agent gets the same data shapes the
+ * MCP endpoint serves, without any OAuth. The tool contract lives in
+ * expense-read-tools.ts and the implementations in expense-read.server.ts;
+ * this loader and the MCP handlers are both thin adapters over them.
  *
  * GET only, no writes: the experiment surface is deliberately inert.
  */
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const url = new URL(request.url);
+  const query = new URL(request.url).searchParams;
   switch (params.resource) {
-    case "expenses":
-    case "summary": {
-      const q = url.searchParams;
-      const type = q.get("type");
-      const filters: ExpenseFilters = {
-        dateFrom: q.get("dateFrom") ?? undefined,
-        dateTo: q.get("dateTo") ?? undefined,
-        category: q.get("category") ?? undefined,
-        merchant: q.get("merchant") ?? undefined,
-        report: q.get("report") ?? undefined,
-        unreported: q.get("unreported") === "true" || undefined,
-        type: type === "receipt" || type === "mileage" ? type : undefined,
-      };
-      const expenses = filterExpenses(
-        await readExpenses(user.accountId),
-        filters,
+    case "expenses": {
+      const limit = Number(query.get("limit") ?? "");
+      return Response.json(
+        await readExpensesPage(
+          user.accountId,
+          parseExpenseFilters(query),
+          limit,
+        ),
       );
-      if (params.resource === "summary") {
-        return Response.json(summarizeExpenses(expenses));
-      }
-      const limitParam = Number(q.get("limit") ?? "");
-      const limit =
-        Number.isInteger(limitParam) && limitParam >= 1 && limitParam <= 500
-          ? limitParam
-          : 100;
-      const limited = sortExpenses(expenses).slice(0, limit);
-      return Response.json({
-        count: expenses.length,
-        returned: limited.length,
-        expenses: limited.map(serializeExpense),
-      });
     }
+    case "summary":
+      return Response.json(
+        await readExpenseSummary(user.accountId, parseExpenseFilters(query)),
+      );
     case "reports":
       return Response.json(await readReportSummaries(user.accountId));
     default:

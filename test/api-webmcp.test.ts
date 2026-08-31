@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * /api/webmcp/:resource: the read-only JSON mirror the in-page WebMCP tools
- * (app/lib/webmcp.ts) fetch with the browser session. The loader must reuse
- * the MCP tools' filter/serialize/summarize implementations, respect the
- * limit clamp, and 404 on unknown resources.
+ * (app/lib/webmcp.ts) fetch with the browser session. The loader and the
+ * MCP handlers are thin adapters over the same implementations
+ * (expense-read.server.ts) and contract (expense-read-tools.ts); these
+ * tests run the real shared code through the loader, with only the DB and
+ * the session mocked.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -121,7 +123,7 @@ describe("api.webmcp.$resource", () => {
     expect(body.count).toBe(1);
   });
 
-  it("summarizes with exact totals via the shared MCP helper", async () => {
+  it("summarizes with exact totals via the shared implementation", async () => {
     mocks.readExpenses.mockResolvedValue([
       receipt({ id: "e1", amount: "12.50", category: "Meals" }),
       receipt({ id: "e2", amount: "0.10", category: "Meals" }),

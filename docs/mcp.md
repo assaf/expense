@@ -224,9 +224,13 @@ same-origin. Writes stay MCP-only while this is experimental.
 
 - Registration: `app/lib/webmcp.ts` (no-op where the API is absent); wired
   in `app/root.tsx` for signed-in users.
+- Shared code: the tool contract (names, descriptions, filter fields,
+  schemas) lives in `app/lib/expense-read-tools.ts` and the implementations
+  (filter, serialize, summarize, limit) in `app/lib/expense-read.server.ts`.
+  The MCP handlers and the WebMCP registration are both thin adapters over
+  them, so the two surfaces can't drift apart.
 - Data: `app/routes/api.webmcp.$resource.ts`, a session-authenticated JSON
-  mirror that imports the MCP tools' filter/serialize/summarize code, so
-  both surfaces return identical shapes.
+  mirror of the three read tools.
 - Trying it: join the [origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241)
   (or use a Chrome with the flag), sign in, and in DevTools run
   `await document.modelContext.getTools()`. Execute a tool with
