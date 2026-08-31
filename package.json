@@ -58,7 +58,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.37.0",
     "pdfjs-dist": "^6.3.289",
-    "pdfkit": "^0.20.1",
+    "pdfkit": "^0.20.2",
     "pg": "8.23.0",
     "portless": "^0.15.6",
     "postal-mime": "^3.0.0",
