@@ -13,7 +13,6 @@ import {
 } from "react-router";
 import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
-import { registerWebMcpTools } from "~/lib/webmcp";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
 import { umamiConfig } from "~/lib/umami.server";
@@ -143,7 +142,12 @@ export default function App() {
     window.umami?.identify?.({ id: user.id });
     // WebMCP experiment: expose the read tools to browser agents when the
     // browser has the API (Chrome 149+ origin trial); no-op elsewhere.
-    void registerWebMcpTools();
+    // Dynamic import keeps the tool catalog (and zod) out of the main
+    // bundle, and the presence check avoids even the chunk fetch for
+    // browsers where the module would be a silent no-op.
+    if ("modelContext" in document) {
+      void import("~/lib/webmcp").then((m) => m.registerWebMcpTools());
+    }
   }, [user]);
   return (
     <html lang="en">

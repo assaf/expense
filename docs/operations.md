@@ -201,6 +201,14 @@ from `INBOUND_EMAIL_ADDRESS` (identity-matched, falling back to the
 account's default identity); without `FASTMAIL_TOKEN` send permission, outbound emails are
 skipped with a warning (logged + Sentry-captured), they never silently fail.
 
+`FASTMAIL_OAUTH_CLIENT_ID` (optional) turns on the "Connect with FastMail"
+OAuth flow (Authorization Code + PKCE; no client secret exists). While
+unset, the OAuth buttons are hidden everywhere and token paste is the only
+connect path; setting it and redeploying switches `/onboarding` and
+Settings → Email accounts over without any other change. FastMail issues
+client ids manually; the ready-to-send request and the post-reply checklist
+are in `docs/email-connections.md` → Client registration (one-time).
+
 `SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
 is disabled (404) and `scripts/deploy` skips the check with a warning. It must
