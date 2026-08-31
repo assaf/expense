@@ -29,7 +29,9 @@ name: deployment-checks
 # The migrate-db job passes the prod DDL URL directly via the
 # DATABASE_URL_UNPOOLED GitHub secret (the same session-pooler URL
 # scripts/deploy uses for schema DDL) and runs the same `prisma db
-# update` sync as scripts/deploy step 3. The CI VERCEL_TOKEN can't
+# update` sync as scripts/deploy step 3, through a local pgbouncer
+# (the linux CLI build ships without TLS; scripts/deploy runs on
+# darwin where the CLI connects directly). The CI VERCEL_TOKEN can't
 # read project settings (403 PROJECT_UNAUTHORIZED) so `vercel env
 # pull` doesn't work here.
 #
@@ -169,11 +171,11 @@ jobs:
   migrate-db:
     name: Migrate prod DB
     runs-on: ubuntu-latest
-    # 2m, not 1m: the job must fit checkout + pnpm self-installer + node
-    # setup + pnpm install + prisma db update, and a cold runner eats ~55s on
-    # the setup alone (the pnpm/action-setup self-installer alone took 27s
-    # on 2026-08-06, killing a 1m job before db push could start).
-    timeout-minutes: 2
+    # 3m, not 1m: the job must fit checkout + pnpm install + pgbouncer +
+    # prisma db update, and a cold runner eats ~55s on the setup alone
+    # (the pnpm/action-setup self-installer alone took 27s on 2026-08-06,
+    # killing a 1m job before db push could start).
+    timeout-minutes: 3
     needs: [check, test]
     # `success()` keeps the default skip-on-failure semantics (no migration
     # when check or test failed) on top of the main-only gate.
@@ -205,15 +207,35 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
 
-      # The old "CLI driver lacks TLS" demotion is stale: the CLI reaches
-      # the session pooler with sslmode=no-verify (proven 2026-08-31 when
-      # EXPENSE-W's missing EmailConnection columns were synced by hand).
-      # Hard failure on any sync problem: a red run is the signal that a
-      # push landed schema-out-of-sync.
+      # The linux Prisma CLI build ships without TLS, and Supabase rejects
+      # plaintext with (ESSLREQUIRED): every sslmode in the URL is ignored
+      # (probed on 2026-08-31; the darwin CLI does TLS, which is why
+      # scripts/deploy connects directly). A local pgbouncer bridges it:
+      # prisma speaks plain postgres to it on loopback, pgbouncer speaks
+      # TLS to the pooler. auth_type=trust + auth_file is required, not
+      # auth_type=any: with any, pgbouncer sends an empty SCRAM username
+      # and the server rejects it. The pooler host is passed as an IP
+      # because pgbouncer's own resolver is unreliable.
       - name: Sync prod schema
         run: |
-          export DATABASE_URL="$DATABASE_URL_UNPOOLED"
-          DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
+          HOST=$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|^[^@]+@||; s|:[0-9]+.*$||')
+          PORT=$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|^[^@]+@[^:]+:([0-9]+).*|\1|')
+          PGUSER=$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|^postgres(ql)?://([^:]+):.*|\2|')
+          PGPASS=$(echo "$DATABASE_URL_UNPOOLED" | sed -E 's|^postgres(ql)?://[^:]+:([^@]+)@.*|\2|')
+          IP=$(getent hosts "$HOST" | awk 'NR==1{print $1}')
+          echo "pooler: $HOST ($IP:$PORT)"
+          mkdir -p /tmp/pgb
+          printf '[databases]\npostgres = host=%s port=%s dbname=postgres\n[pgbouncer]\nlisten_addr = 127.0.0.1\nlisten_port = 6432\nauth_type = trust\nauth_file = /tmp/pgb/userlist.txt\nserver_tls_sslmode = require\npool_mode = session\nignore_startup_parameters = extra_float_digits,options\npidfile = /tmp/pgb/pgbouncer.pid\nlogfile = /tmp/pgb/pgbouncer.log\n' "$IP" "$PORT" > /tmp/pgb/pgbouncer.ini
+          printf '"%s" "%s"\n' "$PGUSER" "$PGPASS" > /tmp/pgb/userlist.txt
+          sudo apt-get install -y pgbouncer >/dev/null
+          pgbouncer -d /tmp/pgb/pgbouncer.ini
+          DB_NAME=$(printf '%s' "$DATABASE_URL_UNPOOLED" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
+          export DATABASE_URL="postgres://$PGUSER:$PGPASS@127.0.0.1:6432/$DB_NAME?sslmode=disable"
+          for i in 1 2 3 4 5; do
+            psql "$DATABASE_URL" -c 'SELECT 1' -tA && break
+            if [ "$i" = 5 ]; then echo "pgbouncer never came up" >&2; exit 1; fi
+            sleep 1
+          done
           pnpm prisma db update --no-interactive --confirm "$DB_NAME"
 
   # Post-deploy PDF/OCR/MCP smoke + auto-rollback for Vercel auto-deploys.
