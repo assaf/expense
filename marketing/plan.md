@@ -48,12 +48,12 @@ A second track alongside the launch channels: get Expense named on the sites AI 
 
 ### Tier 1: direct AI-citation impact
 
-| Site                                            | What to submit                                                                 | Notes                                                                                                                           |
-| ----------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| MCP Registry (registry.modelcontextprotocol.io) | `npx mcp-publisher login`, then `npx mcp-publisher publish` with `server.json` | Already scheduled Tue 9/1. The canonical source: PulseMCP and Smithery ingest from it automatically, so one publish covers them |
-| Bing Webmaster Tools + IndexNow                 | Verify the domain, submit the sitemap, enable IndexNow                         | The biggest gap in this plan: ChatGPT search runs on Bing's index and Copilot is Bing-only. One-time setup, about an hour       |
-| G2                                              | Free vendor listing; adapt the full description in `alternativeto.md`          | What AI cites for "best expense tracker" queries. The listing counts even before reviews accumulate                             |
-| Capterra                                        | Free listing, same description                                                 | Same Gartner family as GetApp and Software Advice, so one entry can propagate to siblings                                       |
+| Site                                            | What to submit                                                                 | Notes                                                                                                                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MCP Registry (registry.modelcontextprotocol.io) | `npx mcp-publisher login`, then `npx mcp-publisher publish` with `server.json` | Already scheduled Tue 9/1. The canonical source: PulseMCP and Smithery ingest from it automatically, so one publish covers them                                                                                                |
+| Bing Webmaster Tools + IndexNow                 | Verify the domain, submit the sitemap, enable IndexNow                         | Done 2026-08-30: Bing Webmaster and Google Search Console are set up. Leftovers: add labnotes.org to Bing too (the weekly posts are the freshness signal ChatGPT cites), and IndexNow pings need a key file at the domain root |
+| G2                                              | Free vendor listing; adapt the full description in `alternativeto.md`          | What AI cites for "best expense tracker" queries. The listing counts even before reviews accumulate                                                                                                                            |
+| Capterra                                        | Free listing, same description                                                 | Same Gartner family as GetApp and Software Advice, so one entry can propagate to siblings                                                                                                                                      |
 
 ### Tier 2: unique niche and strong directories
 
@@ -73,8 +73,6 @@ A second track alongside the launch channels: get Expense named on the sites AI 
 | DevHunt, Uneed, MicroLaunch                     | Launch posts                                                                           | Indie boards with modest crawl weight; use one only if a launch slot is free that week |
 | Quora                                           | Answers to existing "Expensify alternative for freelancers" questions                  | Long-tail queries ChatGPT draws on; answer, don't pitch                                |
 | Reddit beyond r/SideProject                     | Replies in r/freelance, r/smallbusiness, r/Bookkeeping threads asking for alternatives | Rules of engagement apply: relevant replies only, never cross-post                     |
-
-One confirmation: check Google Search Console has the sitemap. AI Overviews run on Google's index; likely already set up, but a one-minute check.
 
 ## Measurement
 
