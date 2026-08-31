@@ -253,83 +253,17 @@ export const COMPARISON_FAQ: Faq = {
 /** The full FAQ list: the standalone questions, then the comparison. */
 export const FAQS: Faq[] = [...STANDALONE_FAQS, COMPARISON_FAQ];
 
-interface ComparisonRow {
-  aspect: string;
-  expense: string;
-  expensify: string;
-}
-
-/** Factual comparison used on /alternatives. Prices are labeled as-of-date. */
-export const COMPARISON_ROWS: ComparisonRow[] = [
-  {
-    aspect: "Cost",
-    expense:
-      "Free until the app reaches 100 users, then a paid plan applies, still free up to 25 invoices a month. No ads.",
-    expensify: `Free tier limited to 25 SmartScans a month; paid plans are per user monthly subscription (Collect and Control tiers, about $5–$9 per user in 2026; check expensify.com for up-to-date pricing).`,
-  },
-  {
-    aspect: "Designed for",
-    expense:
-      "Individuals, freelancers, and small teams tracking expenses for tax season.",
-    expensify:
-      "Companies with employees, approval workflows, reimbursements, and accounting integrations.",
-  },
-  {
-    aspect: "Receipt scanning",
-    expense:
-      "Unlimited OCR on images and PDFs, AI-suggested categories, pasting, dragging and dropping, and receipt email forwarding.",
-    expensify:
-      "SmartScan receipt OCR limited in the free tier according to corporate policies.",
-  },
-  {
-    aspect: "Email import",
-    expense:
-      "Forward receipt emails from any provider, or connect a FastMail mailbox and receipts landing in your inbox are imported automatically, no forwarding. Most other expense apps only auto-import from Gmail.",
-    expensify:
-      "Email receipts are scanned via SmartScan, limited in the free tier.",
-  },
-  {
-    aspect: "Filing taxes",
-    expense:
-      "Schedule C-based categories, per-project reports, per-year IRS mileage rates, and PDF or ZIP export for your accountant.",
-    expensify:
-      "Focusing on corporate reimbursement and accounting exports rather than personal tax filings.",
-  },
-  {
-    aspect: "Mileage",
-    expense: "Per-year IRS rate trips based on map.",
-    expensify: "Mileage tracking with IRS rates on paid plans.",
-  },
-  {
-    aspect: "Statement reconciliation",
-    expense:
-      "Upload statements from any credit card or bank account (PDF, CSV, QFX/OFX, Excel) and match charges against logged expenses to catch deductions you missed. Works across multiple cards and handles mixed personal/business spending on the same statement.",
-    expensify:
-      "Corporate card reconciliation with real-time transaction matching, settlement tracking, and accounting-software integration on paid plans.",
-  },
-  {
-    aspect: "Multiple users",
-    expense: "One account per invitation code, accounts are separated.",
-    expensify: "Corporate roles, approval chains, and policy controls.",
-  },
-  {
-    aspect: "Privacy and code",
-    expense: "No ads, no resale of your data.",
-    expensify: "Closed-source corporate SaaS.",
-  },
-];
-
-/** The quotable verdict paragraph for the comparison page. */
-export const COMPARISON_SUMMARY = `In case you are a private person, freelancer, or small business team who tracks
-expenses for tax season, Expense is a better fit as it is free (until the app
-reaches 100 users, then free up to 25 invoices a month), reads receipts
-with OCR technology, categorizes with AI, reconciles credit card statements to
-catch missed deductions, and arranges all the expenses according to Schedule C
-format, reports, and mileage at the IRS rate. Expensify
-is a corporate expense management system (workflows, reimbursement, accounting
-integrations). Expensify free version is limited to 25 SmartScans a month, and
-there are paid versions based on per-user monthly subscription ($5-$9 per user
-in 2026 according to the website expensify.com).`;
+/** The quotable summary for the comparison page. */
+export const COMPARISON_SUMMARY = `How Expense stacks up against the receipt
+apps it is most often listed next to: Expensify, Zoho Expense, SparkReceipt,
+Shoeboxed, and Wave. Expense is built for one job: getting a private person's
+or small team's expenses ready for tax season. It is free while the app is
+early (then still free up to 25 invoices a month), reads receipts with OCR,
+suggests categories, reconciles credit card statements to catch missed
+deductions, and arranges everything in Schedule C format with mileage at the
+IRS rate. The apps it gets compared to mostly aim at company expense
+management or general bookkeeping; the table below shows who is best for
+what.`;
 
 interface CompetitorRow {
   app: string;
@@ -544,22 +478,13 @@ ${qa}
 
 /** Full markdown for /alternatives.md. Mirrors the /alternatives page. */
 export function alternativesMarkdown(): string {
-  const rows = COMPARISON_ROWS.map(
-    (r) =>
-      `- **${r.aspect}** — ${APP_NAME}: ${wrap(r.expense)} Expensify: ${wrap(r.expensify)}`,
-  ).join("\n");
-
   const competitorRows = COMPETITOR_ROWS.map(
     (r) =>
       `- **${r.app}** (${r.site}): ${wrap(r.bestFor)} Pricing: ${wrap(r.pricing)} Tax-filing focus: ${wrap(r.taxFiling)}`,
   ).join("\n");
-  return `# ${APP_NAME} vs Expensify: a free alternative
+  return `# How ${APP_NAME} compares to the other receipt apps
 
 ${COMPARISON_SUMMARY}
-
-## Side-by-side
-
-${rows}
 
 ## Expense and the other receipt apps
 
@@ -590,7 +515,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [${APP_NAME}: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
-- [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison with Expensify plus a roundup of Zoho Expense, SparkReceipt, Shoeboxed, and Wave.
+- [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, OpenAI, etc) and approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
