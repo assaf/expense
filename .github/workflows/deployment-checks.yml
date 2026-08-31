@@ -235,6 +235,9 @@ jobs:
           pgbouncer -d /tmp/pgb/pgbouncer.ini
           DB_NAME=$(printf '%s' "$DATABASE_URL_UNPOOLED" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
           export DATABASE_URL="postgres://$PGUSER:$PGPASS@127.0.0.1:6433/$DB_NAME?sslmode=disable"
+          # The CLI prefers DATABASE_URL_UNPOOLED over DATABASE_URL when
+          # both are set; point both at the loopback pgbouncer.
+          export DATABASE_URL_UNPOOLED="$DATABASE_URL"
           for i in 1 2 3 4 5; do
             psql "$DATABASE_URL" -c 'SELECT 1' -tA && break
             if [ "$i" = 5 ]; then
