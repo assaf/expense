@@ -3,6 +3,7 @@ import { cronTick } from "~/lib/cron.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
+import { captureWarning } from "~/lib/errors.server";
 import {
   listAllEmailConnections,
   setEmailConnectionStatus,
@@ -56,9 +57,11 @@ export async function loader({ request }: Route.LoaderArgs) {
             const drain = await drainEmailConnection(connection);
             drained = { evaluated: drain.evaluated, created: drain.created };
           } catch (err) {
-            console.error("[email-connections-cron] drain failed", {
+            // Logged + Sentry-captured: receipts silently stop importing
+            // for this connection until the user notices the badge.
+            captureWarning("[email-connections-cron] drain failed", {
               connectionId: connection.id,
-              err,
+              error: err,
             });
           }
           results.push({
@@ -69,10 +72,10 @@ export async function loader({ request }: Route.LoaderArgs) {
           });
         } catch (err) {
           failed++;
-          console.error("[email-connections-cron] renewal failed", {
+          captureWarning("[email-connections-cron] renewal failed", {
             connectionId: connection.id,
             address: connection.emailAddress,
-            err,
+            error: err,
           });
           await setEmailConnectionStatus(connection.id, "error");
           results.push({ id: connection.id, error: String(err) });

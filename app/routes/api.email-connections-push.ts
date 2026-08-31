@@ -2,8 +2,9 @@ import {
   pushVerificationOf,
   readFastMailPush,
 } from "~/lib/fastmail-push.server";
-import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { setConnectionVerificationCode } from "~/lib/email-connection-push.server";
+import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
+import { captureWarning } from "~/lib/errors.server";
 import {
   readEmailConnectionById,
   setEmailConnectionStatus,
@@ -72,9 +73,9 @@ export async function action({ request }: Route.ActionArgs) {
         subscriptionId,
       });
     } catch (err) {
-      console.error("[email-connections-push] verification update failed:", {
+      captureWarning("[email-connections-push] verification update failed:", {
         connectionId,
-        err,
+        error: err,
       });
       return Response.json({ error: "verification failed" }, { status: 500 });
     }
@@ -88,9 +89,9 @@ export async function action({ request }: Route.ActionArgs) {
         const result = await drainEmailConnection(connection);
         console.info("[email-connections-push] drained", result);
       } catch (err) {
-        console.error("[email-connections-push] drain failed:", {
+        captureWarning("[email-connections-push] drain failed:", {
           connectionId,
-          err,
+          error: err,
         });
         await setEmailConnectionStatus(connection.id, "error").catch(() => {});
       }
