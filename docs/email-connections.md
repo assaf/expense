@@ -38,6 +38,55 @@ jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   API tokens: users revoke at FastMail (Settings → Privacy & Security →
   Authorized connections).
 
+### Client registration (one-time)
+
+FastMail issues OAuth client ids by email to partnerships@fastmailteam.com
+(no self-serve). Until the reply sets `FASTMAIL_OAUTH_CLIENT_ID`, the
+buttons stay hidden; everything above is already coded and tested.
+Ready-to-send request:
+
+> Subject: OAuth client registration for "Expense" (JMAP mail client)
+>
+> Hi,
+>
+> I'd like to register an OAuth client for Expense, a personal receipt
+> tracker at https://expense.labnotes.org. It connects a user's own
+> FastMail mailbox over JMAP so receipts in their inbox import
+> automatically (Email/get, Email/query, Email/import, Mail set
+> operations, and PushSubscription/set for push).
+>
+> - Client type: public, Authorization Code + PKCE (S256), no client
+>   secret.
+> - Redirect URIs: `https://expense.labnotes.org/fastmail-oauth-callback`
+>   and `http://localhost:5199/fastmail-oauth-callback` for development
+>   (please allow the localhost port).
+> - Requested scopes: `urn:ietf:params:jmap:core` and
+>   `urn:ietf:params:jmap:mail` (deliberately not `jmap:submission`:
+>   the app imports mail, it does not send).
+>
+> Two questions: (1) is a client secret required at the token exchange
+> for this client type, and (2) is `PushSubscription/set` permitted under
+> `jmap:core`, or does it need a separate scope?
+>
+> Thanks,
+> Assaf
+
+When the reply arrives, check it against the assumptions baked into
+`app/lib/fastmail-oauth.server.ts`:
+
+- If the reply requires a client secret: add
+  `FASTMAIL_OAUTH_CLIENT_SECRET` to `app/lib/env.ts` and include
+  `client_secret` in both token POSTs when non-empty.
+- If the reply forces https-only redirect URIs (no localhost port
+  allowance): update the `redirectUri` derivation in
+  `app/routes/connect-fastmail.ts` and re-verify the dev flow.
+- If `PushSubscription/set` needs a scope beyond `jmap:core`: add it to
+  `OAUTH_SCOPES`; no other code changes (users re-consent once).
+- If the token response omits `refresh_token` on refresh (some servers
+  only return it on the code exchange): stop rotating
+  `refreshTokenEnc` when absent instead of persisting null; the current
+  code assumes FastMail always rotates, per their docs.
+
 ## FastMail onboarding (/onboarding)
 
 First-run flow for users who connect their own mailbox instead of signing
