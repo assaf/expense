@@ -265,7 +265,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
     aspect: "Cost",
     expense:
       "Free until the app reaches 100 users, then a paid plan applies, still free up to 25 invoices a month. No ads.",
-    expensify: `Free tier limited to 25 SmartScans a month; paid plans are per user monthly subscription (Collect and Control tiers, about $5–$9 per user in 2025; check expensify.com for up-to-date pricing).`,
+    expensify: `Free tier limited to 25 SmartScans a month; paid plans are per user monthly subscription (Collect and Control tiers, about $5–$9 per user in 2026; check expensify.com for up-to-date pricing).`,
   },
   {
     aspect: "Designed for",
@@ -329,7 +329,81 @@ format, reports, and mileage at the IRS rate. Expensify
 is a corporate expense management system (workflows, reimbursement, accounting
 integrations). Expensify free version is limited to 25 SmartScans a month, and
 there are paid versions based on per-user monthly subscription ($5-$9 per user
-in 2025 according to the website expensify.com).`;
+in 2026 according to the website expensify.com).`;
+
+interface CompetitorRow {
+  app: string;
+  site: string;
+  bestFor: string;
+  pricing: string;
+  taxFiling: string;
+}
+
+/** One-row-per-app roundup of the receipt trackers most often listed next
+ * to Expense. Numbers come from each vendor's pricing page, checked
+ * August 2026, and each cell names the vendor it came from. */
+export const COMPETITOR_ROWS: CompetitorRow[] = [
+  {
+    app: "Expense",
+    site: SITE_URL,
+    bestFor:
+      "Freelancers and individuals getting their expenses ready for tax season.",
+    pricing:
+      "Free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.",
+    taxFiling:
+      "IRS Schedule C categories, mileage at the IRS rate, statement reconciliation, PDF or ZIP export for your accountant.",
+  },
+  {
+    app: "Expensify",
+    site: "https://www.expensify.com",
+    bestFor:
+      "Companies with employee expense policies, approval workflows, and reimbursements.",
+    pricing:
+      "Free tier limited to 25 SmartScans a month; paid plans about $5-$9 per user a month in 2026 (expensify.com).",
+    taxFiling:
+      "Corporate reimbursement and accounting exports, not personal tax prep.",
+  },
+  {
+    app: "Zoho Expense",
+    site: "https://www.zoho.com/expense/",
+    bestFor: "Small teams already working in the Zoho suite.",
+    pricing:
+      "Free for up to 3 users with 20 receipt scans per user a month; Standard is $4 per user a month (zoho.com).",
+    taxFiling:
+      "Expense reports and accounting integrations, without a Schedule C structure.",
+  },
+  {
+    app: "SparkReceipt",
+    site: "https://sparkreceipt.com",
+    bestFor: "Solo owners who want AI extraction across many currencies.",
+    pricing:
+      "No free plan; $99.99 a year (about $8.33 a month) for 3 seats, 7-day trial (sparkreceipt.com).",
+    taxFiling:
+      "AI categorization that maps to any tax system; currency-global, not tied to a US form.",
+  },
+  {
+    app: "Shoeboxed",
+    site: "https://www.shoeboxed.com",
+    bestFor:
+      "Clearing piles of paper receipts through the mail-in Magic Envelope.",
+    pricing:
+      "No free plan; Starter is $9 a month with 30 digital scans a month (shoeboxed.com).",
+    taxFiling:
+      "Audit-ready reports, unlimited mileage tracking, and CSV export.",
+  },
+  {
+    app: "Wave",
+    site: "https://www.waveapps.com",
+    bestFor: "Invoicing and bookkeeping first, receipts second.",
+    pricing:
+      "Starter is free but scans no receipts; receipt capture needs Pro at $19 a month (waveapps.com).",
+    taxFiling: "General bookkeeping reports rather than a specific tax form.",
+  },
+];
+
+/** The as-of note shown under the roundup table. */
+export const COMPETITOR_PRICING_NOTE =
+  "Pricing from each vendor's pricing page, checked August 2026; check the vendor for current numbers.";
 
 function wrap(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -474,6 +548,11 @@ export function alternativesMarkdown(): string {
     (r) =>
       `- **${r.aspect}** — ${APP_NAME}: ${wrap(r.expense)} Expensify: ${wrap(r.expensify)}`,
   ).join("\n");
+
+  const competitorRows = COMPETITOR_ROWS.map(
+    (r) =>
+      `- **${r.app}** (${r.site}): ${wrap(r.bestFor)} Pricing: ${wrap(r.pricing)} Tax-filing focus: ${wrap(r.taxFiling)}`,
+  ).join("\n");
   return `# ${APP_NAME} vs Expensify: a free alternative
 
 ${COMPARISON_SUMMARY}
@@ -481,6 +560,12 @@ ${COMPARISON_SUMMARY}
 ## Side-by-side
 
 ${rows}
+
+## Expense and the other receipt apps
+
+${competitorRows}
+
+${COMPETITOR_PRICING_NOTE}
 
 ${APP_NAME} (${SITE_URL}) is free, uses OCR and AI to categorize receipts, tracks
 mileage at the IRS rate, and organizes expenses into Schedule C-based
@@ -505,7 +590,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [${APP_NAME}: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
-- [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison for people choosing an expense tracker.
+- [${APP_NAME} vs Expensify](${SITE_URL}/alternatives.md): A side-by-side comparison with Expensify plus a roundup of Zoho Expense, SparkReceipt, Shoeboxed, and Wave.
 - [MCP endpoint for AI assistants](${SITE_URL}/mcp): Connect any MCP client (Claude, OpenAI, etc) and approve the connection by signing in with your account. The assistant can capture receipts, log mileage, answer spending questions, and export reports.
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
