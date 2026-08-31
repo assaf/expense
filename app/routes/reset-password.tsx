@@ -1,5 +1,6 @@
 import { KeyRound, MailCheck, ReceiptText } from "lucide-react";
 import { errorMessage } from "~/lib/errors.server";
+import { pageMeta } from "~/lib/seo-content";
 import { Link, data } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
@@ -45,7 +46,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "Reset password — Expense" }];
+  return [
+    ...pageMeta(
+      "Reset password — Expense",
+      "Set a new password for your Expense account from the single-use link in your email. Links are valid for 7 days.",
+      "/reset-password",
+    ),
+    // A token-entry utility page: keep it out of search indexes.
+    { name: "robots", content: "noindex" },
+  ];
 }
 
 export async function action({ request }: Route.ActionArgs) {

@@ -1,5 +1,6 @@
 import { KeyRound, PlugZap, ReceiptText } from "lucide-react";
 import { errorMessage } from "~/lib/errors.server";
+import { pageMeta } from "~/lib/seo-content";
 import { Link, data, redirect, useFetcher } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
@@ -93,7 +94,11 @@ export async function loader({
 }
 
 export function meta(): Route.MetaDescriptors {
-  return [{ title: "Connect FastMail — Expense" }];
+  return pageMeta(
+    "Connect FastMail — Expense",
+    "Connect your FastMail account instead of email verification: receipts import automatically, and your expenses are arranged for tax season. Free.",
+    "/onboarding",
+  );
 }
 
 export async function action({ request }: Route.ActionArgs) {
