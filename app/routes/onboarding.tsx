@@ -13,7 +13,7 @@ import {
   sessionStorage,
 } from "~/lib/auth.server";
 import { isAuthenticated } from "~/lib/auth.server";
-import { decryptSecret } from "~/lib/token-crypto.server";
+import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
   FM_PENDING_SESSION_KEY,
   isFastMailOAuthConfigured,
@@ -22,11 +22,9 @@ import {
 import {
   completeOnboarding,
   oauthOnboardingState,
-  type OAuthCredentials,
   type OAuthOnboardingState,
   verifyOnboardingToken,
 } from "~/lib/onboarding.server";
-import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
   formEmail,
   formString,
@@ -142,7 +140,7 @@ export async function action({ request }: Route.ActionArgs) {
     const token = formString(form, "token").trim();
     const email = formEmail(form);
     const password = formString(form, "password");
-    let oauth: OAuthCredentials | undefined;
+    let oauth: FmPendingConnection | undefined;
     if (!token) {
       const session = await sessionStorage.getSession(
         request.headers.get("Cookie"),
@@ -151,15 +149,10 @@ export async function action({ request }: Route.ActionArgs) {
         | FmPendingConnection
         | undefined;
       if (pending) {
-        // The callback verified the access token live moments ago;
-        // decrypt the parked credentials for this server call only.
-        oauth = {
-          username: pending.username,
-          mailAccountId: pending.mailAccountId,
-          accessToken: decryptSecret(pending.tokenEnc),
-          refreshToken: decryptSecret(pending.refreshTokenEnc),
-          expiresAt: pending.expiresAt,
-        };
+        // The callback parked these already encrypted and verified the
+        // access token live; the route passes the ciphertext straight
+        // through and never touches plaintext credentials.
+        oauth = pending;
       }
     }
     if (!token && !oauth) {

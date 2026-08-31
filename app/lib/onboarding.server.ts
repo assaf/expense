@@ -12,6 +12,7 @@ import { verifyJmapToken } from "~/lib/jmap.server";
 import { hashPassword } from "~/lib/passwords";
 import { db } from "~/lib/prisma.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
+import type { FmPendingConnection } from "~/lib/fastmail-oauth.server";
 import { createSessionCookie, login, validateSignup } from "~/lib/auth.server";
 import type { Account } from "~/lib/types";
 
@@ -77,15 +78,10 @@ export async function oauthOnboardingState(
   };
 }
 
-/** Decrypted OAuth credentials handed to completeOnboarding by the
- * onboarding action (read out of the fmPending session). */
-export interface OAuthCredentials {
-  username: string;
-  mailAccountId: string;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: string;
-}
+/** No plaintext-OAuth type is exported: the onboarding route passes the
+ * fmPending connection exactly as the callback parked it (ciphertext;
+ * the session cookie is signed, so the value is server-generated), and
+ * it flows straight into the connection row. */
 
 export interface OnboardingOutcome {
   sessionCookie: string;
@@ -118,11 +114,12 @@ export async function completeOnboarding(input: {
   /** Pasted API token; verified live here. */
   token?: string;
   /**
-   * OAuth credentials from the fmPending session (the callback already
-   * verified the access token live seconds earlier; no second network
-   * verification). Exactly one of token/oauth is required.
+   * The fmPending connection exactly as the callback parked it on the
+   * session: ciphertext, already live-verified there (no second network
+   * verification) and passed straight into the connection row. Exactly
+   * one of token/oauth is required.
    */
-  oauth?: OAuthCredentials;
+  oauth?: FmPendingConnection;
   email: string;
   password: string;
 }): Promise<OnboardingOutcome> {
@@ -215,11 +212,9 @@ export async function completeOnboarding(input: {
     emailAddress: mailboxAddress,
     jmapAccountId: mailAccountId,
     tokenEnc: input.oauth
-      ? encryptSecret(input.oauth.accessToken)
+      ? input.oauth.tokenEnc
       : encryptSecret(input.token ?? ""),
-    refreshTokenEnc: input.oauth
-      ? encryptSecret(input.oauth.refreshToken)
-      : undefined,
+    refreshTokenEnc: input.oauth ? input.oauth.refreshTokenEnc : undefined,
     tokenExpiresAt: input.oauth ? input.oauth.expiresAt : undefined,
   });
   if (!created.ok) {

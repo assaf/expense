@@ -53,24 +53,24 @@ export async function registerWebMcpTools(): Promise<void> {
   if (!mc) return;
   try {
     const existing = new Set((await mc.getTools()).map((t) => t.name));
-    await Promise.all(
-      READ_TOOLS.map((spec) => {
-        if (existing.has(spec.name)) return undefined;
-        return mc.registerTool({
-          name: spec.name,
-          description: spec.description,
-          ...(spec.inputSchema ? { inputSchema: spec.inputSchema } : {}),
-          annotations: { readOnlyHint: true },
-          execute: (input, { signal }) =>
-            api(
-              spec.inputSchema
-                ? `/api/webmcp/${spec.resource}?${filtersToQuery(input, spec.inputSchema)}`
-                : `/api/webmcp/${spec.resource}`,
-              signal,
-            ),
-        });
-      }),
-    );
+    // Sequential on purpose: three quick calls at page load, deterministic
+    // order, and no promise aggregator gymnastics for the skip case.
+    for (const spec of READ_TOOLS) {
+      if (existing.has(spec.name)) continue;
+      await mc.registerTool({
+        name: spec.name,
+        description: spec.description,
+        ...(spec.inputSchema ? { inputSchema: spec.inputSchema } : {}),
+        annotations: { readOnlyHint: true },
+        execute: (input, { signal }) =>
+          api(
+            spec.inputSchema
+              ? `/api/webmcp/${spec.resource}?${filtersToQuery(input, spec.inputSchema)}`
+              : `/api/webmcp/${spec.resource}`,
+            signal,
+          ),
+      });
+    }
   } catch (err) {
     // The origin-trial surface is a draft API; a browser that rejects
     // mid-registration must cost a warning, never a page error.

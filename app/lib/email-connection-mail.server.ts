@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   buildRfc822Message,
   type SendEmailInput,
@@ -122,24 +123,65 @@ export async function mailboxSummaries(opts: {
       "m0",
     ],
   ]);
-  const list = (got[0]![1] as { list?: unknown[] }).list ?? [];
-  return list.map((e) => {
-    const email = e as {
-      id: string;
-      receivedAt?: string;
-      subject?: string;
-      from?: Array<{ name?: string; email?: string }>;
-      preview?: string;
-    };
-    const first = email.from?.[0];
-    return {
-      id: email.id,
-      receivedAt: email.receivedAt ?? new Date().toISOString(),
-      subject: email.subject ?? "",
-      from: formatAddress(first),
-      ...(opts.includePreview ? { preview: email.preview ?? "" } : {}),
-    };
+  return parseEmailSummaries(got[0]![1], {
+    includePreview: Boolean(opts.includePreview),
   });
+}
+
+/** One Email/get row of the listing. Header fields are String|null per
+ * RFC 8621; preview is present only when the query asked for it, so it is
+ * nullish here for both request shapes. */
+const connectionEmailRowSchema = z.object({
+  id: z.string(),
+  receivedAt: z.string().nullish(),
+  subject: z.string().nullish(),
+  from: z
+    .array(
+      z.object({ name: z.string().nullish(), email: z.string().nullish() }),
+    )
+    .nullish(),
+  preview: z.string().nullish(),
+});
+
+/**
+ * Parse an Email/get listing response into summaries. The split mirrors
+ * the wire-boundary rules: a structurally wrong ENVELOPE throws loudly
+ * (that is FastMail changing shape — the EXPENSE-S/X lesson), while a
+ * single malformed ROW is skipped with a warning (one junk email must not
+ * kill a whole mailbox listing; the next scan retries it).
+ */
+export function parseEmailSummaries(
+  response: unknown,
+  opts: { includePreview: boolean },
+): ConnectionEmailSummary[] {
+  const parsed = z
+    .object({ list: z.array(z.unknown()).nullish() })
+    .safeParse(response);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new Error(
+      `Email/get response shape mismatch: ${issue?.path.join(".") || "(root)"} ${issue?.message ?? "invalid"}`,
+    );
+  }
+  const summaries: ConnectionEmailSummary[] = [];
+  for (const row of parsed.data.list ?? []) {
+    const email = connectionEmailRowSchema.safeParse(row);
+    if (!email.success) {
+      console.warn(
+        "[email-connections] skipping malformed Email/get row:",
+        email.error.issues[0]?.path.join(".") || "(root)",
+      );
+      continue;
+    }
+    summaries.push({
+      id: email.data.id,
+      receivedAt: email.data.receivedAt ?? new Date().toISOString(),
+      subject: email.data.subject ?? "",
+      from: formatAddress(email.data.from?.[0]),
+      ...(opts.includePreview ? { preview: email.data.preview ?? "" } : {}),
+    });
+  }
+  return summaries;
 }
 
 /** Inbox summaries (role = "inbox"). Retained for the default adapter. */

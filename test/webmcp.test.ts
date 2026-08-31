@@ -26,7 +26,10 @@ const modelContext = {
 
 const fetchMock = vi.fn(async (url: string | URL | Request) => ({
   ok: true,
-  json: async () => ({ url: String(url) }),
+  json: async () => ({
+    url:
+      typeof url === "string" ? url : url instanceof URL ? url.href : url.url,
+  }),
 }));
 
 function installModelContext() {
