@@ -672,29 +672,9 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
       inputSchema: expenseFilterSchema,
     },
     async (args) => {
-      const expenses = filterExpenses(await readExpenses(accountId), args);
-      const byCategory = summarizeBy(
-        expenses,
-        (e) => e.category || "Uncategorized",
+      return ok(
+        summarizeExpenses(filterExpenses(await readExpenses(accountId), args)),
       );
-      // The grand total is the exact sum of the category buckets: every
-      // amount-bearing expense lands in exactly one bucket.
-      const total = [...byCategory.values()].reduce(
-        (sum, b) => sum.add(b.total),
-        new Decimal(0),
-      );
-      const breakdown = [...byCategory.entries()]
-        .map(([category, b]) => ({
-          category,
-          count: b.count,
-          total: b.total.toFixed(2),
-        }))
-        .sort((a, b) => (a.total < b.total ? 1 : a.total > b.total ? -1 : 0));
-      return ok({
-        count: expenses.length,
-        total: total.toFixed(2),
-        byCategory: breakdown,
-      });
     },
   );
 
@@ -878,8 +858,9 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
 
 // --- Tool implementations --------------------------------------------------
 
-/** Shared filters for list_expenses and expense_summary. */
-interface ExpenseFilters {
+/** Shared filters for list_expenses and expense_summary, also used by the
+ * /api/webmcp JSON mirror. */
+export interface ExpenseFilters {
   dateFrom?: string;
   dateTo?: string;
   category?: string;
@@ -888,8 +869,10 @@ interface ExpenseFilters {
   unreported?: boolean;
   type?: "receipt" | "mileage";
 }
-
-function filterExpenses(expenses: Expense[], f: ExpenseFilters): Expense[] {
+export function filterExpenses(
+  expenses: Expense[],
+  f: ExpenseFilters,
+): Expense[] {
   return expenses.filter((e) => {
     if (f.dateFrom && (!e.date || e.date < f.dateFrom)) return false;
     if (f.dateTo && (!e.date || e.date > f.dateTo)) return false;
@@ -910,8 +893,45 @@ function filterExpenses(expenses: Expense[], f: ExpenseFilters): Expense[] {
   });
 }
 
+/** The expense_summary payload: count + exact total, and the per-category
+ * breakdown (sorted by total, descending). The grand total is the exact sum
+ * of the category buckets: every amount-bearing expense lands in exactly
+ * one bucket. */
+export function summarizeExpenses(expenses: Expense[]): {
+  count: number;
+  total: string;
+  byCategory: { category: string; count: number; total: string }[];
+} {
+  const byCategory = summarizeBy(
+    expenses,
+    (e) => e.category || "Uncategorized",
+  );
+  const total = [...byCategory.values()].reduce(
+    (sum, b) => sum.add(b.total),
+    new Decimal(0),
+  );
+  const breakdown = [...byCategory.entries()]
+    .sort((a, b) =>
+      b[1].total.greaterThan(a[1].total)
+        ? 1
+        : b[1].total.lessThan(a[1].total)
+          ? -1
+          : 0,
+    )
+    .map(([category, b]) => ({
+      category,
+      count: b.count,
+      total: b.total.toFixed(2),
+    }));
+  return {
+    count: expenses.length,
+    total: total.toFixed(2),
+    byCategory: breakdown,
+  };
+}
+
 /** The wire shape of an expense: JSON-safe, money as decimal strings. */
-function serializeExpense(e: Expense) {
+export function serializeExpense(e: Expense) {
   return {
     id: e.id,
     type: e.type,

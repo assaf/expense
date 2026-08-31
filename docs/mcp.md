@@ -207,3 +207,23 @@ curl -s https://expense.example.com/mcp \
 - Tests: `test/mcp.test.ts` (OAuth access tokens + smoke round trip) and
   `test/oauth.test.ts` (discovery, registration, the full PKCE flow through
   the real consent page, refresh rotation, revocation, user isolation).
+
+## WebMCP experiment (in-page tools)
+
+Besides the HTTP endpoint, the app registers three **read-only** tools with
+the browser itself (WebMCP, the `document.modelContext` API in Chrome's
+origin trial, Chrome 149+): `list_expenses`, `expense_summary`, and
+`list_reports`. A page-embedded agent (browser agent, ChatGPT Desktop) can
+then query your expenses in the tab you already have open, with your normal
+session; there is no OAuth dance because the tools fetch `/api/webmcp/*`
+same-origin. Writes stay MCP-only while this is experimental.
+
+- Registration: `app/lib/webmcp.ts` (no-op where the API is absent); wired
+  in `app/root.tsx` for signed-in users.
+- Data: `app/routes/api.webmcp.$resource.ts`, a session-authenticated JSON
+  mirror that imports the MCP tools' filter/serialize/summarize code, so
+  both surfaces return identical shapes.
+- Trying it: join the [origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241)
+  (or use a Chrome with the flag), sign in, and in DevTools run
+  `await document.modelContext.getTools()`. Execute a tool with
+  `document.modelContext.executeTool(tool, '{"limit": 5}')`.

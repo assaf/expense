@@ -195,7 +195,18 @@ export function rejectCrossSitePost(request: Request): void {
     // Unparseable Origin: treat as foreign rather than guess.
     throw new Response("Cross-site request blocked", { status: 403 });
   }
-  if (originUrl.origin !== new URL(request.url).origin) {
+  if (originUrl.origin === new URL(request.url).origin) return;
+  // Behind a TLS-terminating proxy (local dev: https://expense.localhost
+  // terminating at an http://127.0.0.1 vite server) the scheme and host the
+  // server sees can both differ from the browser's Origin. The proxy
+  // reports the public side of the chain in x-forwarded-host, so the same
+  // host through the proxy chain is still the same site.
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim();
+  const host = forwardedHost || new URL(request.url).host;
+  if (originUrl.host !== host) {
     throw new Response("Cross-site request blocked", { status: 403 });
   }
 }

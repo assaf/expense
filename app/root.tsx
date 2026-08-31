@@ -13,6 +13,7 @@ import {
 } from "react-router";
 import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
+import { registerWebMcpTools } from "~/lib/webmcp";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
 import { umamiConfig } from "~/lib/umami.server";
@@ -140,6 +141,9 @@ export default function App() {
     // Link this session's pageviews/events to the signed-in user. Safe even
     // before the (deferred) script has run; identify is a no-op then.
     window.umami?.identify?.({ id: user.id });
+    // WebMCP experiment: expose the read tools to browser agents when the
+    // browser has the API (Chrome 149+ origin trial); no-op elsewhere.
+    void registerWebMcpTools();
   }, [user]);
   return (
     <html lang="en">
