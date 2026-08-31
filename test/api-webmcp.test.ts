@@ -111,6 +111,19 @@ describe("api.webmcp.$resource", () => {
     expect(body.returned).toBe(2);
   });
 
+  it("falls back to the default limit for out-of-range and garbage values", async () => {
+    mocks.readExpenses.mockResolvedValue([
+      receipt({ id: "e1", date: "2026-08-01" }),
+      receipt({ id: "e2", date: "2026-08-05" }),
+      receipt({ id: "e3", date: "2026-08-09" }),
+    ]);
+    for (const query of ["?limit=999", "?limit=0", "?limit=abc", ""]) {
+      const response = (await loader(args("expenses", query))) as Response;
+      const body = (await response.json()) as { returned: number };
+      expect(body.returned).toBe(3);
+    }
+  });
+
   it("filters by category before counting", async () => {
     mocks.readExpenses.mockResolvedValue([
       receipt({ id: "e1", category: "Meals" }),
