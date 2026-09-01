@@ -48,9 +48,12 @@ const PALETTE_PANEL =
 /**
  * Shortcut chords for the palette actions that have one, by action id.
  * One table feeds the kbar actions below and the Shift+? hint layer
- * (shortcut-hints.tsx), so the two can never drift apart.
+ * (shortcut-hints.tsx), so the two can never drift apart. `satisfies`
+ * keeps the keys literal: a mistyped action id lookup is a type error,
+ * and `test/shortcut-anchors.test.ts` pins the data-shortcut attributes
+ * to these keys.
  */
-export const ACTION_SHORTCUTS: Record<string, string[]> = {
+export const ACTION_SHORTCUTS = {
   "nav-expenses": ["g", "e"],
   "nav-reports": ["g", "r"],
   "nav-emails": ["g", "m"],
@@ -61,7 +64,7 @@ export const ACTION_SHORTCUTS: Record<string, string[]> = {
   "upload-expense": ["f"],
   "export-report": ["e"],
   "search-expenses": ["/"],
-};
+} satisfies Record<string, string[]>;
 
 /** The Settings route action response for `intent=addCategory`. */
 type AddCategoryResult =
