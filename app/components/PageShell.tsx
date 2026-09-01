@@ -87,7 +87,10 @@ export function PageShell({
           <div className="flex items-center gap-2">
             {headerRight ?? null}
             <Button asChild variant="ghost" size="sm">
-              <Link to={backTo}>
+              <Link
+                to={backTo}
+                data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
+              >
                 <ArrowLeft aria-hidden="true" className="h-4 w-4" /> {backLabel}
               </Link>
             </Button>
@@ -109,6 +112,7 @@ export function PageShell({
           <button
             type="button"
             onClick={onBack}
+            data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
             className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100"
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
@@ -116,6 +120,7 @@ export function PageShell({
         ) : (
           <Link
             to={backTo}
+            data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
             className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100"
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back

@@ -10,6 +10,25 @@ const blurFocus = (page: Page) =>
       document.activeElement.blur();
     }
   });
+
+/** Toggle the Shift+? hint layer on, retrying the press: like every
+ * shortcut it can land in the pre-hydration window where it is a no-op. */
+const showHints = async (page: Page) => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await blurFocus(page);
+    await page.keyboard.press("Shift+Slash");
+    const shown = await page
+      .locator("[data-shortcut-hint]")
+      .first()
+      .waitFor({ state: "visible", timeout: 2500 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (shown) return;
+  }
+  throw new Error("shortcut hint layer never appeared on Shift+?");
+};
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
 // The palette mounts in the root layout for signed-in users. The shared
@@ -136,7 +155,7 @@ describe("Command palette", () => {
 
     page = await goto("/");
     await blurFocus(page);
-    await page.keyboard.press("Shift+Slash"); // "?"
+    await page.keyboard.press("Slash"); // "/"
     const homeSearch = page.getByLabel("Search expenses");
     await expect(homeSearch).toBeFocused();
 
@@ -155,14 +174,52 @@ describe("Command palette", () => {
     expect(chooser).not.toBeNull();
   });
 
+  it("pins shortcut hint badges next to their elements on Shift+?", async () => {
+    page = await goto("/");
+    await showHints(page);
+    // Home carries eight anchors: the four nav buttons, the three
+    // create/upload buttons, and the search box.
+    const badges = page.locator("[data-shortcut-hint]");
+    await expect(badges).toHaveCount(8);
+    // The search badge sits centered above the search box, just clear of
+    // it: the placement that keeps every badge off the neighboring
+    // controls in the app's tight button rows.
+    const input = await page.getByLabel("Search expenses").boundingBox();
+    const hint = await page
+      .locator('[data-shortcut-hint="search-expenses"]')
+      .boundingBox();
+    const center = hint!.x + hint!.width / 2;
+    expect(center).toBeGreaterThanOrEqual(input!.x);
+    expect(center).toBeLessThanOrEqual(input!.x + input!.width);
+    expect(hint!.y + hint!.height).toBeLessThanOrEqual(input!.y);
+    // ? toggles the layer off and back on; Escape dismisses it.
+    await page.keyboard.press("Shift+Slash");
+    await expect(badges).toHaveCount(0);
+    await page.keyboard.press("Shift+Slash");
+    await expect(badges).toHaveCount(8);
+    await page.keyboard.press("Escape");
+    await expect(badges).toHaveCount(0);
+  });
+
+  it("shows only the back-to-expenses hint on an editor page", async () => {
+    page = await goto("/expense/new");
+    await showHints(page);
+    await expect(page.locator("[data-shortcut-hint]")).toHaveCount(1);
+    await expect(
+      page.locator('[data-shortcut-hint="nav-expenses"]'),
+    ).toBeVisible();
+  });
+
   it("ignores shortcut keys typed inside inputs", async () => {
     page = await goto("/");
     const box = page.getByLabel("Search expenses");
     await box.click();
-    await box.pressSequentially("amefgs");
+    await box.pressSequentially("amefgs?");
     await page.waitForTimeout(500);
     expect(page.url()).toBe(page.url()); // still on home, no shortcut fired
-    await expect(box).toHaveValue("amefgs");
+    await expect(box).toHaveValue("amefgs?");
+    // The ? typed into the box must not have toggled the hint layer.
+    await expect(page.locator("[data-shortcut-hint]")).toHaveCount(0);
   });
 
   it("opens a file picker for Upload expense file and drafts the receipt", async () => {

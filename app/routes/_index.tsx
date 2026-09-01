@@ -590,22 +590,22 @@ function ExpenseList({
         </h1>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/reconcile">
+            <Link to="/reconcile" data-shortcut="nav-reconcile">
               <ListChecks aria-hidden="true" className="h-4 w-4" /> Reconcile
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/export">
+            <Link to="/export" data-shortcut="nav-reports">
               <Download aria-hidden="true" className="h-4 w-4" /> Reports
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/emails">
+            <Link to="/emails" data-shortcut="nav-emails">
               <Mail aria-hidden="true" className="h-4 w-4" /> Email
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/settings">
+            <Link to="/settings" data-shortcut="nav-settings">
               <Settings aria-hidden="true" className="h-4 w-4" /> Settings
             </Link>
           </Button>
@@ -618,15 +618,23 @@ function ExpenseList({
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap items-center gap-0.5 sm:gap-2">
-          <Button onClick={() => createExpense("receipt")}>
+          <Button
+            data-shortcut="new-receipt"
+            onClick={() => createExpense("receipt")}
+          >
             <ReceiptText aria-hidden="true" className="h-4 w-4" /> Add receipt
           </Button>
-          <Button onClick={() => createExpense("mileage")} variant="secondary">
+          <Button
+            data-shortcut="new-mileage"
+            onClick={() => createExpense("mileage")}
+            variant="secondary"
+          >
             <MapPinned aria-hidden="true" className="h-4 w-4" /> Add mileage
           </Button>
           <Button
             type="button"
             variant="secondary"
+            data-shortcut="upload-expense"
             onClick={() => fileRef.current?.click()}
           >
             <Upload aria-hidden="true" className="h-4 w-4" /> Upload file
@@ -643,7 +651,10 @@ function ExpenseList({
             }}
           />
         </div>
-        <div className="relative w-full sm:min-w-56 sm:flex-1">
+        <div
+          className="relative w-full sm:min-w-56 sm:flex-1"
+          data-shortcut="search-expenses"
+        >
           <Search
             aria-hidden="true"
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"

@@ -13,6 +13,7 @@ import {
 } from "react-router";
 import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
+import { ShortcutHints } from "~/components/shortcut-hints";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
 import { umamiConfig } from "~/lib/umami.server";
@@ -203,6 +204,7 @@ export default function App() {
         ) : null}
         <Outlet />
         {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
+        {user ? <ShortcutHints /> : null}
         <ScrollRestoration />
         {/* Emailed links carry single-use tokens in ?token= (reset,
         verification, sender claim). Strip the query so the tracker records

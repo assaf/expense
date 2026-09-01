@@ -232,7 +232,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
             {
               id: "search-expenses",
               name: "Search expenses",
-              shortcut: ["?"],
+              shortcut: ["/"],
               section: "Search",
               keywords: "find filter query amount merchant",
               icon: <Search aria-hidden="true" className="h-4 w-4" />,
