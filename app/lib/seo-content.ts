@@ -444,7 +444,7 @@ ${AI_SECURITY}
 
 /** One-paragraph hero summary for /connect, quoted by the page and /connect.md. */
 export const MCP_PAGE_SUMMARY =
-  "Expense speaks the Model Context Protocol: connect any MCP client (Claude, Claude Code, Cursor, VS Code, ChatGPT, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth; there are no API keys.";
+  "Expense speaks the Model Context Protocol: connect any MCP client (Claude, ChatGPT, Gemini CLI, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth; there are no API keys.";
 
 /** Per-client setup instructions, rendered on /connect and mirrored in /connect.md. */
 export interface McpClientInstructions {
@@ -466,44 +466,6 @@ export const MCP_CLIENTS: McpClientInstructions[] = [
       "Claude opens a browser to sign in to Expense; approve the connection",
     ],
     note: "The connector also appears in Claude Desktop and Claude Code when signed in with the same Claude account.",
-  },
-  {
-    id: "claude-code",
-    name: "Claude Code",
-    steps: ["Run:", "Sign in when the browser opens; approve the connection."],
-    code: {
-      lang: "sh",
-      body: `claude mcp add --transport http expense ${MCP_ENDPOINT}`,
-    },
-  },
-  {
-    id: "cursor",
-    name: "Cursor",
-    steps: ["Add to your Cursor MCP config (~/.cursor/mcp.json):"],
-    code: {
-      lang: "json",
-      body: JSON.stringify(
-        { mcpServers: { expense: { url: MCP_ENDPOINT } } },
-        null,
-        2,
-      ),
-    },
-    note: "Cursor opens the Expense sign-in the first time it calls a tool.",
-  },
-  {
-    id: "vscode",
-    name: "VS Code",
-    steps: [
-      'Command Palette, run "MCP: Add Server", choose HTTP, and paste the server URL; or add to .vscode/mcp.json:',
-    ],
-    code: {
-      lang: "json",
-      body: JSON.stringify(
-        { servers: { expense: { type: "http", url: MCP_ENDPOINT } } },
-        null,
-        2,
-      ),
-    },
   },
   {
     id: "chatgpt",
@@ -529,13 +491,36 @@ export const MCP_CLIENTS: McpClientInstructions[] = [
     },
   },
   {
-    id: "codex",
-    name: "Codex CLI",
-    steps: ["Add to ~/.codex/config.toml:"],
+    id: "pi",
+    name: "Pi",
+    steps: [
+      "Install the MCP adapter and restart Pi: pi install npm:pi-mcp-adapter",
+      "Add to .mcp.json (project) or ~/.config/mcp/mcp.json (global):",
+      "Ask for a tool: the first call opens the Expense sign-in, or run /mcp-auth expense.",
+    ],
     code: {
-      lang: "toml",
-      body: `[mcp_servers.expense]\nurl = "${MCP_ENDPOINT}"`,
+      lang: "json",
+      body: JSON.stringify(
+        { mcpServers: { expense: { url: MCP_ENDPOINT, auth: "oauth" } } },
+        null,
+        2,
+      ),
     },
+    note: "Pi has no built-in MCP client by design; pi-mcp-adapter is the community package that adds one.",
+  },
+  {
+    id: "omp",
+    name: "Oh My Pi (OMP)",
+    steps: ["Add to ~/.omp/agent/mcp.json (user) or .omp/mcp.json (project):"],
+    code: {
+      lang: "json",
+      body: JSON.stringify(
+        { mcpServers: { expense: { type: "http", url: MCP_ENDPOINT } } },
+        null,
+        2,
+      ),
+    },
+    note: "Or run /mcp add in a session. OMP opens the Expense sign-in when the server asks for auth; /mcp reauth expense re-approves later.",
   },
   {
     id: "other",
@@ -736,7 +721,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
-- [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, Claude Code, Cursor, VS Code, ChatGPT, Gemini CLI, Codex), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
+- [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
 ## Optional

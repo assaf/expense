@@ -1,4 +1,5 @@
-import { Bot, Check, Link2, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Check, Copy, Link2, ShieldCheck, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { cardSurface, Card } from "~/components/ui/Card";
@@ -36,15 +37,52 @@ const CONNECT_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
     `${APP_NAME}: MCP server`,
-    "Install instructions for the Expense MCP server in Claude, Cursor, VS Code, ChatGPT, and other MCP clients, the full tool list, and example usage. Remote HTTP + OAuth, no API keys.",
+    "Install instructions for the Expense MCP server in Claude, ChatGPT, Gemini CLI, and other MCP clients, the full tool list, and example usage. Remote HTTP + OAuth, no API keys.",
     "/connect",
   );
 }
 
 export const headers = marketingPageHeaders;
 
-/** A labeled config snippet: header bar like the /ai code block, body verbatim. */
-function CodeBlock({ label, body }: { label: string; body: string }) {
+/** One-click copy for a snippet: the icon swaps to a check for two seconds. */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={copied ? "Copied" : label}
+      title={copied ? "Copied" : label}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          // Clipboard unavailable (blocked or insecure context); the text stays selectable.
+          return;
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="ml-auto rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+    >
+      {copied ? (
+        <Check aria-hidden="true" className="h-4 w-4" />
+      ) : (
+        <Copy aria-hidden="true" className="h-4 w-4" />
+      )}
+    </button>
+  );
+}
+
+/** A labeled config snippet with one-click copy: header bar like the /ai code block, body verbatim. */
+function CodeBlock({
+  label,
+  body,
+  copyLabel = "Copy config",
+}: {
+  label: string;
+  body: string;
+  copyLabel?: string;
+}) {
   return (
     <div
       className="mt-3 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700
@@ -52,6 +90,7 @@ function CodeBlock({ label, body }: { label: string; body: string }) {
     >
       <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
         <Link2 aria-hidden="true" className="h-3.5 w-3.5" /> {label}
+        <CopyButton text={body} label={copyLabel} />
       </div>
       <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
         <code>{body}</code>
@@ -79,14 +118,11 @@ export default function ConnectPage() {
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
           The base MCP server address is:
         </p>
-        <div
-          className="mt-4 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700
-          bg-gray-50 dark:bg-gray-900"
-        >
-          <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
-            <code>{MCP_ENDPOINT}</code>
-          </pre>
-        </div>
+        <CodeBlock
+          label="Server URL"
+          body={MCP_ENDPOINT}
+          copyLabel="Copy server URL"
+        />
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
           All connections use OAuth: the first connection opens a sign-in flow
           to your Expense account. No API keys.
