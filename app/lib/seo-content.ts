@@ -450,6 +450,8 @@ export const MCP_PAGE_SUMMARY =
 export interface McpClientInstructions {
   id: string;
   name: string;
+  /** Compact label for the /connect selector pills; falls back to name. */
+  short?: string;
   steps: string[];
   code?: { lang: "sh" | "json" | "toml"; body: string };
   note?: string;
@@ -459,6 +461,7 @@ export const MCP_CLIENTS: McpClientInstructions[] = [
   {
     id: "claude",
     name: "Claude (claude.ai and Claude Desktop)",
+    short: "Claude",
     steps: [
       "Go to claude.ai/customize/connectors",
       'Click the + icon, then "Add custom connector"',
@@ -511,6 +514,7 @@ export const MCP_CLIENTS: McpClientInstructions[] = [
   {
     id: "omp",
     name: "Oh My Pi (OMP)",
+    short: "Oh My Pi",
     steps: ["Add to ~/.omp/agent/mcp.json (user) or .omp/mcp.json (project):"],
     code: {
       lang: "json",
@@ -525,6 +529,7 @@ export const MCP_CLIENTS: McpClientInstructions[] = [
   {
     id: "other",
     name: "Anything else",
+    short: "Other",
     steps: [
       "Any MCP client with Streamable HTTP transport works: point it at the server URL above.",
       "The client discovers the OAuth flow automatically via /.well-known/oauth-authorization-server and opens the Expense sign-in; approve once and consent is remembered.",
