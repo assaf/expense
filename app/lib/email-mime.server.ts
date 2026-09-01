@@ -69,16 +69,21 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     .toString(36)
     .slice(2)}@fastmail.labnotes.org>`;
 
+  // safeHeaderValue(encodeHeader(...)) at every free-text header: the
+  // RFC 2047 encoder passes printable ASCII (including CR/LF) through
+  // verbatim, so the strip must wrap it — today's subjects are app-owned,
+  // but one interpolated inbound subject away from a header-injection
+  // hole (deep-pass INB-HDR-1).
   const from =
     input.fromName.trim() === ""
       ? `<${input.fromEmail}>`
-      : `${encodeHeader(input.fromName)} <${input.fromEmail}>`;
+      : `${safeHeaderValue(encodeHeader(input.fromName))} <${input.fromEmail}>`;
 
   const headers = [
     header("Date", new Date().toUTCString()),
     header("From", from),
     header("To", safeHeaderValue(input.to)),
-    header("Subject", encodeHeader(input.subject)),
+    header("Subject", safeHeaderValue(encodeHeader(input.subject))),
     header("Message-ID", messageId),
     "MIME-Version: 1.0",
     // Stable marker so the inbound pipelines can recognize this as the
@@ -120,10 +125,15 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     body.push(...alternative);
     for (const att of input.attachments) {
       body.push("--" + boundary);
+      // Declared types arrive from inbound parsers; pin the grammar so a
+      // future caller can't smuggle CRLF or parameters into the header.
+      const contentType = /^([\w.+-]+\/[\w.+-]+)$/.test(att.contentType ?? "")
+        ? att.contentType!
+        : "application/octet-stream";
       body.push(
         header(
           "Content-Type",
-          `${att.contentType ?? "application/octet-stream"}; name=${JSON.stringify(att.filename)}`,
+          `${contentType}; name=${JSON.stringify(att.filename)}`,
         ),
       );
       body.push(

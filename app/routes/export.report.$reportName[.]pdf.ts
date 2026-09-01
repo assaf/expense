@@ -23,7 +23,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   return new Response(pdf as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${sanitizeFilenamePart(reportName)}.pdf"`,
+      // RFC 6266/5987: report names are free text, and undici rejects
+      // header values outside ISO-8859-1 (an em dash or CJK name made the
+      // whole export a 500). ASCII fallback + percent-encoded UTF-8 name.
+      "Content-Disposition": `attachment; filename="${sanitizeFilenamePart(reportName).replace(/[^\x20-\x7e]/g, "") || "report"}.pdf"; filename*=UTF-8''${encodeURIComponent(`${sanitizeFilenamePart(reportName)}.pdf`)}`,
       "Cache-Control": "no-store",
     },
   });
