@@ -210,15 +210,27 @@ describe("Command palette", () => {
     ).toBeVisible();
   });
 
+  it("shows the back-to-expenses hint on a toolbar page too", async () => {
+    // The toolbar Back link (PageShell's icon layout) is a separate branch
+    // from the editor Back: both must carry the nav-expenses anchor.
+    page = await goto("/export");
+    await showHints(page);
+    await expect(page.locator("[data-shortcut-hint]")).toHaveCount(1);
+    await expect(
+      page.locator('[data-shortcut-hint="nav-expenses"]'),
+    ).toBeVisible();
+  });
+
   it("ignores shortcut keys typed inside inputs", async () => {
     page = await goto("/");
     const box = page.getByLabel("Search expenses");
     await box.click();
-    await box.pressSequentially("amefgs?");
+    await box.pressSequentially("amefgs?/");
     await page.waitForTimeout(500);
     expect(page.url()).toBe(page.url()); // still on home, no shortcut fired
-    await expect(box).toHaveValue("amefgs?");
-    // The ? typed into the box must not have toggled the hint layer.
+    await expect(box).toHaveValue("amefgs?/");
+    // Shortcut keys (? and /) typed into the box must insert literally:
+    // no palette chord fires and the hint layer does not toggle.
     await expect(page.locator("[data-shortcut-hint]")).toHaveCount(0);
   });
 
