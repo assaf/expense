@@ -70,6 +70,9 @@ export function PageShell({
         onDrop: drop.onDrop,
       }
     : {};
+  // The Shift+? hint layer pins "G E" on the control that goes home; the
+  // email-review back link goes to /emails, so it must not claim the chord.
+  const homeShortcut = backTo === "/" ? "nav-expenses" : undefined;
   const containerClass = [className, "mx-auto", maxWidth, "px-4 py-8"]
     .filter(Boolean)
     .join(" ");
@@ -87,10 +90,7 @@ export function PageShell({
           <div className="flex items-center gap-2">
             {headerRight ?? null}
             <Button asChild variant="ghost" size="sm">
-              <Link
-                to={backTo}
-                data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
-              >
+              <Link to={backTo} data-shortcut={homeShortcut}>
                 <ArrowLeft aria-hidden="true" className="h-4 w-4" /> {backLabel}
               </Link>
             </Button>
@@ -112,7 +112,7 @@ export function PageShell({
           <button
             type="button"
             onClick={onBack}
-            data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
+            data-shortcut={homeShortcut}
             className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100"
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back
@@ -120,7 +120,7 @@ export function PageShell({
         ) : (
           <Link
             to={backTo}
-            data-shortcut={backTo === "/" ? "nav-expenses" : undefined}
+            data-shortcut={homeShortcut}
             className="inline-flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100"
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" /> Back

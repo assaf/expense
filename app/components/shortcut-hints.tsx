@@ -2,31 +2,28 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router";
 
+import { ACTION_SHORTCUTS } from "~/components/command-palette";
+
 /**
  * Shift+? shortcut hints, the FastMail trick: pressing ? pins a keycap next
  * to every element the palette shortcuts drive (nav buttons, the create
  * buttons, the search box), so the keys are discovered in place instead of
  * memorized from the palette. Press ? again (or Escape) to dismiss.
  *
- * Anchors are plain `data-shortcut` attributes on the page, matched against
- * the kbar action ids in command-palette.tsx so the two lists can't drift
- * apart silently: an action without an anchor simply shows no badge. The
- * layer is aria-hidden and pointer-events-none: it is a visual aid, the
- * palette itself is the accessible list of shortcuts.
+ * The chords come from ACTION_SHORTCUTS in command-palette.tsx, so the
+ * palette, its results list, and these badges share one table and can't
+ * drift apart. Anchors are plain `data-shortcut` attributes on the page
+ * named after the kbar action ids: an action whose anchor isn't rendered
+ * on the current page simply shows no badge. The layer is aria-hidden and
+ * pointer-events-none: it is a visual aid, the palette itself is the
+ * accessible list of shortcuts.
  */
 
-/** Palette shortcut -> the `data-shortcut` anchors it drives. */
-const HINTS: Array<{ name: string; keys: string[] }> = [
-  { name: "nav-expenses", keys: ["G", "E"] },
-  { name: "nav-reconcile", keys: ["G", "F"] },
-  { name: "nav-reports", keys: ["G", "R"] },
-  { name: "nav-emails", keys: ["G", "M"] },
-  { name: "nav-settings", keys: ["G", "S"] },
-  { name: "new-receipt", keys: ["A"] },
-  { name: "new-mileage", keys: ["M"] },
-  { name: "upload-expense", keys: ["F"] },
-  { name: "search-expenses", keys: ["/"] },
-];
+/** Badge per palette shortcut chord, in the table's own order. */
+const HINTS = Object.entries(ACTION_SHORTCUTS).map(([name, keys]) => ({
+  name,
+  keys,
+}));
 
 /** Where typing ? must stay typing: inputs, textareas, and editable hosts. */
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -123,7 +120,7 @@ export function ShortcutHints() {
           {badge.keys.map((key) => (
             <kbd
               key={key}
-              className="rounded-md bg-gray-800 px-1.5 py-0.5 text-[11px] font-semibold leading-4 text-white shadow-sm dark:bg-gray-600 dark:text-white"
+              className="rounded-md bg-gray-800 px-1.5 py-0.5 text-[11px] font-semibold uppercase leading-4 text-white shadow-sm dark:bg-gray-600 dark:text-white"
             >
               {key}
             </kbd>

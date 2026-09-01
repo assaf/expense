@@ -45,6 +45,24 @@ const PALETTE_POSITIONER =
 const PALETTE_PANEL =
   "w-full max-w-[600px] rounded-lg bg-[rgb(252_252_252)] text-[rgb(28_28_29)] shadow-[0px_6px_20px_rgb(0_0_0/20%)] dark:bg-[rgb(28_28_29)] dark:text-[rgba(252_252_252/0.9)] dark:shadow-none";
 
+/**
+ * Shortcut chords for the palette actions that have one, by action id.
+ * One table feeds the kbar actions below and the Shift+? hint layer
+ * (shortcut-hints.tsx), so the two can never drift apart.
+ */
+export const ACTION_SHORTCUTS: Record<string, string[]> = {
+  "nav-expenses": ["g", "e"],
+  "nav-reports": ["g", "r"],
+  "nav-emails": ["g", "m"],
+  "nav-reconcile": ["g", "f"],
+  "nav-settings": ["g", "s"],
+  "new-receipt": ["a"],
+  "new-mileage": ["m"],
+  "upload-expense": ["f"],
+  "export-report": ["e"],
+  "search-expenses": ["/"],
+};
+
 /** The Settings route action response for `intent=addCategory`. */
 type AddCategoryResult =
   | { ok: true; name: string }
@@ -110,7 +128,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
     () => [
       {
         id: "nav-expenses",
-        shortcut: ["g", "e"],
+        shortcut: ACTION_SHORTCUTS["nav-expenses"],
         name: "Go to Expenses",
         section: "Navigate",
         keywords: "receipts list home",
@@ -119,7 +137,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "nav-reports",
-        shortcut: ["g", "r"],
+        shortcut: ACTION_SHORTCUTS["nav-reports"],
         name: "Go to Reports",
         section: "Navigate",
         keywords: "export pdf download",
@@ -128,7 +146,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "nav-emails",
-        shortcut: ["g", "m"],
+        shortcut: ACTION_SHORTCUTS["nav-emails"],
         name: "Go to Emails",
         section: "Navigate",
         keywords: "mail inbox fastmail",
@@ -137,7 +155,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "nav-reconcile",
-        shortcut: ["g", "f"],
+        shortcut: ACTION_SHORTCUTS["nav-reconcile"],
         name: "Go to Reconcile",
         section: "Navigate",
         keywords: "statement credit card match",
@@ -146,7 +164,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "nav-settings",
-        shortcut: ["g", "s"],
+        shortcut: ACTION_SHORTCUTS["nav-settings"],
         name: "Go to Settings",
         section: "Navigate",
         keywords: "preferences account",
@@ -155,7 +173,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "new-receipt",
-        shortcut: ["a"],
+        shortcut: ACTION_SHORTCUTS["new-receipt"],
         name: "Add receipt",
         section: "Create",
         keywords: "expense new",
@@ -164,7 +182,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "new-mileage",
-        shortcut: ["m"],
+        shortcut: ACTION_SHORTCUTS["new-mileage"],
         name: "Add mileage expense",
         section: "Create",
         keywords: "drive miles trip",
@@ -173,7 +191,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       },
       {
         id: "upload-expense",
-        shortcut: ["f"],
+        shortcut: ACTION_SHORTCUTS["upload-expense"],
         name: "Upload expense file",
         section: "Create",
         keywords: "receipt image pdf photo",
@@ -232,7 +250,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
             {
               id: "search-expenses",
               name: "Search expenses",
-              shortcut: ["/"],
+              shortcut: ACTION_SHORTCUTS["search-expenses"],
               section: "Search",
               keywords: "find filter query amount merchant",
               icon: <Search aria-hidden="true" className="h-4 w-4" />,
@@ -247,7 +265,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
       {
         id: "export-report",
         name: "Export report",
-        shortcut: ["e"],
+        shortcut: ACTION_SHORTCUTS["export-report"],
         section: "Export",
         keywords: "download pdf tax",
         icon: <FileDown aria-hidden="true" className="h-4 w-4" />,
