@@ -145,6 +145,7 @@ describe("Access control", () => {
     for (const [label, path] of [
       ["About", "/about"],
       ["AI", "/ai"],
+      ["MCP", "/connect"],
       ["FAQ", "/faq"],
       ["Compare", "/alternatives"],
     ] as const) {

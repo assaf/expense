@@ -8,6 +8,7 @@ import { BLOG_URL } from "~/lib/seo-content";
 const FOOTER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
   { label: "AI", to: "/ai" },
+  { label: "MCP", to: "/connect" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
   { label: "Blog", to: BLOG_URL, external: true },

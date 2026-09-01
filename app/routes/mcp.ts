@@ -1,3 +1,4 @@
+import { redirect } from "react-router";
 import { handleMcpRequest } from "~/lib/mcp.server";
 import type { Route } from "./+types/mcp";
 
@@ -21,6 +22,12 @@ import type { Route } from "./+types/mcp";
 export const config = { maxDuration: 15 };
 
 export async function loader({ request }: Route.LoaderArgs) {
+  // Browsers pasting the endpoint URL get the landing guide; MCP clients send
+  // "Accept: application/json, text/event-stream" per the Streamable HTTP
+  // spec and fall through to handleMcpRequest (same 405/401 as before).
+  if (request.headers.get("accept")?.includes("text/html")) {
+    throw redirect("/connect");
+  }
   return handleMcpRequest(request);
 }
 

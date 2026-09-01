@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { loader as aboutLoader } from "~/routes/about[.]md";
 import { loader as alternativesLoader } from "~/routes/alternatives[.]md";
+import { loader as connectLoader } from "~/routes/connect[.]md";
 import { loader as faqLoader } from "~/routes/faq[.]md";
 import { loader as llmsTxtLoader } from "~/routes/llms[.]txt";
 import {
   aboutMarkdown,
   alternativesMarkdown,
+  connectMarkdown,
   faqMarkdown,
   llmsTxt,
   SITE_URL,
 } from "~/lib/seo-content";
 
-/** The four public text mirrors (llmstxt.org convention) and their
+/** The five public text mirrors (llmstxt.org convention) and their
  * routes. The loader wiring is shared, so the header and link-hygiene
  * contracts are asserted for every mirror, not just /llms.txt: a client
  * that fetched the text by URL cannot resolve relative links, and the
@@ -40,6 +42,12 @@ const MIRRORS = [
     path: "/alternatives.md",
     loader: alternativesLoader,
     content: alternativesMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/connect.md",
+    loader: connectLoader,
+    content: connectMarkdown,
     type: "text/markdown",
   },
 ] as const;

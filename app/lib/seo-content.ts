@@ -55,6 +55,9 @@ export function pageMeta(
  */
 
 export const SITE_URL = "https://expense.labnotes.org";
+
+/** The public MCP endpoint (Streamable HTTP + OAuth): every install instruction points here. */
+export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 export const APP_NAME = "Expense";
 export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
@@ -437,6 +440,223 @@ ${AI_SECURITY}
 `;
 }
 
+// --- MCP connect page (/connect) -------------------------------------------
+
+/** One-paragraph hero summary for /connect, quoted by the page and /connect.md. */
+export const MCP_PAGE_SUMMARY =
+  "Expense speaks the Model Context Protocol: connect any MCP client (Claude, Claude Code, Cursor, VS Code, ChatGPT, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth; there are no API keys.";
+
+/** Per-client setup instructions, rendered on /connect and mirrored in /connect.md. */
+export interface McpClientInstructions {
+  id: string;
+  name: string;
+  steps: string[];
+  code?: { lang: "sh" | "json" | "toml"; body: string };
+  note?: string;
+}
+
+export const MCP_CLIENTS: McpClientInstructions[] = [
+  {
+    id: "claude",
+    name: "Claude (claude.ai and Claude Desktop)",
+    steps: [
+      "Go to claude.ai/customize/connectors",
+      'Click the + icon, then "Add custom connector"',
+      `Enter the server URL: ${MCP_ENDPOINT}`,
+      "Claude opens a browser to sign in to Expense; approve the connection",
+    ],
+    note: "The connector also appears in Claude Desktop and Claude Code when signed in with the same Claude account.",
+  },
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    steps: ["Run:", "Sign in when the browser opens; approve the connection."],
+    code: {
+      lang: "sh",
+      body: `claude mcp add --transport http expense ${MCP_ENDPOINT}`,
+    },
+  },
+  {
+    id: "cursor",
+    name: "Cursor",
+    steps: ["Add to your Cursor MCP config (~/.cursor/mcp.json):"],
+    code: {
+      lang: "json",
+      body: JSON.stringify(
+        { mcpServers: { expense: { url: MCP_ENDPOINT } } },
+        null,
+        2,
+      ),
+    },
+    note: "Cursor opens the Expense sign-in the first time it calls a tool.",
+  },
+  {
+    id: "vscode",
+    name: "VS Code",
+    steps: [
+      'Command Palette, run "MCP: Add Server", choose HTTP, and paste the server URL; or add to .vscode/mcp.json:',
+    ],
+    code: {
+      lang: "json",
+      body: JSON.stringify(
+        { servers: { expense: { type: "http", url: MCP_ENDPOINT } } },
+        null,
+        2,
+      ),
+    },
+  },
+  {
+    id: "chatgpt",
+    name: "ChatGPT",
+    steps: [
+      "Go to Settings > Apps > Advanced settings and enable Developer mode",
+      `Click "Create app" and enter the server URL: ${MCP_ENDPOINT}`,
+      "Select Developer mode from the Plus menu to use Expense in conversations",
+    ],
+    note: "Requires a Pro, Plus, Business, Enterprise, or Education plan.",
+  },
+  {
+    id: "gemini-cli",
+    name: "Gemini CLI",
+    steps: ["Add to ~/.gemini/settings.json:"],
+    code: {
+      lang: "json",
+      body: JSON.stringify(
+        { mcpServers: { expense: { httpUrl: MCP_ENDPOINT } } },
+        null,
+        2,
+      ),
+    },
+  },
+  {
+    id: "codex",
+    name: "Codex CLI",
+    steps: ["Add to ~/.codex/config.toml:"],
+    code: {
+      lang: "toml",
+      body: `[mcp_servers.expense]\nurl = "${MCP_ENDPOINT}"`,
+    },
+  },
+  {
+    id: "other",
+    name: "Anything else",
+    steps: [
+      "Any MCP client with Streamable HTTP transport works: point it at the server URL above.",
+      "The client discovers the OAuth flow automatically via /.well-known/oauth-authorization-server and opens the Expense sign-in; approve once and consent is remembered.",
+    ],
+  },
+];
+
+/** One-line tool descriptions for /connect; docs/mcp.md stays the operational reference. */
+export const MCP_TOOLS: Array<{
+  name: string;
+  writes: boolean;
+  what: string;
+}> = [
+  {
+    name: "capture_receipt",
+    writes: true,
+    what: "Capture a receipt from an image or PDF (file data or URL): extraction pipeline, stores the image, creates the expense.",
+  },
+  {
+    name: "log_mileage",
+    writes: true,
+    what: "Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate.",
+  },
+  {
+    name: "list_expenses",
+    writes: false,
+    what: "Query expenses by date range, category, merchant, report, or type.",
+  },
+  {
+    name: "expense_summary",
+    writes: false,
+    what: 'Totals and per-category breakdown: the "how much did I spend on X?" tool.',
+  },
+  {
+    name: "list_reports",
+    writes: false,
+    what: "Reports with expense counts and exact totals.",
+  },
+  {
+    name: "create_report",
+    writes: true,
+    what: "Create a report (fails if the name exists).",
+  },
+  {
+    name: "close_report",
+    writes: true,
+    what: "Close (or reopen) a report; closed reports refuse new expenses.",
+  },
+  {
+    name: "add_to_report",
+    writes: true,
+    what: "Move an expense into an open report.",
+  },
+  {
+    name: "export_report",
+    writes: false,
+    what: "Render a report as a PDF (same layout as the web export) and return it base64-encoded.",
+  },
+  {
+    name: "list_categories",
+    writes: false,
+    what: "The account's categories; use these when categorizing.",
+  },
+  {
+    name: "list_merchants",
+    writes: false,
+    what: "Merchant names previously used, most recent first.",
+  },
+  {
+    name: "get_settings",
+    writes: false,
+    what: "Home address and the IRS mileage-rate table.",
+  },
+  {
+    name: "reconcile",
+    writes: false,
+    what: "Match a bank statement (CSV/QFX/OFX) against logged expenses; pure analysis, writes nothing.",
+  },
+];
+
+/** Full markdown for /connect.md; mirrors the /connect page content. */
+export function connectMarkdown(): string {
+  const tools = MCP_TOOLS.map(
+    (t) => `| \`${t.name}\` | ${t.writes ? "yes" : "no"} | ${t.what} |`,
+  ).join("\n");
+  const clients = MCP_CLIENTS.map((c) => {
+    const steps = c.steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
+    const code = c.code
+      ? `\n\n\`\`\`${c.code.lang}\n${c.code.body}\n\`\`\``
+      : "";
+    const note = c.note ? `\n\n${c.note}` : "";
+    return `### ${c.name}\n\n${steps}${code}${note}`;
+  }).join("\n\n");
+  return `# Connect your AI assistant to Expense: the MCP server
+
+${MCP_PAGE_SUMMARY}
+
+The base MCP server address is ${MCP_ENDPOINT} (Streamable HTTP + OAuth). All connections use OAuth: the first connection opens a sign-in flow to your Expense account; there are no API keys.
+
+## Tools
+
+| Tool | Writes | What it does |
+| --- | --- | --- |
+${tools}
+
+## Setup instructions
+
+${clients}
+
+## Security
+
+${AI_SECURITY}
+
+For the browser-based in-page tools (WebMCP), see [${APP_NAME}: connect your AI assistant](${SITE_URL}/ai.md).
+`;
+}
+
 /** Full markdown for /about.md. Mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = BENEFITS.map(
@@ -516,7 +736,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
-- [AI assistants: MCP server and in-page tools](${SITE_URL}/mcp): Connect any MCP client (Claude, OpenAI, etc) and approve the connection by signing in, or let a browser agent use the read-only in-page WebMCP tools. Either way the assistant can answer spending questions and build reports; the MCP server can also capture receipts, log mileage, and export reports.
+- [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, Claude Code, Cursor, VS Code, ChatGPT, Gemini CLI, Codex), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
 
 ## Optional

@@ -1,4 +1,5 @@
 import { Bot, Link2, ShieldCheck, Sparkles } from "lucide-react";
+import { Link } from "react-router";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { cardSurface, Card } from "~/components/ui/Card";
 import { cn } from "~/lib/cn";
@@ -106,7 +107,15 @@ export default function AiPage() {
         </div>
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
           No headers or keys. The client discovers the sign-in flow itself.
-          Claude and OpenAI connect the same way.
+          Claude and OpenAI connect the same way. Per-client setup instructions
+          for Claude, Cursor, VS Code, ChatGPT, and more:{" "}
+          <Link
+            to="/connect"
+            className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
+          >
+            Connect with MCP
+          </Link>
+          .
         </p>
       </section>
 

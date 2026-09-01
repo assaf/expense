@@ -36,6 +36,7 @@ const THEME_SCRIPT = `
 const PUBLIC_PAGES = new Set([
   "/about",
   "/ai",
+  "/connect",
   "/faq",
   "/alternatives",
   "/llms.txt",
