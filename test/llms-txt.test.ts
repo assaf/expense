@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loader as aboutLoader } from "~/routes/about[.]md";
+import { loader as mileageRatesLoader } from "~/routes/mileage-rates[.]md";
 import { loader as alternativesLoader } from "~/routes/alternatives[.]md";
 import { loader as connectLoader } from "~/routes/connect[.]md";
 import { loader as faqLoader } from "~/routes/faq[.]md";
@@ -10,6 +11,7 @@ import {
   connectMarkdown,
   faqMarkdown,
   llmsTxt,
+  mileageRatesMarkdown,
   SITE_URL,
 } from "~/lib/seo-content";
 
@@ -50,6 +52,12 @@ const MIRRORS = [
     content: connectMarkdown,
     type: "text/markdown",
   },
+  {
+    path: "/mileage-rates.md",
+    loader: mileageRatesLoader,
+    content: mileageRatesMarkdown,
+    type: "text/markdown",
+  },
 ] as const;
 
 /** All markdown link hrefs in a document. */
@@ -84,9 +92,12 @@ describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {
 
   it("keeps every link on the canonical domains", () => {
     for (const href of markdownLinks(content())) {
+      // irs.gov is the primary source on the mileage-rate page; every other
+      // link stays on the canonical domains.
       expect(
         href.startsWith(`${SITE_URL}/`) ||
-          href.startsWith("https://labnotes.org"),
+          href.startsWith("https://labnotes.org") ||
+          href.startsWith("https://www.irs.gov/"),
         `${href} is off the canonical domains`,
       ).toBe(true);
     }

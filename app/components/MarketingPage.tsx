@@ -115,9 +115,7 @@ export function MarketingCta({
       >
         {heading}
       </h2>
-      <p className="mx-auto mt-3 max-w-md text-gray-700 dark:text-gray-200">
-        {body}
-      </p>
+      <p className="mx-auto mt-3 max-w-md text-gray-300">{body}</p>
       <div
         className={cn(
           "flex flex-col items-center justify-center gap-3 sm:flex-row",

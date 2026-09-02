@@ -39,6 +39,7 @@ const PUBLIC_PAGES = new Set([
   "/ai",
   "/connect",
   "/faq",
+  "/mileage-rates",
   "/alternatives",
   "/llms.txt",
 ]);

@@ -20,7 +20,7 @@ const COMPARISON_SCHEMA = {
 
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    `How ${APP_NAME} compares to the other receipt apps`,
+    `Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave`,
     `Where ${APP_NAME} fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.`,
     "/alternatives",
   );

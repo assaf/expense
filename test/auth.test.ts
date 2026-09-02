@@ -148,6 +148,7 @@ describe("Access control", () => {
       ["MCP", "/connect"],
       ["FAQ", "/faq"],
       ["Compare", "/alternatives"],
+      ["Mileage", "/mileage-rates"],
     ] as const) {
       await page
         .getByRole("link", { name: label, exact: true })

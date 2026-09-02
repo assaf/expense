@@ -11,6 +11,7 @@ const FOOTER_NAV: SiteNavItem[] = [
   { label: "MCP", to: "/connect" },
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
+  { label: "Mileage", to: "/mileage-rates" },
   { label: "Blog", to: BLOG_URL, external: true },
 ];
 
@@ -76,7 +77,7 @@ export function SiteFooter() {
           <Logo icon /> · © {new Date().getFullYear()} · Built by{" "}
           <a href="https://labnotes.org">Assaf Arkin</a>
         </div>
-        <nav className="flex items-center gap-4 text-sm">
+        <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
           {FOOTER_NAV.map((item) => (
             <SiteNavLink key={item.label} item={item} />
           ))}

@@ -54,6 +54,9 @@ export function pageMeta(
  * marketing filler, nothing that sounds like a press release.
  */
 
+import { MILEAGE_RATES } from "~/data/mileage-rates";
+import { formatRate, periodLabel } from "~/lib/mileage-rates";
+
 export const SITE_URL = "https://expense.labnotes.org";
 
 /** The public MCP endpoint (Streamable HTTP + OAuth): every install instruction points here. */
@@ -201,6 +204,10 @@ const STANDALONE_FAQS: Faq[] = [
     answer: `Yes. Log a mile trip using a map, and Expense calculates the mileage deduction using the IRS rate for the type and date of the trip. The rates are fetched from the IRS automatically, no configuration needed. Mileage expenses rows will be exported together with regular ones.`,
   },
   {
+    question: "What is the IRS standard mileage rate?",
+    answer: `${currentMileageSummary()} Expense applies the right rate to each drive automatically, based on its date and type. The full table by year: https://expense.labnotes.org/mileage-rates.`,
+  },
+  {
     question: "Can I add receipts by email?",
     answer: `Yes. Just forward a receipt email to it, and an expense will be created based on it, including the receipt date from the original email. Only the approved senders are added to the account, and forwarding the same email twice is impossible.`,
   },
@@ -215,6 +222,14 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "What receipt formats are supported?",
     answer: `Receipts can be either images (including HEIC from iPhone) or PDFs. Receipts can be uploaded, pasted with Cmd-V, dragged onto the web page, or forwarded via email.`,
+  },
+  {
+    question: "How long should I keep receipts for my taxes?",
+    answer: `The IRS can assess additional tax for three years after you file, so keep receipts, mileage logs, and statements at least that long. The window stretches to six years if you underreported income by more than 25%, seven years for bad-debt or worthless-securities claims, and indefinitely for a fraudulent or unfiled return. Electronic copies count. Expense keeps the receipt image attached to every expense and exports it with the report, so the archive builds itself.`,
+  },
+  {
+    question: "What does the IRS require for a mileage log?",
+    answer: `An adequate record shows the miles driven, the date, the destination, and the business purpose of each trip; a year of drives reconstructed from memory does not qualify. For travel expenses generally, the IRS wants documentation for anything $75 or more, plus lodging receipts no matter the amount. Expense logs every drive from the map with its date, route, and applied rate, and keeps that record attached to the expense.`,
   },
   {
     question: "What happens if I upload the same receipt twice?",
@@ -341,6 +356,82 @@ export const COMPETITOR_ROWS: CompetitorRow[] = [
 /** The as-of note shown under the roundup table. */
 export const COMPETITOR_PRICING_NOTE =
   "Pricing from each vendor's pricing page, checked August 2026; check the vendor for current numbers.";
+
+// --- IRS mileage rates page (/mileage-rates) --------------------------------
+
+/** One IRS rate period aggregated across types, for the /mileage-rates
+ * table and its markdown mirror. Rows come straight from MILEAGE_RATES
+ * (the same seed the app syncs into its master table), newest first. */
+export interface MileageRateRow {
+  period: string;
+  start: string;
+  end: string;
+  business: string;
+  medical: string;
+  moving: string;
+  charity: string;
+}
+
+/** All rate periods, newest first. */
+export function mileageRateRows(): MileageRateRow[] {
+  const byPeriod = new Map<string, MileageRateRow>();
+  for (const r of MILEAGE_RATES) {
+    const key = `${r.startDate}|${r.endDate}`;
+    const row = byPeriod.get(key) ?? {
+      period: periodLabel(r.startDate, r.endDate),
+      start: r.startDate,
+      end: r.endDate,
+      business: "",
+      medical: "",
+      moving: "",
+      charity: "",
+    };
+    row[r.type] = formatRate(r.rate);
+    byPeriod.set(key, row);
+  }
+  return [...byPeriod.values()].toSorted((a, b) =>
+    b.start.localeCompare(a.start),
+  );
+}
+
+function mileagePhrase(row: MileageRateRow): string {
+  const [sy, ey] = [row.start.slice(0, 4), row.end.slice(0, 4)];
+  if (sy === ey && row.start === `${sy}-01-01` && row.end === `${ey}-12-31`) {
+    return `for ${sy}`;
+  }
+  const monthDay = (d: string) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+  return `from ${monthDay(row.start)} to ${monthDay(row.end)}, ${ey}`;
+}
+
+/** The current business/medical/charitable rates as one quotable sentence.
+ * Composed from MILEAGE_RATES, not hand-written: when the IRS publishes new
+ * rates (usually each December, plus mid-year changes), updating the data
+ * file keeps this answer, the FAQ entry, and the page meta description true
+ * without a copy edit. */
+export function currentMileageSummary(): string {
+  const rows = mileageRateRows();
+  const latest = rows[0]!;
+  const prev = rows[1];
+  const split =
+    prev !== undefined && prev.end.slice(0, 4) === latest.end.slice(0, 4);
+  const business = split
+    ? `$${prev.business} per mile ${mileagePhrase(prev)}, then $${latest.business} per mile ${mileagePhrase(latest)}`
+    : `$${latest.business} per mile ${mileagePhrase(latest)}`;
+  const secondary = split
+    ? `medical and moving moves run $${prev.medical} and then $${latest.medical} for the same dates`
+    : `medical and moving moves run $${latest.medical}`;
+  return `The IRS standard business mileage rate is ${business}; ${secondary}, and the charitable rate is fixed by statute at $${latest.charity}.`;
+}
+
+/** One-paragraph hero summary for /mileage-rates, quoted by the page and
+ * its markdown mirror. */
+export const MILEAGE_PAGE_SUMMARY =
+  "The IRS standard mileage rates for every period since 2011 in one table: business, medical, moving, and charitable, including any mid-year changes. Expense uses the same table to compute the mileage deduction from each drive's date and type, so it never asks you to look a rate up.";
 
 function wrap(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -710,6 +801,36 @@ categories and reports for tax filing.
 `;
 }
 
+/** Full markdown for /mileage-rates.md; mirrors the /mileage-rates page. */
+export function mileageRatesMarkdown(): string {
+  const rows = mileageRateRows();
+  const latest = rows[0]!;
+  const table = [
+    "| Period | Business | Medical | Moving | Charity |",
+    "| --- | --- | --- | --- | --- |",
+    ...rows.map(
+      (r) =>
+        `| ${r.period} | $${r.business} | $${r.medical} | $${r.moving} | $${r.charity} |`,
+    ),
+  ].join("\n");
+  return `# IRS standard mileage rates by year
+
+> ${wrap(MILEAGE_PAGE_SUMMARY)}
+
+${wrap(`Reimbursement and deduction rates per mile, newest first. A rate is
+effective for its whole period; mid-year changes appear as two rows for the
+same year.`)}
+
+${table}
+
+${wrap(`Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates).
+The moving rate applies only to Armed Forces and Intelligence Community members
+moving under orders, and the charitable rate is fixed by statute. [${APP_NAME}](${SITE_URL}/)
+applies these rates automatically: each drive's deduction follows its date and
+type, with no configuration. Current through ${latest.period}.`)}
+`;
+}
+
 /** The /llms.txt file: a curated overview for LLM retrieval, per llmstxt.org. */
 export function llmsTxt(): string {
   return `# ${APP_NAME}
@@ -725,6 +846,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [${APP_NAME}: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
+- [IRS standard mileage rates by year](${SITE_URL}/mileage-rates.md): The rate table for business, medical, moving, and charity drives by period, 2011 to today, including mid-year changes. Expense applies the right rate to each drive automatically.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
