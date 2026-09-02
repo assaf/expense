@@ -226,11 +226,17 @@ export function ErrorBanner({ error }: { error: string }) {
 
 /**
  * Prominent in-progress indicator for a receipt draft: a spinner, the stage
- * currently running (PDF rasterization or OCR/extraction), and an
- * indeterminate progress bar so the wait reads as active work.
+ * currently running (PDF rasterization, OCR/extraction, or an in-browser
+ * rotation), and an indeterminate progress bar so the wait reads as active
+ * work.
  */
-export function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
+export function DraftProgress({
+  stage,
+}: {
+  stage: "convert" | "ocr" | "rotate" | null;
+}) {
   const converting = stage === "convert";
+  const rotating = stage === "rotate";
   return (
     <div
       role="status"
@@ -241,7 +247,13 @@ export function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
           aria-hidden="true"
           className="h-4 w-4 shrink-0 animate-spin text-blue-600 dark:text-blue-400"
         />
-        <span>{converting ? "Converting PDF…" : "Reading receipt…"}</span>
+        <span>
+          {converting
+            ? "Converting PDF…"
+            : rotating
+              ? "Rotating image…"
+              : "Reading receipt…"}
+        </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100 dark:bg-gray-700">
         <div className="h-full w-1/3 animate-[progress-slide_1.2s_ease-in-out_infinite] rounded-full bg-blue-500" />
@@ -249,7 +261,9 @@ export function DraftProgress({ stage }: { stage: "convert" | "ocr" | null }) {
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {converting
           ? "Rasterizing the PDF so it can be displayed and read."
-          : "Extracting the merchant, amount, and category."}
+          : rotating
+            ? "Turning the receipt. Fields stay as they are."
+            : "Extracting the merchant, amount, and category."}
       </p>
     </div>
   );

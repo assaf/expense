@@ -2,6 +2,7 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import PDFDocument from "pdfkit";
+import sharp from "sharp";
 import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
@@ -388,6 +389,185 @@ describe("Expense CRUD", () => {
       await testPrisma.expense.delete({ where: { id: created.id } });
       await testPrisma.imageBlob.deleteMany({
         where: { accountId: TEST_ACCOUNT_ID, key: created.imageFile },
+      });
+    }
+  });
+
+  it("rotates the receipt in the editor and stores the turn only on Save", async () => {
+    // 2:1 landscape, so the stored turn is observable as swapped dimensions.
+    const png = await tinyPng();
+    const { filename } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "rotate.png",
+    );
+    const id = ulid();
+    const now = new Date().toISOString();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-01-15",
+        report: "2026 Test",
+        category: "Office Supplies",
+        description: "",
+        amount: "1.00",
+        merchant: "Rotate Test",
+        imageFile: filename,
+        imageMime: "image/jpeg",
+        originalName: "rotate.png",
+        locations: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    let newKey = "";
+    try {
+      await page.goto(`/expense/${id}`, { waitUntil: "load" });
+      await waitForEditorSettle(page);
+      const img = page.locator('img[alt="Receipt"]');
+      await expect(img).toHaveAttribute("src", /\/expense\//);
+      const beforeRow = await testPrisma.expense.findFirst({
+        where: { id },
+        select: { imageFile: true, updatedAt: true },
+      });
+      const beforeBlob = await testPrisma.imageBlob.findFirst({
+        where: { accountId: TEST_ACCOUNT_ID, key: filename },
+      });
+      expect(beforeBlob).not.toBeNull();
+
+      await page.getByRole("button", { name: "Rotate receipt right" }).click();
+      // The preview swaps to the locally rotated image; nothing is stored yet.
+      await expect(img).toHaveAttribute("src", /^blob:/, { timeout: 15_000 });
+      // Rotation never re-runs OCR: the fields stay as they were.
+      expect(await page.locator("input[list='merchants']").inputValue()).toBe(
+        "Rotate Test",
+      );
+      expect(
+        await testPrisma.expense.findFirst({
+          where: { id },
+          select: { imageFile: true, updatedAt: true },
+        }),
+      ).toEqual(beforeRow);
+      const midBlob = await testPrisma.imageBlob.findFirst({
+        where: { accountId: TEST_ACCOUNT_ID, key: filename },
+      });
+      expect(
+        Buffer.from(midBlob!.data as Uint8Array).equals(
+          Buffer.from(beforeBlob!.data as Uint8Array),
+        ),
+      ).toBe(true);
+
+      await page.getByText("Save").click();
+      await page.waitForURL((url) => url.pathname === "/", {
+        timeout: 15_000,
+      });
+      const saved = await testPrisma.expense.findFirst({
+        where: { id },
+        select: {
+          imageFile: true,
+          imageMime: true,
+          originalName: true,
+          updatedAt: true,
+        },
+      });
+      // The rotated draft replaced the stored image under a new key.
+      newKey = saved!.imageFile as string;
+      expect(newKey).not.toBe(filename);
+      expect(saved!.originalName).toBe("rotate.jpg");
+      expect(saved!.imageMime).toBe("image/jpeg");
+      expect(saved!.updatedAt).not.toBe(now);
+      const stored = await testPrisma.imageBlob.findFirst({
+        where: { accountId: TEST_ACCOUNT_ID, key: newKey },
+        select: { data: true },
+      });
+      expect(stored).not.toBeNull();
+      expect(startsWithMagic(stored!.data as Uint8Array, JPEG_MAGIC)).toBe(
+        true,
+      );
+      // 120x60 turned right becomes 60x120.
+      const meta = await sharp(stored!.data as Buffer).metadata();
+      expect(meta.width).toBe(60);
+      expect(meta.height).toBe(120);
+      // Replaced, not duplicated: the original blob is gone.
+      expect(
+        await testPrisma.imageBlob.count({
+          where: { accountId: TEST_ACCOUNT_ID, key: filename },
+        }),
+      ).toBe(0);
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+      await testPrisma.imageBlob.deleteMany({
+        where: {
+          accountId: TEST_ACCOUNT_ID,
+          key: { in: newKey ? [filename, newKey] : [filename] },
+        },
+      });
+    }
+  });
+
+  it("keeps the stored receipt when a rotation is abandoned", async () => {
+    const png = await tinyPng();
+    const { filename } = await saveImage(
+      TEST_ACCOUNT_ID,
+      png,
+      "image/png",
+      "rotate-cancel.png",
+    );
+    const id = ulid();
+    const now = new Date().toISOString();
+    await testPrisma.expense.create({
+      data: {
+        id,
+        accountId: TEST_ACCOUNT_ID,
+        type: "receipt",
+        date: "2026-01-15",
+        report: "2026 Test",
+        category: "Office Supplies",
+        description: "",
+        amount: "1.00",
+        merchant: "Rotate Cancel",
+        imageFile: filename,
+        imageMime: "image/jpeg",
+        originalName: "rotate-cancel.png",
+        locations: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+    try {
+      await page.goto(`/expense/${id}`, { waitUntil: "load" });
+      await waitForEditorSettle(page);
+      const img = page.locator('img[alt="Receipt"]');
+      await expect(img).toHaveAttribute("src", /\/expense\//);
+      await page.getByRole("button", { name: "Rotate receipt left" }).click();
+      await expect(img).toHaveAttribute("src", /^blob:/, { timeout: 15_000 });
+      // Escape cancels the editor: the draft is dropped, nothing persists.
+      await page.keyboard.press("Escape");
+      await page.waitForURL((url) => url.pathname === "/", {
+        timeout: 15_000,
+      });
+      const row = await testPrisma.expense.findFirst({
+        where: { id },
+        select: { imageFile: true, updatedAt: true },
+      });
+      expect(row!.imageFile).toBe(filename);
+      // The helper returns the raw PG timestamp (naive UTC, no T/Z): parse
+      // it as UTC; the contract is "the row is untouched".
+      expect(
+        new Date(`${(row!.updatedAt as string).replace(" ", "T")}Z`).getTime(),
+      ).toBe(new Date(now).getTime());
+      expect(
+        await testPrisma.imageBlob.count({
+          where: { accountId: TEST_ACCOUNT_ID, key: filename },
+        }),
+      ).toBe(1);
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id } });
+      await testPrisma.imageBlob.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, key: filename },
       });
     }
   });

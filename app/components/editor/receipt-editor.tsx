@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Trash2, Upload } from "lucide-react";
+import { Loader2, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Field } from "~/components/ui/Field";
@@ -9,6 +9,7 @@ import { isReceiptFile } from "~/lib/file-types";
 import { findDuplicates } from "~/lib/duplicates";
 import { todayDate } from "~/lib/format";
 import { imageVersion } from "~/lib/image-version";
+import { rotateReceiptImage } from "~/lib/rotate-image";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { useDropTarget } from "~/lib/use-drop-target";
 import type { ReceiptExpense } from "~/lib/types";
@@ -73,7 +74,9 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const [draftPreview, setDraftPreview] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [draftStage, setDraftStage] = useState<"convert" | "ocr" | null>(null);
+  const [draftStage, setDraftStage] = useState<
+    "convert" | "ocr" | "rotate" | null
+  >(null);
   // Foreign-currency provenance: what the receipt reads (currency +
   // printed amount) and the applied USD conversion. The amount field
   // always holds the USD value; changing the date re-converts at that
@@ -94,6 +97,12 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     message: "Receipt file detected — drop to replace",
   });
   const fileRef = useRef<HTMLInputElement>(null);
+  // The receipt <img>: the rotation source when no replacement file is
+  // pending (the browser has already applied any EXIF orientation).
+  const imgRef = useRef<HTMLImageElement>(null);
+  // The raw File behind the current preview (an upload or a rotated turn),
+  // so further rotations re-encode from those pixels instead of the screen.
+  const pendingFileRef = useRef<File | null>(null);
   const amountRef = useRef<HTMLInputElement>(null);
   const manualAmount = useRef(false);
   const fxSeq = useRef(0);
@@ -151,7 +160,11 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   async function uploadDraft(
     file: File,
     fill: "empty-only" | "override" = "empty-only",
+    // Rotation reuses this whole flow but must not re-run OCR: the pixels
+    // changed, the fields didn't.
+    opts: { ocr?: boolean } = {},
   ) {
+    pendingFileRef.current = file;
     // Images render straight from a blob URL. PDFs can't (an <img> can't
     // display a PDF), so their preview is the rasterized PNG served from
     // storage once the upload completes.
@@ -162,7 +175,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     // PDFs rasterize before they can be displayed; images show a preview
     // immediately and only read fields. The stage label tells the user which
     // phase is running while they wait.
-    setDraftStage(isPdf ? "convert" : "ocr");
+    if (opts.ocr !== false) setDraftStage(isPdf ? "convert" : "ocr");
     const form = new FormData();
     form.set("intent", "draft-upload");
     form.set("file", file);
@@ -199,10 +212,12 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       // for images and PDFs. Extraction only fills fields the user hasn't
       // typed yet: a slow response arriving after the user started editing
       // must not overwrite what they wrote.
-      setDraftStage("ocr");
-      // A fresh scan supersedes any hand edit of the previous fill.
-      manualAmount.current = false;
-      fillFields(await ocrFile(file), fill);
+      if (opts.ocr !== false) {
+        setDraftStage("ocr");
+        // A fresh scan supersedes any hand edit of the previous fill.
+        manualAmount.current = false;
+        fillFields(await ocrFile(file), fill);
+      }
     } catch {
       // Keep the preview; the user can still fill the fields by hand.
     } finally {
@@ -335,6 +350,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
 
   async function removeDraft() {
     if (draft) await deleteDraftBlob(draft.key);
+    pendingFileRef.current = null;
     setDraft(null);
     setDraftPreview(null);
     setDraftError(null);
@@ -343,6 +359,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   /** Cancel without saving: drop any draft image, then leave the editor. */
   function onCancel() {
     if (draft) void deleteDraftBlob(draft.key);
+    pendingFileRef.current = null;
     doCancel();
   }
 
@@ -356,6 +373,29 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
 
   // Paste an image anywhere to replace the receipt image.
   usePasteImage(replaceImage);
+
+  /** Rotate the receipt 90° left (negative) or right. The turn re-encodes
+   * the pixels currently on screen (a pending replacement file, else the
+   * stored image) and rides the same local-draft path as a replacement,
+   * so the stored receipt is untouched until Save. Rotation never re-runs
+   * OCR: the pixels change, the fields don't. */
+  async function rotateReceipt(deg: number) {
+    if (drafting) return;
+    const source = pendingFileRef.current ?? imgRef.current;
+    if (!source) return;
+    setDraftStage("rotate");
+    try {
+      const name = draft?.originalName || expense.originalName || "receipt";
+      await uploadDraft(
+        await rotateReceiptImage(source, deg, name),
+        "empty-only",
+        { ocr: false },
+      );
+    } catch {
+      setDraftError("Couldn't rotate the image.");
+      setDraftStage(null);
+    }
+  }
 
   function onSave() {
     const form = new FormData();
@@ -399,6 +439,11 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       ? ""
       : `/expense/${expense.id}/image?v=${encodeURIComponent(imageSrcVersion)}`);
   const showImage = Boolean(draftPreview || (!isNew && hasImage));
+  // A PDF draft isn't displayed as an image, so it can't turn on a canvas;
+  // stored receipts are always rasters (PDFs rasterize at upload).
+  const pdfDraft =
+    draft !== null &&
+    (draft.mime === "application/pdf" || /\.pdf$/i.test(draft.originalName));
 
   const error = fetcherError(fetcher.data);
   useFormKeys({
@@ -431,6 +476,32 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
             Receipt image
           </span>
           <span className="flex gap-1">
+            {showImage && !reportClosed && !pdfDraft ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={drafting}
+                  aria-label="Rotate receipt left"
+                  title="Rotate left"
+                  onClick={() => void rotateReceipt(-90)}
+                >
+                  <RotateCcw aria-hidden="true" className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={drafting}
+                  aria-label="Rotate receipt right"
+                  title="Rotate right"
+                  onClick={() => void rotateReceipt(90)}
+                >
+                  <RotateCw aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </>
+            ) : null}
             {!reportClosed ? (
               <>
                 <input
@@ -491,6 +562,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
             className="block w-full overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
           >
             <img
+              ref={imgRef}
               key={imageSrcVersion}
               src={imageSrc}
               alt="Receipt"
