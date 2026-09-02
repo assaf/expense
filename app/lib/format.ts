@@ -74,6 +74,23 @@ export function formatShortDate(iso: string | null): string {
   });
 }
 
+/** Local date/time "Sep 2, 2026, 7:33 AM" for an ISO timestamp, in the
+ * viewer's timezone; "—" when unset, the raw input when unparseable. Render
+ * it client-side (the useToday pattern): the server runs UTC, so an
+ * SSR-rendered call would disagree with hydration. */
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** Today's date in the local timezone as YYYY-MM-DD. */
 export function todayDate(): string {
   const now = new Date();
