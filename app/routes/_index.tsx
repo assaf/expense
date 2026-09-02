@@ -62,7 +62,7 @@ import {
   formatRate,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
-import { SITE_URL } from "~/lib/seo-content";
+import { OG_IMAGE, SITE_URL } from "~/lib/seo-content";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { countAccounts, readAccount } from "~/lib/db/accounts";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
@@ -261,8 +261,6 @@ function toListItem(
     })),
   };
 }
-
-const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 
 export function meta({ loaderData }: Route.MetaArgs) {
   if (loaderData?.mode === "landing") {

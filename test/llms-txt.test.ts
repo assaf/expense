@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loader as aboutLoader } from "~/routes/about[.]md";
 import { loader as scheduleCLoader } from "~/routes/schedule-c-categories[.]md";
@@ -139,5 +140,31 @@ describe("/llms.txt specific contract", () => {
     // The primary integration surface for assistants; if the path moves,
     // this file must move with it.
     expect(llmsTxt()).toContain(`${SITE_URL}/mcp`);
+  });
+});
+
+describe("sitemap coverage", () => {
+  // public/sitemap.xml is static and hand-edited; this keeps it honest
+  // against the one list that must stay complete: llms.txt's core pages.
+  const sitemap = readFileSync(
+    new URL("../public/sitemap.xml", import.meta.url),
+    "utf8",
+  );
+  const locs = new Set(
+    [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]),
+  );
+
+  it("lists every app page llms.txt advertises", () => {
+    const paths = new Set(
+      markdownLinks(llmsTxt())
+        .filter((href) => href.startsWith(`${SITE_URL}/`))
+        .map((href) => new URL(href).pathname.replace(/\.md$/, "")),
+    );
+    for (const path of paths) {
+      expect(
+        locs.has(`${SITE_URL}${path}`),
+        `${path} is in llms.txt but missing from public/sitemap.xml`,
+      ).toBe(true);
+    }
   });
 });

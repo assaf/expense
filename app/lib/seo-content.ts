@@ -24,10 +24,15 @@ export function marketingPageHeaders(): Record<string, string> {
   };
 }
 
-/** The three standard meta tags every marketing/SEO page advertises: a
- * title, a description, and the canonical link against its own path.
- * Shared by /about, /ai, /faq, /alternatives, and /login so the tag
- * shape and the canonical URL pattern can't drift between pages. */
+/** The standard meta tags every marketing/SEO page advertises: a title, a
+ * description, a canonical link against its own path, and the og:* tags
+ * social cards need (the static root head carries og:site_name, og:locale,
+ * og:type, and twitter:card; route meta arrays replace, not merge, so each
+ * page repeats only the per-page values). Shared by /about, /ai, /faq,
+ * /alternatives, /mileage-rates, /schedule-c-categories, and /login so the
+ * tag shape and the canonical URL pattern can't drift between pages. The
+ * landing page opts out: its card copy is richer and hand-written. */
+
 export function pageMeta(
   title: string,
   description: string,
@@ -36,11 +41,16 @@ export function pageMeta(
   | { title: string }
   | { name: "description"; content: string }
   | { tagName: "link"; rel: "canonical"; href: string }
+  | { property: string; content: string }
 > {
   return [
     { title },
     { name: "description", content: description },
     { tagName: "link", rel: "canonical", href: `${SITE_URL}${path}` },
+    { property: "og:url", content: `${SITE_URL}${path}` },
+    { property: "og:title", content: title },
+    { property: "og:description", content: description },
+    { property: "og:image", content: OG_IMAGE },
   ];
 }
 
@@ -61,6 +71,9 @@ export const SITE_URL = "https://expense.labnotes.org";
 
 /** The public MCP endpoint (Streamable HTTP + OAuth): every install instruction points here. */
 export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
+
+/** The social-card image shared by every marketing page's og:image. */
+export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 export const APP_NAME = "Expense";
 export const BLOG_URL = "https://labnotes.org";
 export const AUTHOR_NAME = "Assaf Arkin";
