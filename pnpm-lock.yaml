@@ -193,8 +193,8 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(@types/react@19.2.18)
       knip:
-        specifier: ^6.33.0
-        version: 6.33.0
+        specifier: ^6.34.0
+        version: 6.34.0
       playwright:
         specifier: ^1.62.1
         version: 1.62.1
@@ -293,8 +293,8 @@ packages:
     resolution: {integrity: sha512-Jb59xfEISoN5mmbnA+HYqdtrSX3CgCtJoof+V5D8/TgUI56W63GEEd5Y58WijU3Ou6+WEgaLD1feVzaRXV5IDQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-node@3.972.81':
-    resolution: {integrity: sha512-Rml+WitoFvXmv6JZ18U/xGdGDGGvB/mOin0ya0lTnTrdC0Z1lrVxTYh7iNklZBcvcRMrs4DoEf6xy1KWyrLQQw==}
+  '@aws-sdk/credential-provider-node@3.972.82':
+    resolution: {integrity: sha512-znDkEOGXB8W3kG1LJUKP3foBZY/9qLM0eil/DxWXSp37XsdsRLQHE/d/OaCGGVgKpA6znR38h/+INk8do1FjiA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-process@3.972.70':
@@ -309,8 +309,8 @@ packages:
     resolution: {integrity: sha512-d3AGyVu759PGr35mEB2s22xxlNEA5rpdxtSPJthfPFJvoQ8dt357iVPECqWfUxXp1toJAvKmbtcIYVGigaGsCA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-providers@3.1121.0':
-    resolution: {integrity: sha512-lWdkLauoXNDH/lwYWFpYnFhtYqt0lLrQAyuyxak31PiKD5UQ4YT2z3rQckzEfIGyP1VBGvC+n6Ziqm3y3HKmmQ==}
+  '@aws-sdk/credential-providers@3.1123.0':
+    resolution: {integrity: sha512-hfpS7dywjHDyzDRLl/IF03Uy4FY9MpnPT7eSArkvTwP4F29G1r3PYwNyhCTa+wX/pyeyuVKkXX44XeQlWDiMJQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.997.44':
@@ -484,8 +484,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@5.20260831.1':
-    resolution: {integrity: sha512-yXg4pwfYjhsDH9rYc3qZ3K+z62DCSvO/aj7GiZo6AyDeWGZpyFRpPMYcQ6LF/zfaf1x0Ngw2gSqL8JjuUtMGlA==}
+  '@cloudflare/workers-types@5.20260901.1':
+    resolution: {integrity: sha512-m1rNbR3UYC1pgaEyXkSlwLFLDB11QziYUlY0z/nqjwuYtg5dw9zBrgDudoSfYM6ebbPDKU81ogBQAzLp6h1y4w==}
 
   '@distilled.cloud/aws@1.0.0-rc.6':
     resolution: {integrity: sha512-WI0KK4mCdIvclKH7kbK/geY9iIRiSN6v067OdvuLUOEHA19GdQj88lUBSbtwdmIG0sm61zm2JKHwXO+RKseuIg==}
@@ -2418,8 +2418,8 @@ packages:
     resolution: {integrity: sha512-zMrXu/O5tPa7GLtra8L4wFG6DACcXT9QV4Ay+WEAjUhXm1dVq7c/q9Qv9gkJZNLY8hmQKg08778kDcxpKNMqOA==}
     engines: {node: '>=18.0.0'}
 
-  '@smithy/node-http-handler@4.11.3':
-    resolution: {integrity: sha512-2jY1tSpERfPfWqyBV2pH+iGFaghVsIJszJNsT7hxtQYhVJpWDyc0LqOWI+nXOxOAHaEfZ4PXXtp1wW1TGpHhkA==}
+  '@smithy/node-http-handler@4.12.0':
+    resolution: {integrity: sha512-0mq1pHadfyXCYCqm2cNpbjNIT+fbaUpNxewZb/YNr2L0IrEVMOb8gM/Fl4K6XvHCW3uSNDFwPl/+iKm0bx9jYg==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/shared-ini-file-loader@4.7.2':
@@ -3626,8 +3626,8 @@ packages:
   effect@4.0.0-rc.112:
     resolution: {integrity: sha512-wXxwuh1Ywnv4cPRM3Wfa0vDwuOHnZ1TsTgHJkG9XgzND6inhBH9n1vBxhg3iIXOia/OrpmvVmd3lrD4vq6bF3A==}
 
-  electron-to-chromium@1.5.417:
-    resolution: {integrity: sha512-4T+DTDWuMPM4aHlHwWdAVCVWwp7LDilnhzkj+c/Lbj91XSQrLuOmZSLtS9Q4iIqjlPUbPOnC624zDVVHCHaolQ==}
+  electron-to-chromium@1.5.418:
+    resolution: {integrity: sha512-UzS26r3AEbG5wSoGVpJKqwHIU9zwQN7LHdVIThDrJpS0I5KdlXFMEb8543fhc9dVnIIAST6ar8rhwa00AL5MlA==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -4130,8 +4130,8 @@ packages:
       react: ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  knip@6.33.0:
-    resolution: {integrity: sha512-gMXWV2bqgJcdZKsaRgl1oH5V2J0VumhJ2ujfP4M6b9ftpca2BNpvlX3Dq++vVtEey7sU67EXCvZGNkQfG2w1RQ==}
+  knip@6.34.0:
+    resolution: {integrity: sha512-bbHIrnGspYwe4EBPjjx+lvkUor0F2qfKQc5BPzPI4SOAImYA+k2ueVpIcF7d/W1LEVT7XoJUPt6zELeGZhXBgA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
@@ -5637,7 +5637,7 @@ snapshots:
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
-      '@smithy/node-http-handler': 4.11.3
+      '@smithy/node-http-handler': 4.12.0
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
@@ -5666,7 +5666,7 @@ snapshots:
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-node@3.972.81':
+  '@aws-sdk/credential-provider-node@3.972.82':
     dependencies:
       '@aws-sdk/credential-provider-env': 3.972.70
       '@aws-sdk/credential-provider-http': 3.972.72
@@ -5707,7 +5707,7 @@ snapshots:
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
-  '@aws-sdk/credential-providers@3.1121.0':
+  '@aws-sdk/credential-providers@3.1123.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
       '@aws-sdk/credential-provider-cognito-identity': 3.972.69
@@ -5715,7 +5715,7 @@ snapshots:
       '@aws-sdk/credential-provider-http': 3.972.72
       '@aws-sdk/credential-provider-ini': 3.973.15
       '@aws-sdk/credential-provider-login': 3.972.77
-      '@aws-sdk/credential-provider-node': 3.972.81
+      '@aws-sdk/credential-provider-node': 3.972.82
       '@aws-sdk/credential-provider-process': 3.972.70
       '@aws-sdk/credential-provider-sso': 3.973.14
       '@aws-sdk/credential-provider-web-identity': 3.972.76
@@ -5733,7 +5733,7 @@ snapshots:
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
-      '@smithy/node-http-handler': 4.11.3
+      '@smithy/node-http-handler': 4.12.0
       '@smithy/types': 4.17.2
       tslib: 2.8.1
 
@@ -5935,13 +5935,13 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260704.1':
     optional: true
 
-  '@cloudflare/workers-types@5.20260831.1': {}
+  '@cloudflare/workers-types@5.20260901.1': {}
 
   '@distilled.cloud/aws@1.0.0-rc.6(effect@4.0.0-rc.112)':
     dependencies:
       '@aws-crypto/crc32': 5.2.0
       '@aws-crypto/util': 5.2.0
-      '@aws-sdk/credential-providers': 3.1121.0
+      '@aws-sdk/credential-providers': 3.1123.0
       '@aws-sdk/types': 3.974.5
       '@distilled.cloud/core': 1.0.0-rc.6(effect@4.0.0-rc.112)
       '@smithy/shared-ini-file-loader': 4.7.2
@@ -5987,7 +5987,7 @@ snapshots:
 
   '@effect/sql-d1@4.0.0-rc.112(effect@4.0.0-rc.112)':
     dependencies:
-      '@cloudflare/workers-types': 5.20260831.1
+      '@cloudflare/workers-types': 5.20260901.1
       effect: 4.0.0-rc.112
 
   '@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.0-rc.112)':
@@ -7619,7 +7619,7 @@ snapshots:
       '@smithy/core': 3.33.3
       tslib: 2.8.1
 
-  '@smithy/node-http-handler@4.11.3':
+  '@smithy/node-http-handler@4.12.0':
     dependencies:
       '@smithy/core': 3.33.3
       '@smithy/types': 4.17.2
@@ -8165,7 +8165,7 @@ snapshots:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.0-rc.112))(@types/node@26.4.0)(@voidzero-dev/vite-plus-core@0.3.0(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(typescript@7.0.2)(yaml@2.9.0))(effect@4.0.0-rc.112)(rolldown@1.1.5)(typescript@7.0.2)
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.0-rc.112)
       '@alchemy.run/node-utils': 2.0.0-beta.74
-      '@aws-sdk/credential-providers': 3.1121.0
+      '@aws-sdk/credential-providers': 3.1123.0
       '@clack/prompts': 1.7.0
       '@distilled.cloud/aws': 1.0.0-rc.6(effect@4.0.0-rc.112)
       '@distilled.cloud/axiom': 1.0.0-rc.6(effect@4.0.0-rc.112)
@@ -8361,7 +8361,7 @@ snapshots:
     dependencies:
       baseline-browser-mapping: 2.11.20
       caniuse-lite: 1.0.30001810
-      electron-to-chromium: 1.5.417
+      electron-to-chromium: 1.5.418
       node-releases: 2.0.54
       update-browserslist-db: 1.3.2(browserslist@4.28.8)
 
@@ -8643,7 +8643,7 @@ snapshots:
       fast-check: 4.9.0
       msgpackr: 2.1.0
 
-  electron-to-chromium@1.5.417: {}
+  electron-to-chromium@1.5.418: {}
 
   emoji-regex@10.6.0: {}
 
@@ -9178,7 +9178,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  knip@6.33.0:
+  knip@6.34.0:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.7)
       formatly: 0.7.0
