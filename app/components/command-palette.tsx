@@ -56,8 +56,8 @@ const PALETTE_PANEL =
 export const ACTION_SHORTCUTS = {
   "nav-expenses": ["g", "e"],
   "nav-reports": ["g", "r"],
-  "nav-emails": ["g", "m"],
-  "nav-reconcile": ["g", "f"],
+  "nav-emails": ["g", "l"],
+  "nav-reconcile": ["g", "x"],
   "nav-settings": ["g", "s"],
   "new-receipt": ["a"],
   "new-mileage": ["m"],

@@ -134,8 +134,8 @@ describe("Command palette", () => {
     };
 
     await navVia("**/export", "r");
-    await navVia("**/emails", "m");
-    await navVia("**/reconcile", "f");
+    await navVia("**/emails", "l");
+    await navVia("**/reconcile", "x");
     await navVia("**/settings", "s");
     await navVia("**/", "e");
   });
