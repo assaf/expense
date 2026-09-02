@@ -28,6 +28,7 @@ gate.
 ## Conventions that shape every edit
 
 - **Dark mode**: system-only; **every component adds `dark:` variants for all color classes** (map: `docs/dark-mode.md`). Use shared primitives (`Button`, `Input`, `Select`, `Card`, `EmptyState`).
+- **Narrow screens**: design for ~320px first, widen at `sm:`. Toolbar rows of sibling buttons: one-word labels + `px-2 sm:px-4` (header nav: icon-only below `sm:` via `hidden sm:inline` labels, always keep `aria-label` and `data-shortcut`). Input + button rows: the input gets `min-w-0 flex-1` (a text input's `min-width: auto` pins it at ~200px intrinsic and squeezes the button into wrapping); button keeps natural width. Verify at 390/375/320 with a Playwright probe (see the dev-smoke skill): one row, `scrollWidth === innerWidth`, no clipped labels.
 - **State**: all reads/writes via `app/lib/db/`, scoped by `accountId`; never read state client-side. Route types from `./+types/<name>`; alias `~/*` → `app/*`.
 - **MCP**: `/mcp` (Streamable HTTP, OAuth 2.1, Settings → Agents & API) exposes the store: capture_receipt (OCR/DeepSeek, sha256 cache), log_mileage, list_expenses, reports, reconcile. `docs/mcp.md`. **WebMCP (experiment)**: `app/lib/webmcp.ts` registers read-only in-page tools for Chrome's origin-trial API, backed by the session-authenticated JSON mirror `app/routes/api.webmcp.$resource.ts`. Both share the read-tool contract (`app/lib/expense-read-tools.ts`) and implementations (`app/lib/expense-read.server.ts`).
 - **Maps**: Leaflet client-only dynamic import; Nominatim/OSRM, no keys.
