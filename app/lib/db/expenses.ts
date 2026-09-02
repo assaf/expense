@@ -8,6 +8,7 @@ import {
   toIso,
   toIsoOrNull,
 } from "~/lib/db/wire";
+import { compareExpenses } from "~/lib/format";
 import { normalizeMerchant } from "~/lib/duplicates";
 import { deleteImage, mimeForFile } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
@@ -110,100 +111,35 @@ export async function readExpenseImage(
 
 /**
  * The two expenses immediately before and after `expense` in the main list
- * sort order (dated newest-first, undated newest-createdAt last). Two
- * lightweight queries instead of loading every expense just for prev/next
- * arrows.
+ * order: the home page renders `sortExpenses` over open reports only, so
+ * navigation runs the same shared comparator over the same universe (rows
+ * in closed reports are skipped; they are not on the list either). One
+ * thin-column query instead of per-side date queries, which cannot see the
+ * same-day createdAt tie-break and used to jump over same-day siblings.
  */
 export async function readNeighborIds(
   accountId: string,
-  expense: { id: string; date: string; createdAt: string },
+  expense: { id: string },
 ): Promise<{ prevId: string | null; nextId: string | null }> {
-  const hasDate = expense.date !== "";
-  let prevId: string | null = null;
-  let nextId: string | null = null;
-
-  if (hasDate) {
-    // Prev: the expense with the closest *newer* date (date > this one,
-    // ordered ascending, so the smallest gap forward in time = the one just
-    // before in a newest-first list).
-    const prev = await db.orm.public.Expense.where((e) =>
-      and(
-        e.accountId.eq(accountId),
-        e.date.gt(expense.date),
-        e.id.neq(expense.id),
-      ),
-    )
-      .orderBy((e) => e.date.asc())
-      .select("id")
-      .first();
-    prevId = prev?.id ?? null;
-
-    // Next: the expense with the closest *older* date (date < this one,
-    // ordered descending).
-    const next = await db.orm.public.Expense.where((e) =>
-      and(
-        e.accountId.eq(accountId),
-        e.date.lt(expense.date),
-        e.id.neq(expense.id),
-      ),
-    )
-      .orderBy((e) => e.date.desc())
-      .select("id")
-      .first();
-    if (next) {
-      nextId = next.id;
-    } else {
-      // No older dated expense; fall back to the first undated row.
-      const firstUndated = await db.orm.public.Expense.where((e) =>
-        and(e.accountId.eq(accountId), e.date.eq(""), e.id.neq(expense.id)),
-      )
-        .orderBy((e) => e.createdAt.desc())
-        .select("id")
-        .first();
-      nextId = firstUndated?.id ?? null;
-    }
-  } else {
-    // Undated expense: prev is the closest newer undated, or the oldest
-    // dated row when this is the first undated.
-    const prevUndated = await db.orm.public.Expense.where((e) =>
-      and(
-        e.accountId.eq(accountId),
-        e.date.eq(""),
-        e.createdAt.gt(fromIso(expense.createdAt)),
-        e.id.neq(expense.id),
-      ),
-    )
-      .orderBy((e) => e.createdAt.asc())
-      .select("id")
-      .first();
-    if (prevUndated) {
-      prevId = prevUndated.id;
-    } else {
-      const oldestDated = await db.orm.public.Expense.where((e) =>
-        and(e.accountId.eq(accountId), e.date.neq(""), e.id.neq(expense.id)),
-      )
-        .orderBy((e) => e.date.asc())
-        .select("id")
-        .first();
-      prevId = oldestDated?.id ?? null;
-    }
-
-    // Next: closest older undated (createdAt < this one, ordered desc).
-    const nextUndated = await db.orm.public.Expense.where((e) =>
-      and(
-        e.accountId.eq(accountId),
-        e.date.eq(""),
-        e.createdAt.lt(fromIso(expense.createdAt)),
-        e.id.neq(expense.id),
-      ),
-    )
-      .orderBy((e) => e.createdAt.desc())
-      .select("id")
-      .first();
-    nextId = nextUndated?.id ?? null;
-  }
-
-  return { prevId, nextId };
+  const [reportRows, rows] = await Promise.all([
+    db.orm.public.Report.where((r) => r.accountId.eq(accountId))
+      .select("name", "closed")
+      .all(),
+    db.orm.public.Expense.where((e) => e.accountId.eq(accountId))
+      .select("id", "date", "createdAt", "report")
+      .all(),
+  ]);
+  const closed = new Set(reportRows.filter((r) => r.closed).map((r) => r.name));
+  const ordered = rows
+    .filter((r) => !closed.has(r.report))
+    .map((r) => ({ id: r.id, date: r.date, createdAt: toIso(r.createdAt) }))
+    .sort((a, b) => compareExpenses(a, b));
+  const i = ordered.findIndex((r) => r.id === expense.id);
+  if (i === -1) return { prevId: null, nextId: null };
+  return {
+    prevId: ordered[i - 1]?.id ?? null,
+    nextId: ordered[i + 1]?.id ?? null,
+  };
 }
 
 /**

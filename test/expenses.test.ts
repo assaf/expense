@@ -7,6 +7,7 @@ import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
+import { readNeighborIds } from "~/lib/db/expenses";
 import { saveImage } from "~/lib/images.server";
 
 /** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
@@ -568,6 +569,66 @@ describe("Expense CRUD", () => {
       await testPrisma.expense.deleteMany({ where: { id } });
       await testPrisma.imageBlob.deleteMany({
         where: { accountId: TEST_ACCOUNT_ID, key: filename },
+      });
+    }
+  });
+
+  it("orders editor navigation like the main list: same-day rows by entry order, closed reports skipped", async () => {
+    // A future-dated cluster sits above every other row in the account, so
+    // adjacency inside it is fully controlled: same day, three entry
+    // timestamps (A < B < C), plus Z in a closed report with the newest
+    // timestamp. The list renders C, B, A (Z hidden), so from B both
+    // neighbors are same-day siblings and from C nothing newer is visible.
+    const date = "2031-05-10";
+    const at = (n: number) =>
+      new Date(Date.parse("2026-09-01T00:00:00.000Z") + n * 1000).toISOString();
+    const ids = { a: ulid(), b: ulid(), c: ulid(), z: ulid() };
+    await testPrisma.report.create({
+      data: { name: "Nav Closed", accountId: TEST_ACCOUNT_ID, closed: true },
+    });
+    const rows = [
+      { id: ids.a, createdAt: at(1), merchant: "Nav A" },
+      { id: ids.b, createdAt: at(2), merchant: "Nav B" },
+      { id: ids.c, createdAt: at(3), merchant: "Nav C" },
+      { id: ids.z, createdAt: at(4), merchant: "Nav Z", report: "Nav Closed" },
+    ];
+    for (const r of rows) {
+      await testPrisma.expense.create({
+        data: {
+          id: r.id,
+          accountId: TEST_ACCOUNT_ID,
+          type: "receipt",
+          date,
+          report: r.report ?? "2026 Test",
+          category: "Office Supplies",
+          description: "",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          amount: "1.00",
+          merchant: r.merchant,
+          locations: [],
+          createdAt: r.createdAt,
+          updatedAt: r.createdAt,
+        },
+      });
+    }
+    try {
+      const b = await readNeighborIds(TEST_ACCOUNT_ID, { id: ids.b });
+      expect(b.prevId).toBe(ids.c);
+      expect(b.nextId).toBe(ids.a);
+      // The closed-report row is invisible: C's newer sibling Z does not
+      // become C's prev, and B's neighbors are still its same-day list
+      // neighbors.
+      const c = await readNeighborIds(TEST_ACCOUNT_ID, { id: ids.c });
+      expect(c.prevId).toBeNull();
+      expect(c.nextId).toBe(ids.b);
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: { id: { in: Object.values(ids) } },
+      });
+      await testPrisma.report.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, name: "Nav Closed" },
       });
     }
   });

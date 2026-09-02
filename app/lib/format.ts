@@ -112,27 +112,40 @@ export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
 }
 
 /**
+ * The canonical expense order, one comparator for every consumer that must
+ * agree on it: `sortExpenses` (the home list, exports) and the editor's
+ * prev/next neighbor lookup. Newest-first by date; same-day rows keep
+ * entry order (createdAt desc); undated rows sort last, newest entry
+ * first. `desc = false` flips it for chronological exports.
+ */
+export function compareExpenses(
+  a: Pick<Expense, "date" | "createdAt">,
+  b: Pick<Expense, "date" | "createdAt">,
+  desc = true,
+): number {
+  if (!a.date && !b.date) {
+    return desc
+      ? b.createdAt.localeCompare(a.createdAt)
+      : a.createdAt.localeCompare(b.createdAt);
+  }
+  if (!a.date) return 1;
+  if (!b.date) return -1;
+  // Same day → by when the expense was recorded (imported receipts:
+  // arrival order; manual entries: entry order). The date itself is
+  // day-granular, so createdAt is the only time signal available.
+  return desc
+    ? b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)
+    : a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
+}
+
+/**
  * Sort expenses by date; empty dates sort last (ties broken by createdAt).
  * `desc` (default) is newest-first (the home list and editor navigation);
  * pass `false` for chronological order (PDF/ZIP exports). Returns a new
  * array (callers' input is never mutated).
  */
 export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
-  return expenses.toSorted((a, b) => {
-    if (!a.date && !b.date) {
-      return desc
-        ? b.createdAt.localeCompare(a.createdAt)
-        : a.createdAt.localeCompare(b.createdAt);
-    }
-    if (!a.date) return 1;
-    if (!b.date) return -1;
-    // Same day → by when the expense was recorded (imported receipts:
-    // arrival order; manual entries: entry order). The date itself is
-    // day-granular, so createdAt is the only time signal available.
-    return desc
-      ? b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)
-      : a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt);
-  });
+  return expenses.toSorted((a, b) => compareExpenses(a, b, desc));
 }
 
 /** "1 expense" / "3 expenses": human count label. */
