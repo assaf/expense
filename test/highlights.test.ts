@@ -35,6 +35,8 @@ describe("feature highlights", () => {
       "reconcile",
       "reports",
       "search-operators",
+      "shortcut-hints",
+      "webmcp",
     ]);
   });
 

@@ -4,6 +4,8 @@ import {
   CreditCard,
   FileText,
   Fuel,
+  Globe,
+  Keyboard,
   Mail,
   MapPinned,
   Plug,
@@ -37,7 +39,9 @@ export type HighlightId =
   | "reports"
   | "invite"
   | "reconcile"
-  | "search-operators";
+  | "search-operators"
+  | "shortcut-hints"
+  | "webmcp";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
  * empty strings; the matching highlights are excluded from the pool.
@@ -81,10 +85,16 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Add your own categories",
     body: () => (
       <>
-        Expense starts with the IRS Schedule C categories, but you can add your
-        own anytime in Settings, for clients, projects, or whatever makes your
-        taxes clearer. New categories are offered automatically when receipts
-        are parsed.
+        Expense starts with the{" "}
+        <Link
+          to="/schedule-c-categories"
+          className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
+        >
+          IRS Schedule C categories
+        </Link>
+        , but you can add your own anytime in Settings, for clients, projects,
+        or whatever makes your taxes clearer. New categories are offered
+        automatically when receipts are parsed.
       </>
     ),
     cta: { label: "Manage categories", to: "/settings#categories" },
@@ -97,6 +107,16 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         Press ⌘K and type what you want: jump to a page, add a receipt or
         mileage, search expenses, export a report. Power keys work too: g then r
         opens Reports, a starts a new receipt.
+      </>
+    ),
+  },
+  "shortcut-hints": {
+    icon: Keyboard,
+    title: "The shortcuts, on screen",
+    body: () => (
+      <>
+        Press Shift+? and Expense pins the keys next to the buttons they drive:
+        pages, new receipt, search. Press it again and the pins go away.
       </>
     ),
   },
@@ -152,7 +172,19 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         export reports. Revoke access to any app in Settings.
       </>
     ),
-    cta: { label: "Manage connected apps", to: "/settings#agents" },
+    cta: { label: "Set up a client", to: "/connect" },
+  },
+  webmcp: {
+    icon: Globe,
+    title: "Browser agents can read along",
+    body: () => (
+      <>
+        In Chrome, Expense registers read-only tools for the browser's own agent
+        (WebMCP): same data, your signed-in session, nothing to set up. Ask the
+        page a question about your spending.
+      </>
+    ),
+    cta: { label: "How agent access works", to: "/ai" },
   },
   "mileage-location": {
     icon: MapPinned,
@@ -180,7 +212,14 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
           "the rate for today"
         )}{" "}
         for business right now. Classify each drive as business, charity, or
-        medical and the right rate is applied.
+        medical and the right rate is applied. Every rate since 2011 is on the{" "}
+        <Link
+          to="/mileage-rates"
+          className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
+        >
+          mileage rates page
+        </Link>
+        .
       </>
     ),
     cta: { label: "Log a drive", to: "/expense/new?type=mileage" },
@@ -235,6 +274,8 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "capture",
     "categories",
     "command-palette",
+    "shortcut-hints",
+    "webmcp",
     "mileage-location",
     "reconcile",
     "reports",
