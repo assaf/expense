@@ -4,6 +4,7 @@ Disallow: /expense
 Disallow: /settings
 Disallow: /export
 Disallow: /api/
+Disallow: /_highlights
 Disallow: /sign-out
 
 # AI assistants and search engines that answer questions with AI-generated

@@ -268,6 +268,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     cta: { label: "Reconcile now", to: "/reconcile" },
   },
 };
+/** Every highlight id, for the /_highlights preview page. */
+export const HIGHLIGHT_IDS = Object.keys(HIGHLIGHTS) as HighlightId[];
 
 /** The highlight ids that can render with the given data: "email" needs the
  * inbound address configured, "mileage-rate" a published IRS rate, "invite"
