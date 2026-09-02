@@ -26,6 +26,10 @@ import { Card } from "~/components/ui/Card";
  * the current data (e.g. "email" needs the inbound address configured), so
  * every return visit surfaces a different feature without the card ever
  * getting in the way of adding expenses.
+ *
+ * Practice: new user-facing features ship with a card here, and existing
+ * cards get updated when the feature they describe changes (see the
+ * Feature highlights bullet in AGENTS.md).
  */
 export type HighlightId =
   | "capture"

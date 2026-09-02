@@ -35,6 +35,7 @@ gate.
 - **Validation**: plain helpers (`app/lib/validation.ts`, `app/lib/completeness.ts`) for form/domain validation; Zod is fine anywhere it earns its keep, and is the tool-contract language for the agent surfaces (MCP arg schemas, the WebMCP tool schemas derived via `z.toJSONSchema`, provider-response boundaries).
 - **Security**: scrypt hashing; escape untrusted text (`escapeHtml`); sanitize filenames; authenticated responses `Cache-Control: private`; HTML denies framing (HSTS from Vercel); untrusted URL fetches only via `fetchPublicUrl` (SSRF checks per redirect hop).
 - **Logging**: only `.assert`/`.error`/`.info`/`.warn`, prefixed with a context tag.
+- **Feature highlights**: every new user-facing feature or page ships with a "Did you know?" card (`app/components/FeatureHighlight.tsx`, picked per request on the home page), and existing cards get updated when the feature changes (new pages to link, changed flows, renamed shortcuts). Keyboard-only features take no CTA; gate data-dependent ones in `availableHighlights` and pin the gating in `test/highlights.test.ts`.
 
 ## Code style
 
