@@ -22,7 +22,7 @@ describe("Mileage expense", () => {
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },
     });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -40,7 +40,7 @@ describe("Mileage expense", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -74,7 +74,7 @@ describe("Mileage expense", () => {
 
   it("recomputes the amount when the type or date changes the rate", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -146,7 +146,7 @@ describe("Mileage expense", () => {
 
   it("only geocodes and updates the map when an address field loses focus", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -203,7 +203,7 @@ describe("Mileage expense", () => {
     });
     try {
       await page.goto("/", { waitUntil: "load" });
-      await page.getByText("Add mileage").click();
+      await page.getByRole("button", { name: "Mileage" }).click();
       await page.waitForURL(/\/expense\/new\?type=mileage$/, {
         timeout: 10_000,
       });
@@ -219,7 +219,7 @@ describe("Mileage expense", () => {
   it("leaves the category unset when no Travel category exists", async () => {
     // The seeded categories have no Travel, so the editor starts unset.
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -228,7 +228,7 @@ describe("Mileage expense", () => {
 
   it("always keeps a start and a first stop; extra stops can be removed", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -261,7 +261,7 @@ describe("Mileage expense", () => {
 
   it("updates the field to the geocoded address on blur, or shows an error", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -316,7 +316,7 @@ describe("Mileage expense", () => {
 
   it("shows a geocoding indicator while the address is being geocoded", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -375,7 +375,7 @@ describe("Mileage expense", () => {
 
   it("drops empty addresses when saving", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -403,7 +403,7 @@ describe("Mileage expense", () => {
 
   it("recomputes the route without a location when its field is emptied", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -454,7 +454,7 @@ describe("Mileage expense", () => {
 
   it("shows the stop address (street, city) in the map tooltip", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -519,7 +519,7 @@ describe("Mileage expense", () => {
     // still geocode the trip, so the saved expense keeps its route,
     // distance, and amount.
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -600,7 +600,7 @@ describe("Mileage expense", () => {
 
   it("shows a route error when the API returns 500 and still allows saving", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
@@ -644,7 +644,7 @@ describe("Mileage expense", () => {
 
   it("keeps the typed addresses and shows an error when geocoding fails to match", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });

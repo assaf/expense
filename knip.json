@@ -12,10 +12,5 @@
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend"
   ],
-  "entry": [
-    "test/helpers/globalSetup.ts",
-    "app/lib/command-requests.ts",
-    "app/routes/**",
-    "app/entry.*"
-  ]
+  "entry": ["app/lib/command-requests.ts", "app/routes/**", "app/entry.*"]
 }

@@ -21,7 +21,7 @@ describe("Home page", () => {
   });
 
   it("shows the add receipt button", async () => {
-    await expect(page.getByText("Add receipt")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Receipt" })).toBeVisible();
   });
 
   it("shows expense rows for seeded data", async () => {

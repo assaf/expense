@@ -1,13 +1,15 @@
-import { Bot, Check, Copy, Link2, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Check, Copy, Link2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
-import { cardSurface, Card } from "~/components/ui/Card";
+import { Card } from "~/components/ui/Card";
+import {
+  CapabilitiesSection,
+  PromptsSection,
+  SecuritySection,
+} from "~/components/mcp-sections";
 import { cn } from "~/lib/cn";
 import {
-  AI_CAPABILITIES,
-  AI_PROMPTS,
-  AI_SECURITY,
   APP_NAME,
   AUTHOR_NAME,
   BLOG_URL,
@@ -236,21 +238,7 @@ export default function ConnectPage() {
         </Card>
       </section>
 
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">
-          What your assistant can do
-        </h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {AI_CAPABILITIES.map((c) => (
-            <Card key={c.title} className="p-5">
-              <h3 className="font-semibold text-ink">{c.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                {c.body}
-              </p>
-            </Card>
-          ))}
-        </div>
-      </section>
+      <CapabilitiesSection />
 
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">Tools</h2>
@@ -300,39 +288,9 @@ export default function ConnectPage() {
         </div>
       </section>
 
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">
-          Example prompts
-        </h2>
-        <ul className="mt-6 flex flex-col gap-3">
-          {AI_PROMPTS.map((prompt) => (
-            <li
-              key={prompt}
-              className={cn(cardSurface, "flex items-start gap-2 p-4")}
-            >
-              <Sparkles
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
-              />
-              <span className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
-                {prompt}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <PromptsSection heading="Example prompts" />
 
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">Security</h2>
-        <Card className="mt-6 flex items-start gap-3 p-5">
-          <ShieldCheck
-            aria-hidden="true"
-            className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-          />
-          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            {AI_SECURITY}
-          </p>
-        </Card>
+      <SecuritySection>
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
           Signed in? Manage or revoke existing connections in Settings → Agents
           &amp; API (MCP). For the read-only in-page tools a browser agent can
@@ -345,7 +303,7 @@ export default function ConnectPage() {
           </Link>
           .
         </p>
-      </section>
+      </SecuritySection>
 
       <MarketingCta
         heading="Your expenses, on speaking terms with your assistant."

@@ -78,7 +78,7 @@ describe("Date picker", () => {
 
   it("saves a future date chosen from the calendar", async () => {
     const page = await goto("/");
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
 
     const future = new Date();

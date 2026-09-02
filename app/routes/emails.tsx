@@ -98,6 +98,11 @@ export function meta(): Route.MetaDescriptors {
 export async function action({ request }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request);
 
+  // Both send paths share the same follow-up: a failure is echoed as JSON,
+  // and a minted token emails the verification link (addressed with the
+  // account's display name) so receipts start flowing once the mailbox
+  // owner clicks it. `token: null` means the address was already verified
+  // for this account; nothing to send.
   // Both send paths share the same email: the verification link for a
   // pending sender address, addressed with the account's display name.
   const sendVerification = async (address: string, token: string) => {
@@ -109,32 +114,30 @@ export async function action({ request }: Route.ActionArgs) {
       accountName: account?.name ?? "",
     });
   };
+  // And the same follow-up: a failure is echoed as JSON, and a minted
+  // token emails that link. `token: null` means the address was already
+  // verified for this account; nothing to send.
+  const finishSender = async (
+    result:
+      | { ok: true; address: string; token: string | null }
+      | { ok: false; error: string },
+  ) => {
+    if (!result.ok) return Response.json(result);
+    if (result.token) await sendVerification(result.address, result.token);
+    return Response.json({ ok: true, address: result.address });
+  };
   switch (intent) {
-    case "addInboundSender": {
-      const result = await addInboundSender(
-        user.accountId,
-        formString(form, "address"),
+    case "addInboundSender":
+      return finishSender(
+        await addInboundSender(user.accountId, formString(form, "address")),
       );
-      if (!result.ok) return Response.json(result);
-      // New/updated sender → email its verification link so receipts start
-      // flowing once the mailbox owner clicks it. `token: null` means the
-      // address was already verified for this account; nothing to send.
-      if (result.token) {
-        await sendVerification(result.address, result.token);
-      }
-      return Response.json({ ok: true, address: result.address });
-    }
-    case "resendInboundSenderVerification": {
-      const result = await resendInboundSenderVerification(
-        user.accountId,
-        formString(form, "address"),
+    case "resendInboundSenderVerification":
+      return finishSender(
+        await resendInboundSenderVerification(
+          user.accountId,
+          formString(form, "address"),
+        ),
       );
-      if (!result.ok) return Response.json(result);
-      if (result.token) {
-        await sendVerification(result.address, result.token);
-      }
-      return Response.json({ ok: true, address: result.address });
-    }
     case "removeInboundSender": {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;

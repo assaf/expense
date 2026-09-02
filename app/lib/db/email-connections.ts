@@ -39,22 +39,10 @@ const CONNECTION_FIELDS = [
   "createdAt",
 ] as const;
 
-/** The columns every connection read maps, shared by the view and
- * secret-bearing mappers so the two can't drift apart. */
-interface ConnectionRow {
-  id: string;
-  accountId: string;
-  provider: string;
-  emailAddress: string;
-  status: string;
-  receivedCount: number;
-  processedCount: number;
-  lastPushAt: string | null;
-  pushSubscriptionId: string | null;
-  pushExpiresAt: string | null;
-  reviewScannedAt: string | null;
-  createdAt: string;
-}
+/** The DB row's shape: the public record's columns pre-timezone-conversion
+ * (connectionBase maps wire stamps to ISO), shared by the view and
+ * secret-bearing mappers so they can't drift from the record type. */
+type ConnectionRow = EmailConnectionRecord;
 
 function connectionBase(row: ConnectionRow) {
   return {
@@ -153,24 +141,14 @@ export interface EmailConnectionWithSecret extends EmailConnectionRecord {
   tokenExpiresAt?: string | null;
 }
 
-function rowWithSecret(row: {
-  id: string;
-  accountId: string;
-  provider: string;
-  emailAddress: string;
-  status: string;
-  receivedCount: number;
-  processedCount: number;
-  lastPushAt: string | null;
-  pushSubscriptionId: string | null;
-  pushExpiresAt: string | null;
-  reviewScannedAt: string | null;
-  createdAt: string;
-  tokenEnc: string;
-  jmapAccountId: string;
-  refreshTokenEnc: string | null;
-  tokenExpiresAt: string | null;
-}): EmailConnectionWithSecret {
+function rowWithSecret(
+  row: ConnectionRow & {
+    tokenEnc: string;
+    jmapAccountId: string;
+    refreshTokenEnc: string | null;
+    tokenExpiresAt: string | null;
+  },
+): EmailConnectionWithSecret {
   return {
     ...connectionBase(row),
     tokenEnc: row.tokenEnc,

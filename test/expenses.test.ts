@@ -82,7 +82,7 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
     // Click "Add receipt"
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     // The editor is a draft: nothing is persisted until Save.
     expect(
@@ -153,7 +153,7 @@ describe("Expense CRUD", () => {
   it("edits an existing receipt and saves the changes", async () => {
     // Create a receipt to edit.
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await page.locator("input[list='merchants']").fill("Edit Target");
     await page.locator("input[type='number']").fill("5.00");
@@ -218,7 +218,7 @@ describe("Expense CRUD", () => {
 
   it("uploads a draft receipt image and attaches it on save", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await waitForEditorSettle(page);
 
@@ -278,7 +278,7 @@ describe("Expense CRUD", () => {
 
   it("uploads a PDF draft, rasterizes it to a stored PNG/JPEG, and saves", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await waitForEditorSettle(page);
 
@@ -740,7 +740,7 @@ describe("Expense CRUD", () => {
 
   it("saves with a future date (invoice dated ahead of payment)", async () => {
     await page.goto("/", { waitUntil: "load" });
-    await page.getByText("Add receipt").click();
+    await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
 
     await page.locator("input[list='merchants']").fill("Future Shop");

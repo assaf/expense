@@ -1,12 +1,12 @@
-import { Bot, Link2, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, Link2 } from "lucide-react";
 import { Link } from "react-router";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
-import { cardSurface, Card } from "~/components/ui/Card";
-import { cn } from "~/lib/cn";
 import {
-  AI_CAPABILITIES,
-  AI_PROMPTS,
-  AI_SECURITY,
+  CapabilitiesSection,
+  PromptsSection,
+  SecuritySection,
+} from "~/components/mcp-sections";
+import {
   AI_STEPS,
   AI_SUMMARY,
   APP_NAME,
@@ -51,21 +51,7 @@ export default function AiPage() {
         <script type="application/ld+json">{JSON.stringify(AI_SCHEMA)}</script>
       }
     >
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">
-          What your assistant can do
-        </h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {AI_CAPABILITIES.map((c) => (
-            <Card key={c.title} className="p-5">
-              <h3 className="font-semibold text-ink">{c.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                {c.body}
-              </p>
-            </Card>
-          ))}
-        </div>
-      </section>
+      <CapabilitiesSection />
 
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">
@@ -132,40 +118,9 @@ export default function AiPage() {
         </p>
       </section>
 
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">
-          Try asking
-        </h2>
-        <ul className="mt-6 flex flex-col gap-3">
-          {AI_PROMPTS.map((prompt) => (
-            <li
-              key={prompt}
-              className={cn(cardSurface, "flex items-start gap-2 p-4")}
-            >
-              <Sparkles
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400"
-              />
-              <span className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
-                {prompt}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <PromptsSection heading="Try asking" />
 
-      <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">Security</h2>
-        <Card className="mt-6 flex items-start gap-3 p-5">
-          <ShieldCheck
-            aria-hidden="true"
-            className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400"
-          />
-          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            {AI_SECURITY}
-          </p>
-        </Card>
-      </section>
+      <SecuritySection />
 
       <MarketingCta
         heading="Your expenses, on speaking terms with your assistant."

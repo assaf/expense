@@ -50,7 +50,7 @@ describe("Mileage map rendering", () => {
   async function openEditorWithRoute(): Promise<{
     inputs: import("playwright").Locator;
   }> {
-    await page.getByText("Add mileage").click();
+    await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });

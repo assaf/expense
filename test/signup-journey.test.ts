@@ -81,7 +81,7 @@ describe("Signup journeys", () => {
       await expect(page.locator("h1")).toContainText("Expense");
 
       // Upload a receipt through the editor and save it.
-      await page.getByText("Add receipt").click();
+      await page.getByRole("button", { name: "Receipt" }).click();
       await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
       await page.waitForTimeout(100);
       const [resp] = await Promise.all([
