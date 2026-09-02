@@ -283,7 +283,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </p>
         <Form method="post" className="flex items-end gap-2">
           <input type="hidden" name="intent" value="saveHome" />
-          <Field label="Address" className="flex-1">
+          <Field label="Address" className="min-w-0 flex-1">
             <Input type="text" name="homeAddress" defaultValue={homeAddress} />
           </Field>
           <Button type="submit" size="md">

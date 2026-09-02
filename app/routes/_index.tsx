@@ -508,25 +508,37 @@ function ExpenseList({
         <h1>
           <Logo link />
         </h1>
-        <nav className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/reconcile" data-shortcut="nav-reconcile">
-              <ListChecks aria-hidden="true" className="h-4 w-4" /> Reconcile
+        <nav className="flex items-center gap-0.5 sm:gap-2">
+          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+            <Link
+              to="/reconcile"
+              data-shortcut="nav-reconcile"
+              aria-label="Reconcile"
+            >
+              <ListChecks aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Reconcile</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/export" data-shortcut="nav-reports">
-              <Download aria-hidden="true" className="h-4 w-4" /> Reports
+          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+            <Link to="/export" data-shortcut="nav-reports" aria-label="Reports">
+              <Download aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Reports</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/emails" data-shortcut="nav-emails">
-              <Mail aria-hidden="true" className="h-4 w-4" /> Email
+          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+            <Link to="/emails" data-shortcut="nav-emails" aria-label="Email">
+              <Mail aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Email</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/settings" data-shortcut="nav-settings">
-              <Settings aria-hidden="true" className="h-4 w-4" /> Settings
+          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+            <Link
+              to="/settings"
+              data-shortcut="nav-settings"
+              aria-label="Settings"
+            >
+              <Settings aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Settings</span>
             </Link>
           </Button>
         </nav>
@@ -537,27 +549,30 @@ function ExpenseList({
       ) : null}
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap items-center gap-0.5 sm:gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <Button
             data-shortcut="new-receipt"
             onClick={() => createExpense("receipt")}
+            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
           >
-            <ReceiptText aria-hidden="true" className="h-4 w-4" /> Add receipt
+            <ReceiptText aria-hidden="true" className="h-4 w-4" /> Receipt
           </Button>
           <Button
             data-shortcut="new-mileage"
             onClick={() => createExpense("mileage")}
             variant="secondary"
+            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
           >
-            <MapPinned aria-hidden="true" className="h-4 w-4" /> Add mileage
+            <MapPinned aria-hidden="true" className="h-4 w-4" /> Mileage
           </Button>
           <Button
             type="button"
             variant="secondary"
             data-shortcut="upload-expense"
             onClick={() => fileRef.current?.click()}
+            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
           >
-            <Upload aria-hidden="true" className="h-4 w-4" /> Upload file
+            <Upload aria-hidden="true" className="h-4 w-4" /> Upload
           </Button>
           <input
             ref={fileRef}

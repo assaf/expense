@@ -131,7 +131,7 @@ export function AddSenderForm() {
           required
           aria-invalid={notice && !notice.ok ? true : undefined}
           invalid={!!notice && !notice.ok}
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
         <Button
           type="submit"

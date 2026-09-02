@@ -87,7 +87,7 @@ export function AddNameForm({
           placeholder={placeholder}
           aria-invalid={error ? true : undefined}
           invalid={!!error}
-          className="flex-1"
+          className="min-w-0 flex-1"
         />
         <Button
           type="submit"
