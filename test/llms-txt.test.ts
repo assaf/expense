@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loader as aboutLoader } from "~/routes/about[.]md";
+import { loader as scheduleCLoader } from "~/routes/schedule-c-categories[.]md";
 import { loader as mileageRatesLoader } from "~/routes/mileage-rates[.]md";
 import { loader as alternativesLoader } from "~/routes/alternatives[.]md";
 import { loader as connectLoader } from "~/routes/connect[.]md";
@@ -10,6 +11,7 @@ import {
   alternativesMarkdown,
   connectMarkdown,
   faqMarkdown,
+  scheduleCCategoriesMarkdown,
   llmsTxt,
   mileageRatesMarkdown,
   SITE_URL,
@@ -50,6 +52,12 @@ const MIRRORS = [
     path: "/connect.md",
     loader: connectLoader,
     content: connectMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/schedule-c-categories.md",
+    loader: scheduleCLoader,
+    content: scheduleCCategoriesMarkdown,
     type: "text/markdown",
   },
   {

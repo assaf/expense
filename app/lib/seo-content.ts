@@ -422,6 +422,7 @@ export function currentMileageSummary(): string {
   const business = split
     ? `$${prev.business} per mile ${mileagePhrase(prev)}, then $${latest.business} per mile ${mileagePhrase(latest)}`
     : `$${latest.business} per mile ${mileagePhrase(latest)}`;
+
   const secondary = split
     ? `medical and moving moves run $${prev.medical} and then $${latest.medical} for the same dates`
     : `medical and moving moves run $${latest.medical}`;
@@ -433,6 +434,165 @@ export function currentMileageSummary(): string {
 export const MILEAGE_PAGE_SUMMARY =
   "The IRS standard mileage rates for every period since 2011 in one table: business, medical, moving, and charitable, including any mid-year changes. Expense uses the same table to compute the mileage deduction from each drive's date and type, so it never asks you to look a rate up.";
 
+// --- Schedule C categories page (/schedule-c-categories) --------------------
+
+/** One Schedule C Part II expense line: the form's line number, the
+ * category name Expense seeds (verbatim from the IRS form), and a
+ * plain-language note. Order matches the IRS form (and the default
+ * categories CSV, asserted by test). */
+export interface ScheduleCRow {
+  line: string;
+  name: string;
+  note: string;
+}
+
+export const SCHEDULE_C_ROWS: ScheduleCRow[] = [
+  {
+    line: "8",
+    name: "Advertising",
+    note: "Ads and promotion: mailers, web ads, print, business cards.",
+  },
+  {
+    line: "9",
+    name: "Car and truck expenses",
+    note: "Driving for the business, via the standard mileage rate or actual vehicle costs. Commutes don't count.",
+  },
+  {
+    line: "10",
+    name: "Commissions and fees",
+    note: "Sales commissions and platform or service fees.",
+  },
+  {
+    line: "11",
+    name: "Contract labor",
+    note: "Payments to contractors and freelancers (1099 work), not employees.",
+  },
+  {
+    line: "12",
+    name: "Depletion",
+    note: "Costs of extracting natural resources. Most service businesses never touch this line.",
+  },
+  {
+    line: "13",
+    name: "Depreciation and section 179 expense deduction",
+    note: "Recovering the cost of equipment and property over time, or all at once under section 179.",
+  },
+  {
+    line: "14",
+    name: "Employee benefit programs",
+    note: "Benefits for employees: health and life plans, dependent care. As a sole proprietor you generally can't count your own.",
+  },
+  {
+    line: "15",
+    name: "Insurance (other than health)",
+    note: "Business insurance: liability, malpractice, workers' comp. Health insurance for the self-employed goes on Schedule 1 instead.",
+  },
+  {
+    line: "16a",
+    name: "Mortgage interest paid to banks, etc.",
+    note: "Interest on a mortgage for business property.",
+  },
+  {
+    line: "16b",
+    name: "Other interest",
+    note: "Other business borrowing: credit lines, business cards, equipment loans.",
+  },
+  {
+    line: "17",
+    name: "Legal and professional services",
+    note: "Lawyers, accountants, consultants, and similar professional fees.",
+  },
+  {
+    line: "18",
+    name: "Office expenses",
+    note: "Small consumables: pens, paper, toner. Furniture and equipment belong on the depreciation line.",
+  },
+  {
+    line: "19",
+    name: "Pension and profit-sharing plans",
+    note: "Contributions to retirement plans: SEP, SIMPLE, 401(k).",
+  },
+  {
+    line: "20a",
+    name: "Rent or lease: vehicles, machinery, and equipment",
+    note: "Renting vehicles and equipment for the business.",
+  },
+  {
+    line: "20b",
+    name: "Rent or lease: other business property",
+    note: "Rent for an office, storefront, or workspace.",
+  },
+  {
+    line: "21",
+    name: "Repairs and maintenance",
+    note: "Fixing and maintaining business property and equipment. Improvements that extend its life depreciate instead.",
+  },
+  {
+    line: "22",
+    name: "Supplies",
+    note: "Materials the business consumes: stock, raw materials, shipping supplies.",
+  },
+  {
+    line: "23",
+    name: "Taxes and licenses",
+    note: "Payroll tax, sales tax, licenses, permits. Federal income tax is never deductible.",
+  },
+  {
+    line: "24a",
+    name: "Travel",
+    note: "Business trips: airfare, hotels, and transport while away overnight.",
+  },
+  {
+    line: "24b",
+    name: "Meals and entertainment",
+    note: "Business meals are 50% deductible; entertainment stopped being deductible in 2018. Expense splits the receipt for you.",
+  },
+  {
+    line: "25",
+    name: "Utilities",
+    note: "Phone, internet, and power for the business; often a partial percentage for a home office.",
+  },
+  {
+    line: "26",
+    name: "Wages",
+    note: "Salaries and wages paid to employees. Not you, and not contractors (line 11).",
+  },
+  {
+    line: "27a",
+    name: "Other expenses",
+    note: "Anything that fits no line above, itemized in Part V of the form.",
+  },
+];
+
+/** One-paragraph hero summary for /schedule-c-categories, quoted by the
+ * page and its markdown mirror. */
+export const SCHEDULE_C_PAGE_SUMMARY =
+  "The expense categories on IRS Schedule C, Part II (lines 8 to 27a), in the form's order, with a plain-language note for each. Every new Expense account starts with these categories pre-filled, so receipts land in the same buckets your tax return uses; rename or add your own in settings anytime.";
+
+/** Full markdown for /schedule-c-categories.md; mirrors the page. */
+export function scheduleCCategoriesMarkdown(): string {
+  const table = [
+    "| Line | Category | What goes there |",
+    "| --- | --- | --- |",
+    ...SCHEDULE_C_ROWS.map((r) => `| ${r.line} | ${r.name} | ${r.note} |`),
+  ].join("\n");
+  return `# Schedule C expense categories
+
+> ${wrap(SCHEDULE_C_PAGE_SUMMARY)}
+
+${wrap(`When you file as a sole proprietor or single-member LLC, business profit
+and expenses are reported on Schedule C of Form 1040, and Part II of that
+form is where the expense categories live. These are the 23 lines.`)}
+
+${table}
+
+${wrap(`Source: [About Schedule C (Form 1040)](https://www.irs.gov/forms-pubs/about-schedule-c-form-1040).
+Car and truck expenses can also use the standard mileage rate: see
+[IRS standard mileage rates by year](${SITE_URL}/mileage-rates).
+[${APP_NAME}](${SITE_URL}/) seeds every new account with this exact list,
+in this order, so yearly totals line up with the return without re-bucketing.`)}
+`;
+}
 function wrap(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -847,6 +1007,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
 - [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
 - [IRS standard mileage rates by year](${SITE_URL}/mileage-rates.md): The rate table for business, medical, moving, and charity drives by period, 2011 to today, including mid-year changes. Expense applies the right rate to each drive automatically.
+- [Schedule C expense categories](${SITE_URL}/schedule-c-categories.md): The 23 expense lines from IRS Schedule C, Part II, with a plain-language note for each; every new Expense account starts pre-filled with this list.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.

@@ -12,6 +12,7 @@ const FOOTER_NAV: SiteNavItem[] = [
   { label: "FAQ", to: "/faq" },
   { label: "Compare", to: "/alternatives" },
   { label: "Mileage", to: "/mileage-rates" },
+  { label: "Categories", to: "/schedule-c-categories" },
   { label: "Blog", to: BLOG_URL, external: true },
 ];
 
