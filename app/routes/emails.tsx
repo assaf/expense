@@ -98,11 +98,6 @@ export function meta(): Route.MetaDescriptors {
 export async function action({ request }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request);
 
-  // Both send paths share the same follow-up: a failure is echoed as JSON,
-  // and a minted token emails the verification link (addressed with the
-  // account's display name) so receipts start flowing once the mailbox
-  // owner clicks it. `token: null` means the address was already verified
-  // for this account; nothing to send.
   // Both send paths share the same email: the verification link for a
   // pending sender address, addressed with the account's display name.
   const sendVerification = async (address: string, token: string) => {
@@ -114,9 +109,9 @@ export async function action({ request }: Route.ActionArgs) {
       accountName: account?.name ?? "",
     });
   };
-  // And the same follow-up: a failure is echoed as JSON, and a minted
-  // token emails that link. `token: null` means the address was already
-  // verified for this account; nothing to send.
+  // Both send paths share the same follow-up: a failure is echoed as JSON,
+  // and a minted token emails that link. `token: null` means the address
+  // was already verified for this account; nothing to send.
   const finishSender = async (
     result:
       | { ok: true; address: string; token: string | null }

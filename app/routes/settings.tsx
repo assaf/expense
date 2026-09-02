@@ -27,7 +27,7 @@ import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
-import { formatShortDate } from "~/lib/format";
+import { LocalDate } from "~/components/ui/LocalTime";
 import { useToday } from "~/lib/use-today";
 import {
   MILEAGE_TYPE_LABELS,
@@ -203,7 +203,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
                     <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
-                      Joined {formatShortDate(member.createdAt)}
+                      Joined <LocalDate iso={member.createdAt} />
                     </span>
                     {member.emailVerifiedAt ? (
                       <Badge

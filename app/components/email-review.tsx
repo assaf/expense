@@ -14,7 +14,7 @@ import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Badge } from "~/components/ui/Badge";
 import { EmptyState } from "~/components/ui/EmptyState";
-import { formatShortDate } from "~/lib/format";
+import { LocalDate } from "~/components/ui/LocalTime";
 
 /**
  * Inbox review (/email-review): the list of receipt-like emails found in a
@@ -212,7 +212,13 @@ export function ReviewInbox({
               Scan again
             </button>{" "}
             to catch mail that arrived since
-            {scannedAt ? ` ${formatShortDate(scannedAt)}` : ""}.
+            {scannedAt ? (
+              <>
+                {" "}
+                <LocalDate iso={scannedAt} />
+              </>
+            ) : null}
+            .
           </p>
         </>
       ) : null}
@@ -264,7 +270,7 @@ export function ReviewInbox({
                 className="flex flex-wrap items-baseline gap-x-2"
               >
                 <span className="text-gray-500 dark:text-gray-400">
-                  {formatShortDate(item.receivedAt)}
+                  <LocalDate iso={item.receivedAt} />
                 </span>
                 <span>{item.fromDisplay ?? ""}</span>
                 <span className="text-gray-500 dark:text-gray-400">
@@ -353,7 +359,7 @@ function ReviewRow({
               </Badge>
             ) : null}
             <span className="text-xs text-gray-400 dark:text-gray-500">
-              {formatShortDate(item.receivedAt)}
+              <LocalDate iso={item.receivedAt} />
             </span>
           </div>
           <p className="mt-0.5 truncate text-sm text-gray-900 dark:text-gray-100">

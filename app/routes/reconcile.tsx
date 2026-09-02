@@ -7,7 +7,6 @@ import { Landing } from "~/components/reconcile/reconcile-landing";
 import { RunPage } from "~/components/reconcile/reconcile-run";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
-import { formatDate } from "~/lib/format";
 import {
   matchStatementRows,
   parseStatementUpload,
@@ -108,7 +107,10 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return Response.json(
         {
-          error: `This statement was already reconciled on ${formatDate(existing.completedAt ?? existing.createdAt)}.`,
+          error: "This statement was already reconciled.",
+          // The client renders the local date/time (formatDate can't render
+          // a full timestamp, and the server must not format local time).
+          alreadyReconciledAt: existing.completedAt ?? existing.createdAt,
         },
         { status: 409 },
       );

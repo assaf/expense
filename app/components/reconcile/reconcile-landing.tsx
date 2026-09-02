@@ -8,7 +8,7 @@ import {
   useCommandRequest,
 } from "~/lib/command-requests";
 import { cn } from "~/lib/cn";
-import { formatDateTime } from "~/lib/format";
+import { LocalDateTime } from "~/components/ui/LocalTime";
 import type { ReconciliationRunRecord } from "~/lib/types";
 
 export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
@@ -30,6 +30,10 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
   });
   const error =
     fetcher.data && "error" in fetcher.data ? fetcher.data.error : null;
+  const alreadyReconciledAt =
+    fetcher.data && "alreadyReconciledAt" in fetcher.data
+      ? (fetcher.data.alreadyReconciledAt as string)
+      : null;
   const uploaded =
     fetcher.data && "run" in fetcher.data && fetcher.data.run
       ? fetcher.data.run
@@ -85,7 +89,14 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                 role="alert"
                 className="text-sm text-red-600 dark:text-red-400"
               >
-                {error}
+                {alreadyReconciledAt ? (
+                  <>
+                    This statement was already reconciled on{" "}
+                    <LocalDateTime iso={alreadyReconciledAt} />.
+                  </>
+                ) : (
+                  error
+                )}
               </span>
             ) : null}
           </div>
@@ -119,7 +130,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             {run.rowCount} transactions · started{" "}
-                            <RunTime iso={run.createdAt} />
+                            <LocalDateTime iso={run.createdAt} />
                           </div>
                         </div>
                         <span className="shrink-0 text-sm text-blue-600 dark:text-blue-400">
@@ -151,7 +162,9 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
                             {run.fileName}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            <RunTime iso={run.completedAt ?? run.createdAt} />
+                            <LocalDateTime
+                              iso={run.completedAt ?? run.createdAt}
+                            />
                             {run.status === "discarded" ? " · discarded" : ""}
                           </div>
                         </div>
@@ -201,13 +214,4 @@ function DiscardRunButton({ runId }: { runId: string }) {
       Discard
     </Button>
   );
-}
-
-/** A run timestamp in the viewer's timezone: the ISO string until mount,
- * then the local rendering swaps in via effect. SSR runs UTC, so formatting
- * during render would disagree with hydration (the useToday pattern). */
-function RunTime({ iso }: { iso: string }) {
-  const [local, setLocal] = useState<string | null>(null);
-  useEffect(() => setLocal(formatDateTime(iso)), [iso]);
-  return <>{local ?? iso}</>;
 }

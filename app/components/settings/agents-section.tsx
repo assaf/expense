@@ -2,7 +2,7 @@ import { KeyRound } from "lucide-react";
 import { useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
 import { Card } from "~/components/ui/Card";
-import { formatShortDate } from "~/lib/format";
+import { LocalDate } from "~/components/ui/LocalTime";
 
 /**
  * Agents & API (MCP): the OAuth-connected apps for this account. Each app
@@ -93,9 +93,14 @@ export function AgentsSection({
                     />
                   </div>
                   <p className="mt-1 border-t border-gray-200 dark:border-gray-700 pl-8 pt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                    {expiresAt
-                      ? `Last used ${formatShortDate(lastUsedAt)} · expires ${formatShortDate(expiresAt)}`
-                      : `Last used ${formatShortDate(lastUsedAt)} · no active tokens`}
+                    Last used <LocalDate iso={lastUsedAt} /> ·{" "}
+                    {expiresAt ? (
+                      <>
+                        expires <LocalDate iso={expiresAt} />
+                      </>
+                    ) : (
+                      "no active tokens"
+                    )}
                   </p>
                 </li>
               ))}

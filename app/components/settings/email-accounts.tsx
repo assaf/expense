@@ -7,7 +7,7 @@ import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
-import { formatShortDate } from "~/lib/format";
+import { LocalDate } from "~/components/ui/LocalTime";
 import type { EmailConnectionView } from "~/lib/db/email-connections";
 
 /**
@@ -139,8 +139,8 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
       <p className="text-xs text-gray-500 dark:text-gray-400">
         {connection.receivedCount} received · {connection.processedCount}{" "}
         processed · {connection.processedLast24h} in the last 24h · last webhook{" "}
-        {formatShortDate(connection.lastPushAt)} · connected{" "}
-        {formatShortDate(connection.createdAt)}
+        <LocalDate iso={connection.lastPushAt} /> · connected{" "}
+        <LocalDate iso={connection.createdAt} />
       </p>
       {busy ? (
         <p className="text-xs text-gray-500 dark:text-gray-400">
