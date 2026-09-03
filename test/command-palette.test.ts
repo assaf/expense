@@ -138,7 +138,11 @@ describe("Command palette", () => {
     await navVia("**/reconcile", "x");
     await navVia("**/settings", "s");
     await navVia("**/", "e");
-  });
+    // Retry worst case is 5 chords x 3 attempts x 2500ms = 37.5s, over the
+    // 30s default test timeout: on a slow CI runner the test died
+    // mid-retry (run 33770839904) before the final waitForURL could fail
+    // loudly. Budget the test above its own worst case.
+  }, 90_000);
 
   it("uses single-key shortcuts for editors, search, and uploads", async () => {
     page = await goto("/");
