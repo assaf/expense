@@ -110,6 +110,18 @@ describe("Closed reports", () => {
     await editor.close();
   });
 
+  it("refuses to save an expense that is already in a closed report", async () => {
+    // The UI hides Save for closed-report expenses, but the gate is the
+    // server action: a hand-crafted same-origin save must get the
+    // badRequest, not silently succeed (regression guard for the
+    // closedReportNames extraction in expense.$id.tsx).
+    const res = await page.request.post("/expense/exp_closedq3", {
+      form: { intent: "save", date: "2026-06-02", amount: "20.00" },
+    });
+    expect(res.status()).toBe(400);
+    expect(await res.text()).toContain("closed report");
+  });
+
   it("rejects saving an expense into a closed report", async () => {
     const editor = await goto("/expense/exp_openq3");
     // The UI never offers the closed report, so exercise the server guard

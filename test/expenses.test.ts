@@ -442,6 +442,14 @@ describe("Expense CRUD", () => {
       await page.getByRole("button", { name: "Rotate receipt right" }).click();
       // The preview swaps to the locally rotated image; nothing is stored yet.
       await expect(img).toHaveAttribute("src", /^blob:/, { timeout: 15_000 });
+      // The preview must actually decode: a revoked or broken blob URL
+      // would leave the <img> holding a src attribute with no pixels.
+      await expect
+        .poll(
+          () => img.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+          { timeout: 15_000 },
+        )
+        .toBe(60);
       // Rotation never re-runs OCR: the fields stay as they were.
       expect(await page.locator("input[list='merchants']").inputValue()).toBe(
         "Rotate Test",

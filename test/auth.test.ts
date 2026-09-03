@@ -62,6 +62,42 @@ describe("Access control", () => {
     await page.close();
   });
 
+  it("marks marketing pages private so shared caches can't pin personalized HTML", async () => {
+    // MKT-CACHE-1: the root loader embeds the signed-in visitor's report
+    // names in the SSR document (global command palette), so any
+    // public/s-maxage header would let a shared cache serve one user's
+    // page to everyone. Pin the exact header so a caching "optimization"
+    // can't reintroduce it.
+    const page = await openPage();
+    for (const path of [
+      "/about",
+      "/ai",
+      "/faq",
+      "/alternatives",
+      "/connect",
+      "/mileage-rates",
+      "/schedule-c-categories",
+    ]) {
+      const res = await page.request.get(`http://localhost:5199${path}`);
+      expect(res.headers()["cache-control"]).toBe(
+        "private, max-age=0, must-revalidate",
+      );
+    }
+    await page.close();
+  });
+
+  it("keeps the highlight preview page behind the session", async () => {
+    // /_highlights renders every highlight card; it must never join the
+    // public allowlist. Anonymous requests bounce to login.
+    const page = await openPage();
+    const res = await page.request.get("http://localhost:5199/_highlights", {
+      maxRedirects: 0,
+    });
+    expect(res.status()).toBe(302);
+    expect(res.headers()["location"]).toContain("/login");
+    await page.close();
+  });
+
   it("blocks cross-site POSTs to the auth actions (login CSRF)", async () => {
     const page = await openPage();
     // A foreign Origin must be rejected outright, even with valid creds.
