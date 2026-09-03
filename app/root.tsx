@@ -31,7 +31,17 @@ const THEME_SCRIPT = `
   }
   apply(mq);
   mq.addEventListener("change", apply);
-})();`;
+`;
+
+/** Inline script that runs before first paint: if the visitor dismissed the
+ * landing tips slider earlier in this browsing session, tag <html> so CSS
+ * hides the card before it can flash on a reload. */
+const TIPS_SCRIPT = `
+try {
+  if (sessionStorage.getItem("tips-dismissed")) {
+    document.documentElement.setAttribute("data-tips-dismissed", "");
+  }
+} catch (e) {}`;
 
 /** Public marketing/SEO pages (plus their markdown mirrors like /faq.md). */
 const PUBLIC_PAGES = new Set([
@@ -178,9 +188,9 @@ export default function App() {
         Umami integration: app-wide pageviews, conversion events (login
         signup), and export-download events; the values come from the
         loader (env-resolved, see umami.server.ts), so deployments without
-        the env vars simply don't track. Pageview URLs exclude the query
         string: emailed links carry single-use tokens in ?token=, and the
         tracker must never record them. */}
+        <script dangerouslySetInnerHTML={{ __html: TIPS_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         {process.env.NODE_ENV === "production" && umami?.scriptUrl ? (
           <script

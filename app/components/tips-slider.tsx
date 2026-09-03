@@ -159,32 +159,45 @@ const TIPS: Tip[] = [
 ];
 
 const DISMISS_KEY = "tips-dismissed";
-const ADVANCE_MS = 5000;
 
+/** Tips run 20-30 words: ~10s of relaxed reading plus a few seconds to
+ * settle before the next slide moves in. */
+const ADVANCE_MS = 12000;
 /** Fixed tips carousel near the bottom of the viewport on the landing page:
- * advances on its own every 5 seconds (pausing while hovered or focused, and
- * never auto-advancing for reduced-motion users), with prev/next and dots to
- * move manually. Slides carry no buttons; dismiss persists in localStorage. */
+ * advances on its own every 12 seconds (pausing while hovered or focused,
+ * and never auto-advancing for reduced-motion users), with prev/next and
+ * dots to move manually. Slides carry no buttons; dismiss lasts for the
+ * browsing session (sessionStorage), so a reload stays hidden but a new
+ * tab shows tips again. */
 export function TipsSlider() {
   const [index, setIndex] = useState(0);
+  const [dir, setDir] = useState<1 | -1>(1);
   const [dismissed, setDismissed] = useState(false);
   const [paused, setPaused] = useState(false);
   useEffect(() => {
-    if (localStorage.getItem(DISMISS_KEY)) setDismissed(true);
+    if (sessionStorage.getItem(DISMISS_KEY)) setDismissed(true);
   }, []);
+  /** Move to `next`, remembering which side the incoming slide enters
+   * from: the shortest way around the ring decides — forward (including
+   * wrapping last → first) enters from the right, backward from the left. */
+  const goTo = (next: number) => {
+    if (next === index) return;
+    let delta = next - index;
+    if (delta > TIPS.length / 2) delta -= TIPS.length;
+    if (delta < -TIPS.length / 2) delta += TIPS.length;
+    setDir(delta >= 0 ? 1 : -1);
+    setIndex(next);
+  };
   useEffect(() => {
     if (paused) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(
-      () => setIndex((i) => (i + 1) % TIPS.length),
-      ADVANCE_MS,
-    );
+    const id = setInterval(() => goTo((index + 1) % TIPS.length), ADVANCE_MS);
     return () => clearInterval(id);
-  }, [paused]);
+  }, [paused, index]);
   if (dismissed) return null;
   const { icon: Icon, title, body } = TIPS[index];
   return (
-    <div className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-2xl">
+    <div className="tips-slider fixed inset-x-4 bottom-4 z-40 mx-auto max-w-2xl">
       <div className="relative">
         <Card
           className="p-4"
@@ -196,7 +209,7 @@ export function TipsSlider() {
           <button
             type="button"
             onClick={() => {
-              localStorage.setItem(DISMISS_KEY, "1");
+              sessionStorage.setItem(DISMISS_KEY, "1");
               setDismissed(true);
             }}
             aria-label="Dismiss tips"
@@ -208,7 +221,12 @@ export function TipsSlider() {
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-gray-800 dark:text-blue-400">
               <Icon aria-hidden="true" className="h-4 w-4" />
             </span>
-            <div className="min-w-0 pr-6" key={index}>
+            <div
+              className={`min-w-0 pr-6 ${
+                dir === 1 ? "tip-enter-next" : "tip-enter-prev"
+              }`}
+              key={index}
+            >
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Tip {index + 1} of {TIPS.length}
               </p>
@@ -226,7 +244,7 @@ export function TipsSlider() {
                 <button
                   key={i}
                   type="button"
-                  onClick={() => setIndex(i)}
+                  onClick={() => goTo(i)}
                   aria-label={`Go to tip ${i + 1}`}
                   aria-current={i === index}
                   className={`h-1.5 rounded-full transition-all ${
@@ -241,9 +259,7 @@ export function TipsSlider() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() =>
-                  setIndex((i) => (i - 1 + TIPS.length) % TIPS.length)
-                }
+                onClick={() => goTo((index - 1 + TIPS.length) % TIPS.length)}
                 aria-label="Previous tip"
               >
                 <ChevronLeft aria-hidden="true" className="h-4 w-4" />
@@ -251,7 +267,7 @@ export function TipsSlider() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setIndex((i) => (i + 1) % TIPS.length)}
+                onClick={() => goTo((index + 1) % TIPS.length)}
                 aria-label="Next tip"
               >
                 <ChevronRight aria-hidden="true" className="h-4 w-4" />

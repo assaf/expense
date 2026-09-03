@@ -123,6 +123,47 @@ body {
   }
 }
 
+/* Tips slider (landing page): the incoming tip slides in from the side it
+ * is headed toward — next enters from the right, previous from the left.
+ * The global reduced-motion rule above neutralizes this when asked. */
+@keyframes tip-enter-next {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tip-enter-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tip-enter-next {
+  animation: tip-enter-next 0.3s ease-out;
+}
+
+.tip-enter-prev {
+  animation: tip-enter-prev 0.3s ease-out;
+}
+
+/* Hide the landing tips slider before React hydrates when the visitor
+ * dismissed it earlier in this browsing session: the pre-paint script in
+ * root.tsx sets the attribute from sessionStorage, so the card never
+ * flashes on a reload. */
+html[data-tips-dismissed] .tips-slider {
+  display: none;
+}
+
 /* Respect the user's motion preference — kill all animations and
  * transitions when reduced motion is requested (vestibular disorders,
  * migraine, etc.). Tailwind's animate-* utilities and the progress bar
