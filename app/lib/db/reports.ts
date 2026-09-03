@@ -25,6 +25,19 @@ export async function readReports(accountId: string): Promise<Report[]> {
 }
 
 /**
+ * The set of closed report names, the single definition used everywhere
+ * "off the list" is decided: the home page hides closed reports entirely
+ * and the editor's prev/next navigation walks the same universe. Pure so
+ * callers can feed it either `readReports` output or their own thin
+ * Report query.
+ */
+export function closedReportNames(
+  reports: ReadonlyArray<{ name: string; closed: boolean }>,
+): Set<string> {
+  return new Set(reports.filter((r) => r.closed).map((r) => r.name));
+}
+
+/**
  * Expenses per category that belong to reports that are NOT closed (an
  * expense with no report counts, since it isn't in any closed report). Categories
  * are referenced by name; only categories with live expenses appear.

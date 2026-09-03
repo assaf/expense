@@ -8,6 +8,7 @@ import {
   toIso,
   toIsoOrNull,
 } from "~/lib/db/wire";
+import { closedReportNames } from "~/lib/db/reports";
 import { compareExpenses } from "~/lib/format";
 import { normalizeMerchant } from "~/lib/duplicates";
 import { deleteImage, mimeForFile } from "~/lib/images.server";
@@ -129,7 +130,7 @@ export async function readNeighborIds(
       .select("id", "date", "createdAt", "report")
       .all(),
   ]);
-  const closed = new Set(reportRows.filter((r) => r.closed).map((r) => r.name));
+  const closed = closedReportNames(reportRows);
   const ordered = rows
     .filter((r) => !closed.has(r.report))
     .map((r) => ({ id: r.id, date: r.date, createdAt: toIso(r.createdAt) }))

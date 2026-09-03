@@ -10,7 +10,7 @@ import {
 } from "~/lib/expense-save.server";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
-import { readReports } from "~/lib/db/reports";
+import { closedReportNames, readReports } from "~/lib/db/reports";
 import { badRequest, notFound, unknownIntent } from "~/lib/validation";
 import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/expense.$id";
@@ -20,8 +20,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw notFound();
   // Editor context (reports, categories, merchants, home, rate) and the
-  // prev/next neighbours for the ← → arrows: two targeted queries instead
-  // of loading every expense.
+  // prev/next neighbours for the ← → arrows, in parallel. readNeighborIds
+  // scans the account's open expenses so navigation sees the exact list
+  // order the home page renders.
   const [nav, context] = await Promise.all([
     readNeighborIds(user.accountId, expense),
     loadEditorContext(user.accountId, expense),
@@ -56,16 +57,13 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (intent === "save") {
     // Expenses in closed reports cannot be edited.
-    if (existing.report) {
-      const allReports = await readReports(user.accountId);
-      const closed = allReports.find(
-        (r) => r.name === existing.report && r.closed,
+    if (
+      existing.report &&
+      closedReportNames(await readReports(user.accountId)).has(existing.report)
+    ) {
+      return badRequest(
+        "This expense is in a closed report and cannot be edited.",
       );
-      if (closed) {
-        return badRequest(
-          "This expense is in a closed report and cannot be edited.",
-        );
-      }
     }
     const result = await saveExpenseFromForm(form, user.accountId, existing);
     if (result.error) return badRequest(result.error);

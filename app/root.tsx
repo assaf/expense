@@ -20,8 +20,11 @@ import { umamiConfig } from "~/lib/umami.server";
 import type { Route } from "./+types/root";
 
 /** Inline script that runs before first paint; applies the `dark` class
- * based on `prefers-color-scheme` and listens for live system changes. */
-const THEME_SCRIPT = `
+ * based on `prefers-color-scheme` and listens for live system changes.
+ * Exported so the parse contract in test/inline-scripts.test.ts can catch
+ * a malformed edit: this script failing to parse silently kills dark mode
+ * app-wide (it is the only thing that toggles the class). */
+export const THEME_SCRIPT = `
 (() => {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   function apply(e) {
@@ -31,12 +34,14 @@ const THEME_SCRIPT = `
   }
   apply(mq);
   mq.addEventListener("change", apply);
+})();
 `;
 
 /** Inline script that runs before first paint: if the visitor dismissed the
  * landing tips slider earlier in this browsing session, tag <html> so CSS
- * hides the card before it can flash on a reload. */
-const TIPS_SCRIPT = `
+ * hides the card before it can flash on a reload. Also parse-checked by
+ * test/inline-scripts.test.ts. */
+export const TIPS_SCRIPT = `
 try {
   if (sessionStorage.getItem("tips-dismissed")) {
     document.documentElement.setAttribute("data-tips-dismissed", "");

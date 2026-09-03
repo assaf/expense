@@ -157,6 +157,28 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     }
   }, []);
 
+  const previewUrlRef = useRef<string | null>(null);
+  /** Swap the draft preview, revoking the superseded blob URL so repeated
+   * uploads and rotations don't retain every prior image until page unload.
+   * Path previews (the rasterized PDF from storage) are not revoked. */
+  function setPreviewUrl(next: string | null) {
+    const prev = previewUrlRef.current;
+    if (prev && prev !== next && prev.startsWith("blob:")) {
+      URL.revokeObjectURL(prev);
+    }
+    previewUrlRef.current = next;
+    setDraftPreview(next);
+  }
+  // Revoke whatever preview is live when the editor unmounts (the
+  // navigations that close it are full reloads, but be explicit).
+  useEffect(
+    () => () => {
+      const url = previewUrlRef.current;
+      if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+    },
+    [],
+  );
+
   async function uploadDraft(
     file: File,
     fill: "empty-only" | "override" = "empty-only",
@@ -169,7 +191,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     // display a PDF), so their preview is the rasterized PNG served from
     // storage once the upload completes.
     const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-    if (!isPdf) setDraftPreview(URL.createObjectURL(file));
+    if (!isPdf) setPreviewUrl(URL.createObjectURL(file));
     setDraftError(null);
     setDrafting(true);
     // PDFs rasterize before they can be displayed; images show a preview
@@ -203,7 +225,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       if (isPdf) {
         // PDFs can't render from a blob; the preview is the rasterized PNG
         // served from storage.
-        setDraftPreview(
+        setPreviewUrl(
           `/api/expense?draftKey=${encodeURIComponent(json.draftKey)}`,
         );
       }
@@ -352,7 +374,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
     if (draft) await deleteDraftBlob(draft.key);
     pendingFileRef.current = null;
     setDraft(null);
-    setDraftPreview(null);
+    setPreviewUrl(null);
     setDraftError(null);
   }
 

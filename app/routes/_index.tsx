@@ -67,7 +67,7 @@ import { usePasteImage } from "~/lib/use-paste-image";
 import { countAccounts, readAccount } from "~/lib/db/accounts";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import { listEmailConnections } from "~/lib/db/email-connections";
-import { readReports } from "~/lib/db/reports";
+import { closedReportNames, readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import {
   dismissDuplicatePair,
@@ -106,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     listEmailConnections(user.accountId),
   ]);
   // Closed reports stay off the home page: no summary card, no expenses.
-  const closed = new Set(allReports.filter((r) => r.closed).map((r) => r.name));
+  const closed = closedReportNames(allReports);
   const open = expenses.filter((e) => !closed.has(e.report));
   const sorted = sortExpenses(open);
   // Which rows look like each other (both sides of a pair). Matched against
