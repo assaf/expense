@@ -50,6 +50,12 @@ export default defineConfig({
       LLM_API_KEY: "test-llm-key",
       LLM_BASE_URL: "https://api.deepseek.com",
       LLM_VISION_MODEL: "vision-test-model",
+      // Dummy Gmail OAuth client so the google-oauth module treats the
+      // deployment as configured in unit tests (routes that need it mock
+      // the accessor; URL/resolver tests assert the real value).
+      GOOGLE_OAUTH_CLIENT_ID: "test-gmail-client-id",
+      GOOGLE_OAUTH_CLIENT_SECRET: "test-gmail-client-secret",
+      GOOGLE_PUBSUB_TOPIC: "projects/test/topics/expense-test",
     },
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,

@@ -18,10 +18,9 @@ import {
   type ConnectionMailAdapter,
   type OwnerEmail,
   connectionInboundDeps,
-  connectionMailAdapter,
+  mailClientFor,
   processConnectionEmail,
   realExtractionDeps,
-  sendConnectionEmailToOwner,
 } from "~/lib/email-connection-process.server";
 import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
 import { and, or } from "@prisma/orm-postgres/orm-client";
@@ -552,7 +551,9 @@ export async function scanConnectionInbox(
   // The scan only reads: nothing moves to Trash until the owner acts on
   // the review list.
   const adapter: ConnectionMailAdapter = options.adapter ?? {
-    ...connectionMailAdapter(token),
+    ...mailClientFor(connection, token).adapter,
+    // The scan only reads: nothing moves to Trash until the owner acts on
+    // the review list.
     moveToTrash: () => Promise.resolve(),
   };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
@@ -960,7 +961,8 @@ export async function processReviewItem(input: {
   }
 
   const token = await connectionAccessToken(connection);
-  const adapter = input.adapter ?? connectionMailAdapter(token);
+  const client = mailClientFor(connection, token);
+  const adapter = input.adapter ?? client.adapter;
   const summary: ConnectionEmailSummary = {
     id: emailId,
     receivedAt:
@@ -981,8 +983,7 @@ export async function processReviewItem(input: {
     ),
     {
       moveToTrash: (id) => adapter.moveToTrash(id),
-      sendToOwner: (email: OwnerEmail) =>
-        sendConnectionEmailToOwner(connection, token, email),
+      sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
     },
     { review: true },
   );

@@ -1,0 +1,223 @@
+import { createSign, generateKeyPairSync } from "node:crypto";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * /api/email-connections-gmail-push: the Pub/Sub push webhook. A signed
+ * RS256 JWT against Google's JWKS IS the auth; the body carries the
+ * mailbox address. The drain itself is mocked (the pipeline has its own
+ * tests); these tests pin the auth gates, the retry contract (unknown or
+ * non-Gmail mailboxes answer 200 so Pub/Sub never retries them), and the
+ * error-flag semantics.
+ */
+
+const mocks = vi.hoisted(() => ({
+  findEmailConnectionByAddress: vi.fn(),
+  readEmailConnectionByAddressSecret: vi.fn(),
+  touchEmailConnectionPush: vi.fn(async () => {}),
+  setEmailConnectionStatus: vi.fn(async () => {}),
+}));
+
+vi.mock("~/lib/db/email-connections", () => ({
+  findEmailConnectionByAddress: mocks.findEmailConnectionByAddress,
+  readEmailConnectionByAddressSecret: mocks.readEmailConnectionByAddressSecret,
+  touchEmailConnectionPush: mocks.touchEmailConnectionPush,
+  setEmailConnectionStatus: mocks.setEmailConnectionStatus,
+}));
+
+const drainMock = vi.hoisted(() => ({ drainEmailConnection: vi.fn() }));
+vi.mock("~/lib/email-connection-process.server", () => ({
+  drainEmailConnection: drainMock.drainEmailConnection,
+}));
+
+import { action } from "~/routes/api.email-connections-gmail-push";
+
+// Throwaway RS256 pair; the mocked JWKS endpoint serves the public half.
+const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+});
+const publicJwk = publicKey.export({ format: "jwk" }) as Record<
+  string,
+  unknown
+>;
+const KID = "test-kid";
+
+vi.stubGlobal(
+  "fetch",
+  vi.fn(
+    async () =>
+      new Response(JSON.stringify({ keys: [{ ...publicJwk, kid: KID }] }), {
+        status: 200,
+      }),
+  ),
+);
+
+const AUDIENCE =
+  "https://expense.labnotes.org/api/email-connections-gmail-push";
+
+function signJwt(claims: Record<string, unknown>): string {
+  const header = b64url({ alg: "RS256", kid: KID });
+  const payload = b64url(claims);
+  const signer = createSign("RSA-SHA256");
+  signer.update(`${header}.${payload}`);
+  return `${header}.${payload}.${b64url(signer.sign(privateKey))}`;
+}
+
+function validClaims(overrides: Record<string, unknown> = {}) {
+  return {
+    iss: "accounts.google.com",
+    aud: AUDIENCE,
+    exp: Math.floor(Date.now() / 1000) + 600,
+    email: "user@gmail.com",
+    ...overrides,
+  };
+}
+
+function envelope(emailAddress: string): string {
+  return JSON.stringify({
+    message: {
+      data: b64url(Buffer.from(JSON.stringify({ emailAddress, historyId: 7 }))),
+    },
+  });
+}
+
+function b64url(input: object | Buffer | string): string {
+  const value =
+    input instanceof Buffer || typeof input === "string"
+      ? input
+      : JSON.stringify(input);
+  return Buffer.from(value).toString("base64url");
+}
+function request(
+  body: string,
+  token = signJwt(validClaims()),
+  method = "POST",
+): Request {
+  return new Request("https://x.test/api/email-connections-gmail-push", {
+    method,
+    headers: { Authorization: `Bearer ${token}` },
+    ...(method === "POST" ? { body } : {}),
+  });
+}
+
+function args(req: Request): Parameters<typeof action>[0] {
+  return { request: req } as Parameters<typeof action>[0];
+}
+
+const gmailConnection = {
+  id: "conn-1",
+  provider: "gmail",
+  emailAddress: "user@gmail.com",
+  status: "active",
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.findEmailConnectionByAddress.mockResolvedValue({
+    accountId: "acc-1",
+  });
+  mocks.readEmailConnectionByAddressSecret.mockResolvedValue(gmailConnection);
+  drainMock.drainEmailConnection.mockResolvedValue({
+    evaluated: 1,
+    created: 1,
+  });
+});
+
+describe("api.email-connections-gmail-push", () => {
+  it("drains a valid push for a known gmail connection", async () => {
+    const res = await action(args(request(envelope("user@gmail.com"))));
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ ok: true, drained: true });
+    expect(mocks.touchEmailConnectionPush).toHaveBeenCalledWith("conn-1");
+    expect(drainMock.drainEmailConnection).toHaveBeenCalledWith(
+      gmailConnection,
+    );
+  });
+
+  it("accepts the https issuer variant", async () => {
+    const res = await action(
+      args(
+        request(
+          envelope("user@gmail.com"),
+          signJwt(validClaims({ iss: "https://accounts.google.com" })),
+        ),
+      ),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a bad signature with 401", async () => {
+    const parts = signJwt(validClaims()).split(".");
+    const forged = `${parts[0]}.${parts[1]}.${b64url(Buffer.from("junk"))}`;
+    const res = await action(args(request(envelope("user@gmail.com"), forged)));
+    expect(res.status).toBe(401);
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong audience with 401", async () => {
+    const res = await action(
+      args(
+        request(
+          envelope("user@gmail.com"),
+          signJwt(validClaims({ aud: "https://evil.test/push" })),
+        ),
+      ),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an expired token with 401", async () => {
+    const res = await action(
+      args(
+        request(
+          envelope("user@gmail.com"),
+          signJwt(validClaims({ exp: Math.floor(Date.now() / 1000) - 10 })),
+        ),
+      ),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("answers 200 undrained for an unknown mailbox", async () => {
+    mocks.findEmailConnectionByAddress.mockResolvedValue(undefined);
+    const res = await action(args(request(envelope("stranger@gmail.com"))));
+    await expect(res.json()).resolves.toEqual({ ok: true, drained: false });
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
+  it("answers 200 undrained for a fastmail-provider address", async () => {
+    mocks.readEmailConnectionByAddressSecret.mockResolvedValue({
+      ...gmailConnection,
+      provider: "fastmail",
+    });
+    const res = await action(args(request(envelope("user@gmail.com"))));
+    await expect(res.json()).resolves.toEqual({ ok: true, drained: false });
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed body with 400", async () => {
+    const res = await action(args(request("not-json")));
+    expect(res.status).toBe(400);
+  });
+
+  it("flags the connection error on drain failure but still answers 200", async () => {
+    drainMock.drainEmailConnection.mockRejectedValue(new Error("token dead"));
+    const res = await action(args(request(envelope("user@gmail.com"))));
+    expect(res.status).toBe(200);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith(
+      "conn-1",
+      "error",
+    );
+  });
+
+  it("rejects non-POST with 405", async () => {
+    const res = await action(
+      args(
+        new Request("https://x.test/api/email-connections-gmail-push", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${signJwt(validClaims())}` },
+        }),
+      ),
+    );
+    expect(res.status).toBe(405);
+  });
+});

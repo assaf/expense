@@ -24,6 +24,7 @@ import {
   readEmailConnection,
   removeEmailConnection,
 } from "~/lib/db/email-connections";
+import { isGmailOAuthConfigured } from "~/lib/google-oauth.server";
 import { verifyJmapToken } from "~/lib/jmap.server";
 import {
   encryptSecret,
@@ -57,6 +58,15 @@ const OAUTH_ERROR_TEXT: Record<string, string> = {
     "Connecting with FastMail is not configured on this deployment.",
 };
 
+const GMAIL_OAUTH_ERROR_TEXT: Record<string, string> = {
+  state: "The Gmail connection attempt expired or did not match; try again.",
+  denied: "Gmail consent was not granted; nothing was connected.",
+  exchange: "Google could not exchange the authorization; try again.",
+  verify:
+    "Google approved the connection but the Gmail check failed; try again.",
+  unconfigured: "Connecting with Gmail is not configured on this deployment.",
+};
+
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const [inboundSenders, emailConnections] = await Promise.all([
@@ -67,6 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const params = new URL(request.url).searchParams;
   const connected = params.get("connected");
   const oauthError = params.get("oauthError");
+  const gmailOauthError = params.get("gmailOauthError");
   const oauthNotice = connected
     ? connected === "1"
       ? {
@@ -79,7 +90,13 @@ export async function loader({ request }: Route.LoaderArgs) {
           ok: false,
           text: OAUTH_ERROR_TEXT[oauthError] ?? "Could not connect.",
         }
-      : null;
+      : gmailOauthError
+        ? {
+            ok: false,
+            text:
+              GMAIL_OAUTH_ERROR_TEXT[gmailOauthError] ?? "Could not connect.",
+          }
+        : null;
   return {
     userEmail: user.email,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
@@ -87,6 +104,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     emailConnections,
     emailAccountsConfigured: isTokenCryptoConfigured(),
     oauthConfigured: isFastMailOAuthConfigured(),
+    googleConfigured: isGmailOAuthConfigured(),
     oauthNotice,
   };
 }
@@ -163,7 +181,7 @@ export async function action({ request }: Route.ActionArgs) {
         accountId: user.accountId,
         provider: "fastmail",
         emailAddress: verification.info.username,
-        jmapAccountId: verification.info.mailAccountId,
+        remoteAccountId: verification.info.mailAccountId,
         tokenEnc: encryptSecret(token),
       });
       if (!result.ok) return Response.json(result);
@@ -215,6 +233,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function EmailsPage({ loaderData }: Route.ComponentProps) {
   const {
     oauthConfigured,
+    googleConfigured,
     oauthNotice,
     userEmail,
     inboundAddress,
@@ -228,15 +247,11 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
       icon={<Mail aria-hidden="true" className="h-6 w-6" />}
       title="Email"
     >
-      <p className="-mt-3 mb-6 text-sm text-gray-500 dark:text-gray-400">
-        How receipts get into Expense by email: connect your mailbox for
-        automatic import, or forward receipts to a dedicated address.
-      </p>
-
       <EmailAccountsSection
         connections={emailConnections}
         configured={emailAccountsConfigured}
         oauthConfigured={oauthConfigured}
+        googleConfigured={googleConfigured}
         oauthNotice={oauthNotice}
       />
 
@@ -249,8 +264,8 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
         </p>
         {emailConnections.length === 0 && inboundSenders.length > 0 ? (
           <p className="mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-            Forwarding works, but connect your FastMail account above and
-            receipts landing in your inbox are processed automatically, no
+            Forwarding works, but connect your Gmail or FastMail account above
+            and receipts landing in your inbox are processed automatically, no
             forwarding needed.
           </p>
         ) : null}

@@ -20,7 +20,7 @@ import {
   verifyOnboardingToken,
 } from "~/lib/onboarding.server";
 import { hashPassword } from "~/lib/passwords";
-import { encryptSecret } from "~/lib/token-crypto.server";
+import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 import { action } from "~/routes/onboarding";
 
 /**
@@ -225,7 +225,7 @@ describe("FastMail onboarding", () => {
       accountId: OTHER_ACCOUNT_ID,
       provider: "fastmail",
       emailAddress: email,
-      jmapAccountId: "jmap-other",
+      remoteAccountId: "jmap-other",
       tokenEnc: encryptSecret("other-token"),
     });
     mockToken(email);
@@ -334,7 +334,7 @@ describe("FastMail onboarding", () => {
       accountId: account.id,
       provider: "fastmail",
       emailAddress: email,
-      jmapAccountId: "jmap-1",
+      remoteAccountId: "jmap-1",
       tokenEnc: encryptSecret("tok-1"),
     });
     mockToken(email);
@@ -377,7 +377,7 @@ describe("FastMail onboarding UI", () => {
       .click();
     await pwExpect(page).toHaveURL(/\/onboarding/);
     await pwExpect(
-      page.getByRole("heading", { name: "Connect your FastMail account" }),
+      page.getByRole("heading", { name: "Connect your email account" }),
     ).toBeVisible();
     await pwExpect(page.getByLabel("FastMail API token")).toBeVisible();
     await page.close();
@@ -461,5 +461,58 @@ describe("FastMail onboarding route throttle", () => {
       expect(res.data?.error).toMatch(/FastMail rejected/);
     }
     await expect(attempt()).rejects.toThrow(/Too many failed attempts/);
+  });
+});
+import { sessionStorage } from "~/lib/auth.server";
+import { GOOGLE_PENDING_SESSION_KEY } from "~/lib/google-oauth.server";
+import type { Route as OnboardingRoute } from "+types/app/routes/+types/onboarding";
+
+describe("Gmail onboarding via googlePending", () => {
+  function onboardForm(
+    intent: string,
+    email: string,
+    cookie?: string,
+  ): Request {
+    const form = new FormData();
+    form.set("intent", intent);
+    form.set("email", email);
+    form.set("password", PASSWORD);
+    return new Request("https://expense.test/onboarding", {
+      method: "POST",
+      body: form,
+      headers: cookie ? { cookie } : {},
+    });
+  }
+
+  it("creates a verified account from the parked Gmail credentials", async () => {
+    const address = `gmail.pending.${ulid().toLowerCase()}@example.com`;
+    const session = await sessionStorage.getSession();
+    session.set(GOOGLE_PENDING_SESSION_KEY, {
+      emailAddress: address,
+      remoteAccountId: "google-sub-9",
+      tokenEnc: encryptSecret("gmail-at"),
+      refreshTokenEnc: encryptSecret("gmail-rt"),
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    });
+    const cookie = await sessionStorage.commitSession(session);
+    const res = (await action({
+      request: onboardForm("create", address, cookie),
+    } as OnboardingRoute.ActionArgs)) as Response;
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain(
+      "/email-review?onboarding=1&connection=",
+    );
+    const user = await testPrisma.user.findUnique({
+      where: { email: address },
+    });
+    expect(user?.emailVerifiedAt).not.toBeNull();
+    const connection = await testPrisma.emailConnection.findUniqueOrThrow({
+      where: { emailAddress: address },
+    });
+    expect(connection.provider).toBe("gmail");
+    expect(connection.remoteAccountId).toBe("google-sub-9");
+    expect(decryptSecret(String(connection.tokenEnc))).toBe("gmail-at");
+    expect(decryptSecret(String(connection.refreshTokenEnc))).toBe("gmail-rt");
   });
 });

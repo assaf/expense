@@ -78,6 +78,15 @@ export async function launchServer(): Promise<string> {
     // change the OAuth metadata issuer to the production origin; tests
     // assert on the request/forwarded origin instead.
     PUBLIC_URL: "",
+    // Dummy Gmail config so the Email page renders the "Connect with
+    // Gmail" button deterministically (same reasoning as the key above;
+    // real consent can't complete in tests, which is fine: the unit tests
+    // cover the callback against mocked endpoints).
+    GOOGLE_OAUTH_CLIENT_ID: "test-gmail-client-id",
+    GOOGLE_OAUTH_CLIENT_SECRET: "test-gmail-client-secret",
+    GOOGLE_PUBSUB_TOPIC: "projects/test/topics/expense-test",
+    // Same for the FastMail OAuth button (public PKCE client, no secret).
+    FASTMAIL_OAUTH_CLIENT_ID: "test-fm-client-id",
     // Point the user-token JMAP client at the local mock (see
     // startMockJmap) so connect and onboarding flows stay offline.
     JMAP_SESSION_URL: `${jmapBase}/jmap/session`,

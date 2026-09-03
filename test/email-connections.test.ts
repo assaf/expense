@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterAll } from "vitest";
+import { ulid } from "ulid";
 import {
   testPrisma,
   TEST_ACCOUNT_ID,
@@ -13,6 +14,7 @@ import {
   listAllEmailConnections,
   removeEmailConnection,
   saveEmailConnectionSubscription,
+  saveEmailConnectionWatch,
   touchEmailConnectionPush,
   setEmailConnectionStatus,
   type EmailConnectionView,
@@ -34,7 +36,7 @@ async function connect(
     accountId,
     provider: "fastmail",
     emailAddress: address,
-    jmapAccountId: "jmap-acct-1",
+    remoteAccountId: "jmap-acct-1",
     tokenEnc: encryptSecret(TOKEN),
   });
 }
@@ -68,7 +70,7 @@ describe("email connections store", () => {
     expect(row).toBeDefined();
     expect(row!.tokenEnc).not.toContain(TOKEN);
     expect(decryptSecret(row!.tokenEnc)).toBe(TOKEN);
-    expect(row!.jmapAccountId).toBe("jmap-acct-1");
+    expect(row!.remoteAccountId).toBe("jmap-acct-1");
   });
 
   it("rejects connecting the same mailbox twice (same workspace)", async () => {
@@ -173,7 +175,7 @@ describe("email connections store", () => {
       "a@example.com",
       "b@example.com",
     ]);
-    expect(all.every((c) => "tokenEnc" in c && "jmapAccountId" in c)).toBe(
+    expect(all.every((c) => "tokenEnc" in c && "remoteAccountId" in c)).toBe(
       true,
     );
   });
@@ -196,6 +198,32 @@ describe("email connections store", () => {
     // And the view (Email page) surfaces the error status.
     const view = (await listEmailConnections(TEST_ACCOUNT_ID))[0]!;
     expect(view.status).toBe("error");
+  });
+
+  it("creates a gmail row and saves a watch expiration without an id", async () => {
+    const result = await createEmailConnection({
+      accountId: TEST_ACCOUNT_ID,
+      provider: "gmail",
+      emailAddress: `gmail.${ulid()}@example.com`,
+      remoteAccountId: "google-sub-7",
+      tokenEnc: encryptSecret("gmail-at"),
+      refreshTokenEnc: encryptSecret("gmail-rt"),
+      tokenExpiresAt: "2030-06-01T00:00:00.000Z",
+    });
+    expect(result.ok).toBe(true);
+    const row = await readEmailConnection(
+      TEST_ACCOUNT_ID,
+      result.ok ? result.connection.id : "",
+    );
+    expect(row!.remoteAccountId).toBe("google-sub-7");
+    expect(row!.provider).toBe("gmail");
+    expect(row!.tokenExpiresAt).toBe("2030-06-01T00:00:00.000Z");
+    // Gmail has no subscription id; the watch saver touches only the
+    // expiration.
+    await saveEmailConnectionWatch(row!.id, "2030-06-02T00:00:00.000Z");
+    const after = await readEmailConnectionById(row!.id);
+    expect(after!.pushExpiresAt).toBe("2030-06-02T00:00:00.000Z");
+    expect(after!.pushSubscriptionId).toBeNull();
   });
 
   it("cascades the process log when the connection is deleted", async () => {

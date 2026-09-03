@@ -31,7 +31,7 @@ function connection(overrides: Record<string, unknown> = {}) {
     pushExpiresAt: null,
     createdAt: "2026-08-19T00:00:00.000Z",
     tokenEnc: "enc",
-    jmapAccountId: "jmap-1",
+    remoteAccountId: "jmap-1",
     ...overrides,
   };
 }

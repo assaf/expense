@@ -152,7 +152,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         shortcut: ACTION_SHORTCUTS["nav-emails"],
         name: "Go to Emails",
         section: "Navigate",
-        keywords: "mail inbox fastmail",
+        keywords: "mail inbox fastmail gmail",
         icon: <Mail aria-hidden="true" className="h-4 w-4" />,
         perform: () => void navigate("/emails"),
       },

@@ -13,7 +13,9 @@ import { hashPassword } from "~/lib/passwords";
 import { db } from "~/lib/prisma.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 import type { FmPendingConnection } from "~/lib/fastmail-oauth.server";
+import type { GooglePendingConnection } from "~/lib/google-oauth.server";
 import { createSessionCookie, login, validateSignup } from "~/lib/auth.server";
+import type { EmailConnectionProvider } from "~/lib/db/email-connections";
 import type { Account } from "~/lib/types";
 
 /**
@@ -64,24 +66,22 @@ export async function verifyOnboardingToken(
  */
 export interface OAuthOnboardingState {
   email: string;
+  provider: "fastmail" | "gmail";
   existing: "none" | "verified" | "unverified";
 }
 
 export async function oauthOnboardingState(
   username: string,
+  provider: "fastmail" | "gmail",
 ): Promise<OAuthOnboardingState> {
   const email = username.toLowerCase();
   const user = await findUserByEmail(email);
   return {
     email,
+    provider,
     existing: !user ? "none" : user.emailVerifiedAt ? "verified" : "unverified",
   };
 }
-
-/** No plaintext-OAuth type is exported: the onboarding route passes the
- * fmPending connection exactly as the callback parked it (ciphertext;
- * the session cookie is signed, so the value is server-generated), and
- * it flows straight into the connection row. */
 
 export interface OnboardingOutcome {
   sessionCookie: string;
@@ -114,12 +114,12 @@ export async function completeOnboarding(input: {
   /** Pasted API token; verified live here. */
   token?: string;
   /**
-   * The fmPending connection exactly as the callback parked it on the
+   * The pending connection exactly as the callback parked it on the
    * session: ciphertext, already live-verified there (no second network
    * verification) and passed straight into the connection row. Exactly
    * one of token/oauth is required.
    */
-  oauth?: FmPendingConnection;
+  oauth?: FmPendingConnection | GooglePendingConnection;
   email: string;
   password: string;
 }): Promise<OnboardingOutcome> {
@@ -130,15 +130,28 @@ export async function completeOnboarding(input: {
   }
   await initStore();
   let mailboxAddress: string;
-  let mailAccountId: string;
+  let remoteAccountId: string;
+  let provider: EmailConnectionProvider;
   if (input.oauth) {
-    mailboxAddress = input.oauth.username.toLowerCase();
-    mailAccountId = input.oauth.mailAccountId;
+    // The callback parked these already encrypted and verified the
+    // mailbox live; the row is created straight from the ciphertext.
+    // The two pending shapes are provider-specific (Gmail has no JMAP
+    // account id; its remoteAccountId is the Google `sub`).
+    if ("mailAccountId" in input.oauth) {
+      provider = "fastmail";
+      mailboxAddress = input.oauth.username.toLowerCase();
+      remoteAccountId = input.oauth.mailAccountId;
+    } else {
+      provider = "gmail";
+      mailboxAddress = input.oauth.emailAddress.toLowerCase();
+      remoteAccountId = input.oauth.remoteAccountId;
+    }
   } else {
     const verification = await verifyJmapToken(input.token ?? "");
     if (!verification.ok) throw new Error(verification.message);
+    provider = "fastmail";
     mailboxAddress = verification.info.username;
-    mailAccountId = verification.info.mailAccountId;
+    remoteAccountId = verification.info.mailAccountId;
   }
   const email = input.email.trim().toLowerCase();
 
@@ -208,13 +221,13 @@ export async function completeOnboarding(input: {
 
   const created = await createEmailConnection({
     accountId,
-    provider: "fastmail",
+    provider,
     emailAddress: mailboxAddress,
-    jmapAccountId: mailAccountId,
+    remoteAccountId,
     tokenEnc: input.oauth
       ? input.oauth.tokenEnc
       : encryptSecret(input.token ?? ""),
-    refreshTokenEnc: input.oauth ? input.oauth.refreshTokenEnc : undefined,
+    refreshTokenEnc: input.oauth?.refreshTokenEnc ?? undefined,
     tokenExpiresAt: input.oauth ? input.oauth.expiresAt : undefined,
   });
   if (!created.ok) {

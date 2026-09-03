@@ -33,7 +33,7 @@ export function connection() {
     reviewScannedAt: null,
     createdAt: "2026-08-19T00:00:00.000Z",
     tokenEnc: encryptSecret("fmu1-conn-tok"),
-    jmapAccountId: "jmap-1",
+    remoteAccountId: "jmap-1",
   };
 }
 

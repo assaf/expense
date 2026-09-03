@@ -1,4 +1,4 @@
-import { KeyRound, PlugZap, ReceiptText } from "lucide-react";
+import { KeyRound, Mail, PlugZap, ReceiptText } from "lucide-react";
 import { errorMessage } from "~/lib/errors.server";
 import { pageMeta } from "~/lib/seo-content";
 import { Link, data, redirect, useFetcher } from "react-router";
@@ -19,6 +19,11 @@ import {
   isFastMailOAuthConfigured,
   type FmPendingConnection,
 } from "~/lib/fastmail-oauth.server";
+import {
+  GOOGLE_PENDING_SESSION_KEY,
+  isGmailOAuthConfigured,
+  type GooglePendingConnection,
+} from "~/lib/google-oauth.server";
 import {
   completeOnboarding,
   oauthOnboardingState,
@@ -62,6 +67,7 @@ type ActionData =
 interface LoaderData {
   configured: boolean;
   oauthConfigured: boolean;
+  googleConfigured: boolean;
   oauthConnected?: OAuthOnboardingState;
 }
 export async function loader({
@@ -71,30 +77,46 @@ export async function loader({
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
-  const pending = session.get(FM_PENDING_SESSION_KEY) as
-    | FmPendingConnection
+  const googlePending = session.get(GOOGLE_PENDING_SESSION_KEY) as
+    | GooglePendingConnection
     | undefined;
-  if (pending) {
-    // The OAuth callback verified the mailbox and parked its encrypted
+  if (googlePending) {
+    // The Gmail callback verified the mailbox and parked its encrypted
     // credentials here; skip straight to the create/attach step. The
     // session value stays intact until the flow completes (or is
     // restarted) so form errors can retry without a re-connect.
     return {
       configured: isTokenCryptoConfigured(),
       oauthConfigured: false,
-      oauthConnected: await oauthOnboardingState(pending.username),
+      googleConfigured: false,
+      oauthConnected: await oauthOnboardingState(
+        googlePending.emailAddress,
+        "gmail",
+      ),
+    };
+  }
+  const pending = session.get(FM_PENDING_SESSION_KEY) as
+    | FmPendingConnection
+    | undefined;
+  if (pending) {
+    // Same fast path for the FastMail OAuth callback's parked credentials.
+    return {
+      configured: isTokenCryptoConfigured(),
+      oauthConfigured: false,
+      googleConfigured: false,
+      oauthConnected: await oauthOnboardingState(pending.username, "fastmail"),
     };
   }
   return {
     configured: isTokenCryptoConfigured(),
     oauthConfigured: isFastMailOAuthConfigured() && isTokenCryptoConfigured(),
+    googleConfigured: isGmailOAuthConfigured() && isTokenCryptoConfigured(),
   };
 }
-
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    "Connect FastMail — Expense",
-    "Connect your FastMail account instead of email verification: receipts import automatically, and your expenses are arranged for tax season. Free.",
+    "Connect your email — Expense",
+    "Connect Gmail or FastMail instead of email verification: receipts import automatically, and your expenses are arranged for tax season. Free.",
     "/onboarding",
   );
 }
@@ -140,26 +162,27 @@ export async function action({ request }: Route.ActionArgs) {
     const token = formString(form, "token").trim();
     const email = formEmail(form);
     const password = formString(form, "password");
-    let oauth: FmPendingConnection | undefined;
+    let oauth: FmPendingConnection | GooglePendingConnection | undefined;
     if (!token) {
       const session = await sessionStorage.getSession(
         request.headers.get("Cookie"),
       );
-      const pending = session.get(FM_PENDING_SESSION_KEY) as
-        | FmPendingConnection
-        | undefined;
-      if (pending) {
-        // The callback parked these already encrypted and verified the
-        // access token live; the route passes the ciphertext straight
-        // through and never touches plaintext credentials.
-        oauth = pending;
-      }
+      // Either provider's parked credentials: already encrypted, mailbox
+      // already verified live by the callback; the route passes the
+      // ciphertext straight through and never touches plaintext.
+      oauth =
+        (session.get(GOOGLE_PENDING_SESSION_KEY) as
+          | GooglePendingConnection
+          | undefined) ??
+        (session.get(FM_PENDING_SESSION_KEY) as
+          | FmPendingConnection
+          | undefined);
     }
     if (!token && !oauth) {
       return data({
         step: intent,
         email,
-        error: "Your FastMail connection expired. Connect again.",
+        error: "Your email connection expired. Connect again.",
       } satisfies ActionData);
     }
     try {
@@ -192,6 +215,7 @@ export async function action({ request }: Route.ActionArgs) {
     const session = await sessionStorage.getSession(
       request.headers.get("Cookie"),
     );
+    session.unset(GOOGLE_PENDING_SESSION_KEY);
     session.unset(FM_PENDING_SESSION_KEY);
     throw redirect("/onboarding", {
       headers: { "Set-Cookie": await sessionStorage.commitSession(session) },
@@ -227,13 +251,13 @@ export default function OnboardingPage({
             <ReceiptText aria-hidden="true" className="h-6 w-6 text-white" />
           </AuthTile>
         }
-        title={stepTwo ? "Set your password" : "Connect your FastMail account"}
+        title={stepTwo ? "Set your password" : "Connect your email account"}
         blurb={
           stepTwo
             ? oauth
               ? step === "attach"
-                ? `Connected as ${email} via FastMail. This mailbox already has an Expense account; sign in to connect it to whichever account you use.`
-                : `Connected as ${email} via FastMail. Set a password to create your account.`
+                ? `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "FastMail"}. This mailbox already has an Expense account; sign in to connect it to whichever account you use.`
+                : `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "FastMail"}. Set a password to create your account.`
               : email
                 ? step === "attach"
                   ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
@@ -241,7 +265,6 @@ export default function OnboardingPage({
                 : ""
             : "We automatically import and process your expenses from your inbox, no manual forwarding. Your token proves you own the mailbox, so there's no verification email."
         }
-        note={`Step ${stepTwo ? 2 : 1} of 2`}
       />
 
       {!stepTwo ? (
@@ -252,14 +275,24 @@ export default function OnboardingPage({
             </Alert>
           ) : (
             <>
-              {loaderData.oauthConfigured ? (
+              {loaderData.oauthConfigured || loaderData.googleConfigured ? (
                 <div className="mb-4 flex flex-col items-center gap-1.5">
-                  <Button asChild size="lg" className="w-full">
-                    <a href="/connect-fastmail?next=onboarding">
-                      <PlugZap aria-hidden="true" className="h-5 w-5" />
-                      Connect with FastMail
-                    </a>
-                  </Button>
+                  {loaderData.googleConfigured ? (
+                    <Button asChild size="lg" className="w-full">
+                      <a href="/connect-gmail?next=onboarding">
+                        <Mail aria-hidden="true" className="h-5 w-5" />
+                        Connect with Gmail
+                      </a>
+                    </Button>
+                  ) : null}
+                  {loaderData.oauthConfigured ? (
+                    <Button asChild size="lg" className="w-full">
+                      <a href="/connect-fastmail?next=onboarding">
+                        <PlugZap aria-hidden="true" className="h-5 w-5" />
+                        Connect with FastMail
+                      </a>
+                    </Button>
+                  ) : null}
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     or paste an API token
                   </p>
@@ -338,7 +371,7 @@ export default function OnboardingPage({
           </Field>
           <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
             {oauth
-              ? "Prefilled from your FastMail connection; change it to the email you sign in with."
+              ? `Prefilled from your ${oauth.provider === "gmail" ? "Gmail" : "FastMail"} connection; change it to the email you sign in with.`
               : step === "attach"
                 ? "Prefilled from your token; change it to the email you sign in with."
                 : "Your account email is the address from your token; the token proves you own it."}
@@ -358,7 +391,7 @@ export default function OnboardingPage({
           </Field>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {step === "create"
-              ? "At least 8 characters. This is your sign-in password; your FastMail connection stays stored encrypted and is only used to read your inbox."
+              ? "At least 8 characters. This is your sign-in password; your email connection stays stored encrypted and is only used to read your inbox."
               : "Your password is checked against the account you sign in with; the mailbox connects to it."}
           </p>
           {step === "attach" ? (

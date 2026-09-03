@@ -682,8 +682,8 @@ function ExpenseList({
           </p>
           {!hasEmailConnection ? (
             <p className="mt-2 text-sm">
-              Or connect your FastMail account and receipts from your inbox are
-              added automatically, no forwarding.
+              Or connect your Gmail or FastMail account and receipts from your
+              inbox are added automatically, no forwarding.
             </p>
           ) : null}
         </EmptyState>

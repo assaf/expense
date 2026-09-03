@@ -136,6 +136,11 @@ jobs:
       # branch even if the pin ever regresses (Aug 2026 flake, see
       # docs/../commit 014a9c6f).
       EMAIL_TOKEN_ENCRYPTION_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+      # Same defense-in-depth for the Gmail connect buttons on /emails.
+      GOOGLE_OAUTH_CLIENT_ID: test-gmail-client-id
+      GOOGLE_OAUTH_CLIENT_SECRET: test-gmail-client-secret
+      GOOGLE_PUBSUB_TOPIC: projects/test/topics/expense-test
+      FASTMAIL_OAUTH_CLIENT_ID: test-fm-client-id
     steps:
       - uses: actions/checkout@v7
 

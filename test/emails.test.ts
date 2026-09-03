@@ -32,15 +32,24 @@ describe("Email", () => {
   });
 
   it("shows the connect form with no accounts connected", async () => {
-    // The test server sets EMAIL_TOKEN_ENCRYPTION_KEY, so the section is
-    // configured: empty list + the FastMail connect form.
+    // The test server sets EMAIL_TOKEN_ENCRYPTION_KEY (and the dummy
+    // GOOGLE_* / FASTMAIL OAuth vars), so the section is configured:
+    // empty list + both OAuth buttons + the token paste form.
     const section = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Email accounts" }),
     });
     await expect(
       section.getByText("No email accounts connected yet."),
     ).toBeVisible();
-    await expect(section.getByText("Connect a FastMail account")).toBeVisible();
+    await expect(
+      section.getByText("Connect an email account", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      section.getByRole("link", { name: "Connect with Gmail" }),
+    ).toBeVisible();
+    await expect(
+      section.getByRole("link", { name: "Connect with FastMail" }),
+    ).toBeVisible();
   });
 
   it("shows the sign-in email as a pending receipts-by-email sender", async () => {

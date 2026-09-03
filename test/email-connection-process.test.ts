@@ -25,6 +25,15 @@ import {
  * counters, expenses).
  */
 
+const gmailMocks = vi.hoisted(() => ({
+  // The gmail branch of mailClientFor routes owner notifications here;
+  // the real importer has its own test file.
+  gmailSendConnectionEmailToOwner: vi.fn(async () => {}),
+  gmailMailAdapter: vi.fn(),
+}));
+
+vi.mock("~/lib/gmail.server", () => gmailMocks);
+
 vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("~/lib/email-connection-mail.server")
@@ -66,7 +75,7 @@ describe("processConnectionEmail", () => {
         accountId: conn.accountId,
         provider: conn.provider,
         emailAddress: conn.emailAddress,
-        jmapAccountId: conn.jmapAccountId,
+        remoteAccountId: conn.remoteAccountId,
         tokenEnc: conn.tokenEnc,
         createdAt: conn.createdAt,
       },
@@ -619,7 +628,7 @@ describe("drainEmailConnection", () => {
         accountId: conn.accountId,
         provider: conn.provider,
         emailAddress: conn.emailAddress,
-        jmapAccountId: conn.jmapAccountId,
+        remoteAccountId: conn.remoteAccountId,
         tokenEnc: conn.tokenEnc,
         createdAt: conn.createdAt,
       },
@@ -831,6 +840,7 @@ describe("drainEmailConnection", () => {
     expect(second.evaluated).toBe(1);
     expect(second.created + second.partial).toBe(1);
     expect(trashed).toContain("g2");
+
     const row = await logRow(conn.id, "g2");
     expect(row?.outcome === "created" || row?.outcome === "partial").toBe(true);
     const expenses = await readExpenses(conn.accountId);
@@ -839,6 +849,40 @@ describe("drainEmailConnection", () => {
     );
     expect(created).toBeDefined();
     expect(created?.type === "receipt" && created.merchant).toBe("Apple");
+  });
+
+  it("drains a gmail connection through the same pipeline", async () => {
+    // provider: "gmail" selects the Gmail branch of mailClientFor: the
+    // injected (fake) mailbox adapter overrides the transport, and owner
+    // notifications must flow through the Gmail importer, not the JMAP
+    // delivery. Everything else (rules, dedupe, counters, Trash) is
+    // provider-agnostic.
+    const gmailConn = { ...conn, provider: "gmail" };
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "gm1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 9.25\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const result = await drainEmailConnection(gmailConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    expect(result.created + result.partial).toBe(1);
+    expect(trashed).toContain("gm1");
+    const row = await testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+    });
+    expect(row?.receivedCount).toBe(1);
+    expect(row?.processedCount).toBe(1);
   });
 });
 

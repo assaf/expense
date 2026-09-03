@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Plug, PlugZap } from "lucide-react";
+import { ArrowRight, Mail, Plug, PlugZap } from "lucide-react";
 import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Link, useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
@@ -28,6 +28,7 @@ export function EmailAccountsSection({
   connections,
   configured,
   oauthConfigured,
+  googleConfigured,
   oauthNotice,
 }: {
   connections: EmailConnectionView[];
@@ -35,8 +36,10 @@ export function EmailAccountsSection({
   /** FASTMAIL_OAUTH_CLIENT_ID is set (resolved server-side in the loader;
    * env.ts never runs in the browser). */
   oauthConfigured: boolean;
-  /** Landing notice from the OAuth callback redirect (connected=0/1 or
-   * oauthError params). */
+  /** The GOOGLE_* vars are set (resolved server-side in the loader). */
+  googleConfigured: boolean;
+  /** Landing notice from an OAuth callback redirect (connected=0/1 or
+   * oauthError/gmailOauthError params). */
   oauthNotice: { ok: boolean; text: string } | null;
 }) {
   return (
@@ -76,7 +79,10 @@ export function EmailAccountsSection({
                 {oauthNotice.text}
               </p>
             ) : null}
-            <ConnectForm oauthConfigured={oauthConfigured} />
+            <ConnectForm
+              oauthConfigured={oauthConfigured}
+              googleConfigured={googleConfigured}
+            />
           </>
         ) : (
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -151,7 +157,13 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
   );
 }
 
-function ConnectForm({ oauthConfigured }: { oauthConfigured: boolean }) {
+function ConnectForm({
+  oauthConfigured,
+  googleConfigured,
+}: {
+  oauthConfigured: boolean;
+  googleConfigured: boolean;
+}) {
   const fetcher = useFetcher<ConnectResult>();
   const [token, setToken] = useState("");
   const busy = fetcher.state !== "idle";
@@ -164,17 +176,27 @@ function ConnectForm({ oauthConfigured }: { oauthConfigured: boolean }) {
   return (
     <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
       <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-        Connect a FastMail account
+        Connect an email account
       </div>
-      {oauthConfigured ? (
-        <div className="mb-3">
-          <Button asChild size="sm">
-            <a href="/connect-fastmail?next=emails">
-              <Plug aria-hidden="true" className="h-4 w-4" />
-              Connect with FastMail
-            </a>
-          </Button>
-          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+      {oauthConfigured || googleConfigured ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {googleConfigured ? (
+            <Button asChild size="sm">
+              <a href="/connect-gmail?next=emails">
+                <Mail aria-hidden="true" className="h-4 w-4" />
+                Connect with Gmail
+              </a>
+            </Button>
+          ) : null}
+          {oauthConfigured ? (
+            <Button asChild size="sm">
+              <a href="/connect-fastmail?next=emails">
+                <Plug aria-hidden="true" className="h-4 w-4" />
+                Connect with FastMail
+              </a>
+            </Button>
+          ) : null}
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             or paste an API token
           </p>
         </div>
@@ -237,8 +259,9 @@ function ConnectForm({ oauthConfigured }: { oauthConfigured: boolean }) {
         </p>
       ) : (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          The token is verified with FastMail and stored encrypted. You can
-          revoke it any time in FastMail, or disconnect it here.
+          The token is verified with FastMail and stored encrypted; OAuth
+          connections are stored encrypted too. You can revoke either any time
+          in Gmail or FastMail, or disconnect it here.
         </p>
       )}
     </div>

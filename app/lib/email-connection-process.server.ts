@@ -27,6 +27,10 @@ import {
   type ConnectionEmailSummary,
   type RawConnectionEmail,
 } from "~/lib/email-connection-mail.server";
+import {
+  gmailMailAdapter,
+  gmailSendConnectionEmailToOwner,
+} from "~/lib/gmail.server";
 import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
@@ -659,6 +663,32 @@ export function connectionMailAdapter(token: string): ConnectionMailAdapter {
   };
 }
 
+/** Adapter + owner-notification transport for one connection. The one
+ * branch point between the JMAP (FastMail) and Gmail paths: everything
+ * downstream (drain, review) is provider-agnostic. */
+export interface ConnectionMailClient {
+  adapter: ConnectionMailAdapter;
+  sendToOwner(email: OwnerEmail): Promise<void>;
+}
+
+export function mailClientFor(
+  connection: EmailConnectionWithSecret,
+  token: string,
+): ConnectionMailClient {
+  if (connection.provider === "gmail") {
+    return {
+      adapter: gmailMailAdapter(token),
+      sendToOwner: (email) =>
+        gmailSendConnectionEmailToOwner(connection, token, email),
+    };
+  }
+  return {
+    adapter: connectionMailAdapter(token),
+    sendToOwner: (email) =>
+      sendConnectionEmailToOwner(connection, token, email),
+  };
+}
+
 /**
  * Drain new Inbox mail for one connection: evaluate each unseen email,
  * create expenses for receipts, Trash + notify on success. Bounded by a
@@ -679,7 +709,8 @@ export async function drainEmailConnection(
   options: DrainOptions = {},
 ): Promise<DrainResult> {
   const token = await connectionAccessToken(connection);
-  const adapter = options.adapter ?? connectionMailAdapter(token);
+  const client = mailClientFor(connection, token);
+  const adapter = options.adapter ?? client.adapter;
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);
 
@@ -698,8 +729,7 @@ export async function drainEmailConnection(
 
   const adapters = {
     moveToTrash: (id: string) => adapter.moveToTrash(id),
-    sendToOwner: (email: OwnerEmail) =>
-      sendConnectionEmailToOwner(connection, token, email),
+    sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
   };
 
   // Cursor over receivedAt: starts at the lookback floor, advances past
@@ -781,10 +811,10 @@ export async function drainEmailConnection(
   return result;
 }
 
-/** Deliver the confirmation to the mailbox owner's own Inbox by writing it
- * via JMAP (the API token can't submit/send, only write mail), so the
- * owner sees it appear in their Inbox. Exported for the review flow. */
-export async function sendConnectionEmailToOwner(
+/** Deliver the confirmation to the mailbox owner's own Inbox. On JMAP
+ * (FastMail) it is written via Email/import (the API token can't send);
+ * the Gmail branch routes to the gmail importer in mailClientFor. */
+async function sendConnectionEmailToOwner(
   connection: EmailConnectionWithSecret,
   token: string,
   email: OwnerEmail,

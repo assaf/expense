@@ -209,6 +209,17 @@ Settings → Email accounts over without any other change. FastMail issues
 client ids manually; the ready-to-send request and the post-reply checklist
 are in `docs/email-connections.md` → Client registration (one-time).
 
+Gmail/Google Workspace connections add four optional vars, all required
+together (when any is unset the Gmail connect surfaces stay hidden and
+FastMail is the only provider): `GOOGLE_OAUTH_CLIENT_ID` and
+`GOOGLE_OAUTH_CLIENT_SECRET` (the GCP Web-application OAuth client;
+redirect URI `<origin>/gmail-oauth-callback`), `GOOGLE_PUBSUB_TOPIC` (full
+topic name `projects/<project>/topics/<topic>` passed to Gmail
+`users.watch`), and `GOOGLE_PUBSUB_AUDIENCE` (optional; the OIDC `aud`
+expected on Pub/Sub push JWTs, defaulting to this deployment's
+`/api/email-connections-gmail-push` URL). Setup steps and Testing-mode
+caveats: `docs/email-connections.md` → Gmail / Google Workspace.
+
 `SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
 is disabled (404) and `scripts/deploy` skips the check with a warning. It must

@@ -117,7 +117,7 @@ model EmailConnection {
   accountId          String
   provider           String
   emailAddress       String
-  jmapAccountId      String
+  remoteAccountId   String
   tokenEnc           String
   refreshTokenEnc   String?
   tokenExpiresAt    TimestampString(3)?

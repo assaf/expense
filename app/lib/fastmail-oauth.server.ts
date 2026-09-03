@@ -182,6 +182,9 @@ export interface ConnectionCredentials {
   tokenEnc: string;
   /** OAuth only; null/absent for legacy API-token connections. */
   refreshTokenEnc?: string | null;
+  /** "gmail" routes the resolver to the Google refresh flow; absent or
+   * "fastmail" uses the JMAP path. */
+  provider?: string;
   tokenExpiresAt?: string | null;
 }
 
@@ -200,6 +203,13 @@ const inflightRefreshes = new Map<string, Promise<string>>();
 export async function connectionAccessToken(
   connection: ConnectionCredentials,
 ): Promise<string> {
+  // Gmail rows resolve through the Google refresh flow. Dynamic import
+  // keeps the module graph acyclic (google-oauth reuses this module's
+  // PKCE + staleness helpers).
+  if (connection.provider === "gmail") {
+    const { gmailAccessToken } = await import("~/lib/google-oauth.server");
+    return gmailAccessToken(connection);
+  }
   if (!connection.refreshTokenEnc) {
     return decryptSecret(connection.tokenEnc);
   }

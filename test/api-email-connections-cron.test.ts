@@ -10,6 +10,15 @@ const mocks = vi.hoisted(() => ({
     async () => [] as Array<Record<string, unknown>>,
   ),
   setEmailConnectionStatus: vi.fn(async () => {}),
+  ensureGmailWatch: vi.fn(async () => {}),
+  connectionAccessToken: vi.fn(async () => "test-token"),
+  drainEmailConnection: vi.fn(async () => ({
+    evaluated: 0,
+    created: 0,
+    partial: 0,
+    ignored: 0,
+    failed: 0,
+  })),
   ensureConnectionPushSubscription: vi.fn(
     async (_connection: { id: string }) => ({
       subscriptionId: "sub-1",
@@ -34,6 +43,18 @@ vi.mock("~/lib/db/email-connections", () => ({
 
 vi.mock("~/lib/email-connection-push.server", () => ({
   ensureConnectionPushSubscription: mocks.ensureConnectionPushSubscription,
+}));
+
+vi.mock("~/lib/gmail.server", () => ({
+  ensureGmailWatch: mocks.ensureGmailWatch,
+}));
+
+vi.mock("~/lib/fastmail-oauth.server", () => ({
+  connectionAccessToken: mocks.connectionAccessToken,
+}));
+
+vi.mock("~/lib/email-connection-process.server", () => ({
+  drainEmailConnection: mocks.drainEmailConnection,
 }));
 
 import { loader } from "~/routes/api.email-connections-cron";
@@ -61,16 +82,19 @@ function connection(overrides: Record<string, unknown> = {}) {
     pushExpiresAt: null,
     createdAt: "2026-08-19T00:00:00.000Z",
     tokenEnc: "enc",
-    jmapAccountId: "jmap-1",
+    remoteAccountId: "jmap-1",
     ...overrides,
   };
 }
-
 describe("api.email-connections-cron", () => {
   beforeEach(() => {
     mocks.listAllEmailConnections.mockImplementation(async () => []);
     mocks.setEmailConnectionStatus.mockClear();
     mocks.ensureConnectionPushSubscription.mockClear();
+    mocks.ensureGmailWatch.mockClear();
+    mocks.connectionAccessToken.mockClear();
+    mocks.drainEmailConnection.mockClear();
+    mocks.ensureGmailWatch.mockResolvedValue(undefined);
     mocks.ensureConnectionPushSubscription.mockImplementation(async () => ({
       subscriptionId: "sub-1",
       expires: "x",
@@ -155,5 +179,54 @@ describe("api.email-connections-cron", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { total: number };
     expect(body.total).toBe(0);
+  });
+
+  it("renews an expiring gmail watch and skips a fresh one", async () => {
+    const soon = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const fresh = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      // Expiring within the 48h margin: renewed.
+      connection({ id: "g1", provider: "gmail", pushExpiresAt: soon }),
+      // Fresh for 6 days: skipped.
+      connection({ id: "g2", provider: "gmail", pushExpiresAt: fresh }),
+      // No expiration at all: renewed.
+      connection({ id: "g3", provider: "gmail" }),
+    ]);
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.ensureGmailWatch).toHaveBeenCalledTimes(2);
+    expect(mocks.ensureGmailWatch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "g1" }),
+      "test-token",
+    );
+    expect(mocks.ensureGmailWatch).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "g3" }),
+      "test-token",
+    );
+    // The FastMail connection still takes the JMAP renewal path.
+    expect(mocks.ensureConnectionPushSubscription).not.toHaveBeenCalled();
+  });
+
+  it("flags a connection as error when the gmail watch renewal fails", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "g1", provider: "gmail", pushExpiresAt: null }),
+    ]);
+    mocks.ensureGmailWatch.mockRejectedValue(new Error("watch refused"));
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    const body = (await res.json()) as { total: number; failed: number };
+    expect(body.failed).toBe(1);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("g1", "error");
   });
 });

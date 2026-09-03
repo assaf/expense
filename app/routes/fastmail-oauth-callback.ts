@@ -95,7 +95,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       accountId: user.accountId,
       provider: "fastmail",
       emailAddress: verification.info.username,
-      jmapAccountId: verification.info.mailAccountId,
+      remoteAccountId: verification.info.mailAccountId,
       tokenEnc: encryptSecret(tokens.accessToken),
       refreshTokenEnc: encryptSecret(tokens.refreshToken),
       tokenExpiresAt: tokens.expiresAt,

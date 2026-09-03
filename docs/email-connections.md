@@ -87,6 +87,86 @@ When the reply arrives, check it against the assumptions baked into
   `refreshTokenEnc` when absent instead of persisting null; the current
   code assumes FastMail always rotates, per their docs.
 
+## Gmail / Google Workspace
+
+A second provider behind the same pipeline, quiet-launched in Google
+**Testing mode** (env-gated exactly like FastMail OAuth: the four
+`GOOGLE_*` vars in `docs/operations.md`; while any is unset the Gmail
+surfaces stay hidden). Advertising copy is unchanged; only the functional
+surfaces (/onboarding step 1, /emails, the home empty-state nudge) present
+both providers equally when configured.
+
+**Architecture**: no Google SDK — plain `fetch` + `node:crypto`, matching
+the Vercel lazy-loading story. OAuth lives in
+`app/lib/google-oauth.server.ts` (Authorization Code + PKCE, confidential
+client, consent forced so Google always issues a refresh token); the Gmail
+API client + pipeline adapter live in `app/lib/gmail.server.ts`; the
+provider branch point is `mailClientFor` in
+`app/lib/email-connection-process.server.ts` (adapter + owner-notification
+transport; the drain/review pipeline itself is provider-agnostic). Routes:
+`/connect-gmail` and `/gmail-oauth-callback` (mirror the FastMail pair),
+plus `/api/email-connections-gmail-push` (Pub/Sub push webhook).
+
+**Scope rule**: only `gmail.modify` + `openid email`. No `gmail.send`:
+report/confirmation emails reach the owner's inbox via
+`messages.import` (`neverMarkSpam`, `internalDateSource=dateHeader`),
+mirroring the FastMail import-don't-send behavior. `gmail.modify` covers
+read, TRASH moves (the success path), and import.
+
+### GCP setup (one-time, per deployment)
+
+1. **Project + OAuth consent screen**: create a GCP project; configure the
+   consent screen (External). Justify `gmail.modify` in the scope review.
+   While in **Testing** mode, users see the "unverified app" screen, the
+   app is capped at 100 test users, and **refresh tokens expire after 7
+   days** (they surface as `gmailAccessToken` refresh failures → connection
+   `status = "error"` → the user reconnects; no special-casing).
+2. **OAuth client**: create a _Web application_ client with redirect URI
+   `<origin>/gmail-oauth-callback`. Set `GOOGLE_OAUTH_CLIENT_ID` /
+   `GOOGLE_OAUTH_CLIENT_SECRET`.
+3. **Pub/Sub**: create a topic; grant publish on it to
+   `gmail-api-push@system.gserviceaccount.com`; create a **push**
+   subscription to `<origin>/api/email-connections-gmail-push` whose OIDC
+   token audience matches `GOOGLE_PUBSUB_AUDIENCE` (defaults to that same
+   push URL). Set `GOOGLE_PUBSUB_TOPIC` to the full topic name
+   `projects/<project>/topics/<topic>`.
+
+The webhook verifies the Pub/Sub push JWT by hand (`node:crypto`): RS256
+signature against Google's JWKS (`kid`-matched, 1h module cache), `iss`
+`accounts.google.com`, `aud` = the configured audience, `exp` in the
+future. Any failure → 401 (fail closed). An unknown or non-Gmail mailbox
+answers **200 { drained: false }** because Pub/Sub retries non-2xx and a
+stale subscription must never wedge the retry queue.
+
+**Watch renewal**: `users.watch` (`labelIds: ["INBOX"]`) expires after ~7
+days; the daily cron renews at a 48h margin (five retries), persisting
+`pushExpiresAt` (`pushSubscriptionId` stays null; Gmail has no id, only an
+expiration). Pushes carry a `historyId`, but the drain is lookback-based
+with EmailProcessLog dedupe (same as FastMail), so no history column and
+no history API usage.
+
+**Gmail API quirks the adapter absorbs**: `messages.list` is always
+newest-first and `after:` is day-granular, so the adapter scans metadata
+(500-message cap) and enforces the drain's exclusive-afterIso,
+oldest-first contract client-side; raw email needs two calls
+(`format=raw` for the source, `format=metadata` for the envelope the
+pipeline logs on).
+
+### Before advertising (out of Testing mode)
+
+Google OAuth verification (scope justification for `gmail.modify`) plus an
+annual CASA Tier 2 assessment. Until both land: 100 test users, 7-day
+refresh-token expiry, and the unverified-app consent screen are accepted
+limitations of the quiet launch, documented rather than worked around.
+
+### Setup checklist after registering (mirrors the FastMail checklist)
+
+- Create the OAuth client + Pub/Sub topic/subscription as above.
+- Set the four `GOOGLE_*` vars in Vercel (production) and redeploy.
+- Connect a real Google account, send a receipt email to the mailbox,
+  confirm the push → drain → expense flow, and check `/api/smoke` stays
+  green.
+
 ## FastMail onboarding (/onboarding)
 
 First-run flow for users who connect their own mailbox instead of signing
@@ -207,6 +287,13 @@ and llms.txt) and with in-app nudges:
   computed from `EmailProcessLog` rows with `outcome = "created"`.
 
 ## Env
+
+- `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` /
+  `GOOGLE_PUBSUB_TOPIC` / `GOOGLE_PUBSUB_AUDIENCE` (the last optional,
+  defaulting to this deployment's push URL): Gmail/Google Workspace
+  support, all required together. See
+  [Gmail / Google Workspace](#gmail--google-workspace) above and
+  `docs/operations.md`.
 
 - `EMAIL_TOKEN_ENCRYPTION_KEY`: 32-byte base64 key (`openssl rand -base64 32`) that
   encrypts user API tokens at rest. **Required in production before anyone

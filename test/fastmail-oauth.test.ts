@@ -128,7 +128,7 @@ function seedExpiredConnection(prefix: string) {
         accountId: account.id,
         provider: "fastmail",
         emailAddress: `${prefix.toLowerCase()}.${ulid()}@example.com`,
-        jmapAccountId: "jmap-1",
+        remoteAccountId: "jmap-1",
         tokenEnc: encryptSecret("at-expired"),
         refreshTokenEnc: encryptSecret("rt-expired"),
         tokenExpiresAt: new Date(Date.now() - 1000).toISOString(),
@@ -403,7 +403,7 @@ describe("fastmail-oauth-callback", () => {
       where: { emailAddress: address },
     });
     expect(connection.accountId).toBe(user.accountId);
-    expect(connection.jmapAccountId).toBe("jmap-9");
+    expect(connection.remoteAccountId).toBe("jmap-9");
     expect(decryptSecret(String(connection.tokenEnc))).toBe("oauth-at");
     expect(decryptSecret(String(connection.refreshTokenEnc))).toBe("oauth-rt");
   });
@@ -445,7 +445,7 @@ describe("updateEmailConnectionTokens", () => {
         accountId: account.id,
         provider: "fastmail",
         emailAddress: `clear.${ulid()}@example.com`,
-        jmapAccountId: "jmap-1",
+        remoteAccountId: "jmap-1",
         tokenEnc: encryptSecret("at"),
         refreshTokenEnc: encryptSecret("rt"),
       }),

@@ -115,6 +115,8 @@ export async function listEmailConnections(
   );
 }
 
+export type EmailConnectionProvider = "fastmail" | "gmail";
+
 /**
  * The connection owning a mailbox address, if any. Enforces the global
  * one-workspace-per-mailbox rule at connect time (the DB unique index is
@@ -135,7 +137,7 @@ export async function findEmailConnectionByAddress(
  * (server-side only, never returned to the client). */
 export interface EmailConnectionWithSecret extends EmailConnectionRecord {
   tokenEnc: string;
-  jmapAccountId: string;
+  remoteAccountId: string;
   /** OAuth only; null/absent for legacy API-token connections. */
   refreshTokenEnc?: string | null;
   tokenExpiresAt?: string | null;
@@ -144,7 +146,7 @@ export interface EmailConnectionWithSecret extends EmailConnectionRecord {
 function rowWithSecret(
   row: ConnectionRow & {
     tokenEnc: string;
-    jmapAccountId: string;
+    remoteAccountId: string;
     refreshTokenEnc: string | null;
     tokenExpiresAt: string | null;
   },
@@ -152,7 +154,7 @@ function rowWithSecret(
   return {
     ...connectionBase(row),
     tokenEnc: row.tokenEnc,
-    jmapAccountId: row.jmapAccountId,
+    remoteAccountId: row.remoteAccountId,
     refreshTokenEnc: row.refreshTokenEnc,
     tokenExpiresAt: toIsoOrNull(row.tokenExpiresAt),
   };
@@ -177,6 +179,17 @@ export async function readEmailConnectionById(
   return row ? rowWithSecret(row) : undefined;
 }
 
+/** A connection by mailbox address alone; the Gmail push webhook has no
+ * session/account, only the address the push names. */
+export async function readEmailConnectionByAddressSecret(
+  emailAddress: string,
+): Promise<EmailConnectionWithSecret | undefined> {
+  const row = await db.orm.public.EmailConnection.where((c) =>
+    c.emailAddress.eq(emailAddress.trim().toLowerCase()),
+  ).first();
+  return row ? rowWithSecret(row) : undefined;
+}
+
 /** Every connection across all workspaces, for the renewal cron. */
 export async function listAllEmailConnections(): Promise<
   EmailConnectionWithSecret[]
@@ -198,9 +211,9 @@ export type CreateEmailConnectionResult =
  */
 export async function createEmailConnection(input: {
   accountId: string;
-  provider: string;
+  provider: EmailConnectionProvider;
   emailAddress: string;
-  jmapAccountId: string;
+  remoteAccountId: string;
   tokenEnc: string;
   refreshTokenEnc?: string;
   tokenExpiresAt?: string;
@@ -221,7 +234,7 @@ export async function createEmailConnection(input: {
     accountId: input.accountId,
     provider: input.provider,
     emailAddress: address,
-    jmapAccountId: input.jmapAccountId,
+    remoteAccountId: input.remoteAccountId,
     tokenEnc: input.tokenEnc,
     refreshTokenEnc: input.refreshTokenEnc,
     tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
@@ -261,6 +274,17 @@ export async function saveEmailConnectionSubscription(
 ): Promise<void> {
   await db.orm.public.EmailConnection.where({ id }).update({
     pushSubscriptionId: subscriptionId,
+    pushExpiresAt: fromIso(expiresAt),
+  });
+}
+
+/** Record a Gmail watch expiration: Gmail has no subscription id, only an
+ * expiration the daily cron renews at a 48h margin. */
+export async function saveEmailConnectionWatch(
+  id: string,
+  expiresAt: string,
+): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id }).update({
     pushExpiresAt: fromIso(expiresAt),
   });
 }
