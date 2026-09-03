@@ -18,11 +18,18 @@ import { assertCronSecret } from "~/lib/route-helpers.server";
 
 /** Vercel kills the lambda at the route's maxDuration; alert when a tick
  * outlives that window (maxRuntime in minutes) instead of the multi-hour
- * default. Margin absorbs Vercel cron lateness (observed ~25 min late on
- * 2026-08-29, well past the old 5-min margin, which logged a false
- * "missed" while the tick itself ran healthy). */
-const CHECKIN_MARGIN_MINUTES = 30;
-const MAX_RUNTIME_MINUTES = 1;
+ * default. The route's maxDuration is 60s and ticks do real work (JMAP
+ * mailbox pulls, receipt processing), so 2 minutes gives headroom without
+ * the old 1-minute ceiling flagging healthy slow ticks.
+ *
+ * Margin absorbs Vercel cron lateness: the scheduler is best-effort and
+ * ticks have fired ~25+ minutes past schedule (observed 2026-08-29, which
+ * logged a false "missed" under the original 5-min margin). Sentry's
+ * missed-checkin events arrive at exactly margin expiry (12:05 under the
+ * 5-min margin, 12:30 under 30), so lateness, not the job, is what trips
+ * them. 60 minutes covers the observed worst case. */
+const CHECKIN_MARGIN_MINUTES = 60;
+const MAX_RUNTIME_MINUTES = 2;
 
 export async function cronTick(
   request: Request,
@@ -44,6 +51,7 @@ export async function cronTick(
     return Response.json({ error: options.configuredError }, { status: 503 });
   }
 
+  const startedAt = Date.now();
   try {
     const runTick = async () => options.run();
     const result = await (Sentry.isInitialized()
@@ -53,7 +61,10 @@ export async function cronTick(
           checkinMargin: CHECKIN_MARGIN_MINUTES,
         })
       : runTick());
-    console.info(`[${options.name}] tick complete`, result);
+    console.info(
+      `[${options.name}] tick complete in ${Date.now() - startedAt}ms`,
+      result,
+    );
     return Response.json({ ok: true, ...result });
   } catch (err) {
     console.error(`[${options.name}] tick failed:`, err);
