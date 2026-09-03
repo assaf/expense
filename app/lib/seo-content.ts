@@ -13,14 +13,16 @@
  */
 
 /**
- * Cache-Control header shared by the marketing/SEO pages: browsers
- * revalidate on every request (max-age=0), but the CDN caches for one hour
- * and serves stale for up to 24h while revalidating in the background.
+ * Cache-Control header shared by the marketing/SEO pages. These SSR
+ * documents embed session-dependent loader data for signed-in visitors
+ * (the root loader feeds the global command palette the account's report
+ * names), so shared caches must never store them: the first signed-in hit
+ * would otherwise pin personalized HTML for every visitor (MKT-CACHE-1).
+ * Browsers revalidate on every request.
  */
 export function marketingPageHeaders(): Record<string, string> {
   return {
-    "Cache-Control":
-      "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate",
+    "Cache-Control": "private, max-age=0, must-revalidate",
   };
 }
 

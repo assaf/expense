@@ -193,6 +193,7 @@ export default function App() {
         Umami integration: app-wide pageviews, conversion events (login
         signup), and export-download events; the values come from the
         loader (env-resolved, see umami.server.ts), so deployments without
+        the env vars simply don't track. Pageview URLs exclude the query
         string: emailed links carry single-use tokens in ?token=, and the
         tracker must never record them. */}
         <script dangerouslySetInnerHTML={{ __html: TIPS_SCRIPT }} />

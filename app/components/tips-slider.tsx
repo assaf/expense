@@ -175,7 +175,13 @@ export function TipsSlider() {
   const [dismissed, setDismissed] = useState(false);
   const [paused, setPaused] = useState(false);
   useEffect(() => {
-    if (sessionStorage.getItem(DISMISS_KEY)) setDismissed(true);
+    // Storage access throws when the browser blocks site data entirely
+    // (Safari "block all cookies"); degrade to always-showing tips rather
+    // than crashing the landing page into the error boundary. TIPS_SCRIPT
+    // wraps its identical read in try/catch for the same reason.
+    try {
+      if (sessionStorage.getItem(DISMISS_KEY)) setDismissed(true);
+    } catch {}
   }, []);
   /** Move to `next`, remembering which side the incoming slide enters
    * from: the shortest way around the ring decides — forward (including
@@ -209,7 +215,9 @@ export function TipsSlider() {
           <button
             type="button"
             onClick={() => {
-              sessionStorage.setItem(DISMISS_KEY, "1");
+              try {
+                sessionStorage.setItem(DISMISS_KEY, "1");
+              } catch {}
               setDismissed(true);
             }}
             aria-label="Dismiss tips"
