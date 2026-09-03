@@ -56,6 +56,10 @@ export default defineConfig({
       GOOGLE_OAUTH_CLIENT_ID: "test-gmail-client-id",
       GOOGLE_OAUTH_CLIENT_SECRET: "test-gmail-client-secret",
       GOOGLE_PUBSUB_TOPIC: "projects/test/topics/expense-test",
+      // Pinned empty so the push-webhook tests exercise the default
+      // audience (derived from SITE_URL) even when a local .env carries a
+      // real GOOGLE_PUBSUB_AUDIENCE for manual testing.
+      GOOGLE_PUBSUB_AUDIENCE: "",
     },
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,
