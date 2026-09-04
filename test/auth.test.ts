@@ -98,6 +98,27 @@ describe("Access control", () => {
     await page.close();
   });
 
+  it("keeps the four OAuth connect/callback routes reachable signed-out (AUTH-FLOW-1)", async () => {
+    // AUTH-FLOW-1: the root requireUser gate dead-ends any OAuth route
+    // missing from the public allowlist (the provider bounces the user's
+    // browser there mid-flow; the routes self-gate). Pin all four —
+    // Fastmail and Gmail, entry + callback — so a new provider can't
+    // regress this by forgetting the gate.
+    const page = await openPage();
+    for (const [path, location] of [
+      ["/connect-fastmail", "api.fastmail.com"],
+      ["/connect-gmail", "accounts.google.com"],
+      ["/fastmail-oauth-callback", "/onboarding?oauthError=state"],
+      ["/gmail-oauth-callback", "/onboarding?gmailOauthError=state"],
+    ] as const) {
+      const res = await page.request.get(`http://localhost:5199${path}`, {
+        maxRedirects: 0,
+      });
+      expect(res.status(), path).toBe(302);
+      expect(res.headers()["location"], path).toContain(location);
+    }
+  });
+
   it("blocks cross-site POSTs to the auth actions (login CSRF)", async () => {
     const page = await openPage();
     // A foreign Origin must be rejected outright, even with valid creds.

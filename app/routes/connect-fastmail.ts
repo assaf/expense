@@ -40,7 +40,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw redirect(`${resumePath(rawNext)}?oauthError=unconfigured`);
   }
   // Minting flow state costs a signed cookie write and enables two
-  // outbound FastmaiFastmaildownstream; cap it per IP like every other
+  // outbound Fastmail calls downstream; cap it per IP like every other
   // anonymous path (skips empty-IP requests, e.g. tests).
   await guardAnonymousAttempt(request, "fastmail-oauth");
   const state = randomBytes(32).toString("base64url");

@@ -60,6 +60,10 @@ export default defineConfig({
       // audience (derived from SITE_URL) even when a local .env carries a
       // real GOOGLE_PUBSUB_AUDIENCE for manual testing.
       GOOGLE_PUBSUB_AUDIENCE: "",
+      // The push-webhook tests sign JWTs with this SA email (the route
+      // rejects tokens whose email claim differs — GMAIL-WEBHOOK-1 fix).
+      GOOGLE_PUSH_SERVICE_ACCOUNT:
+        "pubsub-push@test-project.iam.gserviceaccount.com",
     },
     browser: { screenshotDirectory: "__screenshots__" },
     disableConsoleIntercept: !process.env.CI,

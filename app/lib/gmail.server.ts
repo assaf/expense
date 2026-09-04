@@ -148,18 +148,79 @@ export async function gmailInboxSummaries(opts: {
   descending?: boolean;
   includePreview?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
-  // `after:` is day-granular (inclusive of the day), so the query over-
-  // selects the boundary day and the precise exclusive filter below
-  // trims it. Without afterIso the whole Inbox is the scan space.
-  const day = opts.afterIso
-    ? opts.afterIso.slice(0, 10).replaceAll("-", "/")
-    : null;
-  const query = day ? `in:inbox after:${day}` : "in:inbox";
-  const ids = await listInboxMessageIds(opts.token, query);
-  if (ids.length === 0) return [];
+  if (opts.descending || !opts.afterIso) {
+    // Review scan contract: newest-first, at most `limit` of the newest
+    // SCAN_CAP matches (documented 500-email cap). Without afterIso the
+    // whole Inbox is the scan space.
+    const day = opts.afterIso
+      ? opts.afterIso.slice(0, 10).replaceAll("-", "/")
+      : null;
+    const query = day ? `in:inbox after:${day}` : "in:inbox";
+    const ids = await listInboxMessageIds(opts.token, query);
+    const summaries = await fetchSummaries(
+      opts.token,
+      ids,
+      Boolean(opts.includePreview),
+    );
+    if (opts.afterIso) {
+      const afterMs = Date.parse(opts.afterIso);
+      return summaries
+        .filter((s) => Date.parse(s.receivedAt) > afterMs)
+        .slice(0, opts.limit);
+    }
+    return summaries.slice(0, opts.limit);
+  }
 
-  // Metadata fetches in bounded parallel chunks; index order preserves
-  // the list's newest-first order.
+  // Drain contract: oldest-first over the FULL matching window, so the
+  // receivedAt cursor slides past exactly the returned batch. A single
+  // query cannot honor that: messages.list is newest-first and caps at
+  // 500 ids, so a saturated inbox (>500 matches) would silently hide its
+  // oldest mail from every drain run. Walk DAY windows oldest-first
+  // instead (after:/before: are date-granular; overlapping windows +
+  // id dedupe avoid boundary gaps) and stop as soon as the batch is full.
+  const afterMs = Date.parse(opts.afterIso);
+  const DAY = 24 * 60 * 60 * 1000;
+  const fmt = (ms: number) =>
+    new Date(ms).toISOString().slice(0, 10).replaceAll("-", "/");
+  let windowStart = Date.UTC(
+    new Date(afterMs).getUTCFullYear(),
+    new Date(afterMs).getUTCMonth(),
+    new Date(afterMs).getUTCDate(),
+  );
+  const endMs = Date.now();
+  const seenIds = new Set<string>();
+  const collected: ConnectionEmailSummary[] = [];
+  let scanned = 0;
+  while (
+    windowStart <= endMs &&
+    collected.length < opts.limit &&
+    scanned < SCAN_CAP
+  ) {
+    const query = `in:inbox after:${fmt(windowStart)} before:${fmt(windowStart + 2 * DAY)}`;
+    const ids = (await listInboxMessageIds(opts.token, query)).filter((id) => {
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+      return true;
+    });
+    scanned += ids.length;
+    const summaries = (
+      await fetchSummaries(opts.token, ids, Boolean(opts.includePreview))
+    )
+      .filter((s) => Date.parse(s.receivedAt) > afterMs)
+      .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt));
+    collected.push(...summaries);
+    windowStart += DAY;
+  }
+  return collected.slice(0, opts.limit);
+}
+
+/** Metadata fetches in bounded parallel chunks, preserving id order. */
+async function fetchSummaries(
+  token: string,
+  ids: string[],
+  includePreview: boolean,
+): Promise<ConnectionEmailSummary[]> {
+  if (ids.length === 0) return [];
   const metaPath = (id: string) =>
     `/gmail/v1/users/me/messages/${id}?format=metadata`;
   const CHUNK = 20;
@@ -168,24 +229,11 @@ export async function gmailInboxSummaries(opts: {
     const chunk = await Promise.all(
       ids
         .slice(i, i + CHUNK)
-        .map((id) => gmailJson<unknown>(opts.token, metaPath(id))),
+        .map((id) => gmailJson<unknown>(token, metaPath(id))),
     );
     metas.push(...chunk.map((m) => messageMetaSchema.parse(m)));
   }
-  let summaries = metas.map((m) => toSummary(m, Boolean(opts.includePreview)));
-  if (opts.afterIso) {
-    const afterMs = Date.parse(opts.afterIso);
-    summaries = summaries.filter((s) => Date.parse(s.receivedAt) > afterMs);
-  }
-  if (opts.descending) {
-    // Review scan contract: newest-first, at most `limit`.
-    return summaries.slice(0, opts.limit);
-  }
-  // Drain contract: oldest-first so the receivedAt cursor slides past the
-  // newest email the batch returned.
-  return summaries
-    .sort((a, b) => Date.parse(a.receivedAt) - Date.parse(b.receivedAt))
-    .slice(0, opts.limit);
+  return metas.map((m) => toSummary(m, includePreview));
 }
 
 // --- Raw email -----------------------------------------------------------------

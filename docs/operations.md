@@ -208,16 +208,23 @@ Settings → Email accounts over without any other change. Fastmail issues
 client ids manually; the ready-to-send request and the post-reply checklist
 are in `docs/email-connections.md` → Client registration (one-time).
 
-Gmail/Google Workspace connections add four optional vars, all required
+Gmail/Google Workspace connections add five vars: four gate the feature
 together (when any is unset the Gmail connect surfaces stay hidden and
-Fastmail is the only provider): `GOOGLE_OAUTH_CLIENT_ID` and
+Fastmail is the only provider) — `GOOGLE_OAUTH_CLIENT_ID` and
 `GOOGLE_OAUTH_CLIENT_SECRET` (the GCP Web-application OAuth client;
 redirect URI `<origin>/gmail-oauth-callback`), `GOOGLE_PUBSUB_TOPIC` (full
 topic name `projects/<project>/topics/<topic>` passed to Gmail
 `users.watch`), and `GOOGLE_PUBSUB_AUDIENCE` (optional; the OIDC `aud`
 expected on Pub/Sub push JWTs, defaulting to this deployment's
-`/api/email-connections-gmail-push` URL). Setup steps and Testing-mode
-caveats: `docs/email-connections.md` → Gmail / Google Workspace.
+`/api/email-connections-gmail-push` URL). The fifth,
+`GOOGLE_PUSH_SERVICE_ACCOUNT`, is required for the push webhook: the JWT's
+`email` claim must equal it, because signature/iss/aud alone accept tokens
+minted by ANY GCP project's push subscription aimed at the public webhook
+URL. Set it to the push subscription's service account (e.g.
+`pubsub-push@<project>.iam.gserviceaccount.com`); unset -> the webhook
+503s and the daily cron is the only drain path. Setup steps and
+Testing-mode caveats: `docs/email-connections.md` → Gmail / Google
+Workspace.
 
 `SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route

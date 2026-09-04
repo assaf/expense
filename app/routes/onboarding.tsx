@@ -100,7 +100,7 @@ export async function loader({
     | FmPendingConnection
     | undefined;
   if (pending) {
-    // Same fast path for the FastmaiFastmaiFastmailk's parked credentials.
+    // Same fast path for the Fastmail callback's parked credentials.
     return {
       configured: isTokenCryptoConfigured(),
       oauthConfigured: false,

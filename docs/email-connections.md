@@ -90,8 +90,8 @@ When the reply arrives, check it against the assumptions baked into
 ## Gmail / Google Workspace
 
 A second provider behind the same pipeline, quiet-launched in Google
-**Testing mode** (env-gated exactly like Fastmail OAuth: the four
-`GOOGLE_*` vars in `docs/operations.md`; while any is unset the Gmail
+**Testing mode** (env-gated exactly like Fastmail OAuth: the `GOOGLE_*`
+vars in `docs/operations.md`; while any is unset the Gmail
 surfaces stay hidden). Advertising copy is unchanged; only the functional
 surfaces (/onboarding step 1, /emails, the home empty-state nudge) present
 both providers equally when configured.
@@ -126,17 +126,32 @@ read, TRASH moves (the success path), and import.
    `GOOGLE_OAUTH_CLIENT_SECRET`.
 3. **Pub/Sub**: create a topic; grant publish on it to
    `gmail-api-push@system.gserviceaccount.com`; create a **push**
-   subscription to `<origin>/api/email-connections-gmail-push` whose OIDC
-   token audience matches `GOOGLE_PUBSUB_AUDIENCE` (defaults to that same
-   push URL). Set `GOOGLE_PUBSUB_TOPIC` to the full topic name
-   `projects/<project>/topics/<topic>`.
+   subscription to `<origin>/api/email-connections-gmail-push` with an
+   OIDC token from a dedicated service account (e.g.
+   `pubsub-push@<project>`, granted
+   `roles/iam.serviceAccountTokenCreator` on itself) whose audience
+   matches `GOOGLE_PUBSUB_AUDIENCE` (defaults to that same push URL). Set
+   `GOOGLE_PUBSUB_TOPIC` to the full topic name
+   `projects/<project>/topics/<topic>`, and set
+   `GOOGLE_PUSH_SERVICE_ACCOUNT` to the subscription's service account
+   email — the webhook rejects pushes whose JWT `email` claim differs,
+   because tokens from ANY GCP project's subscription carry the same
+   signature/iss/aud shape (this pin is what binds pushes to ours).
+   Without it the webhook 503s (the daily cron still drains).
 
 The webhook verifies the Pub/Sub push JWT by hand (`node:crypto`): RS256
-signature against Google's JWKS (`kid`-matched, 1h module cache), `iss`
+signature against Google's JWKS (`kid`-matched, 1h module cache, one
+floor-throttled refetch on an unknown kid for key rotations), `iss`
 `accounts.google.com`, `aud` = the configured audience, `exp` in the
-future. Any failure → 401 (fail closed). An unknown or non-Gmail mailbox
-answers **200 { drained: false }** because Pub/Sub retries non-2xx and a
-stale subscription must never wedge the retry queue.
+future, and `email` = `GOOGLE_PUSH_SERVICE_ACCOUNT` (the pin that binds
+pushes to OUR subscription — signature/iss/aud alone also match tokens
+minted by any other GCP project's subscription aimed at this URL). Any
+failure → 401 (fail closed); unconfigured pin → 503. An unknown or
+non-Gmail mailbox answers **200 { drained: false }** because Pub/Sub
+retries non-2xx and a stale subscription must never wedge the retry queue.
+Also note the drain's adapter walks day windows for Gmail (Gmail's
+`messages.list` is newest-first and its `after:` operator is
+day-granular), so a saturated inbox still drains oldest-first.
 
 **Watch renewal**: `users.watch` (`labelIds: ["INBOX"]`) expires after ~7
 days; the daily cron renews at a 48h margin (five retries), persisting
@@ -162,7 +177,9 @@ limitations of the quiet launch, documented rather than worked around.
 ### Setup checklist after registering (mirrors the Fastmail checklist)
 
 - Create the OAuth client + Pub/Sub topic/subscription as above.
-- Set the four `GOOGLE_*` vars in Vercel (production) and redeploy.
+- Set the five `GOOGLE_*` vars in Vercel (production) and redeploy
+  (the fifth, `GOOGLE_PUSH_SERVICE_ACCOUNT`, is the push subscription's
+  service account email — the webhook 503s without it).
 - Connect a real Google account, send a receipt email to the mailbox,
   confirm the push → drain → expense flow, and check `/api/smoke` stays
   green.

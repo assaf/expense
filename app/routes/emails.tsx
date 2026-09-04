@@ -89,21 +89,20 @@ export async function loader({ request }: Route.LoaderArgs) {
           text: `${params.get("address") ?? "The mailbox"} connected; expenses will import automatically.`,
         }
       : { ok: false, text: params.get("reason") ?? "Could not connect." }
-    : oauthError
+    : oauthError && Object.hasOwn(OAUTH_ERROR_TEXT.fastmail, oauthError)
       ? {
           ok: false,
-          text:
-            OAUTH_ERROR_TEXT.fastmail[
-              oauthError as keyof typeof OAUTH_ERROR_TEXT.fastmail
-            ] ?? "Could not connect.",
+          text: OAUTH_ERROR_TEXT.fastmail[
+            oauthError as keyof typeof OAUTH_ERROR_TEXT.fastmail
+          ],
         }
-      : gmailOauthError
+      : gmailOauthError &&
+          Object.hasOwn(OAUTH_ERROR_TEXT.gmail, gmailOauthError)
         ? {
             ok: false,
-            text:
-              OAUTH_ERROR_TEXT.gmail[
-                gmailOauthError as keyof typeof OAUTH_ERROR_TEXT.gmail
-              ] ?? "Could not connect.",
+            text: OAUTH_ERROR_TEXT.gmail[
+              gmailOauthError as keyof typeof OAUTH_ERROR_TEXT.gmail
+            ],
           }
         : null;
   return {

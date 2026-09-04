@@ -26,7 +26,7 @@ import {
 
 // Newest-first, per messages.list. internalDate is epoch-ms text.
 const DAY = 24 * 60 * 60 * 1000;
-const T0 = Date.UTC(2026, 7, 10, 12, 0, 0); // Aug 10 2026, 12:00 UTC
+const T0 = Date.UTC(2026, 6, 10, 12, 0, 0); // Jul 10 2026 12:00 UTC (before the suite's pinned 2026-07-15 clock)
 const MESSAGES: Array<{
   id: string;
   at: number;
@@ -113,7 +113,7 @@ afterEach(() => {
 
 describe("gmailInboxSummaries", () => {
   it("enforces afterIso exclusivity, oldest-first order, and limit", async () => {
-    const afterIso = new Date(T0).toISOString(); // Aug 10, 12:00 UTC
+    const afterIso = new Date(T0).toISOString(); // Jul 10, 12:00 UTC
     const summaries = await gmailInboxSummaries({
       token: "t",
       afterIso,
@@ -126,7 +126,7 @@ describe("gmailInboxSummaries", () => {
     );
     // The Gmail query over-selects the boundary day (day-granular after:).
     const list = calls.find((c) => c.path.includes("/messages?"));
-    expect(list!.path).toContain("q=in%3Ainbox+after%3A2026%2F08%2F10");
+    expect(list!.path).toContain("q=in%3Ainbox+after%3A2026%2F07%2F10");
   });
 
   it("returns the newest-first batch for the review scan", async () => {

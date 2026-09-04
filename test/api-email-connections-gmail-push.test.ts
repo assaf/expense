@@ -67,7 +67,7 @@ function validClaims(overrides: Record<string, unknown> = {}) {
     iss: "accounts.google.com",
     aud: AUDIENCE,
     exp: Math.floor(Date.now() / 1000) + 600,
-    email: "user@gmail.com",
+    email: "pubsub-push@test-project.iam.gserviceaccount.com",
     ...overrides,
   };
 }
@@ -222,37 +222,81 @@ describe("api.email-connections-gmail-push", () => {
   });
 
   it("refetches the JWKS once on an unknown kid (Google key rotation)", async () => {
-    // The module cache holds test-kid (from the earlier tests). A token
-    // signed with a FRESH key must trigger exactly one forced refetch that
-    // serves the new key, then verify — not 401 until the cache expires.
+    // Fresh module = cold JWKS cache, modeling the pre-rotation state:
+    // the first lookup misses the rotated kid and forces exactly ONE
+    // refetch, which must serve the new key and verify the token.
+    vi.resetModules();
     const { publicKey: newKey, privateKey: newPriv } = generateKeyPairSync(
       "rsa",
       { modulusLength: 2048 },
     );
     const newJwk = newKey.export({ format: "jwk" }) as Record<string, unknown>;
     const NEW_KID = "rotated-kid";
-    const jwksFetch = vi.fn(async () => {
-      // The cache already holds the pre-rotation set; the forced refetch
-      // serves the rotated key alongside it.
-      const keys = [
-        { ...publicJwk, kid: KID },
-        { ...newJwk, kid: NEW_KID },
-      ];
-      return new Response(JSON.stringify({ keys }), { status: 200 });
-    });
-    vi.stubGlobal("fetch", jwksFetch);
+    let fetchCalls = 0;
+    const { action: freshAction } =
+      await import("~/routes/api.email-connections-gmail-push");
+    // env.ts installs its test network guard over global fetch at import;
+    // the stub must be (re)installed AFTER the fresh module graph loads.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        fetchCalls++;
+        const keys =
+          fetchCalls === 1
+            ? [{ ...publicJwk, kid: KID }]
+            : [
+                { ...publicJwk, kid: KID },
+                { ...newJwk, kid: NEW_KID },
+              ];
+        return new Response(JSON.stringify({ keys }), { status: 200 });
+      }),
+    );
 
     const header = b64url({ alg: "RS256", kid: NEW_KID });
     const payload = b64url(validClaims());
     const signer = createSign("RSA-SHA256");
     signer.update(`${header}.${payload}`);
     const rotated = `${header}.${payload}.${b64url(signer.sign(newPriv))}`;
-    const res = await action(
+    const res = await freshAction(
       args(request(envelope("user@gmail.com"), rotated)),
     );
     expect(res.status).toBe(200);
-    // The cache was already warm (earlier tests), so the only fetch this
-    // request makes is the single forced refetch that served the new kid.
-    expect(jwksFetch).toHaveBeenCalledTimes(1);
+    // Cold-cache lookup + exactly one forced refetch.
+    expect(fetchCalls).toBe(2);
+  });
+
+  it("rejects tokens from a foreign service account (SA pin)", async () => {
+    // Any GCP project can aim a push subscription at this URL; Google
+    // signs those tokens with the same iss/aud shape. The email claim is
+    // the only thing binding a push to OUR subscription.
+    const res = await action(
+      args(
+        request(
+          envelope("user@gmail.com"),
+          signJwt(
+            validClaims({
+              email: "attacker@evil-project.iam.gserviceaccount.com",
+            }),
+          ),
+        ),
+      ),
+    );
+    expect(res.status).toBe(401);
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
+  it("503s when the push service account is not configured", async () => {
+    vi.resetModules();
+    vi.stubEnv("GOOGLE_PUSH_SERVICE_ACCOUNT", "");
+    try {
+      const { action: unconfigured } =
+        await import("~/routes/api.email-connections-gmail-push");
+      const res = await unconfigured(args(request(envelope("user@gmail.com"))));
+      expect(res.status).toBe(503);
+      expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });
