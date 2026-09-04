@@ -299,4 +299,49 @@ describe("api.email-connections-gmail-push", () => {
       vi.resetModules();
     }
   });
+
+  it("answers 503 (retryable) when the JWKS endpoint fails", async () => {
+    // A Google-side outage is infrastructure, not auth: the route must
+    // return a retryable 503, not throw an unhandled exception per push.
+    vi.resetModules();
+    const jwks = vi.fn(async () => new Response("boom", { status: 500 }));
+    const { action: freshAction } =
+      await import("~/routes/api.email-connections-gmail-push");
+    vi.stubGlobal("fetch", jwks);
+    const res = await freshAction(args(request(envelope("user@gmail.com"))));
+    expect(res.status).toBe(503);
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
+  it("floors repeated unknown-kid refetches (junk flood)", async () => {
+    // The cache is warm (KID, from the earlier tests). Each junk-kid
+    // request may force at most one refetch within the 30s floor: the
+    // SECOND unknown kid must 401 without any further fetch.
+    const jwks = vi.fn(async () => {
+      // The forced refetch still only knows the pre-rotation key: an
+      // unknown kid stays unknown (401), it just must not re-fetch.
+      return new Response(
+        JSON.stringify({ keys: [{ ...publicJwk, kid: KID }] }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", jwks);
+    const junkKid = (kid: string) => {
+      const header = b64url({ alg: "RS256", kid });
+      const payload = b64url(validClaims());
+      // Signature is garbage — the kid miss short-circuits before verify.
+      return `${header}.${payload}.AAAA`;
+    };
+    const first = await action(
+      args(request(envelope("user@gmail.com"), junkKid("flood-1"))),
+    );
+    expect(first.status).toBe(401);
+    const callsAfterFirst = jwks.mock.calls.length;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+    const second = await action(
+      args(request(envelope("user@gmail.com"), junkKid("flood-2"))),
+    );
+    expect(second.status).toBe(401);
+    expect(jwks.mock.calls.length).toBe(callsAfterFirst);
+  });
 });

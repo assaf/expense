@@ -322,6 +322,26 @@ describe("gmail-oauth-callback", () => {
     expect(pending.remoteAccountId).toBe("google-sub-1");
     expect(decryptSecret(pending.tokenEnc)).toBe("gmail-at");
   });
+  it("lands on gmailOauthError=verify when the id_token carries no sub", async () => {
+    // openid always accompanies gmail.modify, so a missing sub means
+    // Google changed shape: fail closed on the verify bucket rather than
+    // storing an empty remoteAccountId.
+    mockedExchange.mockResolvedValue(gmailTokenSet({ idToken: null }));
+    const cookie = await sessionCookieWith([
+      GOOGLE_OAUTH_SESSION_KEY,
+      flow({ next: "onboarding" }),
+    ]);
+    const res = await callbackLoader(
+      args(callbackRequest("code=c&state=flow-state", cookie)),
+    );
+    expect(res.headers.get("location")).toBe(
+      "/onboarding?gmailOauthError=verify",
+    );
+    const session = await sessionStorage.getSession(
+      res.headers.get("set-cookie") ?? "",
+    );
+    expect(session.get(GOOGLE_PENDING_SESSION_KEY)).toBeUndefined();
+  });
 });
 
 // --- Token resolver ------------------------------------------------------------------

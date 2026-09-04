@@ -163,7 +163,20 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const auth = request.headers.get("Authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const claims = token ? await verifyPushJwt(token) : undefined;
+  let claims: { email?: string } | undefined;
+  try {
+    claims = token ? await verifyPushJwt(token) : undefined;
+  } catch (err) {
+    // A JWKS fetch failure is infrastructure, not auth: 503 so Pub/Sub
+    // retries, without an unhandled exception per push.
+    captureWarning("[gmail-push] JWKS verification failed:", {
+      error: err,
+    });
+    return Response.json(
+      { error: "verification temporarily unavailable" },
+      { status: 503 },
+    );
+  }
   if (!claims) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
