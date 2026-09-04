@@ -114,6 +114,24 @@ export function headerRecord(
   return out;
 }
 
+/**
+ * The newest Fastmail-stamped Authentication-Results header value, or
+ * null. Authentication-Results headers are PREPENDED in delivery order,
+ * so the first one in file order is our host's own evaluation of the
+ * message — attacker-supplied A-R headers sit older than it and are
+ * ignored (and Fastmail rewrites same-id headers on ingestion).
+ */
+export function newestAuthResults(
+  headers: ParsedEmail["headers"],
+): string | null {
+  for (const h of headers) {
+    if (h.key.toLowerCase() !== "authentication-results") continue;
+    const authservId = (h.value.split(";")[0] ?? "").toLowerCase();
+    if (authservId.includes("messagingengine.com")) return h.value;
+  }
+  return null;
+}
+
 /** Fastmail `contentId` may carry angle brackets; HTML references use `cid:` without them. */
 function normalizeContentId(contentId: string | undefined): string | null {
   if (!contentId) return null;
@@ -169,6 +187,7 @@ export function mimeFetchDeps(
         html: email.html ?? null,
         text: email.text ?? null,
         headers: headerRecord(email.headers),
+        authResults: newestAuthResults(email.headers),
         created_at: raw.receivedAt,
         message_id: email.messageId ?? raw.messageId,
       };

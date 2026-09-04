@@ -31,7 +31,20 @@ pipeline's reply email is the recovery path. The daily cron
 (`/api/inbound-cron`, `0 12 * * *`) renews the ~30-day push subscription
 and drains anything a missed push left behind. Sender
 verification: From must have a verified `inbound_senders` row (one row per
-account+address, normalized lowercase);
+account+address, normalized lowercase), and the DELIVERED message must
+carry a passing, aligned authentication result — the newest Fastmail-
+stamped `Authentication-Results` header (authserv-id messagingengine.com)
+must show `dmarc=pass`, or `dkim=pass`/`spf=pass` for a domain aligned
+with the From domain (INB-SPOOF-1: the From header is forgeable at SMTP
+time, and a verified row only proves a one-time verification, not that
+THIS message came from its owner). A verified sender whose mail fails
+authentication is not imported and gets an honest "failed authentication"
+reply (the same amplifier class as the verify-first reply, capped the
+same way); a record-less message is allowed only because Fastmail stamps
+every delivery; records are evaluated from the newest
+messagingengine.com-stamped header so attacker-supplied A-R headers are
+ignored (they sit older than Fastmail's stamp, which rewrites same-id
+headers on ingestion).
 failure/confirmation replies are sent FROM the FastMail identity
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the

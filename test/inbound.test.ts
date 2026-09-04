@@ -1511,6 +1511,83 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
     expect(result).toMatchObject({ status: "created" });
   });
 
+  it("still imports when no Authentication-Results record is present (legacy transport)", async () => {
+    // authResults undefined = the transport predates the A-R check; the
+    // gate allows it (Fastmail stamps every delivery in production).
+    await allowSender(TEST_ACCOUNT_ID, "legacy@example.com");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ from: "Legacy <legacy@example.com>" });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-legacy-auth",
+        from: "Legacy <legacy@example.com>",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-legacy-auth");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result.status === "created" || result.status === "partial").toBe(
+      true,
+    );
+  });
+
+  it("rejects a verified sender's mail that fails authentication (INB-SPOOF-1)", async () => {
+    // The From claims the verified address, but the Fastmail stamp shows
+    // the message authenticated as attacker.evil — a spoofed sender.
+    await allowSender(TEST_ACCOUNT_ID, "victim@example.com");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        from: "Victim <victim@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; spf=pass smtp.mailfrom=bounce@attacker.evil; dmarc=fail header.from=example.com",
+      });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-spoofed",
+        from: "Victim <victim@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; spf=pass smtp.mailfrom=bounce@attacker.evil; dmarc=fail header.from=example.com",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-spoofed");
+    expect(result).toMatchObject({ status: "auth-failed" });
+    // Not imported, and the honest reply went to the claimed sender.
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toContain("failed authentication");
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
+
+  it("imports a verified sender's mail with an aligned dmarc=pass stamp", async () => {
+    await allowSender(TEST_ACCOUNT_ID, "aligned@example.com");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        from: "Aligned <aligned@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=aligned.example.com; spf=pass smtp.mailfrom=bounce@aligned.example.com; dmarc=pass header.from=example.com",
+      });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-aligned-auth",
+        from: "Aligned <aligned@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=aligned.example.com; spf=pass smtp.mailfrom=bounce@aligned.example.com; dmarc=pass header.from=example.com",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-aligned-auth");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result.status === "created" || result.status === "partial").toBe(
+      true,
+    );
+  });
+
   it("only the verified account receives, regardless of who added first", async () => {
     // Both accounts added the same address; only Test Account verified it.
     await allowSender(

@@ -11,6 +11,7 @@ import {
 import {
   createMimeInboundCache,
   headerRecord,
+  newestAuthResults,
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
@@ -135,6 +136,7 @@ export async function receiptEmailData(
     message_id: raw.messageId,
     subject: raw.subject,
     headers: headerRecord(email.headers),
+    authResults: newestAuthResults(email.headers),
     // The pipeline never reads data.attachments (metadata comes from
     // deps.listAttachments), so this stays empty.
     attachments: [],
@@ -171,6 +173,8 @@ function replyTypeFor(
       return "sender not recognized";
     case "unverified-sender":
       return "verify first";
+    case "auth-failed":
+      return "sender authentication failed";
     case "duplicate":
       return "none (duplicate)";
     case "concurrent":

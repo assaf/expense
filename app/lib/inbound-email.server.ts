@@ -29,6 +29,7 @@ import {
   SIMPLE_FOOTER,
 } from "~/lib/email-layout.server";
 import { captureWarning } from "~/lib/errors.server";
+import { evaluateAuthResults } from "~/lib/email-auth.server";
 import { escapeHtml } from "~/lib/escape";
 import {
   confirmationEmail,
@@ -95,6 +96,9 @@ export interface EmailReceivedData {
    * hasOwnConfirmationHeader for case-insensitive lookup). Lets the
    * pipeline recognize the app's own outbound mail (loop guard). */
   headers: Record<string, string>;
+  /** The newest Fastmail-stamped Authentication-Results header value, or
+   * null when none (see evaluateAuthResults / INB-SPOOF-1). */
+  authResults?: string | null;
   attachments: {
     id: string;
     filename: string;
@@ -113,6 +117,12 @@ export interface ReceivedEmail {
   html: string | null;
   text: string | null;
   headers: Record<string, string>;
+  /**
+   * The newest Fastmail-stamped Authentication-Results header value
+   * (authserv-id messagingengine.com), or null when none — see
+   * evaluateAuthResults (INB-SPOOF-1).
+   */
+  authResults?: string | null;
   created_at: string;
   message_id: string;
 }
@@ -146,6 +156,7 @@ export type ProcessResult =
   | { status: "concurrent" }
   | { status: "unknown-sender" }
   | { status: "unverified-sender" }
+  | { status: "auth-failed"; reason: string }
   | { status: "self-reply" }
   | { status: "bounce"; failedRecipient?: string };
 
@@ -1252,6 +1263,33 @@ export async function processInboundEvent(
   // added but never verified gets a "verify first" reply instead of an
   // import; an address with no row at all is the unknown-sender case.
   const verified = await findVerifiedSenderAccount(fromEmail);
+  if (verified) {
+    // INB-SPOOF-1: a verified inbound_senders row proves the address was
+    // verified ONCE — not that THIS message came from its owner. The From
+    // header alone is forgeable at SMTP time, so the delivered message
+    // must also carry a passing, aligned authentication result (evaluated
+    // and stamped by Fastmail). Failures are demoted to the unverified
+    // path below: not imported, replied with the honest reason.
+    const verdict = evaluateAuthResults(data.authResults, fromEmail);
+    if (!verdict.ok) {
+      captureWarning(
+        "[inbound] verified sender failed message authentication; not importing",
+        { emailId: data.email_id, from: data.from, reason: verdict.reason },
+      );
+      await deps.sendReply({
+        ...replyEnvelope(data),
+        subject: "⚠️ Receipt not imported — message failed authentication",
+        html: replyHtml(
+          "Receipt not imported — message failed authentication",
+          [
+            `We received an email claiming to be from <b>${escapeHtml(data.from)}</b>, but it failed SPF/DKIM/DMARC authentication, so it was not imported (a forged sender address could otherwise add fake expenses).`,
+            "If this was a legitimate receipt, forward it again from your mail client. If it keeps failing, the sending service needs to fix its mail authentication.",
+          ],
+        ),
+      });
+      return { status: "auth-failed", reason: verdict.reason };
+    }
+  }
   if (!verified) {
     const pending = await findPendingSenderRow(fromEmail);
     if (pending) {
