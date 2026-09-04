@@ -60,29 +60,62 @@ async function gmailJson<T>(token: string, path: string): Promise<T> {
 
 // --- Envelope helpers --------------------------------------------------------
 
-const headerListSchema = z.array(z.unknown()).nullish();
+const headerRowSchema = z.object({
+  name: z.string(),
+  value: z.string().nullish(),
+});
+
+const headerListSchema = z.array(headerRowSchema).nullish();
+
+/** All values of one header name, in order (To can repeat: one row per
+ * address); empty when the headers shape is unexpected. */
+function headerValues(headers: unknown, name: string): string[] {
+  const rows = headerListSchema.safeParse(headers);
+  if (!rows.success) return [];
+  const lower = name.toLowerCase();
+  return (rows.data ?? [])
+    .filter((row) => row.name.toLowerCase() === lower)
+    .map((row) => row.value ?? "");
+}
 
 function headerValue(headers: unknown, name: string): string | null {
-  const rows = headerListSchema.safeParse(headers);
-  if (!rows.success) return null;
-  for (const row of rows.data ?? []) {
-    const parsed = z
-      .object({ name: z.string(), value: z.string().nullish() })
-      .safeParse(row);
-    if (
-      parsed.success &&
-      parsed.data.name.toLowerCase() === name.toLowerCase()
-    ) {
-      return parsed.data.value ?? null;
-    }
-  }
-  return null;
+  return headerValues(headers, name)[0] ?? null;
+}
+
+/** internalDate is epoch-ms text; a missing/unparseable value falls back
+ * to now (same tolerance as the JMAP adapter's nullish receivedAt). */
+function receivedAtOf(meta: z.infer<typeof messageMetaSchema>): string {
+  const ms = Number(meta.internalDate);
+  return Number.isFinite(ms)
+    ? new Date(ms).toISOString()
+    : new Date().toISOString();
 }
 
 // --- Inbox summaries ----------------------------------------------------------
 
 interface MessageListItem {
   id?: unknown;
+}
+
+// The metadata fields summaries map from. internalDate is epoch-ms text.
+const messageMetaSchema = z.object({
+  id: z.string(),
+  internalDate: z.string().nullish(),
+  snippet: z.string().nullish(),
+  payload: z.object({ headers: z.unknown().optional() }).nullish(),
+});
+
+function toSummary(
+  meta: z.infer<typeof messageMetaSchema>,
+  includePreview: boolean,
+): ConnectionEmailSummary {
+  return {
+    id: meta.id,
+    receivedAt: receivedAtOf(meta),
+    subject: headerValue(meta.payload?.headers, "Subject") ?? "",
+    from: headerValue(meta.payload?.headers, "From"),
+    ...(includePreview ? { preview: meta.snippet ?? "" } : {}),
+  };
 }
 
 async function listInboxMessageIds(
@@ -106,30 +139,6 @@ async function listInboxMessageIds(
     if (ids.length >= SCAN_CAP) break;
   } while (pageToken);
   return ids.slice(0, SCAN_CAP);
-}
-
-// The metadata fields summaries map from. internalDate is epoch-ms text.
-const messageMetaSchema = z.object({
-  id: z.string(),
-  internalDate: z.string().nullish(),
-  snippet: z.string().nullish(),
-  payload: z.object({ headers: z.unknown().optional() }).nullish(),
-});
-
-function toSummary(
-  meta: z.infer<typeof messageMetaSchema>,
-  includePreview: boolean,
-): ConnectionEmailSummary {
-  const ms = Number(meta.internalDate);
-  return {
-    id: meta.id,
-    receivedAt: Number.isFinite(ms)
-      ? new Date(ms).toISOString()
-      : new Date().toISOString(),
-    subject: headerValue(meta.payload?.headers, "Subject") ?? "",
-    from: headerValue(meta.payload?.headers, "From"),
-    ...(includePreview ? { preview: meta.snippet ?? "" } : {}),
-  };
 }
 
 export async function gmailInboxSummaries(opts: {
@@ -199,29 +208,13 @@ async function gmailRawEmail(
     ),
   );
   // To can repeat; metadata headers hold one row per address.
-  const headerRow = z.object({
-    name: z.string(),
-    value: z.string().nullish(),
-  });
-  const headers = headerListSchema.safeParse(meta.payload?.headers);
-  const to =
-    headers.success && headers.data
-      ? (Array.isArray(headers.data) ? headers.data : [])
-          .map((row) => headerRow.safeParse(row))
-          .flatMap((p) =>
-            p.success && p.data.name.toLowerCase() === "to"
-              ? [formatAddress({ name: null, email: p.data.value ?? null })]
-              : [],
-          )
-          .filter((v): v is string => v !== null)
-      : [];
-  const ms = Number(meta.internalDate);
+  const to = headerValues(meta.payload?.headers, "To")
+    .map((value) => formatAddress({ name: null, email: value || null }))
+    .filter((v): v is string => v !== null);
   return {
     id,
     raw: Buffer.from(rawMsg.raw, "base64url"),
-    receivedAt: Number.isFinite(ms)
-      ? new Date(ms).toISOString()
-      : new Date().toISOString(),
+    receivedAt: receivedAtOf(meta),
     subject: headerValue(meta.payload?.headers, "Subject") ?? "",
     from: headerValue(meta.payload?.headers, "From"),
     to,

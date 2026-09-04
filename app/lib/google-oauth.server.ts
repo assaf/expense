@@ -6,10 +6,9 @@ import {
   GOOGLE_PUBSUB_TOPIC,
 } from "~/lib/env";
 import { SITE_URL } from "~/lib/seo-content";
-import {
-  isFlowStale,
-  type ConnectionCredentials,
-  type FmOAuthFlow,
+import type {
+  ConnectionCredentials,
+  FmOAuthFlow,
 } from "~/lib/fastmail-oauth.server";
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 import { updateEmailConnectionTokens } from "~/lib/db/email-connections";
@@ -51,9 +50,6 @@ export interface GooglePendingConnection {
   refreshTokenEnc: string | null;
   expiresAt: string;
 }
-
-/** Reuse the Fastmail staleness check; the flow shapes are identical. */
-export const isGmailFlowStale = isFlowStale;
 
 export function isGmailOAuthConfigured(): boolean {
   return (

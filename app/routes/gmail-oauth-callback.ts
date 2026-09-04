@@ -15,11 +15,11 @@ import {
   exchangeGmailAuthorizationCode,
   GOOGLE_OAUTH_SESSION_KEY,
   GOOGLE_PENDING_SESSION_KEY,
-  isGmailFlowStale,
   type GmailTokenSet,
   type GoogleOAuthFlow,
   type GooglePendingConnection,
 } from "~/lib/google-oauth.server";
+import { isFlowStale } from "~/lib/fastmail-oauth.server";
 
 /**
  * The OAuth redirect target registered with Google (GET
@@ -77,12 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 
   const stateParam = url.searchParams.get("state");
-  if (
-    !flow ||
-    isGmailFlowStale(flow) ||
-    !stateParam ||
-    stateParam !== flow.state
-  ) {
+  if (!flow || isFlowStale(flow) || !stateParam || stateParam !== flow.state) {
     return finish(`/${next}?gmailOauthError=state`);
   }
   if (url.searchParams.get("error")) {

@@ -48,24 +48,28 @@ import type { Route } from "./+types/emails";
  *    email there parses and adds it (only from verified sender addresses).
  */
 
-const OAUTH_ERROR_TEXT: Record<string, string> = {
-  state: "The Fastmail connection attempt expired or did not match; try again.",
-  denied: "Fastmail consent was not granted; nothing was connected.",
-  exchange: "Fastmailnot exchange the authorization; try again.",
-  verify:
-    "Fastmail approved the connection but the token failed verification; try again.",
-  unconfigured:
-    "Connecting with Fastmail is not configured on this deployment.",
-};
-
-const GMAIL_OAUTH_ERROR_TEXT: Record<string, string> = {
-  state: "The Gmail connection attempt expired or did not match; try again.",
-  denied: "Gmail consent was not granted; nothing was connected.",
-  exchange: "Google could not exchange the authorization; try again.",
-  verify:
-    "Google approved the connection but the Gmail check failed; try again.",
-  unconfigured: "Connecting with Gmail is not configured on this deployment.",
-};
+// The two callbacks share the same five failure codes; only the provider
+// names differ. Keyed by provider so the pairing stays obvious.
+const OAUTH_ERROR_TEXT = {
+  fastmail: {
+    state:
+      "The Fastmail connection attempt expired or did not match; try again.",
+    denied: "Fastmail consent was not granted; nothing was connected.",
+    exchange: "Fastmail could not exchange the authorization; try again.",
+    verify:
+      "Fastmail approved the connection but the token failed verification; try again.",
+    unconfigured:
+      "Connecting with Fastmail is not configured on this deployment.",
+  },
+  gmail: {
+    state: "The Gmail connection attempt expired or did not match; try again.",
+    denied: "Gmail consent was not granted; nothing was connected.",
+    exchange: "Google could not exchange the authorization; try again.",
+    verify:
+      "Google approved the connection but the Gmail check failed; try again.",
+    unconfigured: "Connecting with Gmail is not configured on this deployment.",
+  },
+} as const;
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
@@ -88,13 +92,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     : oauthError
       ? {
           ok: false,
-          text: OAUTH_ERROR_TEXT[oauthError] ?? "Could not connect.",
+          text:
+            OAUTH_ERROR_TEXT.fastmail[
+              oauthError as keyof typeof OAUTH_ERROR_TEXT.fastmail
+            ] ?? "Could not connect.",
         }
       : gmailOauthError
         ? {
             ok: false,
             text:
-              GMAIL_OAUTH_ERROR_TEXT[gmailOauthError] ?? "Could not connect.",
+              OAUTH_ERROR_TEXT.gmail[
+                gmailOauthError as keyof typeof OAUTH_ERROR_TEXT.gmail
+              ] ?? "Could not connect.",
           }
         : null;
   return {
