@@ -8,9 +8,79 @@
 @theme {
   --font-sans: "Nebula Sans", "ui-sans-serif", "system-ui", "sans-serif";
   --font-figures: "Nebula Sans", var(--font-sans);
-  --color-ink: #111827;
+  --color-ink: #171717;
   --color-paper: #ffffff;
-  --color-incomplete: #fef3c7;
+  --color-incomplete: #f7eed6;
+
+  /* Palette borrowed from judgmentkit.ai: warm paper neutrals in light,
+   * green-tinted graphite in dark (body/.dark rules below), deep teal as
+   * the accent. One ramp serves both modes — Tailwind ordering (low =
+   * light, high = dark) is preserved, so dark surfaces come from the high
+   * shades (dark:bg-gray-900 → #171717) and dark text from the low shades
+   * (dark:text-gray-100 → #ece9df). The page canvas tint comes from the
+   * body rules below, not from an inverted ramp. */
+  --color-gray-50: #f4f2ea;
+  --color-gray-100: #ece9df;
+  --color-gray-200: #d7d3c8;
+  --color-gray-300: #b5b1a5;
+  --color-gray-400: #9d998d;
+  --color-gray-500: #8a867a;
+  --color-gray-600: #615f55;
+  --color-gray-700: #454540;
+  --color-gray-800: #2b2b26;
+  --color-gray-900: #171717;
+  --color-gray-950: #101312;
+
+  --color-blue-50: #eef4f5;
+  --color-blue-100: #d9e7ea;
+  --color-blue-200: #b5d0d7;
+  --color-blue-300: #9fc6d0;
+  --color-blue-400: #6f9dab;
+  --color-blue-500: #44798a;
+  --color-blue-600: #245f73;
+  --color-blue-700: #1d4c5c;
+  --color-blue-800: #173c49;
+  --color-blue-900: #122e38;
+  --color-blue-950: #0d222a;
+
+  --color-green-50: #edf3ef;
+  --color-green-100: #dbe8e0;
+  --color-green-200: #b9d3c4;
+  --color-green-300: #8fbca4;
+  --color-green-400: #5f9e7f;
+  --color-green-500: #3d7d5e;
+  --color-green-600: #2e6b48;
+  --color-green-700: #26573b;
+  --color-green-800: #1e4530;
+  --color-green-900: #163325;
+  --color-green-950: #0e2118;
+
+  --color-red-50: #f9efee;
+  --color-red-100: #f2dcd9;
+  --color-red-200: #e4bcb7;
+  --color-red-300: #d29590;
+  --color-red-400: #c98a83;
+  --color-red-500: #a85049;
+  --color-red-600: #8f342f;
+  --color-red-700: #742925;
+  --color-red-800: #5c211e;
+  --color-red-900: #451917;
+  --color-red-950: #2e100e;
+
+  --color-amber-50: #f9f3e7;
+  --color-amber-100: #f2e6cb;
+  --color-amber-200: #e5cf9e;
+  --color-amber-300: #d8b871;
+  --color-amber-400: #c99e46;
+  --color-amber-500: #b08230;
+  --color-amber-600: #946a24;
+  --color-amber-700: #7a571d;
+  --color-amber-800: #5c4214;
+  --color-amber-900: #43300f;
+  --color-amber-950: #2a1e09;
+
+  --color-orange-400: #cf9743;
+  --color-orange-600: #a15c1e;
 }
 
 /* Self-hosted Nebula Sans (SIL OFL, based on Source Sans): the app
@@ -54,21 +124,21 @@ body {
 }
 
 body {
-  background-color: #f9fafb;
+  background-color: #f8f7f2;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 .dark body {
-  background-color: #0f172a;
-  color: #e2e8f0;
+  background-color: #101312;
+  color: #f2f4ef;
 }
 
 .dark {
-  --color-ink: #e2e8f0;
-  --color-paper: #1e293b;
-  --color-incomplete: #422006;
+  --color-ink: #f2f4ef;
+  --color-paper: #181d1b;
+  --color-incomplete: #33230c;
 }
 
 /* Thin, unobtrusive scrollbars */
@@ -77,7 +147,7 @@ body {
 }
 
 .dark * {
-  scrollbar-color: #475569 #1e293b;
+  scrollbar-color: #39423f #181d1b;
 }
 
 /* Anchor-target highlight: when navigating to /settings#reports (or any
@@ -85,7 +155,7 @@ body {
  * for 3 seconds to draw attention to the linked section. */
 @keyframes target-flash {
   from {
-    background-color: #fef3c7;
+    background-color: #f2e6cb;
   }
   to {
     background-color: transparent;
@@ -94,7 +164,7 @@ body {
 
 @keyframes target-flash-dark {
   from {
-    background-color: #78350f;
+    background-color: #43300f;
   }
   to {
     background-color: transparent;
@@ -180,33 +250,33 @@ html[data-tips-dismissed] .tips-slider {
 
 /* Visible keyboard focus for links (buttons use their own ring utility). */
 a:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #245f73;
   outline-offset: 2px;
   border-radius: 4px;
 }
 
 .dark a:focus-visible {
-  outline-color: #60a5fa;
+  outline-color: #7db6c7;
 }
 
 /* Leaflet containers need an explicit height */
 .leaflet-container {
   height: 100%;
   width: 100%;
-  background: #e5e7eb;
+  background: #ece9df;
   /* Confine Leaflet's internal z-indexes (panes 400+, controls up to 1000)
-     to this container's own stacking context — without it the map paints
-     over the app's modal layer (command palette, dialogs, image viewer). */
+   * to this container's own stacking context — without it the map paints
+   * over the app's modal layer (command palette, dialogs, image viewer). */
   position: relative;
   z-index: 0;
 }
 
 .dark .leaflet-container {
-  background: #334155;
+  background: #232b28;
 }
 
 /* Numbered stop bubble on the route map (S, 1, 2, …) — white disc with a
-   blue ring and bold blue label, matching the blue route line. */
+   teal ring and bold teal label, matching the teal route line. */
 .map-stop-bubble {
   display: flex;
   align-items: center;
@@ -215,23 +285,23 @@ a:focus-visible {
   height: 20px;
   border-radius: 9999px;
   background: #ffffff;
-  border: 2px solid #2563eb;
+  border: 2px solid #245f73;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
 }
 
 .dark .map-stop-bubble {
-  background: #1e293b;
-  border-color: #60a5fa;
+  background: #181d1b;
+  border-color: #7db6c7;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
 }
 
 .map-stop-bubble span {
-  color: #2563eb;
+  color: #245f73;
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
 }
 
 .dark .map-stop-bubble span {
-  color: #93c5fd;
+  color: #a9d7e4;
 }
