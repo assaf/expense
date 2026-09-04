@@ -121,8 +121,11 @@ export async function findPendingSenderRow(
 ): Promise<{ accountId: string; address: string } | undefined> {
   const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
+  // removedAt rows are removal tombstones (INB-BOMB-1): the sender was
+  // removed, so the pipeline must treat the address as unknown (no
+  // "verify first" reply — that reply is the email amplifier).
   const row = await db.orm.public.InboundSender.where((s) =>
-    s.address.eq(address),
+    and(s.address.eq(address), s.removedAt.isNull()),
   )
     .orderBy([(s) => s.createdAt.asc(), (s) => s.accountId.asc()])
     .select("accountId", "address")
@@ -139,7 +142,7 @@ export async function listInboundSenders(
   accountId: string,
 ): Promise<InboundSenderRecord[]> {
   const rows = await db.orm.public.InboundSender.where((s) =>
-    s.accountId.eq(accountId),
+    and(s.accountId.eq(accountId), s.removedAt.isNull()),
   )
     .orderBy([(s) => s.createdAt.asc(), (s) => s.address.asc()])
     .all();
@@ -169,7 +172,14 @@ export async function addInboundSender(
   accountId: string,
   address: string,
 ): Promise<
-  | { ok: true; address: string; token: string | null }
+  | {
+      ok: true;
+      address: string;
+      token: string | null;
+      /** A verification email went out so recently (any account) that this
+       * mint was suppressed by the INB-BOMB-1 cooldown. */
+      recent?: boolean;
+    }
   | { ok: false; error: string }
 > {
   const normalized = extractEmailAddress(address);
@@ -186,20 +196,32 @@ export async function addInboundSender(
     };
   }
   if (verification) return { ok: true, address: normalized, token: null };
-  const token = await mintSenderToken(accountId, normalized);
-  return { ok: true, address: normalized, token };
+  const mint = await mintSenderToken(accountId, normalized);
+  return {
+    ok: true,
+    address: normalized,
+    token: mint.token,
+    ...(mint.recent ? { recent: true } : {}),
+  };
 }
 
 /**
  * Mint a fresh verification token for an already-added sender (the "Resend
  * verification email" action). Fails when the address is already verified
- * or claimed by another account.
+ * or claimed by another account. The mint may be cooldown-suppressed
+ * (recent: true, token: null) — a verification email went out recently.
  */
 export async function resendInboundSenderVerification(
   accountId: string,
   address: string,
 ): Promise<
-  { ok: true; address: string; token: string } | { ok: false; error: string }
+  | {
+      ok: true;
+      address: string;
+      token: string | null;
+      recent?: boolean;
+    }
+  | { ok: false; error: string }
 > {
   const normalized = extractEmailAddress(address);
   if (!normalized) return { ok: false, error: "Enter a valid email address" };
@@ -215,23 +237,51 @@ export async function resendInboundSenderVerification(
           : "That email address is already verified for another account",
     };
   }
-  const token = await mintSenderToken(accountId, normalized);
-  return { ok: true, address: normalized, token };
+  const mint = await mintSenderToken(accountId, normalized);
+  return {
+    ok: true,
+    address: normalized,
+    token: mint.token,
+    ...(mint.recent ? { recent: true } : {}),
+  };
 }
 
-/** Remove a sender address (and its verification) from an account. */
+/**
+ * Remove a sender address from an account. VERIFIED senders (and their
+ * verification) are deleted outright — the address becomes claimable
+ * again. PENDING senders are TOMBSTONED instead of deleted: the row
+ * survives with its verificationSentAt so the global mint cooldown
+ * survives a remove→re-add loop (INB-BOMB-1: two authenticated requests
+ * used to mint one verification email to an arbitrary victim address).
+ * Tombstoned rows are invisible to the UI and the pipeline and are
+ * purged after the verification TTL.
+ */
 export async function removeInboundSender(
   accountId: string,
   address: string,
 ): Promise<void> {
   const normalized = extractEmailAddress(address);
   await db.transaction(async (tx) => {
+    const verification = await tx.orm.public.InboundSenderVerification.where(
+      (v) => and(v.accountId.eq(accountId), v.address.eq(normalized)),
+    ).first();
+    if (verification) {
+      await tx.orm.public.InboundSender.where((s) =>
+        and(s.accountId.eq(accountId), s.address.eq(normalized)),
+      ).deleteAll();
+      await tx.orm.public.InboundSenderVerification.where((v) =>
+        and(v.accountId.eq(accountId), v.address.eq(normalized)),
+      ).deleteAll();
+      return;
+    }
+    // Pending (or nonexistent): tombstone. Nulling the token hash also
+    // kills any verification link still in flight for the removed row.
     await tx.orm.public.InboundSender.where((s) =>
       and(s.accountId.eq(accountId), s.address.eq(normalized)),
-    ).deleteAll();
-    await tx.orm.public.InboundSenderVerification.where((v) =>
-      and(v.accountId.eq(accountId), v.address.eq(normalized)),
-    ).deleteAll();
+    ).updateAll({
+      removedAt: nowWire(),
+      verificationTokenHash: null,
+    });
   });
 }
 
@@ -403,20 +453,62 @@ export async function ensureInboundSenderForUser(
     // A fresh verification email is already in flight; don't re-send.
     return { token: null, verified: false, claimedByOther: false };
   }
-  const token = await mintSenderToken(accountId, address);
-  return { token, verified: false, claimedByOther: false };
+  const mint = await mintSenderToken(accountId, address);
+  // A cooldown-suppressed mint (recent) also returns token: null — the
+  // default sender's verification email simply waits for the next
+  // sign-in, when the window has elapsed.
+  return { token: mint.token, verified: false, claimedByOther: false };
 }
 
 /**
  * Create (or refresh) the pending sender row with a fresh single-use
- * verification token, hashed at rest. Returns the raw token for the email
- * link. Shared by addInboundSender, resendInboundSenderVerification, and
- * ensureInboundSenderForUser.
+ * verification token, hashed at rest. Shared by addInboundSender,
+ * resendInboundSenderVerification, and ensureInboundSenderForUser.
+ *
+ * INB-BOMB-1 cooldown: a verification email was sent to this ADDRESS (by
+ * ANY account — the check is global, so a remove→re-add loop or a
+ * rotation of fresh accounts cannot mint faster than one email per
+ * VERIFICATION_RESEND_MS) → token: null, recent: true. Contested
+ * addresses therefore cool down for everyone for up to 24h — accepted:
+ * the alternative was an unauthenticated email bomb via open signup.
+ * Also purges tombstones whose verification links have expired (7-day
+ * TTL) — best-effort, never blocks the mint.
  */
 async function mintSenderToken(
   accountId: string,
   address: string,
-): Promise<string> {
+): Promise<{ token: string | null; recent: boolean }> {
+  // INB-BOMB-1 cooldown, global per address: a verification email went to
+  // this address recently (from ANY account — pending or tombstoned row)
+  // → suppress the mint. A remove→re-add loop or a rotation of fresh
+  // accounts therefore cannot email a victim faster than one email per
+  // VERIFICATION_RESEND_MS; contested addresses cool down for everyone
+  // for the same window (accepted trade-off, documented in the posture).
+  const rows = await db.orm.public.InboundSender.where((s) =>
+    s.address.eq(address),
+  ).all();
+  if (
+    rows.some((r) => withinWindow(r.verificationSentAt, VERIFICATION_RESEND_MS))
+  ) {
+    return { token: null, recent: true };
+  }
+  // Opportunistic tombstone purge (best-effort): tombstones older than the
+  // verification TTL can never matter again — their links are dead.
+  if (rows.some((r) => r.removedAt !== null)) {
+    try {
+      await db.orm.public.InboundSender.where((r) =>
+        and(
+          r.address.eq(address),
+          r.removedAt.isNotNull(),
+          r.verificationSentAt.lt(
+            fromIso(new Date(Date.now() - VERIFICATION_TTL_MS).toISOString()),
+          ),
+        ),
+      ).deleteAll();
+    } catch (err) {
+      console.warn("[inbound] tombstone sweep failed:", err);
+    }
+  }
   const token = generateOpaqueToken();
   const now = new Date().toISOString();
   await db.orm.public.InboundSender.upsert({
@@ -430,8 +522,9 @@ async function mintSenderToken(
     update: {
       verificationTokenHash: hashToken(token),
       verificationSentAt: fromIso(now),
+      removedAt: null,
     },
     conflictOn: { accountId, address },
   });
-  return token;
+  return { token, recent: false };
 }

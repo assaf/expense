@@ -135,3 +135,28 @@ describe("statement parsing with Excel date cells", () => {
     });
   });
 });
+
+describe("zip budget (NET-006)", () => {
+  it("rejects a workbook whose central directory declares a bomb-sized entry", () => {
+    // The upload path caps the file at 5MB; a crafted zip can still declare
+    // multi-GB uncompressed sizes, which fflate's unzipSync would allocate.
+    // The budget pre-scan must reject it before any decompression.
+    const xlsx = buildXlsx({
+      "xl/workbook.xml":
+        '<?xml version="1.0"?><workbook><sheets><sheet name="S" sheetId="1" r:id="r1"/></sheets></workbook>',
+    });
+    // Patch the central-directory uncompressed-size field (offset +24 from
+    // the 0x02014b50 entry header) to 64MB.
+    const sig = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+    const entry = xlsx.indexOf(sig);
+    expect(entry).toBeGreaterThan(0);
+    xlsx.writeUInt32LE(64 * 1024 * 1024, entry + 24);
+
+    expect(() => parseXlsxSheets(xlsx)).toThrow(/decompression budget/);
+  });
+
+  it("rejects structurally broken zips up front", () => {
+    const garbage = Buffer.from("PK\x05\x06 not really a zip");
+    expect(() => parseXlsxSheets(garbage)).toThrow(/decompression budget/);
+  });
+});

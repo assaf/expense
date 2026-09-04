@@ -165,8 +165,73 @@ function parseSheet(
   return rows;
 }
 
+// NET-006: a .xlsx is attacker-supplied input (reconcile upload). fflate's
+// unzipSync trusts the central directory's declared uncompressed sizes and
+// allocates them, so a crafted "zip bomb" (small file declaring multi-GB
+// entries) would OOM the function. Pre-scan the central directory and
+// reject workbooks whose DECLARED expansion exceeds the budget before any
+// decompression; a lying header (actual output > declared) makes fflate
+// throw, which the reconcile caller already catches.
+const XLSX_MAX_ENTRIES = 200;
+const XLSX_MAX_ENTRY_BYTES = 32 * 1024 * 1024;
+const XLSX_MAX_TOTAL_BYTES = 96 * 1024 * 1024;
+
+/** Walk the ZIP central directory (bounded scan) and sum declared
+ * uncompressed sizes. False when the structure is unreadable or the
+ * budget is exceeded. */
+function zipWithinBudget(
+  buffer: Buffer,
+  maxEntry = XLSX_MAX_ENTRY_BYTES,
+  maxTotal = XLSX_MAX_TOTAL_BYTES,
+): boolean {
+  const view = new DataView(
+    buffer.buffer,
+    buffer.byteOffset,
+    buffer.byteLength,
+  );
+  // Locate the End Of Central Directory record (signature 0x06054b50);
+  // it may be followed by a zip comment up to 65535 bytes.
+  const eocdMin = Math.max(0, buffer.byteLength - 22 - 65535);
+  let eocd = -1;
+  for (let i = buffer.byteLength - 22; i >= eocdMin; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return false;
+  const entryCount = view.getUint16(eocd + 10, true);
+  if (entryCount > XLSX_MAX_ENTRIES) return false;
+  let offset = view.getUint32(eocd + 16, true);
+  let total = 0;
+  for (let n = 0; n < entryCount; n++) {
+    if (offset + 46 > buffer.byteLength) return false;
+    if (view.getUint32(offset, true) !== 0x02014b50) return false;
+    const compressed = view.getUint32(offset + 20, true);
+    const uncompressed = view.getUint32(offset + 24, true);
+    const nameLen = view.getUint16(offset + 28, true);
+    const extraLen = view.getUint16(offset + 30, true);
+    const commentLen = view.getUint16(offset + 32, true);
+    // 0xffffffff marks ZIP64 — beyond the budget by definition.
+    if (
+      compressed === 0xffffffff ||
+      uncompressed === 0xffffffff ||
+      uncompressed > maxEntry
+    ) {
+      return false;
+    }
+    total += uncompressed;
+    if (total > maxTotal) return false;
+    offset += 46 + nameLen + extraLen + commentLen;
+  }
+  return true;
+}
+
 /** Unzip an .xlsx and return every sheet's cells, in workbook order. */
 export function parseXlsxSheets(buffer: Buffer): string[][][] {
+  if (!zipWithinBudget(buffer)) {
+    throw new Error("xlsx exceeds the decompression budget");
+  }
   const zip = unzipSync(new Uint8Array(buffer));
   const rels = sheetTargets(zip);
   const shared = sharedStrings(zip);

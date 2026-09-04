@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import {
   addInboundSender,
   ensureInboundSenderForUser,
@@ -104,14 +105,31 @@ describe("addInboundSender", () => {
 });
 
 describe("verifyInboundSenderAddress", () => {
+  /**
+   * Mint a pending sender row's token. When the INB-BOMB-1 global
+   * cooldown suppresses the mint (a rival row for the same address sent
+   * recently), create the row directly — the claim tests need concurrent
+   * rival rows to exist.
+   */
   async function pendingSender(
     accountId: string,
     address: string,
   ): Promise<string> {
     const result = await addInboundSender(accountId, address);
-    if (!result.ok || !result.token) throw new Error("addInboundSender failed");
     await track(accountId, address);
-    return result.token;
+    if (result.ok && result.token) return result.token;
+    const token = generateOpaqueToken();
+    const now = new Date();
+    await testPrisma.inboundSender.create({
+      data: {
+        accountId,
+        address,
+        verificationTokenHash: hashToken(token),
+        verificationSentAt: now,
+        createdAt: now,
+      },
+    });
+    return token;
   }
 
   it("verifies the address, claims it exclusively, and consumes the token", async () => {
@@ -209,7 +227,11 @@ describe("verifyInboundSenderAddress", () => {
 });
 
 describe("resendInboundSenderVerification", () => {
-  it("mints a fresh token that supersedes the old one", async () => {
+  it("suppresses an immediate resend inside the cooldown window", async () => {
+    // INB-BOMB-1: resending within VERIFICATION_RESEND_MS no longer
+    // re-mints (an add→resend cycle used to email the address twice). The
+    // ORIGINAL token stays valid — the row's token hash is untouched — so
+    // a user who lost the first email can still click it.
     const first = await addInboundSender(TEST_ACCOUNT_ID, "resend@example.com");
     if (!first.ok || !first.token) throw new Error("addInboundSender failed");
     await track(TEST_ACCOUNT_ID, "resend@example.com");
@@ -220,14 +242,39 @@ describe("resendInboundSenderVerification", () => {
     );
     expect(second.ok).toBe(true);
     if (!second.ok) throw new Error("resend failed");
+    expect(second.token).toBeNull();
+    expect(second.recent).toBe(true);
 
-    // The old token is dead; the new one works.
+    // No re-mint happened: the original token still verifies.
     expect((await verifyInboundSenderAddress(first.token)).status).toBe(
-      "invalid",
-    );
-    expect((await verifyInboundSenderAddress(second.token)).status).toBe(
       "verified",
     );
+  });
+
+  it("keeps the cooldown across remove → re-add (tombstone)", async () => {
+    // The remove→re-add loop used to mint a fresh email per cycle. The
+    // tombstone keeps verificationSentAt, so the re-add is suppressed —
+    // globally, including a different account re-adding the same address.
+    const address = "cycle@example.com";
+    const first = await addInboundSender(TEST_ACCOUNT_ID, address);
+    if (!first.ok || !first.token) throw new Error("addInboundSender failed");
+    await track(TEST_ACCOUNT_ID, address);
+
+    await removeInboundSender(TEST_ACCOUNT_ID, address);
+    // The removed row is invisible to the pipeline...
+    expect(await findPendingSenderRow(address)).toBeUndefined();
+
+    const second = await addInboundSender(TEST_ACCOUNT_ID, address);
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error("add failed");
+    expect(second.token).toBeNull();
+    expect(second.recent).toBe(true);
+
+    const third = await addInboundSender(OTHER_ACCOUNT_ID, address);
+    expect(third.ok).toBe(true);
+    if (!third.ok) throw new Error("add failed");
+    expect(third.token).toBeNull();
+    expect(third.recent).toBe(true);
   });
 
   it("fails for an already-verified address", async () => {

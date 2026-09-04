@@ -21,7 +21,11 @@ export function SenderRow({
   sender: InboundSenderRecord;
   isDefault: boolean;
 }) {
-  const resendFetcher = useFetcher<{ ok: boolean; error?: string }>();
+  const resendFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    recent?: boolean;
+  }>();
   const removeFetcher = useFetcher();
   return (
     <li className="flex flex-col gap-1 rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-1.5">
@@ -81,7 +85,9 @@ export function SenderRow({
         </p>
       ) : resendFetcher.data?.ok ? (
         <p className="text-xs text-green-700 dark:text-green-400">
-          Verification email sent. Check that inbox and click the link.
+          {resendFetcher.data.recent
+            ? "A verification email was sent recently — check that inbox (or wait before resending)."
+            : "Verification email sent. Check that inbox and click the link."}
         </p>
       ) : resendFetcher.data?.error ? (
         <p className="text-xs text-red-600 dark:text-red-400">
@@ -102,16 +108,20 @@ export function AddSenderForm() {
     ok: boolean;
     error?: string;
     address?: string;
+    recent?: boolean;
   }>();
   const [address, setAddress] = useState("");
   const busy = fetcher.state !== "idle";
 
   // A successful add leaves the row in the list with its own status; the
-  // notice carries the "email sent" confirmation.
+  // notice carries the "email sent" confirmation (or the cooldown variant
+  // when a verification email went out recently).
   const { notice, setNotice } = useFetcherNotice(
     fetcher.data,
-    (address) =>
-      `Verification email sent to ${address}; click the link in it and receipts from this address will start importing.`,
+    (addr) =>
+      fetcher.data?.recent
+        ? `A verification email was sent to ${addr} recently — check that inbox before resending.`
+        : `Verification email sent to ${addr}; click the link in it and receipts from this address will start importing.`,
     () => setAddress(""),
   );
 

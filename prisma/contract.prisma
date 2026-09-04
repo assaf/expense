@@ -220,6 +220,10 @@ model InboundSender {
   accountId             String
   address               String
   createdAt             TimestampString(3)
+  // Removal tombstone for PENDING senders: the row survives removal so a
+  // remove→re-add loop can't mint verification emails faster than the
+  // resend cooldown (INB-BOMB-1). Verified senders are deleted outright.
+  removedAt             TimestampString(3)?
   verificationSentAt    TimestampString(3)?
   verificationTokenHash String?
   account               Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_senders_accountId_fkey", index: false)

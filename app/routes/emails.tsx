@@ -137,15 +137,26 @@ export async function action({ request }: Route.ActionArgs) {
   };
   // Both send paths share the same follow-up: a failure is echoed as JSON,
   // and a minted token emails that link. `token: null` means the address
-  // was already verified for this account; nothing to send.
+  // was already verified for this account, OR the INB-BOMB-1 cooldown
+  // suppressed the mint (recent: true) — a verification email went out
+  // recently, so nothing is sent and the UI says so.
   const finishSender = async (
     result:
-      | { ok: true; address: string; token: string | null }
+      | {
+          ok: true;
+          address: string;
+          token: string | null;
+          recent?: boolean;
+        }
       | { ok: false; error: string },
   ) => {
     if (!result.ok) return Response.json(result);
     if (result.token) await sendVerification(result.address, result.token);
-    return Response.json({ ok: true, address: result.address });
+    return Response.json({
+      ok: true,
+      address: result.address,
+      ...(result.recent ? { recent: true } : {}),
+    });
   };
   switch (intent) {
     case "addInboundSender":
