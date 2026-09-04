@@ -2,7 +2,7 @@ import { FileArchive, FileDown, Lock } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { redirect, useFetcher } from "react-router";
 import { AddNameForm } from "~/components/AddNameForm";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { PageShell } from "~/components/PageShell";
 import {
   RemoveButton,

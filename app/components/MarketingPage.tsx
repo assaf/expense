@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { SitePage } from "~/components/SitePage";
 import { Button } from "~/components/ui/Button";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 /**
  * Shared layout for the public marketing/SEO subpages (/about, /ai, /faq,

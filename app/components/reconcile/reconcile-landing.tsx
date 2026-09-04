@@ -7,7 +7,7 @@ import {
   consumeCommandRequest,
   useCommandRequest,
 } from "~/lib/command-requests";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { LocalDateTime } from "~/components/ui/LocalTime";
 import type { ReconciliationRunRecord } from "~/lib/types";
 

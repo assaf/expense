@@ -1,6 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import type { ReactNode } from "react";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 interface AlertProps {
   /** Prepend the AlertCircle icon and lay the banner out horizontally. */

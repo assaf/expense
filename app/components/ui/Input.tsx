@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 import type { ComponentProps } from "react";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 export const inputVariants = cva(
   "rounded-lg border border-gray-300 bg-white px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:focus:border-blue-400 dark:focus:ring-blue-400",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { todayDate } from "~/lib/format";
 import { inputVariants } from "~/components/ui/Input";
 

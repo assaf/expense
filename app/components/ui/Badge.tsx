@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 type BadgeTone = "green" | "amber" | "blue" | "gray" | "red" | "purple";
 

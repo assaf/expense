@@ -8,7 +8,7 @@ import {
   PromptsSection,
   SecuritySection,
 } from "~/components/mcp-sections";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import {
   APP_NAME,
   AUTHOR_NAME,

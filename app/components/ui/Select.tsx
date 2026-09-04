@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { inputVariants } from "~/components/ui/Input";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 /** The shared dropdown. Keeps Tailwind Forms' chevron styling. */
 export function Select({ className, ...props }: ComponentProps<"select">) {

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { inputVariants } from "~/components/ui/Input";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 interface TextareaProps extends ComponentProps<"textarea"> {
   invalid?: boolean;

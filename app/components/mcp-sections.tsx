@@ -1,7 +1,7 @@
 import { ShieldCheck, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { Card, cardSurface } from "~/components/ui/Card";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { AI_CAPABILITIES, AI_PROMPTS, AI_SECURITY } from "~/lib/seo-content";
 
 /**

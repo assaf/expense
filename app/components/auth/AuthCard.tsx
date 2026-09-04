@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Card } from "~/components/ui/Card";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 interface AuthCardProps {
   /** Center the card's text, for icon-tile screens whose copy centers

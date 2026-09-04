@@ -35,7 +35,7 @@ import {
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { requestCommand } from "~/lib/command-requests";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 /** The palette overlay + panel surface, shared by the kbar palette and the
  * category prompt so the two can't drift. Callers add their own extras

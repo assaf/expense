@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 
 /** Label + caption wrapper for a form control. The label wraps the control
  * directly, so clicking the label focuses the field via implicit

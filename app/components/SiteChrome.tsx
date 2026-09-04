@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
 import { BLOG_URL } from "~/lib/seo-content";

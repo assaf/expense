@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
-import { cn } from "~/lib/cn";
+import { cn } from "cn";
 import { AddNameForm } from "~/components/AddNameForm";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
