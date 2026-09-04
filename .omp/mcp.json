@@ -8,6 +8,10 @@
     "judgmentkit": {
       "type": "http",
       "url": "https://judgmentkit.ai/mcp"
+    },
+    "linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp"
     }
   }
 }
