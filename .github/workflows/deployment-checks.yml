@@ -180,11 +180,12 @@ jobs:
   migrate-db:
     name: Migrate prod DB
     runs-on: ubuntu-latest
-    # 3m, not 1m: the job must fit checkout + pnpm install + pgbouncer +
-    # prisma db update, and a cold runner eats ~55s on the setup alone
-    # (the pnpm/action-setup self-installer alone took 27s on 2026-08-06,
-    # killing a 1m job before db push could start).
-    timeout-minutes: 3
+    # Must fit checkout + pnpm install + pgbouncer + prisma db update. The
+    # budget has been raised twice as installs grew: 1m (the
+    # pnpm/action-setup self-installer alone took 27s on 2026-08-06), then
+    # 3m, then 10m after the 2026-09-03/04 npm-registry slowness stalled
+    # installs past 3 minutes and cancelled the job before db push.
+    timeout-minutes: 10
     needs: [check, test]
     # `success()` keeps the default skip-on-failure semantics (no migration
     # when check or test failed) on top of the main-only gate.
