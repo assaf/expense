@@ -15,9 +15,15 @@ import sharp from "sharp";
 import { ulid } from "ulid";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { closeServer, launchServer } from "./helpers/launchServer";
-import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
-import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
+import { freshPage, closeBrowser, goto, signIn } from "./helpers/launchBrowser";
+import {
+  TEST_ACCOUNT_ID,
+  TEST_EMAIL,
+  TEST_PASSWORD,
+  testPrisma,
+} from "./helpers/seedTestData";
 
 const ACCOUNT = "acct_screenshot";
 const NOW = "2026-07-31T12:00:00.000Z";
@@ -467,4 +473,108 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       if (launched) await closeServer();
     }
   }, 180_000);
+});
+
+/**
+ * Suite artifact capture: on every `pnpm test` run, screenshot the app's
+ * important screens into screenshots/ (gitignored). Uses whatever state the
+ * suite has left in expense_test, so the shots reflect the same data the
+ * tests verified. Fails loudly: a screen that throws or never hydrates is
+ * a broken screen, not a missing artifact.
+ */
+describe("suite screenshots", () => {
+  const OUT_DIR = "screenshots";
+
+  /** Hydration + image settle, then a full-page capture. The pinned clock
+   * (freezePageClock) keeps client-rendered dates stable across runs. */
+  async function capture(
+    page: import("playwright").Page,
+    path: string,
+    name: string,
+  ): Promise<void> {
+    await page.goto(path, { waitUntil: "load", timeout: 15_000 });
+    await page.waitForFunction(() => "__reactRouterContext" in window);
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("img")].every((img) => img.complete),
+    );
+    // Post-mount rendering: <LocalDate> swaps ISO for local format, the
+    // dashboard computes future badges after hydration.
+    await page.screenshot({ path: `${OUT_DIR}/${name}.png`, fullPage: true });
+  }
+
+  it("captures the important screens into screenshots/", async () => {
+    await mkdir(OUT_DIR, { recursive: true });
+    for (const stale of await readdir(OUT_DIR)) {
+      if (stale.endsWith(".png")) await rm(`${OUT_DIR}/${stale}`);
+    }
+
+    // The globalSetup server is usually already listening on 5199; reuse it
+    // rather than spawning a second instance.
+    let baseURL = "http://127.0.0.1:5199";
+    let launched = false;
+    try {
+      await fetch(`${baseURL}/login`, { signal: AbortSignal.timeout(3_000) });
+    } catch {
+      baseURL = await launchServer();
+      launched = true;
+    }
+
+    try {
+      // Logged-out surfaces.
+      const fresh = await freshPage({ viewport: { width: 1280, height: 800 } });
+      await capture(fresh, "/", "landing");
+      await capture(fresh, "/login", "login");
+      await capture(fresh, "/onboarding", "onboarding");
+      await fresh.close();
+
+      // Signed-in surfaces on the shared (test-credential) session.
+      const page = await goto("/");
+      await capture(page, "/", "home");
+      await capture(page, "/expense/new", "expense-new");
+
+      // The editor needs a real expense row; the global seed provides one,
+      // but a test that ran earlier may have deleted them.
+      let editor = await testPrisma.expense.findFirst({
+        where: { accountId: TEST_ACCOUNT_ID },
+        select: { id: true },
+      });
+      if (!editor) {
+        editor = await testPrisma.expense.create({
+          data: {
+            id: ulid(),
+            accountId: TEST_ACCOUNT_ID,
+            type: "receipt",
+            date: "2026-01-15",
+            report: "2026 Test",
+            category: "Office Supplies",
+            description: "",
+            amount: 42.5,
+            merchant: "Screenshot Fallback",
+            imageFile: "",
+            imageMime: "image/jpeg",
+            originalName: "fallback.jpg",
+            locations: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          select: { id: true },
+        });
+      }
+      // Prisma's generated create-result type is loose here (see the same
+      // cast in the README block above).
+      const editorId = editor.id as string;
+      await capture(page, `/expense/${editorId}`, "expense-editor");
+
+      await capture(page, "/emails", "emails");
+      await capture(page, "/email-review", "email-review");
+      await capture(page, "/reconcile", "reconcile");
+      await capture(page, "/settings", "settings");
+      await capture(page, "/mileage-rates", "mileage-rates");
+      await capture(page, "/export", "export");
+      await capture(page, "/ai", "ai");
+    } finally {
+      await closeBrowser();
+      if (launched) await closeServer();
+    }
+  }, 240_000);
 });

@@ -14,6 +14,7 @@ prisma/backup.sql
 # Test artifacts
 data-test/
 __screenshots__/
+screenshots/
 
 # Logs
 *.log
