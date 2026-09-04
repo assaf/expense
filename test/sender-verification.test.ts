@@ -341,6 +341,10 @@ describe("ensureInboundSenderForUser (the login email is the default sender)", (
     );
     expect(first.token).not.toBeNull();
     await track(TEST_ACCOUNT_ID, "stale@example.com");
+    // Both clocks own "when the last email went out": the sender row's
+    // sentAt (ensure's in-flight pre-check) and the cooldown slot (the
+    // mint claim). Backdate both.
+    const stale = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
     await testPrisma.inboundSender.update({
       where: {
         accountId_address: {
@@ -348,11 +352,11 @@ describe("ensureInboundSenderForUser (the login email is the default sender)", (
           address: "stale@example.com",
         },
       },
-      data: {
-        verificationSentAt: new Date(
-          Date.now() - 25 * 3600 * 1000,
-        ).toISOString(),
-      },
+      data: { verificationSentAt: stale },
+    });
+    await testPrisma.inboundEmailCooldown.update({
+      where: { address: "stale@example.com" },
+      data: { sentAt: stale },
     });
 
     const again = await ensureInboundSenderForUser(

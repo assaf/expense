@@ -1263,6 +1263,11 @@ export async function processInboundEvent(
   // added but never verified gets a "verify first" reply instead of an
   // import; an address with no row at all is the unknown-sender case.
   const verified = await findVerifiedSenderAccount(fromEmail);
+  // INB-SPOOF-1/INB-REPLY-AMP-2: one authentication verdict drives both
+  // sender paths — a failing/missing record never imports AND never
+  // replies (the From header is attacker-controlled at SMTP time; a
+  // reply would let any spoofed address pump mail out of our mailbox).
+  const auth = evaluateAuthResults(data.authResults, fromEmail);
   if (verified) {
     // INB-SPOOF-1: a verified inbound_senders row proves the address was
     // verified ONCE — not that THIS message came from its owner. The From
@@ -1270,11 +1275,10 @@ export async function processInboundEvent(
     // must also carry a passing, aligned authentication result (evaluated
     // and stamped by Fastmail). Failures are demoted to the unverified
     // path below: not imported, replied with the honest reason.
-    const verdict = evaluateAuthResults(data.authResults, fromEmail);
-    if (!verdict.ok) {
+    if (!auth.ok) {
       captureWarning(
         "[inbound] verified sender failed message authentication; not importing",
-        { emailId: data.email_id, from: data.from, reason: verdict.reason },
+        { emailId: data.email_id, from: data.from, reason: auth.reason },
       );
       await deps.sendReply({
         ...replyEnvelope(data),
@@ -1287,12 +1291,24 @@ export async function processInboundEvent(
           ],
         ),
       });
-      return { status: "auth-failed", reason: verdict.reason };
+      return { status: "auth-failed", reason: auth.reason };
     }
   }
   if (!verified) {
     const pending = await findPendingSenderRow(fromEmail);
     if (pending) {
+      // The verify-first reply is the amplifier INB-REPLY-AMP-2 armed:
+      // one pending row + spoofed-From mail = a reply per delivered
+      // message (per-push drains each get a fresh reply budget). Only
+      // an ALIGNED PASS gets the reply; failed-auth pending mail is
+      // dropped silently, exactly like unknown senders.
+      if (!auth.ok) {
+        captureWarning(
+          "[inbound] pending sender failed message authentication; dropped without reply",
+          { emailId: data.email_id, from: data.from, reason: auth.reason },
+        );
+        return { status: "unknown-sender" };
+      }
       await deps.sendReply({
         ...replyEnvelope(data),
         subject: "⚠️ Receipt not imported — sender not verified yet",

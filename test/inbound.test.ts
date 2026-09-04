@@ -1472,6 +1472,52 @@ describe("processInboundEvent (body receipt)", () => {
     expect((await readExpenses(TEST_ACCOUNT_ID)).length).toBe(before);
   });
 
+  it("drops spoofed mail at a pending (unverified) address silently (INB-REPLY-AMP-2)", async () => {
+    // One pending row must not arm a reply amplifier: spoofed-From mail
+    // at a pending address that fails authentication is dropped silently
+    // (no verify-first reply — the From is attacker-controlled).
+    await allowSender(TEST_ACCOUNT_ID, "pending@example.com", undefined, false);
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-pending-spoofed",
+        from: "Pending <pending@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; dmarc=fail header.from=example.com",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-pending-spoofed");
+    expect(result).toMatchObject({ status: "unknown-sender" });
+    expect(deps.sent).toHaveLength(0);
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(
+      expenses.some((e) => e.type === "receipt" && e.merchant === "Amazon"),
+    ).toBe(false);
+  });
+
+  it("replies verify-first to an authenticated pending sender", async () => {
+    await allowSender(
+      TEST_ACCOUNT_ID,
+      "authed-pending@example.com",
+      undefined,
+      false,
+    );
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-pending-authed",
+        from: "Authed <authed-pending@example.com>",
+        authResults:
+          "mx3.messagingengine.com; dmarc=pass header.from=example.com",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-pending-authed");
+    expect(result).toMatchObject({ status: "unverified-sender" });
+    expect(deps.sent).toHaveLength(1);
+  });
+
   it("rejects an added-but-unverified sender with a verify-first reply", async () => {
     await allowSender(TEST_ACCOUNT_ID, "pending@example.com", undefined, false);
     const deps = fakeDeps();

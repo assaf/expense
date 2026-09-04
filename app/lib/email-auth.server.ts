@@ -14,10 +14,19 @@ import { extractEmailAddress } from "~/lib/validation";
  * than this check): allowed, because Fastmail stamps every delivery and
  * the folder only holds Fastmail-delivered mail.
  *
- * A record passes when ANY of these hold for the From domain:
- *  - `dmarc=pass` (DMARC pass is alignment by definition),
- *  - `dkim=pass` with an aligned `header.d=` domain,
- *  - `spf=pass` with an aligned `smtp.mailfrom=` domain.
+ * A record may carry MULTIPLE clauses per method (e.g. two DKIM
+ * signatures: a bogus one claiming the From domain that fails, plus a
+ * valid attacker-domain one that passes). Evaluation is STRICTLY
+ * per-clause: a clause passes only when ITS OWN result is a pass AND one
+ * of ITS OWN identity domains aligns with the From domain. Cross-pairing
+ * a result from one clause with a domain from another is the exact
+ * bypass this structure exists to prevent.
+ *
+ * A record passes when ANY clause satisfies that rule for:
+ *  - `dmarc` (DMARC pass is alignment by definition, but its
+ *    `header.from=` domain must still align),
+ *  - `dkim` (its `header.d=` domains),
+ *  - `spf` (its `smtp.mailfrom=` domain).
  * Alignment = same domain or org-domain suffix in either direction
  * (relaxed DMARC alignment).
  */
@@ -27,14 +36,15 @@ export interface AuthVerdict {
   reason: string;
 }
 
-interface MethodAuth {
-  result?: string;
+interface AuthClause {
+  method: string;
+  result: string;
   domains: string[];
 }
 
 interface AuthRecord {
   host: string;
-  methods: Record<string, MethodAuth>;
+  clauses: AuthClause[];
 }
 
 function domainOf(address: string): string {
@@ -61,7 +71,8 @@ function parseRecord(record: string): AuthRecord | null {
   const segments = record.split(";");
   const host = (segments[0] ?? "").trim().toLowerCase();
   if (!host) return null;
-  const methods: Record<string, MethodAuth> = {};
+  const clauses: AuthClause[] = [];
+  let current: AuthClause | null = null;
   for (const segment of segments.slice(1)) {
     for (const token of segment.trim().split(/\s+/)) {
       if (!token || token.startsWith("(")) continue;
@@ -71,26 +82,28 @@ function parseRecord(record: string): AuthRecord | null {
       const value = token.slice(eq + 1).toLowerCase();
       const method = key.match(/^(dkim|spf|dmarc|auth)$/)?.[1];
       if (method) {
-        methods[method] = methods[method] ?? { domains: [] };
-        methods[method]!.result = value;
+        current = { method, result: value, domains: [] };
+        clauses.push(current);
         continue;
       }
       const param = methodKey(key);
-      if (param === key) continue; // not an alignment param we use
+      // Params before the first method clause (or params we don't use)
+      // carry no verdict weight.
+      if (!current || param === key) continue;
       const domain = value.replace(/[<>]/g, "").split("@").pop() ?? "";
-      if (!domain) continue;
-      methods[param] = methods[param] ?? { domains: [] };
-      methods[param]!.domains.push(domain);
+      if (domain) current.domains.push(domain);
     }
   }
-  return { host, methods };
+  return { host, clauses };
 }
 
-function summary(methods: Record<string, MethodAuth>, method: string): string {
-  const entry = methods[method];
-  const result = entry?.result ?? "none";
-  const domains = (entry?.domains ?? []).join("|") || "no domain";
-  return `${method}=${result} (${domains})`;
+function summarize(clauses: AuthClause[]): string {
+  if (clauses.length === 0) return "no authentication clauses";
+  return clauses
+    .map(
+      (c) => `${c.method}=${c.result} (${c.domains.join("|") || "no domain"})`,
+    )
+    .join(", ");
 }
 
 export function evaluateAuthResults(
@@ -111,31 +124,20 @@ export function evaluateAuthResults(
   if (!fromDomain) {
     return { ok: false, reason: "unparseable From domain" };
   }
-  const fail = (): AuthVerdict => ({
+  for (const clause of parsed.clauses) {
+    if (clause.method === "auth") continue; // auth-service result, no identity
+    if (
+      clause.result.startsWith("pass") &&
+      clause.domains.some((domain) => aligns(domain, fromDomain))
+    ) {
+      return {
+        ok: true,
+        reason: `${clause.method}=pass aligned with ${fromDomain}`,
+      };
+    }
+  }
+  return {
     ok: false,
-    reason: `${summary(parsed.methods, "dmarc")}, ${summary(parsed.methods, "dkim")}, ${summary(parsed.methods, "spf")} vs From domain ${fromDomain}`,
-  });
-
-  // DMARC pass is alignment by definition, but the record names the From
-  // domain it evaluated — require it to match anyway (guards against a
-  // record evaluated for a different message).
-  const dmarc = parsed.methods.dmarc;
-  if (dmarc?.result?.startsWith("pass")) {
-    if (dmarc.domains.some((domain) => aligns(domain, fromDomain))) {
-      return { ok: true, reason: `dmarc=pass aligned with ${fromDomain}` };
-    }
-  }
-  const dkim = parsed.methods.dkim;
-  if (dkim?.result?.startsWith("pass")) {
-    if (dkim.domains.some((domain) => aligns(domain, fromDomain))) {
-      return { ok: true, reason: `dkim=pass aligned with ${fromDomain}` };
-    }
-  }
-  const spf = parsed.methods.spf;
-  if (spf?.result?.startsWith("pass")) {
-    if (spf.domains.some((domain) => aligns(domain, fromDomain))) {
-      return { ok: true, reason: `spf=pass aligned with ${fromDomain}` };
-    }
-  }
-  return fail();
+    reason: `${summarize(parsed.clauses)} vs From domain ${fromDomain}`,
+  };
 }

@@ -95,6 +95,7 @@ const MODEL_NAMES: Record<string, string> = {
   expense: "Expense",
   imageBlob: "ImageBlob",
   inboundEmail: "InboundEmail",
+  inboundEmailCooldown: "InboundEmailCooldown",
   inboundSender: "InboundSender",
   inboundSenderVerification: "InboundSenderVerification",
   oAuthClient: "OAuthClient",

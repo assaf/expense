@@ -220,10 +220,6 @@ model InboundSender {
   accountId             String
   address               String
   createdAt             TimestampString(3)
-  // Removal tombstone for PENDING senders: the row survives removal so a
-  // remove→re-add loop can't mint verification emails faster than the
-  // resend cooldown (INB-BOMB-1). Verified senders are deleted outright.
-  removedAt             TimestampString(3)?
   verificationSentAt    TimestampString(3)?
   verificationTokenHash String?
   account               Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_senders_accountId_fkey", index: false)
@@ -231,6 +227,19 @@ model InboundSender {
   @@id([accountId, address], map: "inbound_senders_pkey")
   @@index([address], map: "inbound_senders_address_idx")
   @@map("inbound_senders")
+}
+
+// Global per-address cooldown for verification-email minting (INB-BOMB-1):
+// one row per base address; minting claims the slot with an atomic
+// conditional update (sentAt < now - VERIFICATION_RESEND_MS), so remove/
+// re-add loops, plus-alias rotation, and concurrent mints are all capped
+// at one verification email per address per window. Rows are never
+// deleted (one per distinct base address, tiny); no cooldown state a
+// removal could destroy.
+model InboundEmailCooldown {
+  address String             @id(map: "inbound_email_cooldowns_pkey")
+  sentAt  TimestampString(3)
+  @@map("inbound_email_cooldowns")
 }
 
 model MileageRate {

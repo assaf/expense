@@ -121,11 +121,8 @@ export async function findPendingSenderRow(
 ): Promise<{ accountId: string; address: string } | undefined> {
   const address = extractEmailAddress(senderEmail);
   if (!address) return undefined;
-  // removedAt rows are removal tombstones (INB-BOMB-1): the sender was
-  // removed, so the pipeline must treat the address as unknown (no
-  // "verify first" reply — that reply is the email amplifier).
   const row = await db.orm.public.InboundSender.where((s) =>
-    and(s.address.eq(address), s.removedAt.isNull()),
+    s.address.eq(address),
   )
     .orderBy([(s) => s.createdAt.asc(), (s) => s.accountId.asc()])
     .select("accountId", "address")
@@ -142,7 +139,7 @@ export async function listInboundSenders(
   accountId: string,
 ): Promise<InboundSenderRecord[]> {
   const rows = await db.orm.public.InboundSender.where((s) =>
-    and(s.accountId.eq(accountId), s.removedAt.isNull()),
+    s.accountId.eq(accountId),
   )
     .orderBy([(s) => s.createdAt.asc(), (s) => s.address.asc()])
     .all();
@@ -247,14 +244,12 @@ export async function resendInboundSenderVerification(
 }
 
 /**
- * Remove a sender address from an account. VERIFIED senders (and their
- * verification) are deleted outright — the address becomes claimable
- * again. PENDING senders are TOMBSTONED instead of deleted: the row
- * survives with its verificationSentAt so the global mint cooldown
- * survives a remove→re-add loop (INB-BOMB-1: two authenticated requests
- * used to mint one verification email to an arbitrary victim address).
- * Tombstoned rows are invisible to the UI and the pipeline and are
- * purged after the verification TTL.
+ * Remove a sender address (and its verification) from an account. The
+ * global mint cooldown (inbound_email_cooldowns, keyed on the BASE
+ * address) is deliberately untouched — it survives removal, so a
+ * remove→re-add loop cannot re-mint inside the window (INB-BOMB-1).
+ * Deleting the sender row also kills any verification link still in
+ * flight for the removed row.
  */
 export async function removeInboundSender(
   accountId: string,
@@ -262,26 +257,12 @@ export async function removeInboundSender(
 ): Promise<void> {
   const normalized = extractEmailAddress(address);
   await db.transaction(async (tx) => {
-    const verification = await tx.orm.public.InboundSenderVerification.where(
-      (v) => and(v.accountId.eq(accountId), v.address.eq(normalized)),
-    ).first();
-    if (verification) {
-      await tx.orm.public.InboundSender.where((s) =>
-        and(s.accountId.eq(accountId), s.address.eq(normalized)),
-      ).deleteAll();
-      await tx.orm.public.InboundSenderVerification.where((v) =>
-        and(v.accountId.eq(accountId), v.address.eq(normalized)),
-      ).deleteAll();
-      return;
-    }
-    // Pending (or nonexistent): tombstone. Nulling the token hash also
-    // kills any verification link still in flight for the removed row.
     await tx.orm.public.InboundSender.where((s) =>
       and(s.accountId.eq(accountId), s.address.eq(normalized)),
-    ).updateAll({
-      removedAt: nowWire(),
-      verificationTokenHash: null,
-    });
+    ).deleteAll();
+    await tx.orm.public.InboundSenderVerification.where((v) =>
+      and(v.accountId.eq(accountId), v.address.eq(normalized)),
+    ).deleteAll();
   });
 }
 
@@ -478,36 +459,15 @@ async function mintSenderToken(
   accountId: string,
   address: string,
 ): Promise<{ token: string | null; recent: boolean }> {
-  // INB-BOMB-1 cooldown, global per address: a verification email went to
-  // this address recently (from ANY account — pending or tombstoned row)
-  // → suppress the mint. A remove→re-add loop or a rotation of fresh
-  // accounts therefore cannot email a victim faster than one email per
-  // VERIFICATION_RESEND_MS; contested addresses cool down for everyone
-  // for the same window (accepted trade-off, documented in the posture).
-  const rows = await db.orm.public.InboundSender.where((s) =>
-    s.address.eq(address),
-  ).all();
-  if (
-    rows.some((r) => withinWindow(r.verificationSentAt, VERIFICATION_RESEND_MS))
-  ) {
+  // INB-BOMB-1: claim the global per-address cooldown slot atomically
+  // (conditional UPDATE ... WHERE sentAt < window, racing on one row —
+  // exactly one concurrent mint wins). Keyed on the BASE address:
+  // plus-aliases (user+tag@host) deliver to the same inbox, so keying on
+  // the exact string would let a rotation mint unlimited email. The
+  // claim runs standalone: its create-catch pattern would abort a shared
+  // transaction (Postgres poisons the tx on the unique violation).
+  if (!(await claimInboundCooldown(address))) {
     return { token: null, recent: true };
-  }
-  // Opportunistic tombstone purge (best-effort): tombstones older than the
-  // verification TTL can never matter again — their links are dead.
-  if (rows.some((r) => r.removedAt !== null)) {
-    try {
-      await db.orm.public.InboundSender.where((r) =>
-        and(
-          r.address.eq(address),
-          r.removedAt.isNotNull(),
-          r.verificationSentAt.lt(
-            fromIso(new Date(Date.now() - VERIFICATION_TTL_MS).toISOString()),
-          ),
-        ),
-      ).deleteAll();
-    } catch (err) {
-      console.warn("[inbound] tombstone sweep failed:", err);
-    }
   }
   const token = generateOpaqueToken();
   const now = new Date().toISOString();
@@ -522,9 +482,50 @@ async function mintSenderToken(
     update: {
       verificationTokenHash: hashToken(token),
       verificationSentAt: fromIso(now),
-      removedAt: null,
     },
     conflictOn: { accountId, address },
   });
   return { token, recent: false };
+}
+
+/** The cooldown key for an address: lowercase, plus-alias suffixes
+ * stripped from an unquoted local part (they deliver to the same
+ * mailbox). */
+function inboundCooldownKey(address: string): string {
+  const at = address.lastIndexOf("@");
+  if (at === -1) return address.toLowerCase();
+  const local = address.slice(0, at);
+  const domain = address.slice(at + 1).toLowerCase();
+  const stripped = local.startsWith('"') ? local : local.split("+")[0] || local;
+  return `${stripped}@${domain}`;
+}
+
+/**
+ * Atomically claim the 24h verification-email slot for a base address:
+ * a single conditional UPDATE (sentAt < now - VERIFICATION_RESEND_MS)
+ * racing on one row — exactly one concurrent mint wins. A first-ever
+ * claim creates the row (sentAt = epoch, always claimable); two
+ * concurrent first-claims both succeed, which is harmless (both are
+ * genuine first sends).
+ */
+async function claimInboundCooldown(address: string): Promise<boolean> {
+  const key = inboundCooldownKey(address);
+  const cutoff = fromIso(
+    new Date(Date.now() - VERIFICATION_RESEND_MS).toISOString(),
+  );
+  try {
+    // First-ever send for this base address: the epoch sentAt is always
+    // claimable by the conditional update below.
+    await db.orm.public.InboundEmailCooldown.create({
+      address: key,
+      sentAt: fromIso(new Date(0).toISOString()),
+    });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // Row already exists: the conditional update decides.
+  }
+  const updated = await db.orm.public.InboundEmailCooldown.where((c) =>
+    and(c.address.eq(key), c.sentAt.lt(cutoff)),
+  ).updateAll({ sentAt: nowWire() });
+  return updated.length === 1;
 }

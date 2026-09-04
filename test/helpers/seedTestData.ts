@@ -33,7 +33,11 @@ export const TEST_PASSWORD = "test-password";
 export async function seedTestData() {
   const now = "2026-06-15T00:00:00.000Z";
 
-  // Wipe everything; accounts cascade to users + all scoped rows.
+  // Wipe everything; accounts cascade to users + all scoped rows. The
+  // mint-cooldown table has no account FK (keyed by base address, global
+  // by design) — without an explicit wipe, rows from a previous run
+  // suppress this run's first mints.
+  await testPrisma.inboundEmailCooldown.deleteMany({});
   await testPrisma.account.deleteMany({});
 
   // --- Accounts & users ----------------------------------------------------

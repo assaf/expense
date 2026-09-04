@@ -22,7 +22,7 @@ describe("evaluateAuthResults", () => {
   it("passes on an aligned dmarc=pass", () => {
     const v = evaluateAuthResults(PASS_RECORD, "user@example.com");
     expect(v.ok).toBe(true);
-    expect(v.reason).toContain("dmarc=pass");
+    expect(v.reason).toContain("aligned with example.com");
   });
 
   it("passes on an aligned dkim=pass even when dmarc is absent", () => {
@@ -63,6 +63,34 @@ describe("evaluateAuthResults", () => {
       "user@example.com",
     );
     expect(v.ok).toBe(false);
+  });
+
+  it("rejects a multi-dkim record where a failing aligned clause precedes a passing foreign one (the cross-pairing bypass)", () => {
+    // Two DKIM signatures: a bogus one claiming the From domain (fails
+    // evaluation) plus a valid attacker-domain one (passes). Strict
+    // per-clause evaluation must not let the failing clause's aligned
+    // domain borrow the later clause's pass.
+    const v = evaluateAuthResults(
+      "mx3.messagingengine.com; dkim=fail header.d=victim.example; dkim=pass header.d=attacker.evil; spf=pass smtp.mailfrom=bounce@attacker.evil; dmarc=fail header.from=victim.example",
+      "user@victim.example",
+    );
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects the reverse multi-dkim order (pass foreign first, aligned fail second)", () => {
+    const v = evaluateAuthResults(
+      "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; dkim=fail header.d=victim.example",
+      "user@victim.example",
+    );
+    expect(v.ok).toBe(false);
+  });
+
+  it("accepts a legitimate multi-signature record (aligned clause present)", () => {
+    const v = evaluateAuthResults(
+      "mx3.messagingengine.com; dkim=pass header.d=example.com; dkim=pass header.d=maillist.example.com",
+      "user@example.com",
+    );
+    expect(v.ok).toBe(true);
   });
 
   it("fails on an unparseable record", () => {
