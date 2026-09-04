@@ -297,11 +297,11 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       <section className="border-t border-gray-100 dark:border-gray-800 pt-6">
         <h2 className="mb-2 text-lg font-semibold">Session</h2>
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-gray-400">
             Sign out of this device. You will need your email and password to
             get back in.
           </p>
-          <Form method="post" action="/sign-out">
+          <Form method="post" action="/sign-out" className="shrink-0">
             <Button type="submit" size="md" variant="secondary">
               <LogOut aria-hidden="true" className="h-4 w-4" /> Sign out
             </Button>
