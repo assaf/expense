@@ -38,11 +38,12 @@ vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("~/lib/email-connection-mail.server")
   >()),
-  sendConnectionEmail: mocks.sendConnectionEmail,
 }));
 
 const mocks = vi.hoisted(() => ({
-  sendConnectionEmail: vi.fn(async (..._args: unknown[]) => true),
+  // The tests inject this as sendToOwner (the `adapters` arg to
+  // processConnectionEmail); it is a spy, not the real JMAP delivery.
+  notifyOwner: vi.fn(async (..._args: unknown[]) => true),
 }));
 
 /**
@@ -83,7 +84,7 @@ describe("processConnectionEmail", () => {
     await testPrisma.emailRule.deleteMany({
       where: { accountId: conn.accountId, source: "forward" },
     });
-    mocks.sendConnectionEmail.mockClear();
+    mocks.notifyOwner.mockClear();
   });
 
   it("creates an expense for a rule-matched receipt, trashes, notifies the owner", async () => {
@@ -107,7 +108,7 @@ describe("processConnectionEmail", () => {
       {
         moveToTrash: (id) => adapter.moveToTrash(id),
         sendToOwner: async (email) => {
-          await mocks.sendConnectionEmail(email);
+          await mocks.notifyOwner(email);
         },
       },
     );
@@ -124,8 +125,8 @@ describe("processConnectionEmail", () => {
     expect(created?.amount?.toString()).toBe("1.23");
     expect(created?.category).toBe("");
     // The owner got one notification FROM their own mailbox TO themselves.
-    expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
-    const sent = mocks.sendConnectionEmail.mock.calls[0]![0] as {
+    expect(mocks.notifyOwner).toHaveBeenCalledTimes(1);
+    const sent = mocks.notifyOwner.mock.calls[0]![0] as {
       to: string;
       subject: string;
     };
@@ -167,7 +168,7 @@ describe("processConnectionEmail", () => {
     const adapters = {
       moveToTrash: (id: string) => adapter.moveToTrash(id),
       sendToOwner: async (email: OwnerEmail) => {
-        await mocks.sendConnectionEmail(email);
+        await mocks.notifyOwner(email);
       },
     };
 
@@ -178,7 +179,7 @@ describe("processConnectionEmail", () => {
       adapters,
     );
     expect(first.status).toBe("partial");
-    expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyOwner).toHaveBeenCalledTimes(1);
 
     const second = await processConnectionEmail(
       conn,
@@ -192,7 +193,7 @@ describe("processConnectionEmail", () => {
     expect((second as { reason: string }).reason).toBe("duplicate");
     // Only the first copy was trashed (imported); the duplicate stays.
     expect(trashed).toEqual(["e1"]);
-    expect(mocks.sendConnectionEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.notifyOwner).toHaveBeenCalledTimes(1);
     expect((await logRow(conn.id, "e2"))?.reason).toBe(
       "duplicate of a recent import",
     );
@@ -215,7 +216,7 @@ describe("processConnectionEmail", () => {
     );
     expect(result.status).toBe("ignored");
     expect(trashed).toEqual([]);
-    expect(mocks.sendConnectionEmail).not.toHaveBeenCalled();
+    expect(mocks.notifyOwner).not.toHaveBeenCalled();
     expect((await logRow(conn.id, "e2"))?.outcome).toBe("ignored");
     expect(
       (await readExpenses(conn.accountId)).find(
@@ -636,7 +637,7 @@ describe("drainEmailConnection", () => {
     await testPrisma.emailRule.deleteMany({
       where: { accountId: conn.accountId, source: "forward" },
     });
-    mocks.sendConnectionEmail.mockClear();
+    mocks.notifyOwner.mockClear();
   });
 
   it("evaluates new mail, bumps counters, and is idempotent", async () => {

@@ -157,7 +157,8 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "create" || intent === "attach") {
-    // Also anonymous work: verifyJmapToken makes an outbound FastmaiFastmail    // (and success hashes a password), so cap it per IP like connect-token.
+    // Also anonymous work: verifyJmapToken makes an outbound FastMail call
+    // (and success hashes a password), so cap it per IP like connect-token.
     await guardAnonymousAttempt(request);
     const token = formString(form, "token").trim();
     const email = formEmail(form);

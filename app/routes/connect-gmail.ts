@@ -11,6 +11,7 @@ import {
 } from "~/lib/google-oauth.server";
 import { generatePkcePair } from "~/lib/fastmail-oauth.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
+import { oauthResumePath } from "~/lib/route-helpers.server";
 
 /**
  * "Connect with Gmail" entry point (GET /connect-gmail): bounces the
@@ -25,15 +26,11 @@ import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
  * route can never become an open redirect.
  */
 
-function resumePath(raw: string | null): string {
-  return raw === "emails" ? "/emails" : "/onboarding";
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const rawNext = url.searchParams.get("next");
   if (!isGmailOAuthConfigured() || !isTokenCryptoConfigured()) {
-    throw redirect(`${resumePath(rawNext)}?gmailOauthError=unconfigured`);
+    throw redirect(`${oauthResumePath(rawNext)}?gmailOauthError=unconfigured`);
   }
   // Minting flow state costs a signed cookie write and enables two
   // outbound Google calls downstream; cap it per IP like every other

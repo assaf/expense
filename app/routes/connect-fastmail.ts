@@ -12,6 +12,7 @@ import {
   type FmOAuthFlow,
 } from "~/lib/fastmail-oauth.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
+import { oauthResumePath } from "~/lib/route-helpers.server";
 
 /**
  * "Connect with Fastmail" entry point (GET /connect-fastmail): bounces the
@@ -29,15 +30,11 @@ import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 
 /** Map a raw ?next= value to its resume path (allowlist, defaulting to
  * onboarding); shared by the error redirects and the flow state. */
-function resumePath(raw: string | null): string {
-  return raw === "emails" ? "/emails" : "/onboarding";
-}
-
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const rawNext = url.searchParams.get("next");
   if (!isFastmailOAuthConfigured() || !isTokenCryptoConfigured()) {
-    throw redirect(`${resumePath(rawNext)}?oauthError=unconfigured`);
+    throw redirect(`${oauthResumePath(rawNext)}?oauthError=unconfigured`);
   }
   // Minting flow state costs a signed cookie write and enables two
   // outbound Fastmail calls downstream; cap it per IP like every other

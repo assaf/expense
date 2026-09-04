@@ -28,7 +28,7 @@ secretlint flags `fmu1-` tokens).
 Scope note: the developer docs describe API tokens as "for JMAP access".
 The demo repo's walkthrough checks the "Email Submission" scope; mail read
 scopes exist alongside it. **Unverified detail:** the exact scope names
-shown in the FastmaiFastmaile help article body listing them is gated
+shown in the FastMail API help article (listing them is gated
 behind the article's dynamic content). The connect UI instructs "Read mail
 and Compose"; if the real labels differ, adjust
 `app/components/settings/email-accounts.tsx`.

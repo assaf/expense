@@ -238,7 +238,7 @@ and llms.txt) and with in-app nudges:
   account" button under an "or" divider.
 - **Landing page**: hero line ("Have a Fastmail account? Connect it…") and a
   "Connect your Fastmail account" feature card.
-- **FAQ**: "Does Expense work with FastmaiFastmail"only support Gmail"
+- **FAQ**: "Does Expense work with Fastmail"? The "only support Gmail"
   positioning lives in the FAQ, the /alternatives "Email import" comparison
   row, and the /about benefit + KEY_FACTS.
 - **Home page highlight** (`FeatureHighlight`): the `connect-email` highlight
@@ -296,7 +296,7 @@ and llms.txt) and with in-app nudges:
 - **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step
-  FastmaiFastmailctions with the direct new-token link, connect form,
+  Fastmail connections with the direct new-token link, connect form,
   connection rows with stats (received / processed / last 24h / last
   webhook), disconnect. Rendered on the Email page (`app/routes/emails.tsx`).
 - **Stats counters**: `receivedCount` / `processedCount` / `lastPushAt` are
@@ -374,7 +374,7 @@ and llms.txt) and with in-app nudges:
 - Errors leave the email untouched and set `status = "error"` on the
   connection when the push subscription can't be renewed (user-visible).
 - Disconnect deletes the row + token; users should also revoke the token in
-  FastmaiFastmailI says so).
+  Fastmail UI says so).
 
 ## No-LLM extraction (connected flow)
 

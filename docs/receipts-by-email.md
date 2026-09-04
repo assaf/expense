@@ -32,7 +32,7 @@ pipeline's reply email is the recovery path. The daily cron
 and drains anything a missed push left behind. Sender
 verification: From must have a verified `inbound_senders` row (one row per
 account+address, normalized lowercase);
-failure/confirmation replies are sent FROM the FastmaiFastmailty
+failure/confirmation replies are sent FROM the FastMail identity
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the
 identity's Sent mailbox → submit; the submit step retries once on a
@@ -89,7 +89,7 @@ subscription created before the webhook was live (or with stale push
 keys) never completed the PushVerification handshake, and verification
 state is invisible via the API (`verificationCode`reads null either
 way). Fix: destroy the subscription and recreate it (a tsx script
-calling`destroySubscription`+`ensureSubscription`) so FastmaiFastmaila
+calling`destroySubscription`+`ensureSubscription`) so FastMail issues a
 fresh PushVerification against the live webhook. `RECEIPTS_FOLDER`must
 match the folder name EXACTLY (a`Receipt`vs`Receipts` mismatch makes
 every drain throw and die silently). To test the push handler without

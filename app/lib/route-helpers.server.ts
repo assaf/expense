@@ -46,3 +46,11 @@ export function assertCronSecret(request: Request): Response | undefined {
   }
   return undefined;
 }
+
+/** Map an OAuth entry route's raw `?next=` value to its resume path. An
+ * allowlist token, never a path, so the route can't become an open
+ * redirect; anything unknown defaults to onboarding. Shared by the
+ * Fastmail and Gmail connect/callback route pairs. */
+export function oauthResumePath(raw: string | null): string {
+  return raw === "emails" ? "/emails" : "/onboarding";
+}

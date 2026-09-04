@@ -10,7 +10,10 @@ import type {
   RawConnectionEmail,
 } from "~/lib/email-connection-mail.server";
 import { saveEmailConnectionWatch } from "~/lib/db/email-connections";
-import type { OwnerEmail } from "~/lib/email-connection-process.server";
+import type {
+  ConnectionMailAdapter,
+  OwnerEmail,
+} from "~/lib/email-connection-process.server";
 
 /**
  * Gmail API client for Gmail/Google Workspace connections: plain fetch
@@ -431,9 +434,7 @@ export async function gmailProfileEmail(accessToken: string): Promise<string> {
 /** The ConnectionMailAdapter over Gmail. Same interface as the JMAP
  * adapter (email-connection-process.server); the type import is
  * erased at runtime so this module never pulls the pipeline. */
-export function gmailMailAdapter(
-  token: string,
-): import("~/lib/email-connection-process.server").ConnectionMailAdapter {
+export function gmailMailAdapter(token: string): ConnectionMailAdapter {
   return {
     inboxEmailSummaries: (opts) => gmailInboxSummaries({ token, ...opts }),
     rawEmail: (id) => gmailRawEmail(token, id),
