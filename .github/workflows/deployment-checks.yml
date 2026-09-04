@@ -57,7 +57,11 @@ jobs:
   secretlint:
     name: Secretlint
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # The secretlint action self-installs from the npm registry inside the
+    # job; a slow registry (2026-09-03/04 outage) stalled that install past
+    # 3 minutes. 10m matches the test job's headroom — the scan itself is
+    # still fast, this only bounds the install.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
