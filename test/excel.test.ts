@@ -159,4 +159,10 @@ describe("zip budget (NET-006)", () => {
     const garbage = Buffer.from("PK\x05\x06 not really a zip");
     expect(() => parseXlsxSheets(garbage)).toThrow(/decompression budget/);
   });
+
+  it("rejects buffers too small to hold a zip EOCD record", () => {
+    expect(() => parseXlsxSheets(Buffer.from("PK\x03\x04tiny"))).toThrow(
+      /decompression budget/,
+    );
+  });
 });

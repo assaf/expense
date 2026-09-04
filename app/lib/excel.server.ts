@@ -190,7 +190,9 @@ function zipWithinBudget(
     buffer.byteLength,
   );
   // Locate the End Of Central Directory record (signature 0x06054b50);
-  // it may be followed by a zip comment up to 65535 bytes.
+  // it may be followed by a zip comment up to 65535 bytes. A buffer too
+  // small to hold the 22-byte EOCD is not a zip.
+  if (buffer.byteLength < 22) return false;
   const eocdMin = Math.max(0, buffer.byteLength - 22 - 65535);
   let eocd = -1;
   for (let i = buffer.byteLength - 22; i >= eocdMin; i--) {
