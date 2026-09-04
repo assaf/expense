@@ -488,6 +488,7 @@ describe("Gmail onboarding via googlePending", () => {
     const address = `gmail.pending.${ulid().toLowerCase()}@example.com`;
     const session = await sessionStorage.getSession();
     session.set(GOOGLE_PENDING_SESSION_KEY, {
+      provider: "gmail",
       emailAddress: address,
       remoteAccountId: "google-sub-9",
       tokenEnc: encryptSecret("gmail-at"),

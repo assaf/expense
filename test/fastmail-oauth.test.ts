@@ -539,6 +539,7 @@ describe("connect-fastmail entry", () => {
 describe("onboarding via fmPending", () => {
   function pendingFor(username: string) {
     return {
+      provider: "fastmail",
       username,
       mailAccountId: "jmap-pending",
       tokenEnc: encryptSecret("oauth-at"),

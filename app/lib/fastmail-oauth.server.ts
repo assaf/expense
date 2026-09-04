@@ -53,6 +53,9 @@ export interface FmOAuthFlow {
 }
 
 export interface FmPendingConnection {
+  /** Discriminates the union with GooglePendingConnection in
+   * completeOnboarding. */
+  provider: "fastmail";
   username: string;
   mailAccountId: string;
   tokenEnc: string;

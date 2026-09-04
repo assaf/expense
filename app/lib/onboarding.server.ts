@@ -135,16 +135,14 @@ export async function completeOnboarding(input: {
   if (input.oauth) {
     // The callback parked these already encrypted and verified the
     // mailbox live; the row is created straight from the ciphertext.
-    // The two pending shapes are provider-specific (Gmail has no JMAP
-    // account id; its remoteAccountId is the Google `sub`).
-    if ("mailAccountId" in input.oauth) {
-      provider = "fastmail";
-      mailboxAddress = input.oauth.username.toLowerCase();
-      remoteAccountId = input.oauth.mailAccountId;
-    } else {
+    if (input.oauth.provider === "gmail") {
       provider = "gmail";
       mailboxAddress = input.oauth.emailAddress.toLowerCase();
       remoteAccountId = input.oauth.remoteAccountId;
+    } else {
+      provider = "fastmail";
+      mailboxAddress = input.oauth.username.toLowerCase();
+      remoteAccountId = input.oauth.mailAccountId;
     }
   } else {
     const verification = await verifyJmapToken(input.token ?? "");

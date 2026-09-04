@@ -44,6 +44,9 @@ export type GoogleOAuthFlow = FmOAuthFlow;
  * Gmail has no mailbox account id; `remoteAccountId` is the Google `sub`.
  */
 export interface GooglePendingConnection {
+  /** Discriminates the union with FmPendingConnection in
+   * completeOnboarding. */
+  provider: "gmail";
   emailAddress: string;
   remoteAccountId: string;
   tokenEnc: string;

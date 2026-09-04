@@ -116,6 +116,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const pending: FmPendingConnection = {
+    provider: "fastmail",
     username: verification.info.username,
     mailAccountId: verification.info.mailAccountId,
     tokenEnc: encryptSecret(tokens.accessToken),

@@ -45,9 +45,15 @@ function pendingFrom(
   emailAddress: string,
 ): GooglePendingConnection {
   const payload = tokens.idToken ? decodeGoogleIdToken(tokens.idToken) : {};
+  if (!payload.sub) {
+    // openid is always granted with gmail.modify, so a missing sub means
+    // Google changed shape; store nothing rather than a silent "".
+    throw new Error("Google token response carried no id_token sub");
+  }
   return {
+    provider: "gmail",
     emailAddress,
-    remoteAccountId: payload.sub ?? "",
+    remoteAccountId: payload.sub,
     tokenEnc: encryptSecret(tokens.accessToken),
     refreshTokenEnc: tokens.refreshToken
       ? encryptSecret(tokens.refreshToken)
@@ -113,6 +119,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     return finish(`/${next}?gmailOauthError=verify`);
   }
 
+  let pending: GooglePendingConnection;
+  try {
+    pending = pendingFrom(tokens, emailAddress);
+  } catch (err) {
+    // A missing id_token sub is a Google shape change, not a user error;
+    // the verify bucket is the closest existing landing.
+    console.error("[gmail-oauth] id_token sub missing:", { err });
+    return finish(`/${next}?gmailOauthError=verify`);
+  }
+
   const userId = session.get(SESSION_USER_KEY);
   const user =
     typeof userId === "string" ? await findUserById(userId) : undefined;
@@ -121,7 +137,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       accountId: user.accountId,
       provider: "gmail",
       emailAddress,
-      remoteAccountId: pendingFrom(tokens, emailAddress).remoteAccountId,
+      remoteAccountId: pending.remoteAccountId,
       tokenEnc: encryptSecret(tokens.accessToken),
       refreshTokenEnc: tokens.refreshToken
         ? encryptSecret(tokens.refreshToken)
@@ -143,6 +159,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
   }
 
-  session.set(GOOGLE_PENDING_SESSION_KEY, pendingFrom(tokens, emailAddress));
+  session.set(GOOGLE_PENDING_SESSION_KEY, pending);
   return finish("/onboarding?connected=1");
 }

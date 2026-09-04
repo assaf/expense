@@ -86,8 +86,17 @@ async function verifyPushJwt(
   if (header?.alg !== "RS256" || typeof header.kid !== "string") {
     return undefined;
   }
-  const [jwk] = (await googleJwks()).filter((k) => k.kid === header.kid);
-  if (!jwk) return undefined;
+  // Google rotates JWKS keys; an unknown kid most likely means the 1h
+  // module cache predates the rotation, so force one refetch before
+  // failing (otherwise pushes would 401 until the cache expires).
+  let keys = await googleJwks();
+  let [jwk] = keys.filter((k) => k.kid === header.kid);
+  if (!jwk) {
+    jwksCache = undefined;
+    keys = await googleJwks();
+    [jwk] = keys.filter((k) => k.kid === header.kid);
+    if (!jwk) return undefined;
+  }
   const key = createPublicKey({ key: jwk.jwk, format: "jwk" });
   const ok = cryptoVerify(
     "RSA-SHA256",

@@ -220,4 +220,39 @@ describe("api.email-connections-gmail-push", () => {
     );
     expect(res.status).toBe(405);
   });
+
+  it("refetches the JWKS once on an unknown kid (Google key rotation)", async () => {
+    // The module cache holds test-kid (from the earlier tests). A token
+    // signed with a FRESH key must trigger exactly one forced refetch that
+    // serves the new key, then verify — not 401 until the cache expires.
+    const { publicKey: newKey, privateKey: newPriv } = generateKeyPairSync(
+      "rsa",
+      { modulusLength: 2048 },
+    );
+    const newJwk = newKey.export({ format: "jwk" }) as Record<string, unknown>;
+    const NEW_KID = "rotated-kid";
+    const jwksFetch = vi.fn(async () => {
+      // The cache already holds the pre-rotation set; the forced refetch
+      // serves the rotated key alongside it.
+      const keys = [
+        { ...publicJwk, kid: KID },
+        { ...newJwk, kid: NEW_KID },
+      ];
+      return new Response(JSON.stringify({ keys }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", jwksFetch);
+
+    const header = b64url({ alg: "RS256", kid: NEW_KID });
+    const payload = b64url(validClaims());
+    const signer = createSign("RSA-SHA256");
+    signer.update(`${header}.${payload}`);
+    const rotated = `${header}.${payload}.${b64url(signer.sign(newPriv))}`;
+    const res = await action(
+      args(request(envelope("user@gmail.com"), rotated)),
+    );
+    expect(res.status).toBe(200);
+    // The cache was already warm (earlier tests), so the only fetch this
+    // request makes is the single forced refetch that served the new kid.
+    expect(jwksFetch).toHaveBeenCalledTimes(1);
+  });
 });
