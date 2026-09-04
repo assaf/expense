@@ -1,12 +1,12 @@
 # Receipts by email
 
-inbound is FastMail-only (the Resend webhook path was removed in Aug 2026; see the git history for `api.inbound-email.ts`). A FastMail delivery rule files mail to a
+inbound is Fastmail-only (the Resend webhook path was removed in Aug 2026; see the git history for `api.inbound-email.ts`). A Fastmail delivery rule files mail to a
 dedicated address (e.g. `receipts@labnotes.org`) into a folder, never the
-Inbox. FastMail pushes an encrypted RFC 8291 `StateChange` to
+Inbox. Fastmail pushes an encrypted RFC 8291 `StateChange` to
 `/api/inbound-push`; the handler drains the folder via
 `processUnprocessedReceipts` (`app/lib/inbound-fastmail.server.ts`): mark
 each email `$receipt-processed` **before** processing, run the existing
-`processInboundEvent` through the FastMail MIME bridge (`InboundDeps`
+`processInboundEvent` through the Fastmail MIME bridge (`InboundDeps`
 fetch/list/download collaborators backed by postal-mime; the JMAP email
 id is the idempotency key), and **destroy the email after any non-error
 result** (created / partial / duplicate / concurrent / unknown /
@@ -32,7 +32,7 @@ pipeline's reply email is the recovery path. The daily cron
 and drains anything a missed push left behind. Sender
 verification: From must have a verified `inbound_senders` row (one row per
 account+address, normalized lowercase);
-failure/confirmation replies are sent FROM the FastMail identity
+failure/confirmation replies are sent FROM the FastmaiFastmailty
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the
 identity's Sent mailbox → submit; the submit step retries once on a
@@ -89,11 +89,11 @@ subscription created before the webhook was live (or with stale push
 keys) never completed the PushVerification handshake, and verification
 state is invisible via the API (`verificationCode`reads null either
 way). Fix: destroy the subscription and recreate it (a tsx script
-calling`destroySubscription`+`ensureSubscription`) so FastMail sends a
+calling`destroySubscription`+`ensureSubscription`) so FastmaiFastmaila
 fresh PushVerification against the live webhook. `RECEIPTS_FOLDER`must
 match the folder name EXACTLY (a`Receipt`vs`Receipts` mismatch makes
 every drain throw and die silently). To test the push handler without
-waiting for FastMail: encrypt a StateChange with the app's own keys
+waiting for Fastmail: encrypt a StateChange with the app's own keys
 (`p256dhFromPrivate(PUSH_PRIVATE_KEY)`+`http_ece`encrypt) and POST it
 to`/api/inbound-push`; decryption is the auth, so this works.
 Env: `FASTMAIL_TOKEN`,

@@ -118,7 +118,7 @@ async function commitUserSession(userId: string): Promise<string> {
   return sessionStorage.commitSession(session);
 }
 
-/** Exposed for FastMail onboarding: mint a session cookie for a freshly
+/** Exposed for Fastmail onboarding: mint a session cookie for a freshly
  * created VERIFIED user without going through the login path (the login
  * path re-verifies credentials; the onboarding token already proved
  * mailbox control and the password was set in the same step). */
@@ -596,7 +596,7 @@ async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
 }
 
 /** Shared signup validation: email format + password length bounds. The
- * FastMail onboarding flow reuses this for the create step, so the
+ * Fastmail onboarding flow reuses this for the create step, so the
  * password contract is identical to email signup. */
 export function validateSignup(email: string, password: string): void {
   if (!isEmail(email)) {

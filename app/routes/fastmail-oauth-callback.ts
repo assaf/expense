@@ -19,7 +19,7 @@ import {
   type FmPendingConnection,
 } from "~/lib/fastmail-oauth.server";
 /**
- * The OAuth redirect target registered with FastMail (GET
+ * The OAuth redirect target registered with Fastmail (GET
  * /fastmail-oauth-callback). Validates CSRF state + staleness, exchanges
  * the authorization code (PKCE), and verifies the resulting access token
  * against the JMAP session endpoint — the same live check the paste flow
@@ -58,14 +58,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     return finish(`/${next}?oauthError=state`);
   }
   if (url.searchParams.get("error")) {
-    // The user denied consent on FastMail's page (RFC 6749 §4.1.2.1).
+    // The user denied consent on Fastmail's page (RFC 6749 §4.1.2.1).
     return finish(`/${next}?oauthError=denied`);
   }
   const code = url.searchParams.get("code");
   if (!code) {
     return finish(`/${next}?oauthError=state`);
   }
-  // Each code exchange is two outbound FastMail calls; cap per IP like
+  // Each code exchange is two outbound Fastmail calls; cap per IP like
   // every other anonymous network path (empty-IP requests skip, so tests
   // are unaffected).
   await guardAnonymousAttempt(request, "fastmail-oauth-exchange");

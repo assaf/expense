@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // The review flow's owner confirmation goes through the JMAP mailbox; in
-// tests that must not hit FastMail, so the delivery is faked.
+// tests that must not hit Fastmail, so the delivery is faked.
 vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("~/lib/email-connection-mail.server")

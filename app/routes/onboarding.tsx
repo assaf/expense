@@ -4,9 +4,10 @@ import { pageMeta } from "~/lib/seo-content";
 import { Link, data, redirect, useFetcher } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
-import { Alert } from "~/components/ui/Alert";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
+import { OrDivider } from "~/components/ui/OrDivider";
+import { Alert } from "~/components/ui/Alert";
 import {
   guardAnonymousAttempt,
   rejectCrossSitePost,
@@ -16,7 +17,7 @@ import { isAuthenticated } from "~/lib/auth.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
   FM_PENDING_SESSION_KEY,
-  isFastMailOAuthConfigured,
+  isFastmailOAuthConfigured,
   type FmPendingConnection,
 } from "~/lib/fastmail-oauth.server";
 import {
@@ -40,10 +41,10 @@ import { parseIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/onboarding";
 
 /**
- * FastMail onboarding: the first-run flow for users who connect their
+ * Fastmail onboarding: the first-run flow for users who connect their
  * own mailbox instead of signing up with email + verification link.
  *
- * Step 1: paste a FastMail API token. The token is verified against the
+ * Step 1: paste a Fastmail API token. The token is verified against the
  * JMAP session endpoint, which also reveals the mailbox address (no
  * typing it).
  * Step 2: set a password (new account, with email verified automatically
@@ -99,7 +100,7 @@ export async function loader({
     | FmPendingConnection
     | undefined;
   if (pending) {
-    // Same fast path for the FastMail OAuth callback's parked credentials.
+    // Same fast path for the FastmaiFastmaiFastmailk's parked credentials.
     return {
       configured: isTokenCryptoConfigured(),
       oauthConfigured: false,
@@ -109,14 +110,14 @@ export async function loader({
   }
   return {
     configured: isTokenCryptoConfigured(),
-    oauthConfigured: isFastMailOAuthConfigured() && isTokenCryptoConfigured(),
+    oauthConfigured: isFastmailOAuthConfigured() && isTokenCryptoConfigured(),
     googleConfigured: isGmailOAuthConfigured() && isTokenCryptoConfigured(),
   };
 }
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
     "Connect your email — Expense",
-    "Connect Gmail or FastMail instead of email verification: receipts import automatically, and your expenses are arranged for tax season. Free.",
+    "Connect Gmail or Fastmail instead of email verification: receipts import automatically, and your expenses are arranged for tax season. Free.",
     "/onboarding",
   );
 }
@@ -126,7 +127,7 @@ export async function action({ request }: Route.ActionArgs) {
   const { form, intent } = await parseIntent(request);
 
   if (intent === "connect-token") {
-    // Anonymous work (a FastMail session call per request); cap per IP.
+    // Anonymous work (a Fastmail session call per request); cap per IP.
     await guardAnonymousAttempt(request);
     if (!isTokenCryptoConfigured()) {
       return data(
@@ -141,7 +142,7 @@ export async function action({ request }: Route.ActionArgs) {
     if (!token) {
       return data({
         step: "token",
-        error: "Paste your FastMail API token first.",
+        error: "Paste your Fastmail API token first.",
       } satisfies ActionData);
     }
     const result = await verifyOnboardingToken(token);
@@ -156,8 +157,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "create" || intent === "attach") {
-    // Also anonymous work: verifyJmapToken makes an outbound FastMail call
-    // (and success hashes a password), so cap it per IP like connect-token.
+    // Also anonymous work: verifyJmapToken makes an outbound FastmaiFastmail    // (and success hashes a password), so cap it per IP like connect-token.
     await guardAnonymousAttempt(request);
     const token = formString(form, "token").trim();
     const email = formEmail(form);
@@ -256,8 +256,8 @@ export default function OnboardingPage({
           stepTwo
             ? oauth
               ? step === "attach"
-                ? `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "FastMail"}. This mailbox already has an Expense account; sign in to connect it to whichever account you use.`
-                : `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "FastMail"}. Set a password to create your account.`
+                ? `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "Fastmail"}. This mailbox already has an Expense account; sign in to connect it to whichever account you use.`
+                : `Connected as ${email} via ${oauth.provider === "gmail" ? "Gmail" : "Fastmail"}. Set a password to create your account.`
               : email
                 ? step === "attach"
                   ? `The mailbox ${email} already has an Expense account, but you can connect it to whichever account you sign in with.`
@@ -275,24 +275,30 @@ export default function OnboardingPage({
             </Alert>
           ) : (
             <>
-              {loaderData.oauthConfigured || loaderData.googleConfigured ? (
+              {loaderData.googleConfigured ? (
+                <>
+                  <Button asChild size="lg" className="w-full">
+                    <a href="/connect-gmail?next=onboarding">
+                      <Mail aria-hidden="true" className="h-5 w-5" />
+                      Connect with Gmail
+                    </a>
+                  </Button>
+                  <div className="my-5">
+                    <OrDivider />
+                  </div>
+                </>
+              ) : null}
+              <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Connect your Fastmail
+              </h2>
+              {loaderData.oauthConfigured ? (
                 <div className="mb-4 flex flex-col items-center gap-1.5">
-                  {loaderData.googleConfigured ? (
-                    <Button asChild size="lg" className="w-full">
-                      <a href="/connect-gmail?next=onboarding">
-                        <Mail aria-hidden="true" className="h-5 w-5" />
-                        Connect with Gmail
-                      </a>
-                    </Button>
-                  ) : null}
-                  {loaderData.oauthConfigured ? (
-                    <Button asChild size="lg" className="w-full">
-                      <a href="/connect-fastmail?next=onboarding">
-                        <PlugZap aria-hidden="true" className="h-5 w-5" />
-                        Connect with FastMail
-                      </a>
-                    </Button>
-                  ) : null}
+                  <Button asChild size="lg" className="w-full">
+                    <a href="/connect-fastmail?next=onboarding">
+                      <PlugZap aria-hidden="true" className="h-5 w-5" />
+                      Connect with Fastmail
+                    </a>
+                  </Button>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     or paste an API token
                   </p>
@@ -307,7 +313,7 @@ export default function OnboardingPage({
                     rel="noreferrer"
                     className="text-blue-600 dark:text-blue-400 hover:underline"
                   >
-                    FastMail → Settings → Privacy &amp; Security → API tokens
+                    Fastmail → Settings → Privacy &amp; Security → API tokens
                     <PlugZap
                       aria-hidden="true"
                       className="ml-0.5 inline h-3 w-3 align-text-bottom"
@@ -323,7 +329,7 @@ export default function OnboardingPage({
               </ol>
               <form method="post" className="flex flex-col gap-4">
                 <input type="hidden" name="intent" value="connect-token" />
-                <Field label="FastMail API token">
+                <Field label="Fastmail API token">
                   <Input
                     type="password"
                     name="token"
@@ -340,7 +346,7 @@ export default function OnboardingPage({
                   </Alert>
                 ) : null}
                 <Button type="submit" size="lg" className="mt-2 w-full">
-                  Verify token
+                  Verify Fastmail token
                 </Button>
               </form>
               <div className="mt-6 flex flex-col items-center gap-1 border-t border-gray-100 dark:border-gray-700 pt-4 text-sm">
@@ -371,7 +377,7 @@ export default function OnboardingPage({
           </Field>
           <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
             {oauth
-              ? `Prefilled from your ${oauth.provider === "gmail" ? "Gmail" : "FastMail"} connection; change it to the email you sign in with.`
+              ? `Prefilled from your ${oauth.provider === "gmail" ? "Gmail" : "Fastmail"} connection; change it to the email you sign in with.`
               : step === "attach"
                 ? "Prefilled from your token; change it to the email you sign in with."
                 : "Your account email is the address from your token; the token proves you own it."}

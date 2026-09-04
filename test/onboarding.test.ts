@@ -24,7 +24,7 @@ import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 import { action } from "~/routes/onboarding";
 
 /**
- * FastMail onboarding (/onboarding): the token is the credential, so the
+ * Fastmail onboarding (/onboarding): the token is the credential, so the
  * JMAP session call is mocked; the store tests cover the real connect
  * path (see email-connections.test.ts). EMAIL_TOKEN_ENCRYPTION_KEY comes
  * from the vitest main-project env (fixed test key).
@@ -62,7 +62,7 @@ async function seedVerifiedUser(email: string, password = PASSWORD) {
   return { account, user };
 }
 
-describe("FastMail onboarding", () => {
+describe("Fastmail onboarding", () => {
   beforeEach(() => {
     mockedVerify.mockReset();
   });
@@ -306,15 +306,15 @@ describe("FastMail onboarding", () => {
     });
   });
 
-  it("surfaces FastMail token errors", async () => {
+  it("surfaces Fastmail token errors", async () => {
     mockedVerify.mockResolvedValue({
       ok: false,
       reason: "invalid-token",
-      message: "FastMail rejected this token — check it and try again.",
+      message: "Fastmail rejected this token — check it and try again.",
     });
     expect(await verifyOnboardingToken("bad")).toEqual({
       ok: false,
-      error: "FastMail rejected this token — check it and try again.",
+      error: "Fastmail rejected this token — check it and try again.",
     });
     await expect(
       completeOnboarding({
@@ -322,7 +322,7 @@ describe("FastMail onboarding", () => {
         email: "nobody@example.com",
         password: PASSWORD,
       }),
-    ).rejects.toThrow("FastMail rejected this token");
+    ).rejects.toThrow("Fastmail rejected this token");
   });
 
   it("keeps an existing connection when a verified account attaches", async () => {
@@ -356,10 +356,10 @@ afterAll(async () => {
 /**
  * Browser-level coverage of the onboarding surface: the login-page entry,
  * the /onboarding first step, and the welcome panel lifecycle. The full
- * token→account flow can't run here (the live server can't reach FastMail
+ * token→account flow can't run here (the live server can't reach Fastmail
  * or mock the JMAP call). That logic is covered by the unit tests above.
  */
-describe("FastMail onboarding UI", () => {
+describe("Fastmail onboarding UI", () => {
   afterAll(async () => {
     await closeBrowser();
   });
@@ -368,18 +368,18 @@ describe("FastMail onboarding UI", () => {
     return freshPage();
   }
 
-  it("links from the sign-up flow into the FastMail onboarding", async () => {
+  it("links from the sign-up flow into the Fastmail onboarding", async () => {
     await seedTestData();
     const page = await openPage();
     await page.goto("/login?mode=create", { waitUntil: "load" });
     await page
-      .getByRole("link", { name: /Connect your FastMail account/ })
+      .getByRole("link", { name: /Connect your Fastmail account/ })
       .click();
     await pwExpect(page).toHaveURL(/\/onboarding/);
     await pwExpect(
       page.getByRole("heading", { name: "Connect your email account" }),
     ).toBeVisible();
-    await pwExpect(page.getByLabel("FastMail API token")).toBeVisible();
+    await pwExpect(page.getByLabel("Fastmail API token")).toBeVisible();
     await page.close();
   });
 
@@ -421,9 +421,9 @@ describe("FastMail onboarding UI", () => {
   });
 });
 
-describe("FastMail onboarding route throttle", () => {
+describe("Fastmail onboarding route throttle", () => {
   it("caps create/attach attempts per IP like the other anonymous surfaces", async () => {
-    // The route action records the attempt before the work (a FastMail
+    // The route action records the attempt before the work (a Fastmail
     // session call), so five attempts burn the per-IP budget and the sixth
     // is locked before any outbound call. Mirror of the reset-password cap
     // test; the route action is called directly with the same mocked
@@ -431,7 +431,7 @@ describe("FastMail onboarding route throttle", () => {
     mockedVerify.mockResolvedValue({
       ok: false,
       reason: "invalid-token",
-      message: "FastMail rejected this token — check it and try again.",
+      message: "Fastmail rejected this token — check it and try again.",
     });
     const ip = `203.0.113.${Math.floor(Math.random() * 200) + 2}`;
     const attempt = () => {
@@ -458,7 +458,7 @@ describe("FastMail onboarding route throttle", () => {
         init?: ResponseInit;
       };
       expect(res.init?.status ?? 200).toBe(200);
-      expect(res.data?.error).toMatch(/FastMail rejected/);
+      expect(res.data?.error).toMatch(/Fastmail rejected/);
     }
     await expect(attempt()).rejects.toThrow(/Too many failed attempts/);
   });

@@ -17,7 +17,7 @@ import type { Route } from "./+types/api.email-connections-cron";
  * renew every connection's push setup and catch up on anything a missed
  * push left behind.
  *
- * - FastMail (JMAP): subscriptions live ~30 days; recreate within 7 days
+ * - Fastmail (JMAP): subscriptions live ~30 days; recreate within 7 days
  *   of expiry; recreating triggers a fresh PushVerification our webhook
  *   completes.
  * - Gmail: watches expire after ~7 days; renew at a 48h margin, which

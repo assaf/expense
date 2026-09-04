@@ -54,7 +54,7 @@ function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
 
 /** One TTL+LRU parse cache per transport module. Keys must be unique across
  * everything sharing an instance: connected accounts namespace theirs with
- * `${connectionId}:${emailId}`; the FastMail transport uses the raw id. */
+ * `${connectionId}:${emailId}`; the Fastmail transport uses the raw id. */
 export interface MimeInboundCache {
   parsedEmail(
     key: string,
@@ -146,7 +146,7 @@ export function mimeFetchDeps(
   cache: MimeInboundCache,
   adapter: MimeInboundAdapter,
   options: {
-    /** Cache-key derivation from an email id: the FastMail transport uses
+    /** Cache-key derivation from an email id: the Fastmail transport uses
      * the raw id; connected accounts namespace `${connectionId}:${emailId}`. */
     cacheKey(emailId: string): string;
     /** Error suffix when an attachment id doesn't decode as `emailId:index`. */

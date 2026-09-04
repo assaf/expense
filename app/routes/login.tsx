@@ -195,7 +195,7 @@ export default function LoginPage() {
             your account, then sign in.
           </p>
           <p>
-            Once you're in, connect your FastMail account and receipts from your
+            Once you're in, connect your Fastmail account and receipts from your
             inbox are imported automatically, no forwarding.
           </p>
           <p>Can't find it? Check spam, or resend below.</p>
@@ -339,7 +339,7 @@ export default function LoginPage() {
             size="lg"
             className="mt-3 w-full border-blue-600 bg-blue-600 text-white hover:border-blue-700 hover:bg-blue-700 dark:border-blue-600 dark:bg-blue-600 dark:text-white dark:hover:border-blue-700 dark:hover:bg-blue-700"
           >
-            <Link to="/onboarding">Connect your FastMail account</Link>
+            <Link to="/onboarding">Connect your Fastmail account</Link>
           </Button>
         </div>
       ) : null}

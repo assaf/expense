@@ -59,10 +59,10 @@ import { fxProvenance, withConversionNote } from "~/lib/fx-note";
 /**
  * Inbound email pipeline (receipts by email).
  *
- * Flow: FastMail delivers a forwarded receipt to the Receipts folder (address
+ * Flow: Fastmail delivers a forwarded receipt to the Receipts folder (address
  * action) and pushes a JMAP StateChange; `processUnprocessedReceipts`
  * (`~/lib/inbound-fastmail.server`) drains the folder and calls
- * `processInboundEvent` with FastMail-backed collaborators (fetch/list/
+ * `processInboundEvent` with Fastmail-backed collaborators (fetch/list/
  * download over JMAP via postal-mime). The pipeline determines the expense
  * date, picks the receipt (attachment or email body), extracts
  * merchant/amount/category via DeepSeek (with tesseract OCR fallback), stores
@@ -80,7 +80,7 @@ import { fxProvenance, withConversionNote } from "~/lib/fx-note";
 
 // --- Types -----------------------------------------------------------------
 
-/** The pipeline's incoming-email metadata (FastMail JMAP id as email_id). */
+/** The pipeline's incoming-email metadata (Fastmail JMAP id as email_id). */
 export interface EmailReceivedData {
   email_id: string;
   created_at: string;
@@ -104,7 +104,7 @@ export interface EmailReceivedData {
   }[];
 }
 
-/** Received email content fetched by the transport (FastMail JMAP / postal-mime). */
+/** Received email content fetched by the transport (Fastmail JMAP / postal-mime). */
 export interface ReceivedEmail {
   id: string;
   from: string;
@@ -117,7 +117,7 @@ export interface ReceivedEmail {
   message_id: string;
 }
 
-/** Attachment metadata from the transport (FastMail JMAP / postal-mime). */
+/** Attachment metadata from the transport (Fastmail JMAP / postal-mime). */
 export interface AttachmentMeta {
   id: string;
   filename: string;

@@ -664,7 +664,7 @@ export function connectionMailAdapter(token: string): ConnectionMailAdapter {
 }
 
 /** Adapter + owner-notification transport for one connection. The one
- * branch point between the JMAP (FastMail) and Gmail paths: everything
+ * branch point between the JMAP (Fastmail) and Gmail paths: everything
  * downstream (drain, review) is provider-agnostic. */
 export interface ConnectionMailClient {
   adapter: ConnectionMailAdapter;
@@ -812,7 +812,7 @@ export async function drainEmailConnection(
 }
 
 /** Deliver the confirmation to the mailbox owner's own Inbox. On JMAP
- * (FastMail) it is written via Email/import (the API token can't send);
+ * (Fastmail) it is written via Email/import (the API token can't send);
  * the Gmail branch routes to the gmail importer in mailClientFor. */
 async function sendConnectionEmailToOwner(
   connection: EmailConnectionWithSecret,

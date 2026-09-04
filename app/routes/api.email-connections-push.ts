@@ -1,6 +1,6 @@
 import {
   pushVerificationOf,
-  readFastMailPush,
+  readFastmailPush,
 } from "~/lib/fastmail-push.server";
 import { setConnectionVerificationCode } from "~/lib/email-connection-push.server";
 import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
@@ -16,7 +16,7 @@ import type { Route } from "./+types/api.email-connections-push";
 
 /**
  * Webhook for CONNECTED email accounts (per-connection JMAP push). Same
- * scheme as /api/inbound-push: FastMail POSTs an RFC 8291-encrypted body,
+ * scheme as /api/inbound-push: Fastmail POSTs an RFC 8291-encrypted body,
  * and successful decryption with the app's push keys is the auth. The
  * connection arrives as `?c=<connectionId>` in the URL; its own API token
  * authenticates the JMAP side (verification echo, later mailbox reads).
@@ -35,7 +35,7 @@ import type { Route } from "./+types/api.email-connections-push";
 export const config = { maxDuration: 60 };
 
 export async function action({ request }: Route.ActionArgs) {
-  const payload = await readFastMailPush(request, {
+  const payload = await readFastmailPush(request, {
     logTag: "[email-connections-push]",
   });
   if (payload instanceof Response) return payload;

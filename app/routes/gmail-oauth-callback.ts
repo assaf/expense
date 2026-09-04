@@ -31,7 +31,7 @@ import {
  * Then:
  *
  * - signed-in: create the connection on the user's account (mirroring the
- *   FastMail callback) and land on /emails;
+ *   Fastmail callback) and land on /emails;
  * - anonymous: park the ENCRYPTED credentials on the session (googlePending)
  *   for the onboarding flow to consume, and land on /onboarding.
  *

@@ -8,15 +8,15 @@ address); both coexist.
 **Status: all four phases shipped (connect/verify/disconnect, per-connection
 push webhook + renewal cron, rules + processing pipeline, rule inference
 from an existing inbox), plus the inbox review flow (/email-review), plus
-the first-run FastMail onboarding (/onboarding).**
+the first-run Fastmail onboarding (/onboarding).**
 
 ## Connecting via OAuth
 
 The token-paste flow has an OAuth 2.0 alternative ("Connect with
-FastMail"), gated on `FASTMAIL_OAUTH_CLIENT_ID`: unset (today), the buttons
+Fastmail"), gated on `FASTMAIL_OAUTH_CLIENT_ID`: unset (today), the buttons
 are hidden and paste is the only path; set, an Authorization Code + PKCE
-public client flow runs instead (FastMail registers clients manually, no
-client secret exists). Authorization + token endpoints are FastMail's
+public client flow runs instead (Fastmail registers clients manually, no
+client secret exists). Authorization + token endpoints are Fastmail's
 (`api.fastmail.com/oauth/authorize|refresh`); the code lives in
 `app/lib/fastmail-oauth.server.ts`, with `/connect-fastmail` (entry) and
 `/fastmail-oauth-callback` (redirect target) routes.
@@ -26,7 +26,7 @@ client secret exists). Authorization + token endpoints are FastMail's
   consumers go through `connectionAccessToken`, which decrypts and returns
   the access token for legacy rows unchanged, and for OAuth rows refreshes
   via the token endpoint 60s before expiry, persisting the ROTATED refresh
-  token (FastMail revokes stale ones; reuse revokes the whole grant).
+  token (Fastmail revokes stale ones; reuse revokes the whole grant).
 - **Requested scopes**: `urn:ietf:params:jmap:core` + `urn:ietf:params:
 jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   sent).
@@ -35,12 +35,12 @@ jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   them; the callback always verifies the new access token against
   `jmap/session` before anything is stored.
 - **Disconnect does not revoke the grant server-side**, same caveat as
-  API tokens: users revoke at FastMail (Settings → Privacy & Security →
+  API tokens: users revoke at Fastmail (Settings → Privacy & Security →
   Authorized connections).
 
 ### Client registration (one-time)
 
-FastMail issues OAuth client ids by email to partnerships@fastmailteam.com
+Fastmail issues OAuth client ids by email to partnerships@fastmailteam.com
 (no self-serve). Until the reply sets `FASTMAIL_OAUTH_CLIENT_ID`, the
 buttons stay hidden; everything above is already coded and tested.
 Ready-to-send request:
@@ -51,7 +51,7 @@ Ready-to-send request:
 >
 > I'd like to register an OAuth client for Expense, a personal receipt
 > tracker at https://expense.labnotes.org. It connects a user's own
-> FastMail mailbox over JMAP so receipts in their inbox import
+> Fastmail mailbox over JMAP so receipts in their inbox import
 > automatically (Email/get, Email/query, Email/import, Mail set
 > operations, and PushSubscription/set for push).
 >
@@ -85,12 +85,12 @@ When the reply arrives, check it against the assumptions baked into
 - If the token response omits `refresh_token` on refresh (some servers
   only return it on the code exchange): stop rotating
   `refreshTokenEnc` when absent instead of persisting null; the current
-  code assumes FastMail always rotates, per their docs.
+  code assumes Fastmail always rotates, per their docs.
 
 ## Gmail / Google Workspace
 
 A second provider behind the same pipeline, quiet-launched in Google
-**Testing mode** (env-gated exactly like FastMail OAuth: the four
+**Testing mode** (env-gated exactly like Fastmail OAuth: the four
 `GOOGLE_*` vars in `docs/operations.md`; while any is unset the Gmail
 surfaces stay hidden). Advertising copy is unchanged; only the functional
 surfaces (/onboarding step 1, /emails, the home empty-state nudge) present
@@ -104,13 +104,13 @@ API client + pipeline adapter live in `app/lib/gmail.server.ts`; the
 provider branch point is `mailClientFor` in
 `app/lib/email-connection-process.server.ts` (adapter + owner-notification
 transport; the drain/review pipeline itself is provider-agnostic). Routes:
-`/connect-gmail` and `/gmail-oauth-callback` (mirror the FastMail pair),
+`/connect-gmail` and `/gmail-oauth-callback` (mirror the Fastmail pair),
 plus `/api/email-connections-gmail-push` (Pub/Sub push webhook).
 
 **Scope rule**: only `gmail.modify` + `openid email`. No `gmail.send`:
 report/confirmation emails reach the owner's inbox via
 `messages.import` (`neverMarkSpam`, `internalDateSource=dateHeader`),
-mirroring the FastMail import-don't-send behavior. `gmail.modify` covers
+mirroring the Fastmail import-don't-send behavior. `gmail.modify` covers
 read, TRASH moves (the success path), and import.
 
 ### GCP setup (one-time, per deployment)
@@ -142,7 +142,7 @@ stale subscription must never wedge the retry queue.
 days; the daily cron renews at a 48h margin (five retries), persisting
 `pushExpiresAt` (`pushSubscriptionId` stays null; Gmail has no id, only an
 expiration). Pushes carry a `historyId`, but the drain is lookback-based
-with EmailProcessLog dedupe (same as FastMail), so no history column and
+with EmailProcessLog dedupe (same as Fastmail), so no history column and
 no history API usage.
 
 **Gmail API quirks the adapter absorbs**: `messages.list` is always
@@ -159,7 +159,7 @@ annual CASA Tier 2 assessment. Until both land: 100 test users, 7-day
 refresh-token expiry, and the unverified-app consent screen are accepted
 limitations of the quiet launch, documented rather than worked around.
 
-### Setup checklist after registering (mirrors the FastMail checklist)
+### Setup checklist after registering (mirrors the Fastmail checklist)
 
 - Create the OAuth client + Pub/Sub topic/subscription as above.
 - Set the four `GOOGLE_*` vars in Vercel (production) and redeploy.
@@ -167,14 +167,14 @@ limitations of the quiet launch, documented rather than worked around.
   confirm the push → drain → expense flow, and check `/api/smoke` stays
   green.
 
-## FastMail onboarding (/onboarding)
+## Fastmail onboarding (/onboarding)
 
 First-run flow for users who connect their own mailbox instead of signing
-up with email + verification link (entry: "Connect a FastMail account
+up with email + verification link (entry: "Connect a Fastmail account
 instead" on the sign-up flow, /login?mode=create).
 
 - **Token = mailbox control = email verification.** The step-1 form pastes
-  a FastMail API token; `verifyJmapToken` proves it live against
+  a Fastmail API token; `verifyJmapToken` proves it live against
   `jmap/session`, which also reveals the account's address; no typing.
   Step 2 sets a password (new account) or enters the existing account's
   password (attach). On success `emailVerifiedAt` is stamped WITHOUT an
@@ -217,11 +217,11 @@ The feature is promoted in the public marketing copy (`app/lib/seo-content.ts`,
 the single source; renders /, /about, /faq, /alternatives + their .md mirrors
 and llms.txt) and with in-app nudges:
 
-- **Sign-up flow** (`/login?mode=create`): blue "Connect your FastMail
+- **Sign-up flow** (`/login?mode=create`): blue "Connect your Fastmail
   account" button under an "or" divider.
-- **Landing page**: hero line ("Have a FastMail account? Connect it…") and a
-  "Connect your FastMail account" feature card.
-- **FAQ**: "Does Expense work with FastMail?" The "only support Gmail"
+- **Landing page**: hero line ("Have a Fastmail account? Connect it…") and a
+  "Connect your Fastmail account" feature card.
+- **FAQ**: "Does Expense work with FastmaiFastmail"only support Gmail"
   positioning lives in the FAQ, the /alternatives "Email import" comparison
   row, and the /about benefit + KEY_FACTS.
 - **Home page highlight** (`FeatureHighlight`): the `connect-email` highlight
@@ -232,7 +232,7 @@ and llms.txt) and with in-app nudges:
 - **Empty state** (`_index.tsx`): new accounts with no expenses and no
   connection get the connect suggestion under the "Nothing here yet" copy.
 - **Signup success screen** ("Check your email", `login.tsx`): mentions
-  connecting FastMail once signed in.
+  connecting Fastmail once signed in.
 - **/emails**: accounts using receipts-by-email (verified senders) but no
   connection see a callout suggesting they connect instead of forwarding.
 - **Welcome panel** (`WelcomePanel`, gated by the `welcomePending` setting):
@@ -247,7 +247,7 @@ and llms.txt) and with in-app nudges:
   email. `EmailProcessLog`, one row per evaluated email (idempotency key =
   connection + JMAP email id), the audit/health log and the source of the
   "processed in the last 24 hours" stat.
-- **Token handling**: the user generates a FastMail API token (Settings →
+- **Token handling**: the user generates a Fastmail API token (Settings →
   Privacy & Security → API tokens), pastes it on the Email page.
   We verify it live against `https://api.fastmail.com/jmap/session`
   (`app/lib/jmap.server.ts`, which distinguishes invalid token / no mail scope /
@@ -273,13 +273,13 @@ and llms.txt) and with in-app nudges:
 - **Cron** (`app/routes/api.email-connections-cron.ts`, vercel.json,
   daily 13:00 UTC): renew every connection's subscription (recreate within
   7 days of the 30-day expiry; recreation triggers a fresh
-  PushVerification). A failure (revoked token, FastMail error) flags the
+  PushVerification). A failure (revoked token, Fastmail error) flags the
   connection `status=error` → "Needs attention" on the Email page; a successful
   renewal clears it.
 - **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step
-  FastMail instructions with the direct new-token link, connect form,
+  FastmaiFastmailctions with the direct new-token link, connect form,
   connection rows with stats (received / processed / last 24h / last
   webhook), disconnect. Rendered on the Email page (`app/routes/emails.tsx`).
 - **Stats counters**: `receivedCount` / `processedCount` / `lastPushAt` are
@@ -357,7 +357,7 @@ and llms.txt) and with in-app nudges:
 - Errors leave the email untouched and set `status = "error"` on the
   connection when the push subscription can't be renewed (user-visible).
 - Disconnect deletes the row + token; users should also revoke the token in
-  FastMail (the UI says so).
+  FastmaiFastmailI says so).
 
 ## No-LLM extraction (connected flow)
 
@@ -390,7 +390,7 @@ the connected flow, where every sender is rule-matched.
 
 ## Confirmation delivery (written to Inbox, not sent)
 
-FastMail **API tokens can't submit mail.** `EmailSubmission/set` and
+Fastmail **API tokens can't submit mail.** `EmailSubmission/set` and
 `Identity/get` return HTTP 403 `"Disallowed capabilities for this
 type/client: urn:ietf:params:jmap:submission"`. The token can read/write
 mail (Email/get, Email/query, Mailbox/get, Email/set mailboxIds,

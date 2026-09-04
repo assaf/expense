@@ -131,7 +131,7 @@ describe("verifyJmapToken", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reports network when FastMail is unreachable", async () => {
+  it("reports network when Fastmail is unreachable", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {

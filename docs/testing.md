@@ -7,7 +7,7 @@
   so `~/routes/+types/…` does NOT resolve from `test/`. See
   `test/api-inbound-push.test.ts` for the pattern (mock the route's
   network-facing collaborators with `vi.mock`, keep real decryption).
-- The FastMail flows are unit-tested offline: `test/fastmail-send.test.ts`
+- The Fastmail flows are unit-tested offline: `test/fastmail-send.test.ts`
   drives `sendEmailViaJmap` through its injectable `JmapSendDeps`
   (identity match → upload → import → submit; the submit step retries once
   on a transient failure with the same email id; failures return false),
@@ -43,7 +43,7 @@
     in `launchServer.ts`; keep the pinned instant in sync across all files.
   - The test server blanks `PUBLIC_URL` in its env (like the live-service
     keys) so the OAuth metadata issuer follows the request/forwarded origin.
-    A `.env` `PUBLIC_URL` (set for the FastMail push URL) changed the issuer
+    A `.env` `PUBLIC_URL` (set for the Fastmail push URL) changed the issuer
     to the prod origin locally and prompted a bad hardcode in `531e814`;
     keep OAuth test expectations origin-derived, never hardcoded.
 - **React Router remounts route components when a data navigation settles**

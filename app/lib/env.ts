@@ -53,14 +53,14 @@ export const SESSION_SECRET = env.SESSION_SECRET ?? "";
 
 /** The app's receipts address, the single address for the receipts-by-email
  * feature: users forward receipts TO it (shown in Settings, used in the
- * verification-email copy) and, when FastMail sending is configured,
+ * verification-email copy) and, when Fastmail sending is configured,
  * replies/verifications are sent FROM it (identity-matched against the
- * account; the account's default identity is used when unset). The FastMail
+ * account; the account's default identity is used when unset). The Fastmail
  * delivery rule must file mail to this address into RECEIPTS_FOLDER. */
 export const INBOUND_EMAIL_ADDRESS = env.INBOUND_EMAIL_ADDRESS ?? "";
 
 /**
- * FastMail API token for the JMAP push inbox reader (replaces the Resend
+ * Fastmail API token for the JMAP push inbox reader (replaces the Resend
  * inbound webhook as the receipt source when set; the webhook stays as a
  * fallback). Optional: when unset, the push/cron routes return 503 and
  * receipts keep flowing through Resend.
@@ -68,7 +68,7 @@ export const INBOUND_EMAIL_ADDRESS = env.INBOUND_EMAIL_ADDRESS ?? "";
 export const FASTMAIL_TOKEN = env.FASTMAIL_TOKEN ?? "";
 
 /**
- * FastMail OAuth client id for the "Connect with FastMail" flow. FastMail
+ * Fastmail OAuth client id for the "Connect with Fastmail" flow. Fastmail
  * registers clients manually (partnerships@fastmailteam.com); while unset
  * the OAuth buttons are hidden and the token-paste flow stays the only
  * connect path. Public PKCE client: no client secret exists.
@@ -80,7 +80,7 @@ export const FASTMAIL_OAUTH_CLIENT_ID = env.FASTMAIL_OAUTH_CLIENT_ID ?? "";
  Workspace mailboxes; Authorization Code + PKCE, confidential client).
  * All three of CLIENT_ID, CLIENT_SECRET, and PUBSUB_TOPIC must be set for
  * the Gmail connect surfaces to appear; while unset they stay hidden and
- * FastMail remains the only provider (quiet launch, see
+ * Fastmail remains the only provider (quiet launch, see
  * docs/email-connections.md → Gmail / Google Workspace).
  */
 export const GOOGLE_OAUTH_CLIENT_ID = env.GOOGLE_OAUTH_CLIENT_ID ?? "";
@@ -109,21 +109,21 @@ export const PUSH_PRIVATE_KEY = env.PUSH_PRIVATE_KEY ?? "";
 export const PUSH_AUTH = env.PUSH_AUTH ?? "";
 
 /**
- * Stable id for this app's FastMail push subscription. Keep it distinct from
- * other apps on the same FastMail account (inbox uses `usps-digest-cleaner`)
+ * Stable id for this app's Fastmail push subscription. Keep it distinct from
+ * other apps on the same Fastmail account (inbox uses `usps-digest-cleaner`)
  * so renewals never touch someone else's subscription.
  */
 export const DEVICE_CLIENT_ID = env.DEVICE_CLIENT_ID || "expense-receipts";
 
 /**
- * Name of the FastMail folder the delivery rule files receipt mail into
+ * Name of the Fastmail folder the delivery rule files receipt mail into
  * (Settings → Rules). The processor queries only this folder and destroys
  * emails after a successful import, so receipts never land in the Inbox.
  */
 export const RECEIPTS_FOLDER = env.RECEIPTS_FOLDER || "Receipts";
 
 /**
- * Secret gating the daily FastMail cron (GET /api/inbound-cron). Vercel
+ * Secret gating the daily Fastmail cron (GET /api/inbound-cron). Vercel
  * sends cron requests with `Authorization: Bearer <CRON_SECRET>` when the
  * env var is set; the route rejects everything else. Optional; the cron
  * route 503s without it.

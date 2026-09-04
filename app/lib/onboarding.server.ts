@@ -19,8 +19,8 @@ import type { EmailConnectionProvider } from "~/lib/db/email-connections";
 import type { Account } from "~/lib/types";
 
 /**
- * FastMail onboarding (/onboarding): a first-run flow that skips the
- * emailed verification link entirely. A valid FastMail API token proves
+ * Fastmail onboarding (/onboarding): a first-run flow that skips the
+ * emailed verification link entirely. A valid Fastmail API token proves
  * mailbox control (strictly stronger than a click-through link), so:
  *
  * - the address the token resolves to (JMAP session `username`) becomes the
@@ -251,7 +251,7 @@ export async function completeOnboarding(input: {
 }
 
 /** The home page shows its one-time welcome panel only for accounts that
- * completed FastMail onboarding (default is hidden; see Settings). */
+ * completed Fastmail onboarding (default is hidden; see Settings). */
 async function markWelcomePending(accountId: string): Promise<void> {
   const settings = await readSettings(accountId);
   await writeSettings(accountId, { ...settings, welcomePending: true });

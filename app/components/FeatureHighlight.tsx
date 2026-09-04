@@ -140,7 +140,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Your inbox, processed automatically",
     body: () => (
       <>
-        Connect your FastMail account and receipts landing in your inbox are
+        Connect your Fastmail account and receipts landing in your inbox are
         processed for you: merchant, amount, and category filled in, no
         forwarding needed.
       </>

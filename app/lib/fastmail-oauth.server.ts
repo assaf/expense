@@ -4,8 +4,8 @@ import { updateEmailConnectionTokens } from "~/lib/db/email-connections";
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 
 /**
- * "Connect with FastMail" OAuth 2.0 (Authorization Code + PKCE, public
- * client — FastMail issues no client secret). Endpoint shapes per
+ * "Connect with Fastmail" OAuth 2.0 (Authorization Code + PKCE, public
+ * client — Fastmail issues no client secret). Endpoint shapes per
  * https://www.fastmail.com/for-developers/oauth/: the token endpoint is
  * confusingly named /oauth/refresh; it serves both the authorization-code
  * exchange and refresh grants. An OAuth access token authenticates JMAP
@@ -24,7 +24,7 @@ const OAUTH_TOKEN_URL = "https://api.fastmail.com/oauth/refresh";
 /**
  * Mail read/write covers the Trash move + Inbox import; core covers the
  * session fetch and PushSubscription/set. Deliberately no jmap:submission:
- * FastMail API tokens can't submit mail anyway (confirmations are imported,
+ * Fastmail API tokens can't submit mail anyway (confirmations are imported,
  * not sent), so the least privilege matches the pipeline's real needs.
  */
 const OAUTH_SCOPES = "urn:ietf:params:jmap:core urn:ietf:params:jmap:mail";
@@ -67,12 +67,12 @@ export function isFlowStale(flow: FmOAuthFlow): boolean {
 }
 
 /** Refresh this long before expiry so concurrent JMAP calls never race a
- * dying token (FastMail access tokens live ~1h). */
+ * dying token (Fastmail access tokens live ~1h). */
 const REFRESH_SKEW_MS = 60_000;
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-export function isFastMailOAuthConfigured(): boolean {
+export function isFastmailOAuthConfigured(): boolean {
   return FASTMAIL_OAUTH_CLIENT_ID.length > 0;
 }
 
@@ -91,7 +91,7 @@ export interface OAuthTokenSet {
   expiresAt: string;
 }
 
-/** RFC 7636 S256 pair: verifier is 43 base64url chars (FastMail's minimum),
+/** RFC 7636 S256 pair: verifier is 43 base64url chars (Fastmail's minimum),
  * challenge = BASE64URL(SHA256(verifier)). */
 export function generatePkcePair(): { verifier: string; challenge: string } {
   const verifier = randomBytes(32).toString("base64url");
@@ -129,7 +129,7 @@ async function requestTokenSet(
   const text = await res.text();
   if (!res.ok) {
     throw new Error(
-      `FastMail token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+      `Fastmail token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
     );
   }
   const body = JSON.parse(text) as {
@@ -142,7 +142,7 @@ async function requestTokenSet(
     typeof body.refresh_token !== "string" ||
     typeof body.expires_in !== "number"
   ) {
-    throw new Error("FastMail token endpoint returned an unexpected shape");
+    throw new Error("Fastmail token endpoint returned an unexpected shape");
   }
   return {
     accessToken: body.access_token,

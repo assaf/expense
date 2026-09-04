@@ -209,7 +209,7 @@ describe("api.email-connections-cron", () => {
       expect.objectContaining({ id: "g3" }),
       "test-token",
     );
-    // The FastMail connection still takes the JMAP renewal path.
+    // The Fastmail connection still takes the JMAP renewal path.
     expect(mocks.ensureConnectionPushSubscription).not.toHaveBeenCalled();
   });
 

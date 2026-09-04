@@ -37,7 +37,7 @@ export const GOOGLE_OAUTH_SESSION_KEY = "googleOAuth";
 export const GOOGLE_PENDING_SESSION_KEY = "googlePending";
 export const GOOGLE_OAUTH_MAX_AGE_S = 600;
 
-/** Session-parked in-flight handshake; same shape as the FastMail flow. */
+/** Session-parked in-flight handshake; same shape as the Fastmail flow. */
 export type GoogleOAuthFlow = FmOAuthFlow;
 
 /**
@@ -52,7 +52,7 @@ export interface GooglePendingConnection {
   expiresAt: string;
 }
 
-/** Reuse the FastMail staleness check; the flow shapes are identical. */
+/** Reuse the Fastmail staleness check; the flow shapes are identical. */
 export const isGmailFlowStale = isFlowStale;
 
 export function isGmailOAuthConfigured(): boolean {
@@ -191,7 +191,7 @@ export function decodeGoogleIdToken(idToken: string): {
 }
 
 // Concurrent drains share one connection and can each hit expiry; dedup
-// them on a single refresh per connection (same pattern as the FastMail
+// them on a single refresh per connection (same pattern as the Fastmail
 // resolver), evicting on settle so a failure retries.
 const inflightRefreshes = new Map<string, Promise<string>>();
 

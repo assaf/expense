@@ -143,7 +143,7 @@ const connectionEmailRowSchema = z.object({
 /**
  * Parse an Email/get listing response into summaries. The split mirrors
  * the wire-boundary rules: a structurally wrong ENVELOPE throws loudly
- * (that is FastMail changing shape — the EXPENSE-S/X lesson), while a
+ * (that is Fastmail changing shape — the EXPENSE-S/X lesson), while a
  * single malformed ROW is skipped with a warning (one junk email must not
  * kill a whole mailbox listing; the next scan retries it).
  */
@@ -243,7 +243,7 @@ export async function moveConnectionEmailToTrash(
 
 /**
  * Deliver an email straight into the account's Inbox by writing it via JMAP
- * Email/import, with no EmailSubmission and no Identity/get. FastMail API tokens
+ * Email/import, with no EmailSubmission and no Identity/get. Fastmail API tokens
  * can read/write mail but cannot submit (urn:ietf:params:jmap:submission
  * is disallowed, HTTP 403), so a confirmation that goes to the mailbox
  * owner (self) is written as an Inbox message instead of being sent.

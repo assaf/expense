@@ -42,13 +42,13 @@ describe("Email", () => {
       section.getByText("No email accounts connected yet."),
     ).toBeVisible();
     await expect(
-      section.getByText("Connect an email account", { exact: true }),
+      section.getByRole("heading", { name: "Connect your Fastmail" }),
     ).toBeVisible();
     await expect(
       section.getByRole("link", { name: "Connect with Gmail" }),
     ).toBeVisible();
     await expect(
-      section.getByRole("link", { name: "Connect with FastMail" }),
+      section.getByRole("link", { name: "Connect with Fastmail" }),
     ).toBeVisible();
   });
 

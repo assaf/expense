@@ -1,7 +1,7 @@
 /**
  * Build a raw RFC 5322 message for the app's outbound email (replies and
  * verifications). Pure (no I/O), so it is unit-testable and shared by the
- * FastMail JMAP sender.
+ * Fastmail JMAP sender.
  *
  * Structure: multipart/mixed when there are attachments, else
  * multipart/alternative (text + html). All text parts are UTF-8 base64.
@@ -9,7 +9,7 @@
  * subjects like the receipt replies). CRLF line endings throughout.
  */
 
-/** The transport-level input both senders accept (FastMail JMAP + Resend).
+/** The transport-level input both senders accept (Fastmail JMAP + Resend).
  * Defined here (dependency-free) so fastmail.server and reply.server share
  * one shape instead of each declaring its own. */
 export interface SendEmailInput {

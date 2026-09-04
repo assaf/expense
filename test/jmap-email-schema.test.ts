@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getEmailMetadata } from "~/lib/jmap.server";
 
 /**
- * The Email/get wire boundary (app/lib/jmap.server.ts). FastMail's real
+ * The Email/get wire boundary (app/lib/jmap.server.ts). Fastmail's real
  * response shape enters the app here, zod-validated: junk shapes must
  * throw LOUDLY (the next wire surprise should be loud, not a swallowed
  * warning) and RFC 8621's String[] messageId must pass through. The

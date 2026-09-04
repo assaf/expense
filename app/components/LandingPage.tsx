@@ -51,7 +51,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   "AI invoice & receipt extraction": Sparkles,
   "Stop losing receipts in your gallery": ReceiptText,
   "Smart pre-classification": ListFilter,
-  "Connect your FastMail account": Plug,
+  "Connect your Fastmail account": Plug,
   "Retroactive scan (last 90 days)": History,
   "Capture PDF attachments": FileText,
   "Get ready with your deductions on time": Tags,
@@ -168,7 +168,7 @@ export default function LandingPage({
             choice. And when tax season comes, all is ready.
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500 dark:text-gray-400">
-            Have a FastMail account? Connect it and receipts from your inbox are
+            Have a Fastmail account? Connect it and receipts from your inbox are
             processed automatically, no forwarding and no Gmail required.
           </p>
           <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">

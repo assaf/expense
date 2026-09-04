@@ -1,4 +1,4 @@
-# FastMail API tokens: how users create them
+# Fastmail API tokens: how users create them
 
 Access date: 2026-08-19. Sources (mutable; this is the point-in-time
 snapshot the connect flow's instructions rely on):
@@ -28,7 +28,7 @@ secretlint flags `fmu1-` tokens).
 Scope note: the developer docs describe API tokens as "for JMAP access".
 The demo repo's walkthrough checks the "Email Submission" scope; mail read
 scopes exist alongside it. **Unverified detail:** the exact scope names
-shown in the FastMail UI (the help article body listing them is gated
+shown in the FastmaiFastmaile help article body listing them is gated
 behind the article's dynamic content). The connect UI instructs "Read mail
 and Compose"; if the real labels differ, adjust
 `app/components/settings/email-accounts.tsx`.

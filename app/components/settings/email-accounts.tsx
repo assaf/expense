@@ -4,6 +4,7 @@ import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Link, useFetcher } from "react-router";
 import { RemoveButton } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
+import { OrDivider } from "~/components/ui/OrDivider";
 import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
@@ -12,8 +13,8 @@ import type { EmailConnectionView } from "~/lib/db/email-connections";
 
 /**
  * Email page → Email accounts: connect a user's own mailbox for automatic
- * expense import. Today FastMail-only (JMAP): the connect flow walks the
- * user through generating an API token in FastMail, verifies it live, and
+ * expense import. Today Fastmail-only (JMAP): the connect flow walks the
+ * user through generating an API token in Fastmail, verifies it live, and
  * stores it encrypted. Each connected mailbox shows its health stats
  * (received / processed / last-24h / last webhook) and a disconnect button.
  */
@@ -175,27 +176,30 @@ function ConnectForm({
 
   return (
     <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-      <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
-        Connect an email account
-      </div>
-      {oauthConfigured || googleConfigured ? (
+      {googleConfigured ? (
+        <>
+          <Button asChild size="md" className="w-full">
+            <a href="/connect-gmail?next=emails">
+              <Mail aria-hidden="true" className="h-4 w-4" />
+              Connect with Gmail
+            </a>
+          </Button>
+          <div className="my-4">
+            <OrDivider />
+          </div>
+        </>
+      ) : null}
+      <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        Connect your Fastmail
+      </h3>
+      {oauthConfigured ? (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          {googleConfigured ? (
-            <Button asChild size="sm">
-              <a href="/connect-gmail?next=emails">
-                <Mail aria-hidden="true" className="h-4 w-4" />
-                Connect with Gmail
-              </a>
-            </Button>
-          ) : null}
-          {oauthConfigured ? (
-            <Button asChild size="sm">
-              <a href="/connect-fastmail?next=emails">
-                <Plug aria-hidden="true" className="h-4 w-4" />
-                Connect with FastMail
-              </a>
-            </Button>
-          ) : null}
+          <Button asChild size="sm">
+            <a href="/connect-fastmail?next=emails">
+              <Plug aria-hidden="true" className="h-4 w-4" />
+              Connect with Fastmail
+            </a>
+          </Button>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             or paste an API token
           </p>
@@ -210,7 +214,7 @@ function ConnectForm({
             rel="noreferrer"
             className="text-blue-600 dark:text-blue-400 hover:underline"
           >
-            FastMail → Settings → Privacy &amp; Security → API tokens
+            Fastmail → Settings → Privacy &amp; Security → API tokens
             <PlugZap
               aria-hidden="true"
               className="ml-0.5 inline h-3 w-3 align-text-bottom"
@@ -234,7 +238,7 @@ function ConnectForm({
             setToken(e.target.value);
             setNotice(null);
           }}
-          placeholder="Paste your FastMail API token"
+          placeholder="Paste your Fastmail API token"
           autoComplete="off"
           required
           aria-invalid={notice && !notice.ok ? true : undefined}
@@ -259,9 +263,9 @@ function ConnectForm({
         </p>
       ) : (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          The token is verified with FastMail and stored encrypted; OAuth
+          The token is verified with Fastmail and stored encrypted; OAuth
           connections are stored encrypted too. You can revoke either any time
-          in Gmail or FastMail, or disconnect it here.
+          in Gmail or Fastmail, or disconnect it here.
         </p>
       )}
     </div>

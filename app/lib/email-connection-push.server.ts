@@ -38,7 +38,7 @@ function connectionDeviceClientId(connectionId: string): string {
   return `expense-conn-${connectionId}`;
 }
 
-/** Echo FastMail's PushVerification code back (completes the handshake). */
+/** Echo Fastmail's PushVerification code back (completes the handshake). */
 export async function setConnectionVerificationCode(
   token: string,
   subscriptionId: string,
@@ -75,7 +75,7 @@ export async function ensureConnectionPushSubscription(connection: {
   tokenEnc: string;
 }): Promise<EnsureSubscriptionResult> {
   if (!PUBLIC_URL) {
-    throw new Error("PUBLIC_URL is required for FastMail push");
+    throw new Error("PUBLIC_URL is required for Fastmail push");
   }
   const token = await connectionAccessToken(connection);
   const result = await ensurePushSubscription({

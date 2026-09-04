@@ -17,10 +17,10 @@ reads and writes are scoped; see `app/lib/db/`).
   sha256 of the token at rest on `users.verificationTokenHash`, 7-day TTL,
   resend button on the login page, rate-limited to once a day). The user
   can't sign in until it's clicked (`login` throws EmailNotVerifiedError).
-  **FastMail onboarding (`/onboarding`) is the exception**: a valid FastMail API
+  **Fastmail onboarding (`/onboarding`) is the exception**: a valid Fastmail API
   token proves mailbox control (stronger than a link click), so the
   resolved address is stamped `emailVerifiedAt` without an emailed link
-  (see docs/email-connections.md → FastMail onboarding).
+  (see docs/email-connections.md → Fastmail onboarding).
   Re-signing up with the same email while the account is still unverified
   deletes the throwaway account and its old link (`deleteUnverifiedUser`)
   and starts fresh, unless the verification email went out within the last

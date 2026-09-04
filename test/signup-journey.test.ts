@@ -14,7 +14,7 @@ import { testPrisma } from "./helpers/seedTestData";
  *
  * A. Landing page → create account → email verification link → sign in →
  *    upload a receipt and save it.
- * B. FastMail onboarding → paste an API token (mock JMAP session; the token
+ * B. Fastmail onboarding → paste an API token (mock JMAP session; the token
  *    is the credential, so the email verifies automatically) → set a
  *    password → land on the review inbox.
  *
@@ -123,7 +123,7 @@ describe("Signup journeys", () => {
     }
   });
 
-  it("onboards through a FastMail token: verified account, connection, review inbox", async () => {
+  it("onboards through a Fastmail token: verified account, connection, review inbox", async () => {
     const page = await openPage();
     // The mock derives the mailbox address from the token, so the account
     // is unique per run.
@@ -132,7 +132,7 @@ describe("Signup journeys", () => {
     try {
       await page.goto("/onboarding", { waitUntil: "load", timeout: 15_000 });
       await page.fill('input[name="token"]', token);
-      await page.getByRole("button", { name: "Verify token" }).click();
+      await page.getByRole("button", { name: "Verify Fastmail token" }).click();
 
       // Step 2: the token proved mailbox control, so only a password is
       // asked for; the email is the mock session's username.
@@ -171,7 +171,7 @@ describe("Signup journeys", () => {
     }
   });
 
-  it("connects a FastMail account from the Email page settings", async () => {
+  it("connects a Fastmail account from the Email page settings", async () => {
     const page = await openPage();
     const email = await seedVerifiedUser();
     const accountId = (

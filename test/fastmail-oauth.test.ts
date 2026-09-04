@@ -29,12 +29,12 @@ import { testPrisma } from "./helpers/seedTestData";
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
 
 /**
- * FastMail OAuth: pure-crypto units (PKCE, authorize URL), the connection
+ * Fastmail OAuth: pure-crypto units (PKCE, authorize URL), the connection
  * token resolver (legacy passthrough, fresh skip, refresh rotation +
  * failure, concurrent dedup), the callback route (state check, consent
  * denial, signed-in and anonymous paths), the env-gated entry route, and
  * the onboarding flow's fmPending branch. True end-to-end consent needs a
- * registered FastMail client id.
+ * registered Fastmail client id.
  */
 
 vi.mock("~/lib/jmap.server", () => ({
@@ -49,7 +49,7 @@ vi.mock("~/lib/fastmail-oauth.server", async (importOriginal) => {
     exchangeAuthorizationCode: vi.fn(),
     // Per-test overrides for the env-gated entry route (the client id
     // const is baked in at env import; the accessors read it at call time).
-    isFastMailOAuthConfigured: vi.fn(actual.isFastMailOAuthConfigured),
+    isFastmailOAuthConfigured: vi.fn(actual.isFastmailOAuthConfigured),
     fastMailOAuthClientId: vi.fn(actual.fastMailOAuthClientId),
   };
 });
@@ -174,7 +174,7 @@ describe("buildAuthorizeUrl", () => {
   });
 });
 
-describe("isFastMailOAuthConfigured", () => {
+describe("isFastmailOAuthConfigured", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
@@ -186,14 +186,14 @@ describe("isFastMailOAuthConfigured", () => {
     const off = await vi.importActual<
       typeof import("~/lib/fastmail-oauth.server")
     >("~/lib/fastmail-oauth.server");
-    expect(off.isFastMailOAuthConfigured()).toBe(false);
+    expect(off.isFastmailOAuthConfigured()).toBe(false);
 
     vi.stubEnv("FASTMAIL_OAUTH_CLIENT_ID", "test-client-id");
     vi.resetModules();
     const on = await vi.importActual<
       typeof import("~/lib/fastmail-oauth.server")
     >("~/lib/fastmail-oauth.server");
-    expect(on.isFastMailOAuthConfigured()).toBe(true);
+    expect(on.isFastmailOAuthConfigured()).toBe(true);
   });
 });
 
@@ -465,9 +465,9 @@ describe("updateEmailConnectionTokens", () => {
 });
 
 describe("connect-fastmail entry", () => {
-  it("redirects to FastMail authorization and parks the flow on the session", async () => {
+  it("redirects to Fastmail authorization and parks the flow on the session", async () => {
     const oauthMod = await import("~/lib/fastmail-oauth.server");
-    vi.mocked(oauthMod.isFastMailOAuthConfigured).mockReturnValue(true);
+    vi.mocked(oauthMod.isFastmailOAuthConfigured).mockReturnValue(true);
     vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
     const { loader } = await import("~/routes/connect-fastmail");
     // connect-fastmail throws the redirect; catch the thrown Response.
@@ -492,7 +492,7 @@ describe("connect-fastmail entry", () => {
       "urn:ietf:params:jmap:core urn:ietf:params:jmap:mail",
     );
 
-    // The parked flow must carry the exact state sent to FastMail and a
+    // The parked flow must carry the exact state sent to Fastmail and a
     // verifier matching the challenge in the URL.
     const cookie = res.headers.get("set-cookie")!;
     const session = await sessionStorage.getSession(cookie);
@@ -510,7 +510,7 @@ describe("connect-fastmail entry", () => {
     // pins the throttle actually engaging on the new route: 5 attempts
     // (AUTH_THRESHOLD) pass, the 6th trips guardLockout.
     const oauthMod = await import("~/lib/fastmail-oauth.server");
-    vi.mocked(oauthMod.isFastMailOAuthConfigured).mockReturnValue(true);
+    vi.mocked(oauthMod.isFastmailOAuthConfigured).mockReturnValue(true);
     vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
     const { loader } = await import("~/routes/connect-fastmail");
     const ip = "198.51.100.42";

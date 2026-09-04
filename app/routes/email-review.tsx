@@ -111,7 +111,7 @@ export async function action({ request }: Route.ActionArgs) {
         return Response.json(
           {
             ok: false,
-            error: `Scan failed: ${message}. Check that the API token is still valid in FastMail, then try again.`,
+            error: `Scan failed: ${message}. Check that the API token is still valid in Fastmail, then try again.`,
           },
           { status: 502 },
         );

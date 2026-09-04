@@ -14,7 +14,7 @@ let serverProcess: ChildProcess | undefined;
 let mockJmap: Server | undefined;
 
 /**
- * Local mock of FastMail's JMAP session endpoint, so browser tests can
+ * Local mock of Fastmail's JMAP session endpoint, so browser tests can
  * drive the connect and onboarding flows without the spawned server ever
  * reaching api.fastmail.com (the suite forbids outbound network). Any
  * Bearer token verifies; the username is derived from the token so each
@@ -85,7 +85,7 @@ export async function launchServer(): Promise<string> {
     GOOGLE_OAUTH_CLIENT_ID: "test-gmail-client-id",
     GOOGLE_OAUTH_CLIENT_SECRET: "test-gmail-client-secret",
     GOOGLE_PUBSUB_TOPIC: "projects/test/topics/expense-test",
-    // Same for the FastMail OAuth button (public PKCE client, no secret).
+    // Same for the Fastmail OAuth button (public PKCE client, no secret).
     FASTMAIL_OAUTH_CLIENT_ID: "test-fm-client-id",
     // Point the user-token JMAP client at the local mock (see
     // startMockJmap) so connect and onboarding flows stay offline.

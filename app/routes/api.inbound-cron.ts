@@ -5,10 +5,10 @@ import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
 import type { Route } from "./+types/api.inbound-cron";
 
 /**
- * Daily FastMail maintenance + catch-up cron (vercel.json). Two jobs in one
+ * Daily Fastmail maintenance + catch-up cron (vercel.json). Two jobs in one
  * tick:
  *  1. renew the push subscription when it is within 7 days of expiry
- *     (FastMail push subscriptions live ~30 days)
+ *     (Fastmail push subscriptions live ~30 days)
  *  2. drain the Receipts folder of anything a missed push left behind
  *
  * Auth, monitoring, and the response envelopes are the shared cronTick
@@ -24,7 +24,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     name: "inbound-cron",
     crontab: "0 12 * * *",
     configured: Boolean(FASTMAIL_TOKEN),
-    configuredError: "FastMail is not configured on this deployment",
+    configuredError: "Fastmail is not configured on this deployment",
     run: async () => {
       const subscriptionId = await ensureSubscription();
       const result = await processUnprocessedReceipts();

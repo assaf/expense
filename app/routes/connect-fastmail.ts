@@ -8,14 +8,14 @@ import {
   FM_OAUTH_MAX_AGE_S,
   FM_OAUTH_SESSION_KEY,
   generatePkcePair,
-  isFastMailOAuthConfigured,
+  isFastmailOAuthConfigured,
   type FmOAuthFlow,
 } from "~/lib/fastmail-oauth.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 
 /**
- * "Connect with FastMail" entry point (GET /connect-fastmail): bounces the
- * browser to FastMail's OAuth consent page. Works signed-in (the Settings
+ * "Connect with Fastmail" entry point (GET /connect-fastmail): bounces the
+ * browser to Fastmail's OAuth consent page. Works signed-in (the Settings
  * path) and anonymous (the onboarding path) — no requireUser here; the
  * callback branches on the session. Env-gated: without
  * FASTMAIL_OAUTH_CLIENT_ID (or token encryption) the flow degrades to a
@@ -36,11 +36,11 @@ function resumePath(raw: string | null): string {
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const rawNext = url.searchParams.get("next");
-  if (!isFastMailOAuthConfigured() || !isTokenCryptoConfigured()) {
+  if (!isFastmailOAuthConfigured() || !isTokenCryptoConfigured()) {
     throw redirect(`${resumePath(rawNext)}?oauthError=unconfigured`);
   }
   // Minting flow state costs a signed cookie write and enables two
-  // outbound FastMail calls downstream; cap it per IP like every other
+  // outbound FastmaiFastmaildownstream; cap it per IP like every other
   // anonymous path (skips empty-IP requests, e.g. tests).
   await guardAnonymousAttempt(request, "fastmail-oauth");
   const state = randomBytes(32).toString("base64url");

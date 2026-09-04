@@ -197,7 +197,7 @@ export type Settings = {
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
-  /** True when the account completed FastMail onboarding and hasn't
+  /** True when the account completed Fastmail onboarding and hasn't
    * dismissed the welcome panel yet; the ONLY accounts that see the
    * panel are the ones the onboarding flow explicitly flags (the default
    * is hidden, so email-signup accounts never see it). */

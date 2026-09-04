@@ -258,7 +258,7 @@ afterEach(async () => {
     .catch(() => {});
 });
 
-describe("MIME bridge over FastMail", () => {
+describe("MIME bridge over Fastmail", () => {
   const id = "fm-bridge-1";
 
   it("parses a raw email into the ReceivedEmail shape", async () => {

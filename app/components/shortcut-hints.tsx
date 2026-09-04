@@ -5,7 +5,7 @@ import { useLocation } from "react-router";
 import { ACTION_SHORTCUTS } from "~/components/command-palette";
 
 /**
- * Shift+? shortcut hints, the FastMail trick: pressing ? pins a keycap next
+ * Shift+? shortcut hints, the Fastmail trick: pressing ? pins a keycap next
  * to every element the palette shortcuts drive (nav buttons, the create
  * buttons, the search box), so the keys are discovered in place instead of
  * memorized from the palette. Press ? again (or Escape) to dismiss.

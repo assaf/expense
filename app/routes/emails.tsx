@@ -32,7 +32,7 @@ import {
 } from "~/lib/token-crypto.server";
 import {
   connectionAccessToken,
-  isFastMailOAuthConfigured,
+  isFastmailOAuthConfigured,
 } from "~/lib/fastmail-oauth.server";
 import { destroyConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { formString, unknownIntent } from "~/lib/validation";
@@ -41,7 +41,7 @@ import type { Route } from "./+types/emails";
 /**
  * Email: how receipts get into Expense by email. Two features:
  *
- * 1. Connected email accounts: a user's own mailbox (FastMail via JMAP) whose
+ * 1. Connected email accounts: a user's own mailbox (Fastmail via JMAP) whose
  *    receipts are imported automatically (expense added, email moved to
  *    Trash, and a reply with an edit link lands in the inbox).
  * 2. Receipts by email: a dedicated forward-to address; forwarding a receipt
@@ -49,13 +49,13 @@ import type { Route } from "./+types/emails";
  */
 
 const OAUTH_ERROR_TEXT: Record<string, string> = {
-  state: "The FastMail connection attempt expired or did not match; try again.",
-  denied: "FastMail consent was not granted; nothing was connected.",
-  exchange: "FastMail could not exchange the authorization; try again.",
+  state: "The Fastmail connection attempt expired or did not match; try again.",
+  denied: "Fastmail consent was not granted; nothing was connected.",
+  exchange: "Fastmailnot exchange the authorization; try again.",
   verify:
-    "FastMail approved the connection but the token failed verification; try again.",
+    "Fastmail approved the connection but the token failed verification; try again.",
   unconfigured:
-    "Connecting with FastMail is not configured on this deployment.",
+    "Connecting with Fastmail is not configured on this deployment.",
 };
 
 const GMAIL_OAUTH_ERROR_TEXT: Record<string, string> = {
@@ -103,7 +103,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inboundSenders,
     emailConnections,
     emailAccountsConfigured: isTokenCryptoConfigured(),
-    oauthConfigured: isFastMailOAuthConfigured(),
+    oauthConfigured: isFastmailOAuthConfigured(),
     googleConfigured: isGmailOAuthConfigured(),
     oauthNotice,
   };
@@ -199,7 +199,7 @@ export async function action({ request }: Route.ActionArgs) {
       const connection = await readEmailConnection(user.accountId, id);
       if (connection) {
         // Best effort: tear down the server-side push subscription with
-        // the user's token. A failure (revoked token, FastMail down) still
+        // the user's token. A failure (revoked token, Fastmail down) still
         // disconnects. The orphaned subscription dies at expiry and its
         // pushes hit the webhook's unknown-connection path.
         try {
@@ -264,7 +264,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
         </p>
         {emailConnections.length === 0 && inboundSenders.length > 0 ? (
           <p className="mb-3 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
-            Forwarding works, but connect your Gmail or FastMail account above
+            Forwarding works, but connect your Gmail or Fastmail account above
             and receipts landing in your inbox are processed automatically, no
             forwarding needed.
           </p>

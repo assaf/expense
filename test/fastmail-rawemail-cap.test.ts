@@ -37,7 +37,7 @@ const EMAIL_GET = {
     ],
   ],
 };
-/** RFC 8621 types Email/get's messageId as String[]; FastMail sends the
+/** RFC 8621 types Email/get's messageId as String[]; Fastmail sends the
  * array form, which must never reach the reply envelope as a non-string
  * (EXPENSE-S: "value.replace is not a function" on every confirmation). */
 const EMAIL_GET_ARRAY_MESSAGE_ID = {

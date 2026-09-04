@@ -2,10 +2,10 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
- * One-time FastMail push setup:
+ * One-time Fastmail push setup:
  *  1. generates PUSH_PRIVATE_KEY / PUSH_AUTH (RFC 8291 Web Push keys),
  *     writes them to .env, and prints the `vercel env add` commands
- *  2. creates (or renews) the FastMail push subscription pointing at
+ *  2. creates (or renews) the Fastmail push subscription pointing at
  *     <PUBLIC_URL>/api/inbound-push
  *
  * Run it once before deploy, then again after deploy so the PushVerification
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
 
   if (!FASTMAIL_TOKEN) {
     console.error(
-      "FASTMAIL_TOKEN is missing — add it to .env first (FastMail → Settings → " +
+      "FASTMAIL_TOKEN is missing — add it to .env first (Fastmail → Settings → " +
         "Privacy & Security → Integrations → API tokens; full mail access).",
     );
     process.exit(1);

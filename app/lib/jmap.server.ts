@@ -39,7 +39,7 @@ export function formatAddress(
 
 /** What "verify this token" resolved to. */
 export interface JmapTokenInfo {
-  /** The FastMail account's own address (session `username`). */
+  /** The Fastmail account's own address (session `username`). */
   username: string;
   /** JMAP account id for the mail capability (drives all later calls). */
   mailAccountId: string;
@@ -80,21 +80,21 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
     return {
       ok: false,
       reason: "network",
-      message: `Could not reach FastMail: ${String(err)}`,
+      message: `Could not reach Fastmail: ${String(err)}`,
     };
   }
   if (res.status === 401 || res.status === 403) {
     return {
       ok: false,
       reason: "invalid-token",
-      message: "FastMail rejected this token — check it and try again.",
+      message: "Fastmail rejected this token — check it and try again.",
     };
   }
   if (!res.ok) {
     return {
       ok: false,
       reason: "network",
-      message: `FastMail returned ${res.status} — try again in a moment.`,
+      message: `Fastmail returned ${res.status} — try again in a moment.`,
     };
   }
   let body: unknown;
@@ -104,7 +104,7 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
     return {
       ok: false,
       reason: "network",
-      message: "FastMail returned an unreadable session response.",
+      message: "Fastmail returned an unreadable session response.",
     };
   }
   const parsed = sessionResponseSchema.safeParse(body);
@@ -112,7 +112,7 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
     return {
       ok: false,
       reason: "network",
-      message: "FastMail returned an unreadable session response.",
+      message: "Fastmail returned an unreadable session response.",
     };
   }
   const j = parsed.data;
@@ -138,7 +138,7 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
 }
 
 /**
- * Verify a user-supplied FastMail API token by loading its JMAP session.
+ * Verify a user-supplied Fastmail API token by loading its JMAP session.
  * `invalid-token` covers 401/403 (bad or revoked token); anything else
  * (timeout, 5xx) is `network` so the UI can suggest retrying.
  */
@@ -179,7 +179,7 @@ export type JmapCapability = "urn:ietf:params:jmap:submission";
 /**
  * POST a batch of JMAP method calls; throws on the first per-call error,
  * including per-object /set failures surfaced via notUpdated/notCreated/
- * notDestroyed (the FastMail gotcha). Shared core behind both clients:
+ * notDestroyed (the Fastmail gotcha). Shared core behind both clients:
  * `jmapCall` (per-token, strict) and fastmail.server.ts's app-mailbox
  * client (which passes `tolerateNotFoundDestroy` for idempotent deletes).
  */
@@ -269,7 +269,7 @@ export async function jmapUploadBlob(
 /**
  * POST a batch of JMAP method calls with a user token; throws on the first
  * per-call error, including per-object /set failures surfaced via
- * notUpdated/notCreated/notDestroyed (the FastMail gotcha the app's own
+ * notUpdated/notCreated/notDestroyed (the Fastmail gotcha the app's own
  * client, fastmail.server.ts, documents).
  */
 export async function jmapCall(
@@ -290,7 +290,7 @@ export async function jmapCall(
 
 // --- PushSubscription + Email/import (shared by both auth flavors) ----------
 
-/** A FastMail push subscription (PushSubscription/get). */
+/** A Fastmail push subscription (PushSubscription/get). */
 export interface PushSubscriptionInfo {
   id: string;
   deviceClientId: string;
@@ -325,7 +325,7 @@ export async function jmapPushList(
 }
 
 /** Create a push subscription (PushSubscription/set); returns the new id.
- * Throws when FastMail rejects the create. */
+ * Throws when Fastmail rejects the create. */
 export async function jmapPushCreate(
   token: string,
   opts: {
@@ -365,7 +365,7 @@ export async function jmapPushCreate(
   return id;
 }
 
-/** Echo FastMail's PushVerification code back (completes the handshake). */
+/** Echo Fastmail's PushVerification code back (completes the handshake). */
 export async function jmapPushVerify(
   token: string,
   subscriptionId: string,
@@ -429,7 +429,7 @@ export async function jmapImportEmail(
 }
 
 const jmapAddressSchema = z.object({
-  // RFC 8621 EmailAddress.name is String|null: FastMail sends null when a
+  // RFC 8621 EmailAddress.name is String|null: Fastmail sends null when a
   // participant has no display name (EXPENSE-X: name:null killed the whole
   // Email/get parse). email stays optional: formatAddress maps a missing
   // address to null and the callers tolerate it.
@@ -452,7 +452,7 @@ const jmapEmailMetadataSchema = z.object({
 export type EmailMetadata = z.infer<typeof jmapEmailMetadataSchema>;
 
 /** Email/get for one message id, zod-validated at the wire boundary. This
- * is where FastMail's real response shape enters the app (EXPENSE-S: the
+ * is where Fastmail's real response shape enters the app (EXPENSE-S: the
  * String[] messageId was typed as string, reached the reply envelope, and
  * killed every confirmation send with "value.replace is not a function").
  * A missing id returns undefined (fetchRawRfc822 turns that into "Email
@@ -513,7 +513,7 @@ export interface RawRfc822Email {
 /** Download an email's RFC 5322 blob and map its metadata to the common
  * shape. Shared by both transports (the app's mailbox and connected
  * accounts); the caller owns the Email/get lookup and the auth headers.
- * The top-level Email blob is the full RFC 5322 message; FastMail serves it
+ * The top-level Email blob is the full RFC 5322 message; Fastmail serves it
  * for both message/rfc822 and application/octet-stream. */
 export async function fetchRawRfc822(opts: {
   id: string;

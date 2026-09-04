@@ -101,7 +101,7 @@ describe("api.inbound-push", () => {
     expect(res.status).toBe(400);
   });
 
-  it("echoes a PushVerification code back to FastMail", async () => {
+  it("echoes a PushVerification code back to Fastmail", async () => {
     const res = await action(
       args(
         post(

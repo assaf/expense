@@ -14,7 +14,7 @@ import {
 } from "~/lib/fastmail.server";
 
 /**
- * FastMail push (RFC 8291 Web Push) support for the receipts-by-email
+ * Fastmail push (RFC 8291 Web Push) support for the receipts-by-email
  * pipeline. Ported from the inbox project (lib/keys.ts, lib/decrypt.ts,
  * lib/subscription.ts).
  *
@@ -59,7 +59,7 @@ export function ecdhFromPrivate(privateKey: string): ECDH {
   return ecdh;
 }
 
-/** The decrypted push envelope. Decryption is the auth (only FastMail
+/** The decrypted push envelope. Decryption is the auth (only Fastmail
  * holds the key material), and the schema pins the event shape so a
  * changed payload is rejected loudly instead of silently no-oping the
  * drain. Extra event fields are kept (loose object). */
@@ -93,7 +93,7 @@ export function pushUrl(): string {
 
 const MAX_BODY_BYTES = 1024 * 1024; // a push payload is a few KB
 
-export interface FastMailPushOptions {
+export interface FastmailPushOptions {
   /**
    * Extra env values this webhook additionally needs, e.g. FASTMAIL_TOKEN
    * on /api/inbound-push (the subscription renewal path uses it). Any unset
@@ -105,18 +105,18 @@ export interface FastMailPushOptions {
 }
 
 /**
- * Shared preamble for the FastMail JMAP push webhooks (public; decryption
+ * Shared preamble for the Fastmail JMAP push webhooks (public; decryption
  * success is itself the auth): config gate (503), method check (405),
  * body cap (413), then RFC 8291 decryption (400 on failure). Returns the
  * Response to bail with, or the decrypted payload.
  */
-export async function readFastMailPush(
+export async function readFastmailPush(
   request: Request,
-  opts: FastMailPushOptions,
+  opts: FastmailPushOptions,
 ): Promise<Response | PushPayload> {
   if (!PUSH_PRIVATE_KEY || !PUSH_AUTH || opts.requiredEnv?.some((v) => !v)) {
     return Response.json(
-      { error: "FastMail push is not configured on this deployment" },
+      { error: "Fastmail push is not configured on this deployment" },
       { status: 503 },
     );
   }

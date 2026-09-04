@@ -84,7 +84,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     path.startsWith("/reset-password") ||
     path.startsWith("/receipts-email-verify") ||
     path.startsWith("/verify-email") ||
-    // The OAuth redirect target must be reachable signed-out (FastMail
+    // The OAuth redirect target must be reachable signed-out (Fastmail
     // bounces the user's browser there mid-flow) and connect-fastmail
     // serves the anonymous onboarding path; both self-gate.
     path === "/connect-fastmail" ||

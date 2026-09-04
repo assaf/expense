@@ -31,12 +31,12 @@ import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
- * FastMail-backed transport for the receipts-by-email pipeline.
+ * Fastmail-backed transport for the receipts-by-email pipeline.
  *
  * The pipeline (`processInboundEvent` in inbound-email.server) talks to the
  * world through the injectable `InboundDeps` collaborators; this module
  * implements the three fetch collaborators (email, attachment list, blob
- * download) over FastMail JMAP instead of the Resend API, so the whole
+ * download) over Fastmail JMAP instead of the Resend API, so the whole
  * OCR/DeepSeek/expense-create pipeline runs unchanged.
  *
  * Flow: a Fastmail delivery rule files receipts into a folder (never the
@@ -89,16 +89,16 @@ export function clearMimeCache(): void {
   mimeCache.clear();
 }
 
-// --- InboundDeps over FastMail ----------------------------------------------
+// --- InboundDeps over Fastmail ----------------------------------------------
 
 /** Build the `InboundDeps` collaborators that the pipeline needs from JMAP;
  * every other collaborator is the standard implementation. */
 export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
   return {
     ...mimeFetchDeps(mimeCache, adapter, {
-      // The FastMail transport keys the cache by the raw JMAP id.
+      // The Fastmail transport keys the cache by the raw JMAP id.
       cacheKey: (emailId) => emailId,
-      foreignAttachmentSuffix: "not produced by FastMail",
+      foreignAttachmentSuffix: "not produced by Fastmail",
     }),
     classifyAttachment: classifyReceiptAttachment,
     extractReceipt,

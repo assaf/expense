@@ -249,7 +249,7 @@ export async function createEmailConnection(input: {
 
 /**
  * Disconnect a mailbox: delete the row (the token dies with it; revoking
- * the token itself stays a FastMail-side action for the user). Caller must
+ * the token itself stays a Fastmail-side action for the user). Caller must
  * also destroy the server-side push subscription once phase 2 wires it.
  */
 export async function removeEmailConnection(
@@ -306,7 +306,7 @@ export async function setEmailConnectionStatus(
 
 /**
  * Persist rotated OAuth credentials. The refresh token rotates on every
- * exchange (FastMail revokes the old one), so whatever the token endpoint
+ * exchange (Fastmail revokes the old one), so whatever the token endpoint
  * returns must be saved before the next call; null clears a field.
  */
 export async function updateEmailConnectionTokens(input: {

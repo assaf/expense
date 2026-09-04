@@ -26,7 +26,7 @@ import {
 } from "~/lib/jmap.server";
 
 /**
- * Minimal FastMail JMAP client for the receipts-by-email push pipeline.
+ * Minimal Fastmail JMAP client for the receipts-by-email push pipeline.
  *
  * Ported from the inbox project (lib/jmap.ts) with the same hard-won details:
  *  - per-object /set failures come back in `notUpdated`/`notCreated`/
@@ -379,7 +379,7 @@ const realJmapSendDeps: JmapSendDeps = {
 
 /**
  * True when a submission failure is ambiguous: the request may have been
- * processed by FastMail with only the response lost (fetch timeout, dropped
+ * processed by Fastmail with only the response lost (fetch timeout, dropped
  * connection). Retrying such a failure can deliver a second copy of the
  * same message; explicit server rejections (HTTP/JMAP errors) are the only
  * failures where the submission is known not to exist and a retry is safe.
@@ -391,7 +391,7 @@ function isAmbiguousSubmitFailure(err: unknown): boolean {
       return true;
     }
     // fetch() network-level failure (connection refused/reset, DNS, …);
-    // the request may or may not have reached FastMail.
+    // the request may or may not have reached Fastmail.
     if (err instanceof TypeError && /fetch failed/i.test(err.message)) {
       return true;
     }
@@ -442,7 +442,7 @@ export async function sendEmailViaJmap(
       // request (an HTTP/JMAP error response means the submission is known
       // NOT to exist). When the request timed out or the connection
       // dropped, the first attempt may have landed with only the response
-      // lost; FastMail deletes EmailSubmission records after delivery, so
+      // lost; Fastmail deletes EmailSubmission records after delivery, so
       // there is no way to tell, and re-submitting the same email delivers
       // a SECOND copy (observed in the wild: identical Message-IDs in the
       // recipient's Inbox, one confirmation per submit). Those ambiguous

@@ -1,19 +1,19 @@
 import { FASTMAIL_TOKEN } from "~/lib/env";
 import {
   pushVerificationOf,
-  readFastMailPush,
+  readFastmailPush,
 } from "~/lib/fastmail-push.server";
 import { setVerificationCode } from "~/lib/fastmail.server";
 import { processUnprocessedReceipts } from "~/lib/inbound-fastmail.server";
 import type { Route } from "./+types/api.inbound-push";
 
 /**
- * FastMail JMAP push webhook (public, no session). FastMail POSTs an
+ * Fastmail JMAP push webhook (public, no session). Fastmail POSTs an
  * encrypted RFC 8291 (aes128gcm) payload here; successful decryption is
  * itself the authentication (only a sender holding our public key can
  * produce a decryptable body).
  *
- *  - PushVerification: FastMail asks us to echo the code back before the
+ *  - PushVerification: Fastmail asks us to echo the code back before the
  *    subscription becomes verified.
  *  - StateChange: new mail arrived somewhere; drain the Receipts folder.
  *
@@ -25,9 +25,9 @@ import type { Route } from "./+types/api.inbound-push";
 export const config = { maxDuration: 60 };
 
 export async function action({ request }: Route.ActionArgs) {
-  const payload = await readFastMailPush(request, {
+  const payload = await readFastmailPush(request, {
     // Inbound pushes also renew the subscription (daily cron), which needs
-    // the FastMail API token beyond the shared push keys.
+    // the Fastmail API token beyond the shared push keys.
     requiredEnv: [FASTMAIL_TOKEN],
     logTag: "[inbound-push]",
   });

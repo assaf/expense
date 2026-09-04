@@ -4,7 +4,7 @@ import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 
 /**
- * One-time welcome panel shown on the expense list after FastMail
+ * One-time welcome panel shown on the expense list after Fastmail
  * onboarding finishes. Introduces the features the user hasn't seen yet;
  * dismissing it writes the `onboardingDone` setting so it never returns.
  * `inboundAddress` comes from the loader; `~/lib/env` is server-only and

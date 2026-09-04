@@ -77,7 +77,7 @@ describe("GET /api/inbound-cron", () => {
     expect(res.status).toBe(401);
   });
 
-  it("reports 503 when FastMail is not configured on the deployment", async () => {
+  it("reports 503 when Fastmail is not configured on the deployment", async () => {
     // Auth comes first (an unauthenticated caller learns nothing about the
     // deployment's config); with a valid secret, an unconfigured
     // deployment answers 503 and never runs the tick.
