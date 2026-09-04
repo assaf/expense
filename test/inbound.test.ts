@@ -1482,8 +1482,9 @@ describe("processInboundEvent (body receipt)", () => {
       eventData({
         email_id: "email-pending-spoofed",
         from: "Pending <pending@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; dmarc=fail header.from=example.com",
+        ],
       }),
       deps,
     );
@@ -1508,8 +1509,9 @@ describe("processInboundEvent (body receipt)", () => {
       eventData({
         email_id: "email-pending-authed",
         from: "Authed <authed-pending@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dmarc=pass header.from=example.com",
+        ],
       }),
       deps,
     );
@@ -1586,15 +1588,17 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
     deps.fetchReceivedEmail = async () =>
       receivedEmail({
         from: "Victim <victim@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; spf=pass smtp.mailfrom=bounce@attacker.evil; dmarc=fail header.from=example.com",
+        ],
       });
     const result = await processInboundEvent(
       eventData({
         email_id: "email-spoofed",
         from: "Victim <victim@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; spf=pass smtp.mailfrom=bounce@attacker.evil; dmarc=fail header.from=example.com",
+        ],
       }),
       deps,
     );
@@ -1615,15 +1619,17 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
     deps.fetchReceivedEmail = async () =>
       receivedEmail({
         from: "Aligned <aligned@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=aligned.example.com; spf=pass smtp.mailfrom=bounce@aligned.example.com; dmarc=pass header.from=example.com",
+        ],
       });
     const result = await processInboundEvent(
       eventData({
         email_id: "email-aligned-auth",
         from: "Aligned <aligned@example.com>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=aligned.example.com; spf=pass smtp.mailfrom=bounce@aligned.example.com; dmarc=pass header.from=example.com",
+        ],
       }),
       deps,
     );
@@ -1649,8 +1655,9 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
       eventData({
         email_id: "email-forwarded-receipt",
         from: "Merchant <orders@merchant.example>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=forwarder.example; spf=pass smtp.mailfrom=bounce@forwarder.example; dmarc=fail header.from=merchant.example",
+        ],
       }),
       deps,
     );
@@ -1673,12 +1680,57 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
       eventData({
         email_id: "email-forward-unverified",
         from: "Merchant <orders@merchant.example>",
-        authResults:
+        authResults: [
           "mx3.messagingengine.com; dkim=pass header.d=forwarder.example; dmarc=fail header.from=merchant.example",
+        ],
       }),
       deps,
     );
     usedEmailIds.push("email-forward-unverified");
+    expect(result).toMatchObject({ status: "unknown-sender" });
+    expect(deps.sent).toHaveLength(0);
+  });
+
+  it("imports a verified sender's account-internal mail with an empty stamp", async () => {
+    // assaf@labnotes.org -> receipts@labnotes.org -> receipts@expense.…:
+    // every hop is inside the Fastmail account, so the final stamp has no
+    // clauses (no external hop was ever evaluated). Only an authenticated
+    // submission into the account produces this, so it counts as owner
+    // mail; sender verification still gates the import.
+    await allowSender(TEST_ACCOUNT_ID, "owner@labnotes.org");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({ from: "Assaf <owner@labnotes.org>" });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-internal-delivery",
+        from: "Assaf <owner@labnotes.org>",
+        authResults: ["mx3.messagingengine.com;"],
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-internal-delivery");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result.status === "created" || result.status === "partial").toBe(
+      true,
+    );
+  });
+
+  it("does not let an empty stamp bypass sender verification", async () => {
+    // Internal delivery proves the mail entered through the account, not
+    // that the From address is a verified sender: an unverified From still
+    // gets the verify-first path, never an import.
+    await allowSender(TEST_ACCOUNT_ID, "owner@labnotes.org");
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-internal-unverified",
+        from: "Stranger <stranger@example.com>",
+        authResults: ["mx3.messagingengine.com;"],
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-internal-unverified");
     expect(result).toMatchObject({ status: "unknown-sender" });
     expect(deps.sent).toHaveLength(0);
   });

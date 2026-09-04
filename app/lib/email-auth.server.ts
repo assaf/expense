@@ -116,23 +116,68 @@ function summarize(clauses: AuthClause[]): string {
     .join(", ");
 }
 
-/** Domains that the record's passing clauses authenticate (dkim `header.d=`,
- * spf `smtp.mailfrom=`, dmarc `header.from=`), deduped. Empty when the
- * record is missing or unparseable. Used to match a passing clause against
- * verified forwarder domains (INB-FWD-1). */
+/** Union of the domains the chain's clause-bearing records authenticate
+ * (dkim `header.d=`, spf `smtp.mailfrom=`, dmarc `header.from=`), deduped.
+ * Empty stamps (account-internal deliveries) contribute nothing. Used to
+ * match a passing clause against verified forwarder domains (INB-FWD-1). */
 export function passingAuthDomains(
-  record: string | null | undefined,
+  records: string | string[] | null | undefined,
 ): string[] {
-  if (record == null || record === "") return [];
-  const parsed = parseRecord(record);
-  if (!parsed) return [];
+  const chain = Array.isArray(records) ? records : [records];
   const domains = new Set<string>();
-  for (const clause of parsed.clauses) {
-    if (clause.method === "auth") continue; // auth-service result, no identity
-    if (!clause.result.startsWith("pass")) continue;
-    for (const domain of clause.domains) domains.add(domain);
+  for (const record of chain) {
+    if (record == null || record === "") continue;
+    const parsed = parseRecord(record);
+    if (!parsed) continue;
+    for (const clause of parsed.clauses) {
+      if (clause.method === "auth") continue; // auth-service result, no identity
+      if (!clause.result.startsWith("pass")) continue;
+      for (const domain of clause.domains) domains.add(domain);
+    }
   }
   return [...domains];
+}
+
+/**
+ * Evaluate the message's Authentication-Results chain, newest stamp first
+ * (see authResultsChain). Empty stamps — the host stamped the delivery but
+ * evaluated nothing, which only happens for account-internal hops (a
+ * same-account submission or an internal redirect) — carry no verdict and
+ * are skipped. When every record is empty, the message never crossed an
+ * external hop: only an authenticated submission into the account (or the
+ * account's own redirect of such mail) can produce that, so it passes as
+ * owner-internal mail. An attacker's mail always enters from outside and
+ * therefore always has a clause-bearing stamp, which is then held to the
+ * strict From-aligned rule below.
+ */
+export function evaluateAuthChain(
+  records: string[],
+  fromEmail: string,
+): AuthVerdict {
+  if (records.length === 0) {
+    return {
+      ok: true,
+      reason: "no authentication-results record (legacy transport)",
+    };
+  }
+  let sawClauses = false;
+  let lastReason = "no authentication clauses";
+  for (const record of records) {
+    if (record == null || record === "") continue;
+    const parsed = parseRecord(record);
+    if (!parsed || parsed.clauses.length === 0) continue;
+    sawClauses = true;
+    const verdict = evaluateAuthResults(record, fromEmail);
+    if (verdict.ok) return verdict;
+    lastReason = verdict.reason;
+  }
+  if (!sawClauses) {
+    return {
+      ok: true,
+      reason: "no external hop: delivered inside the mail host's account",
+    };
+  }
+  return { ok: false, reason: lastReason };
 }
 
 export function evaluateAuthResults(

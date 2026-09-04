@@ -29,22 +29,23 @@ images (e.g. the z.ai description backfill, Aug 2026). Error
 results stay in the folder, marked, and are skipped next run; the
 pipeline's reply email is the recovery path. The daily cron
 (`/api/inbound-cron`, `0 12 * * *`) renews the ~30-day push subscription
-and drains anything a missed push left behind. Sender
-verification: From must have a verified `inbound_senders` row (one row per
-account+address, normalized lowercase), and the DELIVERED message must
-carry a passing, aligned authentication result — the newest Fastmail-
-stamped `Authentication-Results` header (authserv-id messagingengine.com)
-must show `dmarc=pass`, or `dkim=pass`/`spf=pass` for a domain aligned
-with the From domain (INB-SPOOF-1: the From header is forgeable at SMTP
-time, and a verified row only proves a one-time verification, not that
-THIS message came from its owner). A verified sender whose mail fails
-authentication is not imported and gets an honest "failed authentication"
-reply (the same amplifier class as the verify-first reply, capped the
-same way); a record-less message is allowed only because Fastmail stamps
-every delivery; records are evaluated from the newest
-messagingengine.com-stamped header so attacker-supplied A-R headers are
-ignored (they sit older than Fastmail's stamp, which rewrites same-id
-headers on ingestion).
+and drains anything a missed push left behind.
+
+Sender verification: From must have a verified `inbound_senders` row (one
+row per account+address, normalized lowercase), and the DELIVERED message
+must pass authentication — the newest Fastmail-stamped
+`Authentication-Results` header (authserv-id messagingengine.com) must
+show `dmarc=pass`, or `dkim=pass`/`spf=pass` for a domain aligned with the
+From domain (INB-SPOOF-1: the From header is forgeable at SMTP time, and a
+verified row only proves a one-time verification, not that THIS message
+came from its owner). A verified sender whose mail fails authentication is
+not imported and gets an honest "failed authentication" reply (the same
+amplifier class as the verify-first reply, capped the same way); a
+record-less message is allowed only because Fastmail stamps every
+delivery. The pipeline reads ALL Fastmail stamps on the message, newest
+first (`authResultsChain`), so attacker-supplied A-R headers — which sit
+older than Fastmail's stamps, which rewrite same-id headers on ingestion —
+are ignored.
 
 Forward fallback (INB-FWD-1): a client-side forward keeps the ORIGINAL
 sender in From, so no clause aligns with it — the passing auth on the
@@ -54,6 +55,18 @@ domains (`passingAuthDomains`) against the domains of VERIFIED senders
 (`findVerifiedForwarder`); a pass aligned with a verified sender's domain
 imports into that sender's account, because producing it requires sending
 as that domain — the same owner-proof the From-aligned pass carries.
+
+Internal delivery: a stamp with no dkim/spf/dmarc clauses means the host
+evaluated nothing — the signature of account-internal delivery (a
+same-account submission like assaf@labnotes.org → receipts@labnotes.org,
+or the account's own redirect to receipts@expense.labnotes.org). Empty
+stamps are skipped; when the whole chain is empty the message never
+crossed an external hop, which only an authenticated submission into the
+account can produce, so it passes as owner-internal mail — sender
+verification still applies. External mail always gets a clause-bearing
+stamp at first delivery, so an outside sender cannot produce an empty
+chain.
+
 failure/confirmation replies are sent FROM the FastMail identity
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the

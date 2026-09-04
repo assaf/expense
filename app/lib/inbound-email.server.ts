@@ -29,10 +29,7 @@ import {
   SIMPLE_FOOTER,
 } from "~/lib/email-layout.server";
 import { captureWarning } from "~/lib/errors.server";
-import {
-  evaluateAuthResults,
-  passingAuthDomains,
-} from "~/lib/email-auth.server";
+import { evaluateAuthChain, passingAuthDomains } from "~/lib/email-auth.server";
 import { escapeHtml } from "~/lib/escape";
 import {
   confirmationEmail,
@@ -100,9 +97,10 @@ export interface EmailReceivedData {
    * hasOwnConfirmationHeader for case-insensitive lookup). Lets the
    * pipeline recognize the app's own outbound mail (loop guard). */
   headers: Record<string, string>;
-  /** The newest Fastmail-stamped Authentication-Results header value, or
-   * null when none (see evaluateAuthResults / INB-SPOOF-1). */
-  authResults?: string | null;
+  /** Fastmail-stamped Authentication-Results headers, newest first (see
+   * authResultsChain / evaluateAuthChain). An empty string is a stamp with
+   * no clauses: account-internal delivery, no external hop. */
+  authResults?: string[];
   attachments: {
     id: string;
     filename: string;
@@ -122,11 +120,11 @@ export interface ReceivedEmail {
   text: string | null;
   headers: Record<string, string>;
   /**
-   * The newest Fastmail-stamped Authentication-Results header value
-   * (authserv-id messagingengine.com), or null when none — see
-   * evaluateAuthResults (INB-SPOOF-1).
+   * Fastmail-stamped Authentication-Results headers, newest first
+   * (authserv-id messagingengine.com) — see evaluateAuthChain
+   * (INB-SPOOF-1).
    */
-  authResults?: string | null;
+  authResults?: string[];
   created_at: string;
   message_id: string;
 }
@@ -1271,7 +1269,7 @@ export async function processInboundEvent(
   // sender paths — a failing/missing record never imports AND never
   // replies (the From header is attacker-controlled at SMTP time; a
   // reply would let any spoofed address pump mail out of our mailbox).
-  let auth = evaluateAuthResults(data.authResults, fromEmail);
+  let auth = evaluateAuthChain(data.authResults ?? [], fromEmail);
   // INB-FWD-1: a client-side forward keeps the ORIGINAL sender in From, so
   // the From-aligned check fails even for honest forwards — the delivered
   // message instead carries the forwarder's own passing auth. When the

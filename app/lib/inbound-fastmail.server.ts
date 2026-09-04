@@ -11,7 +11,7 @@ import {
 import {
   createMimeInboundCache,
   headerRecord,
-  newestAuthResults,
+  authResultsChain,
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
@@ -138,9 +138,8 @@ export async function receiptEmailData(
     message_id: raw.messageId,
     subject: raw.subject,
     headers: headerRecord(email.headers),
-    authResults: newestAuthResults(email.headers),
     // The pipeline never reads data.attachments (metadata comes from
-    // deps.listAttachments), so this stays empty.
+    authResults: authResultsChain(email.headers),
     attachments: [],
   };
 }

@@ -115,21 +115,23 @@ export function headerRecord(
 }
 
 /**
- * The newest Fastmail-stamped Authentication-Results header value, or
- * null. Authentication-Results headers are PREPENDED in delivery order,
- * so the first one in file order is our host's own evaluation of the
- * message — attacker-supplied A-R headers sit older than it and are
- * ignored (and Fastmail rewrites same-id headers on ingestion).
+ * All Fastmail-stamped Authentication-Results header values, newest first
+ * (Authentication-Results headers are PREPENDED in delivery order, so file
+ * order = newest first). Attacker-supplied A-R headers sit older than the
+ * host's own stamps and are ignored (Fastmail rewrites same-id headers on
+ * ingestion). A record with no dkim/spf/dmarc clauses means the host added
+ * a stamp but evaluated nothing — the signature of account-internal
+ * delivery (same-account submission or an internal redirect), which never
+ * crosses an external hop.
  */
-export function newestAuthResults(
-  headers: ParsedEmail["headers"],
-): string | null {
+export function authResultsChain(headers: ParsedEmail["headers"]): string[] {
+  const out: string[] = [];
   for (const h of headers) {
     if (h.key.toLowerCase() !== "authentication-results") continue;
     const authservId = (h.value.split(";")[0] ?? "").toLowerCase();
-    if (authservId.includes("messagingengine.com")) return h.value;
+    if (authservId.includes("messagingengine.com")) out.push(h.value);
   }
-  return null;
+  return out;
 }
 
 /** Fastmail `contentId` may carry angle brackets; HTML references use `cid:` without them. */
@@ -187,7 +189,7 @@ export function mimeFetchDeps(
         html: email.html ?? null,
         text: email.text ?? null,
         headers: headerRecord(email.headers),
-        authResults: newestAuthResults(email.headers),
+        authResults: authResultsChain(email.headers),
         created_at: raw.receivedAt,
         message_id: email.messageId ?? raw.messageId,
       };

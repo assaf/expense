@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  evaluateAuthChain,
   evaluateAuthResults,
   passingAuthDomains,
 } from "~/lib/email-auth.server";
@@ -138,5 +139,64 @@ describe("passingAuthDomains (INB-FWD-1 input)", () => {
   it("returns nothing for a missing or unparseable record", () => {
     expect(passingAuthDomains(null)).toEqual([]);
     expect(passingAuthDomains(";;;")).toEqual([]);
+  });
+});
+
+describe("evaluateAuthChain", () => {
+  it("allows a missing chain (legacy transport)", () => {
+    expect(evaluateAuthChain([], "user@example.com").ok).toBe(true);
+  });
+
+  it("allows an all-empty chain as owner-internal mail", () => {
+    // Fastmail stamps internal deliveries (same-account submission, or the
+    // account's own redirect) without evaluating anything: no external hop
+    // ever happened, which an outside sender cannot produce.
+    const verdict = evaluateAuthChain(
+      ["mx3.messagingengine.com;"],
+      "assaf@labnotes.org",
+    );
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("no external hop");
+  });
+
+  it("skips an empty newest stamp and evaluates the real one below it", () => {
+    // External mail that the account redirected internally: the internal
+    // leg prepends an empty stamp above the real first-delivery evaluation.
+    const verdict = evaluateAuthChain(
+      [
+        "mx3.messagingengine.com;",
+        "mx3.messagingengine.com; dmarc=pass header.from=example.com",
+      ],
+      "user@example.com",
+    );
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("dmarc=pass");
+  });
+
+  it("fails when the real evaluation below an empty stamp fails", () => {
+    const verdict = evaluateAuthChain(
+      [
+        "mx3.messagingengine.com;",
+        "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; dmarc=fail header.from=example.com",
+      ],
+      "user@example.com",
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toContain("dmarc=fail");
+  });
+});
+
+describe("passingAuthDomains (chains)", () => {
+  it("unions passing domains across records and skips empty stamps", () => {
+    expect(
+      passingAuthDomains([
+        "mx3.messagingengine.com;",
+        "mx3.messagingengine.com; dkim=pass header.d=fwd.example; dmarc=fail header.from=m.example",
+      ]),
+    ).toEqual(["fwd.example"]);
+  });
+
+  it("returns nothing for an all-empty chain", () => {
+    expect(passingAuthDomains(["mx3.messagingengine.com;"])).toEqual([]);
   });
 });
