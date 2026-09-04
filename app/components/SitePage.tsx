@@ -16,7 +16,7 @@ export function SitePage({
   padBottom?: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900">
+    <div className="min-h-screen bg-canvas">
       <SiteHeader />
       {children}
       <SiteFooter />

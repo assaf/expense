@@ -16,7 +16,7 @@ export function AuthCard({ center, children }: AuthCardProps) {
   return (
     <main
       id="main-content"
-      className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 px-4"
+      className="flex min-h-screen flex-col items-center justify-center bg-canvas px-4"
     >
       <Card
         className={cn("w-full max-w-sm p-8 shadow-sm", center && "text-center")}

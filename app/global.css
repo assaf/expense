@@ -10,6 +10,7 @@
   --font-figures: "Nebula Sans", var(--font-sans);
   --color-ink: #171717;
   --color-paper: #ffffff;
+  --color-canvas: #f8f7f2;
   --color-incomplete: #f7eed6;
 
   /* Palette borrowed from judgmentkit.ai: warm paper neutrals in light,
@@ -124,20 +125,21 @@ body {
 }
 
 body {
-  background-color: #f8f7f2;
+  background-color: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 .dark body {
-  background-color: #101312;
+  background-color: var(--color-canvas);
   color: #f2f4ef;
 }
 
 .dark {
   --color-ink: #f2f4ef;
   --color-paper: #181d1b;
+  --color-canvas: #101312;
   --color-incomplete: #33230c;
 }
 
