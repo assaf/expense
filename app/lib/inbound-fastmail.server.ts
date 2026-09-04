@@ -42,10 +42,12 @@ import { sendEmail } from "~/lib/reply.server";
  *
  * Flow: a Fastmail delivery rule files receipts into a folder (never the
  * Inbox); a JMAP StateChange push (or the daily cron) triggers
- * `processUnprocessedReceipts`, which marks each email `$receipt-processed`,
- * runs the pipeline, and destroys the email after a successful import.
- * Emails that fail stay in the folder (marked) as the safety net; the
- * pipeline's reply email is the recovery path.
+ * `processUnprocessedReceipts`, which runs the pipeline and, on every
+ * terminal outcome (import, rejection, drop, bounce), marks the email
+ * `$receipt-processed` and destroys it — the reply email is the recovery
+ * path for rejections, so re-forwarding is always the fix. Only an
+ * unexpected exception leaves the email in the folder (unmarked or
+ * retry-flagged) so the next drain retries it.
  */
 
 // --- JMAP adapter (injectable for tests) ------------------------------------
