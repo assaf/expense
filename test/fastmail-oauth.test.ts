@@ -50,7 +50,7 @@ vi.mock("~/lib/fastmail-oauth.server", async (importOriginal) => {
     // Per-test overrides for the env-gated entry route (the client id
     // const is baked in at env import; the accessors read it at call time).
     isFastmailOAuthConfigured: vi.fn(actual.isFastmailOAuthConfigured),
-    fastMailOAuthClientId: vi.fn(actual.fastMailOAuthClientId),
+    fastmailOAuthClientId: vi.fn(actual.fastmailOAuthClientId),
   };
 });
 
@@ -468,7 +468,7 @@ describe("connect-fastmail entry", () => {
   it("redirects to Fastmail authorization and parks the flow on the session", async () => {
     const oauthMod = await import("~/lib/fastmail-oauth.server");
     vi.mocked(oauthMod.isFastmailOAuthConfigured).mockReturnValue(true);
-    vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
+    vi.mocked(oauthMod.fastmailOAuthClientId).mockReturnValue("test-client-id");
     const { loader } = await import("~/routes/connect-fastmail");
     // connect-fastmail throws the redirect; catch the thrown Response.
     const res = (await loader(
@@ -511,7 +511,7 @@ describe("connect-fastmail entry", () => {
     // (AUTH_THRESHOLD) pass, the 6th trips guardLockout.
     const oauthMod = await import("~/lib/fastmail-oauth.server");
     vi.mocked(oauthMod.isFastmailOAuthConfigured).mockReturnValue(true);
-    vi.mocked(oauthMod.fastMailOAuthClientId).mockReturnValue("test-client-id");
+    vi.mocked(oauthMod.fastmailOAuthClientId).mockReturnValue("test-client-id");
     const { loader } = await import("~/routes/connect-fastmail");
     const ip = "198.51.100.42";
     const entry = () =>

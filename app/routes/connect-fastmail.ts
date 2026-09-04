@@ -4,7 +4,7 @@ import type { Route } from "./+types/connect-fastmail";
 import { guardAnonymousAttempt, sessionStorage } from "~/lib/auth.server";
 import {
   buildAuthorizeUrl,
-  fastMailOAuthClientId,
+  fastmailOAuthClientId,
   FM_OAUTH_MAX_AGE_S,
   FM_OAUTH_SESSION_KEY,
   generatePkcePair,
@@ -57,7 +57,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   session.set(FM_OAUTH_SESSION_KEY, flow);
   throw redirect(
     buildAuthorizeUrl({
-      clientId: fastMailOAuthClientId(),
+      clientId: fastmailOAuthClientId(),
       redirectUri: `${url.origin}/fastmail-oauth-callback`,
       state,
       challenge,

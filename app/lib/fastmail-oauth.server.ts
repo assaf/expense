@@ -78,7 +78,7 @@ export function isFastmailOAuthConfigured(): boolean {
 
 /** The registered client id at call time (env.ts caches at import; the
  * redirect route needs the live value). Empty string when unconfigured. */
-export function fastMailOAuthClientId(): string {
+export function fastmailOAuthClientId(): string {
   return FASTMAIL_OAUTH_CLIENT_ID;
 }
 
