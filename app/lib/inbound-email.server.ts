@@ -29,7 +29,10 @@ import {
   SIMPLE_FOOTER,
 } from "~/lib/email-layout.server";
 import { captureWarning } from "~/lib/errors.server";
-import { evaluateAuthResults } from "~/lib/email-auth.server";
+import {
+  evaluateAuthResults,
+  passingAuthDomains,
+} from "~/lib/email-auth.server";
 import { escapeHtml } from "~/lib/escape";
 import {
   confirmationEmail,
@@ -45,6 +48,7 @@ import {
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   findPendingSenderRow,
+  findVerifiedForwarder,
   findVerifiedSenderAccount,
   upsertInboundEmail,
   claimInboundEmail,
@@ -1267,7 +1271,16 @@ export async function processInboundEvent(
   // sender paths — a failing/missing record never imports AND never
   // replies (the From header is attacker-controlled at SMTP time; a
   // reply would let any spoofed address pump mail out of our mailbox).
-  const auth = evaluateAuthResults(data.authResults, fromEmail);
+  let auth = evaluateAuthResults(data.authResults, fromEmail);
+  // INB-FWD-1: a client-side forward keeps the ORIGINAL sender in From, so
+  // the From-aligned check fails even for honest forwards — the delivered
+  // message instead carries the forwarder's own passing auth. When the
+  // record has a pass aligned with a VERIFIED sender's domain, the message
+  // entered through that sender's authenticated mail; import into their
+  // account (spoofing it would require sending AS that domain).
+  const forwarder = auth.ok
+    ? undefined
+    : await findVerifiedForwarder(passingAuthDomains(data.authResults));
   if (verified) {
     // INB-SPOOF-1: a verified inbound_senders row proves the address was
     // verified ONCE — not that THIS message came from its owner. The From
@@ -1275,7 +1288,7 @@ export async function processInboundEvent(
     // must also carry a passing, aligned authentication result (evaluated
     // and stamped by Fastmail). Failures are demoted to the unverified
     // path below: not imported, replied with the honest reason.
-    if (!auth.ok) {
+    if (!auth.ok && !forwarder) {
       captureWarning(
         "[inbound] verified sender failed message authentication; not importing",
         { emailId: data.email_id, from: data.from, reason: auth.reason },
@@ -1287,14 +1300,13 @@ export async function processInboundEvent(
           "Receipt not imported — message failed authentication",
           [
             `We received an email claiming to be from <b>${escapeHtml(data.from)}</b>, but it failed SPF/DKIM/DMARC authentication, so it was not imported (a forged sender address could otherwise add fake expenses).`,
-            "If this was a legitimate receipt, forward it again from your mail client. If it keeps failing, the sending service needs to fix its mail authentication.",
+            "If this was a legitimate receipt, forward it from an address you've verified under Email → Receipts by email (your own address works — a forward carries your mail server's authentication, which we accept). If the merchant's own mail keeps failing, that service needs to fix its mail authentication.",
           ],
         ),
       });
       return { status: "auth-failed", reason: auth.reason };
     }
-  }
-  if (!verified) {
+  } else if (!forwarder) {
     const pending = await findPendingSenderRow(fromEmail);
     if (pending) {
       // The verify-first reply is the amplifier INB-REPLY-AMP-2 armed:
@@ -1331,8 +1343,9 @@ export async function processInboundEvent(
     });
     return { status: "unknown-sender" };
   }
-  const account = verified.account;
-
+  const source = verified ?? forwarder;
+  if (!source) return { status: "unknown-sender" };
+  const account = source.account;
   // Atomic claim: exactly one drain owns this email. A burst of webhook
   // pushes (or a push racing the daily cron) can both list the same email
   // before either marks it `$receipt-processed`; the first to insert the

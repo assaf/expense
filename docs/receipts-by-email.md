@@ -45,6 +45,15 @@ every delivery; records are evaluated from the newest
 messagingengine.com-stamped header so attacker-supplied A-R headers are
 ignored (they sit older than Fastmail's stamp, which rewrites same-id
 headers on ingestion).
+
+Forward fallback (INB-FWD-1): a client-side forward keeps the ORIGINAL
+sender in From, so no clause aligns with it — the passing auth on the
+delivered message belongs to the forwarder's own domain. When the From-
+aligned check fails, the pipeline instead matches the record's passing
+domains (`passingAuthDomains`) against the domains of VERIFIED senders
+(`findVerifiedForwarder`); a pass aligned with a verified sender's domain
+imports into that sender's account, because producing it requires sending
+as that domain — the same owner-proof the From-aligned pass carries.
 failure/confirmation replies are sent FROM the FastMail identity
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the

@@ -4,6 +4,7 @@ import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import { extractEmailAddress, isEmail } from "~/lib/validation";
+import { aligns } from "~/lib/email-auth.server";
 import {
   accountFromRow,
   VERIFICATION_RESEND_MS,
@@ -109,6 +110,50 @@ export async function findVerifiedSenderAccount(
   return {
     account: accountFromRow(account),
     verifiedAt: toIso(verification.verifiedAt),
+  };
+}
+/**
+ * INB-FWD-1: the verified sender whose DOMAIN a passing authentication
+ * clause aligns with — i.e. the trusted forwarder the message entered
+ * through. A client-side forward keeps the original sender in From, so the
+ * delivered message authenticates as the forwarder's domain instead;
+ * matching a VERIFIED sender row keeps the import scoped to the account
+ * that proved control of that address. Exact domain matches win over
+ * subdomain alignments; address order breaks ties.
+ */
+export async function findVerifiedForwarder(
+  passingDomains: string[],
+): Promise<{ account: Account; address: string } | undefined> {
+  if (passingDomains.length === 0) return undefined;
+  const verifications = await db.orm.public.InboundSenderVerification.where(
+    (v) => v.accountId.neq(""),
+  ).all();
+  const candidates = verifications
+    .map((v) => ({
+      verification: v,
+      domain: extractEmailAddress(v.address)?.split("@").pop()?.toLowerCase(),
+    }))
+    .filter((c): c is typeof c & { domain: string } => {
+      const { domain } = c;
+      return domain != null && passingDomains.some((d) => aligns(d, domain));
+    })
+    .sort((a, b) => {
+      const exact =
+        Number(passingDomains.includes(b.domain)) -
+        Number(passingDomains.includes(a.domain));
+      return exact !== 0
+        ? exact
+        : a.verification.address.localeCompare(b.verification.address);
+    });
+  const match = candidates[0];
+  if (!match) return undefined;
+  const account = await db.orm.public.Account.first({
+    id: match.verification.accountId,
+  });
+  if (!account) return undefined;
+  return {
+    account: accountFromRow(account),
+    address: match.verification.address,
   };
 }
 

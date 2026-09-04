@@ -1634,6 +1634,55 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
     );
   });
 
+  it("imports a forwarded merchant receipt via the verified forwarder's domain (INB-FWD-1)", async () => {
+    // A client-side forward keeps the ORIGINAL sender in From: the stamp
+    // shows dmarc failing for the merchant while the passing clauses carry
+    // the FORWARDER's domain. The verified forwarder's pass stands in.
+    await allowSender(TEST_ACCOUNT_ID, "owner@forwarder.example");
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        from: "Merchant <orders@merchant.example>",
+        subject: "Fwd: Your order receipt",
+      });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-forwarded-receipt",
+        from: "Merchant <orders@merchant.example>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=forwarder.example; spf=pass smtp.mailfrom=bounce@forwarder.example; dmarc=fail header.from=merchant.example",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-forwarded-receipt");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result.status === "created" || result.status === "partial").toBe(
+      true,
+    );
+    // Imported into the FORWARDER's account, not anyone else's.
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    expect(expenses.some((e) => e.type === "receipt")).toBe(true);
+  });
+
+  it("rejects forwarded-looking mail when no verified sender matches the passing domain", async () => {
+    // Same stamp shape, but forwarder.example belongs to nobody verified:
+    // the fallback must not fire (an attacker's own domain gets them
+    // nothing but imports into an account that verified THEM).
+    const deps = fakeDeps();
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-forward-unverified",
+        from: "Merchant <orders@merchant.example>",
+        authResults:
+          "mx3.messagingengine.com; dkim=pass header.d=forwarder.example; dmarc=fail header.from=merchant.example",
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-forward-unverified");
+    expect(result).toMatchObject({ status: "unknown-sender" });
+    expect(deps.sent).toHaveLength(0);
+  });
+
   it("only the verified account receives, regardless of who added first", async () => {
     // Both accounts added the same address; only Test Account verified it.
     await allowSender(

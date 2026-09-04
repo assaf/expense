@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { evaluateAuthResults } from "~/lib/email-auth.server";
+import {
+  evaluateAuthResults,
+  passingAuthDomains,
+} from "~/lib/email-auth.server";
 
 /**
  * INB-SPOOF-1: the import gate's Authentication-Results evaluation. The
@@ -99,5 +102,41 @@ describe("evaluateAuthResults", () => {
 
   it("fails when the From has no domain", () => {
     expect(evaluateAuthResults(PASS_RECORD, "no-domain").ok).toBe(false);
+  });
+});
+
+describe("passingAuthDomains (INB-FWD-1 input)", () => {
+  // The forward path matches these against verified sender domains: a
+  // client-side forward keeps the ORIGINAL sender in From (dmarc=fail
+  // header.from=merchant), while the passing clauses carry the FORWARDER's
+  // domain.
+  const FORWARDED_RECORD =
+    "mx3.messagingengine.com; dkim=pass header.d=forwarder.example; spf=pass smtp.mailfrom=bounce@forwarder.example; dmarc=fail (p=none) header.from=merchant.example";
+
+  it("collects domains from passing clauses only", () => {
+    expect(passingAuthDomains(FORWARDED_RECORD)).toEqual(["forwarder.example"]);
+  });
+
+  it("collects domains from every passing method", () => {
+    const record =
+      "mx; dkim=pass header.d=a.example; spf=pass smtp.mailfrom=b@b.example; dmarc=pass header.from=c.example";
+    expect(passingAuthDomains(record).sort()).toEqual([
+      "a.example",
+      "b.example",
+      "c.example",
+    ]);
+  });
+
+  it("returns nothing when every clause fails", () => {
+    expect(
+      passingAuthDomains(
+        "mx; dkim=fail header.d=a.example; dmarc=fail header.from=b.example",
+      ),
+    ).toEqual([]);
+  });
+
+  it("returns nothing for a missing or unparseable record", () => {
+    expect(passingAuthDomains(null)).toEqual([]);
+    expect(passingAuthDomains(";;;")).toEqual([]);
   });
 });

@@ -29,6 +29,15 @@ import { extractEmailAddress } from "~/lib/validation";
  *  - `spf` (its `smtp.mailfrom=` domain).
  * Alignment = same domain or org-domain suffix in either direction
  * (relaxed DMARC alignment).
+ *
+ * The forward path (INB-FWD-1) lives in the pipeline, not here: a
+ * client-side forward keeps the ORIGINAL sender in From, so no passing
+ * clause aligns with it. The pipeline instead matches the record's passing
+ * domains (passingAuthDomains) against verified receipts-by-email senders
+ * (findVerifiedForwarder): a pass aligned with a verified sender's domain
+ * proves the message entered through that sender's authenticated mail,
+ * the same owner-proof a From-aligned pass carries, since spoofing it
+ * requires sending AS that domain.
  */
 
 export interface AuthVerdict {
@@ -52,8 +61,9 @@ function domainOf(address: string): string {
   return at === -1 ? "" : address.slice(at + 1).toLowerCase();
 }
 
-/** Relaxed alignment: equal domains, or one a subdomain of the other. */
-function aligns(a: string, b: string): boolean {
+/** Relaxed alignment: equal domains, or one a subdomain of the other.
+ * Shared with the forwarder lookup in the inbound pipeline. */
+export function aligns(a: string, b: string): boolean {
   return Boolean(
     a && b && (a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`)),
   );
@@ -104,6 +114,25 @@ function summarize(clauses: AuthClause[]): string {
       (c) => `${c.method}=${c.result} (${c.domains.join("|") || "no domain"})`,
     )
     .join(", ");
+}
+
+/** Domains that the record's passing clauses authenticate (dkim `header.d=`,
+ * spf `smtp.mailfrom=`, dmarc `header.from=`), deduped. Empty when the
+ * record is missing or unparseable. Used to match a passing clause against
+ * verified forwarder domains (INB-FWD-1). */
+export function passingAuthDomains(
+  record: string | null | undefined,
+): string[] {
+  if (record == null || record === "") return [];
+  const parsed = parseRecord(record);
+  if (!parsed) return [];
+  const domains = new Set<string>();
+  for (const clause of parsed.clauses) {
+    if (clause.method === "auth") continue; // auth-service result, no identity
+    if (!clause.result.startsWith("pass")) continue;
+    for (const domain of clause.domains) domains.add(domain);
+  }
+  return [...domains];
 }
 
 export function evaluateAuthResults(
