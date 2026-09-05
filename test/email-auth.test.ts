@@ -4,7 +4,7 @@ import {
   evaluateAuthResults,
   passingAuthDomains,
 } from "~/lib/email-auth.server";
-
+import { authResultsChain } from "~/lib/mime-inbound.server";
 /**
  * INB-SPOOF-1: the import gate's Authentication-Results evaluation. The
  * records mirror what Fastmail stamps on delivery (authserv-id
@@ -226,5 +226,91 @@ describe("passingAuthDomains (chains)", () => {
 
   it("returns nothing for an all-empty chain", () => {
     expect(passingAuthDomains(["mx3.messagingengine.com;"])).toEqual([]);
+  });
+});
+
+describe("authResultsChain (collection)", () => {
+  const headers = [
+    {
+      key: "authentication-results",
+      originalKey: "Authentication-Results",
+      value: "phl-mx-01.messagingengine.com; dkim=pass header.d=example.com",
+    },
+    { key: "from", originalKey: "From", value: "Someone <user@example.com>" },
+    {
+      key: "authentication-results",
+      originalKey: "Authentication-Results",
+      value: "spf.icloud.com; spf=pass",
+    },
+    {
+      key: "authentication-results",
+      originalKey: "Authentication-Results",
+      value:
+        "mx.messagingengine.com.attacker.evil; dkim=pass header.d=example.com",
+    },
+  ];
+
+  it("collects Fastmail-ish stamps newest-first and skips foreign authserv-ids", () => {
+    // Document order (mailparser preserves it): Fastmail prepends each
+    // stamp above existing headers, so index 0 is the newest delivery.
+    expect(authResultsChain(headers)).toEqual([
+      "phl-mx-01.messagingengine.com; dkim=pass header.d=example.com",
+      "mx.messagingengine.com.attacker.evil; dkim=pass header.d=example.com",
+    ]);
+  });
+
+  it("includes lookalike authserv-ids (the substring filter is not a trust boundary)", () => {
+    // This is WHY evaluateAuthChain must never walk past the first
+    // clause-bearing record: a lookalike id survives ingestion and passes
+    // this collection filter, so the evaluator's first-record rule is the
+    // only defense (FWD-CHAIN-1).
+    const chain = authResultsChain(headers);
+    expect(chain[1]).toContain("attacker.evil");
+  });
+});
+
+describe("evaluateAuthChain (real Fastmail stamp shapes)", () => {
+  // Production redirected-receipt chains (captured from the live mailbox):
+  // the host writes SEVERAL A-R headers per delivery, the topmost ones
+  // carrying no dkim/spf/dmarc clauses at all (x-me-sender, bimi, arc).
+  const SUBMISSION_CHAIN = [
+    "phl-mx-08.messagingengine.com; x-csa=none; x-me-sender=pass policy.xms=S5d4",
+    "phl-mx-08.messagingengine.com; bimi=skipped (DMARC Policy is not at enforcement)",
+    "phl-mx-08.messagingengine.com; arc=none (no signatures found)",
+    "phl-mx-08.messagingengine.com; dkim=pass (2048-bit rsa key sha256) header.d=labnotes.org header.i=@labnotes.org",
+  ];
+
+  it("passes a real redirected-receipt chain on its first recognized clause", () => {
+    const verdict = evaluateAuthChain(SUBMISSION_CHAIN, "owner@labnotes.org");
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("dkim=pass");
+  });
+
+  it("treats an all-x-me-sender chain as owner-internal mail", () => {
+    // The actual INB-FWD-2 production shape: same-account submissions are
+    // stamped but with no recognized method clauses anywhere.
+    const verdict = evaluateAuthChain(
+      [SUBMISSION_CHAIN[0], SUBMISSION_CHAIN[1]],
+      "owner@labnotes.org",
+    );
+    expect(verdict.ok).toBe(true);
+    expect(verdict.reason).toContain("no external hop");
+  });
+
+  it("ignores a forged record appended below a real chain", () => {
+    const verdict = evaluateAuthChain(
+      [
+        ...SUBMISSION_CHAIN,
+        "messagingengine.com.attacker.example; dkim=pass header.d=labnotes.org",
+      ],
+      "owner@labnotes.org",
+    );
+    expect(verdict.ok).toBe(true);
+    expect(
+      passingAuthDomains([
+        ...SUBMISSION_CHAIN,
+        "messagingengine.com.attacker.example; dkim=pass header.d=other.example",
+      ]),
+    ).toEqual(["labnotes.org"]);
   });
 });
