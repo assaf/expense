@@ -1276,11 +1276,24 @@ export async function processInboundEvent(
   // the From-aligned check fails even for honest forwards — the delivered
   // message instead carries the forwarder's own passing auth. When the
   // record has a pass aligned with a VERIFIED sender's domain, the message
-  // entered through that sender's authenticated mail; import into their
-  // account (spoofing it would require sending AS that domain).
+  // entered through that sender's authenticated mail; producing that pass
+  // requires sending AS that domain, which only its owner can do.
+  // INB-FWD-1 rescue, SAME-ACCOUNT ONLY (FWD-PAIR-2): a pass in the chain
+  // authenticates the FORWARDER's domain, never the From domain. A
+  // different account's verified row must not rescue a failing
+  // From-verified message: the import credits `verified ?? forwarder`
+  // below, so a cross-account rescue would land mail into the From
+  // address's account with no owner-proof for that domain (a self-serve
+  // attacker verifies their own domain, then spoofs the From address the
+  // victim verified). The From-aligned pass already proves ownership for
+  // the normal path; the rescue only extends it to the same owner.
   const forwarder = auth.ok
     ? undefined
     : await findVerifiedForwarder(passingAuthDomains(data.authResults));
+  const rescue =
+    forwarder && verified && forwarder.account.id === verified.account.id
+      ? forwarder
+      : undefined;
   if (verified) {
     // INB-SPOOF-1: a verified inbound_senders row proves the address was
     // verified ONCE — not that THIS message came from its owner. The From
@@ -1288,7 +1301,7 @@ export async function processInboundEvent(
     // must also carry a passing, aligned authentication result (evaluated
     // and stamped by Fastmail). Failures are demoted to the unverified
     // path below: not imported, replied with the honest reason.
-    if (!auth.ok && !forwarder) {
+    if (!auth.ok && !rescue) {
       captureWarning(
         "[inbound] verified sender failed message authentication; not importing",
         { emailId: data.email_id, from: data.from, reason: auth.reason },

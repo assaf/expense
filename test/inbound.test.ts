@@ -1691,6 +1691,38 @@ describe("processInboundEvent (verified sender exclusivity)", () => {
     expect(deps.sent).toHaveLength(0);
   });
 
+  it("does not let a foreign account's verified domain rescue a failing From-verified message (FWD-PAIR-2)", async () => {
+    // No forged headers needed: attacker.example is verified in ANOTHER
+    // account (self-serve), the attacker sends through their own server
+    // with From = the victim's verified address, and the genuine stamp
+    // shows dkim=pass for attacker.example while dmarc fails for the From
+    // domain. The pass authenticates the attacker's domain; the import
+    // would credit the From account (`verified ?? forwarder`). The rescue
+    // must be same-account only, so this is an auth failure.
+    await allowSender(OTHER_ACCOUNT_ID, "c@attacker.example");
+    await allowSender(TEST_ACCOUNT_ID, "victim@example.com");
+    const stamp =
+      "mx3.messagingengine.com; dkim=pass header.d=attacker.example; spf=pass smtp.mailfrom=bounce@attacker.example; dmarc=fail header.from=example.com";
+    const deps = fakeDeps();
+    deps.fetchReceivedEmail = async () =>
+      receivedEmail({
+        from: "Victim <victim@example.com>",
+        authResults: [stamp],
+      });
+    const result = await processInboundEvent(
+      eventData({
+        email_id: "email-fwdpair",
+        from: "Victim <victim@example.com>",
+        authResults: [stamp],
+      }),
+      deps,
+    );
+    usedEmailIds.push("email-fwdpair");
+    expect(result).toMatchObject({ status: "auth-failed" });
+    expect(deps.sent).toHaveLength(1);
+    expect(deps.sent[0]!.subject).toContain("failed authentication");
+  });
+
   it("imports a verified sender's account-internal mail with an empty stamp", async () => {
     // assaf@labnotes.org -> receipts@labnotes.org -> receipts@expense.…:
     // every hop is inside the Fastmail account, so the final stamp has no
