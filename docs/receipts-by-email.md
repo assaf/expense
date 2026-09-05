@@ -42,10 +42,16 @@ came from its owner). A verified sender whose mail fails authentication is
 not imported and gets an honest "failed authentication" reply (the same
 amplifier class as the verify-first reply, capped the same way); a
 record-less message is allowed only because Fastmail stamps every
-delivery. The pipeline reads ALL Fastmail stamps on the message, newest
-first (`authResultsChain`), so attacker-supplied A-R headers — which sit
-older than Fastmail's stamps, which rewrite same-id headers on ingestion —
-are ignored.
+delivery. The pipeline collects all Fastmail stamps on the message,
+newest first (`authResultsChain`), but evaluates ONLY the first
+clause-bearing record: Fastmail stamps above every pre-existing header,
+so that record is its evaluation of the message's last external entry,
+while everything below it predates Fastmail's involvement. Upstream A-R
+headers demonstrably survive Fastmail's intake (foreign authserv-ids
+persist in delivered mail, and a lookalike authserv-id containing
+"messagingengine.com" passes the collection filter), so walking deeper
+would let a forged `dkim=pass header.d=<From domain>` record flip the
+verdict the genuine stamp denied.
 
 Forward fallback (INB-FWD-1): a client-side forward keeps the ORIGINAL
 sender in From, so no clause aligns with it — the passing auth on the

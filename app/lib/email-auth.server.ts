@@ -116,26 +116,31 @@ function summarize(clauses: AuthClause[]): string {
     .join(", ");
 }
 
-/** Union of the domains the chain's clause-bearing records authenticate
- * (dkim `header.d=`, spf `smtp.mailfrom=`, dmarc `header.from=`), deduped.
- * Empty stamps (account-internal deliveries) contribute nothing. Used to
- * match a passing clause against verified forwarder domains (INB-FWD-1). */
+/** Passing identity domains (dkim `header.d=`, spf `smtp.mailfrom=`,
+ * dmarc `header.from=`) of the chain's FIRST clause-bearing record,
+ * newest-first (see authResultsChain). Used to match a passing clause
+ * against verified forwarder domains (INB-FWD-1). Only the first
+ * clause-bearing record contributes: everything below it predates
+ * Fastmail's stamps, and forged A-R records survive Fastmail's intake
+ * (see evaluateAuthChain), so unioning the whole chain would let a forged
+ * `dkim=pass header.d=<verified domain>` impersonate a verified sender. */
 export function passingAuthDomains(
   records: string | string[] | null | undefined,
 ): string[] {
   const chain = Array.isArray(records) ? records : [records];
-  const domains = new Set<string>();
   for (const record of chain) {
     if (record == null || record === "") continue;
     const parsed = parseRecord(record);
-    if (!parsed) continue;
+    if (!parsed || parsed.clauses.length === 0) continue;
+    const domains = new Set<string>();
     for (const clause of parsed.clauses) {
       if (clause.method === "auth") continue; // auth-service result, no identity
       if (!clause.result.startsWith("pass")) continue;
       for (const domain of clause.domains) domains.add(domain);
     }
+    return [...domains];
   }
-  return [...domains];
+  return [];
 }
 
 /**
@@ -143,12 +148,21 @@ export function passingAuthDomains(
  * (see authResultsChain). Empty stamps — the host stamped the delivery but
  * evaluated nothing, which only happens for account-internal hops (a
  * same-account submission or an internal redirect) — carry no verdict and
- * are skipped. When every record is empty, the message never crossed an
- * external hop: only an authenticated submission into the account (or the
- * account's own redirect of such mail) can produce that, so it passes as
- * owner-internal mail. An attacker's mail always enters from outside and
- * therefore always has a clause-bearing stamp, which is then held to the
- * strict From-aligned rule below.
+ * are skipped. When no record carries clauses, the message never crossed
+ * an external hop: only an authenticated submission into the account (or
+ * the account's own redirect of such mail) can produce that, so it passes
+ * as owner-internal mail. An attacker's mail always enters from outside
+ * and therefore always has a clause-bearing stamp, which is then held to
+ * the strict From-aligned rule below.
+ *
+ * ONLY the first clause-bearing record is evaluated. Fastmail adds each
+ * stamp ABOVE every pre-existing header, so that record is its evaluation
+ * of the message's last external entry; everything below it predates
+ * Fastmail's involvement. Upstream A-R headers demonstrably survive
+ * Fastmail's intake (foreign authserv-ids persist in delivered mail, and
+ * a lookalike authserv-id passes the collection filter), so walking
+ * deeper would let an attacker's forged `dkim=pass header.d=<From domain>`
+ * record flip the verdict the genuine stamp denied (INB-SPOOF-1 class).
  */
 export function evaluateAuthChain(
   records: string[],
@@ -160,24 +174,16 @@ export function evaluateAuthChain(
       reason: "no authentication-results record (legacy transport)",
     };
   }
-  let sawClauses = false;
-  let lastReason = "no authentication clauses";
   for (const record of records) {
     if (record == null || record === "") continue;
     const parsed = parseRecord(record);
     if (!parsed || parsed.clauses.length === 0) continue;
-    sawClauses = true;
-    const verdict = evaluateAuthResults(record, fromEmail);
-    if (verdict.ok) return verdict;
-    lastReason = verdict.reason;
+    return evaluateAuthResults(record, fromEmail);
   }
-  if (!sawClauses) {
-    return {
-      ok: true,
-      reason: "no external hop: delivered inside the mail host's account",
-    };
-  }
-  return { ok: false, reason: lastReason };
+  return {
+    ok: true,
+    reason: "no external hop: delivered inside the mail host's account",
+  };
 }
 
 export function evaluateAuthResults(

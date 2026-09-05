@@ -173,27 +173,55 @@ describe("evaluateAuthChain", () => {
     expect(verdict.reason).toContain("dmarc=pass");
   });
 
-  it("fails when the real evaluation below an empty stamp fails", () => {
+  it("ignores forged records below a failing genuine stamp (lookalike authserv-id)", () => {
+    // Upstream A-R headers survive Fastmail's intake and a lookalike
+    // authserv-id passes the collection filter, so an attacker's own SMTP
+    // session can add a passing record below the genuine stamp. Only the
+    // first clause-bearing record may be evaluated.
     const verdict = evaluateAuthChain(
       [
-        "mx3.messagingengine.com;",
-        "mx3.messagingengine.com; dkim=pass header.d=attacker.evil; dmarc=fail header.from=example.com",
+        "phl-mx-01.messagingengine.com; dkim=none; dmarc=fail header.from=example.com",
+        "messagingengine.com.attacker.example; dkim=pass header.d=example.com",
       ],
       "user@example.com",
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.reason).toContain("dmarc=fail");
   });
+
+  it("ignores forged records below an empty newest stamp (internal redirect)", () => {
+    // The internal-redirect chain: genuine entry evaluation below the
+    // empty internal stamp, forged record below that. The entry record
+    // decides; the forged one is never reached.
+    const verdict = evaluateAuthChain(
+      [
+        "mx3.messagingengine.com;",
+        "mx3.messagingengine.com; dkim=none; dmarc=fail header.from=example.com",
+        "mx3.messagingengine.com.attacker.example; dkim=pass header.d=example.com",
+      ],
+      "user@example.com",
+    );
+    expect(verdict.ok).toBe(false);
+  });
 });
 
 describe("passingAuthDomains (chains)", () => {
-  it("unions passing domains across records and skips empty stamps", () => {
+  it("uses the first clause-bearing record and skips empty stamps", () => {
     expect(
       passingAuthDomains([
         "mx3.messagingengine.com;",
         "mx3.messagingengine.com; dkim=pass header.d=fwd.example; dmarc=fail header.from=m.example",
       ]),
     ).toEqual(["fwd.example"]);
+  });
+
+  it("ignores passing domains in forged records below the genuine stamp", () => {
+    expect(
+      passingAuthDomains([
+        "mx3.messagingengine.com; dkim=fail header.d=example.com",
+        "messagingengine.com.attacker.example; dkim=pass header.d=example.com",
+      ]),
+    ).toEqual([]);
   });
 
   it("returns nothing for an all-empty chain", () => {

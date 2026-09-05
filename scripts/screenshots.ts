@@ -14,7 +14,7 @@
  *   pnpm screenshots:review
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -45,7 +45,7 @@ function hashFile(path: string): string | null {
 
 function gitShow(relPath: string, destPath: string): boolean {
   try {
-    const data = execSync(`git show HEAD:"${relPath}"`, {
+    const data = execFileSync("git", ["show", `HEAD:${relPath}`], {
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
       maxBuffer: 50 * 1024 * 1024,
@@ -214,7 +214,9 @@ const html = `<!DOCTYPE html>
   <div id="items"></div>
   <div class="hint">Press <kbd>A</kbd> to accept, <kbd>S</kbd> to skip, <kbd>N</kbd> for next, <kbd>Esc</kbd> to close</div>
   <script>
-    const items = ${JSON.stringify(items)};
+    // </-escaped so a filename containing "</script>" can't break out of
+    // the script context, and "<" can't start a tag via innerHTML sinks.
+    const items = ${JSON.stringify(items).replaceAll("<", "\\u003c")};
     let currentIndex = 0;
     const container = document.getElementById("items");
 
@@ -354,19 +356,29 @@ const html = `<!DOCTYPE html>
 
 writeFileSync(htmlPath, html);
 
+/** Resolve a request path under screenshots/, refusing anything that
+ * escapes the directory (traversal via ../ or absolute paths). */
+function contained(relPath: string): string | null {
+  const full = resolve(screenshotsDir, relPath);
+  const rel = relative(screenshotsDir, full);
+  if (rel.startsWith("..") || resolve(rel) === rel) return null;
+  return full;
+}
+
 function handleAccept(relPath: string, res: ServerResponse): void {
-  const newPath = join(screenshotsDir, relPath);
-  if (!existsSync(newPath)) {
-    res.writeHead(200);
-    res.end("ok");
+  const full = contained(relPath);
+  // Only .new.png artifacts the matcher wrote are acceptable inputs.
+  if (!full || !full.endsWith(".new.png")) {
+    res.writeHead(403);
+    res.end("forbidden");
     return;
   }
-  const oldPath = newPath.replace(/\.new\.png$/, ".png");
-  const diffPath = newPath.replace(/\.new\.png$/, ".diff.png");
-  const gitPath = newPath.replace(/\.new\.png$/, ".git.png");
+  const oldPath = full.replace(/\.new\.png$/, ".png");
+  const diffPath = full.replace(/\.new\.png$/, ".diff.png");
+  const gitPath = full.replace(/\.new\.png$/, ".git.png");
 
   if (existsSync(oldPath)) unlinkSync(oldPath);
-  renameSync(newPath, oldPath);
+  renameSync(full, oldPath);
   if (existsSync(diffPath)) unlinkSync(diffPath);
   if (existsSync(gitPath)) unlinkSync(gitPath);
 
@@ -380,12 +392,23 @@ function handleRevert(
   targetRelPath: string,
   res: ServerResponse,
 ): void {
-  const gitPath = join(screenshotsDir, gitRelPath);
-  const targetPath = join(screenshotsDir, targetRelPath);
+  const gitPath = contained(gitRelPath);
+  const targetPath = contained(targetRelPath);
+  if (
+    !gitPath ||
+    !targetPath ||
+    !gitPath.endsWith(".git.png") ||
+    !targetPath.endsWith(".png") ||
+    targetPath.endsWith(".git.png")
+  ) {
+    res.writeHead(403);
+    res.end("forbidden");
+    return;
+  }
   if (existsSync(gitPath) && existsSync(targetPath)) {
     writeFileSync(targetPath, readFileSync(gitPath));
     unlinkSync(gitPath);
-    console.info(`Reverted: ${targetRelPath.replace(/^\//, "")}`);
+    console.info(`Reverted: ${relative(screenshotsDir, targetPath)}`);
   }
   res.writeHead(200);
   res.end("ok");
@@ -396,8 +419,9 @@ const MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
 };
 
-function serveStatic(filePath: string, res: ServerResponse): void {
-  if (!existsSync(filePath)) {
+function serveStatic(relPath: string, res: ServerResponse): void {
+  const filePath = contained(relPath);
+  if (!filePath || !existsSync(filePath)) {
     res.writeHead(404);
     res.end("Not found");
     return;
@@ -410,6 +434,24 @@ function serveStatic(filePath: string, res: ServerResponse): void {
 }
 
 const server = createServer((req, res) => {
+  // Drive-by CSRF guard: state-changing endpoints must be same-origin.
+  // (The review tab itself sends same-origin Origins or none; a foreign
+  // page's fetch/sendBeacon always tags its Origin.)
+  const origin = req.headers.origin;
+  const site = req.headers["sec-fetch-site"];
+  if (origin || (site && site !== "same-origin" && site !== "none")) {
+    const host = req.headers.host ?? "";
+    if (origin && !String(origin).endsWith(`//${host}`)) {
+      res.writeHead(403);
+      res.end("forbidden");
+      return;
+    }
+    if (site === "cross-site") {
+      res.writeHead(403);
+      res.end("forbidden");
+      return;
+    }
+  }
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname === "/accept") {
     const relPath = url.searchParams.get("path");
@@ -441,13 +483,13 @@ const server = createServer((req, res) => {
     }, 50);
     return;
   }
-  serveStatic(join(screenshotsDir, url.pathname), res);
+  serveStatic(url.pathname, res);
 });
 
 const port = 3456;
-server.listen(port, () => {
+server.listen(port, "127.0.0.1", () => {
   console.info(`Opening http://localhost:${port}/review.html`);
-  execSync(`open http://localhost:${port}/review.html`);
+  execFileSync("open", [`http://localhost:${port}/review.html`]);
 });
 
 function cleanup() {
