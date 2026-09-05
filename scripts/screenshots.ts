@@ -247,6 +247,10 @@ const html = `<!DOCTYPE html>
               <h3>New</h3>
               <img src="\${item.newPath}">
             </div>
+            <div class="image-panel">
+              <h3>Diff</h3>
+              <img src="\${item.newPath.replace(/.new.png$/, ".diff.png")}" onerror="this.style.display='none'">
+            </div>
           </div>
         \`;
         actions = \`

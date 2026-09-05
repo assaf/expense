@@ -493,8 +493,11 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
 describe("suite screenshots", () => {
   /** Drift findings across all captures, asserted empty at the end so one
    * run surfaces every drifted screen (and leaves its diff artifacts),
-   * not just the first. */
+   * not just the first. Client-side exceptions are collected alongside:
+   * a screen can render plausibly and still be broken. */
   const drift: string[] = [];
+  const pageErrors: string[] = [];
+  let currentName = "";
 
   /** Hydration + image settle, then a compared capture. The pinned clock
    * (freezePageClock) keeps client-rendered dates stable across runs. */
@@ -503,6 +506,7 @@ describe("suite screenshots", () => {
     path: string,
     name: string,
   ): Promise<void> {
+    currentName = name;
     await page.goto(path, { waitUntil: "load", timeout: 15_000 });
     await waitForSettled(page);
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
@@ -524,6 +528,9 @@ describe("suite screenshots", () => {
     try {
       // Logged-out surfaces.
       const fresh = await freshPage({ viewport: { width: 1280, height: 800 } });
+      fresh.on("pageerror", (error) =>
+        pageErrors.push(`${currentName}: ${String(error)}`),
+      );
       await capture(fresh, "/", "landing");
       await capture(fresh, "/login", "login");
       await capture(fresh, "/onboarding", "onboarding");
@@ -531,6 +538,9 @@ describe("suite screenshots", () => {
 
       // Signed-in surfaces on the shared (test-credential) session.
       const page = await goto("/");
+      page.on("pageerror", (error) =>
+        pageErrors.push(`${currentName}: ${String(error)}`),
+      );
       await capture(page, "/", "home");
       await capture(page, "/expense/new", "expense-new");
 
@@ -578,10 +588,10 @@ describe("suite screenshots", () => {
       await closeBrowser();
       if (launched) await closeServer();
     }
-    if (drift.length > 0) {
+    const findings = [...drift, ...pageErrors];
+    if (findings.length > 0) {
       throw new Error(
-        `${drift.length} screenshot(s) differ from baseline:\n` +
-          drift.join("\n"),
+        `${findings.length} screenshot problem(s):\n` + findings.join("\n"),
       );
     }
   }, 240_000);
