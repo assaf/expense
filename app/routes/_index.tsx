@@ -142,9 +142,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       // highlight so the nudge shows up within a few visits (the rotation
       // still varies the rest).
       highlight: {
+        // Visual-regression captures run against the test server: when
+        // launchServer sets SCREENSHOT_HIGHLIGHT_PIN, the pick is pinned
+        // (first eligible entry) so home renders are deterministic.
+        // Every other environment keeps the rotation (Math.random).
         id: pickHighlight(
           highlightData,
           emailConnections.length > 0 ? undefined : "connect-email",
+          process.env.SCREENSHOT_HIGHLIGHT_PIN ? () => 0 : undefined,
         ),
         data: highlightData,
       },

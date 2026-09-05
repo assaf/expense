@@ -15,9 +15,9 @@ import sharp from "sharp";
 import { ulid } from "ulid";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
-import { mkdir, readdir, rm } from "node:fs/promises";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import { freshPage, closeBrowser, goto, signIn } from "./helpers/launchBrowser";
+import { removeDiffImages } from "./helpers/toMatchScreenshot";
 import { confirmationEmail } from "~/lib/email-confirmation.server";
 import { replyHtml } from "~/lib/inbound-email.server";
 import { verificationEmailHtml } from "~/lib/verification-email.server";
@@ -479,16 +479,21 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
 });
 
 /**
- * Suite artifact capture: on every `pnpm test` run, screenshot the app's
- * important screens into screenshots/ (gitignored). Uses whatever state the
- * suite has left in expense_test, so the shots reflect the same data the
- * tests verified. Fails loudly: a screen that throws or never hydrates is
- * a broken screen, not a missing artifact.
+ * Suite screenshot regression: on every `pnpm test` run, capture the app's
+ * important screens and the emails it sends, comparing each against the
+ * committed baseline in screenshots/ (see toMatchScreenshot). Uses whatever
+ * state the suite has left in expense_test, so the shots reflect the same
+ * data the tests verified. Fails loudly: a screen that throws, never
+ * hydrates, or drifts from its baseline is a broken screen, not a missing
+ * artifact. Review drift with `pnpm screenshots:review`.
  */
 describe("suite screenshots", () => {
-  const OUT_DIR = "screenshots";
+  /** Drift findings across all captures, asserted empty at the end so one
+   * run surfaces every drifted screen (and leaves its diff artifacts),
+   * not just the first. */
+  const drift: string[] = [];
 
-  /** Hydration + image settle, then a full-page capture. The pinned clock
+  /** Hydration + image settle, then a compared capture. The pinned clock
    * (freezePageClock) keeps client-rendered dates stable across runs. */
   async function capture(
     page: import("playwright").Page,
@@ -502,14 +507,17 @@ describe("suite screenshots", () => {
     );
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
-    await page.screenshot({ path: `${OUT_DIR}/${name}.png`, fullPage: true });
+    try {
+      await expect(page).toMatchScreenshot({ name, fullPage: true });
+    } catch (error) {
+      drift.push(`${name}: ${(error as Error).message.split("\n")[0]}`);
+    }
   }
 
   it("captures the important screens into screenshots/", async () => {
-    await mkdir(OUT_DIR, { recursive: true });
-    for (const stale of await readdir(OUT_DIR)) {
-      if (stale.endsWith(".png")) await rm(`${OUT_DIR}/${stale}`);
-    }
+    // Stale .new/.diff artifacts from earlier failed runs would otherwise
+    // pile up; baselines themselves are never touched here.
+    await removeDiffImages();
 
     // The globalSetup server is usually already listening on 5199; reuse it
     // rather than spawning a second instance.
@@ -579,17 +587,17 @@ describe("suite screenshots", () => {
       await closeBrowser();
       if (launched) await closeServer();
     }
+    if (drift.length > 0) {
+      throw new Error(
+        `${drift.length} screenshot(s) differ from baseline:\n` +
+          drift.join("\n"),
+      );
+    }
   }, 240_000);
 
   it("captures the emails the app sends into screenshots/emails/", async () => {
-    const OUT = `${OUT_DIR}/emails`;
-    await mkdir(OUT, { recursive: true });
-    // Clean only this block's own output: the screens test cleans the
-    // top level, and it runs before this one.
-    for (const stale of await readdir(OUT)) {
-      if (stale.endsWith(".png")) await rm(`${OUT}/${stale}`);
-    }
-
+    // Artifacts from the screens test must survive for review, so this
+    // block does NOT call removeDiffImages.
     const ORIGIN = "https://expense.example.com";
     const emails: Array<[string, string]> = [
       // account-verification.server.ts copy
@@ -654,7 +662,10 @@ describe("suite screenshots", () => {
     try {
       for (const [name, html] of emails) {
         await page.setContent(html, { waitUntil: "load" });
-        await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+        await expect(page).toMatchScreenshot({
+          name: `emails/${name}`,
+          fullPage: true,
+        });
       }
     } finally {
       await page.close();

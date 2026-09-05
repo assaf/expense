@@ -68,6 +68,10 @@ export async function launchServer(): Promise<string> {
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
     DATABASE_URL: "postgres://assaf@localhost/expense_test",
+    // Pins the home page's "Did you know?" highlight pick (see
+    // _index.tsx): the rotation would otherwise change home's render
+    // between screenshot runs and flag phantom drift.
+    SCREENSHOT_HIGHLIGHT_PIN: "1",
     // Fixed key (same value as vitest.main.config.ts `test.env`) so the Email
     // page renders the connected-accounts UI deterministically. The spawned
     // server doesn't inherit vitest's test.env (globalSetup runs in the main

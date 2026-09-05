@@ -14,7 +14,11 @@ prisma/backup.sql
 # Test artifacts
 data-test/
 __screenshots__/
-screenshots/
+# Screenshot baselines are committed; only drift artifacts stay local.
+screenshots/**/*.diff.png
+screenshots/**/*.new.png
+screenshots/**/*.git.png
+screenshots/review.html
 
 # Logs
 *.log
