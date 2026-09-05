@@ -89,7 +89,7 @@
     "knip": "^6.34.0",
     "looks-same": "^10.0.1",
     "playwright": "^1.62.1",
-    "prisma": "8.0.0-rc.12",
+    "prisma": "8.0.0-rc.13",
     "secretlint": "^13.0.5",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
