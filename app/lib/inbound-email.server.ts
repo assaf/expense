@@ -487,7 +487,9 @@ function replyEnvelope(data: EmailReceivedData): {
   };
 }
 
-function replyHtml(title: string, paragraphs: string[]): string {
+/** Exported so the screenshot suite can render the exact failure replies
+ * this module sends. */
+export function replyHtml(title: string, paragraphs: string[]): string {
   return emailShell({
     title,
     body: paragraphs.map(paragraph).join(""),

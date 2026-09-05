@@ -18,6 +18,9 @@ import { hashPassword } from "~/lib/passwords";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import { freshPage, closeBrowser, goto, signIn } from "./helpers/launchBrowser";
+import { confirmationEmail } from "~/lib/email-confirmation.server";
+import { replyHtml } from "~/lib/inbound-email.server";
+import { verificationEmailHtml } from "~/lib/verification-email.server";
 import {
   TEST_ACCOUNT_ID,
   TEST_EMAIL,
@@ -577,4 +580,85 @@ describe("suite screenshots", () => {
       if (launched) await closeServer();
     }
   }, 240_000);
+
+  it("captures the emails the app sends into screenshots/emails/", async () => {
+    const OUT = `${OUT_DIR}/emails`;
+    await mkdir(OUT, { recursive: true });
+    // Clean only this block's own output: the screens test cleans the
+    // top level, and it runs before this one.
+    for (const stale of await readdir(OUT)) {
+      if (stale.endsWith(".png")) await rm(`${OUT}/${stale}`);
+    }
+
+    const ORIGIN = "https://expense.example.com";
+    const emails: Array<[string, string]> = [
+      // account-verification.server.ts copy
+      [
+        "verification",
+        verificationEmailHtml({
+          token: "screenshot-token",
+          origin: ORIGIN,
+          verifyPath: "/verify-email",
+          buttonLabel: "Verify your email",
+          body: [
+            "You signed up for <b>Personal</b> on Expense with <b>you@example.com</b>. Click below to confirm this address is yours and activate the account:",
+          ],
+          closingNote:
+            "You'll be able to sign in once the address is verified. This link expires in 7 days — if it has expired, sign in and use the resend button. If you didn't create this account, you can ignore this email.",
+        }),
+      ],
+      // auth.server.ts requestPasswordReset copy
+      [
+        "password-reset",
+        verificationEmailHtml({
+          token: "screenshot-token",
+          origin: ORIGIN,
+          verifyPath: "/reset-password",
+          buttonLabel: "Set a new password",
+          body: [
+            "We got a request to reset the password for <b>you@example.com</b> on <b>Personal</b>.",
+            "Click below to choose a new password. The link is single-use and expires in 7 days.",
+          ],
+          closingNote:
+            "If you didn't request this, you can ignore this email — your password stays the same.",
+        }),
+      ],
+      // email-confirmation.server.ts receipt confirmation (complete import)
+      [
+        "receipt-confirmation",
+        confirmationEmail({
+          expenseId: "01J00000000000000000000000",
+          date: "2026-08-30",
+          merchant: "Harris Restaurant",
+          amount: "84.20",
+          category: "Meals",
+          report: "2026 Business",
+          description: "Client dinner",
+          notes: "Amount is in USD.",
+          missing: [],
+          quotedOriginal:
+            "HARRIS RESTAURANT\n2026-08-30 19:42\nTable 12\n1x Duck Confit 54.00\n1x Glass of wine 12.50\nTip 17.70\nTotal $84.20",
+        }).html,
+      ],
+      // inbound-email.server.ts auth-failure reply (INB-SPOOF-1 path)
+      [
+        "receipt-not-imported",
+        replyHtml("Receipt not imported — message failed authentication", [
+          "We received an email claiming to be from <b>deals@merchant.example</b>, but it failed SPF/DKIM/DMARC authentication, so it was not imported (a forged sender address could otherwise add fake expenses).",
+          "If this was a legitimate receipt, forward it from an address you've verified under Email → Receipts by email (your own address works — a forward carries your mail server's authentication, which we accept). If the merchant's own mail keeps failing, that service needs to fix its mail authentication.",
+        ]),
+      ],
+    ];
+
+    const page = await freshPage({ viewport: { width: 720, height: 900 } });
+    try {
+      for (const [name, html] of emails) {
+        await page.setContent(html, { waitUntil: "load" });
+        await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+      }
+    } finally {
+      await page.close();
+      await closeBrowser();
+    }
+  }, 60_000);
 });

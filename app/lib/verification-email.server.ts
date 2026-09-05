@@ -43,7 +43,7 @@ function verifyButton(link: string, label: string): string {
  * when it can't be sent or no public origin is set (PUBLIC_URL), because
  * callers must never fail because email did.
  */
-export async function sendVerificationEmail(input: {
+export interface VerificationEmailInput {
   to: string;
   token: string;
   origin?: string;
@@ -56,17 +56,19 @@ export async function sendVerificationEmail(input: {
   body: string[];
   /** The note rendered after the CTA (expiry + "ignore if not yours"). */
   closingNote: string;
-}): Promise<boolean> {
+}
+
+/** Build (without sending) the verification email's HTML, so the render is
+ * testable — the screenshot suite captures exactly what this path sends. */
+export function verificationEmailHtml(
+  input: Pick<
+    VerificationEmailInput,
+    "token" | "origin" | "verifyPath" | "buttonLabel" | "body" | "closingNote"
+  >,
+): string {
   const link = verificationLink(input.origin, input.verifyPath, input.token);
-  if (!link.startsWith("http")) {
-    console.warn(
-      "[verification-email] no public origin (set PUBLIC_URL) — cannot email a verify link for " +
-        input.to,
-    );
-    return false;
-  }
   const home = appBase(input.origin);
-  const html = emailShell({
+  return emailShell({
     title: "Verify your email",
     body: [
       ...input.body.map(paragraph),
@@ -75,5 +77,22 @@ export async function sendVerificationEmail(input: {
     ].join("\n"),
     footer: valuePropFooter(home),
   });
-  return sendEmail({ to: input.to, subject: input.subject, html });
+}
+
+export async function sendVerificationEmail(
+  input: VerificationEmailInput,
+): Promise<boolean> {
+  const link = verificationLink(input.origin, input.verifyPath, input.token);
+  if (!link.startsWith("http")) {
+    console.warn(
+      "[verification-email] no public origin (set PUBLIC_URL) — cannot email a verify link for " +
+        input.to,
+    );
+    return false;
+  }
+  return sendEmail({
+    to: input.to,
+    subject: input.subject,
+    html: verificationEmailHtml(input),
+  });
 }
