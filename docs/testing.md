@@ -57,3 +57,30 @@
   lands well past the ~1ms remount. Drag-drop uploads are exempt (the
   editor's `useEffect` upload fires from mount #1 and `draftUploadsInFlight`
   dedupes the remount).
+
+## Screenshot regression (suite screenshots)
+
+- Every `pnpm test` run captures the app's important screens and the emails
+  it sends (`test/screenshot.test.ts`, "suite screenshots" block) and
+  compares each against the committed baseline in `screenshots/` via
+  `toMatchScreenshot` (`test/helpers/toMatchScreenshot.ts`, looks-same,
+  ΔE tolerance 2.3). Any drift fails the run and leaves
+  `screenshots/<name>.new.png` (the new capture) and
+  `screenshots/<name>.diff.png` next to the baseline; all drifted screens
+  are reported in one failure, not just the first.
+- Baselines are committed. When a capture changes on purpose, review the
+  drift with `pnpm screenshots:review` (adapted from rentail's
+  `scripts/screenshots.ts`): it serves a side-by-side UI on :3456, keyboard
+  driven (A accept / S skip / Esc close), and Accept replaces the baseline
+  with the new capture; the server stops itself after the last item.
+  Baselines that were edited by hand show up in the review as
+  "modified" (compared against the Git HEAD version, Revert/Keep).
+- Comparisons are skipped when `CI` is set, so CI never fails on
+  environment-rendering noise; they only run locally.
+- Determinism guards: the test server pins the home page's "Did you know?"
+  highlight pick (`SCREENSHOT_HIGHLIGHT_PIN`, set by `launchServer.ts`;
+  rotation is untouched in every other environment), the matcher waits for
+  `document.fonts.ready` (a late-loading webfont otherwise flags phantom
+  text drift), and the suite's pinned clock keeps client-rendered dates
+  stable. If you add a screen capture, expect a baseline-creation pass
+  first (`Baseline screenshot created`) and matching runs after.
