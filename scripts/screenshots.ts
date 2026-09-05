@@ -390,8 +390,6 @@ function handleRevert(
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
   ".png": "image/png",
-  ".css": "text/css",
-  ".js": "application/javascript",
 };
 
 function serveStatic(filePath: string, res: ServerResponse): void {

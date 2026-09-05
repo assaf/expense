@@ -24,12 +24,6 @@ interface ScreenshotOptions {
   /** Screenshot name, without extension; nested names map to subdirs. */
   name: string;
   fullPage?: boolean;
-  tolerance?: number;
-  antialiasingTolerance?: number;
-  /** Fraction of differing pixels still accepted even when looks-same
-   * reports unequal — absorbs sub-pixel rendering noise without masking
-   * real layout regressions, which move far more pixels. */
-  maxDiffPixelRatio?: number;
 }
 
 declare module "vitest" {
@@ -41,18 +35,12 @@ declare module "vitest" {
 expect.extend({
   async toMatchScreenshot(
     page: Page,
-    options?: ScreenshotOptions,
+    options: ScreenshotOptions,
   ): Promise<{ message: () => string; pass: boolean }> {
     if (process.env.CI) {
       return {
         message: () => "Skipping screenshot comparison in CI",
         pass: true,
-      };
-    }
-    if (!options?.name) {
-      return {
-        message: () => "toMatchScreenshot requires a name",
-        pass: false,
       };
     }
     // Give the page a moment to finish uploading images and rendering.
@@ -81,20 +69,16 @@ expect.extend({
     }
 
     const result = await looksSame(await readFile(baselinePath), screenshot, {
-      antialiasingTolerance: options.antialiasingTolerance ?? 0,
+      tolerance: DEFAULT_TOLERANCE,
       createDiffImage: true,
       ignoreAntialiasing: true,
       ignoreCaret: true,
-      tolerance: options.tolerance ?? DEFAULT_TOLERANCE,
       strict: false,
     });
     const { equal, differentPixels, totalPixels, diffImage } = result;
     const diffRatio = totalPixels ? differentPixels / totalPixels : 0;
-    const withinPixelBudget =
-      options.maxDiffPixelRatio !== undefined &&
-      diffRatio <= options.maxDiffPixelRatio;
 
-    if (!equal && !withinPixelBudget) {
+    if (!equal) {
       const newPath = path.resolve(SCREENSHOTS_DIR, `${options.name}.new.png`);
       const diffPath = path.resolve(
         SCREENSHOTS_DIR,

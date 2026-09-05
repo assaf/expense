@@ -386,14 +386,30 @@ async function shrinkForReadme(path: string): Promise<void> {
   const { rename } = await import("node:fs/promises");
   await rename(`${path}.tmp`, path);
 }
-
-async function captureHome(page: import("playwright").Page): Promise<void> {
-  await page.goto("/", { waitUntil: "load" });
+/** Wait for React Router hydration and every image to finish loading. */
+async function waitForSettled(page: import("playwright").Page): Promise<void> {
   await page.waitForFunction(() => "__reactRouterContext" in window);
-  // Wait for every thumbnail image to finish loading.
   await page.waitForFunction(() =>
     [...document.querySelectorAll("img")].every((img) => img.complete),
   );
+}
+
+/** Reuse the globalSetup server already listening on 5199 rather than
+ * spawning a second instance. Returns whether this call launched it. */
+async function ensureServer(): Promise<boolean> {
+  const baseURL = "http://127.0.0.1:5199";
+  try {
+    await fetch(`${baseURL}/login`, { signal: AbortSignal.timeout(3_000) });
+    return false;
+  } catch {
+    await launchServer();
+    return true;
+  }
+}
+
+async function captureHome(page: import("playwright").Page): Promise<void> {
+  await page.goto("/", { waitUntil: "load" });
+  await waitForSettled(page);
   // Give map tiles (OSM) and webfonts a moment to arrive.
   await page.waitForTimeout(3_000);
 
@@ -418,16 +434,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
   it("seeds mock data and captures the home + receipt editor pages", async () => {
     await seedScreenshotData();
 
-    // The globalSetup server is usually already listening on 5199; reuse it
-    // rather than spawning a second instance.
-    let baseURL = "http://127.0.0.1:5199";
-    let launched = false;
-    try {
-      await fetch(`${baseURL}/login`, { signal: AbortSignal.timeout(3_000) });
-    } catch {
-      baseURL = await launchServer();
-      launched = true;
-    }
+    const launched = await ensureServer();
 
     try {
       const page = await freshPage({
@@ -449,11 +456,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
       await page.goto(`/expense/${sweetgreen.id as string}`, {
         waitUntil: "load",
       });
-      await page.waitForFunction(() => "__reactRouterContext" in window);
-      await page.waitForFunction(() =>
-        [...document.querySelectorAll("img")].every((img) => img.complete),
-      );
-      await page.waitForTimeout(1_500);
+      await waitForSettled(page);
       await expect
         .poll(() => page.getByLabel("Merchant").inputValue(), {
           timeout: 10_000,
@@ -501,10 +504,7 @@ describe("suite screenshots", () => {
     name: string,
   ): Promise<void> {
     await page.goto(path, { waitUntil: "load", timeout: 15_000 });
-    await page.waitForFunction(() => "__reactRouterContext" in window);
-    await page.waitForFunction(() =>
-      [...document.querySelectorAll("img")].every((img) => img.complete),
-    );
+    await waitForSettled(page);
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
     try {
@@ -519,16 +519,7 @@ describe("suite screenshots", () => {
     // pile up; baselines themselves are never touched here.
     await removeDiffImages();
 
-    // The globalSetup server is usually already listening on 5199; reuse it
-    // rather than spawning a second instance.
-    let baseURL = "http://127.0.0.1:5199";
-    let launched = false;
-    try {
-      await fetch(`${baseURL}/login`, { signal: AbortSignal.timeout(3_000) });
-    } catch {
-      baseURL = await launchServer();
-      launched = true;
-    }
+    const launched = await ensureServer();
 
     try {
       // Logged-out surfaces.
