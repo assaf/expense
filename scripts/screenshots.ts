@@ -430,8 +430,10 @@ function serveStatic(relPath: string, res: ServerResponse): void {
     return;
   }
   const ext = extname(filePath);
+  // no-store: a reload after accepting must not replay the cached image.
   res.writeHead(200, {
     "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
+    "Cache-Control": "no-store",
   });
   res.end(readFileSync(filePath));
 }
