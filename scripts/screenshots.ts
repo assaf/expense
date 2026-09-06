@@ -214,8 +214,9 @@ const html = `<!DOCTYPE html>
   <div id="items"></div>
   <div class="hint">Press <kbd>A</kbd> to accept, <kbd>S</kbd> to skip, <kbd>N</kbd> for next, <kbd>Esc</kbd> to close</div>
   <script>
-    // </-escaped so a filename containing "</script>" can't break out of
-    // the script context, and "<" can't start a tag via innerHTML sinks.
+    // "<" is escaped as \\u003c in the JSON below so a closing-script-tag
+    // sequence smuggled in a filename can't break out of this script
+    // context or start a tag via the innerHTML sinks.
     const items = ${JSON.stringify(items).replaceAll("<", "\\u003c")};
     let currentIndex = 0;
     const container = document.getElementById("items");
@@ -348,7 +349,6 @@ const html = `<!DOCTYPE html>
         window.close();
       }
     });
-    window.addEventListener('beforeunload', shutdown);
     render();
   </script>
 </body>
