@@ -16,6 +16,9 @@ import {
   readAccount,
   readAccountUsers,
   regenerateInviteCode,
+  readMarketingUnsubscribed,
+  resubscribeMarketingEmail,
+  unsubscribeMarketingEmail,
 } from "~/lib/db/accounts";
 import {
   addCategory,
@@ -63,6 +66,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     })),
     homeAddress: settings.homeAddress,
     userEmail: user.email,
+    marketingUnsubscribed: await readMarketingUnsubscribed(user.id),
     rates,
     oauthSessions,
     members,
@@ -117,6 +121,17 @@ export async function action({ request }: Route.ActionArgs) {
       await writeSettings(user.accountId, settings);
       break;
     }
+    case "marketingEmails": {
+      const preference = formString(form, "preference");
+      if (preference === "unsubscribe") {
+        await unsubscribeMarketingEmail(user.id);
+      } else if (preference === "resubscribe") {
+        await resubscribeMarketingEmail(user.id);
+      } else {
+        return unknownIntent();
+      }
+      break;
+    }
     default:
       return unknownIntent();
   }
@@ -134,6 +149,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     oauthSessions,
     members,
     mcpUrl,
+    marketingUnsubscribed,
   } = loaderData;
   // The "current rate" line depends on the browser's local today (the
   // server runs UTC); computed client-side after mount.
@@ -290,6 +306,47 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             <MapPin aria-hidden="true" className="h-4 w-4" /> Save
           </Button>
         </Form>
+      </section>
+
+      <section id="emails" className="mb-8 scroll-mt-6">
+        <h2 className="mb-2 text-lg font-semibold">Emails</h2>
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+          Marketing emails (product news and tips) go to{" "}
+          <span className="font-medium text-gray-700 dark:text-gray-200">
+            {userEmail}
+          </span>
+          . Receipts-by-email notices and security emails (sign-in verification,
+          password resets) are always sent.
+        </p>
+        <Card className="flex items-center justify-between gap-4 p-4">
+          <div className="min-w-0 text-sm">
+            {marketingUnsubscribed ? (
+              <>
+                <span className="font-medium text-gray-700 dark:text-gray-200">
+                  Unsubscribed
+                </span>{" "}
+                <span className="text-gray-500 dark:text-gray-400">
+                  since <LocalDate iso={marketingUnsubscribed} />
+                </span>
+              </>
+            ) : (
+              <span className="font-medium text-gray-700 dark:text-gray-200">
+                Subscribed
+              </span>
+            )}
+          </div>
+          <Form method="post" className="shrink-0">
+            <input type="hidden" name="intent" value="marketingEmails" />
+            <input
+              type="hidden"
+              name="preference"
+              value={marketingUnsubscribed ? "resubscribe" : "unsubscribe"}
+            />
+            <Button type="submit" size="md" variant="secondary">
+              {marketingUnsubscribed ? "Subscribe again" : "Unsubscribe"}
+            </Button>
+          </Form>
+        </Card>
       </section>
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />

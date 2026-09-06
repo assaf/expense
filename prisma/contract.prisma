@@ -369,6 +369,7 @@ model User {
   verificationTokenHash  String?
   passwordResetSentAt    TimestampString(3)?
   passwordResetTokenHash String?
+  marketingUnsubscribedAt TimestampString(3)?
   account                Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 
   @@index([email], map: "users_email_key", unique: true)

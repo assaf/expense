@@ -36,6 +36,19 @@ reads and writes are scoped; see `app/lib/db/`).
   outcome (no account enumeration); unverified accounts are skipped (their
   verification link is the recovery). The token is consumed on use, and the
   password contract matches signup (`validateSignup` rules).
+- **Marketing emails are opt-out per user** (`users.marketingUnsubscribedAt`):
+  every marketing email carries one permanent unsubscribe link
+  (`/unsubscribe/<token>`, also in the `List-Unsubscribe` header for
+  RFC 8058 one-click). The token is stateless — an HMAC signature over the
+  user id (`app/lib/unsubscribe.server.ts`, purpose-salted so tokens can't
+  be reused across flows), never expires, and IS the credential: no login.
+  GET renders a confirmation (mail scanners follow links; the write is
+  POST-only), the same POST serves one-click, and Settings → Emails can
+  re-subscribe. Any future marketing sender must gate on
+  `readMarketingUnsubscribed(userId)` and use `marketingFooter` +
+  `marketingEmailHeaders` from `email-layout.server.ts`. Transactional
+  email (verification, password reset, receipts-by-email notices) ignores
+  the flag.
 - **Bootstrap**: on an empty database, the first account + user are
   created from `APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing). On
   existing pre-email databases, `initStore` backfills the bootstrap

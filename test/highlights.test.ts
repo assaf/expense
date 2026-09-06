@@ -31,6 +31,7 @@ describe("feature highlights", () => {
       "categories",
       "command-palette",
       "connect-email",
+      "email-preferences",
       "mileage-location",
       "reconcile",
       "reports",

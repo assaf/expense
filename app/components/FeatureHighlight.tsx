@@ -7,6 +7,7 @@ import {
   Globe,
   Keyboard,
   Mail,
+  MailCheck,
   MapPinned,
   Plug,
   ReceiptText,
@@ -45,6 +46,7 @@ export type HighlightId =
   | "reconcile"
   | "search-operators"
   | "shortcut-hints"
+  | "email-preferences"
   | "webmcp";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
@@ -267,6 +269,18 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Reconcile now", to: "/reconcile" },
   },
+  "email-preferences": {
+    icon: MailCheck,
+    title: "You decide which emails arrive",
+    body: () => (
+      <>
+        Marketing emails (product news and tips) are your call: turn them off in
+        Settings, or use the unsubscribe link at the bottom of any of them.
+        Receipts-by-email notices and security email always come through.
+      </>
+    ),
+    cta: { label: "Manage emails", to: "/settings#emails" },
+  },
 };
 /** Every highlight id, for the /_highlights preview page. */
 export const HIGHLIGHT_IDS = Object.keys(HIGHLIGHTS) as HighlightId[];
@@ -286,6 +300,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reconcile",
     "reports",
     "search-operators",
+    "email-preferences",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.
   if (!data.hasEmailConnection) pool.push("connect-email");

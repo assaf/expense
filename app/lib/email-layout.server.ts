@@ -37,3 +37,29 @@ export function valuePropFooter(home: string): string {
   <a href="${escapeHtml(home)}/" style="color:#2563eb;text-decoration:none;font-weight:600">Expense</a> is free expense tracking for tax season. Snap a photo, forward a receipt, or log mileage, and Expense sorts it into IRS Schedule C categories and ready-to-file reports.
 </p>`;
 }
+
+/** The footer for marketing emails: the one permanent unsubscribe link.
+ * Marketing email must always carry this (CAN-SPAM / Google-Yahoo sender
+ * requirements); the token is the credential — stateless and permanent,
+ * see app/lib/unsubscribe.server.ts. The address is shown so the recipient
+ * knows which subscription the link controls. */
+export function marketingFooter(unsubUrl: string, email: string): string {
+  return `<p style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:12px;color:#6b7280;font-size:12px;line-height:1.5">
+  You are receiving this because you have an Expense account.
+  <a href="${escapeHtml(unsubUrl)}" style="color:#6b7280">Unsubscribe</a> from marketing emails
+  (sent to ${escapeHtml(email)}).
+</p>`;
+}
+
+/** The mail headers that turn the footer link into one-click
+ * unsubscribing (RFC 8058): Gmail/Apple Mail show an unsubscribe button
+ * and may POST straight to the URL without opening the page. The route
+ * handles both: GET renders the confirmation, POST unsubscribes. */
+export function marketingEmailHeaders(
+  unsubUrl: string,
+): Record<string, string> {
+  return {
+    "List-Unsubscribe": `<${unsubUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}

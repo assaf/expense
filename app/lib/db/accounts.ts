@@ -424,3 +424,41 @@ export async function verificationRecentlySent(
   const row = await db.orm.public.User.where((u) => u.email.eq(email)).first();
   return withinWindow(row?.verificationSentAt, VERIFICATION_RESEND_MS);
 }
+
+/** The user's marketing-email opt-out time (ISO), or null while subscribed.
+ * A dedicated read instead of a User field: the findUserById cache (30s)
+ * would serve a stale preference after an unsubscribe. */
+export async function readMarketingUnsubscribed(
+  userId: string,
+): Promise<string | null> {
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("marketingUnsubscribedAt")
+    .first();
+  return toIsoOrNull(row?.marketingUnsubscribedAt ?? null);
+}
+
+/** Record a marketing-email opt-out (idempotent): the first unsubscribe
+ * wins so the preference page can show when it happened. Returns the
+ * affected address, or null when the user row is gone. */
+export async function unsubscribeMarketingEmail(
+  userId: string,
+): Promise<{ email: string; already: boolean } | null> {
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("email", "marketingUnsubscribedAt")
+    .first();
+  if (!row) return null;
+  if (row.marketingUnsubscribedAt) {
+    return { email: row.email, already: true };
+  }
+  await db.orm.public.User.where({ id: userId }).update({
+    marketingUnsubscribedAt: nowWire(),
+  });
+  return { email: row.email, already: false };
+}
+
+/** Clear a marketing-email opt-out (resubscribe from Settings). */
+export async function resubscribeMarketingEmail(userId: string): Promise<void> {
+  await db.orm.public.User.where({ id: userId }).update({
+    marketingUnsubscribedAt: null,
+  });
+}
