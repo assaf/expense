@@ -106,14 +106,11 @@ expect.extend({
   },
 });
 
-/** Render the drift for human review: identical pixels ghost to near-white
- * (looks-same's own diff keeps them at full strength, which buries a
- * few-pixel drift), changed pixels show through in red, and when the
- * changed region is small the image is cropped to it and magnified — a
- * 19-pixel wobble on a full page is otherwise invisible. Best effort only;
- * the equal/count decision above stays with looks-same. */
+/** Render the drift for human review: identical pixels ghost at 80% over
+ * white (visible context, muted), changed pixels stand out in solid red.
+ * Full page, no cropping or magnification — the red is the signal. Best
+ * effort only; the equal/count decision above stays with looks-same. */
 const DIFF_CHANNEL_THRESHOLD = 8;
-const DIFF_CROP_MAX = 600;
 
 export async function saveDiffImage(
   baseline: Buffer,
@@ -128,10 +125,6 @@ export async function saveDiffImage(
   const overlapW = Math.min(ref.info.width, curW);
   const overlapH = Math.min(ref.info.height, curH);
   const out = Buffer.alloc(curW * curH * 3, 255);
-  let minX = curW,
-    minY = curH,
-    maxX = -1,
-    maxY = -1;
   for (let y = 0; y < curH; y++) {
     for (let x = 0; x < curW; x++) {
       const i = (y * curW + x) * curC;
@@ -150,39 +143,18 @@ export async function saveDiffImage(
         out[o] = 255;
         out[o + 1] = 0;
         out[o + 2] = 0;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
       } else {
-        // Ghost: 7% of the capture over white keeps page context findable
-        // without competing with the red.
-        out[o] = 255 - Math.round((255 - cur.data[i]) * 0.07);
-        out[o + 1] = 255 - Math.round((255 - cur.data[i + 1]) * 0.07);
-        out[o + 2] = 255 - Math.round((255 - cur.data[i + 2]) * 0.07);
+        // 80% of the capture over white: identical content stays readable,
+        // red is the only saturated color on the page.
+        out[o] = 255 - Math.round((255 - cur.data[i]) * 0.2);
+        out[o + 1] = 255 - Math.round((255 - cur.data[i + 1]) * 0.2);
+        out[o + 2] = 255 - Math.round((255 - cur.data[i + 2]) * 0.2);
       }
     }
   }
-  let image = sharp(out, { raw: { width: curW, height: curH, channels: 3 } });
-  if (maxX >= 0) {
-    const w = maxX - minX + 1;
-    const h = maxY - minY + 1;
-    if (w <= DIFF_CROP_MAX && h <= DIFF_CROP_MAX) {
-      const pad = 32;
-      const left = Math.max(0, minX - pad);
-      const top = Math.max(0, minY - pad);
-      const cropW = Math.min(curW - left, w + pad * 2);
-      const cropH = Math.min(curH - top, h + pad * 2);
-      const scale = Math.max(
-        1,
-        Math.min(10, Math.floor(640 / Math.max(cropW, cropH))),
-      );
-      image = image
-        .extract({ left, top, width: cropW, height: cropH })
-        .resize(cropW * scale, cropH * scale, { kernel: "nearest" });
-    }
-  }
-  await image.png().toFile(diffPath);
+  await sharp(out, { raw: { width: curW, height: curH, channels: 3 } })
+    .png()
+    .toFile(diffPath);
 }
 
 /** Delete stale .new/.diff/.git artifacts (recursively) before a run, so
