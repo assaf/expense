@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 /**
  * README screenshot generator, skipped unless SCREENSHOT=1.
  *
@@ -13,7 +14,7 @@
  */
 import sharp from "sharp";
 import { ulid } from "ulid";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import { freshPage, closeBrowser, goto, signIn } from "./helpers/launchBrowser";
@@ -497,6 +498,19 @@ describe("suite screenshots", () => {
    * a screen can render plausibly and still be broken. */
   const drift: string[] = [];
   const pageErrors: string[] = [];
+
+  // Any drift opens the review UI (baseline vs new side by side, A accepts,
+  // Esc closes): the failure alone names files, the comparison is where the
+  // decision happens. Detached + unref'd so the vitest fork can exit; the
+  // server stops itself after the last item or when the tab closes. Never
+  // fires in CI, where comparisons are skipped and drift cannot occur.
+  afterAll(() => {
+    if (drift.length === 0 || process.env.CI) return;
+    spawn("pnpm", ["screenshots:review"], {
+      detached: true,
+      stdio: "ignore",
+    }).unref();
+  });
   let currentName = "";
 
   /** Hydration + image settle, then a compared capture. The pinned clock
@@ -659,18 +673,31 @@ describe("suite screenshots", () => {
       ],
     ];
 
+    const seen = drift.length;
     const page = await freshPage({ viewport: { width: 720, height: 900 } });
     try {
       for (const [name, html] of emails) {
         await page.setContent(html, { waitUntil: "load" });
-        await expect(page).toMatchScreenshot({
-          name: `emails/${name}`,
-          fullPage: true,
-        });
+        try {
+          await expect(page).toMatchScreenshot({
+            name: `emails/${name}`,
+            fullPage: true,
+          });
+        } catch (error) {
+          drift.push(
+            `emails/${name}: ${(error as Error).message.split("\n")[0]}`,
+          );
+        }
       }
     } finally {
       await page.close();
       await closeBrowser();
+    }
+    if (drift.length > seen) {
+      throw new Error(
+        `${drift.length - seen} email screenshot(s) differ from baseline:\n` +
+          drift.slice(seen).join("\n"),
+      );
     }
   }, 60_000);
 });

@@ -357,9 +357,12 @@ const html = `<!DOCTYPE html>
 writeFileSync(htmlPath, html);
 
 /** Resolve a request path under screenshots/, refusing anything that
- * escapes the directory (traversal via ../ or absolute paths). */
+ * escapes the directory. Request paths arrive root-relative
+ * ("/home.png"); prefixing "." makes resolve() join them under
+ * screenshots/ instead of treating a leading "/" as filesystem-absolute,
+ * and any "../" traversal still fails the relative() containment check. */
 function contained(relPath: string): string | null {
-  const full = resolve(screenshotsDir, relPath);
+  const full = resolve(screenshotsDir, `.${relPath}`);
   const rel = relative(screenshotsDir, full);
   if (rel.startsWith("..") || resolve(rel) === rel) return null;
   return full;
