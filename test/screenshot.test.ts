@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 /**
- * README screenshot generator, skipped unless SCREENSHOT=1.
+ * README + landing screenshot generator, skipped unless SCREENSHOT=1.
  *
  *   SCREENSHOT=1 pnpm exec vp test run test/screenshot.test.ts
  *
@@ -8,6 +8,14 @@ import { spawn } from "node:child_process";
  * dataset (real-ish merchants, reports, categories, generated receipt
  * images), boots the app server, signs in through the real login flow, and
  * captures full-page screenshots with Playwright into public/.
+ *
+ * Also regenerates the landing page's marketing images: the hero is a
+ * viewport crop of the same home capture and the og card its 1200x630 top
+ * slice, so all three stay in sync with the current UI (run this after any
+ * home-page redesign and commit the refreshed public/screenshot-*.png).
+ * The suite-screenshot drift block below skips during SCREENSHOT runs: the
+ * README seeder replaces the shared seed state the drift block compares
+ * against, so the two modes must not interleave.
  *
  * Inside the normal suite (`pnpm test`) the whole describe block is skipped,
  * so it never slows or pollutes the regular test run.

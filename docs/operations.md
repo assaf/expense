@@ -276,6 +276,14 @@ while the tick itself ran healthy.
 FASTMAIL_TOKEN, SENTRY_AUTH_TOKEN) must source them from `.env` or read
 them from the Vercel dashboard, not from a pulled env file.
 
+Related trap: `.env.prod`'s `FASTMAIL_TOKEN` is a short placeholder, not a
+working token (401 on the JMAP session endpoint). The real send token lives
+only in Vercel and in the local `.env`. Anything that must send email as the
+app outside Vercel sources `FASTMAIL_TOKEN` from `.env` (and, when the
+payload must verify against production — e.g. an unsubscribe token signed
+with `SESSION_SECRET` — takes that one var from `.env.prod`, whose values
+are quoted and need stripping before `source`).
+
 Vendor tracer-bridge packages: when a dependency lazy-loads files Vercel's
 tracer can't follow (alias requires, binary assets), add a tiny
 `vendor/<name>/index.cjs` that `require`s the exact exported subpaths. As a
