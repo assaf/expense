@@ -7,9 +7,6 @@ pnpm self-update
 echo -e "\033[32m  Upgrading dependencies …\033[0m"
 pnpm update --latest
 
-echo -e "\033[32m  Installing Playwright browsers …\033[0m"
-playwright install webkit --with-deps
-
 echo -e "\033[32m  Deduping dependencies …\033[0m"
 pnpm dedupe --ignore-scripts
 pnpm prune --ignore-scripts
@@ -17,6 +14,14 @@ pnpm prune --ignore-scripts
 echo -e "\033[32m  Security audit …\033[0m"
 pnpm install
 git add package.json pnpm-lock.yaml
+
+echo -e "\033[32m  Installing Playwright browsers …\033[0m"
+# Browsers must match the just-upgraded playwright package (pnpm exec, NOT
+# pnpx: that fetches a fresh registry copy, not the lockfile version), and
+# run after every dependency mutation so the final node_modules decides.
+# The suite launches chromium (launchBrowser.ts, password-reset,
+# email-render); webkit alone left it failing after version bumps.
+pnpm exec playwright install chromium --with-deps
 
 echo -e "\033[32m  Running tests …\033[0m"
 rm -rf __screenshots__/*
