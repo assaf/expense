@@ -84,15 +84,17 @@ const APP_TAGLINE =
   "Free expense tracking for tax season: receipts, mileage, and exports.";
 
 /** One-paragraph brand summary, used in meta descriptions and llms.txt. */
-export const APP_SUMMARY = `Expense is a free expense tracker for those filing taxes as
- individuals—freelancers, self-employed, and side hustlers. Drop in a receipt
- image (or screenshot, PDF, or forwarded email), it identifies the merchant and
- amount, categorizes it (using Schedule C lines from the IRS), groups into
- reports with names you give, mileage is computed from the map using the current
- year's IRS rate. When it comes to tax filing time, you'll have an option to
- export a PDF per each report, or a ZIP of all you need to give your accountant.
- Ad-free, and free until the app reaches 100 users, then still free up to 25
- invoices a month.`;
+export const APP_SUMMARY = `Expense is an expense tracker for those filing taxes
+as individuals—freelancers, self-employed, and side hustlers. Drop in a receipt
+image (or screenshot, PDF, or forwarded email), it identifies the merchant and
+amount, categorizes it (using Schedule C lines from the IRS), groups into
+reports with names you give, mileage is computed from the map using the current
+year's IRS rate. You can also connect your Gmail or Fastmail account, and
+Expense will pull in all your expenses. When it comes to tax filing time, you'll
+have an option to export a PDF per each report, or a ZIP of all you need to give
+your accountant. Ad-free, and free until the app reaches 100 users, then still
+free up to 25 invoices a month. Expense is a free expense tracker for those
+filing taxes as.`;
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
