@@ -22,6 +22,10 @@ export interface SendEmailInput {
   /** File attachments; `content` is base64. `contentType` overrides the
    * default `application/octet-stream` (images/PDFs get their real type). */
   attachments?: { content: string; filename: string; contentType?: string }[];
+  /** Extra RFC 5322 headers (List-Unsubscribe for marketing email).
+   * Names must be printable-ASCII tokens without a colon; values have
+   * CR/LF stripped, so neither can inject headers. */
+  headers?: Record<string, string>;
 }
 
 export interface OutboundMessageInput extends SendEmailInput {
@@ -91,6 +95,11 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     // (the loop guard). Not subject to subject-wording changes.
     "X-Expense-Confirmation: 1",
   ];
+  for (const [kind, value] of Object.entries(input.headers ?? {})) {
+    // Header-name injection guard: only RFC 5322 field-name characters.
+    if (!/^[A-Za-z0-9-]+$/.test(kind)) continue;
+    headers.push(header(kind, safeHeaderValue(value)));
+  }
   if (input.inReplyTo) {
     const inReplyTo = safeHeaderValue(input.inReplyTo);
     headers.push(header("In-Reply-To", inReplyTo));

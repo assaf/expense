@@ -426,6 +426,7 @@ export async function sendEmailViaJmap(
       text: input.text,
       inReplyTo: input.inReplyTo,
       attachments: input.attachments,
+      headers: input.headers,
     });
     const blobId = await deps.uploadBlob(raw);
     const emailId = await deps.importEmail(blobId, chosen.saveSentToMailboxId);

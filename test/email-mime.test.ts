@@ -62,6 +62,42 @@ describe("buildRfc822Message", () => {
     expect(text).toMatch(/References: <orig123@example.com>/);
   });
 
+  it("carries List-Unsubscribe headers and blocks header injection", () => {
+    const raw = buildRfc822Message({
+      fromName: "Expense",
+      fromEmail: "receipts@labnotes.org",
+      to: "assaf@arkin.me",
+      subject: "News",
+      html: "<p>hi</p>",
+      headers: {
+        "List-Unsubscribe": "<https://expense.labnotes.org/unsubscribe/t>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        // Header-name injection: a hostile key must be dropped whole.
+        "X-Evil\r\nBcc: victim@example.com": "v",
+        // Header-value injection: CRLF stripped.
+        "X-Expense-Test": "ok\r\nBcc: victim@example.com",
+      },
+    });
+    const text = raw.toString("utf8");
+    expect(text).toMatch(
+      /List-Unsubscribe: <https:\/\/expense\.labnotes\.org\/unsubscribe\/t>/,
+    );
+    const lines = text.split("\r\n");
+    expect(lines).toContain(
+      "List-Unsubscribe: <https://expense.labnotes.org/unsubscribe/t>",
+    );
+    expect(lines).toContain(
+      "List-Unsubscribe-Post: List-Unsubscribe=One-Click",
+    );
+    // The hostile name is dropped whole; the CRLF-bearing value is
+    // flattened onto one header line, so it can't smuggle a real Bcc.
+    expect(lines.some((l) => l.startsWith("Bcc:"))).toBe(false);
+    expect(lines.some((l) => l.startsWith("X-Evil"))).toBe(false);
+    expect(lines).toContainEqual(
+      expect.stringMatching(/^X-Expense-Test: ok Bcc:/),
+    );
+  });
+
   it("includes attachments as base64 multipart/mixed parts", () => {
     const raw = buildRfc822Message({
       fromName: "Expense",
