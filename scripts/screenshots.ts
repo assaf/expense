@@ -21,6 +21,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -322,15 +323,41 @@ const html = `<!DOCTYPE html>
       document.querySelector('button:last-child')?.focus();
     }
 
+    // A failed fetch means the review server died (it can be stopped from
+    // outside this page): say so instead of failing silently.
+    async function post(url) {
+      try {
+        await fetch(url);
+        return true;
+      } catch {
+        const name = document.querySelector(".item-name");
+        if (name) {
+          name.textContent =
+            "Server stopped — rerun pnpm screenshots:review";
+        }
+        return false;
+      }
+    }
     async function accept() {
       const item = items[currentIndex];
-      await fetch("/accept?path=" + encodeURIComponent(item.newPath));
+      if (!(await post("/accept?path=" + encodeURIComponent(item.newPath)))) {
+        return;
+      }
       currentIndex++;
       render();
     }
     async function revert() {
       const item = items[currentIndex];
-      await fetch("/revert?git=" + encodeURIComponent(item.oldPath) + "&target=" + encodeURIComponent(item.newPath));
+      if (
+        !(await post(
+          "/revert?git=" +
+            encodeURIComponent(item.oldPath) +
+            "&target=" +
+            encodeURIComponent(item.newPath),
+        ))
+      ) {
+        return;
+      }
       currentIndex++;
       render();
     }
@@ -355,17 +382,34 @@ const html = `<!DOCTYPE html>
 </html>`;
 
 writeFileSync(htmlPath, html);
+// Identifies this run's review.html: a replacing server writes its own,
+// and cleanup must only ever delete ours (a SIGTERM can arrive after a
+// newer instance has already taken over the port and file).
+const reviewHtmlMtimeMs = statSync(htmlPath).mtimeMs;
 
-/** Resolve a request path under screenshots/, refusing anything that
- * escapes the directory. Request paths arrive root-relative
- * ("/home.png"); prefixing "." makes resolve() join them under
- * screenshots/ instead of treating a leading "/" as filesystem-absolute,
- * and any "../" traversal still fails the relative() containment check. */
 function contained(relPath: string): string | null {
-  const full = resolve(screenshotsDir, `.${relPath}`);
+  // Leading slashes must go BEFORE the "." segment: resolve() would treat
+  // "/x" as filesystem-absolute and discard screenshotsDir entirely.
+  const normalized = `./${relPath.replace(/^\/+/, "")}`;
+  const full = resolve(screenshotsDir, normalized);
   const rel = relative(screenshotsDir, full);
   if (rel.startsWith("..") || resolve(rel) === rel) return null;
   return full;
+}
+
+/** A request handler crash must never take the server down mid-review:
+ * reply 500 and let the page show the failure instead. */
+function guarded(
+  handle: (res: ServerResponse) => void,
+  res: ServerResponse,
+): void {
+  try {
+    handle(res);
+  } catch (error) {
+    console.error("[screenshots-review]", error);
+    res.writeHead(500);
+    res.end("error");
+  }
 }
 
 function handleAccept(relPath: string, res: ServerResponse): void {
@@ -460,7 +504,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname === "/accept") {
     const relPath = url.searchParams.get("path");
-    if (relPath) handleAccept(relPath, res);
+    if (relPath) guarded(() => handleAccept(relPath, res), res);
     else {
       res.writeHead(200);
       res.end("ok");
@@ -471,7 +515,7 @@ const server = createServer((req, res) => {
     const gitRelPath = url.searchParams.get("git");
     const targetRelPath = url.searchParams.get("target");
     if (gitRelPath && targetRelPath)
-      handleRevert(gitRelPath, targetRelPath, res);
+      guarded(() => handleRevert(gitRelPath, targetRelPath, res), res);
     else {
       res.writeHead(200);
       res.end("ok");
@@ -506,7 +550,14 @@ function cleanup() {
       /* ok */
     }
   }
-  if (existsSync(htmlPath)) unlinkSync(htmlPath);
+  // Only delete this run's review.html: a SIGTERM can arrive after a
+  // newer instance already took over the port and written its own.
+  if (
+    existsSync(htmlPath) &&
+    statSync(htmlPath).mtimeMs === reviewHtmlMtimeMs
+  ) {
+    unlinkSync(htmlPath);
+  }
   console.info("\nDone.");
 }
 
