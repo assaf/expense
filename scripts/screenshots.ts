@@ -313,7 +313,7 @@ const html = `<!DOCTYPE html>
       container.innerHTML = \`
         <div class="item" data-index="\${currentIndex}">
           <div class="item-header">
-            <span class="item-name">\${item.name}\${sourceBadge}</span>
+            <span class="item-name">\${item.name} (\${currentIndex + 1}/\${items.length})\${sourceBadge}</span>
             <div class="item-actions">\${actions}</div>
           </div>
           \${panels}
