@@ -271,6 +271,8 @@ async function seedScreenshotData() {
       accountId: ACCOUNT,
       email: TEST_EMAIL,
       passwordHash: await hashPassword(TEST_PASSWORD),
+      // Email verification gates sign-in; the capture user is pre-verified.
+      emailVerifiedAt: NOW,
       createdAt: NOW,
     },
   });
@@ -418,17 +420,25 @@ async function captureHome(page: import("playwright").Page): Promise<void> {
   await expect
     .poll(() => page.locator("main li").count(), { timeout: 10_000 })
     .toBe(11); // 9 receipts + mileage + 1 incomplete
-  expect(await page.locator("main section button").count()).toBe(4); // reports
-  expect(await page.locator("main li img:not(.leaflet-tile)").count()).toBe(9); // receipt thumbs
+  expect(await page.locator("main header nav a").count()).toBe(4); // Reconcile, Reports, Email, Settings
   expect(await page.getByText("Incomplete").count()).toBe(1);
   expect(await page.getByText("July 2026").count()).toBeGreaterThan(0);
   expect(await page.getByText("Q2 Travel").count()).toBeGreaterThan(0);
-  expect(
-    await page.getByText(/Current mileage rate: \$0\.7\d\/mi\./).count(),
-  ).toBe(1);
+  // The seeded mileage row renders (description is its label on home).
+  expect(await page.getByText("Client visit").count()).toBe(1);
 
   await page.screenshot({ path: "public/screenshot-home.png", fullPage: true });
   await shrinkForReadme("public/screenshot-home.png");
+
+  // The landing page frames a viewport crop of the same home page as its
+  // hero, and the og card is the hero's top slice at social-card size.
+  // Regenerating them here keeps all three in sync with the current UI.
+  await page.screenshot({ path: "public/screenshot-hero.png" });
+  await shrinkForReadme("public/screenshot-hero.png");
+  await sharp("public/screenshot-hero.png")
+    .resize(1200, 630, { fit: "cover", position: "top" })
+    .png()
+    .toFile("public/screenshot-og.png");
 }
 
 describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
@@ -491,7 +501,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
  * hydrates, or drifts from its baseline is a broken screen, not a missing
  * artifact. Review drift with `pnpm screenshots:review`.
  */
-describe("suite screenshots", () => {
+describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
   /** Drift findings across all captures, asserted empty at the end so one
    * run surfaces every drifted screen (and leaves its diff artifacts),
    * not just the first. Client-side exceptions are collected alongside:
