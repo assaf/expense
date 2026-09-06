@@ -112,7 +112,7 @@ expect.extend({
  * effort only; the equal/count decision above stays with looks-same. */
 const DIFF_CHANNEL_THRESHOLD = 8;
 
-export async function saveDiffImage(
+async function saveDiffImage(
   baseline: Buffer,
   current: Buffer,
   diffPath: string,
