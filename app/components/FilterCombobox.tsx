@@ -36,12 +36,8 @@ const OPERATORS = [
 const MAX_OPTIONS = 8;
 
 /** Suggestions for the token under the caret. */
-export function tokenSuggestions(
-  token: string,
-  names: FilterNames,
-): Suggestion[] {
+function tokenSuggestions(token: string, names: FilterNames): Suggestion[] {
   const t = token.toLowerCase();
-  if (!t) return [];
   const byRest = (list: FilterNames["merchants"], key: string, rest: string) =>
     list
       .filter(([name]) => name.toLowerCase().startsWith(rest))
