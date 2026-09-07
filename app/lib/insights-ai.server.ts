@@ -4,6 +4,7 @@ import {
   parseJsonObject,
   type ChatMessage,
 } from "~/lib/receipt-ai.server";
+import { categorySynonyms } from "~/lib/expense-search";
 
 /**
  * One-shot conversational filter for the insights chart: the user's
@@ -43,6 +44,8 @@ Rules:
 - "X expenses" where X is a topic (AI, coffee, travel, software) usually means
   several merchants ORed together, or a category when one matches exactly.
 - Include a category:<name> only when it exactly matches a provided category.
+- A category may list built-in synonyms after "also means" — a question
+  using one of those words ("gas", "food", "software") means that category.
 - Include report:<name> only when the user names a specific report.
 - If nothing in the list matches the question, return "" (show everything).
 - Keep the query under 300 characters.
@@ -67,7 +70,16 @@ export async function translateInsightQuery(input: {
     `Merchants: ${input.merchants.length ? input.merchants.join(", ") : "(none)"}`,
   );
   context.push(
-    `Categories: ${input.categories.length ? input.categories.join(", ") : "(none)"}`,
+    `Categories: ${
+      input.categories.length
+        ? input.categories
+            .map((c) => {
+              const syn = categorySynonyms(c);
+              return syn.length ? `${c} (also means: ${syn.join(", ")})` : c;
+            })
+            .join(", ")
+        : "(none)"
+    }`,
   );
   context.push(
     `Reports: ${input.reports.length ? input.reports.join(", ") : "(none)"}`,

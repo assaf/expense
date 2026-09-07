@@ -98,7 +98,11 @@ export function matchesSearch(
     (filters.report.length > 0 &&
       !filters.report.some((v) => v === e.report.toLowerCase())) ||
     (filters.category.length > 0 &&
-      !filters.category.some((v) => v === e.category.toLowerCase())) ||
+      !filters.category.some(
+        (v) =>
+          v === e.category.toLowerCase() ||
+          categorySynonyms(e.category).includes(v),
+      )) ||
     (filters.merchant.length > 0 &&
       !filters.merchant.some((v) => v === e.merchant.toLowerCase())) ||
     (filters.description.length > 0 &&
@@ -108,5 +112,134 @@ export function matchesSearch(
   }
   if (words.length === 0) return true;
   const haystack = searchableText(e);
-  return words.every((word) => haystack.includes(word));
+  const category = e.category.toLowerCase();
+  // A word that is a built-in synonym of the row's category matches even
+  // when no name contains it ("food" → Meals and entertainment).
+  return words.every(
+    (word) =>
+      haystack.includes(word) || categorySynonyms(category).includes(word),
+  );
+}
+
+// --- Category synonyms -----------------------------------------------------
+
+/** Built-in synonyms for the default Schedule C categories: common words
+ * that appear in no category *name* but clearly mean one ("food" → Meals
+ * and entertainment). Free-text matching is substring-based, so this list
+ * only needs words with no textual overlap. Custom categories get no
+ * built-in synonyms. */
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  "Meals and entertainment": [
+    "food",
+    "dining",
+    "restaurant",
+    "lunch",
+    "dinner",
+    "breakfast",
+    "coffee",
+    "drinks",
+    "cafe",
+    "catering",
+  ],
+  "Car and truck expenses": [
+    "car",
+    "truck",
+    "vehicle",
+    "auto",
+    "gas",
+    "fuel",
+    "petrol",
+    "parking",
+    "tolls",
+    "driving",
+  ],
+  Travel: [
+    "flight",
+    "airline",
+    "airfare",
+    "hotel",
+    "motel",
+    "lodging",
+    "airbnb",
+    "train",
+    "taxi",
+    "rideshare",
+    "uber",
+    "lyft",
+    "conference",
+  ],
+  "Office expenses": [
+    "office",
+    "stationery",
+    "paper",
+    "printer",
+    "software",
+    "saas",
+    "cloud",
+    "apps",
+  ],
+  Supplies: ["materials"],
+  Utilities: [
+    "phone",
+    "mobile",
+    "cell",
+    "internet",
+    "broadband",
+    "wifi",
+    "electricity",
+    "water",
+  ],
+  "Insurance (other than health)": ["insurance", "premium"],
+  "Legal and professional services": [
+    "legal",
+    "lawyer",
+    "attorney",
+    "accounting",
+    "accountant",
+    "bookkeeping",
+    "consulting",
+  ],
+  Advertising: ["ads", "marketing", "promotion", "sponsorship"],
+  "Commissions and fees": [
+    "fees",
+    "commission",
+    "bank fee",
+    "transaction",
+    "processing",
+  ],
+  "Rent or lease: other business property": ["rent", "lease"],
+  "Rent or lease: vehicles, machinery, and equipment": ["equipment lease"],
+  "Repairs and maintenance": ["repair", "maintenance", "fix"],
+  "Taxes and licenses": ["tax", "license", "permit", "irs"],
+  Wages: ["wage", "salary", "payroll"],
+  "Contract labor": ["contractor", "freelancer", "1099"],
+  "Other expenses": ["misc"],
+};
+
+/** Reverse index: synonym word → categories it means. Built once. */
+const SYNONYM_INDEX = new Map<string, string[]>();
+for (const [category, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
+  for (const word of synonyms) {
+    const categories = SYNONYM_INDEX.get(word) ?? [];
+    categories.push(category);
+    SYNONYM_INDEX.set(word, categories);
+  }
+}
+
+/** Canonical category names, lowercase → synonyms (lookups are
+ * case-insensitive; keys keep the display spelling for completions). */
+const CATEGORY_SYNONYMS_BY_LOWER = new Map<string, string[]>();
+for (const [category, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
+  CATEGORY_SYNONYMS_BY_LOWER.set(category.toLowerCase(), synonyms);
+}
+
+/** The built-in synonyms of `category` (case-insensitive canonical name;
+ * unknown categories have none). */
+export function categorySynonyms(category: string): string[] {
+  return CATEGORY_SYNONYMS_BY_LOWER.get(category.trim().toLowerCase()) ?? [];
+}
+
+/** Categories that the synonym word `word` means (case-insensitive). */
+export function categoriesForSynonym(word: string): string[] {
+  return SYNONYM_INDEX.get(word.trim().toLowerCase()) ?? [];
 }

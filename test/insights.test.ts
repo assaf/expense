@@ -9,6 +9,10 @@ import {
 } from "~/lib/insights";
 import { EMPTY_ROUTE } from "~/lib/types";
 import {
+  tokenSuggestions,
+  type FilterNames,
+} from "~/components/FilterCombobox";
+import {
   parseInsightTranslation,
   translateInsightQuery,
 } from "~/lib/insights-ai.server";
@@ -223,7 +227,7 @@ describe("translateInsightQuery", () => {
     const t = await translateInsightQuery({
       text: "my AI expenses",
       merchants: ["Z.ai", "DeepSeek", "Peet's Coffee"],
-      categories: ["Software Subscriptions"],
+      categories: ["Meals and entertainment", "Software Subscriptions"],
       reports: ["July 2026"],
     });
     expect(t).toMatchObject({
@@ -233,6 +237,10 @@ describe("translateInsightQuery", () => {
     const [messages, opts] = chat.mock.calls[0]!;
     const userMessage = messages.at(-1)!.content;
     expect(userMessage).toContain("Merchants: Z.ai, DeepSeek, Peet's Coffee");
+    // Built-in synonyms ride along so "coffee" resolves to the category.
+    expect(userMessage).toContain(
+      "Meals and entertainment (also means: food, dining, restaurant",
+    );
     expect(userMessage).toContain("Question: my AI expenses");
     expect(opts?.json).toBe(true);
   });
@@ -247,5 +255,34 @@ describe("translateInsightQuery", () => {
         reports: [],
       }),
     ).rejects.toThrow("LLM_API_KEY is not configured");
+  });
+});
+
+describe("tokenSuggestions", () => {
+  const names: FilterNames = {
+    merchants: [["Z.ai", 3]],
+    categories: [["Meals and entertainment", 2]],
+    reports: [["July 2026", 1]],
+  };
+
+  it("expands a category synonym to the canonical operator form", () => {
+    const completions = tokenSuggestions("food", names).map(
+      (s) => s.completion,
+    );
+    expect(completions).toContain("category:Meals and entertainment ");
+  });
+
+  it("offers the canonical category for a synonym after the operator", () => {
+    const completions = tokenSuggestions("category:food", names).map(
+      (s) => s.completion,
+    );
+    expect(completions).toContain("category:Meals and entertainment ");
+  });
+
+  it("still offers the operator keyword itself", () => {
+    const completions = tokenSuggestions("cate", names).map(
+      (s) => s.completion,
+    );
+    expect(completions).toContain("category:");
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "~/components/ui/Input";
 import { countLabel } from "~/lib/format";
+import { categoriesForSynonym } from "~/lib/expense-search";
 
 /**
  * The insights filter input with a token-aware dropdown: the suggestion
@@ -38,10 +39,17 @@ const OPERATORS = [
 const MAX_OPTIONS = 50;
 
 /** Suggestions for the token under the caret. */
-function tokenSuggestions(token: string, names: FilterNames): Suggestion[] {
+export function tokenSuggestions(
+  token: string,
+  names: FilterNames,
+): Suggestion[] {
   const t = token.toLowerCase();
-  const byRest = (list: FilterNames["merchants"], key: string, rest: string) =>
-    list
+  const byRest = (
+    list: FilterNames["merchants"],
+    key: string,
+    rest: string,
+  ) => {
+    const prefix = list
       .filter(([name]) => name.toLowerCase().startsWith(rest))
       .slice(0, MAX_OPTIONS)
       .map(([name, count]) => ({
@@ -49,6 +57,17 @@ function tokenSuggestions(token: string, names: FilterNames): Suggestion[] {
         label: name,
         hint: countLabel(count),
       }));
+    // A synonym typed after the operator ("category:food") offers the
+    // canonical category it means.
+    const synonyms = (key === "category" ? categoriesForSynonym(rest) : []).map(
+      (name) => ({
+        completion: `${key}:${name} `,
+        label: name,
+        hint: "category",
+      }),
+    );
+    return [...prefix, ...synonyms].slice(0, MAX_OPTIONS);
+  };
   const op = /^(merchant|category|report|description):(.*)$/.exec(t);
   if (op) {
     const key = op[1]!;
@@ -70,8 +89,16 @@ function tokenSuggestions(token: string, names: FilterNames): Suggestion[] {
   }));
   const namesFor = (list: FilterNames["merchants"], key: string) =>
     byRest(list, key, t);
+  // A bare word that is a built-in synonym of a category ("food", "gas")
+  // offers that category's operator form.
+  const synonymCategories = categoriesForSynonym(t).map((name) => ({
+    completion: `category:${name} `,
+    label: name,
+    hint: "category",
+  }));
   return [
     ...operators,
+    ...synonymCategories,
     ...namesFor(names.merchants, "merchant"),
     ...namesFor(names.categories, "category"),
     ...namesFor(names.reports, "report"),

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  categoriesForSynonym,
+  categorySynonyms,
   matchesSearch,
   parseQuery,
   type SearchableExpense,
@@ -103,5 +105,44 @@ describe("matchesSearch", () => {
 
   it("matches every row on an empty query", () => {
     expect(matchesSearch(row(), parsed(""))).toBe(true);
+  });
+});
+
+describe("category synonyms", () => {
+  const parsed = (query: string) => parseQuery(query);
+  it("maps built-in synonym words to their canonical categories", () => {
+    expect(categoriesForSynonym("food")).toEqual(["Meals and entertainment"]);
+    expect(categoriesForSynonym("Food")).toEqual(["Meals and entertainment"]);
+    expect(categoriesForSynonym("gas")).toEqual(["Car and truck expenses"]);
+    expect(categoriesForSynonym("not-a-synonym")).toEqual([]);
+  });
+
+  it("lists the synonyms of a canonical category", () => {
+    expect(categorySynonyms("meals and entertainment")).toContain("coffee");
+    expect(categorySynonyms("Custom User Category")).toEqual([]);
+  });
+
+  it("matches a synonym word as free text against the row's category", () => {
+    const e = row({ category: "Meals and entertainment" });
+    expect(matchesSearch(e, parsed("food"))).toBe(true);
+    expect(matchesSearch(e, parsed("restaurant"))).toBe(true);
+    // No substring overlap: "food" appears nowhere in the row's text.
+    expect(matchesSearch(e, parsed("catering"))).toBe(true);
+    // A synonym of a DIFFERENT category must not match.
+    expect(matchesSearch(e, parsed("parking"))).toBe(false);
+  });
+
+  it("matches synonyms through the category: operator", () => {
+    const e = row({ category: "Car and truck expenses" });
+    expect(matchesSearch(e, parsed("category:gas"))).toBe(true);
+    expect(matchesSearch(e, parsed("category:Car and truck expenses"))).toBe(
+      true,
+    );
+    expect(matchesSearch(e, parsed("category:food"))).toBe(false);
+  });
+
+  it("keeps substring matching alongside synonyms", () => {
+    const e = row({ category: "Meals and entertainment" });
+    expect(matchesSearch(e, parsed("coffee"))).toBe(true);
   });
 });
