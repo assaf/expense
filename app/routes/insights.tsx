@@ -7,6 +7,7 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import { PageShell } from "~/components/PageShell";
+import { FilterCombobox } from "~/components/FilterCombobox";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -15,7 +16,7 @@ import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount } from "~/lib/db/accounts";
 import { readExpenses } from "~/lib/db/expenses";
-import { countLabel, formatShortDate } from "~/lib/format";
+import { formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
   insightExpense,
@@ -326,49 +327,23 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           </Select>
         </div>
         <div className="relative mb-4">
-          <Input
-            id="insights-query"
-            list="insights-filter-suggestions"
-            type="text"
+          <FilterCombobox
             value={query}
-            onChange={(e) => onQueryInput(e.target.value)}
+            onChange={onQueryInput}
+            names={suggestions}
             placeholder="Filter: merchant: category: report: description: or free text"
-            autoComplete="off"
-            className="w-full pr-9"
+            ariaLabel="Filter expenses"
           />
           {query ? (
             <button
               type="button"
               onClick={() => onQueryInput("")}
               aria-label="Clear filter"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="absolute right-2 top-2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
             >
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
           ) : null}
-          <datalist id="insights-filter-suggestions">
-            {suggestions.merchants.map(([name, c]) => (
-              <option
-                key={`op-merchant:${name}`}
-                value={`merchant:${name}`}
-                label={`${countLabel(c)} as a merchant`}
-              />
-            ))}
-            {suggestions.categories.map(([name, c]) => (
-              <option
-                key={`op-category:${name}`}
-                value={`category:${name}`}
-                label={`${countLabel(c)} in this category`}
-              />
-            ))}
-            {suggestions.reports.map(([name, c]) => (
-              <option
-                key={`report:${name}`}
-                value={`report:${name}`}
-                label={`${countLabel(c)} as a report`}
-              />
-            ))}
-          </datalist>
         </div>
         {today ? (
           <MonthlyChart buckets={buckets} />
