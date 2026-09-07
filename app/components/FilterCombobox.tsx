@@ -33,7 +33,9 @@ const OPERATORS = [
   "description:",
 ] as const;
 
-const MAX_OPTIONS = 8;
+/** Generous cap: the list scrolls, so long merchant lists stay reachable
+ * without rendering unbounded DOM. */
+const MAX_OPTIONS = 50;
 
 /** Suggestions for the token under the caret. */
 function tokenSuggestions(token: string, names: FilterNames): Suggestion[] {
@@ -120,8 +122,13 @@ export function FilterCombobox({
       inputRef.current?.setSelectionRange(pos, pos);
     });
   };
-
   const listId = "insights-filter-options";
+  // Keyboard navigation scrolls the active option into view (the list
+  // is taller than the viewport cap for long merchant lists).
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active, options]);
 
   return (
     <div className="relative">
@@ -170,7 +177,7 @@ export function FilterCombobox({
         <ul
           id={listId}
           role="listbox"
-          className="absolute top-full z-20 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+          className="absolute top-full z-20 mt-1 max-h-64 w-full overflow-y-auto overscroll-contain rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
         >
           {options.map((s, i) => (
             <li key={`${s.completion}-${i}`}>
@@ -178,6 +185,7 @@ export function FilterCombobox({
                 type="button"
                 role="option"
                 aria-selected={i === active}
+                ref={i === active ? activeRef : undefined}
                 // mousedown applies before the input's blur can close the list.
                 onMouseDown={(e) => {
                   e.preventDefault();
