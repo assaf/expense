@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <!-- Rounded square background with white stroke for dark-mode visibility -->
+  <!-- The Expense mark: receipt line items form the letter E, torn bottom edge -->
   <rect x="8" y="8" width="112" height="112" rx="24"
         fill="#0d9488" stroke="#ffffff" stroke-width="2.5"/>
   <!-- Receipt fold corner -->
   <path d="M92 8 L120 36 L92 36 Z"
         fill="#0f766e" stroke="#ffffff" stroke-width="1.5"/>
-  <!-- Dollar sign -->
-  <text x="64" y="82" text-anchor="middle"
-        font-family="system-ui, -apple-system, sans-serif"
-        font-size="60" font-weight="700" fill="#ffffff">$</text>
+  <!-- Line items: three bars of a receipt, reading as an E -->
+  <rect x="30" y="34" width="60" height="10" rx="3" fill="#ffffff"/>
+  <rect x="30" y="56" width="42" height="10" rx="3" fill="#ffffff"/>
+  <path d="M30 78 L90 78 L87 81 L84 78 L81 81 L78 78 L75 81 L72 78 L69 81 L66 78 L63 81 L60 78 L57 81 L54 78 L51 81 L48 78 L45 81 L42 78 L39 81 L36 78 L33 81 L30 78 Z"
+        fill="#ffffff"/>
 </svg>
