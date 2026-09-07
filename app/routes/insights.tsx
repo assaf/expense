@@ -1,6 +1,6 @@
 import { ChartColumn, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Link, useFetcher } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useFetcher, useSearchParams } from "react-router";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
@@ -110,21 +110,48 @@ const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
-  const [query, setQuery] = useState("");
-  const [window_, setWindow] = useState<Window>("12");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [ask, setAsk] = useState("");
   const today = useToday();
 
-  const result = fetcher.data as TranslateOk | TranslateErr | undefined;
+  // The chart's state lives in the URL (?q=<filter>&w=<window>): refresh,
+  // back/forward, and sharing the link all reproduce the same results.
+  const query = searchParams.get("q") ?? "";
+  const rawWindow = searchParams.get("w") ?? "";
+  const window_: Window = (
+    WINDOW_OPTIONS.some((o) => o.value === rawWindow) ? rawWindow : "12"
+  ) as Window;
+
+  // Serialize param updates: setSearchParams commits asynchronously, so
+  // two quick changes (type, then pick a window) must merge through the
+  // latest intended params, not whichever URL the location has now. The
+  // ref re-syncs to the committed URL after every navigation (back /
+  // forward / AI result included).
+  const paramsRef = useRef(new URLSearchParams(searchParams));
   useEffect(() => {
-    if (result?.ok) {
-      setQuery(result.query);
-      // The AI picks a trailing window (0 = all time); "year" is a
-      // viewer-side convenience the model never returns.
-      setWindow(
-        result.months === 0 ? "all" : (String(result.months) as Window),
-      );
-    }
+    paramsRef.current = new URLSearchParams(searchParams);
+  }, [searchParams]);
+  const updateParams = (apply: (params: URLSearchParams) => void) => {
+    const next = new URLSearchParams(paramsRef.current);
+    apply(next);
+    paramsRef.current = next;
+    setSearchParams(next, { replace: true, preventScrollReset: true });
+  };
+  const setQuery = (q: string) =>
+    updateParams((p) => (q ? p.set("q", q) : p.delete("q")));
+  const setWindow = (w: string) => updateParams((p) => p.set("w", w));
+
+  const result = fetcher.data as TranslateOk | TranslateErr | undefined;
+  const appliedResult = useRef<TranslateOk | null>(null);
+  useEffect(() => {
+    if (!result?.ok || result === appliedResult.current) return;
+    appliedResult.current = result;
+    // The AI picks a trailing window (0 = all time); "year" is a
+    // viewer-side convenience the model never returns.
+    updateParams((p) => {
+      p.set("q", result.query);
+      p.set("w", result.months === 0 ? "all" : String(result.months));
+    });
   }, [result]);
 
   const months = useMemo(() => {
