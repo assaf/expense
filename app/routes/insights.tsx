@@ -1,6 +1,6 @@
 import { ChartColumn, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
@@ -10,11 +10,12 @@ import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount } from "~/lib/db/accounts";
 import { readExpenses } from "~/lib/db/expenses";
-import { countLabel } from "~/lib/format";
+import { countLabel, formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
   insightExpense,
   knownMerchantNames,
+  matchingExpenses,
   monthlyTotals,
 } from "~/lib/insights";
 import { translateInsightQuery, LLMError } from "~/lib/insights-ai.server";
@@ -140,6 +141,10 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     () =>
       today ? monthlyTotals(loaderData.expenses, query, today, months) : [],
     [loaderData.expenses, query, today, months],
+  );
+  const matched = useMemo(
+    () => (today ? matchingExpenses(loaderData.expenses, query, buckets) : []),
+    [loaderData.expenses, query, buckets, today],
   );
   const total = buckets.reduce((sum, b) => sum + b.total, 0);
   const count = buckets.reduce((sum, b) => sum + b.count, 0);
@@ -304,6 +309,72 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         ) : (
           <div className="h-[200px]" aria-hidden="true" />
         )}
+        {matched.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  <th scope="col" className="py-1.5 pr-2 font-medium">
+                    Date
+                  </th>
+                  <th scope="col" className="py-1.5 pr-2 font-medium">
+                    Expense
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden py-1.5 pr-2 font-medium sm:table-cell"
+                  >
+                    Category
+                  </th>
+                  <th
+                    scope="col"
+                    className="hidden py-1.5 pr-2 font-medium md:table-cell"
+                  >
+                    Report
+                  </th>
+                  <th scope="col" className="py-1.5 text-right font-medium">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {matched.map((e) => (
+                  <tr
+                    key={e.id}
+                    className="border-b border-gray-100 last:border-0 dark:border-gray-800"
+                  >
+                    <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                      {formatShortDate(e.date)}
+                    </td>
+                    <td className="min-w-0 max-w-52 py-1.5 pr-2">
+                      <Link
+                        to={`/expense/${e.id}`}
+                        className="block truncate hover:underline"
+                      >
+                        {e.merchant || e.description || "Untitled"}
+                        {e.merchant && e.description ? (
+                          <span className="text-gray-400 dark:text-gray-500">
+                            {" "}
+                            · {e.description}
+                          </span>
+                        ) : null}
+                      </Link>
+                    </td>
+                    <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
+                      {e.category}
+                    </td>
+                    <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
+                      {e.report}
+                    </td>
+                    <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                      {usd.format(Number(e.amount) || 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </Card>
     </PageShell>
   );

@@ -12,11 +12,16 @@ export function accountHasAI(plan: string | null | undefined): boolean {
 }
 
 /** The flattened expense row the insights page charts: the search-box view
- * plus the two fields charting needs (date buckets, amount sums). */
-export type InsightExpense = SearchableExpense & { date: string };
+ * plus the fields charting and the drill-down table need (id, date
+ * bucket, amount sum). */
+export type InsightExpense = SearchableExpense & {
+  id: string;
+  date: string;
+};
 
 export function insightExpense(e: Expense): InsightExpense {
   return {
+    id: e.id,
     type: e.type,
     merchant: e.type === "mileage" ? "" : e.merchant,
     mileageType: e.type === "mileage" ? e.mileageType : "business",
@@ -72,6 +77,24 @@ export function monthWindow(today: string, months: number): string[] {
     }
   }
   return keys;
+}
+
+/** The expenses behind the chart: rows matching `query` whose date falls
+ * inside the bucket window, newest first (the drill-down table). */
+export function matchingExpenses(
+  expenses: InsightExpense[],
+  query: string,
+  buckets: MonthBucket[],
+): InsightExpense[] {
+  const keys = new Set(buckets.map((b) => b.key));
+  const parsed = parseQuery(query);
+  return expenses
+    .filter(
+      (e) => e.date && keys.has(e.date.slice(0, 7)) && matchesSearch(e, parsed),
+    )
+    .toSorted(
+      (a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id),
+    );
 }
 
 function bucketLabel(key: string, spanYears: boolean): string {

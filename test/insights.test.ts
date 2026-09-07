@@ -27,6 +27,7 @@ const chat = vi.mocked(chatCompletion);
 
 function exp(fields: Partial<InsightExpense>): InsightExpense {
   return {
+    id: "e",
     type: "receipt",
     merchant: "",
     mileageType: "business",
