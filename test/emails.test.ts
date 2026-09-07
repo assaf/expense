@@ -86,12 +86,13 @@ describe("Email", () => {
     await page.close();
   });
 
-  it("shows Email in the header nav between Reports and Settings", async () => {
+  it("shows Email in the header nav after Reports and Insights", async () => {
     const page = await goto("/");
     const labels = await page.locator("header nav a").allTextContents();
     expect(labels.map((s) => s.trim())).toEqual([
       "Reconcile",
       "Reports",
+      "Insights",
       "Email",
       "Settings",
     ]);

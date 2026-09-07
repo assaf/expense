@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
+  ChartColumn,
   CreditCard,
   Download,
   FileDown,
@@ -57,6 +58,7 @@ export const ACTION_SHORTCUTS = {
   "nav-expenses": ["g", "e"],
   "nav-reports": ["g", "r"],
   "nav-emails": ["g", "l"],
+  "nav-insights": ["g", "i"],
   "nav-reconcile": ["g", "x"],
   "nav-settings": ["g", "s"],
   "new-receipt": ["a"],
@@ -146,6 +148,15 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         keywords: "export pdf download",
         icon: <Download aria-hidden="true" className="h-4 w-4" />,
         perform: () => void navigate("/export"),
+      },
+      {
+        id: "nav-insights",
+        shortcut: ACTION_SHORTCUTS["nav-insights"],
+        name: "Go to Insights",
+        section: "Navigate",
+        keywords: "chart trends monthly ai",
+        icon: <ChartColumn aria-hidden="true" className="h-4 w-4" />,
+        perform: () => void navigate("/insights"),
       },
       {
         id: "nav-emails",

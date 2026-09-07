@@ -14,12 +14,14 @@ export function accountFromRow(row: {
   id: string;
   name: string;
   inviteCode: string;
+  plan: string | null;
   createdAt: string;
 }): Account {
   return {
     id: row.id,
     name: row.name,
     inviteCode: row.inviteCode,
+    plan: row.plan,
     createdAt: toIso(row.createdAt),
   };
 }

@@ -517,7 +517,10 @@ function buildUserPrompt(input: ExtractionInput): string {
   return lines.join("\n\n");
 }
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 /**
  * Owner alert for account-level LLM failures (401 invalid/revoked key,
@@ -558,7 +561,7 @@ export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
   );
 }
 
-async function chatCompletion(
+export async function chatCompletion(
   messages: ChatMessage[],
   opts: {
     json?: boolean;

@@ -5,6 +5,9 @@ model Account {
   id                         String                       @id(map: "accounts_pkey")
   name                       String
   inviteCode                 String
+  /// Billing tier: "paid" or "gratis" unlocks conversational AI; null =
+  /// signed up without a plan (AI surfaces show an upgrade prompt).
+  plan                       String?
   createdAt                  TimestampString(3)
   categories                 Category[]
   duplicateDismissals        DuplicateDismissal[]

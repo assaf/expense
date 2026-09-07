@@ -37,6 +37,7 @@ export default defineConfig({
       "test/llms-txt.test.ts",
       "test/expense-search.test.ts",
       "test/shortcut-anchors.test.ts",
+      "test/insights.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

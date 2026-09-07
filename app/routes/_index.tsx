@@ -4,6 +4,7 @@ import {
   ReceiptText,
   Settings,
   Download,
+  ChartColumn,
   AlertTriangle,
   Search,
   X,
@@ -43,6 +44,7 @@ import { imageVersion } from "~/lib/image-version";
 import { isComplete } from "~/lib/completeness";
 import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import { matchesSearch, parseQuery } from "~/lib/expense-search";
+import { accountHasAI } from "~/lib/insights";
 import type { DuplicateMatch } from "~/lib/duplicates";
 import { isReceiptFile } from "~/lib/file-types";
 import { useDropTarget } from "~/lib/use-drop-target";
@@ -130,6 +132,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     // The connect-email highlight is eligible only while the account has no
     // connected mailbox.
     hasEmailConnection: emailConnections.length > 0,
+    // The insights highlight is eligible only for accounts with a plan
+    // (conversational AI is plan-gated).
+    hasAI: accountHasAI(account?.plan),
   };
   return data(
     {
@@ -526,6 +531,16 @@ function ExpenseList({
             <Link to="/export" data-shortcut="nav-reports" aria-label="Reports">
               <Download aria-hidden="true" className="h-4 w-4" />
               <span className="hidden sm:inline">Reports</span>
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+            <Link
+              to="/insights"
+              data-shortcut="nav-insights"
+              aria-label="Insights"
+            >
+              <ChartColumn aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Insights</span>
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">

@@ -98,6 +98,9 @@ export async function createAccount(name: string): Promise<Account> {
     id: ulid(),
     name: clean,
     inviteCode: generateInviteCode(),
+    // New signups start without a plan; conversational AI is for
+    // "paid"/"gratis" accounts (existing accounts were grandfathered).
+    plan: null,
     createdAt: new Date().toISOString(),
   };
   // The account is created with the IRS Schedule C default categories so

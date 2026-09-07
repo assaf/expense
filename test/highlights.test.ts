@@ -13,6 +13,7 @@ const EMPTY: HighlightData = {
   mileageRate: "",
   hasRates: false,
   hasEmailConnection: false,
+  hasAI: false,
 };
 
 const FULL: HighlightData = {
@@ -22,6 +23,7 @@ const FULL: HighlightData = {
   mileageRate: "0.70",
   hasRates: true,
   hasEmailConnection: true,
+  hasAI: true,
 };
 
 describe("feature highlights", () => {
@@ -64,6 +66,11 @@ describe("feature highlights", () => {
   it("offers the invite highlight only when an invite code exists", () => {
     expect(availableHighlights(FULL)).toContain("invite");
     expect(availableHighlights(EMPTY)).not.toContain("invite");
+  });
+
+  it("offers the insights highlight only when the account has a plan", () => {
+    expect(availableHighlights(FULL)).toContain("insights");
+    expect(availableHighlights(EMPTY)).not.toContain("insights");
   });
 
   it("picks only from the available pool", () => {

@@ -16,6 +16,7 @@ const SAMPLE_DATA: HighlightData = {
   mileageRate: "0.76",
   hasRates: true,
   hasEmailConnection: false,
+  hasAI: true,
 };
 
 export function meta(): Route.MetaDescriptors {

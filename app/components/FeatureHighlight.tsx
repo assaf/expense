@@ -1,5 +1,6 @@
 import {
   Bot,
+  ChartColumn,
   Command,
   CreditCard,
   FileText,
@@ -43,6 +44,7 @@ export type HighlightId =
   | "mileage-rate"
   | "reports"
   | "invite"
+  | "insights"
   | "reconcile"
   | "search-operators"
   | "shortcut-hints"
@@ -63,8 +65,10 @@ export interface HighlightData {
   mileageRate: string;
   hasRates: boolean;
   hasEmailConnection: boolean;
+  /** The account has a billing plan, so conversational AI (Insights)
+   * is available. */
+  hasAI: boolean;
 }
-
 interface HighlightDef {
   icon: LucideIcon;
   title: string;
@@ -257,6 +261,18 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Get your invite code", to: "/settings#invite-code" },
   },
+  insights: {
+    icon: ChartColumn,
+    title: "Ask your expenses a question",
+    body: () => (
+      <>
+        On Insights, describe what you want to see ("my AI expenses") and the
+        chart picks the merchants and the time window for you. You can always
+        type a filter by hand instead.
+      </>
+    ),
+    cta: { label: "Open Insights", to: "/insights" },
+  },
   reconcile: {
     icon: CreditCard,
     title: "Reconcile against your statement",
@@ -308,6 +324,8 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   if (data.mcpUrl) pool.push("mcp");
   if (data.hasRates) pool.push("mileage-rate");
   if (data.inviteCode) pool.push("invite");
+  // Conversational AI is plan-gated, so the highlight is too.
+  if (data.hasAI) pool.push("insights");
   return pool;
 }
 

@@ -175,6 +175,9 @@ export interface Account {
   name: string;
   /** Secret code used to join the account (regenerable). */
   inviteCode: string;
+  /** Billing tier: "paid" or "gratis" unlock conversational AI
+   * (insights); null = no plan yet, AI surfaces show an upgrade prompt. */
+  plan: string | null;
   createdAt: string;
 }
 

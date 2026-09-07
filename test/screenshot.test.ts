@@ -575,6 +575,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       );
       await capture(page, "/", "home");
       await capture(page, "/expense/new", "expense-new");
+      await capture(page, "/insights", "insights");
 
       // The editor needs a real expense row; the global seed provides one,
       // but a test that ran earlier may have deleted them.
