@@ -1,14 +1,16 @@
-import { ChartColumn, Sparkles } from "lucide-react";
+import { ChartColumn, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
+import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
 import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount } from "~/lib/db/accounts";
 import { readExpenses } from "~/lib/db/expenses";
+import { countLabel } from "~/lib/format";
 import {
   accountHasAI,
   insightExpense,
@@ -16,7 +18,7 @@ import {
   monthlyTotals,
 } from "~/lib/insights";
 import { translateInsightQuery, LLMError } from "~/lib/insights-ai.server";
-import { todayDate } from "~/lib/format";
+import { useToday } from "~/lib/use-today";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
 
@@ -90,11 +92,17 @@ interface TranslateErr {
   error: string;
 }
 
-const MONTH_OPTIONS = [
+/** Chart windows. "year" means the calendar year so far (January 1
+ * through the current month), anchored on the browser's local today;
+ * the numeric strings are trailing month counts, "all" is everything. */
+type Window = "6" | "12" | "24" | "all" | "year";
+
+const WINDOW_OPTIONS: { value: Window; label: string }[] = [
+  { value: "year", label: "This year" },
   { value: "6", label: "6 months" },
   { value: "12", label: "12 months" },
   { value: "24", label: "24 months" },
-  { value: "0", label: "All time" },
+  { value: "all", label: "All time" },
 ];
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
@@ -102,20 +110,31 @@ const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
   const [query, setQuery] = useState("");
-  const [months, setMonths] = useState(12);
-  // The month window anchors on the browser's local today (timezone rule:
-  // the server must not guess the user's day), so the chart fills in
-  // after mount like home's future badges.
-  const [today, setToday] = useState("");
-  useEffect(() => setToday(todayDate()), []);
+  const [window_, setWindow] = useState<Window>("12");
+  const [ask, setAsk] = useState("");
+  const today = useToday();
 
   const result = fetcher.data as TranslateOk | TranslateErr | undefined;
   useEffect(() => {
     if (result?.ok) {
       setQuery(result.query);
-      setMonths(result.months);
+      // The AI picks a trailing window (0 = all time); "year" is a
+      // viewer-side convenience the model never returns.
+      setWindow(
+        result.months === 0 ? "all" : (String(result.months) as Window),
+      );
     }
   }, [result]);
+
+  const months = useMemo(() => {
+    if (window_ === "all") return 0;
+    if (window_ === "year") {
+      // January through the current month: walking back from today's
+      // month by its 1-based month number lands on January 1.
+      return today ? Number(today.slice(5, 7)) : 12;
+    }
+    return Number(window_);
+  }, [window_, today]);
 
   const buckets = useMemo(
     () =>
@@ -125,6 +144,30 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const total = buckets.reduce((sum, b) => sum + b.total, 0);
   const count = buckets.reduce((sum, b) => sum + b.count, 0);
   const busy = fetcher.state !== "idle";
+
+  const suggestions = useMemo(() => {
+    const merchants = new Map<string, number>();
+    const categories = new Map<string, number>();
+    const reports = new Map<string, number>();
+    for (const e of loaderData.expenses) {
+      if (e.type === "receipt" && e.merchant) {
+        merchants.set(e.merchant, (merchants.get(e.merchant) ?? 0) + 1);
+      }
+      if (e.category) {
+        categories.set(e.category, (categories.get(e.category) ?? 0) + 1);
+      }
+      if (e.report) {
+        reports.set(e.report, (reports.get(e.report) ?? 0) + 1);
+      }
+    }
+    const byCount = (a: [string, number], b: [string, number]) =>
+      b[1] - a[1] || a[0].localeCompare(b[0]);
+    return {
+      merchants: [...merchants.entries()].toSorted(byCount),
+      categories: [...categories.entries()].toSorted(byCount),
+      reports: [...reports.entries()].toSorted(byCount),
+    };
+  }, [loaderData.expenses]);
 
   return (
     <PageShell
@@ -140,13 +183,15 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               Describe what you want to see
             </label>
             <div className="flex gap-2">
-              <input
+              <Input
                 id="insights-ask"
                 name="text"
                 type="text"
+                value={ask}
+                onChange={(e) => setAsk(e.target.value)}
                 autoComplete="off"
                 placeholder='e.g. "my AI expenses"'
-                className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                className="min-w-0 flex-1"
               />
               <Button type="submit" disabled={busy}>
                 <Sparkles aria-hidden="true" className="h-4 w-4" />
@@ -159,14 +204,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 <button
                   key={ex}
                   type="button"
-                  onClick={() => {
-                    setQuery(ex);
-                    if (!busy)
-                      void fetcher.submit(
-                        { intent: "translate", text: ex },
-                        { method: "post" },
-                      );
-                  }}
+                  onClick={() => setAsk(ex)}
                   className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
                   {ex}
@@ -205,29 +243,62 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           </p>
           <Select
             aria-label="Time window"
-            value={String(months)}
-            onChange={(e) => setMonths(Number(e.target.value))}
-            className="w-32"
+            value={window_}
+            onChange={(e) => setWindow(e.target.value as Window)}
+            className="w-36"
           >
-            {MONTH_OPTIONS.map((o) => (
+            {WINDOW_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
           </Select>
         </div>
-        <label htmlFor="insights-query" className="sr-only">
-          Filter (merchant: category: report: or free text)
-        </label>
-        <input
-          id="insights-query"
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filter: merchant: category: report: description: or free text"
-          autoComplete="off"
-          className="mb-4 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-        />
+        <div className="relative mb-4">
+          <Input
+            id="insights-query"
+            list="insights-filter-suggestions"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter: merchant: category: report: description: or free text"
+            autoComplete="off"
+            className="w-full pr-9"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear filter"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            >
+              <X aria-hidden="true" className="h-4 w-4" />
+            </button>
+          ) : null}
+          <datalist id="insights-filter-suggestions">
+            {suggestions.merchants.map(([name, c]) => (
+              <option
+                key={`op-merchant:${name}`}
+                value={`merchant:${name}`}
+                label={`${countLabel(c)} as a merchant`}
+              />
+            ))}
+            {suggestions.categories.map(([name, c]) => (
+              <option
+                key={`op-category:${name}`}
+                value={`category:${name}`}
+                label={`${countLabel(c)} in this category`}
+              />
+            ))}
+            {suggestions.reports.map(([name, c]) => (
+              <option
+                key={`report:${name}`}
+                value={`report:${name}`}
+                label={`${countLabel(c)} as a report`}
+              />
+            ))}
+          </datalist>
+        </div>
         {today ? (
           <MonthlyChart buckets={buckets} />
         ) : (
