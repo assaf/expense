@@ -114,43 +114,59 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const [ask, setAsk] = useState("");
   const today = useToday();
 
-  // The chart's state lives in the URL (?q=<filter>&w=<window>): refresh,
-  // back/forward, and sharing the link all reproduce the same results.
-  const query = searchParams.get("q") ?? "";
-  const rawWindow = searchParams.get("w") ?? "";
-  const window_: Window = (
-    WINDOW_OPTIONS.some((o) => o.value === rawWindow) ? rawWindow : "12"
-  ) as Window;
+  // The chart's state is written to the URL (?q=<filter>&w=<window>) so
+  // refresh and shared links reproduce it — but the URL is READ only on
+  // page load: typing stays in local state (no navigation per keystroke,
+  // so the page doesn't jump), and the write trails by 300ms.
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+  const [window_, setWindow] = useState<Window>(() => {
+    const w = searchParams.get("w") ?? "";
+    return (WINDOW_OPTIONS.some((o) => o.value === w) ? w : "12") as Window;
+  });
 
-  // Serialize param updates: setSearchParams commits asynchronously, so
-  // two quick changes (type, then pick a window) must merge through the
-  // latest intended params, not whichever URL the location has now. The
-  // ref re-syncs to the committed URL after every navigation (back /
-  // forward / AI result included).
+  // Serialize param writes: setSearchParams commits asynchronously, so
+  // two quick updates must merge through the latest intended params,
+  // not whichever URL the location has now.
   const paramsRef = useRef(new URLSearchParams(searchParams));
-  useEffect(() => {
-    paramsRef.current = new URLSearchParams(searchParams);
-  }, [searchParams]);
+  const queryWrite = useRef<number | undefined>(undefined);
+  // window.setTimeout (not the global) so the handle is a number under
+  // DOM typings in both Node and browser shapes.
   const updateParams = (apply: (params: URLSearchParams) => void) => {
     const next = new URLSearchParams(paramsRef.current);
     apply(next);
     paramsRef.current = next;
     setSearchParams(next, { replace: true, preventScrollReset: true });
   };
-  const setQuery = (q: string) =>
-    updateParams((p) => (q ? p.set("q", q) : p.delete("q")));
-  const setWindow = (w: string) => updateParams((p) => p.set("w", w));
+  const writeQuery = (q: string) => {
+    clearTimeout(queryWrite.current);
+    queryWrite.current = window.setTimeout(
+      () => updateParams((p) => (q ? p.set("q", q) : p.delete("q"))),
+      300,
+    );
+  };
+  const onQueryInput = (q: string) => {
+    setQuery(q);
+    writeQuery(q);
+  };
+  const onWindowSelect = (w: string) => {
+    setWindow(w as Window);
+    updateParams((p) => p.set("w", w));
+  };
 
   const result = fetcher.data as TranslateOk | TranslateErr | undefined;
   const appliedResult = useRef<TranslateOk | null>(null);
   useEffect(() => {
     if (!result?.ok || result === appliedResult.current) return;
     appliedResult.current = result;
+    setQuery(result.query);
     // The AI picks a trailing window (0 = all time); "year" is a
     // viewer-side convenience the model never returns.
+    const w = result.months === 0 ? "all" : String(result.months);
+    setWindow(w as Window);
+    clearTimeout(queryWrite.current);
     updateParams((p) => {
       p.set("q", result.query);
-      p.set("w", result.months === 0 ? "all" : String(result.months));
+      p.set("w", w);
     });
   }, [result]);
 
@@ -276,7 +292,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           <Select
             aria-label="Time window"
             value={window_}
-            onChange={(e) => setWindow(e.target.value as Window)}
+            onChange={(e) => onWindowSelect(e.target.value)}
             className="w-36"
           >
             {WINDOW_OPTIONS.map((o) => (
@@ -292,7 +308,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             list="insights-filter-suggestions"
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryInput(e.target.value)}
             placeholder="Filter: merchant: category: report: description: or free text"
             autoComplete="off"
             className="w-full pr-9"
@@ -300,7 +316,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           {query ? (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => onQueryInput("")}
               aria-label="Clear filter"
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
             >
