@@ -1,6 +1,11 @@
 import { ChartColumn, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useFetcher, useSearchParams } from "react-router";
+import {
+  Link,
+  useFetcher,
+  useSearchParams,
+  type ShouldRevalidateFunctionArgs,
+} from "react-router";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
@@ -33,6 +38,24 @@ export async function loader({ request }: Route.LoaderArgs) {
     aiEnabled: accountHasAI(account?.plan),
     expenses: expenses.map(insightExpense),
   };
+}
+
+/** Filtering and the window are client-side; a search-param change (or
+ * the AI action returning) never changes what the loader would return,
+ * so skip the refetch and the flicker it caused. The loader still runs
+ * on first load and on real navigations to the page. */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    currentUrl.search !== nextUrl.search
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 }
 
 /** Translate free text into a chart filter. Gated on the account's plan

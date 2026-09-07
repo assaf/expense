@@ -8,8 +8,10 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
+  useNavigation,
   useRouteError,
   useRouteLoaderData,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
@@ -117,6 +119,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
+/** The root loader reads nothing from the query string (user, report
+ * names, Umami config), so a search-param-only change (any page's local
+ * UI state in the URL) skips the refetch. Real navigations — a different
+ * path, or an action — still revalidate as usual. */
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+  if (
+    currentUrl.pathname === nextUrl.pathname &&
+    currentUrl.search !== nextUrl.search
+  ) {
+    return false;
+  }
+  return defaultShouldRevalidate;
+}
+
 /**
  * Clickjacking defense on every HTML response: no page may render inside a
  * frame. The loader's `headers` key is inert loader data; only this
@@ -160,12 +180,12 @@ export const links: LinksFunction = () => [
 ];
 
 export default function App() {
+  const navigation = useNavigation();
   const { user, reportNames, umami } =
     useRouteLoaderData<typeof loader>("root") ?? {};
   useEffect(() => {
     if (!user) return;
     // Link this session's pageviews/events to the signed-in user. Safe even
-    // before the (deferred) script has run; identify is a no-op then.
     window.umami?.identify?.({ id: user.id });
     // WebMCP experiment: expose the read tools to browser agents when the
     // browser has the API (Chrome 149+ origin trial); no-op elsewhere.
@@ -212,17 +232,19 @@ export default function App() {
         <meta name="msvalidate.01" content="E606D66AC502D88D7B6E62982FF6CD98" />
       </head>
       <body>
+        {navigation.state !== "idle" ? (
+          <div
+            role="progressbar"
+            aria-label="Loading"
+            className="fixed inset-x-0 top-0 z-[90] h-0.5 animate-pulse bg-teal-600/80 dark:bg-teal-400/80"
+          />
+        ) : null}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-gray-900 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none dark:focus:bg-gray-100 dark:focus:text-gray-900"
         >
           Skip to main content
         </a>
-        {process.env.NODE_ENV === "development" ? (
-          <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-md bg-green-600 px-2 py-0.5 text-xs font-bold tracking-wider text-white shadow">
-            DEV
-          </div>
-        ) : null}
         <Outlet />
         {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
         {user ? <ShortcutHints /> : null}
