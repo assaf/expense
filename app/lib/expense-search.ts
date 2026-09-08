@@ -68,7 +68,7 @@ const OPERATOR_TOKEN = new RegExp(
 /** A parsed amount comparison: the bare tokens >100, >=100, <50, <=50.
  * Comparisons AND together (">100 <=110" is a range) and AND with
  * `amount:` specs. */
-export interface AmountComparison {
+interface AmountComparison {
   op: ">" | ">=" | "<" | "<=";
   value: number;
 }
