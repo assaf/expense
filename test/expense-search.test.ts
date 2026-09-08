@@ -108,6 +108,41 @@ describe("matchesSearch", () => {
   });
 });
 
+describe("operator aliases", () => {
+  const parsed = (query: string) => parseQuery(query);
+
+  it("normalizes aliases to canonical filter keys", () => {
+    const { filters } = parsed(
+      "from:blue bottle cat:meals in:2026 desc:offsite",
+    );
+    expect(filters.merchant).toEqual(["blue bottle"]);
+    expect(filters.category).toEqual(["meals"]);
+    expect(filters.report).toEqual(["2026"]);
+    expect(filters.description).toEqual(["offsite"]);
+  });
+
+  it("accepts every alias spelling", () => {
+    const { filters } = parsed(
+      "vendor:x store:y seller:z note:a notes:b for:c",
+    );
+    expect(filters.merchant).toEqual(["x", "y", "z"]);
+    expect(filters.description).toEqual(["a", "b"]);
+    expect(filters.report).toEqual(["c"]);
+  });
+
+  it("leaves bare words and unknown prefixes as free text", () => {
+    const q = parsed("in june internet:x 10:30");
+    expect(q.words).toEqual(["in", "june", "internet:x", "10:30"]);
+    expect(q.filters.report).toEqual([]);
+  });
+
+  it("aliases match rows through matchesSearch", () => {
+    const e = row({ merchant: "Blue Bottle", category: "Meals" });
+    expect(matchesSearch(e, parsed("from:blue bottle"))).toBe(true);
+    expect(matchesSearch(e, parsed("cat:meals"))).toBe(true);
+  });
+});
+
 describe("category synonyms", () => {
   const parsed = (query: string) => parseQuery(query);
   it("maps built-in synonym words to their canonical categories", () => {

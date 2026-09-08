@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "~/components/ui/Input";
 import { countLabel } from "~/lib/format";
-import { categoriesForSynonym } from "~/lib/expense-search";
+import { categoriesForSynonym, OPERATOR_ALIASES } from "~/lib/expense-search";
 
 /**
  * The insights filter input with a token-aware dropdown: the suggestion
@@ -68,20 +68,34 @@ export function tokenSuggestions(
     );
     return [...prefix, ...synonyms].slice(0, MAX_OPTIONS);
   };
-  const op = /^(merchant|category|report|description):(.*)$/.exec(t);
+  // An operator (canonical or aliased) with a value completes names for
+  // its canonical key; an alias with its colon still completes the
+  // canonical operator ("fro:" -> "merchant:") so queries stay canonical.
+  const op =
+    /^(merchant|category|report|description|from|vendor|store|seller|cat|in|for|desc|note|notes):(.*)$/.exec(
+      t,
+    );
   if (op) {
-    const key = op[1]!;
-    const rest = op[2] ?? "";
+    // Aliases carry their canonical key, so "from:dev" completes merchant
+    // names; the alias stays in the query and parses identically.
+    const canonical = OPERATOR_ALIASES[op[1]!] ?? op[1]!;
     const source =
-      key === "merchant"
+      canonical === "merchant"
         ? names.merchants
-        : key === "category"
+        : canonical === "category"
           ? names.categories
-          : key === "report"
+          : canonical === "report"
             ? names.reports
             : [];
-    return byRest(source, key, rest);
+    return byRest(source, canonical, op[2] ?? "");
   }
+  const aliasCompletions = Object.entries(OPERATOR_ALIASES)
+    .filter(([alias]) => alias.startsWith(t))
+    .map(([alias, canonical]) => ({
+      completion: `${canonical}:`,
+      label: `${alias}: (${canonical}:)`,
+      hint: "filter",
+    }));
   const operators = OPERATORS.filter((o) => o.startsWith(t)).map((o) => ({
     completion: o,
     label: o,
@@ -98,6 +112,7 @@ export function tokenSuggestions(
   }));
   return [
     ...operators,
+    ...aliasCompletions,
     ...synonymCategories,
     ...namesFor(names.merchants, "merchant"),
     ...namesFor(names.categories, "category"),

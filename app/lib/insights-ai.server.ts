@@ -35,8 +35,10 @@ The filter syntax: space-separated tokens of operators and free text.
 - merchant:<name> — exact match (case-insensitive) of the merchant name
 - category:<name> — exact match of the tax category name
 - report:<name> — exact match of the report name
-- description:<words> — substring match of the description
-- bare words — match merchant, description, category, or amount text
+- Aliases work and parse identically: from:/vendor:/store:/seller: =
+  merchant:, cat: = category:, in:/for: = report:, desc:/note:/notes: =
+  description:. Prefer the canonical form in your answer.
+
 Same operator repeats OR together; different operators AND together.
 
 Rules:

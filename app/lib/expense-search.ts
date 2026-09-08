@@ -36,6 +36,28 @@ function searchableText(e: SearchableExpense): string {
 const FILTER_KEYS = ["report", "category", "merchant", "description"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
 
+/** Operator aliases, normalized to their canonical key at parse time.
+ * Chosen so they read naturally in a query ("from:peet's in:2026 trip")
+ * and can't collide with likely free-text tokens: an alias only acts as
+ * an operator when it carries a colon ("in:june" filters reports, the
+ * bare word "in" is still free text). */
+export const OPERATOR_ALIASES: Record<string, FilterKey> = {
+  from: "merchant",
+  vendor: "merchant",
+  store: "merchant",
+  seller: "merchant",
+  cat: "category",
+  in: "report",
+  for: "report",
+  desc: "description",
+  note: "description",
+  notes: "description",
+};
+
+const OPERATOR_TOKEN = new RegExp(
+  `^(${FILTER_KEYS.join("|")}|${Object.keys(OPERATOR_ALIASES).join("|")}):(.*)$`,
+);
+
 /** A query split into operator filters and free-text words (see
  * parseQuery). */
 interface ParsedQuery {
@@ -43,19 +65,18 @@ interface ParsedQuery {
   words: string[];
 }
 
-/**
- * Parse a search query into operator filters plus free-text words.
+/** Parse a search query into operator filters plus free-text words.
  * `report:` / `category:` / `merchant:` set exact filters (case-insensitive);
- * `description:` substring-matches the free text description. An operator's
+ * `description:` substring-matches the free text description. Each operator
+ * has aliases (from:/vendor:/store:/seller: → merchant, cat: → category,
+ * in:/for: → report, desc:/note:/notes: → description) that normalize to
+ * the canonical key. An operator's
  * value runs to the next recognized prefix, so spaced values work:
  * `report:2026 business`, `description:printer paper`. Free text (before
  * any operator, or under an unknown prefix) ANDs words against the row's
  * searchable text, as always. Same-key values OR together; keys AND
  * together. An operator with no value is a no-op, and colon-bearing free
  * text ("10:30") is untouched.
- *
- * Parse once per query change and feed `matchesSearch` per row: the filter
- * runs on every keystroke across the whole list.
  */
 export function parseQuery(query: string): ParsedQuery {
   const filters: Record<FilterKey, string[]> = {
@@ -74,10 +95,13 @@ export function parseQuery(query: string): ParsedQuery {
   };
   for (const token of query.trim().toLowerCase().split(/\s+/)) {
     if (!token) continue;
-    const op = /^(report|category|merchant|description):(.*)$/.exec(token);
-    if (op && (FILTER_KEYS as readonly string[]).includes(op[1])) {
+    const op = OPERATOR_TOKEN.exec(token);
+    if (op) {
       flush();
-      key = op[1] as FilterKey;
+      // Aliases normalize to the canonical key ("from:peet's" is stored
+      // as filters.merchant), so matchesSearch and every consumer stay
+      // alias-free.
+      key = (OPERATOR_ALIASES[op[1]!] ?? op[1]!) as FilterKey;
       if (op[2]) parts.push(op[2]);
     } else if (key) {
       parts.push(token);

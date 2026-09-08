@@ -279,6 +279,18 @@ describe("tokenSuggestions", () => {
     expect(completions).toContain("category:Meals and entertainment ");
   });
 
+  it("completes an alias prefix to the canonical operator", () => {
+    const completions = tokenSuggestions("fro", names).map((s) => s.completion);
+    expect(completions).toContain("merchant:");
+  });
+
+  it("completes names after an aliased operator", () => {
+    const completions = tokenSuggestions("from:z", names).map(
+      (s) => s.completion,
+    );
+    expect(completions).toContain("merchant:Z.ai ");
+  });
+
   it("still offers the operator keyword itself", () => {
     const completions = tokenSuggestions("cate", names).map(
       (s) => s.completion,
