@@ -156,16 +156,37 @@ function allTimeWindow(expenses: InsightExpense[], today: string): string[] {
   return monthWindow(today, Math.max(1, count));
 }
 
-/** Distinct merchant names for the AI context: display spellings, most
- * frequent first, so the model maps "my AI expenses" onto names the
- * account actually has. */
-export function knownMerchantNames(expenses: InsightExpense[]): string[] {
-  const counts = new Map<string, number>();
+/** Merchant context for the AI translator: each distinct merchant with
+ * the categories its expenses actually landed in ("Amazon (Books)"),
+ * most frequent first. The annotations let the model see that a brand
+ * selling AI services still has non-AI expenses here. */
+export function knownMerchants(expenses: InsightExpense[]): string[] {
+  const stats = new Map<
+    string,
+    { count: number; categories: Map<string, number> }
+  >();
   for (const e of expenses) {
     if (e.type !== "receipt" || !e.merchant) continue;
-    counts.set(e.merchant, (counts.get(e.merchant) ?? 0) + 1);
+    const entry = stats.get(e.merchant) ?? {
+      count: 0,
+      categories: new Map<string, number>(),
+    };
+    entry.count += 1;
+    if (e.category) {
+      entry.categories.set(
+        e.category,
+        (entry.categories.get(e.category) ?? 0) + 1,
+      );
+    }
+    stats.set(e.merchant, entry);
   }
-  return [...counts.entries()]
-    .toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([name]) => name);
+  return [...stats.entries()]
+    .toSorted((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
+    .map(([name, { categories }]) => {
+      const top = [...categories.entries()]
+        .toSorted((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 2)
+        .map(([category]) => category);
+      return top.length > 0 ? `${name} (${top.join(", ")})` : name;
+    });
 }

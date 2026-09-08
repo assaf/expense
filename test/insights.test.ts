@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   accountHasAI,
   insightExpense,
-  knownMerchantNames,
+  knownMerchants,
   monthWindow,
   monthlyTotals,
   type InsightExpense,
@@ -129,19 +129,40 @@ describe("monthlyTotals", () => {
   });
 });
 
-describe("knownMerchantNames", () => {
-  it("ranks by frequency and skips mileage and blanks", () => {
+describe("knownMerchants", () => {
+  it("ranks by frequency, annotates categories, skips mileage and blanks", () => {
     const rows: InsightExpense[] = [
-      exp({ merchant: "Z.ai", amount: "1", date: "2026-07-01" }),
-      exp({ merchant: "Z.ai", amount: "1", date: "2026-07-02" }),
-      exp({ merchant: "Peet's Coffee", amount: "1", date: "2026-07-03" }),
+      exp({
+        merchant: "Z.ai",
+        amount: "1",
+        date: "2026-07-01",
+        category: "Software Subscriptions",
+      }),
+      exp({
+        merchant: "Z.ai",
+        amount: "1",
+        date: "2026-07-02",
+        category: "Software Subscriptions",
+      }),
+      exp({
+        merchant: "Peet's Coffee",
+        amount: "1",
+        date: "2026-07-03",
+        category: "Meals and entertainment",
+      }),
       exp({ merchant: "z.ai", amount: "1", date: "2026-07-04" }),
       exp({ type: "mileage", merchant: "", amount: "9", date: "2026-07-05" }),
       exp({ merchant: "", amount: "1", date: "2026-07-06" }),
     ];
     // Display spellings stay as written (no case folding): the list feeds
-    // the LLM prompt, so the model sees names exactly as expenses name them.
-    expect(knownMerchantNames(rows)).toEqual(["Z.ai", "Peet's Coffee", "z.ai"]);
+    // the LLM prompt, so the model sees names exactly as expenses name
+    // them, plus the categories each merchant's expenses actually landed
+    // in (top 2) — "Amazon (Books)" must not look like an AI expense.
+    expect(knownMerchants(rows)).toEqual([
+      "Z.ai (Software Subscriptions)",
+      "Peet's Coffee (Meals and entertainment)",
+      "z.ai",
+    ]);
   });
 });
 
@@ -226,7 +247,11 @@ describe("translateInsightQuery", () => {
     );
     const t = await translateInsightQuery({
       text: "my AI expenses",
-      merchants: ["Z.ai", "DeepSeek", "Peet's Coffee"],
+      merchants: [
+        "Z.ai (Software Subscriptions)",
+        "DeepSeek (Software Subscriptions)",
+        "Peet's Coffee (Meals and entertainment)",
+      ],
       categories: ["Meals and entertainment", "Software Subscriptions"],
       reports: ["July 2026"],
     });
@@ -236,7 +261,9 @@ describe("translateInsightQuery", () => {
     });
     const [messages, opts] = chat.mock.calls[0]!;
     const userMessage = messages.at(-1)!.content;
-    expect(userMessage).toContain("Merchants: Z.ai, DeepSeek, Peet's Coffee");
+    expect(userMessage).toContain(
+      "Merchants: Z.ai (Software Subscriptions), DeepSeek (Software Subscriptions)",
+    );
     // Built-in synonyms ride along so "coffee" resolves to the category.
     expect(userMessage).toContain(
       "Meals and entertainment (also means: food, dining, restaurant",

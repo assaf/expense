@@ -20,7 +20,7 @@ import { formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
   insightExpense,
-  knownMerchantNames,
+  knownMerchants,
   matchingExpenses,
   monthlyTotals,
 } from "~/lib/insights";
@@ -76,7 +76,7 @@ export async function action({ request }: Route.LoaderArgs) {
   if (!text) return { ok: false as const, error: "Type a question first." };
 
   const expenses = (await readExpenses(user.accountId)).map(insightExpense);
-  const merchants = knownMerchantNames(expenses);
+  const merchants = knownMerchants(expenses);
   const categories = [
     ...new Set(expenses.map((e) => e.category).filter(Boolean)),
   ].toSorted();

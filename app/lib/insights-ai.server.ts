@@ -42,9 +42,15 @@ The filter syntax: space-separated tokens of operators and free text.
 Same operator repeats OR together; different operators AND together.
 
 Rules:
-- Pick merchants ONLY from the provided merchant list, copying the exact spelling.
-- "X expenses" where X is a topic (AI, coffee, travel, software) usually means
-  several merchants ORed together, or a category when one matches exactly.
+- Pick merchants ONLY from the provided merchant list, copying the exact
+  spelling INCLUDING any parenthesized category annotation.
+- Merchants may be annotated with the categories their expenses actually
+  fell into — use that: "Amazon (Books)" is a bookstore even though Amazon
+  sells AI services, so it is NOT part of "my AI expenses".
+- "X expenses" where X is a topic means the merchants whose annotated
+  categories and names clearly match that topic. When unsure about a
+  merchant, leave it OUT: a missing merchant is an editable omission, a
+  wrong one hides unrelated spending.
 - Include a category:<name> only when it exactly matches a provided category.
 - A category may list built-in synonyms after "also means" — a question
   using one of those words ("gas", "food", "software") means that category.
