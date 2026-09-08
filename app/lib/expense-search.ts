@@ -65,10 +65,19 @@ const OPERATOR_TOKEN = new RegExp(
   `^(${FILTER_KEYS.join("|")}|${Object.keys(OPERATOR_ALIASES).join("|")}):(.*)$`,
 );
 
+/** A parsed amount comparison: the bare tokens >100, >=100, <50, <=50.
+ * Comparisons AND together (">100 <=110" is a range) and AND with
+ * `amount:` specs. */
+export interface AmountComparison {
+  op: ">" | ">=" | "<" | "<=";
+  value: number;
+}
+
 /** A query split into operator filters and free-text words (see
  * parseQuery). */
 interface ParsedQuery {
   filters: Record<FilterKey, string[]>;
+  comparisons: AmountComparison[];
   words: string[];
 }
 
@@ -79,12 +88,13 @@ interface ParsedQuery {
  * in:/for: → report, desc:/note:/notes: → description) that normalize to
  * the canonical key. An operator's
  * value runs to the next recognized prefix, so spaced values work:
- * `report:2026 business`, `description:printer paper`. Free text (before
+ * `report:2026 business`, `description:printer paper`. Amount comparisons
+ * are bare tokens (">100", "<=50.5" — `$` signs allowed) that AND
+ * together and with `amount:` specs. Free text (before
  * any operator, or under an unknown prefix) ANDs words against the row's
  * searchable text, as always. Same-key values OR together; keys AND
  * together. An operator with no value is a no-op, and colon-bearing free
- * text ("10:30") is untouched.
- */
+ * text ("10:30") is untouched. */
 export function parseQuery(query: string): ParsedQuery {
   const filters: Record<FilterKey, string[]> = {
     report: [],
@@ -93,6 +103,7 @@ export function parseQuery(query: string): ParsedQuery {
     description: [],
     amount: [],
   };
+  const comparisons: AmountComparison[] = [];
   const words: string[] = [];
   let key: FilterKey | null = null;
   let parts: string[] = [];
@@ -103,6 +114,17 @@ export function parseQuery(query: string): ParsedQuery {
   };
   for (const token of query.trim().toLowerCase().split(/\s+/)) {
     if (!token) continue;
+    const cmp = /^([<>]=?)\$?(\d+(?:\.\d{1,2})?)$/.exec(token);
+    if (cmp) {
+      // A bare amount comparison parses ANYWHERE — even after an
+      // operator ("merchant:z.ai >100 <=110" is the natural way to write
+      // a range against one merchant) — and ANDs with everything.
+      comparisons.push({
+        op: cmp[1] as AmountComparison["op"],
+        value: Number(cmp[2]),
+      });
+      continue;
+    }
     const op = OPERATOR_TOKEN.exec(token);
     if (op) {
       flush();
@@ -118,14 +140,15 @@ export function parseQuery(query: string): ParsedQuery {
     }
   }
   flush();
-  return { filters, words };
+  return { filters, comparisons, words };
 }
 
 /** Does the row match an already-parsed query (see parseQuery)? */
 export function matchesSearch(
   e: SearchableExpense,
-  { filters, words }: ParsedQuery,
+  { filters, comparisons, words }: ParsedQuery,
 ): boolean {
+  const hasAmount = filters.amount.length > 0 || comparisons.length > 0;
   if (
     (filters.report.length > 0 &&
       !filters.report.some((v) => v === e.report.toLowerCase())) ||
@@ -141,8 +164,7 @@ export function matchesSearch(
       !filters.description.some((v) =>
         e.description.toLowerCase().includes(v),
       )) ||
-    (filters.amount.length > 0 &&
-      !filters.amount.some((v) => amountInRange(e.amount, v)))
+    (hasAmount && !amountMatches(e.amount, filters.amount, comparisons))
   ) {
     return false;
   }
@@ -157,6 +179,21 @@ export function matchesSearch(
   );
 }
 
+/** OR across `amount:` specs, AND across bare comparisons, ANDed with
+ * everything else. Rows without a usable amount never match. */
+function amountMatches(
+  rawAmount: string,
+  specs: string[],
+  comparisons: AmountComparison[],
+): boolean {
+  const amount = parseAmount(rawAmount);
+  if (amount === null) return false;
+  const specOk =
+    specs.length === 0 || specs.some((v) => amountInRange(rawAmount, v));
+  const cmpOk = comparisons.every((c) => amountCompare(rawAmount, c));
+  return specOk && cmpOk;
+}
+
 // --- Amount ranges ---------------------------------------------------------
 
 /** Parse one bound of an `amount:` value: dollars, at most 2 decimals. */
@@ -166,30 +203,84 @@ function parseAmountBound(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Does the row's amount fall inside an `amount:` operator value?
- * `100-110` (inclusive range), `100+` / `100-` (at least), `-110` (at
- * most), `42.50` (exact); `$` signs are ignored. Unparseable bounds
- * match nothing rather than everything. */
+/** Parse an `amount:` operator value or bare comparison token into
+ * inclusive-exclusive bounds: `100-110` (range), `100+` / `100-` (at
+ * least), `-110` (at most), `42.50` (exact), `>100` / `>=100` (more
+ * than / at least), `<50` / `<=50` (fewer than / at most). `$` signs
+ * are ignored. Returns null when nothing numeric remains (the spec
+ * matches nothing rather than everything). */
+function parseAmountSpec(spec: string): {
+  min: number | null;
+  max: number | null;
+  minIncl: boolean;
+  maxIncl: boolean;
+} | null {
+  const v = spec.replace(/\$/g, "").trim();
+  const cmp = /^([<>]=?)\s*(\d+(?:\.\d{1,2})?)$/.exec(v);
+  if (cmp) {
+    const n = Number(cmp[2]);
+    if (!Number.isFinite(n)) return null;
+    return cmp[1] === ">" || cmp[1] === ">="
+      ? { min: n, max: null, minIncl: cmp[1] === ">=", maxIncl: false }
+      : { min: null, max: n, minIncl: false, maxIncl: cmp[1] === "<=" };
+  }
+  const range = /^(\d+(?:\.\d{1,2})?)?-(\d+(?:\.\d{1,2})?)?$/.exec(v);
+  if (range) {
+    return {
+      min: range[1] ? Number(range[1]) : null,
+      max: range[2] ? Number(range[2]) : null,
+      minIncl: true,
+      maxIncl: true,
+    };
+  }
+  if (v.endsWith("+")) {
+    const min = parseAmountBound(v.slice(0, -1));
+    return min === null
+      ? null
+      : { min, max: null, minIncl: true, maxIncl: false };
+  }
+  const exact = parseAmountBound(v);
+  return exact === null
+    ? null
+    : { min: exact, max: exact, minIncl: true, maxIncl: true };
+}
+
 function amountInRange(rawAmount: string, spec: string): boolean {
   const amount = parseAmount(rawAmount);
   if (amount === null) return false;
-  const value = spec.replace(/\$/g, "").trim();
-  const range = /^(\d+(?:\.\d{1,2})?)?-(\d+(?:\.\d{1,2})?)?$/.exec(value);
-  let min: number | null;
-  let max: number | null;
-  if (range) {
-    min = range[1] ? Number(range[1]) : null;
-    max = range[2] ? Number(range[2]) : null;
-  } else if (value.endsWith("+")) {
-    min = parseAmountBound(value.slice(0, -1));
-    max = null;
-  } else {
-    min = parseAmountBound(value);
-    max = min;
-  }
-  if (min === null && max === null) return false;
+  const bounds = parseAmountSpec(spec);
+  if (bounds === null) return false;
   const n = amount.toNumber();
-  return (min === null || n >= min) && (max === null || n <= max);
+  if (
+    bounds.min !== null &&
+    !(n > bounds.min || (bounds.minIncl && n === bounds.min))
+  ) {
+    return false;
+  }
+  return !(
+    bounds.max !== null &&
+    !(n < bounds.max || (bounds.maxIncl && n === bounds.max))
+  );
+}
+
+/** Does the row's amount satisfy one bare comparison (">100" & co)? */
+function amountCompare(
+  rawAmount: string,
+  comparison: AmountComparison,
+): boolean {
+  const amount = parseAmount(rawAmount);
+  if (amount === null) return false;
+  const n = amount.toNumber();
+  switch (comparison.op) {
+    case ">":
+      return n > comparison.value;
+    case ">=":
+      return n >= comparison.value;
+    case "<":
+      return n < comparison.value;
+    case "<=":
+      return n <= comparison.value;
+  }
 }
 
 // --- Category synonyms -----------------------------------------------------

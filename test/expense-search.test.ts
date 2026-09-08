@@ -177,6 +177,42 @@ describe("amount operator", () => {
   });
 });
 
+describe("amount comparisons", () => {
+  const parsed = (query: string) => parseQuery(query);
+  const e = row({ merchant: "Z.ai", amount: "105.00" });
+
+  it("parses bare comparison tokens", () => {
+    expect(parseQuery(">100").comparisons).toEqual([{ op: ">", value: 100 }]);
+    expect(parseQuery("<=50.5").comparisons).toEqual([
+      { op: "<=", value: 50.5 },
+    ]);
+  });
+
+  it("compares strictly and inclusively", () => {
+    expect(matchesSearch(e, parsed(">100"))).toBe(true);
+    expect(matchesSearch(e, parsed(">105"))).toBe(false);
+    expect(matchesSearch(e, parsed(">=105"))).toBe(true);
+    expect(matchesSearch(e, parsed("<=105"))).toBe(true);
+    expect(matchesSearch(e, parsed("<105"))).toBe(false);
+  });
+
+  it("ands comparisons into a range", () => {
+    expect(matchesSearch(e, parsed(">100 <=110"))).toBe(true);
+    expect(matchesSearch(e, parsed(">100 <=104"))).toBe(false);
+  });
+
+  it("parses comparisons after an operator value", () => {
+    expect(matchesSearch(e, parsed("merchant:z.ai >100"))).toBe(true);
+    expect(matchesSearch(e, parsed("merchant:z.ai >100 <=110"))).toBe(true);
+    expect(matchesSearch(e, parsed("merchant:z.ai >110"))).toBe(false);
+  });
+
+  it("ignores dollar signs in comparisons", () => {
+    expect(matchesSearch(e, parsed(">$100"))).toBe(true);
+    expect(matchesSearch(e, parsed("amount:>=$105"))).toBe(true);
+  });
+});
+
 describe("category synonyms", () => {
   const parsed = (query: string) => parseQuery(query);
   it("maps built-in synonym words to their canonical categories", () => {
