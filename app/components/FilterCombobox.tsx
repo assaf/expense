@@ -39,6 +39,7 @@ const OPERATORS = [
   "category:",
   "report:",
   "description:",
+  "amount:",
 ] as const;
 
 /** Generous cap: the list scrolls, so long merchant lists stay reachable
@@ -83,7 +84,7 @@ export function tokenSuggestions(
   // matching parseQuery, where an operator's value runs to the next
   // operator).
   const op =
-    /^(merchant|category|report|description|from|vendor|store|seller|cat|in|for|desc|note|notes):(.*)$/.exec(
+    /^(merchant|category|report|description|amount|from|vendor|store|seller|cat|in|for|desc|note|notes):(.*)$/.exec(
       t,
     );
   if (op) {
@@ -178,7 +179,7 @@ export function FilterCombobox({
   const { token, tokenStart } = useMemo(() => {
     const upToCaret = value.slice(0, caret).toLowerCase();
     const re =
-      /(?:^|\s)(merchant|category|report|description|from|vendor|store|seller|cat|in|for|desc|note|notes):/gi;
+      /(?:^|\s)(merchant|category|report|description|amount|from|vendor|store|seller|cat|in|for|desc|note|notes):/gi;
     let last: RegExpExecArray | null = null;
     for (let m = re.exec(upToCaret); m; m = re.exec(upToCaret)) last = m;
     if (last) {

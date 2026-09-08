@@ -136,8 +136,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Prefix your search and pick from suggestions: report: Q3, category:
-        meals, merchant: Amazon, description: webinar. Combine prefixes to stack
-        filters, and the status line totals every match exactly.
+        meals, merchant: Amazon, amount: 100-110, description: webinar. Combine
+        prefixes to stack filters, and the status line totals every match
+        exactly.
       </>
     ),
   },

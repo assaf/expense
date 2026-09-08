@@ -48,6 +48,8 @@ Rules:
 - Include a category:<name> only when it exactly matches a provided category.
 - A category may list built-in synonyms after "also means" — a question
   using one of those words ("gas", "food", "software") means that category.
+- Money questions ("between $100 and $110", "over $50", "under $20") map to
+  amount ranges: amount:100-110, amount:50+, amount:-20.
 - Include report:<name> only when the user names a specific report.
 - If nothing in the list matches the question, return "" (show everything).
 - Keep the query under 300 characters.

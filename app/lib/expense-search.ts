@@ -1,3 +1,4 @@
+import { parseAmount } from "~/lib/money";
 import { formatAmount } from "~/lib/format";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
 import type { MileageType } from "~/lib/types";
@@ -33,7 +34,13 @@ function searchableText(e: SearchableExpense): string {
 }
 
 /** The recognized search operators. */
-const FILTER_KEYS = ["report", "category", "merchant", "description"] as const;
+const FILTER_KEYS = [
+  "report",
+  "category",
+  "merchant",
+  "description",
+  "amount",
+] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
 
 /** Operator aliases, normalized to their canonical key at parse time.
@@ -84,6 +91,7 @@ export function parseQuery(query: string): ParsedQuery {
     category: [],
     merchant: [],
     description: [],
+    amount: [],
   };
   const words: string[] = [];
   let key: FilterKey | null = null;
@@ -130,7 +138,11 @@ export function matchesSearch(
     (filters.merchant.length > 0 &&
       !filters.merchant.some((v) => v === e.merchant.toLowerCase())) ||
     (filters.description.length > 0 &&
-      !filters.description.some((v) => e.description.toLowerCase().includes(v)))
+      !filters.description.some((v) =>
+        e.description.toLowerCase().includes(v),
+      )) ||
+    (filters.amount.length > 0 &&
+      !filters.amount.some((v) => amountInRange(e.amount, v)))
   ) {
     return false;
   }
@@ -143,6 +155,41 @@ export function matchesSearch(
     (word) =>
       haystack.includes(word) || categorySynonyms(category).includes(word),
   );
+}
+
+// --- Amount ranges ---------------------------------------------------------
+
+/** Parse one bound of an `amount:` value: dollars, at most 2 decimals. */
+function parseAmountBound(v: string): number | null {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(v)) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Does the row's amount fall inside an `amount:` operator value?
+ * `100-110` (inclusive range), `100+` / `100-` (at least), `-110` (at
+ * most), `42.50` (exact); `$` signs are ignored. Unparseable bounds
+ * match nothing rather than everything. */
+function amountInRange(rawAmount: string, spec: string): boolean {
+  const amount = parseAmount(rawAmount);
+  if (amount === null) return false;
+  const value = spec.replace(/\$/g, "").trim();
+  const range = /^(\d+(?:\.\d{1,2})?)?-(\d+(?:\.\d{1,2})?)?$/.exec(value);
+  let min: number | null;
+  let max: number | null;
+  if (range) {
+    min = range[1] ? Number(range[1]) : null;
+    max = range[2] ? Number(range[2]) : null;
+  } else if (value.endsWith("+")) {
+    min = parseAmountBound(value.slice(0, -1));
+    max = null;
+  } else {
+    min = parseAmountBound(value);
+    max = min;
+  }
+  if (min === null && max === null) return false;
+  const n = amount.toNumber();
+  return (min === null || n >= min) && (max === null || n <= max);
 }
 
 // --- Category synonyms -----------------------------------------------------

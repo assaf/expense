@@ -143,6 +143,40 @@ describe("operator aliases", () => {
   });
 });
 
+describe("amount operator", () => {
+  const parsed = (query: string) => parseQuery(query);
+  it("parses ranges and one-sided bounds", () => {
+    expect(parseQuery("amount:100-110").filters.amount).toEqual(["100-110"]);
+    expect(parseQuery("amount:50+").filters.amount).toEqual(["50+"]);
+    expect(parseQuery("amount:-20").filters.amount).toEqual(["-20"]);
+    expect(parseQuery("amount:42.50").filters.amount).toEqual(["42.50"]);
+  });
+
+  it("matches an inclusive dollar range", () => {
+    const e = row({ amount: "105.00" });
+    expect(matchesSearch(e, parsed("amount:100-110"))).toBe(true);
+    expect(matchesSearch(e, parsed("amount:100"))).toBe(false);
+    // A bare number is an exact match (105 == 105.00).
+    expect(matchesSearch(e, parsed("amount:105"))).toBe(true);
+    expect(matchesSearch(e, parsed("amount:105.01"))).toBe(false);
+    expect(matchesSearch(e, parsed("amount:105-"))).toBe(true); // at least
+    expect(matchesSearch(e, parsed("amount:-99"))).toBe(false); // at most
+  });
+
+  it("ignores $ signs and bounds are inclusive", () => {
+    const e = row({ amount: "100.00" });
+    expect(matchesSearch(e, parsed("amount:$100-$110"))).toBe(true);
+    expect(matchesSearch(e, parsed("amount:$99.99-$100.00"))).toBe(true);
+    expect(matchesSearch(e, parsed("amount:100.01-200"))).toBe(false);
+  });
+
+  it("never matches rows without a usable amount", () => {
+    expect(matchesSearch(row({ amount: "" }), parsed("amount:0-1000"))).toBe(
+      false,
+    );
+  });
+});
+
 describe("category synonyms", () => {
   const parsed = (query: string) => parseQuery(query);
   it("maps built-in synonym words to their canonical categories", () => {
