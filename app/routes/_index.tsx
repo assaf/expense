@@ -29,6 +29,7 @@ import {
 } from "~/components/FeatureHighlight";
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
+import { FilterCombobox } from "~/components/FilterCombobox";
 import { WelcomePanel } from "~/components/WelcomePanel";
 import { cardSurface } from "~/components/ui/Card";
 import {
@@ -37,7 +38,6 @@ import {
 } from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
-import { Input } from "~/components/ui/Input";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { imageVersion } from "~/lib/image-version";
@@ -608,19 +608,16 @@ function ExpenseList({
           className="relative w-full sm:min-w-56 sm:flex-1"
           data-shortcut="search-expenses"
         >
-          <Search
-            aria-hidden="true"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"
-          />
-          <Input
-            ref={searchRef}
-            list="expense-search-suggestions"
-            type="text"
+          <FilterCombobox
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={setQuery}
+            names={suggestions}
             placeholder="Search, or report: category: merchant: description: to filter"
-            aria-label="Search expenses"
-            className="h-10 w-full pl-9 pr-9 text-sm"
+            ariaLabel="Search expenses"
+            id="expense-search"
+            inputRef={searchRef}
+            leading={<Search />}
+            className="h-10 pr-9 text-sm"
           />
           {query ? (
             <button
@@ -632,43 +629,6 @@ function ExpenseList({
               <X aria-hidden="true" className="h-4 w-4" />
             </button>
           ) : null}
-          <datalist id="expense-search-suggestions">
-            {suggestions.merchants.map(([name, count]) => (
-              <option
-                key={`merchant:${name}`}
-                value={name}
-                label={countLabel(count)}
-              />
-            ))}
-            {suggestions.categories.map(([name, count]) => (
-              <option
-                key={`category:${name}`}
-                value={name}
-                label={`${countLabel(count)} in this category`}
-              />
-            ))}
-            {suggestions.reports.map(([name, count]) => (
-              <option
-                key={`report:${name}`}
-                value={`report:${name}`}
-                label={`${countLabel(count)} as a report`}
-              />
-            ))}
-            {suggestions.merchants.map(([name, count]) => (
-              <option
-                key={`op-merchant:${name}`}
-                value={`merchant:${name}`}
-                label={`${countLabel(count)} as a merchant`}
-              />
-            ))}
-            {suggestions.categories.map(([name, count]) => (
-              <option
-                key={`op-category:${name}`}
-                value={`category:${name}`}
-                label={`${countLabel(count)} in this category`}
-              />
-            ))}
-          </datalist>
         </div>
       </div>
 

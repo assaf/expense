@@ -70,17 +70,22 @@ describe("Closed reports", () => {
     // The open report's expense is shown; the closed report's is not.
     await expect(page.getByText("Open Report Shop")).toBeVisible();
     await expect(page.getByText("Closed Report Shop")).toHaveCount(0);
-    // The closed report is not offered as a search suggestion either.
+    // The closed report is not offered as a search suggestion either
+    // (the combobox only renders options while open; type to open it).
+    const search = page.getByLabel("Search expenses");
+    await search.click();
+    await search.pressSequentially("report:", { delay: 20 });
     await expect(
-      page.locator(
-        "#expense-search-suggestions option[value='report:Closed Q3']",
-      ),
+      page.locator("#expense-search-options [role=option]", {
+        hasText: "Closed Q3",
+      }),
     ).toHaveCount(0);
     await expect(
-      page.locator(
-        "#expense-search-suggestions option[value='report:Open Q3']",
-      ),
-    ).toHaveCount(1);
+      page.locator("#expense-search-options [role=option]", {
+        hasText: "Open Q3",
+      }),
+    ).toBeVisible();
+    await search.press("Escape");
     // Seeded fixtures are untouched.
     await expect(page.getByText("Test Store")).toBeVisible();
   });

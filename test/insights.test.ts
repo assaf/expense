@@ -284,6 +284,17 @@ describe("tokenSuggestions", () => {
     expect(completions).toContain("merchant:");
   });
 
+  it("completes reports for a multi-word operator value", () => {
+    const withTest: FilterNames = {
+      ...names,
+      reports: [["2026 Test", 4]],
+    };
+    const completions = tokenSuggestions("report:2026 t", withTest).map(
+      (s) => s.completion,
+    );
+    expect(completions).toContain("report:2026 Test ");
+  });
+
   it("completes names after an aliased operator", () => {
     const completions = tokenSuggestions("from:z", names).map(
       (s) => s.completion,

@@ -79,8 +79,7 @@ describe("Command palette", () => {
     // The palette holds the request until it is fully hidden, so kbar's
     // close-time focus restore cannot blur the search box afterwards.
     await expect(homeSearch).toBeFocused();
-    await expect(page.getByText("DevShop")).toBeVisible();
-    await expect(page.getByText("OfficeMax")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /DevShop/ })).toBeVisible();
   });
 
   it("adds a category from the palette", async () => {

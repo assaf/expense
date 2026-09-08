@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Input } from "~/components/ui/Input";
 import { countLabel } from "~/lib/format";
 import { categoriesForSynonym, OPERATOR_ALIASES } from "~/lib/expense-search";
@@ -44,33 +51,37 @@ export function tokenSuggestions(
   names: FilterNames,
 ): Suggestion[] {
   const t = token.toLowerCase();
-  const byRest = (
-    list: FilterNames["merchants"],
-    key: string,
-    rest: string,
-  ) => {
-    const prefix = list
-      .filter(([name]) => name.toLowerCase().startsWith(rest))
+  // Nothing typed under the caret: no suggestions (this is also what
+  // keeps the dropdown closed when the value is set programmatically).
+  if (!t) return [];
+  const byRest = (list: FilterNames["merchants"], key: string, rest: string) =>
+    list
+      .filter(([name]) =>
+        // Mid-word on a multi-word value ("report:2026 t"): the name only
+        // needs to contain the typed fragment — selecting the suggestion
+        // replaces the whole operator with the parse-exact form.
+        rest.includes(" ")
+          ? name.toLowerCase().includes(rest)
+          : name.toLowerCase().startsWith(rest),
+      )
       .slice(0, MAX_OPTIONS)
       .map(([name, count]) => ({
         completion: `${key}:${name} `,
         label: name,
         hint: countLabel(count),
       }));
-    // A synonym typed after the operator ("category:food") offers the
-    // canonical category it means.
-    const synonyms = (key === "category" ? categoriesForSynonym(rest) : []).map(
-      (name) => ({
-        completion: `${key}:${name} `,
-        label: name,
-        hint: "category",
-      }),
-    );
-    return [...prefix, ...synonyms].slice(0, MAX_OPTIONS);
-  };
+  const categorySynonymSuggestions = (rest: string) =>
+    categoriesForSynonym(rest).map((name) => ({
+      completion: `category:${name} `,
+      label: name,
+      hint: "category",
+    }));
   // An operator (canonical or aliased) with a value completes names for
   // its canonical key; an alias with its colon still completes the
   // canonical operator ("fro:" -> "merchant:") so queries stay canonical.
+  // The value may contain spaces ("report:2026 test" is one token here,
+  // matching parseQuery, where an operator's value runs to the next
+  // operator).
   const op =
     /^(merchant|category|report|description|from|vendor|store|seller|cat|in|for|desc|note|notes):(.*)$/.exec(
       t,
@@ -87,7 +98,13 @@ export function tokenSuggestions(
           : canonical === "report"
             ? names.reports
             : [];
-    return byRest(source, canonical, op[2] ?? "");
+    const rest = op[2] ?? "";
+    // A synonym typed after the category operator ("category:food")
+    // offers the canonical category it means.
+    return [
+      ...byRest(source, canonical, rest),
+      ...(canonical === "category" ? categorySynonymSuggestions(rest) : []),
+    ].slice(0, MAX_OPTIONS);
   }
   const aliasCompletions = Object.entries(OPERATOR_ALIASES)
     .filter(([alias]) => alias.startsWith(t))
@@ -126,21 +143,48 @@ export function FilterCombobox({
   names,
   placeholder,
   ariaLabel,
+  id = "filter-combobox",
+  inputRef,
+  leading,
+  className = "",
 }: {
   value: string;
   onChange: (value: string) => void;
   names: FilterNames;
   placeholder: string;
   ariaLabel: string;
+  /** DOM id of the input (the listbox derives its id from it). */
+  id?: string;
+  /** Ref to the input, for shortcut focus (home's "/" key). */
+  inputRef?: Ref<HTMLInputElement>;
+  /** Icon rendered inside the input's left edge. */
+  leading?: ReactNode;
+  className?: string;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const localRef = useRef<HTMLInputElement>(null);
+  const setInputRef = (el: HTMLInputElement | null) => {
+    localRef.current = el;
+    if (typeof inputRef === "function") inputRef(el);
+    else if (inputRef) inputRef.current = el;
+  };
   const [caret, setCaret] = useState(0);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
 
-  // The word the caret sits in (the candidate being typed).
+  // The candidate the caret sits in: if an operator prefix ("report:",
+  // aliased included) is open at the caret, its value runs to the caret
+  // and may contain spaces (parseQuery semantics: an operator's value
+  // runs to the next operator). Otherwise it's the last bare word.
   const { token, tokenStart } = useMemo(() => {
-    const upToCaret = value.slice(0, caret);
+    const upToCaret = value.slice(0, caret).toLowerCase();
+    const re =
+      /(?:^|\s)(merchant|category|report|description|from|vendor|store|seller|cat|in|for|desc|note|notes):/gi;
+    let last: RegExpExecArray | null = null;
+    for (let m = re.exec(upToCaret); m; m = re.exec(upToCaret)) last = m;
+    if (last) {
+      const start = last.index + last[0].length - last[1].length - 1;
+      return { token: upToCaret.slice(start), tokenStart: start };
+    }
     const m = /(\S*)$/.exec(upToCaret);
     return { token: m![1]!, tokenStart: caret - m![1]!.length };
   }, [value, caret]);
@@ -160,11 +204,11 @@ export function FilterCombobox({
     // Put the caret at the end of the inserted completion.
     const pos = tokenStart + s.completion.length;
     queueMicrotask(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(pos, pos);
+      localRef.current?.focus();
+      localRef.current?.setSelectionRange(pos, pos);
     });
   };
-  const listId = "insights-filter-options";
+  const listId = `${id}-options`;
   // Keyboard navigation scrolls the active option into view (the list
   // is taller than the viewport cap for long merchant lists).
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -175,8 +219,8 @@ export function FilterCombobox({
   return (
     <div className="relative">
       <Input
-        ref={inputRef}
-        id="insights-query"
+        ref={setInputRef}
+        id={id}
         type="text"
         value={value}
         onChange={(e) => {
@@ -207,14 +251,22 @@ export function FilterCombobox({
           }
         }}
         placeholder={placeholder}
+        className={`w-full ${leading ? "pl-9" : ""} ${className}`}
         autoComplete="off"
         role="combobox"
         aria-expanded={open && options.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
         aria-label={ariaLabel}
-        className="w-full pr-9"
       />
+      {leading ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 [&>svg]:h-4 [&>svg]:w-4"
+        >
+          {leading}
+        </div>
+      ) : null}
       {open && options.length > 0 ? (
         <ul
           id={listId}

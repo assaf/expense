@@ -333,6 +333,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             names={suggestions}
             placeholder="Filter: merchant: category: report: description: or free text"
             ariaLabel="Filter expenses"
+            id="insights-query"
           />
           {query ? (
             <button
