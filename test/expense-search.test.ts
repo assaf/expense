@@ -207,6 +207,16 @@ describe("amount comparisons", () => {
     expect(matchesSearch(e, parsed("merchant:z.ai >110"))).toBe(false);
   });
 
+  it("tolerates spaces after the comparison symbol", () => {
+    expect(parseQuery("> 200").comparisons).toEqual([{ op: ">", value: 200 }]);
+    expect(parseQuery(">=   105").comparisons).toEqual([
+      { op: ">=", value: 105 },
+    ]);
+    expect(matchesSearch(e, parsed("> 100"))).toBe(true);
+    expect(matchesSearch(e, parsed(">   100"))).toBe(true);
+    expect(matchesSearch(e, parsed("merchant:z.ai >  110"))).toBe(false);
+  });
+
   it("ignores dollar signs in comparisons", () => {
     expect(matchesSearch(e, parsed(">$100"))).toBe(true);
     expect(matchesSearch(e, parsed("amount:>=$105"))).toBe(true);

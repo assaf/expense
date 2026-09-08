@@ -112,7 +112,14 @@ export function parseQuery(query: string): ParsedQuery {
     key = null;
     parts = [];
   };
-  for (const token of query.trim().toLowerCase().split(/\s+/)) {
+  // "> 200" / "<=   50": collapse the space between a comparison symbol
+  // and its number so the whitespace tokenizer sees one token. Only
+  // symbol+space+number sequences are touched, never other text.
+  const normalized = query
+    .trim()
+    .toLowerCase()
+    .replace(/([<>]=?)\s+(\$?\d+(?:\.\d{1,2})?)/g, "$1$2");
+  for (const token of normalized.split(/\s+/)) {
     if (!token) continue;
     const cmp = /^([<>]=?)\$?(\d+(?:\.\d{1,2})?)$/.exec(token);
     if (cmp) {
