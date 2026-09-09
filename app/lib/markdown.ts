@@ -67,8 +67,9 @@ export function parseMarkdown(text: string): Block[] {
       .split("|")
       .map((cell) => cell.trim());
 
-  for (const line of text.trim().split("\n")) {
-    const trimmed = line.trim();
+  const lines = text.trim().split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
     if (!trimmed) {
       flushAll();
       continue;
@@ -79,14 +80,26 @@ export function parseMarkdown(text: string): Block[] {
       bullets.push(parseInline(trimmed.replace(/^-\s+/, "")));
       continue;
     }
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      const cells = splitRow(trimmed);
-      if (TABLE_SEPARATOR.test(trimmed)) continue; // separator row
-      if (table) {
-        table.rows.push(cells);
-      } else {
-        table = { header: cells, rows: [] };
+    const isPipeRow = trimmed.startsWith("|") && trimmed.endsWith("|");
+    if (isPipeRow && !table) {
+      // A pipe-row opens a table when the NEXT line is also a pipe-row
+      // (the `---` separator may be missing from model output): the first
+      // row becomes the header. A lone pipe-row is just a paragraph.
+      const next = lines[i + 1]?.trim() ?? "";
+      const nextIsPipeRow = next.startsWith("|") && next.endsWith("|");
+      const nextIsSeparator = TABLE_SEPARATOR.test(next);
+      if (!nextIsPipeRow && !nextIsSeparator) {
+        flushAll();
+        blocks.push({ kind: "paragraph", segments: parseInline(trimmed) });
+        continue;
       }
+      flushBullets();
+      table = { header: splitRow(trimmed), rows: [] };
+      continue;
+    }
+    if (isPipeRow && table) {
+      if (TABLE_SEPARATOR.test(trimmed)) continue; // separator row
+      table.rows.push(splitRow(trimmed));
       continue;
     }
     flushAll();

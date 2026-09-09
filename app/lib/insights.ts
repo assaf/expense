@@ -186,6 +186,23 @@ export function insightSummary(
       ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
     );
   if (top.length > 0) lines.push(`Top merchants: ${top.join("; ")}`);
+  const byCategory = new Map<string, { total: number; count: number }>();
+  for (const e of matched) {
+    if (!e.category) continue;
+    const entry = byCategory.get(e.category) ?? { total: 0, count: 0 };
+    entry.total += Number(e.amount) || 0;
+    entry.count += 1;
+    byCategory.set(e.category, entry);
+  }
+  const categories = [...byCategory.entries()]
+    .toSorted((a, b) => b[1].total - a[1].total)
+    .slice(0, 5)
+    .map(
+      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
+    );
+  if (categories.length > 0) {
+    lines.push(`By category: ${categories.join("; ")}`);
+  }
   return lines.join("\n");
 }
 

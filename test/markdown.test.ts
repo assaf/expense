@@ -60,6 +60,32 @@ describe("parseMarkdown", () => {
     ]);
   });
 
+  it("opens a table without a separator row (lenient for model output)", () => {
+    const blocks = parseMarkdown(
+      "| Merchant | Amount |\n| Z.ai | $80.00 |\n| DeepSeek | $25.00 |",
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "table",
+        header: ["Merchant", "Amount"],
+        rows: [
+          ["Z.ai", "$80.00"],
+          ["DeepSeek", "$25.00"],
+        ],
+      },
+    ]);
+  });
+
+  it("keeps a lone pipe-row as a paragraph", () => {
+    const blocks = parseMarkdown("| just text |");
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        segments: [{ text: "| just text |", bold: false }],
+      },
+    ]);
+  });
+
   it("keeps inline bold inside table cells", () => {
     const blocks = parseMarkdown(
       "| Key | Value |\n|---|---|\n| Total | **$105** |",

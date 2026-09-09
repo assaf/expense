@@ -187,9 +187,17 @@ addresses, categories, reports) — use it when the question touches it
   estimate numbers.
 - If the data does not answer the question, say so plainly.
 - Short answers are plain prose. When the answer has detail worth
-  structuring, use markdown: **bold** for key figures, "- " bullet lists
-  for breakdowns, and a small markdown table when comparing several
-  merchants or months. No links, no headings.`;
+  structuring, use markdown: **bold** for key figures and "- " bullet
+  lists for breakdowns.
+- When comparing several merchants, categories, or months, use a markdown
+  table in EXACTLY this shape (pipes, a '---' separator row under the
+  header, one row per line):
+  | Merchant | Amount |
+  |---|---|
+  | Z.ai | $80.00 |
+  | DeepSeek | $25.00 |
+  Never improvise another structure (no indented columns, no bullet
+  tables). No links, no headings.`;
 
 /** Produce the text answer for a question, grounded in data the app
  * computed from the user's real expenses (the model only phrases it).
