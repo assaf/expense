@@ -187,15 +187,21 @@ addresses, categories, reports) — use it when the question touches it
   estimate numbers.
 - If the data does not answer the question, say so plainly.
 - Short answers are plain prose. When the answer has detail worth
-  structuring, use markdown: **bold** for key figures and "- " bullet
-  lists for breakdowns.
-- When comparing several merchants, categories, or months, use a markdown
-  table in EXACTLY this shape (pipes, a '---' separator row under the
+  structuring, use markdown: **bold** for key figures and a table for
+  breakdowns (see below).
+- EVERY multi-item breakdown in the data ("By month:", "Top merchants:",
+  "By category:") must be rendered as a markdown table — one row per
+  item, never a bullet list or an inline semicolon list.
+- Tables use EXACTLY this shape (pipes, a '---' separator row under the
   header, one row per line):
+  | Month | Total | Expenses |
+  |---|---|---|
+  | Jun | $95.00 | 3 |
+  | Jul | $105.00 | 2 |
+  or for merchants:
   | Merchant | Amount |
   |---|---|
   | Z.ai | $80.00 |
-  | DeepSeek | $25.00 |
   Never improvise another structure (no indented columns, no bullet
   tables). No links, no headings.`;
 
