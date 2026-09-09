@@ -6,6 +6,7 @@ import {
   useSearchParams,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
+import { Markdown } from "~/components/Markdown";
 import { PageShell } from "~/components/PageShell";
 import { FilterCombobox } from "~/components/FilterCombobox";
 import { Card } from "~/components/ui/Card";
@@ -413,9 +414,15 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                     <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
                       {t.question}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      {t.answer || (busy ? "Thinking…" : "No answer recorded.")}
-                    </p>
+                    {t.answer ? (
+                      <div className="text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
+                        <Markdown text={t.answer} />
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {busy ? "Thinking…" : "No answer recorded."}
+                      </p>
+                    )}
                     {t.query !== undefined ? (
                       <button
                         type="button"

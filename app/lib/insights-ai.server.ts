@@ -163,11 +163,14 @@ function normalizeMonths(value: unknown): number {
 
 const ANSWER_PROMPT = `You answer a question about someone's expenses using
 ONLY the computed data provided with the question.
-- Lead with the direct answer, then one short supporting sentence.
+- Lead with the direct answer, then any supporting detail.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
 - If the data does not answer the question, say so plainly.
-- 1-3 sentences of plain prose.`;
+- Short answers are plain prose. When the answer has detail worth
+  structuring, use markdown: **bold** for key figures, "- " bullet lists
+  for breakdowns, and a small markdown table when comparing several
+  merchants or months. No links, no headings.`;
 
 /** Produce the text answer for a question, grounded in data the app
  * computed from the user's real expenses (the model only phrases it).
