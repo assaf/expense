@@ -1,18 +1,11 @@
-import { ChartColumn, Sparkles, X } from "lucide-react";
+import { ChartColumn, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Link,
-  useFetcher,
-  useSearchParams,
-  type ShouldRevalidateFunctionArgs,
-} from "react-router";
+import { Link, useFetcher } from "react-router";
 import { Markdown } from "~/components/Markdown";
 import { PageShell } from "~/components/PageShell";
-import { FilterCombobox } from "~/components/FilterCombobox";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
-import { Select } from "~/components/ui/Select";
 import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
@@ -28,6 +21,8 @@ import {
   knownMerchants,
   matchingExpenses,
   monthlyTotals,
+  type InsightExpense,
+  type MonthBucket,
 } from "~/lib/insights";
 import {
   answerInsightQuestion,
@@ -50,28 +45,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-/** Filtering and the window are client-side; a search-param change (or
- * the AI action returning) never changes what the loader would return,
- * so skip the refetch and the flicker it caused. The loader still runs
- * on first load and on real navigations to the page. */
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  if (
-    currentUrl.pathname === nextUrl.pathname &&
-    currentUrl.search !== nextUrl.search
-  ) {
-    return false;
-  }
-  return defaultShouldRevalidate;
-}
-
 /** Two grounded LLM calls behind the plan gate: the question becomes a
  * filter (translate), the app computes the exact numbers from the real
  * expenses, and the model phrases the answer from those numbers — it
- * never invents figures. Chart questions also drive the chart. */
+ * never invents figures. Chart questions carry their own chart in the
+ * transcript. */
 export async function action({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
@@ -195,7 +173,7 @@ interface TranslateOk {
   query: string;
   title: string;
   months: number;
-  /** Whether the question was best answered with the chart. */
+  /** Whether the question was best answered with a chart. */
   chart: boolean;
   /** The grounded text answer (computed figures, phrased by the model). */
   answer: string;
@@ -205,78 +183,26 @@ interface TranslateErr {
   error: string;
 }
 
-/** One question/answer exchange in the conversation. */
+/** One question/answer exchange in the conversation. Chart exchanges
+ * carry their own filter and window so they render their own chart. */
 interface Exchange {
   question: string;
   answer: string;
-  /** Whether this exchange drove the chart (clicking re-applies it). */
-  query?: string;
-  months?: number;
+  chart: boolean;
+  query: string;
+  months: number;
+  title: string;
 }
-
-/** Chart windows. "year" means the calendar year so far (January 1
- * through the current month), anchored on the browser's local today;
- * the numeric strings are trailing month counts, "all" is everything. */
-type Window = "6" | "12" | "24" | "all" | "year";
-
-const WINDOW_OPTIONS: { value: Window; label: string }[] = [
-  { value: "year", label: "This year" },
-  { value: "6", label: "6 months" },
-  { value: "12", label: "12 months" },
-  { value: "24", label: "24 months" },
-  { value: "all", label: "All time" },
-];
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [ask, setAsk] = useState("");
   const [transcript, setTranscript] = useState<Exchange[]>([]);
   const today = useToday();
 
-  // The chart's state is written to the URL (?q=<filter>&w=<window>) so
-  // refresh and shared links reproduce it — but the URL is READ only on
-  // page load: typing stays in local state (no navigation per keystroke,
-  // so the page doesn't jump), and the write trails by 300ms.
-  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
-  const [window_, setWindow] = useState<Window>(() => {
-    const w = searchParams.get("w") ?? "";
-    return (WINDOW_OPTIONS.some((o) => o.value === w) ? w : "12") as Window;
-  });
-
-  // Serialize param writes: setSearchParams commits asynchronously, so
-  // two quick updates must merge through the latest intended params,
-  // not whichever URL the location has now.
-  const paramsRef = useRef(new URLSearchParams(searchParams));
-  const queryWrite = useRef<number | undefined>(undefined);
-  // window.setTimeout (not the global) so the handle is a number under
-  // DOM typings in both Node and browser shapes.
-  const updateParams = (apply: (params: URLSearchParams) => void) => {
-    const next = new URLSearchParams(paramsRef.current);
-    apply(next);
-    paramsRef.current = next;
-    setSearchParams(next, { replace: true, preventScrollReset: true });
-  };
-  const writeQuery = (q: string) => {
-    clearTimeout(queryWrite.current);
-    queryWrite.current = window.setTimeout(
-      () => updateParams((p) => (q ? p.set("q", q) : p.delete("q"))),
-      300,
-    );
-  };
-  const onQueryInput = (q: string) => {
-    setQuery(q);
-    writeQuery(q);
-  };
-  const onWindowSelect = (w: string) => {
-    setWindow(w as Window);
-    updateParams((p) => p.set("w", w));
-  };
-
   const result = fetcher.data as TranslateOk | TranslateErr | undefined;
-  const appliedChart = useRef<TranslateOk | null>(null);
   useEffect(() => {
     if (!result) return;
     // Fill the answer into the newest exchange (pushed optimistically at
@@ -291,73 +217,60 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           answer: result.ok
             ? result.answer
             : (result.error ?? "Something went wrong."),
+          ...(result.ok
+            ? {
+                chart: result.chart,
+                query: result.query,
+                months: result.months,
+                title: result.title,
+              }
+            : {}),
         };
         return copy;
       });
     }
-    // Only chart questions drive the chart, once per answer.
-    if (!result.ok || !result.chart || result === appliedChart.current) {
-      return;
-    }
-    appliedChart.current = result;
-    setQuery(result.query);
-    // The AI picks a trailing window (0 = all time); "year" is a
-    // viewer-side convenience the model never returns.
-    const w = result.months === 0 ? "all" : String(result.months);
-    setWindow(w as Window);
-    clearTimeout(queryWrite.current);
-    updateParams((p) => {
-      p.set("q", result.query);
-      p.set("w", w);
-    });
   }, [result, fetcher.state]);
 
-  const months = useMemo(() => {
-    if (window_ === "all") return 0;
-    if (window_ === "year") {
-      // January through the current month: walking back from today's
-      // month by its 1-based month number lands on January 1.
-      return today ? Number(today.slice(5, 7)) : 12;
-    }
-    return Number(window_);
-  }, [window_, today]);
-
-  const buckets = useMemo(
-    () =>
-      today ? monthlyTotals(loaderData.expenses, query, today, months) : [],
-    [loaderData.expenses, query, today, months],
-  );
-  const matched = useMemo(
-    () => (today ? matchingExpenses(loaderData.expenses, query, buckets) : []),
-    [loaderData.expenses, query, buckets, today],
-  );
-  const total = buckets.reduce((sum, b) => sum + b.total, 0);
-  const count = buckets.reduce((sum, b) => sum + b.count, 0);
   const busy = fetcher.state !== "idle";
 
-  const suggestions = useMemo(() => {
-    const merchants = new Map<string, number>();
-    const categories = new Map<string, number>();
-    const reports = new Map<string, number>();
-    for (const e of loaderData.expenses) {
-      if (e.type === "receipt" && e.merchant) {
-        merchants.set(e.merchant, (merchants.get(e.merchant) ?? 0) + 1);
-      }
-      if (e.category) {
-        categories.set(e.category, (categories.get(e.category) ?? 0) + 1);
-      }
-      if (e.report) {
-        reports.set(e.report, (reports.get(e.report) ?? 0) + 1);
-      }
-    }
-    const byCount = (a: [string, number], b: [string, number]) =>
-      b[1] - a[1] || a[0].localeCompare(b[0]);
-    return {
-      merchants: [...merchants.entries()].toSorted(byCount),
-      categories: [...categories.entries()].toSorted(byCount),
-      reports: [...reports.entries()].toSorted(byCount),
-    };
-  }, [loaderData.expenses]);
+  // Each chart exchange renders its own view from the shared expense
+  // snapshot and its own filter/window.
+  const views = useMemo(
+    () =>
+      transcript.map((ex) => {
+        if (!ex.chart || !today) {
+          return {
+            ex,
+            buckets: [] as MonthBucket[],
+            matched: [] as InsightExpense[],
+          };
+        }
+        const buckets = monthlyTotals(
+          loaderData.expenses,
+          ex.query,
+          today,
+          ex.months,
+        );
+        const matched = matchingExpenses(
+          loaderData.expenses,
+          ex.query,
+          buckets,
+        );
+        return { ex, buckets, matched };
+      }),
+    [transcript, loaderData.expenses, today],
+  );
+
+  // Bring the newest exchange into view once its answer lands.
+  const lastCardRef = useRef<HTMLDivElement>(null);
+  const lastAnswered = useRef<string | null>(null);
+  useEffect(() => {
+    const last = transcript[transcript.length - 1];
+    if (!last || last.answer === "") return;
+    if (lastAnswered.current === last.question + last.answer) return;
+    lastAnswered.current = last.question + last.answer;
+    lastCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [transcript]);
 
   return (
     <PageShell
@@ -380,7 +293,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               // Optimistic transcript entry; the answer fills in on result.
               setTranscript((t) => [
                 ...t,
-                { question: ask.trim(), answer: "" },
+                {
+                  question: ask.trim(),
+                  answer: "",
+                  chart: false,
+                  query: "",
+                  months: 12,
+                  title: "",
+                },
               ]);
               // Chat UX: the input empties for the next question.
               setAsk("");
@@ -417,7 +337,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 value={ask}
                 onChange={(e) => setAsk(e.target.value)}
                 autoComplete="off"
-                placeholder='e.g. "my AI expenses"'
+                placeholder='e.g. "did I spend more on AI this month than last?"'
                 className="min-w-0 flex-1"
               />
               <Button type="submit" disabled={busy}>
@@ -443,168 +363,129 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 {result.error}
               </p>
             ) : null}
-            {transcript.length > 0 ? (
-              <div className="mt-1 space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
-                {transcript.map((t, i) => (
-                  <div key={i}>
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                      {t.question}
-                    </p>
-                    {t.answer ? (
-                      <div className="text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
-                        <Markdown text={t.answer} />
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        {busy ? "Thinking…" : "No answer recorded."}
-                      </p>
-                    )}
-                    {t.query !== undefined ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuery(t.query!);
-                          onWindowSelect(String(t.months ?? 12));
-                        }}
-                        className="text-xs text-teal-700 underline decoration-teal-300 underline-offset-2 hover:decoration-teal-500 dark:text-teal-400 dark:decoration-teal-600"
-                      >
-                        Show in chart
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </fetcher.Form>
         ) : (
           <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
             <Sparkles aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Conversational search ("my AI expenses") is available on paid and
-              gratis accounts. You can still chart anything by typing a filter
-              below, like{" "}
-              <code className="rounded bg-gray-100 px-1 dark:bg-gray-800">
-                merchant:acme
-              </code>
-              .
+              Conversational search ("did I spend more on AI this month?",
+              "what's my medical spend this year?") is available on paid and
+              gratis accounts.
             </p>
           </div>
         )}
       </Card>
 
-      <Card className="mt-4 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            {result?.ok ? `${result.title} · ` : ""}
-            {count
-              ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
-              : "No expenses in this window"}
-          </p>
-          <Select
-            aria-label="Time window"
-            value={window_}
-            onChange={(e) => onWindowSelect(e.target.value)}
-            className="w-36"
+      {views.map(({ ex, buckets, matched }, i) => {
+        const total = buckets.reduce((sum, b) => sum + b.total, 0);
+        const count = matched.length;
+        const isLast = i === views.length - 1;
+        return (
+          <Card
+            key={`${i}-${ex.question}`}
+            className="mt-4 p-4"
+            ref={isLast ? lastCardRef : undefined}
           >
-            {WINDOW_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="relative mb-4">
-          <FilterCombobox
-            value={query}
-            onChange={onQueryInput}
-            names={suggestions}
-            placeholder="Filter: merchant: category: report: description: or free text"
-            ariaLabel="Filter expenses"
-            id="insights-query"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => onQueryInput("")}
-              aria-label="Clear filter"
-              className="absolute right-2 top-2 rounded-full p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            >
-              <X aria-hidden="true" className="h-4 w-4" />
-            </button>
-          ) : null}
-        </div>
-        {today ? (
-          <MonthlyChart buckets={buckets} />
-        ) : (
-          <div className="h-[200px]" aria-hidden="true" />
-        )}
-        {matched.length > 0 ? (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                  <th scope="col" className="py-1.5 pr-2 font-medium">
-                    Date
-                  </th>
-                  <th scope="col" className="py-1.5 pr-2 font-medium">
-                    Expense
-                  </th>
-                  <th
-                    scope="col"
-                    className="hidden py-1.5 pr-2 font-medium sm:table-cell"
-                  >
-                    Category
-                  </th>
-                  <th
-                    scope="col"
-                    className="hidden py-1.5 pr-2 font-medium md:table-cell"
-                  >
-                    Report
-                  </th>
-                  <th scope="col" className="py-1.5 text-right font-medium">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {matched.map((e) => (
-                  <tr
-                    key={e.id}
-                    className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                  >
-                    <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                      {formatShortDate(e.date)}
-                    </td>
-                    <td className="min-w-0 max-w-52 py-1.5 pr-2">
-                      <Link
-                        to={`/expense/${e.id}`}
-                        className="block truncate hover:underline"
-                      >
-                        {e.merchant || e.description || "Untitled"}
-                        {e.merchant && e.description ? (
-                          <span className="text-gray-400 dark:text-gray-500">
-                            {" "}
-                            · {e.description}
-                          </span>
-                        ) : null}
-                      </Link>
-                    </td>
-                    <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
-                      {e.category}
-                    </td>
-                    <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
-                      {e.report}
-                    </td>
-                    <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                      {usd.format(Number(e.amount) || 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </Card>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+              {ex.question}
+            </p>
+            {ex.answer ? (
+              <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
+                <Markdown text={ex.answer} />
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                {busy && isLast ? "Thinking…" : "No answer recorded."}
+              </p>
+            )}
+            {ex.chart && today ? (
+              <>
+                <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {ex.title} ·{" "}
+                    {count
+                      ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
+                      : "No expenses in this window"}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {ex.months === 0 ? "All time" : `${ex.months} months`}
+                  </p>
+                </div>
+                <MonthlyChart buckets={buckets} />
+                {matched.length > 0 ? (
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                          <th scope="col" className="py-1.5 pr-2 font-medium">
+                            Date
+                          </th>
+                          <th scope="col" className="py-1.5 pr-2 font-medium">
+                            Expense
+                          </th>
+                          <th
+                            scope="col"
+                            className="hidden py-1.5 pr-2 font-medium sm:table-cell"
+                          >
+                            Category
+                          </th>
+                          <th
+                            scope="col"
+                            className="hidden py-1.5 pr-2 font-medium md:table-cell"
+                          >
+                            Report
+                          </th>
+                          <th
+                            scope="col"
+                            className="py-1.5 text-right font-medium"
+                          >
+                            Amount
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matched.map((e) => (
+                          <tr
+                            key={e.id}
+                            className="border-b border-gray-100 last:border-0 dark:border-gray-800"
+                          >
+                            <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                              {formatShortDate(e.date)}
+                            </td>
+                            <td className="min-w-0 max-w-52 py-1.5 pr-2">
+                              <Link
+                                to={`/expense/${e.id}`}
+                                className="block truncate hover:underline"
+                              >
+                                {e.merchant || e.description || "Untitled"}
+                                {e.merchant && e.description ? (
+                                  <span className="text-gray-400 dark:text-gray-500">
+                                    {" "}
+                                    · {e.description}
+                                  </span>
+                                ) : null}
+                              </Link>
+                            </td>
+                            <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
+                              {e.category}
+                            </td>
+                            <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
+                              {e.report}
+                            </td>
+                            <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                              {usd.format(Number(e.amount) || 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </Card>
+        );
+      })}
     </PageShell>
   );
 }

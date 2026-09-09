@@ -73,10 +73,20 @@ Rules:
 
 Answer ONLY a JSON object:
 {"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|0, "chart": true|false}
-Set chart=false when the question asks something best answered in words —
-a yes/no, a comparison, a total, or a count ("did I spend more on AI this
-month?"). Set chart=true when the user wants to see the spending itself
-("what's my medical spend this year?", "show my coffee trend").
+Set chart=false ONLY when the answer is a single sentence a monthly
+chart cannot show: yes/no or "did I spend more A than B" comparisons,
+counts of matching expenses, or questions about non-time data (lists of
+categories, merchants, reports). EVERYTHING else is chart=true — any
+"what's my X spend <window>?", "how much did I spend on gas?", trends,
+or spending-over-time questions: the monthly chart and expense table
+are part of the answer, alongside the text summary.
+Chart decision examples:
+- "what's my medical spend this year?" -> chart:true
+- "how much did I spend on gas?" -> chart:true
+- "show my coffee trend over time" -> chart:true
+- "did I spend more on AI this month than last?" -> chart:false
+- "how many expenses over $100?" -> chart:false
+- "what categories do I have?" -> chart:false.
 Use months 6, 12, or 24 when the question names a window ("this year" -> 12,
 "last two years" -> 24, "recent" -> 6), or 0 for all time / no window mentioned.
 
