@@ -104,9 +104,19 @@ describe("insights route plan gate", () => {
         '{"query":"","title":"Expenses","months":12,"chart":false}',
       )
       .mockResolvedValueOnce("You spent $99.99 at DevShop in April.");
+    // Give one report a creation date; the profile context must carry it.
+    await testPrisma.report.update({
+      where: {
+        reports_accountId_name_key: {
+          accountId: TEST_ACCOUNT_ID,
+          name: "2026 Test",
+        },
+      },
+      data: { createdAt: new Date("2026-01-05T09:30:00Z") },
+    });
     const form = new FormData();
     form.set("intent", "translate");
-    form.set("text", "what did I spend the most on?");
+    form.set("text", "all reports and when they were created");
     form.set("today", "2026-07-15");
     form.set("localTime", "14:32");
     const res = (await callRoute("action", "gratis", form)) as {
@@ -123,11 +133,21 @@ describe("insights route plan gate", () => {
     const userMessage = answerCall[answerCall.length - 1]!.content;
     expect(userMessage).toContain("Computed data:");
     expect(userMessage).toContain("DevShop");
-    expect(userMessage).toContain("Question: what did I spend the most on?");
+    expect(userMessage).toContain(
+      "Question: all reports and when they were created",
+    );
     // Profile context rides along: account name, member email, categories.
     expect(userMessage).toContain("About the user:");
     expect(userMessage).toContain("Test Account");
     expect(userMessage).toContain("testuser@example.com");
     expect(userMessage).toContain("Current time: 14:32");
+    // The dated report carries its creation timestamp; the undated one
+    // appears bare.
+    // The stored timestamp is TZ-shifted by the driver; assert the date
+    // and the annotation shape, not the wall-clock time.
+    expect(userMessage).toMatch(
+      /2026 Test \(created 2026-01-05 \d{2}:\d{2} UTC\)/,
+    );
+    expect(userMessage).toContain("Reports: 2026 Test (created");
   });
 });
