@@ -3,7 +3,7 @@ import { action, loader } from "~/routes/insights";
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { chatCompletion } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
-import { addReport, readReports } from "~/lib/db/reports";
+import { addReport } from "~/lib/db/reports";
 import type { Route as InsightsRoute } from "+types/app/routes/+types/insights";
 
 // The gate and the translator boundary are what the route adds on top of

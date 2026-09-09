@@ -36,6 +36,7 @@ export function PageShell({
   className,
   maxWidth = "max-w-2xl",
   dimmed,
+  fullHeight,
   drop,
   children,
 }: {
@@ -58,6 +59,10 @@ export function PageShell({
   maxWidth?: string;
   /** Fade the content while a save/cancel navigation is in flight. */
   dimmed?: boolean;
+  /** Chat layout: main becomes a bounded flex column (no page scroll) so
+   * a transcript can scroll internally and a composer sits flush at the
+   * bottom of the screen. */
+  fullHeight?: boolean;
   /** Drag-and-drop target handlers + outline (receipt editor). */
   drop?: DropTarget;
   children: ReactNode;
@@ -73,7 +78,14 @@ export function PageShell({
   // The Shift+? hint layer pins "G E" on the control that goes home; the
   // email-review back link goes to /emails, so it must not claim the chord.
   const homeShortcut = backTo === "/" ? "nav-expenses" : undefined;
-  const containerClass = [className, "mx-auto", maxWidth, "px-4 py-8"]
+  const containerClass = [
+    className,
+    "mx-auto",
+    maxWidth,
+    fullHeight
+      ? "flex h-dvh flex-col overflow-hidden px-4 pb-3 pt-6"
+      : "px-4 py-8",
+  ]
     .filter(Boolean)
     .join(" ");
 

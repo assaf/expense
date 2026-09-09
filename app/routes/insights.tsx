@@ -84,31 +84,9 @@ export async function action({ request }: Route.LoaderArgs) {
   // The settings lists are authoritative (they include unused entries,
   // unlike the ones derived from expenses).
   const categoryNames = categories.map((c) => c.name);
-  // Report dates are formatted in the user's timezone ("Sep 8, 2026,
-  // 1:15 PM"); an invalid client-supplied zone falls back to UTC.
-  let dateFormatter: Intl.DateTimeFormat;
-  try {
-    dateFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz || "UTC",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    dateFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
   const reportNames = reports.map((r) =>
     r.createdAt
-      ? `${r.name} (created ${dateFormatter.format(new Date(r.createdAt))})`
+      ? `${r.name} (created ${formatUserDate(new Date(r.createdAt), tz)})`
       : r.name,
   );
   const emails = [...new Set([user.email, ...members.map((m) => m.email)])];
@@ -163,6 +141,30 @@ export async function action({ request }: Route.LoaderArgs) {
   }
 }
 
+/** Format an instant in the user's timezone ("Sep 8, 2026, 1:15 PM"); an
+ * invalid client-supplied zone falls back to UTC. */
+export function formatUserDate(date: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+}
+
 /** Conversation context from the client: up to the last 3 exchanges,
  * strings only, length-capped. Unparseable input is ignored. */
 function parseHistory(raw: string): { question: string; answer: string }[] {
@@ -206,25 +208,6 @@ interface TranslateOk {
 interface TranslateErr {
   ok: false;
   error: string;
-}
-
-/** The client's local clock and IANA zone, fresh at call time. */
-function localNow(): { time: string; zone: string } {
-  const now = new Date();
-  let zone = "UTC";
-  try {
-    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    zone = "UTC";
-  }
-  return {
-    time: now.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: zone,
-    }),
-    zone,
-  };
 }
 
 /** One question/answer exchange in the conversation. Chart exchanges
@@ -305,15 +288,20 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     [transcript, loaderData.expenses, today],
   );
 
-  // Bring the newest exchange into view once its answer lands.
-  const lastCardRef = useRef<HTMLDivElement>(null);
-  const lastAnswered = useRef<string | null>(null);
+  // Chat scroll: the transcript is its own scroll region (hidden
+  // scrollbar); new answers scroll into view only when the user is
+  // already near the bottom, never yanking them out of history.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
   useEffect(() => {
-    const last = transcript[transcript.length - 1];
-    if (!last || last.answer === "") return;
-    if (lastAnswered.current === last.question + last.answer) return;
-    lastAnswered.current = last.question + last.answer;
-    lastCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = scrollRef.current;
+    if (!el || !nearBottom.current) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [transcript]);
 
   return (
@@ -321,7 +309,129 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       icon={<ChartColumn aria-hidden="true" className="h-6 w-6" />}
       title="Insights"
       maxWidth="max-w-3xl"
+      fullHeight
     >
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {transcript.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Ask a question to get started.
+            </p>
+          </div>
+        ) : null}
+        {views.map(({ ex, buckets, matched }, i) => {
+          const total = buckets.reduce((sum, b) => sum + b.total, 0);
+          const count = matched.length;
+          return (
+            <Card key={i} className="p-4">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                {ex.question}
+              </p>
+              {ex.answer ? (
+                <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
+                  <Markdown text={ex.answer} />
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  {busy && i === views.length - 1
+                    ? "Thinking…"
+                    : "No answer recorded."}
+                </p>
+              )}
+              {ex.chart && today ? (
+                <>
+                  <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      {ex.title} ·{" "}
+                      {count
+                        ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
+                        : "No expenses in this window"}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {ex.months === 0 ? "All time" : `${ex.months} months`}
+                    </p>
+                  </div>
+                  <MonthlyChart buckets={buckets} />
+                  {matched.length > 0 ? (
+                    <div className="mt-4 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                            <th scope="col" className="py-1.5 pr-2 font-medium">
+                              Date
+                            </th>
+                            <th scope="col" className="py-1.5 pr-2 font-medium">
+                              Expense
+                            </th>
+                            <th
+                              scope="col"
+                              className="hidden py-1.5 pr-2 font-medium sm:table-cell"
+                            >
+                              Category
+                            </th>
+                            <th
+                              scope="col"
+                              className="hidden py-1.5 pr-2 font-medium md:table-cell"
+                            >
+                              Report
+                            </th>
+                            <th
+                              scope="col"
+                              className="py-1.5 text-right font-medium"
+                            >
+                              Amount
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {matched.map((e) => (
+                            <tr
+                              key={e.id}
+                              className="border-b border-gray-100 last:border-0 dark:border-gray-800"
+                            >
+                              <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                                {formatShortDate(e.date)}
+                              </td>
+                              <td className="min-w-0 max-w-52 py-1.5 pr-2">
+                                <Link
+                                  to={`/expense/${e.id}`}
+                                  className="block truncate hover:underline"
+                                >
+                                  {e.merchant || e.description || "Untitled"}
+                                  {e.merchant && e.description ? (
+                                    <span className="text-gray-400 dark:text-gray-500">
+                                      {" "}
+                                      · {e.description}
+                                    </span>
+                                  ) : null}
+                                </Link>
+                              </td>
+                              <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
+                                {e.category}
+                              </td>
+                              <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
+                                {e.report}
+                              </td>
+                              <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                                {usd.format(Number(e.amount) || 0)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </Card>
+          );
+        })}
+      </div>
+
       <Card className="p-4">
         {loaderData.aiEnabled ? (
           <fetcher.Form
@@ -352,8 +462,19 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           >
             <input type="hidden" name="intent" value="translate" />
             <input type="hidden" name="today" value={today ?? ""} />
-            <input type="hidden" name="localTime" value={localNow().time} />
-            <input type="hidden" name="tz" value={localNow().zone} />
+            <input
+              type="hidden"
+              name="localTime"
+              value={new Date().toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            />
+            <input
+              type="hidden"
+              name="tz"
+              value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
+            />
             <input
               type="hidden"
               name="history"
@@ -364,9 +485,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 })),
               )}
             />
-            <label htmlFor="insights-ask" className="text-sm font-medium">
-              Ask about your expenses
-            </label>
             <div className="flex gap-2">
               <Input
                 id="insights-ask"
@@ -413,117 +531,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           </div>
         )}
       </Card>
-
-      {views.map(({ ex, buckets, matched }, i) => {
-        const total = buckets.reduce((sum, b) => sum + b.total, 0);
-        const count = matched.length;
-        const isLast = i === views.length - 1;
-        return (
-          <Card
-            key={`${i}-${ex.question}`}
-            className="mt-4 p-4"
-            ref={isLast ? lastCardRef : undefined}
-          >
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-              {ex.question}
-            </p>
-            {ex.answer ? (
-              <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
-                <Markdown text={ex.answer} />
-              </div>
-            ) : (
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                {busy && isLast ? "Thinking…" : "No answer recorded."}
-              </p>
-            )}
-            {ex.chart && today ? (
-              <>
-                <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {ex.title} ·{" "}
-                    {count
-                      ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
-                      : "No expenses in this window"}
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {ex.months === 0 ? "All time" : `${ex.months} months`}
-                  </p>
-                </div>
-                <MonthlyChart buckets={buckets} />
-                {matched.length > 0 ? (
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                          <th scope="col" className="py-1.5 pr-2 font-medium">
-                            Date
-                          </th>
-                          <th scope="col" className="py-1.5 pr-2 font-medium">
-                            Expense
-                          </th>
-                          <th
-                            scope="col"
-                            className="hidden py-1.5 pr-2 font-medium sm:table-cell"
-                          >
-                            Category
-                          </th>
-                          <th
-                            scope="col"
-                            className="hidden py-1.5 pr-2 font-medium md:table-cell"
-                          >
-                            Report
-                          </th>
-                          <th
-                            scope="col"
-                            className="py-1.5 text-right font-medium"
-                          >
-                            Amount
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matched.map((e) => (
-                          <tr
-                            key={e.id}
-                            className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                          >
-                            <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                              {formatShortDate(e.date)}
-                            </td>
-                            <td className="min-w-0 max-w-52 py-1.5 pr-2">
-                              <Link
-                                to={`/expense/${e.id}`}
-                                className="block truncate hover:underline"
-                              >
-                                {e.merchant || e.description || "Untitled"}
-                                {e.merchant && e.description ? (
-                                  <span className="text-gray-400 dark:text-gray-500">
-                                    {" "}
-                                    · {e.description}
-                                  </span>
-                                ) : null}
-                              </Link>
-                            </td>
-                            <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
-                              {e.category}
-                            </td>
-                            <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
-                              {e.report}
-                            </td>
-                            <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                              {usd.format(Number(e.amount) || 0)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </Card>
-        );
-      })}
     </PageShell>
   );
 }
