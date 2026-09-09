@@ -354,10 +354,22 @@ model Report {
   @@map("reports")
 }
 
+model InsightConversation {
+  id        String            @id(map: "insight_conversations_pkey")
+  userId    String
+  accountId String
+  messages  Jsonb
+  createdAt TimestampString(3)
+  updatedAt TimestampString(3)
+
+  @@index([userId], map: "insight_conversations_userId_idx")
+  @@map("insight_conversations")
+}
+
 model Settings {
+  accountId String
   key       String
   value     String
-  accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "settings_accountId_fkey", index: false)
 
   @@id([accountId, key], map: "settings_pkey")

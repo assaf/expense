@@ -13,6 +13,11 @@ import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
 import { readReports } from "~/lib/db/reports";
 import { readSettings } from "~/lib/db/settings";
+import {
+  appendExchange,
+  readLatestConversation,
+  startNewConversation,
+} from "~/lib/db/insights-chat";
 import { formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
@@ -35,13 +40,17 @@ import type { Route } from "./+types/insights";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const [account, expenses] = await Promise.all([
+  const [account, conversation, expenses] = await Promise.all([
     readAccount(user.accountId),
+    readLatestConversation(user.id),
     readExpenses(user.accountId),
   ]);
   return {
     aiEnabled: accountHasAI(account?.plan),
     expenses: expenses.map(insightExpense),
+    // The most recent conversation reloads with the page; older ones stay
+    // in the database as a record.
+    messages: conversation?.exchanges ?? [],
   };
 }
 
@@ -53,7 +62,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 export async function action({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
-  if (formString(form, "intent") !== "translate") return unknownIntent();
+  const intent = formString(form, "intent");
+  if (intent === "new") {
+    // Start a fresh conversation; the previous one stays in the database
+    // as a record. No LLM call, so no plan gate needed here.
+    await startNewConversation(user.id, user.accountId);
+    return { ok: true as const, fresh: true };
+  }
+  if (intent !== "translate") return unknownIntent();
   const planAccount = await readAccount(user.accountId);
   if (!accountHasAI(planAccount?.plan)) {
     return {
@@ -70,7 +86,6 @@ export async function action({ request }: Route.LoaderArgs) {
   // The client's IANA timezone: report dates are formatted in it (the
   // server's clock is UTC and must not guess the user's zone).
   const tz = formString(form, "tz");
-  const history = parseHistory(formString(form, "history"));
 
   const [account, categories, reports, settings, members] = await Promise.all([
     readAccount(user.accountId),
@@ -100,10 +115,11 @@ export async function action({ request }: Route.LoaderArgs) {
     .filter((line) => !line.endsWith(": "))
     .join("\n");
   const localTimeOk = /^\d{1,2}:\d{2}/.test(localTime);
+  const conversation = await readLatestConversation(user.id);
   try {
     const t = await translateInsightQuery({
       text,
-      history,
+      history: conversation?.exchanges.slice(-3) ?? [],
       today,
       merchants,
       categories: categoryNames,
@@ -117,11 +133,19 @@ export async function action({ request }: Route.LoaderArgs) {
       const matched = matchingExpenses(expenses, t.query, buckets);
       const answer = await answerInsightQuestion({
         question: text,
-        history,
+        history: conversation?.exchanges.slice(-3) ?? [],
         summary: insightSummary(buckets, matched),
         profile: localTimeOk
           ? `${profile}\nCurrent time: ${localTime} (user's local clock)`
           : profile,
+      });
+      await appendExchange(user.id, user.accountId, {
+        question: text,
+        answer,
+        chart: t.chart,
+        query: t.query,
+        months: t.months,
+        title: t.title,
       });
       return { ok: true as const, ...t, answer };
     }
@@ -165,32 +189,6 @@ export function formatUserDate(date: Date, tz: string): string {
   }
 }
 
-/** Conversation context from the client: up to the last 3 exchanges,
- * strings only, length-capped. Unparseable input is ignored. */
-function parseHistory(raw: string): { question: string; answer: string }[] {
-  if (!raw.trim()) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const exchanges: { question: string; answer: string }[] = [];
-    for (const entry of parsed) {
-      if (typeof entry !== "object" || entry === null) continue;
-      if (!("question" in entry) || !("answer" in entry)) continue;
-      const { question, answer } = entry;
-      if (typeof question !== "string" || typeof answer !== "string") {
-        continue;
-      }
-      exchanges.push({
-        question: question.slice(0, 300),
-        answer: answer.slice(0, 600),
-      });
-    }
-    return exchanges.slice(-3);
-  } catch {
-    return [];
-  }
-}
-
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Insights — Expense" }];
 }
@@ -225,13 +223,24 @@ const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
+  const newFetcher = useFetcher<typeof action>();
   const [ask, setAsk] = useState("");
-  const [transcript, setTranscript] = useState<Exchange[]>([]);
+  // The most recent conversation reloads with the page from the
+  // database; new exchanges append to it.
+  const [transcript, setTranscript] = useState<Exchange[]>(loaderData.messages);
   const today = useToday();
 
-  const result = fetcher.data as TranslateOk | TranslateErr | undefined;
+  const result = fetcher.data as
+    | (TranslateOk & { fresh?: boolean })
+    | TranslateErr
+    | undefined;
   useEffect(() => {
     if (!result) return;
+    // "New conversation" starts a fresh exchange stream.
+    if ("fresh" in result && result.fresh) {
+      if (fetcher.state === "idle") setTranscript([]);
+      return;
+    }
     // Fill the answer into the newest exchange (pushed optimistically at
     // submit time); idempotent across re-renders.
     if (fetcher.state === "idle") {
@@ -434,92 +443,90 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
 
       <Card className="p-4">
         {loaderData.aiEnabled ? (
-          <fetcher.Form
-            method="post"
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              // Enter can re-submit while a question is in flight; an
-              // empty ask has nothing to answer.
-              if (!ask.trim() || busy) {
-                e.preventDefault();
-                return;
-              }
-              // Optimistic transcript entry; the answer fills in on result.
-              setTranscript((t) => [
-                ...t,
-                {
-                  question: ask.trim(),
-                  answer: "",
-                  chart: false,
-                  query: "",
-                  months: 12,
-                  title: "",
-                },
-              ]);
-              // Chat UX: the input empties for the next question.
-              setAsk("");
-            }}
-          >
-            <input type="hidden" name="intent" value="translate" />
-            <input type="hidden" name="today" value={today ?? ""} />
-            <input
-              type="hidden"
-              name="localTime"
-              value={new Date().toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            />
-            <input
-              type="hidden"
-              name="tz"
-              value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
-            />
-            <input
-              type="hidden"
-              name="history"
-              value={JSON.stringify(
-                transcript.slice(-3).map(({ question, answer }) => ({
-                  question,
-                  answer,
-                })),
-              )}
-            />
-            <div className="flex gap-2">
-              <Input
-                id="insights-ask"
-                name="text"
-                type="text"
-                value={ask}
-                onChange={(e) => setAsk(e.target.value)}
-                autoComplete="off"
-                placeholder='e.g. "did I spend more on AI this month than last?"'
-                className="min-w-0 flex-1"
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <newFetcher.Form method="post">
+                <input type="hidden" name="intent" value="new" />
+                <Button type="submit" variant="ghost" size="sm">
+                  New conversation
+                </Button>
+              </newFetcher.Form>
+            </div>
+            <fetcher.Form
+              method="post"
+              className="flex flex-col gap-2"
+              onSubmit={(e) => {
+                if (!ask.trim() || busy) {
+                  e.preventDefault();
+                  return;
+                }
+                setTranscript((t) => [
+                  ...t,
+                  {
+                    question: ask.trim(),
+                    answer: "",
+                    chart: false,
+                    query: "",
+                    months: 12,
+                    title: "",
+                  },
+                ]);
+                setAsk("");
+              }}
+            >
+              <input type="hidden" name="intent" value="translate" />
+              <input type="hidden" name="today" value={today ?? ""} />
+              <input
+                type="hidden"
+                name="localTime"
+                value={new Date().toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               />
-              <Button type="submit" disabled={busy}>
-                <Sparkles aria-hidden="true" className="h-4 w-4" />
-                {busy ? "Thinking…" : "Ask"}
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-gray-500 dark:text-gray-400">Try:</span>
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => setAsk(ex)}
-                  className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-            {result && !result.ok ? (
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {result.error}
-              </p>
-            ) : null}
-          </fetcher.Form>
+              <input
+                type="hidden"
+                name="tz"
+                value={
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+                }
+              />
+              <div className="flex gap-2">
+                <Input
+                  id="insights-ask"
+                  name="text"
+                  type="text"
+                  value={ask}
+                  onChange={(e) => setAsk(e.target.value)}
+                  autoComplete="off"
+                  placeholder='e.g. "did I spend more on AI this month than last?"'
+                  className="min-w-0 flex-1"
+                />
+                <Button type="submit" disabled={busy}>
+                  <Sparkles aria-hidden="true" className="h-4 w-4" />
+                  {busy ? "Thinking…" : "Ask"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Try:</span>
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => setAsk(ex)}
+                    className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+              {result && !result.ok ? (
+                <p className="text-sm text-red-700 dark:text-red-400">
+                  {result.error}
+                </p>
+              ) : null}
+            </fetcher.Form>
+          </div>
         ) : (
           <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
             <Sparkles aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
