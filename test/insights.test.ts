@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   accountHasAI,
   insightExpense,
+  insightSummary,
   knownMerchants,
   monthWindow,
   monthlyTotals,
   type InsightExpense,
+  type MonthBucket,
 } from "~/lib/insights";
 import { EMPTY_ROUTE } from "~/lib/types";
 import {
@@ -13,6 +15,7 @@ import {
   type FilterNames,
 } from "~/components/FilterCombobox";
 import {
+  answerInsightQuestion,
   parseInsightTranslation,
   translateInsightQuery,
 } from "~/lib/insights-ai.server";
@@ -24,7 +27,6 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   chatCompletion: vi.fn(),
 }));
-
 import { chatCompletion } from "~/lib/receipt-ai.server";
 
 const chat = vi.mocked(chatCompletion);
@@ -166,6 +168,98 @@ describe("knownMerchants", () => {
   });
 });
 
+describe("insightSummary", () => {
+  const buckets: MonthBucket[] = [
+    { key: "2026-06", label: "Jun", total: 95, count: 3 },
+    { key: "2026-07", label: "Jul", total: 105, count: 2 },
+    { key: "2026-08", label: "Aug", total: 0, count: 0 }, // empty months excluded
+  ];
+  const rows: InsightExpense[] = [
+    exp({
+      merchant: "Z.ai",
+      amount: "80.00",
+      date: "2026-07-01",
+      category: "Software Subscriptions",
+    }),
+    exp({
+      merchant: "Test Store",
+      amount: "25.00",
+      date: "2026-07-02",
+      category: "Testing",
+    }),
+    exp({
+      merchant: "DeepSeek",
+      amount: "25.00",
+      date: "2026-06-10",
+      category: "Software Subscriptions",
+    }),
+    exp({
+      merchant: "Peet's Coffee",
+      amount: "15.00",
+      date: "2026-06-03",
+      category: "Meals and entertainment",
+    }),
+    exp({ type: "mileage", amount: "55", date: "2026-06-01" }), // no merchant
+  ];
+
+  it("sums the total from buckets and counts matched rows", () => {
+    const summary = insightSummary(buckets, rows);
+    expect(summary).toContain("Total: $200.00 across 5 expenses");
+  });
+
+  it("includes the monthly breakdown and skips empty months", () => {
+    const summary = insightSummary(buckets, rows);
+    expect(summary).toContain(
+      "By month: Jun: $95.00 (3 expenses); Jul: $105.00 (2 expenses)",
+    );
+    expect(summary).not.toContain("Aug");
+  });
+
+  it("ranks top merchants and skips merchantless rows", () => {
+    const summary = insightSummary(buckets, rows);
+    expect(summary).toContain(
+      "Top merchants: Z.ai: $80.00 (1 expenses); Test Store: $25.00 (1 expenses); DeepSeek: $25.00 (1 expenses)",
+    );
+  });
+
+  it("includes the per-category breakdown for category questions", () => {
+    const summary = insightSummary(buckets, rows);
+    expect(summary).toContain(
+      "By category: Software Subscriptions: $105.00 (2 expenses); Testing: $25.00 (1 expenses); Meals and entertainment: $15.00 (1 expenses)",
+    );
+  });
+});
+
+describe("answerInsightQuestion", () => {
+  it("grounds the answer prompt in the computed data and history", async () => {
+    chat.mockResolvedValueOnce("  You spent more this month.  ");
+    const answer = await answerInsightQuestion({
+      question: "did I spend more on AI this month?",
+      history: [{ question: "earlier question", answer: "earlier answer" }],
+      summary: "Total: $200.00 across 5 expenses\nBy month: Jul: $105.00 (2)",
+    });
+    // The answer is trimmed (surrounding whitespace/quotes stripped).
+    expect(answer).toBe("You spent more this month.");
+    const [messages] = chat.mock.calls[0]!;
+    const user = messages.at(-1)!.content;
+    expect(user).toContain("Computed data:");
+    expect(user).toContain("Total: $200.00 across 5 expenses");
+    expect(user).toContain("Previous exchanges:");
+    expect(user).toContain("Q: earlier question\nA: earlier answer");
+    expect(user).toContain("Question: did I spend more on AI this month?");
+  });
+
+  it("falls back to a placeholder when the model returns nothing", async () => {
+    chat.mockResolvedValueOnce('""');
+    const answer = await answerInsightQuestion({
+      question: "anything",
+      history: [],
+      summary: "Total: $0.00 across 0 expenses",
+    });
+    expect(answer).toBe("I couldn't summarize that.");
+  });
+});
+
 describe("accountHasAI", () => {
   it("unlocks paid and gratis accounts only", () => {
     expect(accountHasAI("paid")).toBe(true);
@@ -249,6 +343,7 @@ describe("parseInsightTranslation", () => {
 
 describe("translateInsightQuery", () => {
   it("sends the merchant list and question, returns the translation", async () => {
+    chat.mockClear();
     chat.mockResolvedValueOnce(
       '{"query":"merchant:z.ai merchant:deepseek","title":"AI expenses","months":12}',
     );
