@@ -341,13 +341,20 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           <fetcher.Form
             method="post"
             className="flex flex-col gap-2"
-            onSubmit={() => {
-              if (!ask.trim() || busy) return;
+            onSubmit={(e) => {
+              // Enter can re-submit while a question is in flight; an
+              // empty ask has nothing to answer.
+              if (!ask.trim() || busy) {
+                e.preventDefault();
+                return;
+              }
               // Optimistic transcript entry; the answer fills in on result.
               setTranscript((t) => [
                 ...t,
                 { question: ask.trim(), answer: "" },
               ]);
+              // Chat UX: the input empties for the next question.
+              setAsk("");
             }}
           >
             <input type="hidden" name="intent" value="translate" />
