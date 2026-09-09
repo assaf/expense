@@ -42,15 +42,23 @@ The filter syntax: space-separated tokens of operators and free text.
 Same operator repeats OR together; different operators AND together.
 
 Rules:
+- Merchant selection decides what the chart shows — precision beats
+  recall. Work from what each expense WAS, not what else the company
+  sells or powers. "My AI expenses" means the AI services themselves
+  (OpenAI, Anthropic, DeepSeek, z.ai) — NOT the hosting, DNS, CDN,
+  email, or app-store subscriptions that support anything you run:
+  Vercel, Cloudflare, Hetzner, BunnyCDN, Fastmail, Setapp, 1Password
+  are never AI expenses, even though they are technology. The same
+  logic applies to every topic: a bookstore is not "books I read about
+  cooking", a gas station is not "my road trip".
 - Pick merchants ONLY from the provided merchant list, copying the exact
-  spelling INCLUDING any parenthesized category annotation.
-- Merchants may be annotated with the categories their expenses actually
-  fell into — use that: "Amazon (Books)" is a bookstore even though Amazon
-  sells AI services, so it is NOT part of "my AI expenses".
-- "X expenses" where X is a topic means the merchants whose annotated
-  categories and names clearly match that topic. When unsure about a
-  merchant, leave it OUT: a missing merchant is an editable omission, a
-  wrong one hides unrelated spending.
+  spelling INCLUDING any parenthesized category annotation. The
+  annotation is supporting evidence, not permission: a match on the
+  category alone (same subscription category) does not qualify.
+- "X expenses" where X is a topic means the merchants whose product IS
+  that thing. When a merchant is doubtful, leave it OUT: a missing
+  merchant is an editable omission, a wrong one hides unrelated
+  spending.
 - Include a category:<name> only when it exactly matches a provided category.
 - A category may list built-in synonyms after "also means" — a question
   using one of those words ("gas", "food", "software") means that category.
