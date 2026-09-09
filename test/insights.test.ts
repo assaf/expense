@@ -212,6 +212,7 @@ describe("parseInsightTranslation", () => {
       query: "merchant:z.ai merchant:deepseek",
       title: "AI expenses",
       months: 12,
+      chart: true,
     });
   });
 
@@ -220,7 +221,12 @@ describe("parseInsightTranslation", () => {
       parseInsightTranslation(
         '```json\n{"query":"merchant:peet\'s\\n coffee","title":"Coffee","months":24}\n```',
       ),
-    ).toEqual({ query: "merchant:peet's coffee", title: "Coffee", months: 24 });
+    ).toEqual({
+      query: "merchant:peet's coffee",
+      title: "Coffee",
+      months: 24,
+      chart: true,
+    });
   });
 
   it("caps runaway queries and falls back on bad months", () => {
@@ -236,6 +242,7 @@ describe("parseInsightTranslation", () => {
       query: "",
       title: "Expenses",
       months: 12,
+      chart: true,
     });
   });
 });
@@ -327,6 +334,10 @@ describe("tokenSuggestions", () => {
       (s) => s.completion,
     );
     expect(completions).toContain("merchant:Z.ai ");
+  });
+
+  it("returns no suggestions for an empty token", () => {
+    expect(tokenSuggestions("", names)).toEqual([]);
   });
 
   it("still offers the operator keyword itself", () => {

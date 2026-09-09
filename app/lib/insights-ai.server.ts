@@ -25,6 +25,9 @@ export interface InsightTranslation {
   title: string;
   /** 6 / 12 / 24, or 0 for all time. */
   months: number;
+  /** false = the question is best answered in words (a comparison,
+   * total, or count); true = show the chart. */
+  chart: boolean;
 }
 
 const MAX_QUERY_LENGTH = 300;
@@ -69,15 +72,23 @@ Rules:
 - Keep the query under 300 characters.
 
 Answer ONLY a JSON object:
-{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|0}
+{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|0, "chart": true|false}
+Set chart=false when the question asks something best answered in words —
+a yes/no, a comparison, a total, or a count ("did I spend more on AI this
+month?"). Set chart=true when the user wants to see the spending itself
+("what's my medical spend this year?", "show my coffee trend").
 Use months 6, 12, or 24 when the question names a window ("this year" -> 12,
-"last two years" -> 24, "recent" -> 6), or 0 for all time / no window mentioned.`;
+"last two years" -> 24, "recent" -> 6), or 0 for all time / no window mentioned.
+
+Previous exchanges may be provided: resolve short follow-ups ("and last
+month?", "what about coffee?") against them.`;
 
 /** Translate free text into a validated filter. Throws LLMError on
  * transport failure; returns a safe "everything" translation when the
  * model's answer is unusable rather than failing the page. */
 export async function translateInsightQuery(input: {
   text: string;
+  history?: { question: string; answer: string }[];
   merchants: string[];
   categories: string[];
   reports: string[];
@@ -102,6 +113,9 @@ export async function translateInsightQuery(input: {
   context.push(
     `Reports: ${input.reports.length ? input.reports.join(", ") : "(none)"}`,
   );
+  for (const h of input.history ?? []) {
+    context.push(`Previous exchange:\nQ: ${h.question}\nA: ${h.answer}`);
+  }
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: `${context.join("\n")}\n\nQuestion: ${text}` },
@@ -122,7 +136,7 @@ export function parseInsightTranslation(raw: string): InsightTranslation {
   try {
     obj = parseJsonObject(raw);
   } catch {
-    return { query: "", title: "Expenses", months: 12 };
+    return { query: "", title: "Expenses", months: 12, chart: true };
   }
   const query = sanitizeQuery(obj.query);
   const months = normalizeMonths(obj.months);
@@ -130,7 +144,9 @@ export function parseInsightTranslation(raw: string): InsightTranslation {
     typeof obj.title === "string" && obj.title.trim()
       ? obj.title.trim().slice(0, 60)
       : "Expenses";
-  return { query, title, months };
+  // Absent field -> true: showing the chart stays the default.
+  const chart = typeof obj.chart === "boolean" ? obj.chart : true;
+  return { query, title, months, chart };
 }
 
 function sanitizeQuery(value: unknown): string {
@@ -143,6 +159,43 @@ function sanitizeQuery(value: unknown): string {
 function normalizeMonths(value: unknown): number {
   const n = Number(value);
   return (INSIGHT_MONTH_OPTIONS as readonly number[]).includes(n) ? n : 12;
+}
+
+const ANSWER_PROMPT = `You answer a question about someone's expenses using
+ONLY the computed data provided with the question.
+- Lead with the direct answer, then one short supporting sentence.
+- Use the exact dollar figures and counts from the data; never invent or
+  estimate numbers.
+- If the data does not answer the question, say so plainly.
+- 1-3 sentences of plain prose.`;
+
+/** Produce the text answer for a question, grounded in data the app
+ * computed from the user's real expenses (the model only phrases it).
+ * Throws LLMError on transport failure. */
+export async function answerInsightQuestion(input: {
+  question: string;
+  history: { question: string; answer: string }[];
+  summary: string;
+}): Promise<string> {
+  const parts: string[] = [];
+  if (input.history.length > 0) {
+    parts.push(
+      `Previous exchanges:\n${input.history
+        .map((h) => `Q: ${h.question}\nA: ${h.answer}`)
+        .join("\n")}`,
+    );
+  }
+  parts.push(`Computed data:\n${input.summary}`);
+  parts.push(`Question: ${input.question}`);
+  const raw = await chatCompletion(
+    [
+      { role: "system", content: ANSWER_PROMPT },
+      { role: "user", content: parts.join("\n\n") },
+    ],
+    { maxTokens: 200 },
+  );
+  const text = raw.trim().replace(/^["']|["']$/g, "");
+  return text || "I couldn't summarize that.";
 }
 
 export { LLMError };

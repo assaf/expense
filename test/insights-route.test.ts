@@ -88,8 +88,40 @@ describe("insights route plan gate", () => {
     form.set("text", "everything");
     const res = (await callRoute("action", "gratis", form)) as {
       ok: boolean;
+      answer: string;
     };
     expect(res.ok).toBe(true);
+    // No client today -> chart-only answer, no second call.
     expect(chat).toHaveBeenCalledTimes(1);
+    expect(res.answer).toContain("Charting");
+  });
+
+  it("grounds the text answer in computed numbers for a plan account", async () => {
+    // Call 1: the question is text-shaped (chart:false). Call 2 phrases
+    // the answer from the computed data.
+    chat
+      .mockResolvedValueOnce(
+        '{"query":"","title":"Expenses","months":12,"chart":false}',
+      )
+      .mockResolvedValueOnce("You spent $99.99 at DevShop in April.");
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "what did I spend the most on?");
+    form.set("today", "2026-07-15");
+    const res = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      chart: boolean;
+      answer: string;
+    };
+    expect(res.ok).toBe(true);
+    expect(res.chart).toBe(false);
+    expect(res.answer).toContain("$99.99");
+    expect(chat).toHaveBeenCalledTimes(2);
+    // The answer prompt carries the computed data, not the raw question.
+    const answerCall = chat.mock.calls[1]![0];
+    const userMessage = answerCall[answerCall.length - 1]!.content;
+    expect(userMessage).toContain("Computed data:");
+    expect(userMessage).toContain("DevShop");
+    expect(userMessage).toContain("Question: what did I spend the most on?");
   });
 });

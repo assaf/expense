@@ -156,6 +156,39 @@ function allTimeWindow(expenses: InsightExpense[], today: string): string[] {
   return monthWindow(today, Math.max(1, count));
 }
 
+/** The computed numbers behind a chart (or a text answer): totals, the
+ * monthly breakdown, and the biggest merchants — formatted for the
+ * answer model, which phrases it but must never invent figures. */
+export function insightSummary(
+  buckets: MonthBucket[],
+  matched: InsightExpense[],
+): string {
+  const total = buckets.reduce((sum, b) => sum + b.total, 0);
+  const lines = [
+    `Total: $${total.toFixed(2)} across ${matched.length} expenses`,
+  ];
+  const byMonth = buckets
+    .filter((b) => b.count > 0)
+    .map((b) => `${b.label}: $${b.total.toFixed(2)} (${b.count} expenses)`);
+  if (byMonth.length > 0) lines.push(`By month: ${byMonth.join("; ")}`);
+  const byMerchant = new Map<string, { total: number; count: number }>();
+  for (const e of matched) {
+    if (!e.merchant) continue;
+    const entry = byMerchant.get(e.merchant) ?? { total: 0, count: 0 };
+    entry.total += Number(e.amount) || 0;
+    entry.count += 1;
+    byMerchant.set(e.merchant, entry);
+  }
+  const top = [...byMerchant.entries()]
+    .toSorted((a, b) => b[1].total - a[1].total)
+    .slice(0, 5)
+    .map(
+      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
+    );
+  if (top.length > 0) lines.push(`Top merchants: ${top.join("; ")}`);
+  return lines.join("\n");
+}
+
 /** Merchant context for the AI translator: each distinct merchant with
  * the categories its expenses actually landed in ("Amazon (Books)"),
  * most frequent first. The annotations let the model see that a brand

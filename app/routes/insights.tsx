@@ -20,11 +20,16 @@ import { formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
   insightExpense,
+  insightSummary,
   knownMerchants,
   matchingExpenses,
   monthlyTotals,
 } from "~/lib/insights";
-import { translateInsightQuery, LLMError } from "~/lib/insights-ai.server";
+import {
+  answerInsightQuestion,
+  translateInsightQuery,
+  LLMError,
+} from "~/lib/insights-ai.server";
 import { useToday } from "~/lib/use-today";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
@@ -59,8 +64,10 @@ export function shouldRevalidate({
   return defaultShouldRevalidate;
 }
 
-/** Translate free text into a chart filter. Gated on the account's plan
- * (the LLM call costs money); the rest of the page works for everyone. */
+/** Two grounded LLM calls behind the plan gate: the question becomes a
+ * filter (translate), the app computes the exact numbers from the real
+ * expenses, and the model phrases the answer from those numbers — it
+ * never invents figures. Chart questions also drive the chart. */
 export async function action({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
@@ -75,6 +82,10 @@ export async function action({ request }: Route.LoaderArgs) {
   const text = formString(form, "text").trim();
   if (!text) return { ok: false as const, error: "Type a question first." };
 
+  // The client's local today: the server must not guess the user's day.
+  const today = formString(form, "today");
+  const history = parseHistory(formString(form, "history"));
+
   const expenses = (await readExpenses(user.accountId)).map(insightExpense);
   const merchants = knownMerchants(expenses);
   const categories = [
@@ -86,11 +97,29 @@ export async function action({ request }: Route.LoaderArgs) {
   try {
     const t = await translateInsightQuery({
       text,
+      history,
       merchants,
       categories,
       reports,
     });
-    return { ok: true as const, ...t };
+    // Ground the text answer in real numbers: compute the same view the
+    // chart shows and let the model phrase it. Invalid client dates (the
+    // field is always sent by this page) degrade to a chart-only answer.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+      const buckets = monthlyTotals(expenses, t.query, today, t.months);
+      const matched = matchingExpenses(expenses, t.query, buckets);
+      const answer = await answerInsightQuestion({
+        question: text,
+        history,
+        summary: insightSummary(buckets, matched),
+      });
+      return { ok: true as const, ...t, answer };
+    }
+    return {
+      ok: true as const,
+      ...t,
+      answer: `Charting ${t.title}.`,
+    };
   } catch (err) {
     if (err instanceof LLMError) {
       return {
@@ -99,6 +128,32 @@ export async function action({ request }: Route.LoaderArgs) {
       };
     }
     throw err;
+  }
+}
+
+/** Conversation context from the client: up to the last 3 exchanges,
+ * strings only, length-capped. Unparseable input is ignored. */
+function parseHistory(raw: string): { question: string; answer: string }[] {
+  if (!raw.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const exchanges: { question: string; answer: string }[] = [];
+    for (const entry of parsed) {
+      if (typeof entry !== "object" || entry === null) continue;
+      if (!("question" in entry) || !("answer" in entry)) continue;
+      const { question, answer } = entry;
+      if (typeof question !== "string" || typeof answer !== "string") {
+        continue;
+      }
+      exchanges.push({
+        question: question.slice(0, 300),
+        answer: answer.slice(0, 600),
+      });
+    }
+    return exchanges.slice(-3);
+  } catch {
+    return [];
   }
 }
 
@@ -111,10 +166,23 @@ interface TranslateOk {
   query: string;
   title: string;
   months: number;
+  /** Whether the question was best answered with the chart. */
+  chart: boolean;
+  /** The grounded text answer (computed figures, phrased by the model). */
+  answer: string;
 }
 interface TranslateErr {
   ok: false;
   error: string;
+}
+
+/** One question/answer exchange in the conversation. */
+interface Exchange {
+  question: string;
+  answer: string;
+  /** Whether this exchange drove the chart (clicking re-applies it). */
+  query?: string;
+  months?: number;
 }
 
 /** Chart windows. "year" means the calendar year so far (January 1
@@ -136,6 +204,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [ask, setAsk] = useState("");
+  const [transcript, setTranscript] = useState<Exchange[]>([]);
   const today = useToday();
 
   // The chart's state is written to the URL (?q=<filter>&w=<window>) so
@@ -178,10 +247,30 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   };
 
   const result = fetcher.data as TranslateOk | TranslateErr | undefined;
-  const appliedResult = useRef<TranslateOk | null>(null);
+  const appliedChart = useRef<TranslateOk | null>(null);
   useEffect(() => {
-    if (!result?.ok || result === appliedResult.current) return;
-    appliedResult.current = result;
+    if (!result) return;
+    // Fill the answer into the newest exchange (pushed optimistically at
+    // submit time); idempotent across re-renders.
+    if (fetcher.state === "idle") {
+      setTranscript((t) => {
+        const last = t[t.length - 1];
+        if (!last || last.answer !== "") return t;
+        const copy = [...t];
+        copy[copy.length - 1] = {
+          ...last,
+          answer: result.ok
+            ? result.answer
+            : (result.error ?? "Something went wrong."),
+        };
+        return copy;
+      });
+    }
+    // Only chart questions drive the chart, once per answer.
+    if (!result.ok || !result.chart || result === appliedChart.current) {
+      return;
+    }
+    appliedChart.current = result;
     setQuery(result.query);
     // The AI picks a trailing window (0 = all time); "year" is a
     // viewer-side convenience the model never returns.
@@ -192,7 +281,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       p.set("q", result.query);
       p.set("w", w);
     });
-  }, [result]);
+  }, [result, fetcher.state]);
 
   const months = useMemo(() => {
     if (window_ === "all") return 0;
@@ -249,10 +338,32 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     >
       <Card className="p-4">
         {loaderData.aiEnabled ? (
-          <fetcher.Form method="post" className="flex flex-col gap-2">
+          <fetcher.Form
+            method="post"
+            className="flex flex-col gap-2"
+            onSubmit={() => {
+              if (!ask.trim() || busy) return;
+              // Optimistic transcript entry; the answer fills in on result.
+              setTranscript((t) => [
+                ...t,
+                { question: ask.trim(), answer: "" },
+              ]);
+            }}
+          >
             <input type="hidden" name="intent" value="translate" />
+            <input type="hidden" name="today" value={today ?? ""} />
+            <input
+              type="hidden"
+              name="history"
+              value={JSON.stringify(
+                transcript.slice(-3).map(({ question, answer }) => ({
+                  question,
+                  answer,
+                })),
+              )}
+            />
             <label htmlFor="insights-ask" className="text-sm font-medium">
-              Describe what you want to see
+              Ask about your expenses
             </label>
             <div className="flex gap-2">
               <Input
@@ -267,7 +378,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               />
               <Button type="submit" disabled={busy}>
                 <Sparkles aria-hidden="true" className="h-4 w-4" />
-                {busy ? "Thinking…" : "Chart it"}
+                {busy ? "Thinking…" : "Ask"}
               </Button>
             </div>
             <div className="flex flex-wrap items-center gap-1.5 text-sm">
@@ -287,6 +398,32 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               <p className="text-sm text-red-700 dark:text-red-400">
                 {result.error}
               </p>
+            ) : null}
+            {transcript.length > 0 ? (
+              <div className="mt-1 space-y-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                {transcript.map((t, i) => (
+                  <div key={i}>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {t.question}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      {t.answer || (busy ? "Thinking…" : "No answer recorded.")}
+                    </p>
+                    {t.query !== undefined ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery(t.query!);
+                          onWindowSelect(String(t.months ?? 12));
+                        }}
+                        className="text-xs text-teal-700 underline decoration-teal-300 underline-offset-2 hover:decoration-teal-500 dark:text-teal-400 dark:decoration-teal-600"
+                      >
+                        Show in chart
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : null}
           </fetcher.Form>
         ) : (
