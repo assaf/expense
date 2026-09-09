@@ -67,6 +67,9 @@ export async function action({ request }: Route.LoaderArgs) {
   // The client's local today: the server must not guess the user's day.
   const today = formString(form, "today");
   const localTime = formString(form, "localTime");
+  // The client's IANA timezone: report dates are formatted in it (the
+  // server's clock is UTC and must not guess the user's zone).
+  const tz = formString(form, "tz");
   const history = parseHistory(formString(form, "history"));
 
   const [account, categories, reports, settings, members] = await Promise.all([
@@ -81,9 +84,31 @@ export async function action({ request }: Route.LoaderArgs) {
   // The settings lists are authoritative (they include unused entries,
   // unlike the ones derived from expenses).
   const categoryNames = categories.map((c) => c.name);
+  // Report dates are formatted in the user's timezone ("Sep 8, 2026,
+  // 1:15 PM"); an invalid client-supplied zone falls back to UTC.
+  let dateFormatter: Intl.DateTimeFormat;
+  try {
+    dateFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz || "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    dateFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
   const reportNames = reports.map((r) =>
     r.createdAt
-      ? `${r.name} (created ${r.createdAt.slice(0, 16).replace("T", " ")} UTC)`
+      ? `${r.name} (created ${dateFormatter.format(new Date(r.createdAt))})`
       : r.name,
   );
   const emails = [...new Set([user.email, ...members.map((m) => m.email)])];
@@ -181,6 +206,25 @@ interface TranslateOk {
 interface TranslateErr {
   ok: false;
   error: string;
+}
+
+/** The client's local clock and IANA zone, fresh at call time. */
+function localNow(): { time: string; zone: string } {
+  const now = new Date();
+  let zone = "UTC";
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    zone = "UTC";
+  }
+  return {
+    time: now.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: zone,
+    }),
+    zone,
+  };
 }
 
 /** One question/answer exchange in the conversation. Chart exchanges
@@ -308,14 +352,8 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           >
             <input type="hidden" name="intent" value="translate" />
             <input type="hidden" name="today" value={today ?? ""} />
-            <input
-              type="hidden"
-              name="localTime"
-              value={new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            />
+            <input type="hidden" name="localTime" value={localNow().time} />
+            <input type="hidden" name="tz" value={localNow().zone} />
             <input
               type="hidden"
               name="history"

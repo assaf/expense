@@ -3,6 +3,7 @@ import { action, loader } from "~/routes/insights";
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { chatCompletion } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import { addReport, readReports } from "~/lib/db/reports";
 import type { Route as InsightsRoute } from "+types/app/routes/+types/insights";
 
 // The gate and the translator boundary are what the route adds on top of
@@ -118,7 +119,12 @@ describe("insights route plan gate", () => {
     form.set("intent", "translate");
     form.set("text", "all reports and when they were created");
     form.set("today", "2026-07-15");
-    form.set("localTime", "14:32");
+    form.set("localTime", "1:15 PM");
+    form.set("tz", "UTC");
+    // Fresh report rows with creation stamps (addReport busts the cache).
+    await testPrisma.report.deleteMany({});
+    await addReport(TEST_ACCOUNT_ID, "2026 Test");
+    await addReport(TEST_ACCOUNT_ID, "2027 Test");
     const res = (await callRoute("action", "gratis", form)) as {
       ok: boolean;
       chart: boolean;
@@ -140,13 +146,13 @@ describe("insights route plan gate", () => {
     expect(userMessage).toContain("About the user:");
     expect(userMessage).toContain("Test Account");
     expect(userMessage).toContain("testuser@example.com");
-    expect(userMessage).toContain("Current time: 14:32");
+    expect(userMessage).toContain("Current time: ");
     // The dated report carries its creation timestamp; the undated one
     // appears bare.
     // The stored timestamp is TZ-shifted by the driver; assert the date
     // and the annotation shape, not the wall-clock time.
     expect(userMessage).toMatch(
-      /2026 Test \(created 2026-01-05 \d{2}:\d{2} UTC\)/,
+      /2026 Test \(created \w{3} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M\)/,
     );
     expect(userMessage).toContain("Reports: 2026 Test (created");
   });

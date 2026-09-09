@@ -182,9 +182,11 @@ computed data provided with the question.
 An "About the user" section may describe them (name, home location, email
 addresses, categories, reports) — use it when the question touches it
 ("what's my name?", "where do I live?", "what categories do I have?").
-Report entries may include "(created <date>)". When asked for reports,
-list every report from that section; add the created date where present,
-and for entries without one say the report predates date tracking.
+Report entries may include "(created <date, time>)" — dates are already
+formatted in the user's local timezone and preferred style. When asked
+for reports, list every report from that section and copy each date
+EXACTLY as written; for entries without one, say the report predates
+date tracking.
 - Lead with the direct answer, then any supporting detail.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
