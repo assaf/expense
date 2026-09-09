@@ -33,7 +33,7 @@ import type {
 } from "@prisma/orm-postgres/contract/types";
 
 export type StorageHash =
-  StorageHashBase<"e157812a8d39ef651a9c5a8630854207adc1f1a03e33030c23934a5f784c07b0">;
+  StorageHashBase<"ff371b2373c1ec37ac11426d466286268c0b6557562e162d9962c1bd05210aff">;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<"3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2">;
@@ -1207,7 +1207,7 @@ export type StorageColumnTypes = {
       readonly skipped: CodecTypes["pg/jsonb@1"]["output"];
       readonly status: CodecTypes["pg/text@1"]["output"];
     };
-    readonly reports: {
+    readonly report: {
       readonly accountId: CodecTypes["pg/text@1"]["output"];
       readonly closed: CodecTypes["pg/bool@1"]["output"];
       readonly createdAt: TimestampString<3> | null;
@@ -1447,7 +1447,7 @@ export type StorageColumnInputTypes = {
       readonly skipped: CodecTypes["pg/jsonb@1"]["input"];
       readonly status: CodecTypes["pg/text@1"]["input"];
     };
-    readonly reports: {
+    readonly report: {
       readonly accountId: CodecTypes["pg/text@1"]["input"];
       readonly closed: CodecTypes["pg/bool@1"]["input"];
       readonly createdAt: CodecTypes["pg/timestamp-string@1"]["input"] | null;
@@ -2955,7 +2955,7 @@ type ContractBase = Omit<
                 },
               ];
             };
-            readonly reports: {
+            readonly report: {
               columns: {
                 readonly id: {
                   readonly nativeType: "int8";
@@ -2997,18 +2997,12 @@ type ContractBase = Omit<
                 readonly name: "reports_pkey";
               };
               uniques: readonly [];
-              indexes: readonly [
-                {
-                  readonly name: "reports_accountId_name_key";
-                  readonly columns: readonly ["accountId", "name"];
-                  readonly unique: true;
-                },
-              ];
+              indexes: readonly [];
               foreignKeys: readonly [
                 {
                   readonly source: {
                     readonly namespaceId: "public" & NamespaceId;
-                    readonly tableName: "reports";
+                    readonly tableName: "report";
                     readonly columns: readonly ["accountId"];
                   };
                   readonly target: {
@@ -3246,7 +3240,7 @@ type ContractBase = Omit<
       readonly namespace: "public" & NamespaceId;
       readonly model: "ReceiptExtraction";
     };
-    readonly reports: {
+    readonly report: {
       readonly namespace: "public" & NamespaceId;
       readonly model: "Report";
     };
@@ -5281,7 +5275,7 @@ type ContractBase = Omit<
               };
             };
             readonly storage: {
-              readonly table: "reports";
+              readonly table: "report";
               readonly namespaceId: "public";
               readonly fields: {
                 readonly id: { readonly column: "id" };

@@ -15,8 +15,11 @@ import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
 import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
-import { readAccount } from "~/lib/db/accounts";
+import { readAccount, readAccountUsers } from "~/lib/db/accounts";
+import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
+import { readReports } from "~/lib/db/reports";
+import { readSettings } from "~/lib/db/settings";
 import { formatShortDate } from "~/lib/format";
 import {
   accountHasAI,
@@ -73,8 +76,8 @@ export async function action({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const form = await request.formData();
   if (formString(form, "intent") !== "translate") return unknownIntent();
-  const account = await readAccount(user.accountId);
-  if (!accountHasAI(account?.plan)) {
+  const planAccount = await readAccount(user.accountId);
+  if (!accountHasAI(planAccount?.plan)) {
     return {
       ok: false as const,
       error: "Conversational search needs a paid or gratis account.",
@@ -85,23 +88,45 @@ export async function action({ request }: Route.LoaderArgs) {
 
   // The client's local today: the server must not guess the user's day.
   const today = formString(form, "today");
+  const localTime = formString(form, "localTime");
   const history = parseHistory(formString(form, "history"));
 
+  const [account, categories, reports, settings, members] = await Promise.all([
+    readAccount(user.accountId),
+    readCategories(user.accountId),
+    readReports(user.accountId),
+    readSettings(user.accountId),
+    readAccountUsers(user.accountId),
+  ]);
   const expenses = (await readExpenses(user.accountId)).map(insightExpense);
   const merchants = knownMerchants(expenses);
-  const categories = [
-    ...new Set(expenses.map((e) => e.category).filter(Boolean)),
-  ].toSorted();
-  const reports = [
-    ...new Set(expenses.map((e) => e.report).filter(Boolean)),
-  ].toSorted();
+  // The settings lists are authoritative (they include unused entries,
+  // unlike the ones derived from expenses).
+  const categoryNames = categories.map((c) => c.name);
+  const reportNames = reports.map((r) =>
+    r.createdAt
+      ? `${r.name} (created ${r.createdAt.slice(0, 16).replace("T", " ")} UTC)`
+      : r.name,
+  );
+  const emails = [...new Set([user.email, ...members.map((m) => m.email)])];
+  const profile = [
+    `Name (account): ${account?.name ?? ""}`,
+    settings.homeAddress ? `Home location: ${settings.homeAddress}` : "",
+    `Email addresses: ${emails.join(", ")}`,
+    `Categories: ${categoryNames.join(", ")}`,
+    `Reports: ${reportNames.join(", ")}`,
+  ]
+    .filter((line) => !line.endsWith(": "))
+    .join("\n");
+  const localTimeOk = /^\d{1,2}:\d{2}/.test(localTime);
   try {
     const t = await translateInsightQuery({
       text,
       history,
+      today,
       merchants,
-      categories,
-      reports,
+      categories: categoryNames,
+      reports: reportNames,
     });
     // Ground the text answer in real numbers: compute the same view the
     // chart shows and let the model phrase it. Invalid client dates (the
@@ -113,6 +138,9 @@ export async function action({ request }: Route.LoaderArgs) {
         question: text,
         history,
         summary: insightSummary(buckets, matched),
+        profile: localTimeOk
+          ? `${profile}\nCurrent time: ${localTime} (user's local clock)`
+          : profile,
       });
       return { ok: true as const, ...t, answer };
     }
@@ -360,6 +388,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           >
             <input type="hidden" name="intent" value="translate" />
             <input type="hidden" name="today" value={today ?? ""} />
+            <input
+              type="hidden"
+              name="localTime"
+              value={new Date().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            />
             <input
               type="hidden"
               name="history"

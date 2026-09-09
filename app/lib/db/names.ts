@@ -30,11 +30,14 @@ export async function addNamedRow(
   noun: string,
   accountId: string,
   name: string,
+  /** Extra columns for the create (e.g. the reports table's
+   * `createdAt`); categories pass nothing. */
+  extra: Record<string, unknown> = {},
 ): Promise<NamedResult> {
   const clean = name.trim();
   if (!clean) return { ok: false, error: "Name can't be empty." };
   try {
-    await model.create({ name: clean, accountId });
+    await model.create({ name: clean, accountId, ...extra });
   } catch (err) {
     if (isUniqueViolation(err)) {
       return { ok: false, error: `A ${noun} named "${clean}" already exists.` };

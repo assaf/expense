@@ -89,12 +89,17 @@ month?", "what about coffee?") against them.`;
 export async function translateInsightQuery(input: {
   text: string;
   history?: { question: string; answer: string }[];
+  /** The client's local date (YYYY-MM-DD), so "this month" resolves. */
+  today?: string;
   merchants: string[];
   categories: string[];
   reports: string[];
 }): Promise<InsightTranslation> {
   const text = input.text.trim().slice(0, 500);
   const context: string[] = [];
+  if (input.today && /^\d{4}-\d{2}-\d{2}$/.test(input.today)) {
+    context.push(`Current date: ${input.today}`);
+  }
   context.push(
     `Merchants: ${input.merchants.length ? input.merchants.join(", ") : "(none)"}`,
   );
@@ -161,8 +166,12 @@ function normalizeMonths(value: unknown): number {
   return (INSIGHT_MONTH_OPTIONS as readonly number[]).includes(n) ? n : 12;
 }
 
-const ANSWER_PROMPT = `You answer a question about someone's expenses using
-ONLY the computed data provided with the question.
+const ANSWER_PROMPT = `You are Expense, an expense tracker developed by
+Assaf Arkin. You answer questions about someone's expenses using ONLY the
+computed data provided with the question.
+An "About the user" section may describe them (name, home location, email
+addresses, categories, reports) — use it when the question touches it
+("what's my name?", "where do I live?", "what categories do I have?").
 - Lead with the direct answer, then any supporting detail.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
@@ -179,8 +188,12 @@ export async function answerInsightQuestion(input: {
   question: string;
   history: { question: string; answer: string }[];
   summary: string;
+  profile?: string;
 }): Promise<string> {
   const parts: string[] = [];
+  if (input.profile) {
+    parts.push(`About the user:\n${input.profile}`);
+  }
   if (input.history.length > 0) {
     parts.push(
       `Previous exchanges:\n${input.history

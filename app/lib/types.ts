@@ -158,6 +158,8 @@ export interface Report {
   /** True once the report is closed. Closing freezes it; deleting a closed
    *  report (or one with several expenses) requires explicit confirmation. */
   closed: boolean;
+  /** ISO timestamp of creation; null for reports that predate the column. */
+  createdAt: string | null;
 }
 
 export interface Category {

@@ -1,4 +1,5 @@
 import { and } from "@prisma/orm-postgres/orm-client";
+import { toIsoOrNull } from "~/lib/db/wire";
 import { db } from "~/lib/prisma.server";
 import { summarizeByReport } from "~/lib/format";
 import { bust, cachedRead, createCache } from "~/lib/db/shared";
@@ -18,9 +19,13 @@ export async function readReports(accountId: string): Promise<Report[]> {
       and(r.accountId.eq(accountId), r.name.neq("")),
     )
       .orderBy((r) => r.id.asc())
-      .select("name", "closed")
+      .select("name", "closed", "createdAt")
       .all();
-    return rows.map((r) => ({ name: r.name, closed: r.closed }));
+    return rows.map((r) => ({
+      name: r.name,
+      closed: r.closed,
+      createdAt: toIsoOrNull(r.createdAt),
+    }));
   });
 }
 
@@ -158,7 +163,9 @@ export function addReport(
   return bust(
     reportsCache,
     accountId,
-    addNamedRow(db.orm.public.Report, "report", accountId, name),
+    addNamedRow(db.orm.public.Report, "report", accountId, name, {
+      createdAt: new Date(),
+    }),
   );
 }
 

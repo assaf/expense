@@ -345,7 +345,10 @@ model Report {
   name      String
   accountId String
   closed    Boolean  @default(false)
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reports_accountId_fkey", index: false)
+  /// When the report row was created. Null for reports that predate the
+  /// column (their creation date is unknown; id order approximates age).
+  createdAt TimestampString(3)?
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 
   @@index([accountId, name], map: "reports_accountId_name_key", unique: true)
   @@map("reports")

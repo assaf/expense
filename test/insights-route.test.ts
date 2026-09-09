@@ -108,6 +108,7 @@ describe("insights route plan gate", () => {
     form.set("intent", "translate");
     form.set("text", "what did I spend the most on?");
     form.set("today", "2026-07-15");
+    form.set("localTime", "14:32");
     const res = (await callRoute("action", "gratis", form)) as {
       ok: boolean;
       chart: boolean;
@@ -123,5 +124,10 @@ describe("insights route plan gate", () => {
     expect(userMessage).toContain("Computed data:");
     expect(userMessage).toContain("DevShop");
     expect(userMessage).toContain("Question: what did I spend the most on?");
+    // Profile context rides along: account name, member email, categories.
+    expect(userMessage).toContain("About the user:");
+    expect(userMessage).toContain("Test Account");
+    expect(userMessage).toContain("testuser@example.com");
+    expect(userMessage).toContain("Current time: 14:32");
   });
 });
