@@ -10,6 +10,7 @@ import {
   signValue,
   verifySignedValue,
 } from "~/lib/unsubscribe.server";
+import { headers as unsubscribeHeaders } from "~/routes/unsubscribe.$token";
 import {
   marketingEmailHeaders,
   marketingFooter,
@@ -269,5 +270,13 @@ describe("settings marketing preference", () => {
       where: { email: TEST_EMAIL },
     });
     expect(restored.marketingUnsubscribedAt).toBeNull();
+  });
+});
+
+describe("unsubscribe page headers", () => {
+  it("never lets the personalized public page be cached", () => {
+    expect(unsubscribeHeaders()).toEqual({
+      "Cache-Control": "private, max-age=0, must-revalidate",
+    });
   });
 });

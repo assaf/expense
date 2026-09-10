@@ -2,6 +2,7 @@ import { ChartColumn, Lightbulb, Sparkles, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { RevealText } from "~/components/RevealText";
+import { authLockedUntil, recordAuthFailure } from "~/lib/db/auth-attempts";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
@@ -71,7 +72,9 @@ export async function action({ request }: Route.LoaderArgs) {
     return { ok: true as const, fresh: true };
   }
   if (intent !== "translate") return unknownIntent();
-  const text = formString(form, "text").trim();
+  // Same bound the translator applies internally, so the answer call and
+  // the stored exchange never see an uncapped string.
+  const text = formString(form, "text").trim().slice(0, 500);
   if (!text) return { ok: false as const, error: "Type a question first." };
 
   // The client's local today: the server must not guess the user's day.
@@ -80,6 +83,24 @@ export async function action({ request }: Route.LoaderArgs) {
   // The client's IANA timezone: report dates are formatted in it (the
   // server's clock is UTC and must not guess the user's zone).
   const tz = formString(form, "tz");
+
+  // Cost throttle: every translate request drives two LLM calls. A
+  // per-user counter on the auth_attempts keyspace (a rate limit here,
+  // not a lockout: each request counts as one "failure") keeps scripted
+  // loops from running up the bill. THROTTLE-2 class counter; the plan
+  // gate lands with the plan feature itself.
+  const throttleKey = `insights:${user.id}`;
+  if (await authLockedUntil(throttleKey)) {
+    return {
+      ok: false as const,
+      error: "Too many questions in a row. Try again in a few minutes.",
+    };
+  }
+  await recordAuthFailure(throttleKey, {
+    windowMs: 15 * 60_000,
+    threshold: 12,
+    lockMs: 15 * 60_000,
+  });
 
   const [account, categories, reports, settings, members] = await Promise.all([
     readAccount(user.accountId),

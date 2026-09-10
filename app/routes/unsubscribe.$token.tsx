@@ -5,7 +5,7 @@ import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { marketingUnsubscribeUserId } from "~/lib/unsubscribe.server";
 import { findUserById, unsubscribeMarketingEmail } from "~/lib/db/accounts";
 import { rejectCrossSitePost } from "~/lib/auth.server";
-import { pageMeta } from "~/lib/seo-content";
+import { marketingPageHeaders, pageMeta } from "~/lib/seo-content";
 import type { Route } from "./+types/unsubscribe.$token";
 
 /**
@@ -26,6 +26,12 @@ export function meta(): Route.MetaDescriptors {
     "Stop receiving Expense marketing emails.",
     "/unsubscribe",
   );
+}
+
+/** Personalized public page: the confirm view shows the user's email,
+ * so never let it be cached anywhere. */
+export function headers() {
+  return marketingPageHeaders();
 }
 
 export async function loader({ params }: Route.LoaderArgs) {

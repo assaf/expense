@@ -54,7 +54,7 @@ function parseExchanges(raw: unknown): StoredExchange[] {
       answer: answer.slice(0, 2000),
       chart,
       query: query.slice(0, 300),
-      months: [-1, 6, 12, 24].includes(months) ? months : 12,
+      months: [-1, 0, 6, 12, 24].includes(months) ? months : 12,
       title: title.slice(0, 60),
     });
   }

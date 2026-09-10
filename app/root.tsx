@@ -85,6 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     path.startsWith("/onboarding") ||
     path.startsWith("/reset-password") ||
     path.startsWith("/unsubscribe") ||
+    path.startsWith("/receipts-email-verify") ||
     path.startsWith("/verify-email") ||
     // The OAuth redirect targets must be reachable signed-out (the
     // provider bounces the user's browser there mid-flow) and the connect
