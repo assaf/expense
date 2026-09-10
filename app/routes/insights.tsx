@@ -1,4 +1,4 @@
-import { ChartColumn, Sparkles } from "lucide-react";
+import { ChartColumn, Sparkles, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { Markdown } from "~/components/Markdown";
@@ -267,6 +267,17 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     }
   }, [result, fetcher.state]);
 
+  // "New conversation" clears the transcript once the fresh conversation
+  // row exists.
+  const newResult = newFetcher.data as
+    | { ok: boolean; fresh: boolean }
+    | undefined;
+  useEffect(() => {
+    if (newResult?.ok && newResult.fresh && newFetcher.state === "idle") {
+      setTranscript([]);
+    }
+  }, [newResult, newFetcher.state]);
+
   const busy = fetcher.state !== "idle";
 
   // Each chart exchange renders its own view from the shared expense
@@ -319,6 +330,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       title="Insights"
       maxWidth="max-w-3xl"
       fullHeight
+      headerRight={
+        <newFetcher.Form method="post">
+          <input type="hidden" name="intent" value="new" />
+          <Button type="submit" variant="secondary" size="sm">
+            <SquarePen aria-hidden="true" className="h-4 w-4" /> New chat
+          </Button>
+        </newFetcher.Form>
+      }
     >
       <div
         ref={scrollRef}
@@ -444,14 +463,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       <Card className="p-4">
         {loaderData.aiEnabled ? (
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <newFetcher.Form method="post">
-                <input type="hidden" name="intent" value="new" />
-                <Button type="submit" variant="ghost" size="sm">
-                  New conversation
-                </Button>
-              </newFetcher.Form>
-            </div>
             <fetcher.Form
               method="post"
               className="flex flex-col gap-2"
