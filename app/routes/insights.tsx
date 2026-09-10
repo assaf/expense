@@ -124,7 +124,10 @@ export async function action({ request }: Route.LoaderArgs) {
     reports,
     tz,
   });
-  const localTimeOk = /^\d{1,2}:\d{2}/.test(localTime);
+  // Full anchor: an unanchored pattern let padded strings (multi-MB
+  // prompt stuffing) ride into the answer prompt (INS-INPUT-1-RESIDUAL).
+  // The page sends toLocaleTimeString("en-US", {hour, minute}).
+  const localTimeOk = /^\d{1,2}:\d{2}( [AP]M)?$/i.test(localTime);
   const conversation = await readLatestConversation(user.id);
   try {
     const t = await translateInsightQuery({
