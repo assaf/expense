@@ -5,6 +5,7 @@ import {
   type ChatMessage,
 } from "~/lib/receipt-ai.server";
 import { categorySynonyms } from "~/lib/expense-search";
+import { formatUserDate } from "~/lib/format";
 
 /**
  * One-shot conversational filter for the insights chart: the user's
@@ -247,3 +248,50 @@ export async function answerInsightQuestion(input: {
 }
 
 export { LLMError };
+
+/** Report names for the model context, created-timestamped in the
+ * user's zone. Pure. */
+export function insightReportNames(
+  reports: { name: string; createdAt: Date | string | null }[],
+  tz: string,
+): string[] {
+  return reports.map((r) =>
+    r.createdAt
+      ? `${r.name} (created ${formatUserDate(new Date(r.createdAt), tz)})`
+      : r.name,
+  );
+}
+
+/** Inputs for `insightProfile`: structural views of the db rows (plain
+ * fixtures work in tests) plus the client's IANA timezone. */
+export interface InsightProfileInput {
+  account: { name: string } | undefined;
+  settings: { homeAddress: string };
+  /** The signed-in user's own address; members may share it. */
+  userEmail: string;
+  members: { email: string }[];
+  categories: { name: string }[];
+  reports: { name: string; createdAt: Date | string | null }[];
+  tz: string;
+}
+
+/** The "About the user" context block the answer model sees: account
+ * name, home location, the account's email addresses, category and
+ * report names (reports timestamped in the user's zone). Empty entries
+ * are dropped so the model never sees placeholder lines. Pure. */
+export function insightProfile(input: InsightProfileInput): string {
+  const emails = [
+    ...new Set([input.userEmail, ...input.members.map((m) => m.email)]),
+  ];
+  return [
+    `Name (account): ${input.account?.name ?? ""}`,
+    input.settings.homeAddress
+      ? `Home location: ${input.settings.homeAddress}`
+      : "",
+    `Email addresses: ${emails.join(", ")}`,
+    `Categories: ${input.categories.map((c) => c.name).join(", ")}`,
+    `Reports: ${insightReportNames(input.reports, input.tz).join(", ")}`,
+  ]
+    .filter((line) => !line.endsWith(": "))
+    .join("\n");
+}

@@ -233,3 +233,26 @@ export function summarizeAmounts(rows: readonly { amount: string }[]): {
   }
   return { count, total };
 }
+
+/** Format an instant in the user's IANA timezone ("Sep 8, 2026, 1:15
+ * PM"); an invalid zone falls back to UTC. The server clock is UTC and
+ * must never guess the user's zone, so callers supply it. */
+export function formatUserDate(date: Date, tz: string): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  };
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz, ...opts }).format(
+      date,
+    );
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      ...opts,
+    }).format(date);
+  }
+}

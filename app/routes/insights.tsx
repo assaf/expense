@@ -1,7 +1,7 @@
 import { ChartColumn, Lightbulb, Sparkles, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
-import { Markdown } from "~/components/Markdown";
+import { RevealText } from "~/components/RevealText";
 import { PageShell } from "~/components/PageShell";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
@@ -26,13 +26,14 @@ import {
   knownMerchants,
   matchingExpenses,
   pickStarter,
-  revealTo,
   monthlyTotals,
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
 import {
   answerInsightQuestion,
+  insightProfile,
+  insightReportNames,
   translateInsightQuery,
   LLMError,
 } from "~/lib/insights-ai.server";
@@ -92,21 +93,16 @@ export async function action({ request }: Route.LoaderArgs) {
   // The settings lists are authoritative (they include unused entries,
   // unlike the ones derived from expenses).
   const categoryNames = categories.map((c) => c.name);
-  const reportNames = reports.map((r) =>
-    r.createdAt
-      ? `${r.name} (created ${formatUserDate(new Date(r.createdAt), tz)})`
-      : r.name,
-  );
-  const emails = [...new Set([user.email, ...members.map((m) => m.email)])];
-  const profile = [
-    `Name (account): ${account?.name ?? ""}`,
-    settings.homeAddress ? `Home location: ${settings.homeAddress}` : "",
-    `Email addresses: ${emails.join(", ")}`,
-    `Categories: ${categoryNames.join(", ")}`,
-    `Reports: ${reportNames.join(", ")}`,
-  ]
-    .filter((line) => !line.endsWith(": "))
-    .join("\n");
+  const reportNames = insightReportNames(reports, tz);
+  const profile = insightProfile({
+    account,
+    settings,
+    userEmail: user.email,
+    members,
+    categories,
+    reports,
+    tz,
+  });
   const localTimeOk = /^\d{1,2}:\d{2}/.test(localTime);
   const conversation = await readLatestConversation(user.id);
   try {
@@ -158,30 +154,6 @@ export async function action({ request }: Route.LoaderArgs) {
   }
 }
 
-/** Format an instant in the user's timezone ("Sep 8, 2026, 1:15 PM"); an
- * invalid client-supplied zone falls back to UTC. */
-export function formatUserDate(date: Date, tz: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: "UTC",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
-  }
-}
-
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Insights — Expense" }];
 }
@@ -210,48 +182,6 @@ interface Exchange {
   query: string;
   months: number;
   title: string;
-}
-
-const REVEAL_TICK_MS = 33;
-
-/** Renders markdown with a ChatGPT-style reveal for a freshly arrived
- * answer; restored conversation history renders instantly. The text is
- * re-parsed per tick, so the reveal stays markdown-safe by construction
- * (the custom parser degrades gracefully on partial input). */
-function RevealText({
-  text,
-  reveal,
-  onDone,
-}: {
-  text: string;
-  reveal: boolean;
-  onDone: () => void;
-}) {
-  const [pos, setPos] = useState(() =>
-    reveal && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? 0
-      : text.length,
-  );
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-  useEffect(() => {
-    if (!reveal) return;
-    let pos = 0;
-    let last = performance.now();
-    const tick = () => {
-      const now = performance.now();
-      pos = revealTo(text, pos, now - last);
-      last = now;
-      setPos(pos);
-      if (pos >= text.length) {
-        window.clearInterval(timer);
-        onDoneRef.current();
-      }
-    };
-    const timer = window.setInterval(tick, REVEAL_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, [text, reveal]);
-  return <Markdown text={text.slice(0, pos)} />;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];

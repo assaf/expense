@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { action, loader } from "~/routes/insights";
+import { insightProfile, insightReportNames } from "~/lib/insights-ai.server";
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { chatCompletion } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
@@ -130,5 +131,57 @@ describe("insights route", () => {
       /2026 Test \(created \w{3} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M\)/,
     );
     expect(userMessage).toContain("Reports: 2026 Test (created");
+  });
+});
+
+describe("insightProfile", () => {
+  const base = {
+    account: { name: "Arkin Household" },
+    settings: { homeAddress: "123 Main St" },
+    userEmail: "assaf@arkin.me",
+    members: [{ email: "assaf@arkin.me" }, { email: "partner@arkin.me" }],
+    categories: [{ name: "Software" }, { name: "" }, { name: "Meals" }],
+    reports: [
+      { name: "2026 Test", createdAt: new Date("2026-09-09T20:30:00Z") },
+      { name: "Legacy", createdAt: null },
+    ],
+    tz: "America/Los_Angeles",
+  };
+
+  it("builds the context block with emails, categories, and tz-stamped reports", () => {
+    const profile = insightProfile(base);
+    expect(profile).toContain("Name (account): Arkin Household");
+    expect(profile).toContain("Home location: 123 Main St");
+    expect(profile).toContain(
+      "Email addresses: assaf@arkin.me, partner@arkin.me",
+    );
+    expect(profile).toContain("Categories: Software, , Meals");
+    expect(profile).toMatch(/Reports: 2026 Test \(created Sep 9, 2026/);
+    expect(profile).toContain("Legacy");
+  });
+
+  it("drops lines with nothing to say", () => {
+    const profile = insightProfile({
+      account: undefined,
+      settings: { homeAddress: "" },
+      userEmail: "solo@x.me",
+      members: [],
+      categories: [],
+      reports: [],
+      tz: "UTC",
+    });
+    expect(profile).not.toContain("Name (account)");
+    expect(profile).not.toContain("Home location");
+    expect(profile).toContain("Email addresses: solo@x.me");
+    expect(profile).not.toContain("Categories:");
+    expect(profile).not.toContain("Reports:");
+  });
+
+  it("falls back to UTC for an invalid zone", () => {
+    const names = insightReportNames(
+      [{ name: "R", createdAt: "2026-01-05T12:00:00Z" }],
+      "Not/AZone",
+    );
+    expect(names[0]).toContain("Jan 5, 2026");
   });
 });
