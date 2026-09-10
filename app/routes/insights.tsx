@@ -316,6 +316,36 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLInputElement>(null);
   const nearBottom = useRef(true);
+  // Observes the transcript content: a rendered answer (markdown blocks,
+  // chart SVG, images) keeps growing after the state update lands, so the
+  // "scroll to the new answer" effect alone strands the view above it.
+  const contentRef = useRef<HTMLDivElement>(null);
+  // True while a question is in flight: follow the bottom unconditionally
+  // (asking a question is an explicit request to watch the answer).
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  useEffect(() => {
+    const content = contentRef.current;
+    const el = scrollRef.current;
+    if (!content || !el) return;
+    const ro = new ResizeObserver(() => {
+      if (nearBottom.current || busyRef.current) {
+        nearBottom.current = true;
+        el.scrollTo({ top: el.scrollHeight });
+      }
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
+  // Submitting a question jumps to the bottom even if the user had
+  // scrolled up: the answer renders there.
+  useEffect(() => {
+    if (!busy) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    nearBottom.current = true;
+    el.scrollTo({ top: el.scrollHeight });
+  }, [busy]);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -376,143 +406,151 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {transcript.length === 0 && starter ? (
-          <Card className="p-4">
-            <div className="flex items-start gap-2">
-              <Lightbulb
-                aria-hidden="true"
-                className="mt-0.5 h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400"
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                  {starter.question}
-                </p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                  {starter.answer}
-                </p>
-              </div>
-            </div>
-          </Card>
-        ) : transcript.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Ask a question to get started.
-            </p>
-          </div>
-        ) : null}
-        {views.map(({ ex, buckets, matched }, i) => {
-          const total = buckets.reduce((sum, b) => sum + b.total, 0);
-          const count = matched.length;
-          return (
-            <Card key={i} className="p-4">
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-                {ex.question}
-              </p>
-              {ex.answer ? (
-                <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
-                  <Markdown text={ex.answer} />
+        <div ref={contentRef} className="space-y-4">
+          {transcript.length === 0 && starter ? (
+            <Card className="p-4">
+              <div className="flex items-start gap-2">
+                <Lightbulb
+                  aria-hidden="true"
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400"
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                    {starter.question}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                    {starter.answer}
+                  </p>
                 </div>
-              ) : (
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                  {busy && i === views.length - 1
-                    ? "Thinking…"
-                    : "No answer recorded."}
-                </p>
-              )}
-              {ex.chart && today ? (
-                <>
-                  <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      {ex.title} ·{" "}
-                      {count
-                        ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
-                        : "No expenses in this window"}
-                    </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {ex.months === -1
-                        ? "This year"
-                        : ex.months === 0
-                          ? "All time"
-                          : `${ex.months} months`}
-                    </p>
-                  </div>
-                  <MonthlyChart buckets={buckets} />
-                  {matched.length > 0 ? (
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                            <th scope="col" className="py-1.5 pr-2 font-medium">
-                              Date
-                            </th>
-                            <th scope="col" className="py-1.5 pr-2 font-medium">
-                              Expense
-                            </th>
-                            <th
-                              scope="col"
-                              className="hidden py-1.5 pr-2 font-medium sm:table-cell"
-                            >
-                              Category
-                            </th>
-                            <th
-                              scope="col"
-                              className="hidden py-1.5 pr-2 font-medium md:table-cell"
-                            >
-                              Report
-                            </th>
-                            <th
-                              scope="col"
-                              className="py-1.5 text-right font-medium"
-                            >
-                              Amount
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {matched.map((e) => (
-                            <tr
-                              key={e.id}
-                              className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                            >
-                              <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                                {formatShortDate(e.date)}
-                              </td>
-                              <td className="min-w-0 max-w-52 py-1.5 pr-2">
-                                <Link
-                                  to={`/expense/${e.id}`}
-                                  className="block truncate hover:underline"
-                                >
-                                  {e.merchant || e.description || "Untitled"}
-                                  {e.merchant && e.description ? (
-                                    <span className="text-gray-400 dark:text-gray-500">
-                                      {" "}
-                                      · {e.description}
-                                    </span>
-                                  ) : null}
-                                </Link>
-                              </td>
-                              <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
-                                {e.category}
-                              </td>
-                              <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
-                                {e.report}
-                              </td>
-                              <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                                {usd.format(Number(e.amount) || 0)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
-                </>
-              ) : null}
+              </div>
             </Card>
-          );
-        })}
+          ) : transcript.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Ask a question to get started.
+              </p>
+            </div>
+          ) : null}
+          {views.map(({ ex, buckets, matched }, i) => {
+            const total = buckets.reduce((sum, b) => sum + b.total, 0);
+            const count = matched.length;
+            return (
+              <Card key={i} className="p-4">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                  {ex.question}
+                </p>
+                {ex.answer ? (
+                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
+                    <Markdown text={ex.answer} />
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                    {busy && i === views.length - 1
+                      ? "Thinking…"
+                      : "No answer recorded."}
+                  </p>
+                )}
+                {ex.chart && today ? (
+                  <>
+                    <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {ex.title} ·{" "}
+                        {count
+                          ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
+                          : "No expenses in this window"}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {ex.months === -1
+                          ? "This year"
+                          : ex.months === 0
+                            ? "All time"
+                            : `${ex.months} months`}
+                      </p>
+                    </div>
+                    <MonthlyChart buckets={buckets} />
+                    {matched.length > 0 ? (
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                              <th
+                                scope="col"
+                                className="py-1.5 pr-2 font-medium"
+                              >
+                                Date
+                              </th>
+                              <th
+                                scope="col"
+                                className="py-1.5 pr-2 font-medium"
+                              >
+                                Expense
+                              </th>
+                              <th
+                                scope="col"
+                                className="hidden py-1.5 pr-2 font-medium sm:table-cell"
+                              >
+                                Category
+                              </th>
+                              <th
+                                scope="col"
+                                className="hidden py-1.5 pr-2 font-medium md:table-cell"
+                              >
+                                Report
+                              </th>
+                              <th
+                                scope="col"
+                                className="py-1.5 text-right font-medium"
+                              >
+                                Amount
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matched.map((e) => (
+                              <tr
+                                key={e.id}
+                                className="border-b border-gray-100 last:border-0 dark:border-gray-800"
+                              >
+                                <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                                  {formatShortDate(e.date)}
+                                </td>
+                                <td className="min-w-0 max-w-52 py-1.5 pr-2">
+                                  <Link
+                                    to={`/expense/${e.id}`}
+                                    className="block truncate hover:underline"
+                                  >
+                                    {e.merchant || e.description || "Untitled"}
+                                    {e.merchant && e.description ? (
+                                      <span className="text-gray-400 dark:text-gray-500">
+                                        {" "}
+                                        · {e.description}
+                                      </span>
+                                    ) : null}
+                                  </Link>
+                                </td>
+                                <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
+                                  {e.category}
+                                </td>
+                                <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
+                                  {e.report}
+                                </td>
+                                <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                                  {usd.format(Number(e.amount) || 0)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <Card className="p-4">
