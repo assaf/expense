@@ -312,13 +312,39 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // scrollbar); new answers scroll into view only when the user is
   // already near the bottom, never yanking them out of history.
   const scrollRef = useRef<HTMLDivElement>(null);
+  const askRef = useRef<HTMLInputElement>(null);
   const nearBottom = useRef(true);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
     nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
+  // On load: land at the end of the restored conversation with the input
+  // focused (instant scroll — smooth is for new answers, not page load).
+  // Re-scroll briefly after mount: fonts and the chart SVG settle after
+  // hydration and grow the content past the first scroll position.
   useEffect(() => {
+    const scrollToEnd = () => {
+      const el = scrollRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight });
+    };
+    scrollToEnd();
+    const raf = requestAnimationFrame(scrollToEnd);
+    const timer = window.setTimeout(scrollToEnd, 250);
+    askRef.current?.focus({ preventScroll: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [today]);
+  // Skip the initial run: page load is handled by the settle effect above
+  // (a smooth animation racing it leaves the view stranded mid-scroll).
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
     const el = scrollRef.current;
     if (!el || !nearBottom.current) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
@@ -504,6 +530,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               />
               <div className="flex gap-2">
                 <Input
+                  ref={askRef}
                   id="insights-ask"
                   name="text"
                   type="text"
