@@ -25,8 +25,9 @@ import {
   insightSummary,
   knownMerchants,
   matchingExpenses,
-  monthlyTotals,
   pickStarter,
+  revealTo,
+  monthlyTotals,
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
@@ -211,6 +212,48 @@ interface Exchange {
   title: string;
 }
 
+const REVEAL_TICK_MS = 33;
+
+/** Renders markdown with a ChatGPT-style reveal for a freshly arrived
+ * answer; restored conversation history renders instantly. The text is
+ * re-parsed per tick, so the reveal stays markdown-safe by construction
+ * (the custom parser degrades gracefully on partial input). */
+function RevealText({
+  text,
+  reveal,
+  onDone,
+}: {
+  text: string;
+  reveal: boolean;
+  onDone: () => void;
+}) {
+  const [pos, setPos] = useState(() =>
+    reveal && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? 0
+      : text.length,
+  );
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  useEffect(() => {
+    if (!reveal) return;
+    let pos = 0;
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      pos = revealTo(text, pos, now - last);
+      last = now;
+      setPos(pos);
+      if (pos >= text.length) {
+        window.clearInterval(timer);
+        onDoneRef.current();
+      }
+    };
+    const timer = window.setInterval(tick, REVEAL_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [text, reveal]);
+  return <Markdown text={text.slice(0, pos)} />;
+}
+
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
@@ -221,6 +264,9 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // database; new exchanges append to it.
   const [transcript, setTranscript] = useState<Exchange[]>(loaderData.messages);
   const today = useToday();
+  // True while the newest answer is being revealed; restored history
+  // never animates.
+  const [revealing, setRevealing] = useState(false);
 
   const result = fetcher.data as
     | (TranslateOk & { fresh?: boolean })
@@ -231,7 +277,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     // "New conversation" starts a fresh exchange stream.
     if ("fresh" in result && result.fresh) {
       if (fetcher.state === "idle") setTranscript([]);
-      return;
+      setRevealing(false);
     }
     // Fill the answer into the newest exchange (pushed optimistically at
     // submit time); idempotent across re-renders.
@@ -256,6 +302,8 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         };
         return copy;
       });
+      // A fresh answer reveals progressively; see RevealText.
+      setRevealing(true);
     }
   }, [result, fetcher.state]);
 
@@ -443,7 +491,11 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 </p>
                 {ex.answer ? (
                   <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
-                    <Markdown text={ex.answer} />
+                    <RevealText
+                      text={ex.answer}
+                      reveal={revealing && i === views.length - 1}
+                      onDone={() => setRevealing(false)}
+                    />
                   </div>
                 ) : (
                   <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
@@ -452,7 +504,9 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       : "No answer recorded."}
                   </p>
                 )}
-                {ex.chart && today ? (
+                {/* Chart + table wait for the text reveal to finish, so
+                 * the answer streams in like a sentence, not a pop-in. */}
+                {ex.chart && today && !(revealing && i === views.length - 1) ? (
                   <>
                     <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -575,6 +629,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 },
               ]);
               setAsk("");
+              setRevealing(false);
             }}
           >
             <input type="hidden" name="intent" value="translate" />

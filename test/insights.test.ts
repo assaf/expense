@@ -3,6 +3,7 @@ import {
   insightExpense,
   insightStarters,
   pickStarter,
+  revealTo,
   insightSummary,
   knownMerchants,
   monthWindow,
@@ -570,5 +571,33 @@ describe("insightStarters", () => {
       starters[starters.length - 1],
     );
     expect(pickStarter([], () => 0.5)).toBe(null);
+  });
+});
+
+describe("revealTo", () => {
+  const text = "hello world from the reveal function";
+
+  it("does not pass the end", () => {
+    expect(revealTo(text, 0, 60_000)).toBe(text.length);
+    expect(revealTo(text, text.length, 16)).toBe(text.length);
+  });
+
+  it("advances by roughly the elapsed characters per second", () => {
+    const next = revealTo(text, 0, 100);
+    expect(next).toBeGreaterThanOrEqual(25);
+    expect(next).toBeLessThanOrEqual(60);
+  });
+
+  it("cuts on word boundaries, never mid-word", () => {
+    const partial = revealTo("alpha beta gamma delta", 0, 100);
+    expect("alpha beta gamma delta".slice(0, partial)).toMatch(
+      /^(\w+)( \w+)*$/,
+    );
+  });
+
+  it("streams long answers fast enough to finish in a few seconds", () => {
+    const long = "word ".repeat(2_000);
+    const next = revealTo(long, 0, 100);
+    expect(next).toBeGreaterThan(200);
   });
 });

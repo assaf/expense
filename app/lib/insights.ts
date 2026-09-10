@@ -374,3 +374,23 @@ export function pickStarter(
   if (starters.length === 0) return null;
   return starters[Math.floor(rng() * starters.length)] ?? starters[0];
 }
+
+/** Typewriter reveal pacing: short answers stream at REVEAL_MIN_CPS;
+ * long ones are scaled down so the reveal finishes within REVEAL_MAX_MS
+ * and never feels like a slow crawl. */
+const REVEAL_MIN_CPS = 300;
+const REVEAL_MAX_MS = 3500;
+
+/** Advance a typewriter reveal through `full` after `ms` elapsed,
+ * snapping the cut to a word boundary so words appear whole (the cut
+ * lands just before the next word starts). Pure; unit-tested. */
+export function revealTo(full: string, pos: number, ms: number): number {
+  if (pos >= full.length) return full.length;
+  const cps = Math.max(REVEAL_MIN_CPS, (full.length * 1000) / REVEAL_MAX_MS);
+  let next = pos + Math.max(1, Math.round((cps * ms) / 1000));
+  if (next < full.length) {
+    const space = full.indexOf(" ", next);
+    next = space === -1 ? full.length : space;
+  }
+  return Math.min(next, full.length);
+}
