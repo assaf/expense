@@ -10,6 +10,19 @@ describe("parseInline", () => {
     ]);
   });
 
+  it("pairs ** at the start of the line", () => {
+    // Model answers open with bold: "**August (this month): $185.44** ..."
+    expect(parseInline("**August: $185.44** across 14 expenses")).toEqual([
+      { text: "August: $185.44", bold: true },
+      { text: " across 14 expenses", bold: false },
+    ]);
+  });
+
+  it("keeps a trailing odd ** literal", () => {
+    const segments = parseInline("total **$12** plus ** 3 more");
+    expect(segments[segments.length - 1].text).toBe("** 3 more");
+  });
+
   it("renders an unpaired ** as literal text", () => {
     const segments = parseInline("odd ** marker");
     expect(segments.every((s) => !s.bold)).toBe(true);

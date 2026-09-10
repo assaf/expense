@@ -14,25 +14,20 @@ export type Block =
   | { kind: "bullets"; items: InlineSegment[][] }
   | { kind: "table"; header: string[]; rows: string[][] };
 
-/** Split a line into plain and **bold** segments. Unmatched `**` stays
+/** Split a line into plain and **bold** segments. Separators pair left
+ * to right; an odd count leaves the last one unpaired, and it stays
  * literal text. */
 export function parseInline(line: string): InlineSegment[] {
-  const parts = line.split(/\*\*/).filter((part) => part !== "");
-  if (parts.length === 0) return [{ text: "", bold: false }];
-  // An odd number of `**` separators leaves the last one unpaired: the
-  // whole line is literal text (even part count).
-  // An unpaired separator (even part count) renders literally: rejoin
-  // the parts with the ** back.
-  if (parts.length % 2 === 0) {
-    return parts.map((part, i) => ({
-      text: i === 0 ? part : `**${part}`,
-      bold: false,
-    }));
+  const raw = line.split("**");
+  if (raw.length === 1) return [{ text: line, bold: false }];
+  const unpaired = (raw.length - 1) % 2 === 1 ? raw.length - 1 : -1;
+  const segments: InlineSegment[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const text = i === unpaired ? `**${raw[i]}` : raw[i];
+    if (text === "") continue;
+    segments.push({ text, bold: i % 2 === 1 && i !== unpaired });
   }
-  return parts.map((part, i) => ({
-    text: part,
-    bold: i % 2 === 1,
-  }));
+  return segments;
 }
 
 const TABLE_SEPARATOR = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/;

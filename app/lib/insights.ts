@@ -58,13 +58,22 @@ const MONTH_ABBR = [
   "Dec",
 ];
 
-/** The last `months` calendar months ending at `today` (YYYY-MM-DD),
- * oldest first. The window is computed from the caller's `today` because
- * the server runs UTC and must not guess the user's day (the timezone
- * rule) — the insights page passes the browser's `todayDate()`. */
+/** The window of calendar months the chart buckets: the last `months`
+ * months ending at `today`, or -1 for this calendar year so far (Jan
+ * through `today`'s month). Oldest first. The window is computed from
+ * the caller's `today` because the server runs UTC and must not guess
+ * the user's day (the timezone rule) — the insights page passes the
+ * browser's `todayDate()`. */
 export function monthWindow(today: string, months: number): string[] {
   const [y, m] = today.split("-").map(Number);
   if (!y || !m || !Number.isFinite(months)) return [];
+  if (months === -1) {
+    const keys: string[] = [];
+    for (let month = 1; month <= m; month++) {
+      keys.push(`${y}-${String(month).padStart(2, "0")}`);
+    }
+    return keys;
+  }
   const keys: string[] = [];
   let year = y;
   let month = m;
@@ -116,7 +125,7 @@ export function monthlyTotals(
   const spanYears = monthWindow(today, months).some(
     (k) => !k.startsWith(today.slice(0, 4)),
   );
-  const spanAll = months <= 0;
+  const spanAll = months === 0;
   const keys = spanAll
     ? allTimeWindow(expenses, today)
     : monthWindow(today, months);

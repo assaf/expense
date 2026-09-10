@@ -65,6 +65,10 @@ export function formatDate(
 /** Short "Aug 4, 2026" label for an ISO timestamp; "—" when unset. */
 export function formatShortDate(iso: string | null): string {
   if (!iso) return "—";
+  // Date-only strings are calendar dates: render them timezone-
+  // independently (a "Jan 1" UTC midnight would show as "Dec 31" west
+  // of Greenwich). Timestamps keep the viewer-timezone rendering.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatDate(iso);
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", {

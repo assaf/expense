@@ -107,6 +107,13 @@ describe("monthlyTotals", () => {
     expect(july).toMatchObject({ total: 10, count: 1 });
   });
 
+  it("charts the calendar year so far for months=-1", () => {
+    const buckets = monthlyTotals(expenses, "merchant:z.ai", today, -1);
+    expect(buckets).toHaveLength(7);
+    expect(buckets[0]).toMatchObject({ key: "2026-01", total: 100, count: 1 });
+    expect(buckets[6]).toMatchObject({ key: "2026-07", total: 10, count: 1 });
+  });
+
   it("returns empty buckets when nothing matches", () => {
     const buckets = monthlyTotals(expenses, "merchant:nvidia", today, 3);
     expect(buckets).toHaveLength(3);
@@ -120,6 +127,14 @@ describe("monthlyTotals", () => {
     ];
     const buckets = monthlyTotals(rows, "merchant:z.ai report:q3", today, 1);
     expect(buckets[0]).toMatchObject({ total: 2, count: 1 });
+  });
+
+  it("accepts months=-1 for calendar-year questions", () => {
+    expect(
+      parseInsightTranslation(
+        '{"query":"merchant:z.ai","title":"AI expenses","months":-1}',
+      ),
+    ).toMatchObject({ months: -1, chart: true });
   });
 
   it("all-time spans back to the oldest expense", () => {

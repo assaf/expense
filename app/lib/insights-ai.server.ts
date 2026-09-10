@@ -16,14 +16,15 @@ import { categorySynonyms } from "~/lib/expense-search";
  */
 
 /** The month windows the chart offers; the model picks one. */
-const INSIGHT_MONTH_OPTIONS = [6, 12, 24, 0] as const;
+const INSIGHT_MONTH_OPTIONS = [6, 12, 24, -1, 0] as const;
 
 export interface InsightTranslation {
   /** The search-syntax filter string ("" = no filter: everything). */
   query: string;
   /** Short human title for the chart ("AI expenses", "Coffee"). */
   title: string;
-  /** 6 / 12 / 24, or 0 for all time. */
+  /** 6 / 12 / 24, -1 for this calendar year so far, or 0 for all
+   * time. */
   months: number;
   /** false = the question is best answered in words (a comparison,
    * total, or count); true = show the chart. */
@@ -72,7 +73,7 @@ Rules:
 - Keep the query under 300 characters.
 
 Answer ONLY a JSON object:
-{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|0, "chart": true|false}
+{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|-1|0, "chart": true|false}
 Set chart=false ONLY when the answer is a single sentence a monthly
 chart cannot show: yes/no or "did I spend more A than B" comparisons,
 counts of matching expenses, or questions about non-time data (lists of
@@ -87,8 +88,10 @@ Chart decision examples:
 - "did I spend more on AI this month than last?" -> chart:false
 - "how many expenses over $100?" -> chart:false
 - "what categories do I have?" -> chart:false.
-Use months 6, 12, or 24 when the question names a window ("this year" -> 12,
-"last two years" -> 24, "recent" -> 6), or 0 for all time / no window mentioned.
+Use months 6, 12, or 24 when the question names a rolling window ("last
+two years" -> 24, "the past year" -> 12, "recent" -> 6), -1 when it means
+the current calendar year ("this year", "for the year", "in 2026"), or 0
+for all time / no window mentioned.
 
 Previous exchanges may be provided: resolve short follow-ups ("and last
 month?", "what about coffee?") against them.`;

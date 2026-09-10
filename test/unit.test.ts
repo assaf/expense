@@ -20,6 +20,7 @@ import {
   formatAmount,
   normalizeAmount,
   formatDate,
+  formatShortDate,
   mileageMerchant,
   merchantLabel,
   summarizeByReport,
@@ -177,6 +178,11 @@ describe("Format helpers", () => {
   it("formats dates", () => {
     expect(formatDate("2026-01-15")).toContain("Jan");
     expect(formatDate("")).toBe("—");
+  });
+
+  it("formats date-only strings as calendar dates", () => {
+    // A UTC-midnight parse renders Jan 1 as Dec 31 west of Greenwich.
+    expect(formatShortDate("2026-01-01")).toBe("Jan 1, 2026");
   });
 
   it("builds mileage merchant label", () => {

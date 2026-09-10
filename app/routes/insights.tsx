@@ -406,7 +406,11 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                         : "No expenses in this window"}
                     </p>
                     <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {ex.months === 0 ? "All time" : `${ex.months} months`}
+                      {ex.months === -1
+                        ? "This year"
+                        : ex.months === 0
+                          ? "All time"
+                          : `${ex.months} months`}
                     </p>
                   </div>
                   <MonthlyChart buckets={buckets} />
