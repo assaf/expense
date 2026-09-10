@@ -286,6 +286,13 @@ describe("ask input bound (INS-INPUT-1)", () => {
 });
 
 describe("local time bound (INS-INPUT-1-RESIDUAL)", () => {
+  // The chat mock is module-scoped and `vp test run` (the pnpm test gate)
+  // does not clear it between tests, so this describe resets it itself
+  // like the route and fencing describes do.
+  beforeEach(() => {
+    chat.mockReset();
+  });
+
   it("drops a padded localTime instead of prompting with it", async () => {
     chat
       .mockResolvedValueOnce(
