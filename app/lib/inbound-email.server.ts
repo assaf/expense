@@ -409,8 +409,7 @@ export function scoreAttachment(meta: AttachmentMeta, html: string): number {
 
   const size = meta.size ?? 0;
   if (isImageMeta(meta) && size > 0) {
-    if (size < 20_000)
-      score -= 3; // logo / signature territory
+    if (size < 20_000) score -= 3; // logo / signature territory
     else if (size < 50_000) score -= 1;
   }
   return score;
