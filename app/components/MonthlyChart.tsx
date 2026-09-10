@@ -1,11 +1,5 @@
+import { countLabel, formatUsd } from "~/lib/format";
 import type { MonthBucket } from "~/lib/insights";
-
-/** The chart sums amounts as numbers (buckets own the math); format at
- * display with the same USD style as formatAmount. */
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
 /**
  * A bar chart of monthly expense totals. Pure SVG, no chart library:
  * the app keeps heavy client deps lazy-loaded, and twelve bars don't
@@ -52,7 +46,7 @@ export function MonthlyChart({ buckets }: { buckets: MonthBucket[] }) {
               className="fill-gray-400 dark:fill-gray-500"
               fontSize="10"
             >
-              {usd.format(max)}
+              {formatUsd(max)}
             </text>
           </>
         ) : null}
@@ -61,7 +55,7 @@ export function MonthlyChart({ buckets }: { buckets: MonthBucket[] }) {
           const x = i * slot + (slot - barWidth) / 2;
           const y = padTop + plotHeight - h;
           const title = b.count
-            ? `${b.label}: ${usd.format(b.total)} · ${b.count} ${b.count === 1 ? "expense" : "expenses"}`
+            ? `${b.label}: ${formatUsd(b.total)} · ${countLabel(b.count)}`
             : `${b.label}: no expenses`;
           return (
             <g key={b.key}>

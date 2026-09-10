@@ -33,6 +33,13 @@ export function formatAmount(amount: string | Decimal): string {
   return usd.format(d.toNumber());
 }
 
+/** Format a plain number as "$12.34" — the shared formatter for places
+ * that already hold a number (chart totals, computed answers), distinct
+ * from `formatAmount` which parses user-typed strings. */
+export function formatUsd(n: number): string {
+  return usd.format(n);
+}
+
 /**
  * Normalize a user-typed amount to two fractional digits (ROUND_HALF_UP,
  * `Decimal.toFixed`'s default). "" stays "". Unlike Number.prototype.toFixed

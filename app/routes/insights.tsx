@@ -18,7 +18,7 @@ import {
   readLatestConversation,
   startNewConversation,
 } from "~/lib/db/insights-chat";
-import { formatShortDate } from "~/lib/format";
+import { countLabel, formatShortDate, formatUsd } from "~/lib/format";
 import {
   insightExpense,
   insightStarters,
@@ -399,36 +399,13 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     if (!el) return;
     nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
-  // On load: land at the end of the restored conversation with the input
-  // focused (instant scroll — smooth is for new answers, not page load).
-  // Re-scroll briefly after mount: fonts and the chart SVG settle after
-  // hydration and grow the content past the first scroll position.
+  // The input focus stays explicit; landing at the end and following the
+  // growing answer are both the ResizeObserver's job above (its initial
+  // observation fires on mount, and every later content change re-fires:
+  // fonts, chart SVG, the reveal's own growth).
   useEffect(() => {
-    const scrollToEnd = () => {
-      const el = scrollRef.current;
-      if (el) el.scrollTo({ top: el.scrollHeight });
-    };
-    scrollToEnd();
-    const raf = requestAnimationFrame(scrollToEnd);
-    const timer = window.setTimeout(scrollToEnd, 250);
     askRef.current?.focus({ preventScroll: true });
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-    };
   }, [today]);
-  // Skip the initial run: page load is handled by the settle effect above
-  // (a smooth animation racing it leaves the view stranded mid-scroll).
-  const mounted = useRef(false);
-  useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      return;
-    }
-    const el = scrollRef.current;
-    if (!el || !nearBottom.current) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [transcript]);
 
   return (
     <PageShell
@@ -512,7 +489,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       <p className="text-sm text-gray-600 dark:text-gray-300">
                         {ex.title} ·{" "}
                         {count
-                          ? `${count} ${count === 1 ? "expense" : "expenses"} · ${usd.format(total)} total`
+                          ? `${countLabel(count)} · ${formatUsd(total)} total`
                           : "No expenses in this window"}
                       </p>
                       <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -591,7 +568,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                                   {e.report}
                                 </td>
                                 <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                                  {usd.format(Number(e.amount) || 0)}
+                                  {formatUsd(Number(e.amount) || 0)}
                                 </td>
                               </tr>
                             ))}
@@ -688,8 +665,3 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     </PageShell>
   );
 }
-
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});

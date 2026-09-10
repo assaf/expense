@@ -3,6 +3,7 @@ import {
   parseQuery,
   type SearchableExpense,
 } from "~/lib/expense-search";
+import { countLabel, formatUsd } from "~/lib/format";
 import type { Expense } from "~/lib/types";
 
 /** The flattened expense row the insights page charts: the search-box view
@@ -254,11 +255,6 @@ export interface InsightStarter {
   answer: string;
 }
 
-const starterUsd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-
 function shiftDays(today: string, days: number): string {
   const [y, m, d] = today.split("-").map(Number);
   if (!y || !m || !d) return today;
@@ -286,7 +282,6 @@ export function insightStarters(
     dated.filter((e) => e.date >= from && e.date <= today);
   const total = (list: InsightExpense[]) =>
     list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  const count = (n: number) => `${n} ${n === 1 ? "expense" : "expenses"}`;
   const year = today.slice(0, 4);
   const starters: InsightStarter[] = [];
 
@@ -294,7 +289,7 @@ export function insightStarters(
   if (last30.length > 0) {
     starters.push({
       question: "How much have I spent in the last 30 days?",
-      answer: `${count(last30.length)} totaling ${starterUsd.format(total(last30))} in the last 30 days.`,
+      answer: `${countLabel(last30.length)} totaling ${formatUsd(total(last30))} in the last 30 days.`,
     });
   }
 
@@ -304,7 +299,7 @@ export function insightStarters(
   if (thisYear.length > 0) {
     starters.push({
       question: "How much have I spent this year?",
-      answer: `So far this year: ${count(thisYear.length)} totaling ${starterUsd.format(total(thisYear))}.`,
+      answer: `So far this year: ${countLabel(thisYear.length)} totaling ${formatUsd(total(thisYear))}.`,
     });
   }
 
@@ -316,7 +311,7 @@ export function insightStarters(
     if (biggest.category) bits.push(biggest.category);
     starters.push({
       question: "What's my biggest expense?",
-      answer: `Your biggest expense in the last 90 days is ${starterUsd.format(Number(biggest.amount) || 0)}: ${bits.join(" · ")}.`,
+      answer: `Your biggest expense in the last 90 days is ${formatUsd(Number(biggest.amount) || 0)}: ${bits.join(" · ")}.`,
     });
   }
 
@@ -333,7 +328,7 @@ export function insightStarters(
   if (topReport) {
     starters.push({
       question: "Which report is the biggest this year?",
-      answer: `${topReport[0]} leads this year's reports: ${count(topReport[1].length)} worth ${starterUsd.format(total(topReport[1]))}.`,
+      answer: `${topReport[0]} leads this year's reports: ${countLabel(topReport[1].length)} worth ${formatUsd(total(topReport[1]))}.`,
     });
   }
 
@@ -341,7 +336,7 @@ export function insightStarters(
   if (unfiled.length > 0) {
     starters.push({
       question: "What still needs a report?",
-      answer: `${count(unfiled.length)} worth ${starterUsd.format(total(unfiled))} ${unfiled.length === 1 ? "has" : "have"} no report yet.`,
+      answer: `${countLabel(unfiled.length)} worth ${formatUsd(total(unfiled))} ${unfiled.length === 1 ? "has" : "have"} no report yet.`,
     });
   }
 
@@ -358,7 +353,7 @@ export function insightStarters(
   if (topCategory) {
     starters.push({
       question: "Where does my money go?",
-      answer: `Your top category in the last 90 days is ${topCategory[0]}: ${starterUsd.format(total(topCategory[1]))} across ${count(topCategory[1].length)}.`,
+      answer: `Your top category in the last 90 days is ${topCategory[0]}: ${formatUsd(total(topCategory[1]))} across ${countLabel(topCategory[1].length)}.`,
     });
   }
 
