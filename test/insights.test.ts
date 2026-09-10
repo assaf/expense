@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  accountHasAI,
   insightExpense,
   insightSummary,
   knownMerchants,
@@ -272,16 +271,6 @@ describe("answerInsightQuestion", () => {
       summary: "Total: $0.00 across 0 expenses",
     });
     expect(answer).toBe("I couldn't summarize that.");
-  });
-});
-
-describe("accountHasAI", () => {
-  it("unlocks paid and gratis accounts only", () => {
-    expect(accountHasAI("paid")).toBe(true);
-    expect(accountHasAI("gratis")).toBe(true);
-    expect(accountHasAI(null)).toBe(false);
-    expect(accountHasAI(undefined)).toBe(false);
-    expect(accountHasAI("trial")).toBe(false);
   });
 });
 

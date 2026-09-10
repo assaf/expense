@@ -20,7 +20,6 @@ import {
 } from "~/lib/db/insights-chat";
 import { formatShortDate } from "~/lib/format";
 import {
-  accountHasAI,
   insightExpense,
   insightSummary,
   knownMerchants,
@@ -40,13 +39,11 @@ import type { Route } from "./+types/insights";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const [account, conversation, expenses] = await Promise.all([
-    readAccount(user.accountId),
+  const [conversation, expenses] = await Promise.all([
     readLatestConversation(user.id),
     readExpenses(user.accountId),
   ]);
   return {
-    aiEnabled: accountHasAI(account?.plan),
     expenses: expenses.map(insightExpense),
     // The most recent conversation reloads with the page; older ones stay
     // in the database as a record.
@@ -54,7 +51,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-/** Two grounded LLM calls behind the plan gate: the question becomes a
+/** Two grounded LLM calls: the question becomes a
  * filter (translate), the app computes the exact numbers from the real
  * expenses, and the model phrases the answer from those numbers — it
  * never invents figures. Chart questions carry their own chart in the
@@ -70,13 +67,6 @@ export async function action({ request }: Route.LoaderArgs) {
     return { ok: true as const, fresh: true };
   }
   if (intent !== "translate") return unknownIntent();
-  const planAccount = await readAccount(user.accountId);
-  if (!accountHasAI(planAccount?.plan)) {
-    return {
-      ok: false as const,
-      error: "Conversational search needs a paid or gratis account.",
-    };
-  }
   const text = formString(form, "text").trim();
   if (!text) return { ok: false as const, error: "Type a question first." };
 
@@ -491,94 +481,81 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       <Card className="p-4">
-        {loaderData.aiEnabled ? (
-          <div className="flex flex-col gap-2">
-            <fetcher.Form
-              method="post"
-              className="flex flex-col gap-2"
-              onSubmit={(e) => {
-                if (!ask.trim() || busy) {
-                  e.preventDefault();
-                  return;
-                }
-                setTranscript((t) => [
-                  ...t,
-                  {
-                    question: ask.trim(),
-                    answer: "",
-                    chart: false,
-                    query: "",
-                    months: 12,
-                    title: "",
-                  },
-                ]);
-                setAsk("");
-              }}
-            >
-              <input type="hidden" name="intent" value="translate" />
-              <input type="hidden" name="today" value={today ?? ""} />
-              <input
-                type="hidden"
-                name="localTime"
-                value={new Date().toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
+        <div className="flex flex-col gap-2">
+          <fetcher.Form
+            method="post"
+            className="flex flex-col gap-2"
+            onSubmit={(e) => {
+              if (!ask.trim() || busy) {
+                e.preventDefault();
+                return;
+              }
+              setTranscript((t) => [
+                ...t,
+                {
+                  question: ask.trim(),
+                  answer: "",
+                  chart: false,
+                  query: "",
+                  months: 12,
+                  title: "",
+                },
+              ]);
+              setAsk("");
+            }}
+          >
+            <input type="hidden" name="intent" value="translate" />
+            <input type="hidden" name="today" value={today ?? ""} />
+            <input
+              type="hidden"
+              name="localTime"
+              value={new Date().toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            />
+            <input
+              type="hidden"
+              name="tz"
+              value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
+            />
+            <div className="flex gap-2">
+              <Input
+                ref={askRef}
+                id="insights-ask"
+                name="text"
+                type="text"
+                value={ask}
+                onChange={(e) => setAsk(e.target.value)}
+                autoComplete="off"
+                placeholder='e.g. "did I spend more on AI this month than last?"'
+                className="min-w-0 flex-1"
               />
-              <input
-                type="hidden"
-                name="tz"
-                value={
-                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
-                }
-              />
-              <div className="flex gap-2">
-                <Input
-                  ref={askRef}
-                  id="insights-ask"
-                  name="text"
-                  type="text"
-                  value={ask}
-                  onChange={(e) => setAsk(e.target.value)}
-                  autoComplete="off"
-                  placeholder='e.g. "did I spend more on AI this month than last?"'
-                  className="min-w-0 flex-1"
-                />
-                <Button type="submit" disabled={busy}>
-                  <Sparkles aria-hidden="true" className="h-4 w-4" />
-                  {busy ? "Thinking…" : "Ask"}
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Try:</span>
-                {EXAMPLES.map((ex) => (
-                  <button
-                    key={ex}
-                    type="button"
-                    onClick={() => setAsk(ex)}
-                    className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-                  >
-                    {ex}
-                  </button>
-                ))}
-              </div>
-              {result && !result.ok ? (
-                <p className="text-sm text-red-700 dark:text-red-400">
-                  {result.error}
-                </p>
-              ) : null}
-            </fetcher.Form>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
-            <Sparkles aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              Conversational search ("did I spend more on AI this month?",
-              "what's my medical spend this year?") is available on paid and
-              gratis accounts.
-            </p>
-          </div>
-        )}
+              <Button type="submit" disabled={busy}>
+                <Sparkles aria-hidden="true" className="h-4 w-4" />
+                {busy ? "Thinking…" : "Ask"}
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-sm">
+              <span className="text-gray-500 dark:text-gray-400">Try:</span>
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => setAsk(ex)}
+                  className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+            {result && !result.ok ? (
+              <p className="text-sm text-red-700 dark:text-red-400">
+                {result.error}
+              </p>
+            ) : null}
+          </fetcher.Form>
+        </div>
       </Card>
     </PageShell>
   );

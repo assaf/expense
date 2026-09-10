@@ -6,9 +6,9 @@ import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { addReport } from "~/lib/db/reports";
 import type { Route as InsightsRoute } from "+types/app/routes/+types/insights";
 
-// The gate and the translator boundary are what the route adds on top of
-// the pure lib (covered in test/insights.test.ts): the LLM must never be
-// reached without a plan, and must be reached exactly once with one.
+// The translator boundary is what the route adds on top of the pure lib
+// (covered in test/insights.test.ts): the LLM is reached exactly once for
+// a translation, and the text answer is grounded in computed numbers.
 vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   chatCompletion: vi.fn(),
@@ -48,7 +48,7 @@ async function callRoute(
   } as InsightsRoute.ActionArgs);
 }
 
-describe("insights route plan gate", () => {
+describe("insights route", () => {
   beforeEach(async () => {
     chat.mockReset();
     await testPrisma.account.update({
@@ -57,37 +57,12 @@ describe("insights route plan gate", () => {
     });
   });
 
-  it("hides the AI box from the loader for plan-less accounts", async () => {
-    const data = (await callRoute("loader", null)) as { aiEnabled: boolean };
-    expect(data.aiEnabled).toBe(false);
-  });
-
-  it("enables the AI box for gratis and paid accounts", async () => {
-    for (const plan of ["gratis", "paid"]) {
-      const data = (await callRoute("loader", plan)) as { aiEnabled: boolean };
-      expect(data.aiEnabled).toBe(true);
-    }
-  });
-
-  it("rejects the translate action without a plan and never calls the LLM", async () => {
-    const form = new FormData();
-    form.set("intent", "translate");
-    form.set("text", "my AI expenses");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      error: string;
-    };
-    expect(res.ok).toBe(false);
-    expect(res.error).toContain("paid or gratis");
-    expect(chat).not.toHaveBeenCalled();
-  });
-
-  it("translates for a plan account, reaching the LLM once", async () => {
+  it("translates without a plan, reaching the LLM once", async () => {
     chat.mockResolvedValue('{"query":"","title":"Expenses","months":12}');
     const form = new FormData();
     form.set("intent", "translate");
     form.set("text", "everything");
-    const res = (await callRoute("action", "gratis", form)) as {
+    const res = (await callRoute("action", null, form)) as {
       ok: boolean;
       answer: string;
     };

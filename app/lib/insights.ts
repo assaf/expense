@@ -5,12 +5,6 @@ import {
 } from "~/lib/expense-search";
 import type { Expense } from "~/lib/types";
 
-/** Conversational AI (the insights query translator) is for accounts
- * with a billing plan ("paid" or "gratis"); null = no plan yet. */
-export function accountHasAI(plan: string | null | undefined): boolean {
-  return plan === "paid" || plan === "gratis";
-}
-
 /** The flattened expense row the insights page charts: the search-box view
  * plus the fields charting and the drill-down table need (id, date
  * bucket, amount sum). */

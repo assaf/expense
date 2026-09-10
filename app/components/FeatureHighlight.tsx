@@ -67,7 +67,6 @@ export interface HighlightData {
   hasEmailConnection: boolean;
   /** The account has a billing plan, so conversational AI (Insights)
    * is available. */
-  hasAI: boolean;
 }
 interface HighlightDef {
   icon: LucideIcon;
@@ -325,8 +324,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   if (data.mcpUrl) pool.push("mcp");
   if (data.hasRates) pool.push("mileage-rate");
   if (data.inviteCode) pool.push("invite");
-  // Conversational AI is plan-gated, so the highlight is too.
-  if (data.hasAI) pool.push("insights");
+  pool.push("insights");
   return pool;
 }
 

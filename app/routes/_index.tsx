@@ -44,7 +44,6 @@ import { imageVersion } from "~/lib/image-version";
 import { isComplete } from "~/lib/completeness";
 import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import { matchesSearch, parseQuery } from "~/lib/expense-search";
-import { accountHasAI } from "~/lib/insights";
 import type { DuplicateMatch } from "~/lib/duplicates";
 import { isReceiptFile } from "~/lib/file-types";
 import { useDropTarget } from "~/lib/use-drop-target";
@@ -132,9 +131,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     // The connect-email highlight is eligible only while the account has no
     // connected mailbox.
     hasEmailConnection: emailConnections.length > 0,
-    // The insights highlight is eligible only for accounts with a plan
-    // (conversational AI is plan-gated).
-    hasAI: accountHasAI(account?.plan),
   };
   return data(
     {
