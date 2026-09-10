@@ -180,6 +180,25 @@ export const links: LinksFunction = () => [
   { rel: "manifest", href: "/manifest.json" },
 ];
 
+/** Corner marker for the dev server: a small green DEV tag pinned to the
+ * top-left of the viewport, fixed so it survives scrolling. Dev-only by
+ * NODE_ENV gate (tests and production builds render nothing), so
+ * screenshot baselines and prod traffic never see it. Informational
+ * chrome: aria-hidden and pointer-events-none, it never blocks the corner
+ * or enters the a11y tree. Exported for test/dev-badge.test.tsx. */
+export function DevBadge() {
+  if (process.env.NODE_ENV !== "development") return null;
+  return (
+    <div
+      aria-hidden="true"
+      data-dev-badge
+      className="pointer-events-none fixed left-0 top-0 z-[90] select-none rounded-br-md bg-green-600 px-1.5 py-0.5 text-[10px] font-bold leading-4 tracking-wider text-white dark:bg-green-500"
+    >
+      DEV
+    </div>
+  );
+}
+
 export default function App() {
   const navigation = useNavigation();
   const { user, reportNames, umami } =
@@ -246,6 +265,7 @@ export default function App() {
         >
           Skip to main content
         </a>
+        <DevBadge />
         <Outlet />
         {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
         {user ? <ShortcutHints /> : null}
