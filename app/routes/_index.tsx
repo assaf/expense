@@ -513,7 +513,7 @@ function ExpenseList({
           <Logo link />
         </h1>
         <nav className="flex items-center gap-0.5 sm:gap-2">
-          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
             <Link
               to="/reconcile"
               data-shortcut="nav-reconcile"
@@ -523,13 +523,13 @@ function ExpenseList({
               <span className="hidden sm:inline">Reconcile</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
             <Link to="/export" data-shortcut="nav-reports" aria-label="Reports">
               <Download aria-hidden="true" className="h-4 w-4" />
               <span className="hidden sm:inline">Reports</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
             <Link
               to="/insights"
               data-shortcut="nav-insights"
@@ -539,13 +539,13 @@ function ExpenseList({
               <span className="hidden sm:inline">Insights</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
             <Link to="/emails" data-shortcut="nav-emails" aria-label="Email">
               <Mail aria-hidden="true" className="h-4 w-4" />
               <span className="hidden sm:inline">Email</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm" className="px-2 sm:px-3">
+          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
             <Link
               to="/settings"
               data-shortcut="nav-settings"

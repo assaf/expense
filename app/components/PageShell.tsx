@@ -94,7 +94,7 @@ export function PageShell({
   if (icon) {
     return (
       <main id="main-content" className={containerClass} {...dropHandlers}>
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold">
             {icon}
             {title}
@@ -102,8 +102,13 @@ export function PageShell({
           <div className="flex items-center gap-2">
             {headerRight ?? null}
             <Button asChild variant="ghost" size="sm">
-              <Link to={backTo} data-shortcut={homeShortcut}>
-                <ArrowLeft aria-hidden="true" className="h-4 w-4" /> {backLabel}
+              <Link
+                to={backTo}
+                data-shortcut={homeShortcut}
+                aria-label={backLabel}
+              >
+                <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">{backLabel}</span>
               </Link>
             </Button>
           </div>

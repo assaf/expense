@@ -361,8 +361,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       headerRight={
         <newFetcher.Form method="post">
           <input type="hidden" name="intent" value="new" />
-          <Button type="submit" variant="secondary" size="sm">
-            <SquarePen aria-hidden="true" className="h-4 w-4" /> New chat
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            className="px-1.5 sm:px-3"
+          >
+            <SquarePen aria-hidden="true" className="h-4 w-4" />
+            <span className="hidden sm:inline">New chat</span>
           </Button>
         </newFetcher.Form>
       }
