@@ -21,10 +21,12 @@ import {
 import { formatShortDate } from "~/lib/format";
 import {
   insightExpense,
+  insightStarters,
   insightSummary,
   knownMerchants,
   matchingExpenses,
   monthlyTotals,
+  pickStarter,
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
@@ -270,6 +272,16 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
 
   const busy = fetcher.state !== "idle";
 
+  // The opening card: one computed fact about the account, rotating per
+  // visit (the "start with an answer" pattern). Computed client-side
+  // from the loaded expenses and the local today, so no server timezone
+  // and no LLM call.
+  const starter = useMemo(
+    () =>
+      today ? pickStarter(insightStarters(loaderData.expenses, today)) : null,
+    [loaderData.expenses, today],
+  );
+
   // Each chart exchange renders its own view from the shared expense
   // snapshot and its own filter/window.
   const views = useMemo(
@@ -360,7 +372,16 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         onScroll={onScroll}
         className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {transcript.length === 0 ? (
+        {transcript.length === 0 && starter ? (
+          <Card className="p-4">
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+              {starter.question}
+            </p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+              {starter.answer}
+            </p>
+          </Card>
+        ) : transcript.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Ask a question to get started.

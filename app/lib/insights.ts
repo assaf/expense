@@ -243,3 +243,134 @@ export function knownMerchants(expenses: InsightExpense[]): string[] {
       return top.length > 0 ? `${name} (${top.join(", ")})` : name;
     });
 }
+
+/** A computed Q&A the page opens with (the "start with an answer"
+ * pattern): one fact about the account's actual data, phrased as the
+ * question that would produce it. Computed client-side from the already
+ * loaded expenses and the browser's local today, so no server "today"
+ * and no LLM call is involved. */
+export interface InsightStarter {
+  question: string;
+  answer: string;
+}
+
+const starterUsd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+function shiftDays(today: string, days: number): string {
+  const [y, m, d] = today.split("-").map(Number);
+  if (!y || !m || !d) return today;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+function starterLabel(e: InsightExpense): string {
+  return (
+    e.merchant ||
+    e.description ||
+    (e.type === "mileage" ? "Mileage" : "Expense")
+  );
+}
+
+/** The fact pool for the opening card. Only facts with something to say
+ * make the pool, so an empty account keeps the plain empty state. */
+export function insightStarters(
+  expenses: InsightExpense[],
+  today: string,
+): InsightStarter[] {
+  const dated = expenses.filter((e) => e.date);
+  const inWindow = (from: string) =>
+    dated.filter((e) => e.date >= from && e.date <= today);
+  const total = (list: InsightExpense[]) =>
+    list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  const count = (n: number) => `${n} ${n === 1 ? "expense" : "expenses"}`;
+  const year = today.slice(0, 4);
+  const starters: InsightStarter[] = [];
+
+  const last30 = inWindow(shiftDays(today, -30));
+  if (last30.length > 0) {
+    starters.push({
+      question: "How much have I spent in the last 30 days?",
+      answer: `${count(last30.length)} totaling ${starterUsd.format(total(last30))} in the last 30 days.`,
+    });
+  }
+
+  const thisYear = dated.filter(
+    (e) => e.date.startsWith(year) && e.date <= today,
+  );
+  if (thisYear.length > 0) {
+    starters.push({
+      question: "How much have I spent this year?",
+      answer: `So far this year: ${count(thisYear.length)} totaling ${starterUsd.format(total(thisYear))}.`,
+    });
+  }
+
+  const biggest = inWindow(shiftDays(today, -90)).sort(
+    (a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0),
+  )[0];
+  if (biggest) {
+    const bits = [starterLabel(biggest)];
+    if (biggest.category) bits.push(biggest.category);
+    starters.push({
+      question: "What's my biggest expense?",
+      answer: `Your biggest expense in the last 90 days is ${starterUsd.format(Number(biggest.amount) || 0)}: ${bits.join(" · ")}.`,
+    });
+  }
+
+  const byReport = new Map<string, InsightExpense[]>();
+  for (const e of thisYear) {
+    if (!e.report) continue;
+    const list = byReport.get(e.report) ?? [];
+    list.push(e);
+    byReport.set(e.report, list);
+  }
+  const topReport = [...byReport.entries()].sort(
+    (a, b) => total(b[1]) - total(a[1]),
+  )[0];
+  if (topReport) {
+    starters.push({
+      question: "Which report is the biggest this year?",
+      answer: `${topReport[0]} leads this year's reports: ${count(topReport[1].length)} worth ${starterUsd.format(total(topReport[1]))}.`,
+    });
+  }
+
+  const unfiled = dated.filter((e) => !e.report);
+  if (unfiled.length > 0) {
+    starters.push({
+      question: "What still needs a report?",
+      answer: `${count(unfiled.length)} worth ${starterUsd.format(total(unfiled))} ${unfiled.length === 1 ? "has" : "have"} no report yet.`,
+    });
+  }
+
+  const byCategory = new Map<string, InsightExpense[]>();
+  for (const e of inWindow(shiftDays(today, -90))) {
+    if (!e.category) continue;
+    const list = byCategory.get(e.category) ?? [];
+    list.push(e);
+    byCategory.set(e.category, list);
+  }
+  const topCategory = [...byCategory.entries()].sort(
+    (a, b) => total(b[1]) - total(a[1]),
+  )[0];
+  if (topCategory) {
+    starters.push({
+      question: "Where does my money go?",
+      answer: `Your top category in the last 90 days is ${topCategory[0]}: ${starterUsd.format(total(topCategory[1]))} across ${count(topCategory[1].length)}.`,
+    });
+  }
+
+  return starters;
+}
+
+/** One starter per visit, so the opening fact changes from visit to
+ * visit. `rng` is injectable for tests. */
+export function pickStarter(
+  starters: InsightStarter[],
+  rng: () => number = Math.random,
+): InsightStarter | null {
+  if (starters.length === 0) return null;
+  return starters[Math.floor(rng() * starters.length)] ?? starters[0];
+}

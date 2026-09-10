@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   insightExpense,
+  insightStarters,
+  pickStarter,
   insightSummary,
   knownMerchants,
   monthWindow,
@@ -444,5 +446,129 @@ describe("tokenSuggestions", () => {
       (s) => s.completion,
     );
     expect(completions).toContain("category:");
+  });
+});
+
+describe("insightStarters", () => {
+  const today = "2026-07-31";
+  const data: InsightExpense[] = [
+    exp({
+      merchant: "Z.ai",
+      amount: "10.00",
+      date: "2026-07-02",
+      category: "Software",
+      report: "2026 Test",
+    }),
+    exp({
+      merchant: "DeepSeek",
+      amount: "5.50",
+      date: "2026-07-20",
+      category: "Software",
+      report: "2026 Test",
+    }),
+    exp({
+      merchant: "Peet's Coffee",
+      amount: "9.20",
+      date: "2026-07-04",
+      category: "Meals",
+    }),
+    exp({
+      merchant: "OfficeMax",
+      amount: "299.00",
+      date: "2026-06-10",
+      category: "Office Supplies",
+      report: "2026 Test",
+    }),
+    exp({
+      description: "Client drive",
+      type: "mileage",
+      amount: "32.00",
+      date: "2026-05-02",
+      report: "2026 Test",
+    }),
+    exp({
+      merchant: "Z.ai",
+      amount: "100.00",
+      date: "2026-01-01",
+      category: "Software",
+    }),
+    exp({ merchant: "Z.ai", amount: "7.00", date: "2026-08-15" }),
+  ];
+
+  it("offers a last-30-days fact with exact figures", () => {
+    const starters = insightStarters(data, today);
+    const last30 = starters.find((s) => s.question.includes("last 30 days"));
+    expect(last30?.answer).toBe(
+      "3 expenses totaling $24.70 in the last 30 days.",
+    );
+  });
+
+  it("offers a year-to-date fact that excludes future-dated rows", () => {
+    const starters = insightStarters(data, today);
+    const year = starters.find(
+      (s) => s.question.includes("this year") && s.question.includes("spent"),
+    );
+    expect(year?.answer).toBe("So far this year: 6 expenses totaling $455.70.");
+  });
+
+  it("names the biggest recent expense with its category", () => {
+    const starters = insightStarters(data, today);
+    const biggest = starters.find((s) => s.question.includes("biggest"));
+    expect(biggest?.answer).toBe(
+      "Your biggest expense in the last 90 days is $299.00: OfficeMax · Office Supplies.",
+    );
+  });
+
+  it("ranks reports by this year's totals", () => {
+    const starters = insightStarters(data, today);
+    const report = starters.find((s) => s.question.includes("report"));
+    expect(report?.answer).toBe(
+      "2026 Test leads this year's reports: 4 expenses worth $346.50.",
+    );
+  });
+
+  it("counts unfiled expenses", () => {
+    const starters = insightStarters(data, today);
+    const unfiled = starters.find((s) => s.question.includes("report?"));
+    expect(unfiled?.answer).toBe(
+      "3 expenses worth $116.20 have no report yet.",
+    );
+  });
+
+  it("labels mileage rows by description", () => {
+    const starters = insightStarters(data, today);
+    const biggest = starters.find((s) => s.question.includes("biggest"));
+    expect(biggest?.answer).not.toContain("Client drive");
+    const mileageOnly = insightStarters(
+      [
+        exp({
+          description: "Client drive",
+          type: "mileage",
+          amount: "32.00",
+          date: "2026-07-02",
+          category: "Travel",
+          report: "R",
+        }),
+      ],
+      today,
+    );
+    expect(
+      mileageOnly.find((s) => s.question.includes("biggest"))?.answer,
+    ).toBe(
+      "Your biggest expense in the last 90 days is $32.00: Client drive · Travel.",
+    );
+  });
+
+  it("offers nothing for an account without expenses", () => {
+    expect(insightStarters([], today)).toEqual([]);
+  });
+
+  it("picks a different starter as the rng walks", () => {
+    const starters = insightStarters(data, today);
+    expect(pickStarter(starters, () => 0)).toBe(starters[0]);
+    expect(pickStarter(starters, () => 0.999)).toBe(
+      starters[starters.length - 1],
+    );
+    expect(pickStarter([], () => 0.5)).toBe(null);
   });
 });
