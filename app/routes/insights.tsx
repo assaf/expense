@@ -1,4 +1,4 @@
-import { ChartColumn, Sparkles, SquarePen } from "lucide-react";
+import { ChartColumn, Lightbulb, Sparkles, SquarePen } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { Markdown } from "~/components/Markdown";
@@ -374,12 +374,20 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       >
         {transcript.length === 0 && starter ? (
           <Card className="p-4">
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
-              {starter.question}
-            </p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              {starter.answer}
-            </p>
+            <div className="flex items-start gap-2">
+              <Lightbulb
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                  {starter.question}
+                </p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  {starter.answer}
+                </p>
+              </div>
+            </div>
           </Card>
         ) : transcript.length === 0 ? (
           <div className="flex h-full items-center justify-center">
