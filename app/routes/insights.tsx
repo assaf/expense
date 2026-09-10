@@ -53,6 +53,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     // The most recent conversation reloads with the page; older ones stay
     // in the database as a record.
     messages: conversation?.exchanges ?? [],
+    // The opening starter is picked at random; visual-regression captures
+    // need that pick deterministic (the same env pin _index.tsx uses for
+    // the home highlight). Read here because only server code can see
+    // process.env; the flag travels to the browser in loader data.
+    pinStarter: process.env.SCREENSHOT_HIGHLIGHT_PIN === "1",
   };
 }
 
@@ -277,11 +282,17 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // The opening card: one computed fact about the account, rotating per
   // visit (the "start with an answer" pattern). Computed client-side
   // from the loaded expenses and the local today, so no server timezone
-  // and no LLM call.
+  // and no LLM call. Under the screenshot pin (loaderData.pinStarter)
+  // the pick is the first starter so captures stay deterministic.
   const starter = useMemo(
     () =>
-      today ? pickStarter(insightStarters(loaderData.expenses, today)) : null,
-    [loaderData.expenses, today],
+      today
+        ? pickStarter(
+            insightStarters(loaderData.expenses, today),
+            loaderData.pinStarter ? () => 0 : undefined,
+          )
+        : null,
+    [loaderData.expenses, loaderData.pinStarter, today],
   );
 
   // Each chart exchange renders its own view from the shared expense

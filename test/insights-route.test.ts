@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { action, loader } from "~/routes/insights";
 import {
   answerInsightQuestion,
@@ -326,6 +326,30 @@ describe("local time bound (INS-INPUT-1-RESIDUAL)", () => {
     await callRoute("action", null, form);
     const userMessage = chat.mock.calls[1]![0].at(-1)!.content;
     expect(userMessage).toContain("Current time: 1:15 PM");
+  });
+});
+
+describe("starter pin for screenshot captures", () => {
+  // The opening starter is picked with Math.random, so every screenshot
+  // run would otherwise roll a different card and drift against the
+  // committed baseline. The loader carries the pin flag to the client,
+  // which then passes () => 0 to pickStarter (first starter).
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("carries the pin flag only when the screenshot env is set", async () => {
+    vi.stubEnv("SCREENSHOT_HIGHLIGHT_PIN", "1");
+    const pinned = (await callRoute("loader", null)) as {
+      pinStarter: boolean;
+    };
+    expect(pinned.pinStarter).toBe(true);
+
+    vi.stubEnv("SCREENSHOT_HIGHLIGHT_PIN", undefined);
+    const normal = (await callRoute("loader", null)) as {
+      pinStarter: boolean;
+    };
+    expect(normal.pinStarter).toBe(false);
   });
 });
 
