@@ -1,7 +1,12 @@
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, describe, it } from "vitest";
-import { generateCodeVerifier, pkceChallenge } from "~/lib/oauth.server";
+import {
+  generateCodeVerifier,
+  pkceChallenge,
+  publicOrigin,
+} from "~/lib/oauth.server";
+import { PUBLIC_URL } from "~/lib/env";
 import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import { TEST_EMAIL, TEST_PASSWORD, testPrisma } from "./helpers/seedTestData";
 
@@ -14,6 +19,28 @@ const CALLBACK = "http://127.0.0.1:5199/callback";
  * page, token exchange, refresh rotation, revocation, and using the access
  * token on /mcp.
  */
+describe("publicOrigin", () => {
+  // A developer's .env carries the deploy's PUBLIC_URL; a local MCP client
+  // (https://expense.localhost/mcp) must still be sent to the local server,
+  // or RFC 9728 rejects the resource and the flow dies at the token call.
+  it("never advertises a configured origin for a local host", () => {
+    expect(publicOrigin(new Request("https://expense.localhost/mcp"))).toBe(
+      "https://expense.localhost",
+    );
+    expect(publicOrigin(new Request("http://127.0.0.1:5199/mcp"))).toBe(
+      "http://127.0.0.1:5199",
+    );
+  });
+
+  it("prefers the configured origin for a real host", () => {
+    // With PUBLIC_URL unset (the pinned test/CI env) the request wins; with
+    // it set, the configured origin does — which is what deploys rely on.
+    expect(publicOrigin(new Request("https://expense.labnotes.org/mcp"))).toBe(
+      PUBLIC_URL ? new URL(PUBLIC_URL).origin : "https://expense.labnotes.org",
+    );
+  });
+});
+
 describe("MCP OAuth", () => {
   afterAll(async () => {
     await closeBrowser();

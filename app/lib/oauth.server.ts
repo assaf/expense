@@ -99,8 +99,17 @@ function buildOAuthMetadata(origin: string): Record<string, unknown> {
  *     match expected …").
  */
 export function publicOrigin(request: Request): string {
-  if (PUBLIC_URL) return new URL(PUBLIC_URL).origin;
   const url = new URL(request.url);
+  // A local host never advertises a configured production origin: a
+  // developer's .env carries PUBLIC_URL for deploys, and honouring it here
+  // would point an MCP client connected to https://expense.localhost/mcp at
+  // production's token endpoint (RFC 9728 resource mismatch, no local login).
+  const local =
+    url.hostname === "localhost" ||
+    url.hostname.endsWith(".localhost") ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1";
+  if (PUBLIC_URL && !local) return new URL(PUBLIC_URL).origin;
   if (url.protocol === "https:") return url.origin;
   const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
   if (proto === "https") {
