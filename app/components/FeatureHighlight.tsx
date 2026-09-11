@@ -199,9 +199,10 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Mileage measured from where you start",
     body: () => (
       <>
-        Set a start/end location (home, office, or wherever you choose) and
-        every drive is measured as a round trip from there. Change it anytime in
-        Settings.
+        Set a start/end location (home, wherever you choose) and every drive is
+        measured as a round trip from there. Save the other places you drive to
+        by name (work, the hospital) and any trip becomes home, work,
+        restaurant, home. Change either in Settings.
       </>
     ),
     cta: { label: "Set your location", to: "/settings#start-location" },

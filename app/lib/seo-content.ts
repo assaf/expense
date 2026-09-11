@@ -886,7 +886,7 @@ export const MCP_TOOLS: Array<{
   {
     name: "get_settings",
     writes: false,
-    what: "Home address and the IRS mileage-rate table.",
+    what: "Home address, the account's named locations (work, hospital), and the IRS mileage-rate table.",
   },
   {
     name: "reconcile",

@@ -28,7 +28,12 @@ import {
   MILEAGE_TYPES,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
-import type { Expense, Location, MileageType } from "~/lib/types";
+import type {
+  Expense,
+  Location,
+  MileageType,
+  NamedLocation,
+} from "~/lib/types";
 
 /**
  * Data shape shared by the edit route (/expense/:id) and the create route
@@ -43,6 +48,10 @@ export type EditorData = {
   categories: string[];
   merchants: string[];
   home: Location;
+  /** The account's saved places (Work, Hospital, …): the stops a trip can be
+   * authored from by name. Home is not one of them; it is the trip's fixed
+   * start and end, so it lives in `home`. */
+  locations: NamedLocation[];
   /** The IRS mileage-rate master table. The editor resolves the rate from
    * it by (date, type), so changing either recomputes the amount. */
   rates: MileageRateEntry[];

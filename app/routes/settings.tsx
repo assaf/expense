@@ -1,14 +1,13 @@
 import { useMemo } from "react";
-import { Check, MapPin, LogOut, RefreshCw, Settings } from "lucide-react";
+import { Check, LogOut, RefreshCw, Settings } from "lucide-react";
 import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
 import { PageShell } from "~/components/PageShell";
-import { Field } from "~/components/ui/Field";
-import { Input } from "~/components/ui/Input";
 import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
+import { LocationsList } from "~/components/settings/locations-list";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { geocode } from "~/lib/maps.server";
@@ -26,6 +25,12 @@ import {
   removeCategory,
   renameCategory,
 } from "~/lib/db/categories";
+import {
+  addLocation as addLocationRow,
+  readLocations,
+  removeLocation as removeLocationRow,
+  updateLocation as updateLocationRow,
+} from "~/lib/db/locations";
 import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
@@ -45,15 +50,23 @@ import type { Route } from "./+types/settings";
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const account = await readAccount(user.accountId);
-  const [categories, settings, categoryCounts, oauthSessions, rates, members] =
-    await Promise.all([
-      readCategories(user.accountId),
-      readSettings(user.accountId),
-      readCategoryCounts(user.accountId),
-      listUserOAuthSessions(user.id),
-      readMileageRates(),
-      readAccountUsers(user.accountId),
-    ]);
+  const [
+    categories,
+    settings,
+    categoryCounts,
+    oauthSessions,
+    rates,
+    members,
+    locations,
+  ] = await Promise.all([
+    readCategories(user.accountId),
+    readSettings(user.accountId),
+    readCategoryCounts(user.accountId),
+    listUserOAuthSessions(user.id),
+    readMileageRates(),
+    readAccountUsers(user.accountId),
+    readLocations(user.accountId),
+  ]);
   // The "current rate" line is computed CLIENT-side from the browser's
   // local today; the server runs UTC and must not guess the user's day.
   // The rates table itself is passed through (timezone-independent).
@@ -65,7 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       count: categoryCounts.get(c.name) ?? 0,
     })),
     homeAddress: settings.homeAddress,
-    workAddress: settings.workAddress,
+    locations,
     userEmail: user.email,
     marketingUnsubscribed: await readMarketingUnsubscribed(user.id),
     rates,
@@ -122,21 +135,53 @@ export async function action({ request }: Route.ActionArgs) {
       await writeSettings(user.accountId, settings);
       break;
     }
-    case "saveWork": {
-      const settings = await readSettings(user.accountId);
-      const address = formString(form, "workAddress").trim();
-      settings.workAddress = address;
-      if (address) {
-        const geocoded = await geocode(address);
-        settings.workLat = geocoded.lat;
-        settings.workLng = geocoded.lng;
-      } else {
-        settings.workLat = null;
-        settings.workLng = null;
-      }
-      await writeSettings(user.accountId, settings);
-      break;
+    case "addLocation": {
+      const address = formString(form, "address").trim();
+      const geocoded = address ? await geocode(address) : null;
+      const result = await addLocationRow(user.accountId, {
+        name: formString(form, "name"),
+        address,
+        lat: geocoded?.lat ?? null,
+        lng: geocoded?.lng ?? null,
+      });
+      return Response.json(
+        result.ok
+          ? {
+              ok: true,
+              id: result.location.id,
+              name: result.location.name,
+              geocoded: result.location.lat !== null,
+            }
+          : result,
+      );
     }
+    case "updateLocation": {
+      const address = formString(form, "address").trim();
+      const geocoded = address ? await geocode(address) : null;
+      const result = await updateLocationRow(
+        user.accountId,
+        formString(form, "id"),
+        {
+          name: formString(form, "name"),
+          address,
+          lat: geocoded?.lat ?? null,
+          lng: geocoded?.lng ?? null,
+        },
+      );
+      return Response.json(
+        result.ok
+          ? {
+              ok: true,
+              id: result.location.id,
+              name: result.location.name,
+              geocoded: result.location.lat !== null,
+            }
+          : result,
+      );
+    }
+    case "removeLocation":
+      await removeLocationRow(user.accountId, formString(form, "id"));
+      break;
     case "marketingEmails": {
       const preference = formString(form, "preference");
       if (preference === "unsubscribe") {
@@ -158,7 +203,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   const {
     categories,
     homeAddress,
-    workAddress,
+    locations,
     rates,
     accountName,
     inviteCode,
@@ -309,34 +354,13 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       </section>
 
       <section id="start-location" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Start/end location</h2>
+        <h2 className="mb-2 text-lg font-semibold">Locations</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Used as the start and end of every mileage route; trips are always
-          round trips back here.
+          Home is the start and end of every trip, so it can't be removed. The
+          other locations are places you drive to; pick one by name when you log
+          a trip.
         </p>
-        <Form method="post" className="flex items-end gap-2">
-          <input type="hidden" name="intent" value="saveHome" />
-          <Field label="Address" className="min-w-0 flex-1">
-            <Input type="text" name="homeAddress" defaultValue={homeAddress} />
-          </Field>
-          <Button type="submit" size="md">
-            <MapPin aria-hidden="true" className="h-4 w-4" /> Save
-          </Button>
-        </Form>
-        <p className="mt-4 mb-2 text-sm text-gray-500 dark:text-gray-400">
-          Set a work address and Insights can file the drive to the office ("log
-          the drive from the office back home").
-        </p>
-        <Form method="post" className="flex items-end gap-2">
-          <input type="hidden" name="intent" value="saveWork" />
-          <Field label="Work address" className="min-w-0 flex-1">
-            <Input type="text" name="workAddress" defaultValue={workAddress} />
-          </Field>
-          <Button type="submit" size="md">
-            <MapPin aria-hidden="true" className="h-4 w-4" /> Save
-            <span className="sr-only"> work address</span>
-          </Button>
-        </Form>
+        <LocationsList homeAddress={homeAddress} locations={locations} />
       </section>
 
       <section id="emails" className="mb-8 scroll-mt-6">

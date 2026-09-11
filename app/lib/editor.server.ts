@@ -1,17 +1,24 @@
 import { readCategories } from "~/lib/db/categories";
 import { readPriorMerchants } from "~/lib/db/expenses";
+import { readLocations } from "~/lib/db/locations";
 import { readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
-import { homeLocation, type Expense, type Location } from "~/lib/types";
+import {
+  homeLocation,
+  type Expense,
+  type Location,
+  type NamedLocation,
+} from "~/lib/types";
 
 /**
  * Editor context shared by the edit loader (/expense/:id) and the create
  * loader (/expense/new): the expense plus the pickers and defaults both
  * editors render, namely open reports, categories, prior merchants, home location,
- * and the IRS mileage-rate master table (the editor resolves the rate from
- * it by trip date + type, so changing either recomputes the amount).
+ * the account's named locations, and the IRS mileage-rate master table (the
+ * editor resolves the rate from it by trip date + type, so changing either
+ * recomputes the amount).
  */
 export async function loadEditorContext(
   accountId: string,
@@ -22,16 +29,19 @@ export async function loadEditorContext(
   categories: string[];
   merchants: string[];
   home: Location;
+  locations: NamedLocation[];
   rates: MileageRateEntry[];
   reportClosed: boolean;
 }> {
-  const [reports, categories, settings, merchants, rates] = await Promise.all([
-    readReports(accountId),
-    readCategories(accountId),
-    readSettings(accountId),
-    readPriorMerchants(accountId),
-    readMileageRates(),
-  ]);
+  const [reports, categories, settings, merchants, rates, locations] =
+    await Promise.all([
+      readReports(accountId),
+      readCategories(accountId),
+      readSettings(accountId),
+      readPriorMerchants(accountId),
+      readMileageRates(),
+      readLocations(accountId),
+    ]);
   const closedReportNames = new Set(
     reports.filter((r) => r.closed).map((r) => r.name),
   );
@@ -43,6 +53,7 @@ export async function loadEditorContext(
     categories: categories.map((c) => c.name),
     merchants,
     home: homeLocation(settings),
+    locations,
     rates,
     reportClosed: closedReportNames.has(expense.report),
   };

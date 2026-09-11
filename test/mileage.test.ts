@@ -259,6 +259,79 @@ describe("Mileage expense", () => {
     );
   });
 
+  it("fills a trip from the saved location chips", async () => {
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Mileage" }).click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+
+    // The route endpoint answers with each stop's address plus a fixed
+    // distance, so what the test asserts is the trip's shape, not OSRM.
+    await page.route("**/api/route", async (route) => {
+      const body = JSON.parse(route.request().postData() ?? "{}") as {
+        locations: { address: string }[];
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: body.locations.map((l) => ({
+            address: l.address,
+            lat: 34.05,
+            lng: -118.24,
+          })),
+          distanceMiles: "9.99",
+          amount: "6.99",
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.23],
+          ],
+          returnCoords: [],
+          approximate: false,
+        }),
+      });
+    });
+
+    // The account's saved places, home first: home is the trip's fixed
+    // start and end, so it is a chip like the others.
+    const inputs = page.locator("input[placeholder='Address']");
+    await expect(
+      page.getByRole("button", { name: "Use Home as a stop" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Use Work as a stop" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Use Hospital as a stop" }),
+    ).toBeVisible();
+
+    // Start/end is pre-filled with home; the blank stop takes Work.
+    await expect(inputs.nth(0)).toHaveValue("123 Test St, Testing, CA");
+    await page.getByRole("button", { name: "Use Work as a stop" }).click();
+    await expect(inputs).toHaveCount(2);
+    await expect(inputs.nth(1)).toHaveValue("456 Dev Ave, Coding, CA");
+    await expect(page.getByText("9.99 mi")).toBeVisible();
+
+    // No blank stop left, so the next chip appends one: home, work, hospital.
+    await page.getByRole("button", { name: "Use Hospital as a stop" }).click();
+    await expect(inputs).toHaveCount(3);
+    await expect(inputs.nth(2)).toHaveValue("789 Care Blvd, Testing, CA");
+    await expect(page.getByText("Stop 2", { exact: true })).toBeVisible();
+
+    // The home stop is untouched, and the trip is still a draft: picking a
+    // place fills the form, it never writes a row.
+    await expect(inputs.nth(0)).toHaveValue("123 Test St, Testing, CA");
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID },
+      }),
+    ).toBe(before);
+  });
+
   it("updates the field to the geocoded address on blur, or shows an error", async () => {
     await page.goto("/", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();

@@ -17,6 +17,7 @@ model Account {
   inboundEmails              InboundEmail[]
   inboundSenderVerifications InboundSenderVerification[]
   inboundSenders             InboundSender[]
+  locations                  Location[]
   receiptExtractions         ReceiptExtraction[]
   reconciliationRuns         ReconciliationRun[]
   reports                    Report[]
@@ -46,6 +47,29 @@ model Category {
 
   @@index([accountId, name], map: "categories_accountId_name_key", unique: true)
   @@map("categories")
+}
+
+/// A place the account drives to and from, by name ("Work", "Hospital",
+/// "Restaurant"). The home location is NOT here: it stays in the settings
+/// key/value rows, because it is the fixed first/last stop of every trip
+/// (see app/lib/db/settings.ts).
+model Location {
+  id        String   @id(map: "locations_pkey")
+  accountId String
+  name      String
+  /// The canonical address as typed (never geocoder-rewritten here); the
+  /// stop the editor builds from it carries the coordinates below.
+  address   String
+  /// Geocoder coordinates for `address`; null when the address did not
+  /// resolve (the editor geocodes it again when the stop is used).
+  lat       Float?
+  lng       Float?
+  createdAt TimestampString(3)
+  updatedAt TimestampString(3)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "locations_accountId_fkey", index: false)
+
+  @@index([accountId, name], map: "locations_accountId_name_key", unique: true)
+  @@map("locations")
 }
 
 model ReconciliationRun {

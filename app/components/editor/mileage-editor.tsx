@@ -18,7 +18,7 @@ import type {
   MileageType,
   RouteGeometry,
 } from "~/lib/types";
-import { geocodedLocations } from "~/lib/types";
+import { HOME_NAME, geocodedLocations } from "~/lib/types";
 import {
   ClosedReportBanner,
   DateAmountFields,
@@ -64,7 +64,14 @@ function shortAddress(address: string): string {
 }
 
 export function MileageEditor({ data }: { data: EditorData }) {
-  const { reports, categories, home, rates, reportClosed } = data;
+  const {
+    reports,
+    categories,
+    home,
+    rates,
+    reportClosed,
+    locations: savedLocations,
+  } = data;
   const expense = data.expense as MileageExpense;
   const isNew = data.mode === "create";
   const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow();
@@ -246,9 +253,10 @@ export function MileageEditor({ data }: { data: EditorData }) {
    * under the field and keeps the typed text; an emptied field that was
    * part of the route drops out (the server ignores blank addresses) and
    * the map, distance, and amount recompute without it. The map never
-   * changes while typing. */
-  async function commitLocation(i: number) {
-    const address = locations[i]?.address ?? "";
+   * changes while typing. `all` is the array to compute from: the current
+   * state for a blur, or the array a chip just built. */
+  async function commitLocation(i: number, all: Location[] = locations) {
+    const address = all[i]?.address ?? "";
     // A field that was never filled (or already emptied and committed)
     // blurs without changing the trip, so no recompute. Only a field with
     // typed content, or one that was part of the committed route and is
@@ -259,7 +267,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
     setGeocodingFields((prev) => (prev.includes(i) ? prev : [...prev, i]));
     try {
       const seq = ++requestSeq.current;
-      const result = await computeRoute(locations, rate);
+      const result = await computeRoute(all, rate);
       // A stale result (seq already advanced by a newer blur/edit) is
       // silently dropped: a newer request is in flight.
       if (requestSeq.current !== seq) return;
@@ -302,6 +310,38 @@ export function MileageEditor({ data }: { data: EditorData }) {
     } finally {
       setGeocodingFields((prev) => prev.filter((x) => x !== i));
     }
+  }
+
+  /** A saved place tapped as a stop: fill the first empty row, or append a
+   * row when every row is taken. The stop keeps the place's coordinates, so
+   * the route recompute skips geocoding it. The array is built once here and
+   * computed from directly, so the tap costs one request and cannot be
+   * overtaken by the state it just set. */
+  async function pickNamedLocation(saved: {
+    name: string;
+    address: string;
+    lat: number | null;
+    lng: number | null;
+  }) {
+    const blank = locations.findIndex((l) => !l.address.trim());
+    const index = blank === -1 ? locations.length : blank;
+    const next = locations.map((l) => ({ ...l }));
+    if (blank === -1) next.push({ address: "", lat: null, lng: null });
+    next[index] = {
+      address: saved.address,
+      lat: saved.lat,
+      lng: saved.lng,
+    };
+    // The tap owns the state it sets: any in-flight geocode is stale.
+    requestSeq.current += 1;
+    setLocations(next);
+    setResolved(next);
+    setAddressErrors((prev) => {
+      const errors = [...prev];
+      errors[index] = null;
+      return errors;
+    });
+    await commitLocation(index, next);
   }
 
   function addLocation() {
@@ -447,6 +487,14 @@ export function MileageEditor({ data }: { data: EditorData }) {
     };
   });
 
+  // One chip per place a stop can be authored from: Home first (the trip's
+  // fixed start and end), then the account's saved locations, which
+  // readLocations already returns alphabetically.
+  const chips = [
+    ...(home.address.trim() ? [{ name: HOME_NAME, ...home }] : []),
+    ...savedLocations,
+  ];
+
   return (
     <Shell title="Mileage expense" nav={data.nav} dimmed={!!transition}>
       <ErrorBanner error={error} />
@@ -541,6 +589,29 @@ export function MileageEditor({ data }: { data: EditorData }) {
             </Button>
           ) : null}
         </div>
+        {!reportClosed && chips.length > 0 ? (
+          <div className="mb-2">
+            <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
+              Places
+              {savedLocations.length === 0 ? " (add your own in Settings)" : ""}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {chips.map((chip) => (
+                <Button
+                  key={chip.name}
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="px-2 sm:px-3"
+                  aria-label={`Use ${chip.name} as a stop`}
+                  onClick={() => void pickNamedLocation(chip)}
+                >
+                  {chip.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
             <li key={i} className="flex items-start gap-2">

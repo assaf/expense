@@ -25,6 +25,7 @@ import {
   readPriorMerchants,
   upsertExpense,
 } from "~/lib/db/expenses";
+import { readLocations } from "~/lib/db/locations";
 import { deleteOAuthClient, registerOAuthClient } from "~/lib/db/oauth";
 import {
   addReport,
@@ -748,17 +749,19 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     "get_settings",
     {
       description:
-        "Account settings: the home address and the IRS mileage-rate master table (period + type).",
+        "Account settings: the home address (start and end of every trip), the account's named locations, and the IRS mileage-rate master table (period + type).",
       inputSchema: z.object({}),
     },
     async () => {
-      const [settings, rates] = await Promise.all([
+      const [settings, locations, rates] = await Promise.all([
         readSettings(accountId),
+        readLocations(accountId),
         readMileageRates(),
       ]);
       return ok({
         mileageRates: rates,
         homeAddress: settings.homeAddress,
+        locations: locations.map((l) => ({ name: l.name, address: l.address })),
       });
     },
   );

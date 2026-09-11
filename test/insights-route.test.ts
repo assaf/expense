@@ -15,7 +15,6 @@ import {
 } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { readExpenses } from "~/lib/db/expenses";
-import { readSettings, writeSettings } from "~/lib/db/settings";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
 import { addReport } from "~/lib/db/reports";
 import {
@@ -169,10 +168,7 @@ describe("insights route", () => {
 describe("insightProfile", () => {
   const base = {
     account: { name: "Arkin Household" },
-    settings: {
-      homeAddress: "123 Main St",
-      workAddress: "500 Work Ave, Testing, CA",
-    },
+    settings: { homeAddress: "123 Main St" },
     userEmail: "assaf@arkin.me",
     members: [{ email: "assaf@arkin.me" }, { email: "partner@arkin.me" }],
     categories: [{ name: "Software" }, { name: "" }, { name: "Meals" }],
@@ -180,6 +176,7 @@ describe("insightProfile", () => {
       { name: "2026 Test", createdAt: new Date("2026-09-09T20:30:00Z") },
       { name: "Legacy", createdAt: null },
     ],
+    locations: [{ name: "Work", address: "500 Work Ave, Testing, CA" }],
     recentStops: ["1 Office Way, Testing, CA", "2 Home St, Testing, CA"],
     tz: "America/Los_Angeles",
   };
@@ -188,7 +185,11 @@ describe("insightProfile", () => {
     const profile = insightProfile(base);
     expect(profile).toContain("Name (account): Arkin Household");
     expect(profile).toContain("Home location: 123 Main St");
-    expect(profile).toContain("Work location: 500 Work Ave, Testing, CA");
+    // The named places a trip is authored from: home first, then the
+    // account's own names, each as "Name = address".
+    expect(profile).toContain(
+      "Locations: Home = 123 Main St, Work = 500 Work Ave, Testing, CA",
+    );
     expect(profile).toContain(
       "Recent trip stops: 1 Office Way, Testing, CA, 2 Home St, Testing, CA",
     );
@@ -200,20 +201,29 @@ describe("insightProfile", () => {
     expect(profile).toContain("Legacy");
   });
 
+  it("lists named locations without home when no home address is set", () => {
+    const profile = insightProfile({
+      ...base,
+      settings: { homeAddress: "" },
+    });
+    expect(profile).toContain("Locations: Work = 500 Work Ave, Testing, CA");
+  });
+
   it("drops lines with nothing to say", () => {
     const profile = insightProfile({
       account: undefined,
-      settings: { homeAddress: "", workAddress: "" },
+      settings: { homeAddress: "" },
       userEmail: "solo@x.me",
       members: [],
       categories: [],
       reports: [],
+      locations: [],
       recentStops: [],
       tz: "UTC",
     });
     expect(profile).not.toContain("Name (account)");
     expect(profile).not.toContain("Home location");
-    expect(profile).not.toContain("Work location");
+    expect(profile).not.toContain("Locations:");
     expect(profile).not.toContain("Recent trip stops");
     expect(profile).toContain("Email addresses: solo@x.me");
     expect(profile).not.toContain("Categories:");
@@ -608,13 +618,6 @@ describe("filing a trip from the chat (plan_mileage)", () => {
   });
 
   it("proposes a trip, files it only on confirm, and reports what it stored", async () => {
-    // The work address is what "the office" resolves to, and the account's
-    // only non-home recent stop rides along as the fallback hint. Writing
-    // through writeSettings busts the settings cache the route reads.
-    await writeSettings(TEST_ACCOUNT_ID, {
-      ...(await readSettings(TEST_ACCOUNT_ID)),
-      workAddress: "1 Office Way",
-    });
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
@@ -655,11 +658,13 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     expect(asked.ok).toBe(true);
     expect(asked.answer).toContain("confirm");
     // "the office" and "home" are resolvable from the model's context: the
-    // work setting, minus the home stop, plus the account's other stops.
+    // account's home address plus every named place the chat may name.
     const prompt = tools.mock.calls[0]![0].find(
       (m) => m.role === "user",
     )!.content;
-    expect(prompt).toContain("Work location: 1 Office Way");
+    expect(prompt).toContain(
+      "Locations: Home = 123 Test St, Testing, CA, Hospital = 789 Care Blvd, Testing, CA, Work = 456 Dev Ave, Coding, CA",
+    );
     expect(prompt).toContain("Recent trip stops: 456 Dev Ave, Coding, CA");
     // The proposal carries the app's own geocoded addresses and figures.
     expect(asked.pending).toMatchObject({

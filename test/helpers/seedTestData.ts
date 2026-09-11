@@ -115,6 +115,46 @@ export async function seedTestData() {
     ],
   });
 
+  // --- Named locations (per account) ---------------------------------------
+  // The home location is NOT here: it is the settings rows above (it is the
+  // fixed start/end of every trip). These are the places a trip picks by
+  // name; the mileage fixture below already drives to "Work".
+  await testPrisma.location.createMany({
+    data: [
+      {
+        id: "loc_test_work",
+        accountId: TEST_ACCOUNT_ID,
+        name: "Work",
+        address: "456 Dev Ave, Coding, CA",
+        lat: 34.0622,
+        lng: -118.2537,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "loc_test_hospital",
+        accountId: TEST_ACCOUNT_ID,
+        name: "Hospital",
+        address: "789 Care Blvd, Testing, CA",
+        lat: 34.071,
+        lng: -118.271,
+        createdAt: now,
+        updatedAt: now,
+      },
+      // Isolation fixture: the other account's place must never show up.
+      {
+        id: "loc_other_office",
+        accountId: OTHER_ACCOUNT_ID,
+        name: "Work",
+        address: "1 Other Way, Elsewhere, CA",
+        lat: 34.99,
+        lng: -118.99,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+  });
+
   // --- Expenses ------------------------------------------------------------
   const expenses = [
     {

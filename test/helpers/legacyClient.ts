@@ -98,6 +98,7 @@ const MODEL_NAMES: Record<string, string> = {
   inboundEmailCooldown: "InboundEmailCooldown",
   inboundSender: "InboundSender",
   inboundSenderVerification: "InboundSenderVerification",
+  location: "Location",
   oAuthClient: "OAuthClient",
   reconciliationRun: "ReconciliationRun",
   receiptExtraction: "ReceiptExtraction",

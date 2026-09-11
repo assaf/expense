@@ -275,9 +275,20 @@ describe("MCP endpoint", () => {
     const settings = await modernCallTool(accessToken, "get_settings", {});
     expect(settings.isError).toBe(false);
     expect(settings.payload).toHaveProperty("mileageRates");
+    // The named places the account drives to: an agent resolves "work" here
+    // instead of asking for the address. Home stays in homeAddress.
+    expect(settings.payload.homeAddress).toBe("123 Test St, Testing, CA");
+    expect(settings.payload.locations).toEqual([
+      { name: "Hospital", address: "789 Care Blvd, Testing, CA" },
+      { name: "Work", address: "456 Dev Ave, Coding, CA" },
+    ]);
 
     const other = await modernCallTool(otherAccessToken, "get_settings", {});
     expect(other.isError).toBe(false);
+    // Account-scoped: the other account's "Work" is its own place.
+    expect(other.payload.locations).toEqual([
+      { name: "Work", address: "1 Other Way, Elsewhere, CA" },
+    ]);
 
     // A modern-era capture writes a real expense with the image.
     const png = await sharp({

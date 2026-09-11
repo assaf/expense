@@ -43,7 +43,7 @@ describe("Settings", () => {
     await expect(page.locator("h1")).toContainText("Settings");
   });
 
-  it("shows categories, mileage rates, and home fields", async () => {
+  it("shows categories, mileage rates, and the locations section", async () => {
     await expect(
       page.getByRole("heading", { name: "Categories" }),
     ).toBeVisible();
@@ -51,7 +51,7 @@ describe("Settings", () => {
       page.getByRole("heading", { name: "Mileage rates" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Start/end location" }),
+      page.getByRole("heading", { name: "Locations" }),
     ).toBeVisible();
   });
 
@@ -111,12 +111,25 @@ describe("Settings", () => {
     await page.close();
   });
 
-  it("shows the seeded home address in the start/end section", async () => {
+  it("shows the seeded home address and the named locations", async () => {
     const section = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Start/end location" }),
+      has: page.getByRole("heading", { name: "Locations" }),
     });
+    // Home is the first row and cannot be removed: it is the trip anchor.
     await expect(section.locator('input[name="homeAddress"]')).toHaveValue(
       "123 Test St, Testing, CA",
+    );
+    // The named places the trip editor offers by name, with their addresses.
+    const rows = section.locator("ul li");
+    await expect(rows.filter({ hasText: "Work" })).toContainText(
+      "456 Dev Ave, Coding, CA",
+    );
+    await expect(rows.filter({ hasText: "Hospital" })).toContainText(
+      "789 Care Blvd, Testing, CA",
+    );
+    // Home has no delete button (the named places do).
+    await expect(section.getByRole("button", { name: /^Delete / })).toHaveCount(
+      2,
     );
   });
 
@@ -363,6 +376,36 @@ describe("Settings", () => {
     expect(
       await testPrisma.category.count({
         where: { accountId: TEST_ACCOUNT_ID, name: "Temp Dupe" },
+      }),
+    ).toBe(1);
+    await page.close();
+  });
+
+  it("deletes a named location after confirming", async () => {
+    // Last in the file: it removes a seeded row, and the display tests above
+    // assert the list as seeded.
+    const page = await goto("/settings");
+    const section = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Locations" }),
+    });
+    const row = section.locator("ul li").filter({ hasText: "Hospital" });
+    await expect(row).toBeVisible();
+
+    // Dismissing the confirmation keeps the place.
+    page.once("dialog", (d) => void d.dismiss());
+    await row.getByRole("button", { name: "Delete Hospital" }).click();
+    await expect(row).toBeVisible();
+
+    // Accepting removes it; nothing else in the list changes.
+    page.once("dialog", (d) => void d.accept());
+    await row.getByRole("button", { name: "Delete Hospital" }).click();
+    await expect(row).toHaveCount(0);
+    await expect(
+      section.locator("ul li").filter({ hasText: "Work" }),
+    ).toBeVisible();
+    expect(
+      await testPrisma.location.count({
+        where: { accountId: TEST_ACCOUNT_ID },
       }),
     ).toBe(1);
     await page.close();

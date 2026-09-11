@@ -18,6 +18,7 @@ import { requireUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
 import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
+import { readLocations } from "~/lib/db/locations";
 import { readReports } from "~/lib/db/reports";
 import { readSettings } from "~/lib/db/settings";
 import {
@@ -173,13 +174,15 @@ export async function action({ request }: Route.LoaderArgs) {
     lockMs: 15 * 60_000,
   });
 
-  const [account, categories, reports, settings, members] = await Promise.all([
-    readAccount(user.accountId),
-    readCategories(user.accountId),
-    readReports(user.accountId),
-    readSettings(user.accountId),
-    readAccountUsers(user.accountId),
-  ]);
+  const [account, categories, reports, settings, members, locations] =
+    await Promise.all([
+      readAccount(user.accountId),
+      readCategories(user.accountId),
+      readReports(user.accountId),
+      readSettings(user.accountId),
+      readAccountUsers(user.accountId),
+      readLocations(user.accountId),
+    ]);
   const expenses = (await readExpenses(user.accountId)).map(insightExpense);
   const merchants = knownMerchants(expenses);
   // The settings lists are authoritative (they include unused entries,
@@ -189,6 +192,7 @@ export async function action({ request }: Route.LoaderArgs) {
   const profile = insightProfile({
     account,
     settings,
+    locations: locations.map((l) => ({ name: l.name, address: l.address })),
     userEmail: user.email,
     members,
     categories,

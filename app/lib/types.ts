@@ -21,6 +21,28 @@ export interface Location {
   lng: number | null;
 }
 
+/**
+ * A place the account drives to, saved under a name ("Work", "Hospital",
+ * "Restaurant") so a trip can be authored by name instead of by address.
+ * The home location is deliberately NOT one of these: it is the fixed
+ * start and end of every trip and lives in Settings.
+ */
+export interface NamedLocation {
+  id: string;
+  /** Display name, unique per account (case-insensitively). */
+  name: string;
+  /** The address as saved; the coordinates are what a stop uses. */
+  address: string;
+  lat: number | null;
+  lng: number | null;
+}
+
+/** The name the home location goes by. Home is not a named location (see
+ * NamedLocation), so this is both its display name and the name a named
+ * location may not take. Lives here, not with the locations table, because
+ * the editor renders it client-side and the db module reaches Prisma. */
+export const HOME_NAME = "Home";
+
 /** Fields common to every expense. */
 interface ExpenseBase {
   id: string;
@@ -201,16 +223,12 @@ export interface User {
 /** Settings stored as key/value rows in Postgres (a settings table).
  * Mileage rates are NOT here; they live in the global mileage_rates master table. */
 export type Settings = {
-  /** Home location used as the first/last stop of every mileage route. */
+  /** Home location used as the first/last stop of every mileage route. It
+   * is the one location that can never be removed; the account's other
+   * named places live in the locations table (app/lib/db/locations.ts). */
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
-  /** The account's work address, when it has one: what a conversational
-   * request resolves "the office"/"work" to (insights). Unlike the home
-   * address it is not part of a route, so it is only ever a trip stop. */
-  workAddress: string;
-  workLat: number | null;
-  workLng: number | null;
   /** True when the account completed Fastmail onboarding and hasn't
    * dismissed the welcome panel yet; the ONLY accounts that see the
    * panel are the ones the onboarding flow explicitly flags (the default
@@ -222,9 +240,6 @@ export const DEFAULT_SETTINGS: Settings = {
   homeAddress: "",
   homeLat: null,
   homeLng: null,
-  workAddress: "",
-  workLat: null,
-  workLng: null,
   welcomePending: false,
 };
 

@@ -383,7 +383,7 @@ const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the comp
 /** Added when the plan tool is available: how to turn "log the drive from
  * the office back home on Tuesday" into a proposed trip. The tool resolves
  * and prices; filing it is the user's confirm click. */
-const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — "home" and "back home" are the Home location line; "the office" and "work" are the Work location line, or one of the Recent trip stops when no work address is set. If a stop is not one of those addresses and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
+const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — the Locations line lists the account's saved places as Name = address, so "home" and "back home" are the Home entry, and "the office", "work", "the hospital" and any other place the user names resolve to the entry with that name. When the account has not named the place, fall back to the Recent trip stops. If a stop is not one of those and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
 
 /** The read-tool guidance, plus the plan-tool paragraph when the chat can
  * propose a trip at all (a read-only call must not be told about a tool it
@@ -411,20 +411,23 @@ export function insightReportNames(
  * fixtures work in tests) plus the client's IANA timezone. */
 export interface InsightProfileInput {
   account: { name: string } | undefined;
-  settings: { homeAddress: string; workAddress: string };
+  settings: { homeAddress: string };
+  /** The account's named places, in read order (work, hospital, ...). */
+  locations: { name: string; address: string }[];
   /** The signed-in user's own address; members may share it. */
   userEmail: string;
   members: { email: string }[];
   categories: { name: string }[];
   reports: { name: string; createdAt: Date | string | null }[];
-  /** Stop addresses from the account's most recent trips: what "the
-   * office" resolves to when no work address is set. */
+  /** Stop addresses from the account's most recent trips: where a stop the
+   * account never named ("the office" without a saved Work location)
+   * resolves from. */
   recentStops: string[];
   tz: string;
 }
 
 /** The "About the user" context block the answer model sees: account
- * name, home and work locations, recent trip stops, the account's email
+ * name, home and named locations, recent trip stops, the account's email
  * addresses, category and report names (reports timestamped in the user's
  * zone). Empty entries are dropped so the model never sees placeholder
  * lines. Pure. */
@@ -432,12 +435,18 @@ export function insightProfile(input: InsightProfileInput): string {
   const emails = [
     ...new Set([input.userEmail, ...input.members.map((m) => m.email)]),
   ];
+  const places = [
+    ...(input.settings.homeAddress
+      ? [{ name: "Home", address: input.settings.homeAddress }]
+      : []),
+    ...input.locations,
+  ];
   return [
     `Name (account): ${input.account?.name ?? ""}`,
     input.settings.homeAddress
       ? `Home location: ${input.settings.homeAddress}`
       : "",
-    `Work location: ${input.settings.workAddress}`,
+    `Locations: ${places.map((p) => `${p.name} = ${p.address}`).join(", ")}`,
     `Recent trip stops: ${input.recentStops.join(", ")}`,
     `Email addresses: ${emails.join(", ")}`,
     `Categories: ${input.categories.map((c) => c.name).join(", ")}`,

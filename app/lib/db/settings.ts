@@ -21,9 +21,6 @@ export async function readSettings(accountId: string): Promise<Settings> {
     settings.homeAddress = kv["homeAddress"] ?? "";
     settings.homeLat = kv["homeLat"] ? Number(kv["homeLat"]) : null;
     settings.homeLng = kv["homeLng"] ? Number(kv["homeLng"]) : null;
-    settings.workAddress = kv["workAddress"] ?? "";
-    settings.workLat = kv["workLat"] ? Number(kv["workLat"]) : null;
-    settings.workLng = kv["workLng"] ? Number(kv["workLng"]) : null;
     settings.welcomePending = kv["welcomePending"] === "1";
     return settings;
   });
@@ -44,17 +41,6 @@ export async function writeSettings(
       accountId,
       key: "homeLng",
       value: settings.homeLng === null ? "" : String(settings.homeLng),
-    },
-    { accountId, key: "workAddress", value: settings.workAddress },
-    {
-      accountId,
-      key: "workLat",
-      value: settings.workLat === null ? "" : String(settings.workLat),
-    },
-    {
-      accountId,
-      key: "workLng",
-      value: settings.workLng === null ? "" : String(settings.workLng),
     },
     {
       accountId,
