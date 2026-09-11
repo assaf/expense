@@ -3,6 +3,8 @@ import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
+import { addLocation, readLocations, removeLocation } from "~/lib/db/locations";
+import { readSettings, writeSettings } from "~/lib/db/settings";
 
 /** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
 function todayLocal(): string {
@@ -300,24 +302,24 @@ describe("Mileage expense", () => {
     // start and end, so it is a chip like the others.
     const inputs = page.locator("input[placeholder='Address']");
     await expect(
-      page.getByRole("button", { name: "Use Home as a stop" }),
+      page.getByRole("button", { name: "Add Home as a stop" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Use Work as a stop" }),
+      page.getByRole("button", { name: "Add Work as a stop" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Use Hospital as a stop" }),
+      page.getByRole("button", { name: "Add Hospital as a stop" }),
     ).toBeVisible();
 
     // Start/end is pre-filled with home; the blank stop takes Work.
     await expect(inputs.nth(0)).toHaveValue("123 Test St, Testing, CA");
-    await page.getByRole("button", { name: "Use Work as a stop" }).click();
+    await page.getByRole("button", { name: "Add Work as a stop" }).click();
     await expect(inputs).toHaveCount(2);
     await expect(inputs.nth(1)).toHaveValue("456 Dev Ave, Coding, CA");
     await expect(page.getByText("9.99 mi")).toBeVisible();
 
     // No blank stop left, so the next chip appends one: home, work, hospital.
-    await page.getByRole("button", { name: "Use Hospital as a stop" }).click();
+    await page.getByRole("button", { name: "Add Hospital as a stop" }).click();
     await expect(inputs).toHaveCount(3);
     await expect(inputs.nth(2)).toHaveValue("789 Care Blvd, Testing, CA");
     await expect(page.getByText("Stop 2", { exact: true })).toBeVisible();
@@ -752,6 +754,50 @@ describe("Mileage expense", () => {
       timeout: 15_000,
     });
     await page.unroute("**/api/route");
+  });
+
+  it("keeps Add stop available with no saved places", async () => {
+    // An account that never set a home address and saved no places still
+    // needs the button: it is the editor's only way to add a stop. The
+    // changes go through the app's own writes so the server's caches are
+    // busted for the page under test.
+    const settings = await readSettings(TEST_ACCOUNT_ID);
+    const places = await readLocations(TEST_ACCOUNT_ID);
+    await writeSettings(TEST_ACCOUNT_ID, {
+      ...settings,
+      homeAddress: "",
+      homeLat: null,
+      homeLng: null,
+    });
+    for (const place of places) {
+      await removeLocation(TEST_ACCOUNT_ID, place.id);
+    }
+    try {
+      await page.goto("/", { waitUntil: "load" });
+      await page.getByRole("button", { name: "Mileage" }).click();
+      await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+        timeout: 10_000,
+      });
+
+      // No places to tap, but the row and its button are still there.
+      await expect(page.getByRole("button", { name: /^Use / })).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Add stop" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Add stop" }).click();
+      await expect(page.locator("input[placeholder='Address']")).toHaveCount(3);
+    } finally {
+      // Restore the seeded account for the rest of the run.
+      await writeSettings(TEST_ACCOUNT_ID, settings);
+      for (const place of places) {
+        await addLocation(TEST_ACCOUNT_ID, {
+          name: place.name,
+          address: place.address,
+          lat: place.lat,
+          lng: place.lng,
+        });
+      }
+    }
   });
 
   afterAll(async () => {

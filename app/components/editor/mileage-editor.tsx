@@ -574,42 +574,43 @@ export function MileageEditor({ data }: { data: EditorData }) {
       />
 
       <div className="mt-4">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Locations
-          </span>
-          {!reportClosed ? (
+        <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
+          Locations
+        </span>
+        {/* One row of "add a stop" buttons: each saved place adds itself as
+         * a stop (the first empty row, or a new one), and Add stop adds an
+         * empty row. They read the same way and the plain Add stop sits
+         * flush right whether or not places are saved. */}
+        {!reportClosed ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {chips.map((chip) => (
+              <Button
+                key={chip.name}
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="px-2 sm:px-3"
+                aria-label={`Add ${chip.name} as a stop`}
+                onClick={() => void pickNamedLocation(chip)}
+              >
+                <Plus aria-hidden="true" className="h-4 w-4" /> Add: {chip.name}
+              </Button>
+            ))}
+            {chips.length === 0 ? (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Save places like Work or the hospital in Settings to fill a stop
+                by name.
+              </span>
+            ) : null}
             <Button
               type="button"
-              variant="ghost"
+              variant="secondary"
               size="sm"
+              className="ml-auto px-2 sm:px-3"
               onClick={addLocation}
             >
               <Plus aria-hidden="true" className="h-4 w-4" /> Add stop
             </Button>
-          ) : null}
-        </div>
-        {!reportClosed && chips.length > 0 ? (
-          <div className="mb-2">
-            <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
-              Places
-              {savedLocations.length === 0 ? " (add your own in Settings)" : ""}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {chips.map((chip) => (
-                <Button
-                  key={chip.name}
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="px-2 sm:px-3"
-                  aria-label={`Use ${chip.name} as a stop`}
-                  onClick={() => void pickNamedLocation(chip)}
-                >
-                  {chip.name}
-                </Button>
-              ))}
-            </div>
           </div>
         ) : null}
         <ol className="flex flex-col gap-2">
