@@ -222,6 +222,23 @@ mailbox control, so onboarding stamps `emailVerifiedAt` without an emailed link.
 Keep `prisma/backup.sql` (~300MB) out of Vercel uploads through the
 `.vercelignore` `backup*.sql` entries.
 
+**Security invariants.** Every mail-importing path gates on the delivered
+authentication verdict before it writes: the receipts pipeline and the
+connected-mailbox pipeline both run `evaluateAuthChain` over the provider's own
+stamp, and a new transport MUST register its authserv-id with `authResultsChain`
+(a filter keyed to one provider turns the gate into a silent no-op on another,
+because an empty chain reads as "legacy, allowed"). Any new session or token path
+MUST stamp and check `User.credentialsChangedAt`: a password reset bumps it,
+revokes that user's OAuth tokens and busts the user cache, and the OAuth
+callbacks resolve their user through the exported `sessionUser` rather than
+reading `SESSION_USER_KEY` and `findUserById` by hand. Untrusted input is bounded
+at every ingress: uploads pass the zip/entry/PDF budget pre-scans, arrays that
+fan out to outbound calls are capped (`MAX_TRIP_STOPS`), and LLM-provided
+arguments are length-bounded before parsing. Never call `db` from inside a
+`db.transaction`: the pool is `max: 2`, so a nested call starves a concurrent
+request and splits the commit. Use the `tx` handle (the reconcile completion was
+fixed for this; `renameNamedRow` in `app/lib/db/names.ts` still is not).
+
 **Marketing and LLM copy.** All public copy, JSON-LD, `/llms.txt`, and the `.md`
 mirrors come from `app/lib/seo-content.ts`. Edit there, not in the route files.
 Every link in `llms.txt` must also exist in `public/sitemap.xml`
@@ -342,11 +359,17 @@ the tree before acting on a doc:
   `prisma db update` inline instead.
 - `docs/mcp-demo.md` prescribes `pnpm demo:seed` / `pnpm demo:run`; neither
   alias exists.
-- `docs/deploy.md` and `scripts/smoke-check` name
-  `.github/workflows/deployment-smoke.yml`; the smoke job lives inside
-  `deployment-checks.yml`.
-- `vpr` and `vp` are used interchangeably in scripts and docs; the working
-  binary is `vp` (`test:ocr` and `scripts/upgrade` still say `vpr`).
+- Four files name `.github/workflows/deployment-smoke.yml`: `docs/deploy.md`,
+  `docs/operations.md`, `scripts/smoke-check`, and `test/pdf-ocr.test.ts`. The
+  smoke job lives inside `deployment-checks.yml`.
+- `docs/files.md` documents `prisma/migrations/0_init` and a migrate history
+  that is no longer used; the directory holds v7-era dated dirs nothing runs.
+- `docs/mcp-directories.md` gives `server.json`'s name as
+  `io.github.assaf/expense`; the manifest says `org.labnotes/expense`.
+- `docs/operations.md` attributes `.env` loading to dotenv; `app/lib/env.ts`
+  uses `process.loadEnvFile`.
+- `vpr` is a real vite-plus binary, not a typo: it rewrites to `vp run`, so
+  `pnpm test:ocr` and `scripts/upgrade` are fine as written.
 - `scripts/upgrade` auto-commits and runs `pnpm pnpm audit --prod` (a no-op
   typo). It contradicts the repo's never-commit-automatically rule; do not treat
   it as a template.

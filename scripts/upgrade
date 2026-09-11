@@ -24,7 +24,8 @@ echo -e "\033[32m  Installing Playwright browsers …\033[0m"
 pnpm exec playwright install chromium --with-deps
 
 echo -e "\033[32m  Running tests …\033[0m"
-rm -rf __screenshots__/*
+# The committed baselines live in screenshots/, and the matcher removes its own
+# *.new.png / *.diff.png artifacts, so there is nothing to reset here.
 vpr check
 vpr test
 

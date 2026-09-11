@@ -29,6 +29,23 @@ LOCAL_DB_URL="${LOCAL_DB_URL:-$(
 LOCAL_DB_URL="${LOCAL_DB_URL:-postgres://assaf@localhost/expense_dev}"
 BACKUP_FILE="prisma/backup.sql"
 
+# This script drops the public schema on $LOCAL_DB_URL, which falls back to
+# whatever `.env` holds. Pointing .env at the Supabase pooler to reproduce a
+# prod bug is a normal move, so refuse anything that is not a local database
+# unless CLONE_ALLOW_REMOTE=1 says so explicitly.
+if [ "${CLONE_ALLOW_REMOTE:-}" != "1" ]; then
+  case "$LOCAL_DB_URL" in
+    *localhost* | *127.0.0.1* | *"[::1]"*) ;;
+    *)
+      echo -e "\033[0;31mRefusing to clone into a non-local database:\033[0m"
+      echo "  $LOCAL_DB_URL"
+      echo "  Set LOCAL_DB_URL to a local URL, or CLONE_ALLOW_REMOTE=1 to override."
+      exit 1
+      ;;
+  esac
+fi
+echo -e "\033[0;32mCloning into: $LOCAL_DB_URL\033[0m"
+
 # 1. Pull production env from Vercel when .env.prod is missing.
 if [ ! -f .env.prod ]; then
   echo -e "\033[0;32mPulling production env from Vercel …\033[0m"
