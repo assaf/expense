@@ -9,6 +9,9 @@ export interface StoredExchange {
   query: string;
   months: number;
   title: string;
+  /** The expense a "Log it" exchange filed, so the transcript can link to it
+   * for review and correction. Absent on every other exchange. */
+  expenseId?: string;
 }
 
 /** The in-process cache mirrors the 5-minute pattern used for accounts
@@ -38,7 +41,7 @@ function parseExchanges(raw: unknown): StoredExchange[] {
     ) {
       continue;
     }
-    const { question, answer, chart, query, months, title } = entry;
+    const { question, answer, chart, query, months, title, expenseId } = entry;
     if (
       typeof question !== "string" ||
       typeof answer !== "string" ||
@@ -64,6 +67,11 @@ function parseExchanges(raw: unknown): StoredExchange[] {
           ? months
           : 12,
       title: title.slice(0, 60),
+      // Only the app writes this (a filed expense's id), so a non-string is
+      // dropped rather than repaired.
+      ...(typeof expenseId === "string" && expenseId
+        ? { expenseId: expenseId.slice(0, 40) }
+        : {}),
     });
   }
   return out;

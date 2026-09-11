@@ -132,6 +132,9 @@ export async function action({ request }: Route.LoaderArgs) {
       query: "",
       months: 12,
       title: "Logged the trip",
+      // The transcript links to the filed trip, so it can be reviewed and
+      // corrected long after this reply scrolls away.
+      expenseId: saved.expenseId,
     });
     return {
       ok: true as const,
@@ -335,6 +338,8 @@ interface Exchange {
   title: string;
   /** A trip this exchange proposed, until the user logs or discards it. */
   pending?: PendingTrip;
+  /** The expense a logged trip filed, linked for review. */
+  expenseId?: string;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
@@ -498,6 +503,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     handledConfirm.current = confirmResult;
     if (!confirmResult.ok || !("logged" in confirmResult)) return;
     const answer = confirmResult.answer;
+    const expenseId = confirmResult.logged.expenseId;
     setTranscript((t) => [
       ...t.map((ex, i) =>
         i === confirmedIndex ? { ...ex, pending: undefined } : ex,
@@ -509,6 +515,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         query: "",
         months: 12,
         title: "Logged the trip",
+        expenseId,
       },
     ]);
     setConfirmedIndex(null);
@@ -781,6 +788,19 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       </p>
                     ) : null}
                   </Card>
+                ) : null}
+                {/* A logged trip links to the expense itself: the figures
+                 * above are what was filed, and the expense page is where
+                 * the user checks or corrects them. */}
+                {ex.expenseId ? (
+                  <p className="mt-1 text-sm">
+                    <Link
+                      to={`/expense/${ex.expenseId}`}
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Review the trip
+                    </Link>
+                  </p>
                 ) : null}
                 {/* Chart + table wait for the text reveal to finish, so
                  * the answer streams in like a sentence, not a pop-in. */}

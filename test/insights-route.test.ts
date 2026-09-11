@@ -735,12 +735,14 @@ describe("filing a trip from the chat (plan_mileage)", () => {
       { address: "2 Home St, Testing, CA", lat: 34.05, lng: -118.24 },
     ]);
 
-    // The conversation recorded the same line the reply carried.
+    // The conversation recorded the same line the reply carried, plus the
+    // filed expense's id: that is what the transcript links to for review.
     const after = await readLatestConversation("user_test1");
     expect(after!.exchanges).toHaveLength(2);
     expect(after!.exchanges.at(-1)).toMatchObject({
       question: "Log it",
       answer: "Logged 12.34 mi for $9.38 on 2026-07-14.",
+      expenseId: confirmed.logged.expenseId,
     });
   });
 
