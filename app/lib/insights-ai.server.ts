@@ -72,6 +72,9 @@ The filter syntax: space-separated tokens of operators and free text.
 - merchant:<name> — exact match (case-insensitive) of the merchant name
 - category:<name> — exact match of the tax category name
 - report:<name> — exact match of the report name
+- after:<YYYY-MM-DD> — expenses on or after this date (alias since:)
+- before:<YYYY-MM-DD> — expenses on or before this date (alias until:)
+  For a single day, emit both with the same date ("today" = after:<today> before:<today>, "yesterday", "this week", "in August" likewise).
 - Aliases work and parse identically: from:/vendor:/store:/seller: =
   merchant:, cat: = category:, in:/for: = report:, desc:/note:/notes: =
   description:. Prefer the canonical form in your answer.

@@ -14,6 +14,9 @@ export interface SearchableExpense {
   category: string;
   amount: string;
   report: string;
+  /** YYYY-MM-DD, when the consumer has it (the insights snapshot does).
+   * Rows without a date are simply not date-filtered. */
+  date?: string;
 }
 
 /** Text fields the search box filters on: the merchant (or "Business
@@ -79,6 +82,9 @@ interface ParsedQuery {
   filters: Record<FilterKey, string[]>;
   comparisons: AmountComparison[];
   words: string[];
+  /** Inclusive date range from `after:`/`before:` (aliases `since:`/
+   * `until:`), YYYY-MM-DD. */
+  dates: { after?: string; before?: string };
 }
 
 /** Parse a search query into operator filters plus free-text words.
@@ -105,6 +111,7 @@ export function parseQuery(query: string): ParsedQuery {
   };
   const comparisons: AmountComparison[] = [];
   const words: string[] = [];
+  const dates: { after?: string; before?: string } = {};
   let key: FilterKey | null = null;
   let parts: string[] = [];
   const flush = () => {
@@ -132,6 +139,13 @@ export function parseQuery(query: string): ParsedQuery {
       });
       continue;
     }
+    const date = /^(after|since|before|until):(\d{4}-\d{2}-\d{2})$/.exec(token);
+    if (date) {
+      flush();
+      if (date[1] === "before" || date[1] === "until") dates.before = date[2];
+      else dates.after = date[2];
+      continue;
+    }
     const op = OPERATOR_TOKEN.exec(token);
     if (op) {
       flush();
@@ -147,14 +161,20 @@ export function parseQuery(query: string): ParsedQuery {
     }
   }
   flush();
-  return { filters, comparisons, words };
+  return { filters, comparisons, words, dates };
 }
 
 /** Does the row match an already-parsed query (see parseQuery)? */
 export function matchesSearch(
   e: SearchableExpense,
-  { filters, comparisons, words }: ParsedQuery,
+  { filters, comparisons, words, dates }: ParsedQuery,
 ): boolean {
+  // Inclusive date range: only rows that carry a date are constrained, so
+  // consumers without dates (or plain fixtures) keep working unchanged.
+  if (e.date) {
+    if (dates.after && e.date < dates.after) return false;
+    if (dates.before && e.date > dates.before) return false;
+  }
   const hasAmount = filters.amount.length > 0 || comparisons.length > 0;
   if (
     (filters.report.length > 0 &&

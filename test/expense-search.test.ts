@@ -56,6 +56,46 @@ describe("parseQuery", () => {
   });
 });
 
+describe("date range operators", () => {
+  const parsed = (q: string) => parseQuery(q);
+  const dated = (date: string) => row({ date, amount: "12.00" });
+
+  it("parses after:/before: and the since:/until: aliases", () => {
+    expect(parsed("after:2026-09-01 before:2026-09-30").dates).toEqual({
+      after: "2026-09-01",
+      before: "2026-09-30",
+    });
+    expect(parsed("since:2026-09-10 until:2026-09-10").dates).toEqual({
+      after: "2026-09-10",
+      before: "2026-09-10",
+    });
+  });
+
+  it("treats a malformed date as ordinary text, not a filter", () => {
+    expect(parsed("after:yesterday").dates).toEqual({});
+  });
+
+  it("matches inclusively on both ends, and ANDs with other operators", () => {
+    const e = dated("2026-09-10");
+    expect(matchesSearch(e, parsed("after:2026-09-10 before:2026-09-10"))).toBe(
+      true,
+    );
+    expect(matchesSearch(e, parsed("after:2026-09-10"))).toBe(true);
+    expect(matchesSearch(e, parsed("after:2026-09-11"))).toBe(false);
+    expect(matchesSearch(e, parsed("before:2026-09-09"))).toBe(false);
+    expect(
+      matchesSearch(e, parsed("after:2026-09-01 merchant:blue bottle")),
+    ).toBe(true);
+    expect(matchesSearch(e, parsed("after:2026-09-01 merchant:adobe"))).toBe(
+      false,
+    );
+  });
+
+  it("leaves rows without a date unconstrained", () => {
+    expect(matchesSearch(row(), parsed("after:2030-01-01"))).toBe(true);
+  });
+});
+
 describe("matchesSearch", () => {
   const parsed = (query: string) => parseQuery(query);
 
