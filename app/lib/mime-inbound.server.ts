@@ -117,12 +117,13 @@ export function headerRecord(
 /**
  * All Fastmail-stamped Authentication-Results header values, newest first
  * (Authentication-Results headers are PREPENDED in delivery order, so file
- * order = newest first). Attacker-supplied A-R headers sit older than the
- * host's own stamps and are ignored (Fastmail rewrites same-id headers on
- * ingestion). A record with no dkim/spf/dmarc clauses means the host added
- * a stamp but evaluated nothing — the signature of account-internal
- * delivery (same-account submission or an internal redirect), which never
- * crosses an external hop.
+ * order = newest first). Attacker-supplied A-R headers are NOT stripped on
+ * intake, but they always sit BELOW the host's own stamp, so consumers
+ * evaluate the first clause-bearing record only (see evaluateAuthChain and
+ * passingAuthDomains). A record with no dkim/spf/dmarc clauses means the
+ * host added a stamp but evaluated nothing — the signature of
+ * account-internal delivery (same-account submission or an internal
+ * redirect), which never crosses an external hop.
  */
 export function authResultsChain(headers: ParsedEmail["headers"]): string[] {
   const out: string[] = [];
