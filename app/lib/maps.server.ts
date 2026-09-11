@@ -419,6 +419,11 @@ function haversine(
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+/** Most stops one trip may have. Every stop without coordinates costs one
+ * outbound geocode (and OSRM call), so the untrusted ingresses (`/api/route`,
+ * the `log_mileage` tool) bound the array before it reaches recomputeMileage. */
+export const MAX_TRIP_STOPS = 12;
+
 /**
  * Recompute a mileage expense: geocode any un-geocoded addresses, compute the
  * route distance, and derive the amount from the per-year mileage rate.

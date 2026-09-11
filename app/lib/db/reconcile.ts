@@ -167,6 +167,10 @@ export async function updateReconciliationDecision(
     .first();
   if (!run) return false;
   const data = run.data as unknown as ReconciliationRunData;
+  // Same normalization the read path applies: a legacy row whose `data` has no
+  // `decisions` object must not 500 the review page on the first click.
+  if (!data.decisions || typeof data.decisions !== "object")
+    data.decisions = {};
   const key = String(rowIndex);
   if (decision === null) {
     delete data.decisions[key];
@@ -279,7 +283,18 @@ export async function completeReconciliationRun(
         .join("\n");
       const png = await renderReceiptImage(text, { subject: draft.merchant });
       const saved = await saveImage(accountId, png, "image/png", originalName);
-      images.set(i, { ...saved, originalName });
+      // Name the blob by convention here, outside the transaction: the rename
+      // runs on the global client, so doing it inside would take a second pool
+      // connection while the transaction holds its own (the pool is max 2).
+      const filename = await renameImageToConvention(
+        accountId,
+        saved.filename,
+        draft.date,
+        draft.report,
+        originalName,
+        saved.mime,
+      );
+      images.set(i, { ...saved, filename, originalName });
     } catch (err) {
       return {
         error: `Couldn't render the receipt image for row ${i + 1}: ${
@@ -295,6 +310,20 @@ export async function completeReconciliationRun(
     let created = 0;
     const errors: string[] = [];
     const createdExpenseIds: string[] = [];
+
+    // Claim the run before creating anything. The conditional update lets
+    // exactly one concurrent completion through (a double submit, a retried
+    // POST, or two tabs), so the same statement rows can't be imported twice;
+    // a rollback releases the claim along with everything else.
+    const claim = await tx.orm.public.ReconciliationRun.where((r) =>
+      and(
+        r.id.eq(runId),
+        r.accountId.eq(accountId),
+        r.status.eq("draft"),
+        r.completedAt.isNull(),
+      ),
+    ).updateAll({ completedAt: fromIso(now) });
+    if (claim.length !== 1) return null;
 
     for (const [i, res] of resolutions) {
       if (res.kind === "match") {
@@ -371,16 +400,8 @@ export async function completeReconciliationRun(
         createdAt: now,
         updatedAt: now,
       };
-      // The statement row IS the record: name the image by convention like
-      // any other filed receipt (2026-08-03_<report>_<file>.png).
-      expense.imageFile = await renameImageToConvention(
-        accountId,
-        expense.imageFile,
-        draft.date,
-        draft.report,
-        expense.originalName,
-        expense.imageMime,
-      );
+      // The receipt image was saved and named by convention before the
+      // transaction (2026-08-03_<report>_<file>.png).
       await tx.orm.public.Expense.create({
         ...expenseData(expense),
         accountId,
@@ -405,5 +426,8 @@ export async function completeReconciliationRun(
     return { matched, created, errors, createdExpenseIds };
   });
 
+  if (!outcome) {
+    return { error: "This reconciliation is already finished.", result: null };
+  }
   return { error: null, result: outcome };
 }

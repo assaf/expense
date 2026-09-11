@@ -104,7 +104,9 @@ function dateStyles(zip: Record<string, Uint8Array>): Set<number> {
  * 1899-12-30; 25569 is the day offset to the Unix epoch. Time-of-day
  * fractions are dropped (the statement matcher only needs the date). */
 function serialToDate(serial: number): string {
-  if (!Number.isFinite(serial)) return "";
+  // Serial 1 is 1900-01-01 and 0 is the 1899 epoch itself; an empty or
+  // missing <v> reads as 0 and would otherwise become a 1899-12-30 row.
+  if (!Number.isFinite(serial) || serial < 1) return "";
   const ms = (Math.floor(serial) - 25569) * 86_400_000;
   const d = new Date(ms);
   const y = d.getUTCFullYear();
@@ -202,8 +204,17 @@ function zipWithinBudget(
     }
   }
   if (eocd < 0) return false;
-  const entryCount = view.getUint16(eocd + 10, true);
+  // fflate walks the "entries on this disk" field (EOCD+8), so the guard must
+  // read the same one: counting EOCD+10 let a crafted archive declare one
+  // entry to the guard and N to the unzipper. A well-formed single-disk zip
+  // has the two fields equal, so a mismatch is not our format.
+  const entryCount = view.getUint16(eocd + 8, true);
+  if (entryCount !== view.getUint16(eocd + 10, true)) return false;
   if (entryCount > XLSX_MAX_ENTRIES) return false;
+  // A ZIP64 locator means the counts above are placeholders and the real ones
+  // live in a 64-bit record: reject rather than reason about that path.
+  if (eocd >= 20 && view.getUint32(eocd - 20, true) === 0x07064b50)
+    return false;
   let offset = view.getUint32(eocd + 16, true);
   let total = 0;
   for (let n = 0; n < entryCount; n++) {

@@ -135,11 +135,18 @@ function getBrowser(): Promise<Browser> {
           import("@sparticuz/chromium"),
         ]);
       const config = await resolveBrowserConfig(puppeteer, chromiumSparticuz);
-      return puppeteer.launch({
+      const browser = await puppeteer.launch({
         args: config.args,
         executablePath: config.executablePath,
         headless: config.headless,
       });
+      // A frozen/thawed instance keeps a dead handle, and every later render
+      // would throw into the fallback chain (receipts silently lose the real
+      // email layout), so drop the handle the moment the process disconnects.
+      browser.on("disconnected", () => {
+        browserPromise = null;
+      });
+      return browser;
     })();
     browserPromise.catch(() => {
       browserPromise = null;

@@ -127,7 +127,7 @@ export async function saveExpenseFromForm(
       locations: parseLocations(formString(form, "locations")).filter(
         (l) => l.address.trim() !== "",
       ),
-      distanceMiles: formString(form, "distanceMiles"),
+      distanceMiles: normalizeAmount(formString(form, "distanceMiles")),
       route,
       updatedAt: now,
     };

@@ -316,6 +316,14 @@ export async function answerInsightQuestion(input: {
       const text = content.trim().replace(/^["']|["']$/g, "");
       return text || "I couldn't summarize that.";
     }
+    // The endpoint is an untrusted provider: a response asking for a flood of
+    // tool calls is not something a compliant model does, and honoring it
+    // would drive unbounded in-memory scans plus prompt growth on the request
+    // path. Answer with what we already have instead.
+    if (toolCalls.length > MAX_TOOL_CALLS) {
+      const text = content.trim().replace(/^["']|["']$/g, "");
+      return text || "I couldn't summarize that.";
+    }
     messages.push({ role: "assistant", content, tool_calls: toolCalls });
     for (const call of toolCalls) {
       const result =
@@ -332,6 +340,10 @@ export async function answerInsightQuestion(input: {
     }
   }
 }
+
+/** How many tool calls one model response may request before the answer step
+ * stops honoring them (a compliant model asks for one). */
+const MAX_TOOL_CALLS = 4;
 
 /** How the answer step may use the read tool. */
 const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the computed data doesn't cover: any date range (a single day, a week, a month), zero or more exact category names, an exact report name, unreported-only, receipt/mileage type, or a merchant substring. The computed data below is month-bucketed and covers the chart's current window only, so use the tool rather than saying the data is missing. Call it at most ${MAX_TOOL_ROUNDS} times, then answer.`;

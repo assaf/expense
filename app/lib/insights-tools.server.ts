@@ -17,6 +17,10 @@ export const MAX_TOOL_ROUNDS = 3;
  * whole account into the prompt. */
 export const MAX_TOOL_ROWS = 50;
 
+/** Longest tool-argument JSON the query tool will parse. Real filters are a
+ * few hundred bytes; the cap bounds hostile provider output. */
+const MAX_TOOL_ARGUMENTS = 4_096;
+
 /** The fields the tool reads. Structural, so the route's already-mapped
  * expenses and plain test fixtures both fit. */
 export interface FilterableExpense {
@@ -34,7 +38,8 @@ const queryExpensesInput = z.object({
   dateFrom: z.string().optional().describe("Inclusive start date YYYY-MM-DD."),
   dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
   categories: z
-    .array(z.string())
+    .array(z.string().max(200))
+    .max(32)
     .optional()
     .describe("Zero or more exact tax category names."),
   merchant: z
@@ -102,6 +107,11 @@ export function runQueryExpenses(
   call: { function: { arguments: string } },
 ): string {
   let args: unknown;
+  // The provider is untrusted: a multi-megabyte argument string would be
+  // parsed and scanned on the request path before any filter runs.
+  if (call.function.arguments.length > MAX_TOOL_ARGUMENTS) {
+    return JSON.stringify({ error: "arguments were too long" });
+  }
   try {
     args = JSON.parse(call.function.arguments || "{}");
   } catch {

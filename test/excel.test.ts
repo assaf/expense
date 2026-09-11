@@ -155,6 +155,24 @@ describe("zip budget (NET-006)", () => {
     expect(() => parseXlsxSheets(xlsx)).toThrow(/decompression budget/);
   });
 
+  it("rejects a zip whose per-disk entry count differs from the total", () => {
+    // fflate walks EOCD+8 ("entries on this disk") while the budget pre-scan
+    // used to read EOCD+10 ("total entries"), so a crafted archive could
+    // declare one entry to the guard and N to the unzipper, making the real
+    // code allocate up to XLSX_MAX_ENTRY_BYTES per hidden entry. The two
+    // fields must agree.
+    const xlsx = buildXlsx({
+      "xl/workbook.xml":
+        '<?xml version="1.0"?><workbook><sheets><sheet name="S" sheetId="1" r:id="r1"/></sheets></workbook>',
+    });
+    const eocdSig = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+    const eocd = xlsx.lastIndexOf(eocdSig);
+    expect(eocd).toBeGreaterThan(0);
+    xlsx.writeUInt16LE(xlsx.readUInt16LE(eocd + 8) + 1, eocd + 8);
+
+    expect(() => parseXlsxSheets(xlsx)).toThrow(/decompression budget/);
+  });
+
   it("rejects structurally broken zips up front", () => {
     const garbage = Buffer.from("PK\x05\x06 not really a zip");
     expect(() => parseXlsxSheets(garbage)).toThrow(/decompression budget/);

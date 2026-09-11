@@ -549,6 +549,12 @@ export type ToolSpec = {
 let llmAlertSentAt = 0;
 const LLM_ALERT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+/** Bound on one chat-completions call. Every other outbound fetch in the app
+ * carries a timeout; without one a provider that accepts the connection and
+ * then stalls hangs an interactive request (or eats a drain's whole budget)
+ * until the platform kills the function. */
+const LLM_REQUEST_TIMEOUT_MS = 30_000;
+
 export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
   if (!(err instanceof LLMError)) return;
   if (err.status !== 401 && err.status !== 402) return;
@@ -675,6 +681,7 @@ async function llmMessage(
       Authorization: `Bearer ${LLM_API_KEY}`,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");

@@ -33,10 +33,16 @@ type ActionData =
 
 /** Only allow same-origin relative paths for the post-login destination. */
 function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  if (!raw) return "/";
+  // Browsers strip tabs and newlines before resolving a URL, and treat a
+  // backslash as a path separator, so `/<tab>/evil.com` and `/\evil.com`
+  // both resolve to another origin. Normalize first, then require a path.
+  const clean = raw.replace(/[\t\n\r]/g, "");
+  if (!clean.startsWith("/") || clean.startsWith("//")) return "/";
+  if (clean.includes("\\")) return "/";
   // Never bounce back to the login page or to internal `.data` URLs.
-  if (raw.startsWith("/login") || raw.includes(".data")) return "/";
-  return raw;
+  if (clean.startsWith("/login") || clean.includes(".data")) return "/";
+  return clean;
 }
 
 export function meta(): Route.MetaDescriptors {

@@ -19,7 +19,6 @@ import {
   parseLocations,
   parseRoute,
   type Expense,
-  type Location,
   type MileageExpense,
   type ReceiptExpense,
 } from "~/lib/types";
@@ -198,10 +197,9 @@ export async function readDuplicateCandidates(
       ...base,
       type: "mileage" as const,
       mileageType: "business" as const,
-      locations:
-        typeof r.locations === "string"
-          ? (JSON.parse(r.locations) as Location[])
-          : ((r.locations as unknown as Location[]) ?? []),
+      // Same tolerant parse as the canonical mapper: one malformed legacy row
+      // must not throw the account-wide duplicate scan on /expense/new.
+      locations: parseLocations(r.locations),
       distanceMiles: r.distanceMiles ?? "",
       route: EMPTY_ROUTE,
     };

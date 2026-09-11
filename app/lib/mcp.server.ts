@@ -36,6 +36,7 @@ import {
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
 import { renameImageToConvention } from "~/lib/images.server";
+import { MAX_TRIP_STOPS } from "~/lib/maps.server";
 import { reconcileForMcp } from "~/lib/reconcile.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
 import type { Expense } from "~/lib/types";
@@ -86,10 +87,12 @@ let modernHandlerPromise: Promise<ReturnType<typeof createMcpHandler>> | null =
   null;
 
 /** Build the strict handler on first /mcp request: the SDK is a large
- * eager-graph dependency and MCP traffic is rare. */
+ * eager-graph dependency and MCP traffic is rare. A failed import is not
+ * cached: `??=` would otherwise hand the same rejection to every later
+ * request until the process recycles. */
 function getModernHandler(): Promise<ReturnType<typeof createMcpHandler>> {
-  modernHandlerPromise ??= import("@modelcontextprotocol/server").then(
-    ({ createMcpHandler }) =>
+  modernHandlerPromise ??= import("@modelcontextprotocol/server")
+    .then(({ createMcpHandler }) =>
       createMcpHandler(
         (ctx) => {
           const accountId = ctx.authInfo?.extra?.accountId;
@@ -105,7 +108,11 @@ function getModernHandler(): Promise<ReturnType<typeof createMcpHandler>> {
           onerror: (error) => console.error("[mcp] %s", error.message),
         },
       ),
-  );
+    )
+    .catch((err) => {
+      modernHandlerPromise = null;
+      throw err;
+    });
   return modernHandlerPromise;
 }
 
@@ -539,6 +546,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
             ]),
           )
           .min(2)
+          .max(MAX_TRIP_STOPS)
           .describe(
             "Ordered trip stops: start, intermediate stops, end. Each is an address string or a pre-geocoded { address, lat, lng }.",
           ),

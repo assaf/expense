@@ -156,7 +156,10 @@ function allTimeWindow(expenses: InsightExpense[], today: string): string[] {
   const first = dated.toSorted()[0]!.slice(0, 7);
   const [fy, fm] = first.split("-").map(Number);
   const [ty, tm] = today.split("-").map(Number);
-  const count = (ty! - fy!) * 12 + (tm! - fm!) + 1;
+  // A single ancient date (a forwarded receipt's Date: header, or a typed one)
+  // must not turn into a chart with tens of thousands of buckets: same 60-month
+  // cap the question-derived windows use (insight-periods.ts).
+  const count = Math.min(60, (ty! - fy!) * 12 + (tm! - fm!) + 1);
   return monthWindow(today, Math.max(1, count));
 }
 

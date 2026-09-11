@@ -44,10 +44,18 @@ function loadPdfjs() {
   pdfjsPromise ??= Promise.all([
     import("pdfjs-dist/legacy/build/pdf.mjs"),
     import("pdfjs-dist/legacy/build/pdf.worker.mjs"),
-  ]).then(([pdfjs, worker]) => {
-    globalThis.pdfjsWorker = worker;
-    return pdfjs;
-  });
+  ])
+    .then(([pdfjs, worker]) => {
+      globalThis.pdfjsWorker = worker;
+      return pdfjs;
+    })
+    // A failed chunk load must not be cached: the next call would be handed
+    // the same rejected promise and every PDF would fail until the process
+    // recycles (the tracer having dropped an asset is a documented cause).
+    .catch((err) => {
+      pdfjsPromise = null;
+      throw err;
+    });
   return pdfjsPromise;
 }
 
@@ -178,6 +186,10 @@ export async function ocrImage(buffer: Buffer): Promise<string> {
     const { data } = await worker.recognize(png);
     return (data.text ?? "").trim();
   } catch (err) {
+    // The worker may be wedged, so drop it and let the next call build a fresh
+    // one. Terminate it first: the thread (and its wasm heap) would otherwise
+    // outlive the reset, one leaked worker per failure.
+    await ocrWorker?.terminate().catch(() => {});
     ocrWorker = null;
     throw err;
   }

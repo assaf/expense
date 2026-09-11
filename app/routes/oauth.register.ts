@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { guardAnonymousAttempt } from "~/lib/auth.server";
 import { buildRegisteredClient } from "~/lib/oauth.server";
 import { registerOAuthClient } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.register";
@@ -19,6 +20,10 @@ export function loader(): Response {
  * PKCE clients register with `token_endpoint_auth_method: "none"`.
  */
 export async function action({ request }: Route.ActionArgs) {
+  // Unauthenticated and every call inserts a row, so cap per IP like every
+  // other anonymous network path (empty-IP requests skip, so tests are
+  // unaffected).
+  await guardAnonymousAttempt(request, "oauth-register");
   let body: unknown;
   try {
     body = await request.json();

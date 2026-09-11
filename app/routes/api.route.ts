@@ -1,10 +1,10 @@
-import { recomputeMileage } from "~/lib/maps.server";
+import { MAX_TRIP_STOPS, recomputeMileage } from "~/lib/maps.server";
 import { requireUser } from "~/lib/auth.server";
-import type { Location } from "~/lib/types";
+import { parseLocations } from "~/lib/types";
 import type { Route } from "./+types/api.route";
 
 interface RouteRequestBody {
-  locations?: Location[];
+  locations?: unknown;
   rate?: string;
 }
 
@@ -16,7 +16,15 @@ export async function action({ request }: Route.ActionArgs) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const locations = Array.isArray(body.locations) ? body.locations : [];
+  // The body is untrusted, and every stop without coordinates becomes an
+  // outbound geocode: normalize each stop and bound the count.
+  const locations = parseLocations(body.locations);
+  if (locations.length > MAX_TRIP_STOPS) {
+    return Response.json(
+      { error: `A trip can have at most ${MAX_TRIP_STOPS} stops.` },
+      { status: 400 },
+    );
+  }
   const rate = typeof body.rate === "string" ? body.rate : "";
   const result = await recomputeMileage(locations, rate);
   return Response.json(result);
