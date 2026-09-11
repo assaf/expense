@@ -1,5 +1,5 @@
 import { ChartColumn, Lightbulb, Sparkles, SquarePen } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { RevealText } from "~/components/RevealText";
 import { authLockedUntil, recordAuthFailure } from "~/lib/db/auth-attempts";
@@ -236,6 +236,95 @@ interface Exchange {
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
+
+/** The rows behind a chart: collapsed by default, since the chart answers
+ * the question and the table is the evidence. The toggle is a real
+ * disclosure (aria-expanded), so it reads correctly to assistive tech. */
+export function ExpenseTable({ expenses }: { expenses: InsightExpense[] }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <div className="mt-4">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "Hide" : "Show"} {expenses.length}{" "}
+        {expenses.length === 1 ? "expense" : "expenses"}
+      </Button>
+      {open ? (
+        <div id={id} className="mt-2 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                <th scope="col" className="py-1.5 pr-2 font-medium">
+                  Date
+                </th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">
+                  Expense
+                </th>
+                <th
+                  scope="col"
+                  className="hidden py-1.5 pr-2 font-medium sm:table-cell"
+                >
+                  Category
+                </th>
+                <th
+                  scope="col"
+                  className="hidden py-1.5 pr-2 font-medium md:table-cell"
+                >
+                  Report
+                </th>
+                <th scope="col" className="py-1.5 text-right font-medium">
+                  Amount
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {expenses.map((e) => (
+                <tr
+                  key={e.id}
+                  className="border-b border-gray-100 last:border-0 dark:border-gray-800"
+                >
+                  <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
+                    {formatShortDate(e.date)}
+                  </td>
+                  <td className="min-w-0 max-w-52 py-1.5 pr-2">
+                    <Link
+                      to={`/expense/${e.id}`}
+                      className="block truncate hover:underline"
+                    >
+                      {e.merchant || e.description || "Untitled"}
+                      {e.merchant && e.description ? (
+                        <span className="text-gray-400 dark:text-gray-500">
+                          {" "}
+                          · {e.description}
+                        </span>
+                      ) : null}
+                    </Link>
+                  </td>
+                  <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
+                    {e.category}
+                  </td>
+                  <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
+                    {e.report}
+                  </td>
+                  <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
+                    {formatUsd(Number(e.amount) || 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
@@ -489,79 +578,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                     </div>
                     <MonthlyChart buckets={buckets} />
                     {matched.length > 0 ? (
-                      <div className="mt-4 overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                              <th
-                                scope="col"
-                                className="py-1.5 pr-2 font-medium"
-                              >
-                                Date
-                              </th>
-                              <th
-                                scope="col"
-                                className="py-1.5 pr-2 font-medium"
-                              >
-                                Expense
-                              </th>
-                              <th
-                                scope="col"
-                                className="hidden py-1.5 pr-2 font-medium sm:table-cell"
-                              >
-                                Category
-                              </th>
-                              <th
-                                scope="col"
-                                className="hidden py-1.5 pr-2 font-medium md:table-cell"
-                              >
-                                Report
-                              </th>
-                              <th
-                                scope="col"
-                                className="py-1.5 text-right font-medium"
-                              >
-                                Amount
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {matched.map((e) => (
-                              <tr
-                                key={e.id}
-                                className="border-b border-gray-100 last:border-0 dark:border-gray-800"
-                              >
-                                <td className="py-1.5 pr-2 whitespace-nowrap text-gray-500 dark:text-gray-400">
-                                  {formatShortDate(e.date)}
-                                </td>
-                                <td className="min-w-0 max-w-52 py-1.5 pr-2">
-                                  <Link
-                                    to={`/expense/${e.id}`}
-                                    className="block truncate hover:underline"
-                                  >
-                                    {e.merchant || e.description || "Untitled"}
-                                    {e.merchant && e.description ? (
-                                      <span className="text-gray-400 dark:text-gray-500">
-                                        {" "}
-                                        · {e.description}
-                                      </span>
-                                    ) : null}
-                                  </Link>
-                                </td>
-                                <td className="hidden py-1.5 pr-2 text-gray-500 sm:table-cell dark:text-gray-400">
-                                  {e.category}
-                                </td>
-                                <td className="hidden py-1.5 pr-2 text-gray-500 md:table-cell dark:text-gray-400">
-                                  {e.report}
-                                </td>
-                                <td className="py-1.5 text-right whitespace-nowrap tabular-nums">
-                                  {formatUsd(Number(e.amount) || 0)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <ExpenseTable expenses={matched} />
                     ) : null}
                   </>
                 ) : null}
