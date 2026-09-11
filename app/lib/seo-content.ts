@@ -109,6 +109,7 @@ export const KEY_FACTS = [
   "Reconciliation: upload a bank statement (PDF, CSV, QFX/OFX, Excel) to match charges against your logged expenses and catch deductions you missed",
   "Mileage: map-based drives at the IRS mileage rate for the drive date/type",
   "AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth); the assistant can capture receipts, log mileage, answer your spending questions, and build and export reports. In Chrome, the app also registers read-only in-page tools for browser agents (WebMCP)",
+  'Insights: the app\'s own question page, with no assistant to connect. Ask "where does my money go?" or "what still needs a report?" and the answer is computed from your expenses, with a chart when the question spans months',
   "Multi-user accounts: collaborate on one account with an invite code",
   "Data remains in your account. No ads, no data resale",
 ];
@@ -271,6 +272,10 @@ const STANDALONE_FAQS: Faq[] = [
   {
     question: "Can I use Expense with an AI assistant?",
     answer: `Yes. Expense supports the Model Context Protocol (MCP) at /mcp. Point any MCP client (e.g. Claude, OpenAI, or some other assistant) to this endpoint and approve the connection signing in with your account. The assistant can then capture receipts (images or PDFs) using the same OCR pipeline as the web app, log mileage, ask about your spending, group expenses into reports, and export a report as a PDF. At any time, you can disconnect any connected app, or revoke its access tokens from Settings. Browsers with WebMCP (Chrome's origin trial) also get the same read tools in-page, using your signed-in session: nothing to connect or configure.`,
+  },
+  {
+    question: "What is Insights?",
+    answer: `Insights is the app's own question page, no assistant to connect. Ask in plain words, like "how much have I spent this year?" or "where does my money go?", and the app computes the answer from your expenses: totals for a period, your biggest report, the expenses that still have no report. A question covering several months comes back with a chart, and the chart opens to the exact expenses behind it. The figures come from your records and the model only phrases them, so it can't invent a number.`,
   },
   {
     question: "Who makes Expense?",
@@ -620,6 +625,11 @@ function wrap(text: string): string {
 export const AI_SUMMARY =
   "Expense follows the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp. Connect any MCP client like Claude, OpenAI, or some other assistant, then log in via OAuth authentication (no API keys necessary). Your assistant will be able to recognize receipts from photos and PDF files in the same way as the web application does, log drives according to the IRS rate, answer questions about spending based on your data, generate and export reports, and reconcile bank statements with your expenses. In browsers with WebMCP (Chrome's origin trial), Expense also registers in-page read tools for the browser's own agent: same data, your signed-in session, no setup.";
 
+/** The built-in alternative to connecting an assistant: the page otherwise
+ * covers only the assistant you bring. Quoted by /ai and /ai.md. */
+export const AI_INSIGHTS_SUMMARY =
+  'Expense answers questions on its own too, with nothing to connect. On the Insights page you ask in plain words ("how much have I spent this year?", "where does my money go?") and the app computes the answer from your own expenses; the model only phrases it, it never supplies a number. A question that covers several months comes back with a chart, and the chart opens to the exact expenses behind it.';
+
 /** The five things an assistant can do (the /ai capability cards). */
 export const AI_CAPABILITIES = [
   {
@@ -695,6 +705,10 @@ ${caps}
 ## How to connect
 
 ${steps}
+
+## In the app, with nothing connected
+
+${wrap(AI_INSIGHTS_SUMMARY)}
 
 ## Example prompts
 
@@ -911,7 +925,7 @@ ${clients}
 
 ${AI_SECURITY}
 
-For the browser-based in-page tools (WebMCP), see [${APP_NAME}: connect your AI assistant](${SITE_URL}/ai.md).
+For the browser-based in-page tools (WebMCP), and the app's own Insights page that answers questions about your spending with nothing connected, see [${APP_NAME}: connect your AI assistant](${SITE_URL}/ai.md).
 `;
 }
 

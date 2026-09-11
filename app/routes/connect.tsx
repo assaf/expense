@@ -301,7 +301,14 @@ export default function ConnectPage() {
           >
             the WebMCP page
           </Link>
-          .
+          . Prefer to skip the connection?{" "}
+          <Link
+            to="/ai"
+            className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
+          >
+            Insights
+          </Link>{" "}
+          answers questions about your spending inside the app.
         </p>
       </SecuritySection>
 

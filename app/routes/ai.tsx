@@ -7,6 +7,7 @@ import {
   SecuritySection,
 } from "~/components/mcp-sections";
 import {
+  AI_INSIGHTS_SUMMARY,
   AI_STEPS,
   AI_SUMMARY,
   APP_NAME,
@@ -115,6 +116,15 @@ export default function AiPage() {
           you're signed in: list expenses, summarize spending, and list reports.
           Same data as the MCP server, your signed-in session, no setup. It's
           read-only; write actions still go through the MCP endpoint.
+        </p>
+      </section>
+
+      <section className="mt-14">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
+          In the app, with nothing connected
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+          {AI_INSIGHTS_SUMMARY}
         </p>
       </section>
 
