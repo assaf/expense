@@ -105,13 +105,10 @@ Rules:
 - Money questions ("between $100 and $110", "over $50", "under $20") map to
   amount ranges: amount:100-110, amount:50+, amount:-20.
 - Include report:<name> only when the user names a specific report.
-- ANY time reference becomes an explicit date range, computed from the
-  Current date line: "today" → after:<today> before:<today>, "yesterday",
-  "this week", "last week", "this month" → after:<first of month>
-  before:<today>, "last month", "this year", "in August". A question that
-  asks about a period MUST carry its range: the chart window is separate
-  and stays wide, so the range is what narrows the breakdowns the answer
-  is allowed to read (reports, merchants, categories).
+- Do NOT emit date operators (after:/before:/since:/until:). The app computes
+  the query's period itself from the question and the Current date and
+  replaces anything you add, so date tokens here are ignored: encode the
+  merchant/category/report/amount/text filters only.
 - If nothing in the list matches the question, return "" (show everything).
 - Keep the query under 300 characters.
 

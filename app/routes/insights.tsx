@@ -38,7 +38,7 @@ import {
   translateInsightQuery,
   LLMError,
 } from "~/lib/insights-ai.server";
-import { withPeriodRange } from "~/lib/insight-periods";
+import { periodScope, withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
@@ -144,11 +144,15 @@ export async function action({ request }: Route.LoaderArgs) {
       categories: categoryNames,
       reports: reportNames,
     });
-    // The model is asked to emit the period range itself; this net makes a
-    // period question correct even when it does not (see insight-periods).
+    // The app owns the period (range and chart shape): a day, a week, or a
+    // single-month window has no monthly shape to plot, so the model's
+    // guess is replaced whenever the question names a period (see
+    // insight-periods).
+    const scope = periodScope(text, today);
     const t = {
       ...translated,
       query: withPeriodRange(translated.query, text, today),
+      ...(scope ? { chart: scope.chart } : {}),
     };
     // Ground the text answer in real numbers: compute the same view the
     // chart shows and let the model phrase it. Invalid client dates (the

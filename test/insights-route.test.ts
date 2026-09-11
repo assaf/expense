@@ -458,6 +458,30 @@ describe("period range net (this month)", () => {
       "category:Travel after:2026-09-01 before:2026-09-10",
     );
   });
+
+  it("suppresses a chart the model asked for on a 30-day window", async () => {
+    // "last 30 days" is too granular to plot monthly: the app's decision
+    // wins even when the model set chart:true.
+    chat
+      .mockResolvedValueOnce(
+        '{"query":"","title":"Last 30 days","months":12,"chart":true}',
+      )
+      .mockResolvedValueOnce("Blue Bottle was your biggest merchant.");
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set(
+      "text",
+      "which reports did I spend on the most in the last 30 days?",
+    );
+    form.set("today", "2026-09-10");
+    const res = (await callRoute("action", null, form)) as {
+      ok: boolean;
+      chart: boolean;
+    };
+
+    expect(res.ok).toBe(true);
+    expect(res.chart).toBe(false);
+  });
 });
 
 describe("conversation months roundtrip (INS-MONTHS-0)", () => {
