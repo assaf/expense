@@ -89,12 +89,14 @@ as individuals—freelancers, self-employed, and side hustlers. Drop in a receip
 image (or screenshot, PDF, or forwarded email), it identifies the merchant and
 amount, categorizes it (using Schedule C lines from the IRS), groups into
 reports with names you give, mileage is computed from the map using the current
-year's IRS rate. You can also connect your Gmail or Fastmail account, and
-Expense will pull in all your expenses. When it comes to tax filing time, you'll
-have an option to export a PDF per each report, or a ZIP of all you need to give
-your accountant. Ad-free, and free until the app reaches 100 users, then still
-free up to 25 invoices a month. Expense is a free expense tracker for those
-filing taxes as.`;
+year's IRS rate. Ask a question in plain words on the Insights page ("how much
+have I spent this year?", "where does my money go?") and the app answers from
+your own records, with a chart when the question spans several months. You can
+also connect your Gmail or Fastmail account, and Expense will pull in all your
+expenses. When it comes to tax filing time, you'll have an option to export a
+PDF per each report, or a ZIP of all you need to give your accountant. Ad-free,
+and free until the app reaches 100 users, then still free up to 25 invoices a
+month.`;
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
@@ -300,10 +302,11 @@ Shoeboxed, and Wave. Expense is built for one job: getting a private person's
 or small team's expenses ready for tax season. It is free while the app is
 early (then still free up to 25 invoices a month), reads receipts with OCR,
 suggests categories, reconciles credit card statements to catch missed
-deductions, and arranges everything in Schedule C format with mileage at the
-IRS rate. The apps it gets compared to mostly aim at company expense
-management or general bookkeeping; the table below shows who is best for
-what.`;
+deductions, arranges everything in Schedule C format with mileage at the IRS
+rate, and answers questions about your spending on its own Insights page,
+computing the answer from your records instead of guessing at it. The apps it
+gets compared to mostly aim at company expense management or general
+bookkeeping; the table below shows who is best for what.`;
 
 interface CompetitorRow {
   app: string;
@@ -325,7 +328,7 @@ export const COMPETITOR_ROWS: CompetitorRow[] = [
     pricing:
       "Free until the app reaches 100 users, then still free up to 25 invoices a month. No ads.",
     taxFiling:
-      "IRS Schedule C categories, mileage at the IRS rate, statement reconciliation, PDF or ZIP export for your accountant.",
+      "IRS Schedule C categories, mileage at the IRS rate, statement reconciliation, PDF or ZIP export for your accountant, plus Insights: ask a question in plain words and get the answer computed from your own expenses, with a chart across months.",
   },
   {
     app: "Expensify",
@@ -1041,7 +1044,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [Schedule C expense categories](${SITE_URL}/schedule-c-categories.md): The 23 expense lines from IRS Schedule C, Part II, with a plain-language note for each; every new Expense account starts pre-filled with this list.
 - [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
-- [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements.
+- [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements. Covers Insights too, the built-in question page that answers from your own expenses with nothing connected.
 
 ## Optional
 

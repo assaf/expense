@@ -29,7 +29,7 @@ const SOFTWARE_SCHEMA = {
   url: SITE_URL,
   image: `${SITE_URL}/screenshot-og.png`,
   description:
-    "Expense reads your receipts, snapped, pasted, or forwarded from email, and files each expense into IRS Schedule C categories and reports, ready to export for tax season.",
+    "Expense reads your receipts, snapped, pasted, or forwarded from email, and files each expense into IRS Schedule C categories and reports, ready to export for tax season. Ask questions about your spending in the app and the answer is computed from your own records.",
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web",
   offers: {

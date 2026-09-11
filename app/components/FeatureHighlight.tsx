@@ -65,8 +65,6 @@ export interface HighlightData {
   mileageRate: string;
   hasRates: boolean;
   hasEmailConnection: boolean;
-  /** The account has a billing plan, so conversational AI (Insights)
-   * is available. */
 }
 interface HighlightDef {
   icon: LucideIcon;
