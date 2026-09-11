@@ -38,6 +38,7 @@ export default defineConfig({
       "test/shortcut-anchors.test.ts",
       "test/insights.test.ts",
       "test/insights-tools.test.ts",
+      "test/insight-periods.test.ts",
       "test/markdown.test.ts",
     ],
     env: {

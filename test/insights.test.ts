@@ -245,6 +245,36 @@ describe("insightSummary", () => {
       "By category: Software Subscriptions: $105.00 (2 expenses); Testing: $25.00 (1 expenses); Meals and entertainment: $15.00 (1 expenses)",
     );
   });
+
+  it("breaks spending down by report and counts the unreported", () => {
+    const withReports = [
+      exp({
+        merchant: "Z.ai",
+        amount: "80.00",
+        date: "2026-07-01",
+        report: "Q3 Travel",
+      }),
+      exp({
+        merchant: "Test Store",
+        amount: "25.00",
+        date: "2026-07-02",
+        report: "Q3 Travel",
+      }),
+      exp({
+        merchant: "DeepSeek",
+        amount: "25.00",
+        date: "2026-06-10",
+        report: "Software 2026",
+      }),
+      exp({ merchant: "Peet's Coffee", amount: "15.00", date: "2026-06-03" }),
+    ];
+    const summary = insightSummary(buckets, withReports);
+    // Report questions ("which report did I spend most on?") read this line.
+    expect(summary).toContain(
+      "By report: Q3 Travel: $105.00 (2 expenses); Software 2026: $25.00 (1 expenses)",
+    );
+    expect(summary).toContain("Not in any report: 1 expenses");
+  });
 });
 
 describe("answerInsightQuestion", () => {

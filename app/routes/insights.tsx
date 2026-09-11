@@ -38,6 +38,7 @@ import {
   translateInsightQuery,
   LLMError,
 } from "~/lib/insights-ai.server";
+import { withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
@@ -135,7 +136,7 @@ export async function action({ request }: Route.LoaderArgs) {
   const localTimeOk = /^\d{1,2}:\d{2}( [AP]M)?$/i.test(localTime);
   const conversation = await readLatestConversation(user.id);
   try {
-    const t = await translateInsightQuery({
+    const translated = await translateInsightQuery({
       text,
       history: conversation?.exchanges.slice(-3) ?? [],
       today,
@@ -143,6 +144,12 @@ export async function action({ request }: Route.LoaderArgs) {
       categories: categoryNames,
       reports: reportNames,
     });
+    // The model is asked to emit the period range itself; this net makes a
+    // period question correct even when it does not (see insight-periods).
+    const t = {
+      ...translated,
+      query: withPeriodRange(translated.query, text, today),
+    };
     // Ground the text answer in real numbers: compute the same view the
     // chart shows and let the model phrase it. Invalid client dates (the
     // field is always sent by this page) degrade to a chart-only answer.

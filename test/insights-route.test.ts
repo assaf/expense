@@ -430,6 +430,36 @@ describe("answer tool round (query_expenses)", () => {
   });
 });
 
+describe("period range net (this month)", () => {
+  beforeEach(() => {
+    chat.mockReset();
+    vi.mocked(chatWithTools).mockClear();
+  });
+
+  it("applies the range even when the translator omits it", async () => {
+    // The model returns a bare category filter for a month question: the
+    // deterministic net is what keeps the breakdowns month-scoped.
+    chat
+      .mockResolvedValueOnce(
+        '{"query":"category:Travel","title":"Travel","months":12,"chart":false}',
+      )
+      .mockResolvedValueOnce("Travel was your biggest report.");
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "which reports did I spend on the most this month?");
+    form.set("today", "2026-09-10");
+    const res = (await callRoute("action", null, form)) as {
+      ok: boolean;
+      query: string;
+    };
+
+    expect(res.ok).toBe(true);
+    expect(res.query).toBe(
+      "category:Travel after:2026-09-01 before:2026-09-10",
+    );
+  });
+});
+
 describe("conversation months roundtrip (INS-MONTHS-0)", () => {
   it("preserves the all-time window (0) across the read side", async () => {
     await startNewConversation("user_test1", TEST_ACCOUNT_ID);

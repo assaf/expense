@@ -207,6 +207,30 @@ export function insightSummary(
   if (categories.length > 0) {
     lines.push(`By category: ${categories.join("; ")}`);
   }
+  // Report is a first-class dimension on every row (and on the query
+  // tool's results), so the summary must break it out too: without it,
+  // "which report did I spend most on?" has no report-level data to read.
+  const byReport = new Map<string, { total: number; count: number }>();
+  for (const e of matched) {
+    if (!e.report) continue;
+    const entry = byReport.get(e.report) ?? { total: 0, count: 0 };
+    entry.total += Number(e.amount) || 0;
+    entry.count += 1;
+    byReport.set(e.report, entry);
+  }
+  const reports = [...byReport.entries()]
+    .toSorted((a, b) => b[1].total - a[1].total)
+    .slice(0, 5)
+    .map(
+      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
+    );
+  if (reports.length > 0) {
+    lines.push(`By report: ${reports.join("; ")}`);
+  }
+  const unreported = matched.filter((e) => !e.report).length;
+  if (unreported > 0) {
+    lines.push(`Not in any report: ${unreported} expenses`);
+  }
   return lines.join("\n");
 }
 
