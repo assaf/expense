@@ -98,6 +98,22 @@ describe("Access control", () => {
     await page.close();
   });
 
+  it("refuses an off-origin ?next on the login bounce (SEC3-1)", async () => {
+    // Browsers strip tabs and newlines before resolving a URL and treat a
+    // backslash as a path separator, so `/<tab>/evil.com` and `/\evil.com`
+    // both resolve off-origin. The post-login destination must stay local.
+    const page = await signedInPage();
+    for (const raw of ["/\\evil.com", "/\t/evil.com", "//evil.com"]) {
+      const res = await page.request.get(
+        `http://localhost:5199/login?next=${encodeURIComponent(raw)}`,
+        { maxRedirects: 0 },
+      );
+      expect(res.status(), raw).toBe(302);
+      expect(res.headers()["location"], raw).toBe("/");
+    }
+    await page.close();
+  });
+
   it("keeps the four OAuth connect/callback routes reachable signed-out (AUTH-FLOW-1)", async () => {
     // AUTH-FLOW-1: the root requireUser gate dead-ends any OAuth route
     // missing from the public allowlist (the provider bounces the user's

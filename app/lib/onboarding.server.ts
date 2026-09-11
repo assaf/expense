@@ -214,7 +214,7 @@ export async function completeOnboarding(input: {
     }
     createdFresh = true;
     accountId = account.id;
-    sessionCookie = await createSessionCookie(newUser.id);
+    sessionCookie = await createSessionCookie(newUser);
   }
 
   const created = await createEmailConnection({

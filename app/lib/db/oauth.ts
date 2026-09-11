@@ -172,6 +172,15 @@ export async function revokeOAuthToken(tokenHash: string): Promise<void> {
   ).updateAll({ revokedAt: nowWire() });
 }
 
+/** Revoke every live token this user holds. A password reset is the recovery
+ * action after a compromise, so tokens minted under the old password must stop
+ * working, exactly like (and in addition to) the sessions. */
+export async function revokeAllUserOAuthTokens(userId: string): Promise<void> {
+  await db.orm.public.OAuthToken.where((t) =>
+    and(t.userId.eq(userId), t.revokedAt.isNull()),
+  ).updateAll({ revokedAt: nowWire() });
+}
+
 /**
  * The OAuth clients this user has connected, with activity summary for
  * the Settings → Agents & API "connected apps" list. Individual tokens are not

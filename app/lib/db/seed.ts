@@ -263,7 +263,14 @@ async function bootstrapUser(): Promise<User> {
     }
     await seedDefaultCategories(tx, accountId);
   });
-  return { id: userId, accountId, email, emailVerifiedAt: now, createdAt: now };
+  return {
+    id: userId,
+    accountId,
+    email,
+    emailVerifiedAt: now,
+    credentialsChangedAt: null,
+    createdAt: now,
+  };
 }
 
 /** Seed a new account with the IRS Schedule C default categories. */

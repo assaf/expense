@@ -2,10 +2,9 @@ import { redirect } from "react-router";
 import type { Route } from "./+types/gmail-oauth-callback";
 import {
   guardAnonymousAttempt,
-  SESSION_USER_KEY,
   sessionStorage,
+  sessionUser,
 } from "~/lib/auth.server";
-import { findUserById } from "~/lib/db/accounts";
 import { createEmailConnection } from "~/lib/db/email-connections";
 import { initStore } from "~/lib/db/seed";
 import { encryptSecret } from "~/lib/token-crypto.server";
@@ -129,9 +128,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     return finish(`/${next}?gmailOauthError=verify`);
   }
 
-  const userId = session.get(SESSION_USER_KEY);
-  const user =
-    typeof userId === "string" ? await findUserById(userId) : undefined;
+  // The parked session's user, epoch-checked: a cookie revoked by a password
+  // reset must not be able to attach a mailbox.
+  const user = await sessionUser(request);
   if (user) {
     const result = await createEmailConnection({
       accountId: user.accountId,

@@ -61,6 +61,10 @@ const SESSION_COOKIE = "expense_session";
 /** The session key holding the signed-in user id (cookie-session based;
  * the whole session serializes into the signed cookie). */
 export const SESSION_USER_KEY = "userId";
+/** The session key holding the credentials epoch the session was minted under.
+ * A password reset bumps the user's epoch, so a session carrying the old value
+ * is refused (the signed cookie itself cannot be recalled). */
+const SESSION_CREDENTIALS_KEY = "credentialsChangedAt";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 export const sessionStorage = createCookieSessionStorage({
@@ -75,15 +79,30 @@ export const sessionStorage = createCookieSessionStorage({
   },
 });
 
-/** Require an authenticated request. Returns the user or redirects to /login. */
-export async function requireUser(request: Request): Promise<User> {
-  await initStore();
+/** The user a valid session refers to, or undefined when there is none. A
+ * session minted before the user's last password change is not valid: the
+ * epoch comparison is what revokes it. A cookie from before this check existed
+ * carries no epoch, and a user who never reset has none either, so both
+ * normalize to "" and existing sessions keep working. Exported for the OAuth
+ * callbacks, which resolve the parked session's user without requireUser
+ * (they must not redirect). */
+export async function sessionUser(request: Request): Promise<User | undefined> {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
   const userId = session.get(SESSION_USER_KEY);
-  const user =
-    typeof userId === "string" ? await findUserById(userId) : undefined;
+  if (typeof userId !== "string") return undefined;
+  const user = await findUserById(userId);
+  if (!user) return undefined;
+  const minted = session.get(SESSION_CREDENTIALS_KEY);
+  const epoch = typeof minted === "string" ? minted : "";
+  return epoch === (user.credentialsChangedAt ?? "") ? user : undefined;
+}
+
+/** Require an authenticated request. Returns the user or redirects to /login. */
+export async function requireUser(request: Request): Promise<User> {
+  await initStore();
+  const user = await sessionUser(request);
   if (!user) {
     const url = new URL(request.url);
     // Loader fetches arrive as /path.data; redirect back to the real page
@@ -102,19 +121,17 @@ export async function requireUser(request: Request): Promise<User> {
 
 /** True when the request already has a valid session. */
 export async function isAuthenticated(request: Request): Promise<boolean> {
-  const session = await sessionStorage.getSession(
-    request.headers.get("Cookie"),
-  );
-  const userId = session.get(SESSION_USER_KEY);
-  return (
-    typeof userId === "string" && (await findUserById(userId)) !== undefined
-  );
+  return (await sessionUser(request)) !== undefined;
 }
 
-/** The Set-Cookie value for the given user's session. */
-async function commitUserSession(userId: string): Promise<string> {
+/** The Set-Cookie value for the given user's session, stamped with the
+ * credentials epoch it is minted under. */
+async function commitUserSession(
+  user: Pick<User, "id" | "credentialsChangedAt">,
+): Promise<string> {
   const session = await sessionStorage.getSession();
-  session.set(SESSION_USER_KEY, userId);
+  session.set(SESSION_USER_KEY, user.id);
+  session.set(SESSION_CREDENTIALS_KEY, user.credentialsChangedAt ?? "");
   return sessionStorage.commitSession(session);
 }
 
@@ -122,8 +139,10 @@ async function commitUserSession(userId: string): Promise<string> {
  * created VERIFIED user without going through the login path (the login
  * path re-verifies credentials; the onboarding token already proved
  * mailbox control and the password was set in the same step). */
-export async function createSessionCookie(userId: string): Promise<string> {
-  return commitUserSession(userId);
+export async function createSessionCookie(
+  user: Pick<User, "id" | "credentialsChangedAt">,
+): Promise<string> {
+  return commitUserSession(user);
 }
 
 /** Login failed because the account's email hasn't been verified yet. The
@@ -323,7 +342,7 @@ export async function login(
     await updateUserPasswordHash(user.id, await hashPassword(password));
   }
   await ensureDefaultSender(user, origin);
-  return commitUserSession(user.id);
+  return commitUserSession(user);
 }
 
 /**

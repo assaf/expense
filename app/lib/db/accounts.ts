@@ -7,6 +7,7 @@ import {
   toIso,
   toIsoOrNull,
 } from "~/lib/db/wire";
+import { revokeAllUserOAuthTokens } from "~/lib/db/oauth";
 import {
   generateInviteCode,
   generateOpaqueToken,
@@ -15,6 +16,7 @@ import {
 } from "~/lib/passwords";
 import {
   accountFromRow,
+  bust,
   cachedRead,
   createCache,
   userFromRow,
@@ -77,6 +79,7 @@ export async function readBootstrapUser(): Promise<User | undefined> {
     "accountId",
     "email",
     "emailVerifiedAt",
+    "credentialsChangedAt",
     "createdAt",
   )
     .orderBy([(u) => u.createdAt.asc(), (u) => u.id.asc()])
@@ -169,6 +172,7 @@ export async function createUser(input: {
     accountId: input.accountId,
     email,
     emailVerifiedAt: input.emailVerifiedAt ?? null,
+    credentialsChangedAt: null,
     createdAt: new Date().toISOString(),
   };
   // The registering email becomes an allowed "receipts by email" sender by
@@ -402,7 +406,16 @@ export async function resetUserPasswordWithToken(
     passwordHash,
     passwordResetTokenHash: null,
     passwordResetSentAt: null,
+    // A reset is what a user does after a session or token theft, so it has to
+    // end the access granted under the old password: this epoch invalidates
+    // every session minted before it (requireUser compares it) and the OAuth
+    // tokens are revoked outright.
+    credentialsChangedAt: nowWire(),
   });
+  await revokeAllUserOAuthTokens(row.id);
+  // The id→user cache would otherwise keep serving the pre-reset epoch (and
+  // with it, keep accepting the old session) for the rest of its TTL.
+  bust(userCache, row.id);
   return { status: "reset", email: row.email };
 }
 

@@ -387,6 +387,10 @@ model User {
   verificationTokenHash  String?
   passwordResetSentAt    TimestampString(3)?
   passwordResetTokenHash String?
+  // Bumped when the password changes (a reset). Sessions and OAuth tokens
+  // minted before it are refused, so a password reset actually ends the
+  // access a stolen cookie or token granted.
+  credentialsChangedAt   TimestampString(3)?
   marketingUnsubscribedAt TimestampString(3)?
   account                Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 

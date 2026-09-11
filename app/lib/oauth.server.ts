@@ -104,11 +104,13 @@ export function publicOrigin(request: Request): string {
   // developer's .env carries PUBLIC_URL for deploys, and honouring it here
   // would point an MCP client connected to https://expense.localhost/mcp at
   // production's token endpoint (RFC 9728 resource mismatch, no local login).
+  // An IPv6 literal keeps its brackets in `hostname`, so strip them first.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
   const local =
-    url.hostname === "localhost" ||
-    url.hostname.endsWith(".localhost") ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "::1";
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "127.0.0.1" ||
+    host === "::1";
   if (PUBLIC_URL && !local) return new URL(PUBLIC_URL).origin;
   if (url.protocol === "https:") return url.origin;
   const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
@@ -150,7 +152,8 @@ function isValidRedirectUri(uri: string): boolean {
   }
   if (parsed.protocol === "https:") return true;
   if (parsed.protocol === "http:") {
-    const host = parsed.hostname.toLowerCase();
+    // An IPv6 literal keeps its brackets in `hostname`.
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
     return host === "localhost" || host === "127.0.0.1" || host === "::1";
   }
   return false;

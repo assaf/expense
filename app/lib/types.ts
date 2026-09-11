@@ -192,6 +192,9 @@ export interface User {
   /** When the email was verified (the emailed link was clicked); null means
    * the account can't sign in until it is. */
   emailVerifiedAt: string | null;
+  /** When the password last changed (a reset); null when it never has. A
+   * session or OAuth token minted before this moment is refused. */
+  credentialsChangedAt: string | null;
   createdAt: string;
 }
 
