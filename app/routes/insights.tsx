@@ -156,9 +156,17 @@ export async function action({ request }: Route.LoaderArgs) {
         // The read tool queries the request's own snapshot, so a follow-up
         // question ("what about this week?") needs no second DB read.
         expenses,
-        profile: localTimeOk
-          ? `${profile}\nCurrent time: ${localTime} (user's local clock)`
-          : profile,
+        // The answer step needs the user's local DATE, not just the clock:
+        // the chart data is month-bucketed, so without this a "what's
+        // today?" question gets a date inferred from the expense rows.
+        // Same `Current date:` wording the translator prompt uses.
+        profile: [
+          profile,
+          `Current date: ${today} (user's local date)`,
+          ...(localTimeOk
+            ? [`Current time: ${localTime} (user's local clock)`]
+            : []),
+        ].join("\n"),
       });
       await appendExchange(user.id, user.accountId, {
         question: text,

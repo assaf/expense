@@ -345,6 +345,11 @@ describe("local time bound (INS-INPUT-1-RESIDUAL)", () => {
     await callRoute("action", null, form);
     const userMessage = chat.mock.calls[1]![0].at(-1)!.content;
     expect(userMessage).toContain("Current time: 1:15 PM");
+    // The answer step must carry the local date, or a "what's today?"
+    // question gets a date inferred from the expense rows.
+    expect(userMessage).toContain(
+      "Current date: 2026-09-09 (user's local date)",
+    );
   });
 });
 
