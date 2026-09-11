@@ -117,6 +117,23 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   },
 ];
 
+/** The landing page's Insights sample: the questions are the ones the app
+ * itself suggests (see insightStarters in app/lib/insights.ts), so nothing
+ * here promises an ask the pipeline can't answer. */
+const INSIGHTS_QUESTIONS = [
+  "How much have I spent this year?",
+  "Which report is the biggest this year?",
+  "What still needs a report?",
+  "What's my biggest expense?",
+  "Where does my money go?",
+];
+
+const INSIGHTS_EXCHANGE = {
+  question: "How much have I spent this year?",
+  answer:
+    "You spent $18,240.55 across 312 expenses. Q3 Travel is your biggest report at $4,180.20, and 6 expenses still have no report.",
+};
+
 /** The browser-window mock framing both marketing screenshots: the
  * traffic-light dot header over a full-width screenshot. */
 function BrowserFrame({
@@ -228,6 +245,51 @@ export default function LandingPage({
               ))}
             </div>
           </div>
+        </section>
+
+        {/* Insights */}
+        <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
+          <h2 className="text-3xl font-bold tracking-tight text-ink">
+            Ask your expenses a question
+          </h2>
+          <p className="mt-3 max-w-2xl text-gray-600 dark:text-gray-300">
+            Insights answers from your own records, not from a model's memory:
+            every number is computed from your expenses. The longer you use
+            Expense, the more it has to work with.
+          </p>
+          <p className="mt-8 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Example
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <Card className="p-4">
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                {INSIGHTS_EXCHANGE.question}
+              </p>
+            </Card>
+            <Card className="border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {INSIGHTS_EXCHANGE.answer}
+              </p>
+            </Card>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center gap-1.5 text-sm">
+            {INSIGHTS_QUESTIONS.filter(
+              (q) => q !== INSIGHTS_EXCHANGE.question,
+            ).map((q) => (
+              <span
+                key={q}
+                className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 dark:border-gray-600 dark:text-gray-300"
+              >
+                {q}
+              </span>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            Only answers what your data supports. When it can't, it says so.
+          </p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Next: summaries that arrive on their own when your spending changes.
+          </p>
         </section>
 
         {/* How it works */}
