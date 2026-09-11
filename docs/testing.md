@@ -77,9 +77,12 @@
   "modified" (compared against the Git HEAD version, Revert/Keep).
 - Comparisons are skipped when `CI` is set, so CI never fails on
   environment-rendering noise; they only run locally.
-- Determinism guards: the test server pins the home page's "Did you know?"
-  highlight pick (`SCREENSHOT_HIGHLIGHT_PIN`, set by `launchServer.ts`;
-  rotation is untouched in every other environment), the matcher waits for
+- Determinism guards: the test server pins the random content on captured
+  screens (`SCREENSHOT_HIGHLIGHT_PIN`, set by `launchServer.ts`): the home
+  page's "Did you know?" highlight pick and the insights page's opening
+  starter both read it, so both capture the first eligible entry. Any new
+  random content on a captured screen must read it too; the rotation is
+  untouched in every other environment. The matcher also waits for
   `document.fonts.ready` (a late-loading webfont otherwise flags phantom
   text drift), and the suite's pinned clock keeps client-rendered dates
   stable. If you add a screen capture, expect a baseline-creation pass

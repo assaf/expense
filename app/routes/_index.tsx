@@ -144,13 +144,14 @@ export async function loader({ request }: Route.LoaderArgs) {
       // still varies the rest).
       highlight: {
         // Visual-regression captures run against the test server: when
-        // launchServer sets SCREENSHOT_HIGHLIGHT_PIN, the pick is pinned
-        // (first eligible entry) so home renders are deterministic.
-        // Every other environment keeps the rotation (Math.random).
+        // launchServer sets SCREENSHOT_HIGHLIGHT_PIN=1, the pick is pinned
+        // (first eligible entry) so home renders are deterministic; the
+        // insights starter reads the same pin. Every other environment
+        // keeps the rotation (Math.random).
         id: pickHighlight(
           highlightData,
           emailConnections.length > 0 ? undefined : "connect-email",
-          process.env.SCREENSHOT_HIGHLIGHT_PIN ? () => 0 : undefined,
+          process.env.SCREENSHOT_HIGHLIGHT_PIN === "1" ? () => 0 : undefined,
         ),
         data: highlightData,
       },
