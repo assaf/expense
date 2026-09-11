@@ -115,11 +115,11 @@ describe("Command palette", () => {
     await blurFocus(page);
     // kbar's chained shortcuts (["g", "r"] etc.) complete silently (the
     // palette does not open on "g" alone), so the navigation itself is the
-    // success signal. A keypress can land in the brief window before kbar
-    // binds its listener after hydration (a no-op, like the Cmd+K tests'
-    // open-wait), so retry the whole chord until the URL moves.
+    // success signal. kbar binds its document listener in a mount effect,
+    // and the previous chord's navigation may still be settling, so retry
+    // the whole chord rather than trusting a single press.
     const navVia = async (urlGlob: string, ...keys: string[]) => {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
         await blurFocus(page);
         await page.keyboard.press("g");
         for (const k of keys) await page.keyboard.press(k);
@@ -129,7 +129,18 @@ describe("Command palette", () => {
         );
         if (moved) return;
       }
-      await page.waitForURL(urlGlob); // fail with the standard timeout
+      // Straggler grace: a chord that fired on the last attempt may still
+      // be resolving its loader. Then fail by name rather than with the old
+      // bare wait, which pressed no keys and could only ever time out.
+      const arrived = await page.waitForURL(urlGlob, { timeout: 5_000 }).then(
+        () => true,
+        () => false,
+      );
+      if (!arrived) {
+        throw new Error(
+          `chord "${["g", ...keys].join(" ")}" never navigated to ${urlGlob}`,
+        );
+      }
     };
 
     await navVia("**/export", "r");
@@ -137,10 +148,10 @@ describe("Command palette", () => {
     await navVia("**/reconcile", "x");
     await navVia("**/settings", "s");
     await navVia("**/", "e");
-    // Retry worst case is 5 chords x 3 attempts x 2500ms = 37.5s, over the
-    // 30s default test timeout: on a slow CI runner the test died
-    // mid-retry (run 33770839904) before the final waitForURL could fail
-    // loudly. Budget the test above its own worst case.
+    // Worst case is 5 chords x 4 attempts x 2500ms = 50s; the 90s budget
+    // keeps a slow CI runner (3x local test time) from dying mid-retry
+    // before the chord that never fires is named (run 33770839904 died on
+    // the old 30s default).
   }, 90_000);
 
   it("uses single-key shortcuts for editors, search, and uploads", async () => {

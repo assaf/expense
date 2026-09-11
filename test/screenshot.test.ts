@@ -25,7 +25,14 @@ import { ulid } from "ulid";
 import { afterAll, describe, expect, it } from "vitest";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
-import { freshPage, closeBrowser, goto, signIn } from "./helpers/launchBrowser";
+import {
+  freshPage,
+  closeBrowser,
+  goto,
+  signIn,
+  waitForHydration,
+} from "./helpers/launchBrowser";
+import type { Page } from "playwright";
 import { removeDiffImages } from "./helpers/toMatchScreenshot";
 import { confirmationEmail } from "~/lib/email-confirmation.server";
 import { replyHtml } from "~/lib/inbound-email.server";
@@ -397,9 +404,12 @@ async function shrinkForReadme(path: string): Promise<void> {
   const { rename } = await import("node:fs/promises");
   await rename(`${path}.tmp`, path);
 }
-/** Wait for React Router hydration and every image to finish loading. */
-async function waitForSettled(page: import("playwright").Page): Promise<void> {
-  await page.waitForFunction(() => "__reactRouterContext" in window);
+/** Wait for React to attach (fiber keys, not just the bundle globals) and
+ * every image to finish loading. */
+async function waitForSettled(page: Page): Promise<void> {
+  // React attached (fiber keys): a capture taken while the bundle has run
+  // but React has not attached diffs every client-rendered detail.
+  await waitForHydration(page);
   await page.waitForFunction(() =>
     [...document.querySelectorAll("img")].every((img) => img.complete),
   );
@@ -418,7 +428,7 @@ async function ensureServer(): Promise<boolean> {
   }
 }
 
-async function captureHome(page: import("playwright").Page): Promise<void> {
+async function captureHome(page: Page): Promise<void> {
   await page.goto("/", { waitUntil: "load" });
   await waitForSettled(page);
   // Give map tiles (OSM) and webfonts a moment to arrive.
@@ -534,7 +544,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
   /** Hydration + image settle, then a compared capture. The pinned clock
    * (freezePageClock) keeps client-rendered dates stable across runs. */
   async function capture(
-    page: import("playwright").Page,
+    page: Page,
     path: string,
     name: string,
   ): Promise<void> {

@@ -94,6 +94,25 @@ export async function closeBrowser(): Promise<void> {
   sharedContext = undefined;
 }
 
+/** Wait until React has actually attached, not just until the bundle ran.
+ * React Router's bootstrap sets `__reactRouterContext`/`__reactRouterVersion`
+ * before React attaches; in that window a click or keypress is a SILENT
+ * no-op — no handler runs and nothing throws — which is the suite's main
+ * source of CI flakes (keys "not registering" on slow runners). Fiber keys
+ * on a rendered node are the reliable signal. */
+export async function waitForHydration(
+  page: Page,
+  timeout = 15_000,
+): Promise<void> {
+  await page.waitForFunction(
+    () =>
+      [...document.body.children].some((el) =>
+        Object.keys(el).some((k) => k.startsWith("__react")),
+      ),
+    { timeout },
+  );
+}
+
 /**
  * Navigate to a path on the test server and return a Playwright page.
  * Signs in through the real /login flow when the shared context has no
@@ -111,10 +130,9 @@ export async function goto(path: string): Promise<Page> {
     await signIn(page, TEST_EMAIL, TEST_PASSWORD);
   }
   await page.goto(path, { waitUntil: "load", timeout: 15_000 });
-  // Wait for React Router to hydrate
-  await page.waitForFunction(() => "__reactRouterContext" in window, {
-    timeout: 10_000,
-  });
+  await waitForHydration(page);
+  // A beat for mount effects (kbar's document listeners, focus traps) that
+  // run just after attachment.
   await page.waitForTimeout(150);
   return page;
 }
