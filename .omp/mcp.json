@@ -12,6 +12,10 @@
     "linear": {
       "type": "http",
       "url": "https://mcp.linear.app/mcp"
+    },
+    "expense": {
+      "type": "http",
+      "url": "https://expense.localhost/mcp"
     }
   }
 }
