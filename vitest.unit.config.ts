@@ -37,6 +37,7 @@ export default defineConfig({
       "test/expense-search.test.ts",
       "test/shortcut-anchors.test.ts",
       "test/insights.test.ts",
+      "test/insights-tools.test.ts",
       "test/markdown.test.ts",
     ],
     env: {

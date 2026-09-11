@@ -1,9 +1,18 @@
 import {
   chatCompletion,
+  chatWithTools,
   LLMError,
   parseJsonObject,
   type ChatMessage,
+  type ToolCall,
 } from "~/lib/receipt-ai.server";
+import {
+  MAX_TOOL_ROUNDS,
+  QUERY_EXPENSES,
+  queryExpensesTool,
+  runQueryExpenses,
+  type FilterableExpense,
+} from "~/lib/insights-tools.server";
 import { categorySynonyms } from "~/lib/expense-search";
 import { formatUserDate } from "~/lib/format";
 import { stripFenceMarkers } from "~/lib/prompt-fence.server";
@@ -250,6 +259,9 @@ export async function answerInsightQuestion(input: {
   history: { question: string; answer: string }[];
   summary: string;
   profile?: string;
+  /** The account's expenses, enabling the read tool. Omitted by callers
+   * (and tests) that only want the grounded-summary answer. */
+  expenses?: readonly FilterableExpense[];
 }): Promise<string> {
   const parts: string[] = [];
   if (input.profile) {
@@ -266,16 +278,56 @@ export async function answerInsightQuestion(input: {
   }
   parts.push(fenceData(`Computed data:\n${input.summary}`));
   parts.push(`Question: ${input.question}`);
-  const raw = await chatCompletion(
-    [
-      { role: "system", content: ANSWER_PROMPT },
-      { role: "user", content: parts.join("\n\n") },
-    ],
-    { maxTokens: 200 },
-  );
-  const text = raw.trim().replace(/^["']|["']$/g, "");
-  return text || "I couldn't summarize that.";
+  const messages: ChatMessage[] = [];
+  if (input.expenses) {
+    // The computed data covers the chart's window only; the tool is how the
+    // model checks anything else (a day, a range, a filter).
+    messages.push({ role: "system", content: TOOL_GUIDANCE });
+  }
+  messages.push({ role: "system", content: ANSWER_PROMPT });
+  messages.push({ role: "user", content: parts.join("\n\n") });
+  if (!input.expenses) {
+    const raw = await chatCompletion(messages, { maxTokens: 200 });
+    return (
+      raw.trim().replace(/^["']|["']$/g, "") || "I couldn't summarize that."
+    );
+  }
+  // Bounded tool loop: at most MAX_TOOL_ROUNDS tool rounds, then one
+  // toolless call so an insistent model still produces an answer.
+  for (let round = 0; ; round += 1) {
+    const { content, toolCalls } =
+      round >= MAX_TOOL_ROUNDS
+        ? {
+            content: await chatCompletion(messages, { maxTokens: 300 }),
+            toolCalls: [] as ToolCall[],
+          }
+        : await chatWithTools(messages, {
+            tools: [queryExpensesTool()],
+            maxTokens: 300,
+          });
+    if (toolCalls.length === 0) {
+      const text = content.trim().replace(/^["']|["']$/g, "");
+      return text || "I couldn't summarize that.";
+    }
+    messages.push({ role: "assistant", content, tool_calls: toolCalls });
+    for (const call of toolCalls) {
+      const result =
+        call.function.name === QUERY_EXPENSES
+          ? runQueryExpenses(input.expenses, call)
+          : JSON.stringify({ error: `unknown tool ${call.function.name}` });
+      // Tool output is third-party-shaped data (merchant names, notes):
+      // fence it exactly like every other untrusted block.
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        content: fenceData(`Tool result:\n${result}`),
+      });
+    }
+  }
 }
+
+/** How the answer step may use the read tool. */
+const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the computed data doesn't cover: any date range (a single day, a week, a month), zero or more exact category names, an exact report name, unreported-only, receipt/mileage type, or a merchant substring. The computed data below is month-bucketed and covers the chart's current window only, so use the tool rather than saying the data is missing. Call it at most ${MAX_TOOL_ROUNDS} times, then answer.`;
 
 export { LLMError };
 

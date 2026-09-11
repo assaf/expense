@@ -517,8 +517,25 @@ function buildUserPrompt(input: ExtractionInput): string {
 }
 
 export type ChatMessage = {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Assistant turn that requested tools (function calling). */
+  tool_calls?: ToolCall[];
+  /** Tool-result turn: the call it answers. */
+  tool_call_id?: string;
+};
+
+/** A tool call the model asked for (OpenAI-compatible shape). */
+export type ToolCall = {
+  id: string;
+  type?: "function";
+  function: { name: string; arguments: string };
+};
+
+/** A tool the model may call. */
+export type ToolSpec = {
+  type: "function";
+  function: { name: string; description: string; parameters: unknown };
 };
 
 /**
@@ -576,6 +593,46 @@ export async function chatCompletion(
     thinking?: boolean;
   } = {},
 ): Promise<string> {
+  const message = await llmMessage(messages, opts);
+  const contentStr = message.content ?? "";
+  if (!contentStr)
+    throw new LLMError(`${providerLabelOf()} returned empty content`, 502, "");
+  return contentStr;
+}
+
+/** Same request path with function calling enabled: returns the raw
+ * assistant message so the caller can run the requested tools and
+ * continue the conversation (see insights-ai's answer loop). */
+export async function chatWithTools(
+  messages: ChatMessage[],
+  opts: { tools: ToolSpec[]; maxTokens?: number },
+): Promise<{ content: string; toolCalls: ToolCall[] }> {
+  const message = await llmMessage(messages, opts);
+  return {
+    content: message.content ?? "",
+    toolCalls: message.tool_calls ?? [],
+  };
+}
+
+function providerLabelOf(): string {
+  return LLM_BASE_URL.includes("api.deepseek.com")
+    ? "DeepSeek"
+    : new URL(LLM_BASE_URL).hostname;
+}
+
+/** One chat-completions request; returns the assistant message verbatim
+ * (content and/or tool_calls). */
+async function llmMessage(
+  messages: ChatMessage[],
+  opts: {
+    json?: boolean;
+    image?: { buffer: Buffer; mime: string };
+    maxTokens?: number;
+    model?: string;
+    thinking?: boolean;
+    tools?: ToolSpec[];
+  } = {},
+): Promise<{ content?: string; tool_calls?: ToolCall[] }> {
   if (!LLM_API_KEY) {
     throw new LLMError("LLM_API_KEY is not configured", 500, "");
   }
@@ -592,18 +649,19 @@ export async function chatCompletion(
       },
     ];
   }
-  // DeepSeek-specific: JSON mode + disabled thinking. Other providers get
-  // JSON mode too (OpenAI-compatible), but no `thinking` param. Disabling
-  // thinking matters for the vision-exp reasoning model; with it on, the
-  // budget burns on reasoning_content (empty content at low max_tokens).
+  // Tool rounds send their own message list (assistant tool_calls + tool
+  // results), so only the image form rewrites the last message.
   const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
-  const providerLabel = isDeepSeek
-    ? "DeepSeek"
-    : new URL(LLM_BASE_URL).hostname;
+  const providerLabel = providerLabelOf();
   const body = {
     model: opts.model ?? LLM_MODEL,
-    messages: [...messages.slice(0, -1), { role: "user", content }],
+    messages: opts.image
+      ? [...messages.slice(0, -1), { role: "user", content }]
+      : messages,
     ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+    ...(opts.tools && opts.tools.length > 0
+      ? { tools: opts.tools, tool_choice: "auto" }
+      : {}),
     ...(isDeepSeek && opts.thinking !== false
       ? { thinking: { type: "disabled" } }
       : {}),
@@ -629,12 +687,22 @@ export async function chatCompletion(
     throw err;
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: {
+      message?: { content?: string; tool_calls?: ToolCall[] };
+    }[];
   };
-  const contentStr = data.choices?.[0]?.message?.content ?? "";
-  if (!contentStr)
-    throw new LLMError(`${providerLabel} returned empty content`, 502, "");
-  return contentStr;
+  const message = data.choices?.[0]?.message ?? {};
+  if (
+    !message.content &&
+    !(message.tool_calls && message.tool_calls.length > 0)
+  ) {
+    throw new LLMError(
+      `${providerLabel} returned neither content nor a tool call`,
+      502,
+      "",
+    );
+  }
+  return message;
 }
 
 /** Robustly extract a JSON object from a model response (fences, prose). */

@@ -153,6 +153,9 @@ export async function action({ request }: Route.LoaderArgs) {
         question: text,
         history: conversation?.exchanges.slice(-3) ?? [],
         summary: insightSummary(buckets, matched),
+        // The read tool queries the request's own snapshot, so a follow-up
+        // question ("what about this week?") needs no second DB read.
+        expenses,
         profile: localTimeOk
           ? `${profile}\nCurrent time: ${localTime} (user's local clock)`
           : profile,

@@ -7,7 +7,12 @@ import {
   translateInsightQuery,
 } from "~/lib/insights-ai.server";
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
-import { chatCompletion } from "~/lib/receipt-ai.server";
+import {
+  chatCompletion,
+  chatWithTools,
+  type ChatMessage,
+  type ToolCall,
+} from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { addReport } from "~/lib/db/reports";
 import {
@@ -20,10 +25,24 @@ import type { Route as InsightsRoute } from "+types/app/routes/+types/insights";
 // The translator boundary is what the route adds on top of the pure lib
 // (covered in test/insights.test.ts): the LLM is reached exactly once for
 // a translation, and the text answer is grounded in computed numbers.
-vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  chatCompletion: vi.fn(),
-}));
+// The route's answer step may use function calling (query_expenses): the
+// tools mock delegates to the mocked chatCompletion, so tests that count or
+// inspect the chat calls keep seeing every round.
+vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("~/lib/receipt-ai.server")>();
+  const chatCompletion = vi.fn();
+  return {
+    ...actual,
+    chatCompletion,
+    chatWithTools: vi.fn(
+      async (messages: ChatMessage[], opts: { maxTokens?: number }) => ({
+        content: await chatCompletion(messages, opts),
+        toolCalls: [] as ToolCall[],
+      }),
+    ),
+  };
+});
 
 const chat = vi.mocked(chatCompletion);
 
@@ -350,6 +369,59 @@ describe("starter pin for screenshot captures", () => {
       pinStarter: boolean;
     };
     expect(normal.pinStarter).toBe(false);
+  });
+});
+
+describe("answer tool round (query_expenses)", () => {
+  // vp (the gate runner) does not clear module-scoped mock history between
+  // tests, so each describe resets the mocks it inspects.
+  beforeEach(() => {
+    chat.mockReset();
+    vi.mocked(chatWithTools).mockClear();
+  });
+
+  // The answer step may call the read tool: the second request must carry
+  // the tool result (fenced), and the final answer must be returned.
+  it("runs a requested query and answers from its result", async () => {
+    const tools = vi.mocked(chatWithTools);
+    chat.mockResolvedValueOnce(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_1",
+            function: {
+              name: "query_expenses",
+              arguments: JSON.stringify({
+                dateFrom: "2026-09-09",
+                dateTo: "2026-09-09",
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ content: "You spent $9.99.", toolCalls: [] });
+
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "how much did I spend yesterday?");
+    form.set("today", "2026-09-10");
+    const res = (await callRoute("action", null, form)) as {
+      ok: boolean;
+      answer: string;
+    };
+
+    expect(res.ok).toBe(true);
+    expect(res.answer).toBe("You spent $9.99.");
+    // The follow-up request carries the tool result as fenced DATA.
+    const followUp = tools.mock.calls[1]![0];
+    const toolMessage = followUp.at(-1)!;
+    expect(toolMessage.role).toBe("tool");
+    expect(toolMessage.content).toContain("<<<DATA>>>");
+    expect(toolMessage.content).toContain('"count"');
   });
 });
 
