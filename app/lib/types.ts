@@ -205,6 +205,12 @@ export type Settings = {
   homeAddress: string;
   homeLat: number | null;
   homeLng: number | null;
+  /** The account's work address, when it has one: what a conversational
+   * request resolves "the office"/"work" to (insights). Unlike the home
+   * address it is not part of a route, so it is only ever a trip stop. */
+  workAddress: string;
+  workLat: number | null;
+  workLng: number | null;
   /** True when the account completed Fastmail onboarding and hasn't
    * dismissed the welcome panel yet; the ONLY accounts that see the
    * panel are the ones the onboarding flow explicitly flags (the default
@@ -216,6 +222,9 @@ export const DEFAULT_SETTINGS: Settings = {
   homeAddress: "",
   homeLat: null,
   homeLng: null,
+  workAddress: "",
+  workLat: null,
+  workLng: null,
   welcomePending: false,
 };
 

@@ -3,6 +3,7 @@ import {
   insightExpense,
   insightStarters,
   pickStarter,
+  recentTripStops,
   revealTo,
   insightSummary,
   knownMerchants,
@@ -21,17 +22,39 @@ import {
   parseInsightTranslation,
   translateInsightQuery,
 } from "~/lib/insights-ai.server";
+import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
+import type { ToolCall } from "~/lib/receipt-ai.server";
 
 // The translator's LLM transport is mocked at the receipt-ai boundary:
 // these tests cover the prompt contract, validation, and fallbacks, not
-// the API client (covered by the receipt flows).
+// the API client (covered by the receipt flows). chatWithTools is mocked
+// too: the answer step's tool loop must not reach the network here.
 vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   chatCompletion: vi.fn(),
+  chatWithTools: vi.fn(async () => ({ content: "", toolCalls: [] })),
 }));
-import { chatCompletion } from "~/lib/receipt-ai.server";
+// The plan tool itself is covered in test/insights-mileage-tool.test.ts
+// (fake resolver) and end-to-end in test/insights-route.test.ts: here only
+// the answer step's dispatch is under test, so the module is stubbed to
+// keep this suite free of the map services and the DB.
+vi.mock("~/lib/insights-mileage-tool.server", () => ({
+  PLAN_MILEAGE: "plan_mileage",
+  planMileageTool: () => ({
+    type: "function",
+    function: {
+      name: "plan_mileage",
+      description: "Plan a mileage trip.",
+      parameters: { type: "object" },
+    },
+  }),
+  runPlanMileage: vi.fn(),
+}));
+import { chatCompletion, chatWithTools } from "~/lib/receipt-ai.server";
+import { runPlanMileage } from "~/lib/insights-mileage-tool.server";
 
 const chat = vi.mocked(chatCompletion);
+const tools = vi.mocked(chatWithTools);
 
 function exp(fields: Partial<InsightExpense>): InsightExpense {
   return {
@@ -185,6 +208,93 @@ describe("knownMerchants", () => {
   });
 });
 
+describe("recentTripStops", () => {
+  const stop = (address: string) => ({ address, lat: null, lng: null });
+
+  it("collects stops newest trip first, minus the home address", () => {
+    const rows: InsightExpense[] = [
+      exp({
+        id: "e1",
+        type: "mileage",
+        date: "2026-07-01",
+        locations: [stop("Home Base, CA"), stop("Old Client, CA")],
+      }),
+      exp({
+        id: "e2",
+        type: "mileage",
+        date: "2026-07-20",
+        locations: [stop("The Office, CA"), stop("Home Base, CA")],
+      }),
+    ];
+    expect(recentTripStops(rows, "home base, CA")).toEqual([
+      "The Office, CA",
+      "Old Client, CA",
+    ]);
+  });
+
+  it("dedupes case-insensitively and keeps the first spelling", () => {
+    const rows: InsightExpense[] = [
+      exp({
+        id: "b",
+        type: "mileage",
+        date: "2026-07-10",
+        locations: [stop("The Office, CA"), stop("1 Client Way, CA")],
+      }),
+      exp({
+        id: "a",
+        type: "mileage",
+        date: "2026-07-10",
+        locations: [stop("the office, ca"), stop("2 Client Way, CA")],
+      }),
+    ];
+    // Same-date trips are ordered by id, so "a" is the newer one.
+    expect(recentTripStops(rows, "")).toEqual([
+      "the office, ca",
+      "2 Client Way, CA",
+      "1 Client Way, CA",
+    ]);
+  });
+
+  it("ignores one-stop rows, blanks, and receipt rows", () => {
+    const rows: InsightExpense[] = [
+      exp({
+        id: "e1",
+        type: "mileage",
+        date: "2026-07-01",
+        locations: [stop("Solo, CA")],
+      }),
+      exp({
+        id: "e2",
+        type: "mileage",
+        date: "2026-07-02",
+        locations: [stop("   "), stop("Real Stop, CA"), stop("Other Stop, CA")],
+      }),
+      exp({
+        id: "e3",
+        type: "receipt",
+        date: "2026-07-03",
+        locations: [stop("Not A Trip, CA"), stop("Also Not, CA")],
+      }),
+    ];
+    expect(recentTripStops(rows, "")).toEqual([
+      "Real Stop, CA",
+      "Other Stop, CA",
+    ]);
+  });
+
+  it("caps the list at the limit", () => {
+    const rows: InsightExpense[] = [
+      exp({
+        id: "e1",
+        type: "mileage",
+        date: "2026-07-01",
+        locations: [stop("A"), stop("B"), stop("C"), stop("D")],
+      }),
+    ];
+    expect(recentTripStops(rows, "", 3)).toEqual(["A", "B", "C"]);
+  });
+});
+
 describe("insightSummary", () => {
   const buckets: MonthBucket[] = [
     { key: "2026-06", label: "Jun", total: 95, count: 3 },
@@ -280,13 +390,14 @@ describe("insightSummary", () => {
 describe("answerInsightQuestion", () => {
   it("grounds the answer prompt in the computed data and history", async () => {
     chat.mockResolvedValueOnce("  You spent more this month.  ");
-    const answer = await answerInsightQuestion({
+    const { answer, pending } = await answerInsightQuestion({
       question: "did I spend more on AI this month?",
       history: [{ question: "earlier question", answer: "earlier answer" }],
       summary: "Total: $200.00 across 5 expenses\nBy month: Jul: $105.00 (2)",
     });
     // The answer is trimmed (surrounding whitespace/quotes stripped).
     expect(answer).toBe("You spent more this month.");
+    expect(pending).toBeUndefined();
     const [messages] = chat.mock.calls[0]!;
     const user = messages.at(-1)!.content;
     expect(user).toContain("Computed data:");
@@ -298,12 +409,104 @@ describe("answerInsightQuestion", () => {
 
   it("falls back to a placeholder when the model returns nothing", async () => {
     chat.mockResolvedValueOnce('""');
-    const answer = await answerInsightQuestion({
+    const { answer } = await answerInsightQuestion({
       question: "anything",
       history: [],
       summary: "Total: $0.00 across 0 expenses",
     });
     expect(answer).toBe("I couldn't summarize that.");
+  });
+});
+
+describe("answerInsightQuestion plan_mileage dispatch", () => {
+  const planned: PendingTrip = {
+    stops: [
+      { address: "1 Office Way, Testing, CA", lat: 34.02, lng: -118.28 },
+      { address: "2 Home St, Testing, CA", lat: 34.05, lng: -118.24 },
+    ],
+    date: "2026-07-14",
+    type: "business",
+    report: "",
+    description: "",
+    distanceMiles: "12.34",
+    amount: "9.38",
+    rate: "0.76",
+    approximate: false,
+  };
+  const expenses = [exp({ id: "e1", date: "2026-07-01", amount: "10.00" })];
+  const tripCall: ToolCall = {
+    id: "call_trip",
+    function: {
+      name: "plan_mileage",
+      arguments: JSON.stringify({ stops: ["1 Office Way", "2 Home St"] }),
+    },
+  };
+  const offeredToolNames = () =>
+    tools.mock.calls[0]![1].tools.map((t) => t.function.name);
+
+  it("collects the planned trip as pending when writes are enabled", async () => {
+    tools.mockClear();
+    vi.mocked(runPlanMileage).mockClear();
+    vi.mocked(runPlanMileage).mockResolvedValueOnce({
+      result: JSON.stringify({ ok: true, distanceMiles: "12.34" }),
+      pending: planned,
+    });
+    tools
+      .mockResolvedValueOnce({ content: "", toolCalls: [tripCall] })
+      .mockResolvedValueOnce({
+        content: "That's a 12.34 mi trip — confirm it?",
+        toolCalls: [],
+      });
+
+    const result = await answerInsightQuestion({
+      question: "log the drive from the office back home on Tuesday",
+      history: [],
+      summary: "Total: $0.00 across 0 expenses",
+      expenses,
+      writes: {
+        accountId: "acct_1",
+        reportNames: ["Q3"],
+        today: "2026-07-15",
+      },
+    });
+
+    expect(result.answer).toBe("That's a 12.34 mi trip — confirm it?");
+    // The proposal comes back for the confirm card, and only that.
+    expect(result.pending).toEqual(planned);
+    expect(offeredToolNames()).toContain("plan_mileage");
+    // The call is resolved against the request's own account context.
+    expect(vi.mocked(runPlanMileage).mock.calls[0]![0]).toEqual({
+      accountId: "acct_1",
+      reportNames: ["Q3"],
+      today: "2026-07-15",
+    });
+    // Its result reaches the model, fenced like every other tool output.
+    const sent = tools.mock.calls.at(-1)![0];
+    const toolMessage = sent.filter((m) => m.role === "tool").at(-1)!;
+    expect(toolMessage.content).toContain("<<<DATA>>>");
+    expect(toolMessage.content).toContain("12.34");
+  });
+
+  it("neither offers nor honors the plan tool without writes", async () => {
+    tools.mockClear();
+    vi.mocked(runPlanMileage).mockClear();
+    tools
+      .mockResolvedValueOnce({ content: "", toolCalls: [tripCall] })
+      .mockResolvedValueOnce({ content: "I can't log trips.", toolCalls: [] });
+
+    const result = await answerInsightQuestion({
+      question: "log the drive home",
+      history: [],
+      summary: "Total: $0.00 across 0 expenses",
+      expenses,
+    });
+
+    expect(result.pending).toBeUndefined();
+    expect(runPlanMileage).not.toHaveBeenCalled();
+    expect(offeredToolNames()).not.toContain("plan_mileage");
+    const sent = tools.mock.calls.at(-1)![0];
+    const toolMessage = sent.filter((m) => m.role === "tool").at(-1)!;
+    expect(toolMessage.content).toContain("unknown tool plan_mileage");
   });
 });
 

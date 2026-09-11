@@ -1,4 +1,10 @@
-import { ChartColumn, Lightbulb, Sparkles, SquarePen } from "lucide-react";
+import {
+  ChartColumn,
+  Check,
+  Lightbulb,
+  Sparkles,
+  SquarePen,
+} from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { RevealText } from "~/components/RevealText";
@@ -27,10 +33,17 @@ import {
   knownMerchants,
   matchingExpenses,
   pickStarter,
+  recentTripStops,
   monthlyTotals,
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
+import {
+  parseTripConfirmation,
+  type PendingTrip,
+} from "~/lib/insights-mileage-tool.server";
+import { resolveMileage, saveMileageTrip } from "~/lib/mcp-write.server";
+import { MILEAGE_TYPE_LABELS, formatRate } from "~/lib/mileage-rates";
 import {
   answerInsightQuestion,
   insightProfile,
@@ -76,6 +89,58 @@ export async function action({ request }: Route.LoaderArgs) {
     // as a record. No LLM call, so no plan gate needed here.
     await startNewConversation(user.id, user.accountId);
     return { ok: true as const, fresh: true };
+  }
+  if (intent === "confirm") {
+    // The confirm card's submission, not a model call: it makes no LLM
+    // request and costs no throttle. The payload carries only the trip's
+    // inputs, so a re-resolved trip is the only thing that gets filed.
+    const confirmed = parseTripConfirmation(formString(form, "pending"));
+    if (!confirmed) {
+      return {
+        ok: false as const,
+        error: "That trip is no longer available. Ask for it again.",
+      };
+    }
+    const resolved = await resolveMileage(user.accountId, {
+      locations: confirmed.stops,
+      date: confirmed.date,
+      type: confirmed.type,
+      report: confirmed.report,
+    });
+    if (!resolved.ok) return { ok: false as const, error: resolved.error };
+    const saved = await saveMileageTrip(user.accountId, resolved.trip, {
+      description: confirmed.description,
+    });
+    // The reply reports the STORED figures: if the routing service changed
+    // state between the proposal and the confirm, the user sees what was
+    // actually filed, not what was previewed.
+    const distance = saved.distanceMiles
+      ? `${saved.distanceMiles} mi`
+      : "a trip";
+    const amount = saved.amount
+      ? ` for ${formatUsd(Number(saved.amount))}`
+      : "";
+    const note = resolved.trip.approximate
+      ? " (straight-line estimate — the route service was unavailable)"
+      : "";
+    const answer = `Logged ${distance}${amount} on ${resolved.trip.date}${note}.`;
+    await appendExchange(user.id, user.accountId, {
+      question: "Log it",
+      answer,
+      chart: false,
+      query: "",
+      months: 12,
+      title: "Logged the trip",
+    });
+    return {
+      ok: true as const,
+      answer,
+      logged: {
+        expenseId: saved.expenseId,
+        distanceMiles: saved.distanceMiles,
+        amount: saved.amount,
+      },
+    };
   }
   if (intent !== "translate") return unknownIntent();
   // Same bound the translator applies internally, so the answer call and
@@ -128,6 +193,7 @@ export async function action({ request }: Route.LoaderArgs) {
     members,
     categories,
     reports,
+    recentStops: recentTripStops(expenses, settings.homeAddress),
     tz,
   });
   // Full anchor: an unanchored pattern let padded strings (multi-MB
@@ -160,13 +226,22 @@ export async function action({ request }: Route.LoaderArgs) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(today)) {
       const buckets = monthlyTotals(expenses, t.query, today, t.months);
       const matched = matchingExpenses(expenses, t.query, buckets);
-      const answer = await answerInsightQuestion({
+      const { answer, pending } = await answerInsightQuestion({
         question: text,
         history: conversation?.exchanges.slice(-3) ?? [],
         summary: insightSummary(buckets, matched),
         // The read tool queries the request's own snapshot, so a follow-up
         // question ("what about this week?") needs no second DB read.
         expenses,
+        // The plan tool resolves a trip the user asked to log; the app
+        // files it only when the confirm card is submitted. The report
+        // names are the plain ones (the profile annotates them for the
+        // model, but a stored expense's report must be the bare name).
+        writes: {
+          accountId: user.accountId,
+          reportNames: reports.map((r) => r.name),
+          today,
+        },
         // The answer step needs the user's local DATE, not just the clock:
         // the chart data is month-bucketed, so without this a "what's
         // today?" question gets a date inferred from the expense rows.
@@ -187,7 +262,14 @@ export async function action({ request }: Route.LoaderArgs) {
         months: t.months,
         title: t.title,
       });
-      return { ok: true as const, ...t, answer };
+      // The proposal is a one-shot UI affordance, never persisted: a reload
+      // drops the card, and asking again plans a fresh trip.
+      return {
+        ok: true as const,
+        ...t,
+        answer,
+        ...(pending ? { pending } : {}),
+      };
     }
     return {
       ok: true as const,
@@ -218,10 +300,24 @@ interface TranslateOk {
   chart: boolean;
   /** The grounded text answer (computed figures, phrased by the model). */
   answer: string;
+  /** A mileage trip the model worked out for the user to confirm. */
+  pending?: PendingTrip;
 }
 interface TranslateErr {
   ok: false;
   error: string;
+}
+
+/** A confirmed trip was filed: the stored figures and the line the server
+ * recorded as the exchange's answer. */
+interface ConfirmOk {
+  ok: true;
+  answer: string;
+  logged: {
+    expenseId: string;
+    distanceMiles: string;
+    amount: string;
+  };
 }
 
 /** One question/answer exchange in the conversation. Chart exchanges
@@ -233,6 +329,8 @@ interface Exchange {
   query: string;
   months: number;
   title: string;
+  /** A trip this exchange proposed, until the user logs or discards it. */
+  pending?: PendingTrip;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
@@ -329,10 +427,14 @@ export function ExpenseTable({ expenses }: { expenses: InsightExpense[] }) {
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   const fetcher = useFetcher<typeof action>();
   const newFetcher = useFetcher<typeof action>();
+  const confirmFetcher = useFetcher<typeof action>();
   const [ask, setAsk] = useState("");
   // The most recent conversation reloads with the page from the
   // database; new exchanges append to it.
   const [transcript, setTranscript] = useState<Exchange[]>(loaderData.messages);
+  // Which exchange's confirm card was submitted: the one whose pending
+  // proposal this reply answers.
+  const [confirmedIndex, setConfirmedIndex] = useState<number | null>(null);
   const today = useToday();
   // True while the newest answer is being revealed; restored history
   // never animates.
@@ -367,6 +469,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                 query: result.query,
                 months: result.months,
                 title: result.title,
+                ...(result.pending ? { pending: result.pending } : {}),
               }
             : {}),
         };
@@ -376,6 +479,43 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       setRevealing(true);
     }
   }, [result, fetcher.state]);
+
+  // A confirmed trip: the card is replaced by the exchange the server
+  // recorded, so the transcript reads the same after a reload.
+  const confirmResult = confirmFetcher.data as
+    | ConfirmOk
+    | TranslateErr
+    | undefined;
+  const handledConfirm = useRef<unknown>(null);
+  useEffect(() => {
+    if (!confirmResult || confirmFetcher.state !== "idle") return;
+    // The fetcher's data survives re-renders; only a new reply may append.
+    if (handledConfirm.current === confirmResult) return;
+    handledConfirm.current = confirmResult;
+    if (!confirmResult.ok || !("logged" in confirmResult)) return;
+    const answer = confirmResult.answer;
+    setTranscript((t) => [
+      ...t.map((ex, i) =>
+        i === confirmedIndex ? { ...ex, pending: undefined } : ex,
+      ),
+      {
+        question: "Log it",
+        answer,
+        chart: false,
+        query: "",
+        months: 12,
+        title: "Logged the trip",
+      },
+    ]);
+    setConfirmedIndex(null);
+  }, [confirmResult, confirmFetcher.state, confirmedIndex]);
+
+  /** Drop a proposal the user does not want (nothing was filed). */
+  const discardTrip = (index: number) => {
+    setTranscript((t) =>
+      t.map((ex, i) => (i === index ? { ...ex, pending: undefined } : ex)),
+    );
+  };
 
   // "New conversation" clears the transcript once the fresh conversation
   // row exists.
@@ -557,6 +697,87 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       : "No answer recorded."}
                   </p>
                 )}
+                {/* The proposed trip: the model resolved it, the user
+                 * files it. Nothing is written until "Log trip" submits
+                 * (and the server re-resolves then, so the numbers shown
+                 * are the server's, not the client's). */}
+                {ex.pending ? (
+                  <Card variant="amber" className="mt-3 p-3">
+                    <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                      Mileage trip
+                    </p>
+                    <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
+                      {ex.pending.stops.map((stop) => stop.address).join(" → ")}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                      {[
+                        ex.pending.distanceMiles
+                          ? `${ex.pending.distanceMiles} mi`
+                          : "",
+                        ex.pending.amount
+                          ? formatUsd(Number(ex.pending.amount))
+                          : "",
+                        MILEAGE_TYPE_LABELS[ex.pending.type],
+                        formatShortDate(ex.pending.date),
+                        ex.pending.rate
+                          ? `$${formatRate(ex.pending.rate)}/mi`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {ex.pending.approximate ? (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Straight-line estimate: the route service was
+                        unavailable.
+                      </p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <confirmFetcher.Form
+                        method="post"
+                        onSubmit={() => setConfirmedIndex(i)}
+                      >
+                        <input type="hidden" name="intent" value="confirm" />
+                        <input
+                          type="hidden"
+                          name="pending"
+                          value={JSON.stringify({
+                            stops: ex.pending.stops,
+                            date: ex.pending.date,
+                            type: ex.pending.type,
+                            report: ex.pending.report,
+                            description: ex.pending.description,
+                          })}
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="px-2 sm:px-4"
+                          disabled={confirmFetcher.state !== "idle"}
+                        >
+                          <Check aria-hidden="true" className="h-4 w-4" />
+                          Log trip
+                        </Button>
+                      </confirmFetcher.Form>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="px-2 sm:px-4"
+                        onClick={() => discardTrip(i)}
+                      >
+                        Discard
+                      </Button>
+                    </div>
+                    {confirmResult &&
+                    !confirmResult.ok &&
+                    i === confirmedIndex ? (
+                      <p className="mt-2 text-sm text-red-700 dark:text-red-400">
+                        {confirmResult.error}
+                      </p>
+                    ) : null}
+                  </Card>
+                ) : null}
                 {/* Chart + table wait for the text reveal to finish, so
                  * the answer streams in like a sentence, not a pop-in. */}
                 {ex.chart && today && !(revealing && i === views.length - 1) ? (

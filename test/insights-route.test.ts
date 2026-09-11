@@ -14,6 +14,9 @@ import {
   type ToolCall,
 } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import { readExpenses } from "~/lib/db/expenses";
+import { readSettings, writeSettings } from "~/lib/db/settings";
+import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
 import { addReport } from "~/lib/db/reports";
 import {
   appendExchange,
@@ -166,7 +169,10 @@ describe("insights route", () => {
 describe("insightProfile", () => {
   const base = {
     account: { name: "Arkin Household" },
-    settings: { homeAddress: "123 Main St" },
+    settings: {
+      homeAddress: "123 Main St",
+      workAddress: "500 Work Ave, Testing, CA",
+    },
     userEmail: "assaf@arkin.me",
     members: [{ email: "assaf@arkin.me" }, { email: "partner@arkin.me" }],
     categories: [{ name: "Software" }, { name: "" }, { name: "Meals" }],
@@ -174,6 +180,7 @@ describe("insightProfile", () => {
       { name: "2026 Test", createdAt: new Date("2026-09-09T20:30:00Z") },
       { name: "Legacy", createdAt: null },
     ],
+    recentStops: ["1 Office Way, Testing, CA", "2 Home St, Testing, CA"],
     tz: "America/Los_Angeles",
   };
 
@@ -181,6 +188,10 @@ describe("insightProfile", () => {
     const profile = insightProfile(base);
     expect(profile).toContain("Name (account): Arkin Household");
     expect(profile).toContain("Home location: 123 Main St");
+    expect(profile).toContain("Work location: 500 Work Ave, Testing, CA");
+    expect(profile).toContain(
+      "Recent trip stops: 1 Office Way, Testing, CA, 2 Home St, Testing, CA",
+    );
     expect(profile).toContain(
       "Email addresses: assaf@arkin.me, partner@arkin.me",
     );
@@ -192,15 +203,18 @@ describe("insightProfile", () => {
   it("drops lines with nothing to say", () => {
     const profile = insightProfile({
       account: undefined,
-      settings: { homeAddress: "" },
+      settings: { homeAddress: "", workAddress: "" },
       userEmail: "solo@x.me",
       members: [],
       categories: [],
       reports: [],
+      recentStops: [],
       tz: "UTC",
     });
     expect(profile).not.toContain("Name (account)");
     expect(profile).not.toContain("Home location");
+    expect(profile).not.toContain("Work location");
+    expect(profile).not.toContain("Recent trip stops");
     expect(profile).toContain("Email addresses: solo@x.me");
     expect(profile).not.toContain("Categories:");
     expect(profile).not.toContain("Reports:");
@@ -513,6 +527,230 @@ describe("conversation months roundtrip (INS-MONTHS-0)", () => {
     });
     const conversation = await readLatestConversation("user_test1");
     expect(conversation!.exchanges.at(-1)!.months).toBe(0);
+  });
+});
+
+describe("filing a trip from the chat (plan_mileage)", () => {
+  /** The map services as the real ones answer. The trip is 19,858 m
+   * (12.34 mi), which at the 2026-07-14 business rate ($0.76/mi) prices
+   * at $9.38. */
+  function stubMapServices(): void {
+    const respond = (body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | Request) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.includes("nominatim.openstreetmap.org")) {
+          const q = new URL(url).searchParams.get("q") ?? "";
+          const [number, ...road] = q.split(" ");
+          // The first stop is the office; every other address is home.
+          const office = number === "1";
+          return respond([
+            {
+              lat: office ? "34.0200" : "34.0500",
+              lon: office ? "-118.2800" : "-118.2400",
+              display_name: `${q}, Testing, CA`,
+              address: {
+                house_number: number,
+                road: road.join(" "),
+                city: "Testing",
+                state: "California",
+                country: "United States",
+                "ISO3166-2-lvl4": "US-CA",
+              },
+            },
+          ]);
+        }
+        if (url.includes("router.project-osrm.org")) {
+          return respond({
+            routes: [
+              {
+                distance: 19_858,
+                geometry: {
+                  coordinates: [
+                    [-118.28, 34.02],
+                    [-118.24, 34.05],
+                    [-118.28, 34.02],
+                  ],
+                },
+              },
+            ],
+            waypoints: [
+              { location: [-118.28, 34.02] },
+              { location: [-118.24, 34.05] },
+              { location: [-118.28, 34.02] },
+            ],
+          });
+        }
+        return new Response("unexpected url", { status: 404 });
+      }),
+    );
+  }
+
+  const mileageIds = async (): Promise<string[]> =>
+    (await readExpenses(TEST_ACCOUNT_ID))
+      .filter((e) => e.type === "mileage")
+      .map((e) => e.id);
+
+  beforeEach(async () => {
+    chat.mockReset();
+    vi.mocked(chatWithTools).mockClear();
+    stubMapServices();
+    await startNewConversation("user_test1", TEST_ACCOUNT_ID);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("proposes a trip, files it only on confirm, and reports what it stored", async () => {
+    // The work address is what "the office" resolves to, and the account's
+    // only non-home recent stop rides along as the fallback hint. Writing
+    // through writeSettings busts the settings cache the route reads.
+    await writeSettings(TEST_ACCOUNT_ID, {
+      ...(await readSettings(TEST_ACCOUNT_ID)),
+      workAddress: "1 Office Way",
+    });
+    chat.mockResolvedValue(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    const tools = vi.mocked(chatWithTools);
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_trip",
+            function: {
+              name: "plan_mileage",
+              arguments: JSON.stringify({
+                stops: ["1 Office Way", "2 Home St"],
+                date: "2026-07-14",
+                description: "Client visit",
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: "That's a 12.34 mi drive — confirm it?",
+        toolCalls: [],
+      });
+
+    const before = await mileageIds();
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "log the drive from the office back home on Tuesday");
+    form.set("today", "2026-07-15");
+    const asked = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      answer: string;
+      pending?: PendingTrip;
+    };
+
+    expect(asked.ok).toBe(true);
+    expect(asked.answer).toContain("confirm");
+    // "the office" and "home" are resolvable from the model's context: the
+    // work setting, minus the home stop, plus the account's other stops.
+    const prompt = tools.mock.calls[0]![0].find(
+      (m) => m.role === "user",
+    )!.content;
+    expect(prompt).toContain("Work location: 1 Office Way");
+    expect(prompt).toContain("Recent trip stops: 456 Dev Ave, Coding, CA");
+    // The proposal carries the app's own geocoded addresses and figures.
+    expect(asked.pending).toMatchObject({
+      date: "2026-07-14",
+      type: "business",
+      report: "",
+      description: "Client visit",
+      distanceMiles: "12.34",
+      amount: "9.38",
+      rate: "0.76",
+      approximate: false,
+    });
+    expect(asked.pending!.stops.map((s) => s.address)).toEqual([
+      "1 Office Way, Testing, CA",
+      "2 Home St, Testing, CA",
+    ]);
+    // A proposal is not a write: the user has not confirmed anything yet.
+    expect(await mileageIds()).toEqual(before);
+    const conversation = await readLatestConversation("user_test1");
+    expect(conversation!.exchanges).toHaveLength(1);
+
+    // The card's payload: the trip's inputs, no computed figures.
+    const pending = asked.pending!;
+    const confirm = new FormData();
+    confirm.set("intent", "confirm");
+    confirm.set(
+      "pending",
+      JSON.stringify({
+        stops: pending.stops,
+        date: pending.date,
+        type: pending.type,
+        report: pending.report,
+        description: pending.description,
+      }),
+    );
+    const confirmed = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      answer: string;
+      logged: { expenseId: string; distanceMiles: string; amount: string };
+    };
+
+    expect(confirmed.ok).toBe(true);
+    expect(confirmed.answer).toBe("Logged 12.34 mi for $9.38 on 2026-07-14.");
+    expect(confirmed.logged).toMatchObject({
+      distanceMiles: "12.34",
+      amount: "9.38",
+    });
+
+    // Exactly one new mileage row, with the stops and figures the card
+    // showed.
+    const filed = (await readExpenses(TEST_ACCOUNT_ID)).filter(
+      (e) => e.type === "mileage" && !before.includes(e.id),
+    );
+    expect(filed).toHaveLength(1);
+    const trip = filed[0]!;
+    expect(trip).toMatchObject({
+      id: confirmed.logged.expenseId,
+      date: "2026-07-14",
+      report: "",
+      category: "",
+      description: "Client visit",
+      mileageType: "business",
+      distanceMiles: "12.34",
+      amount: "9.38",
+    });
+    expect(trip.type === "mileage" ? trip.locations : []).toMatchObject([
+      { address: "1 Office Way, Testing, CA", lat: 34.02, lng: -118.28 },
+      { address: "2 Home St, Testing, CA", lat: 34.05, lng: -118.24 },
+    ]);
+
+    // The conversation recorded the same line the reply carried.
+    const after = await readLatestConversation("user_test1");
+    expect(after!.exchanges).toHaveLength(2);
+    expect(after!.exchanges.at(-1)).toMatchObject({
+      question: "Log it",
+      answer: "Logged 12.34 mi for $9.38 on 2026-07-14.",
+    });
+  });
+
+  it("refuses a stale confirm payload without filing anything", async () => {
+    const before = await mileageIds();
+    const confirm = new FormData();
+    confirm.set("intent", "confirm");
+    confirm.set("pending", JSON.stringify({ stops: [], date: "" }));
+    const res = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      error: string;
+    };
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no longer available/);
+    expect(await mileageIds()).toEqual(before);
   });
 });
 

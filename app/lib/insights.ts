@@ -272,6 +272,41 @@ export function knownMerchants(expenses: InsightExpense[]): string[] {
     });
 }
 
+/** Stop addresses from the most recent mileage rows, the home address
+ * excluded: hints for resolving "the office" when no work address is set.
+ * Newest trip first (id as the tie-break, so the order is deterministic),
+ * distinct addresses (case-insensitive), capped at `limit`. Reads nothing:
+ * `insightExpense` already puts `locations` on the snapshot. Pure. */
+export function recentTripStops(
+  expenses: readonly InsightExpense[],
+  homeAddress: string,
+  limit = 8,
+): string[] {
+  const home = homeAddress.trim().toLowerCase();
+  const seen = new Set<string>(home ? [home] : []);
+  const stops: string[] = [];
+  const trips = expenses
+    .filter(
+      (e) =>
+        e.type === "mileage" &&
+        e.locations.filter((l) => l.address.trim() !== "").length >= 2,
+    )
+    .toSorted(
+      (a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id),
+    );
+  for (const trip of trips) {
+    for (const { address } of trip.locations) {
+      const stop = address.trim();
+      const key = stop.toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      stops.push(stop);
+      if (stops.length >= limit) return stops;
+    }
+  }
+  return stops;
+}
+
 /** A computed Q&A the page opens with (the "start with an answer"
  * pattern): one fact about the account's actual data, phrased as the
  * question that would produce it. Computed client-side from the already

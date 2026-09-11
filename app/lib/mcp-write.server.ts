@@ -64,7 +64,7 @@ export function fail(message: string): ToolResult {
 
 /** Shared prelude of the two write tools: resolve the expense date
  * (omitted means UTC today) and the trimmed report, then validate both.
- * Returns the fail payload instead of values when validation rejects the
+ * Returns the error message instead of values when validation rejects the
  * input. serverUtcNow comes back so the client can resolve the user's local
  * date (the client knows its timezone; the server runs UTC). */
 async function validatedExpenseInput(
@@ -72,13 +72,13 @@ async function validatedExpenseInput(
   args: { date?: string; report?: string },
 ): Promise<
   | { ok: true; date: string; report: string; serverUtcNow: string }
-  | { ok: false; result: ToolResult }
+  | { ok: false; error: string }
 > {
   const serverUtcNow = new Date().toISOString();
   const date = args.date ?? serverUtcNow.slice(0, 10);
   const report = args.report?.trim() ?? "";
   const inputError = await validateExpenseInputs(accountId, date, report);
-  if (inputError) return { ok: false, result: fail(inputError) };
+  if (inputError) return { ok: false, error: inputError };
   return { ok: true, date, report, serverUtcNow };
 }
 
@@ -194,7 +194,7 @@ export async function captureReceipt(
     categories,
   );
   const input = await validatedExpenseInput(accountId, args);
-  if (!input.ok) return input.result;
+  if (!input.ok) return fail(input.error);
   const { date, report, serverUtcNow } = input;
   // The receipt currency: explicit arg wins, else what the receipt reads,
   // else USD. A non-USD amount converts at the ECB rate for the expense
@@ -273,6 +273,111 @@ export async function captureReceipt(
   });
 }
 
+/** A trip resolved to a priced route, before anything is written: what
+ * log_mileage files, and what the insights chat shows the user to confirm. */
+export interface ResolvedTrip {
+  date: string;
+  report: string;
+  type: MileageType;
+  locations: Location[];
+  distanceMiles: string;
+  amount: string;
+  /** The IRS rate used, "" when no published rate covers (date, type). */
+  rate: string;
+  /** True when the routing service was unavailable and the distance is
+   * straight-line (the coordinates are still real addresses). */
+  approximate: boolean;
+  coords: [number, number][];
+  returnCoords: [number, number][];
+}
+
+/** Validate the inputs, geocode the stops, route the trip and price it.
+ * Writes nothing: this is the read half of log_mileage, shared with the
+ * insights chat, which proposes the trip and only files it on the user's
+ * confirmation. `error` carries the message log_mileage fails with. Stops
+ * may be `Location`s (the chat's confirm payload) as well as the MCP
+ * tool's `{ address, lat?, lng? }` shape. */
+export async function resolveMileage(
+  accountId: string,
+  args: {
+    locations: (
+      | string
+      | { address: string; lat?: number | null; lng?: number | null }
+    )[];
+    date?: string;
+    type?: MileageType;
+    report?: string;
+  },
+): Promise<{ ok: true; trip: ResolvedTrip } | { ok: false; error: string }> {
+  const input = await validatedExpenseInput(accountId, args);
+  if (!input.ok) return { ok: false, error: input.error };
+  const { date, report } = input;
+
+  const stops: Location[] = args.locations.map((l) =>
+    typeof l === "string"
+      ? { address: l, lat: null, lng: null }
+      : { address: l.address, lat: l.lat ?? null, lng: l.lng ?? null },
+  );
+  if (!hasEnoughStops(stops)) {
+    return { ok: false, error: "A trip needs at least two stops." };
+  }
+
+  const type = args.type ?? "business";
+  // The IRS rate for the trip's (date, type). No rate in the master table
+  // for the period means no amount (never $0.00).
+  const rate = mileageRateFor(await readMileageRates(), date, type);
+  const {
+    locations,
+    distanceMiles,
+    amount,
+    approximate,
+    coords,
+    returnCoords,
+  } = await recomputeMileage(stops, rate);
+
+  return {
+    ok: true,
+    trip: {
+      date,
+      report,
+      type,
+      locations,
+      distanceMiles,
+      amount,
+      rate,
+      approximate,
+      coords,
+      returnCoords,
+    },
+  };
+}
+
+/** Build and persist the expense for an already-resolved trip. */
+export async function saveMileageTrip(
+  accountId: string,
+  trip: ResolvedTrip,
+  args: { category?: string; description?: string },
+): Promise<{ expenseId: string; distanceMiles: string; amount: string }> {
+  const expense: MileageExpense = {
+    ...(newExpenseShell("mileage") as MileageExpense),
+    date: trip.date,
+    report: trip.report,
+    category: args.category?.trim() ?? "",
+    description: args.description ?? "",
+    mileageType: trip.type,
+    amount: trip.amount,
+    locations: trip.locations,
+    distanceMiles: trip.distanceMiles,
+    route: { coords: trip.coords, returnCoords: trip.returnCoords },
+  };
+  await upsertExpense(expense, accountId);
+  return {
+    expenseId: expense.id,
+    distanceMiles: trip.distanceMiles,
+    amount: trip.amount,
+  };
+}
+
 /** Geocode + route a trip and create the mileage expense. */
 export async function logMileage(
   accountId: string,
@@ -285,59 +390,21 @@ export async function logMileage(
     description?: string;
   },
 ): Promise<ToolResult> {
-  const input = await validatedExpenseInput(accountId, args);
-  if (!input.ok) return input.result;
-  const { date, report } = input;
-
-  const stops: Location[] = args.locations.map((l) =>
-    typeof l === "string"
-      ? { address: l, lat: null, lng: null }
-      : { address: l.address, lat: l.lat ?? null, lng: l.lng ?? null },
-  );
-  if (!hasEnoughStops(stops)) {
-    return fail("A trip needs at least two stops.");
-  }
-
-  // The IRS rate for the trip's (date, type). No rate in the master table
-  // for the period means no amount (never $0.00).
-  const rate = mileageRateFor(
-    await readMileageRates(),
-    date,
-    args.type ?? "business",
-  );
-  const {
-    locations,
-    distanceMiles,
-    amount,
-    approximate,
-    coords,
-    returnCoords,
-  } = await recomputeMileage(stops, rate);
-
-  const expense: MileageExpense = {
-    ...(newExpenseShell("mileage") as MileageExpense),
-    date,
-    report,
-    category: args.category?.trim() ?? "",
-    description: args.description ?? "",
-    mileageType: args.type ?? "business",
-    amount,
-    locations,
-    distanceMiles,
-    route: { coords, returnCoords },
-  };
-  await upsertExpense(expense, accountId);
+  const resolved = await resolveMileage(accountId, args);
+  if (!resolved.ok) return fail(resolved.error);
+  const { trip } = resolved;
+  const saved = await saveMileageTrip(accountId, trip, args);
 
   return ok({
     logged: true,
-    expenseId: expense.id,
-    stops: locations.map((l) => l.address),
-    distanceMiles,
-    amount,
-    type: expense.mileageType,
-    rate: rate || null,
-    approximate,
-    ...(approximate
+    expenseId: saved.expenseId,
+    stops: trip.locations.map((l) => l.address),
+    distanceMiles: saved.distanceMiles,
+    amount: saved.amount,
+    type: trip.type,
+    rate: trip.rate || null,
+    approximate: trip.approximate,
+    ...(trip.approximate
       ? {
           note: "Route service unavailable — distance is straight-line; re-save the expense later to recompute.",
         }

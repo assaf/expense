@@ -17,9 +17,9 @@ export const MAX_TOOL_ROUNDS = 3;
  * whole account into the prompt. */
 export const MAX_TOOL_ROWS = 50;
 
-/** Longest tool-argument JSON the query tool will parse. Real filters are a
- * few hundred bytes; the cap bounds hostile provider output. */
-const MAX_TOOL_ARGUMENTS = 4_096;
+/** Longest tool-argument JSON a tool will parse. Real filters are a few
+ * hundred bytes; the cap bounds hostile provider output. */
+export const MAX_TOOL_ARGUMENTS = 4_096;
 
 /** The fields the tool reads. Structural, so the route's already-mapped
  * expenses and plain test fixtures both fit. */

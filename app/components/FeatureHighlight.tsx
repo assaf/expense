@@ -266,7 +266,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       <>
         On Insights, describe what you want to see ("my AI expenses") and the
         chart picks the merchants and the time window for you. You can always
-        type a filter by hand instead.
+        type a filter by hand instead. Ask it to log a drive ("the drive from
+        the office back home on Tuesday") and it works out the route and the IRS
+        amount, then asks you to confirm.
       </>
     ),
     cta: { label: "Open Insights", to: "/insights" },

@@ -13,6 +13,13 @@ import {
   runQueryExpenses,
   type FilterableExpense,
 } from "~/lib/insights-tools.server";
+import {
+  PLAN_MILEAGE,
+  planMileageTool,
+  runPlanMileage,
+  type PendingTrip,
+  type PlanMileageContext,
+} from "~/lib/insights-mileage-tool.server";
 import { categorySynonyms } from "~/lib/expense-search";
 import { formatUserDate } from "~/lib/format";
 import { stripFenceMarkers } from "~/lib/prompt-fence.server";
@@ -239,6 +246,9 @@ date tracking.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
 - If the data does not answer the question, say so plainly.
+- When the user asks you to log a drive, state the stops, the distance and
+  the amount the trip tool returned, and tell them to confirm it: filing
+  the trip is their click, not yours.
 - Short answers are plain prose. When the answer has detail worth
   structuring, use markdown: **bold** for key figures and a table for
   breakdowns (see below).
@@ -260,7 +270,9 @@ date tracking.
 
 /** Produce the text answer for a question, grounded in data the app
  * computed from the user's real expenses (the model only phrases it).
- * Throws LLMError on transport failure. */
+ * With `writes` the answer step may also work out a mileage trip; the
+ * trip comes back as `pending` for the user to confirm, and nothing is
+ * filed here. Throws LLMError on transport failure. */
 export async function answerInsightQuestion(input: {
   question: string;
   history: { question: string; answer: string }[];
@@ -269,7 +281,15 @@ export async function answerInsightQuestion(input: {
   /** The account's expenses, enabling the read tool. Omitted by callers
    * (and tests) that only want the grounded-summary answer. */
   expenses?: readonly FilterableExpense[];
-}): Promise<string> {
+  /** Enables the plan_mileage tool; absent = read-only. */
+  writes?: PlanMileageContext;
+}): Promise<{ answer: string; pending?: PendingTrip }> {
+  let pending: PendingTrip | undefined = undefined;
+  const reply = (text: string) => ({
+    answer:
+      text.trim().replace(/^["']|["']$/g, "") || "I couldn't summarize that.",
+    ...(pending ? { pending } : {}),
+  });
   const parts: string[] = [];
   if (input.profile) {
     parts.push(fenceData(`About the user:\n${input.profile}`));
@@ -289,15 +309,16 @@ export async function answerInsightQuestion(input: {
   if (input.expenses) {
     // The computed data covers the chart's window only; the tool is how the
     // model checks anything else (a day, a range, a filter).
-    messages.push({ role: "system", content: TOOL_GUIDANCE });
+    messages.push({
+      role: "system",
+      content: toolGuidance(Boolean(input.writes)),
+    });
   }
   messages.push({ role: "system", content: ANSWER_PROMPT });
   messages.push({ role: "user", content: parts.join("\n\n") });
   if (!input.expenses) {
     const raw = await chatCompletion(messages, { maxTokens: 200 });
-    return (
-      raw.trim().replace(/^["']|["']$/g, "") || "I couldn't summarize that."
-    );
+    return reply(raw);
   }
   // Bounded tool loop: at most MAX_TOOL_ROUNDS tool rounds, then one
   // toolless call so an insistent model still produces an answer.
@@ -309,29 +330,40 @@ export async function answerInsightQuestion(input: {
             toolCalls: [] as ToolCall[],
           }
         : await chatWithTools(messages, {
-            tools: [queryExpensesTool()],
+            tools: [
+              queryExpensesTool(),
+              ...(input.writes ? [planMileageTool()] : []),
+            ],
             maxTokens: 300,
           });
     if (toolCalls.length === 0) {
-      const text = content.trim().replace(/^["']|["']$/g, "");
-      return text || "I couldn't summarize that.";
+      return reply(content);
     }
     // The endpoint is an untrusted provider: a response asking for a flood of
     // tool calls is not something a compliant model does, and honoring it
     // would drive unbounded in-memory scans plus prompt growth on the request
     // path. Answer with what we already have instead.
     if (toolCalls.length > MAX_TOOL_CALLS) {
-      const text = content.trim().replace(/^["']|["']$/g, "");
-      return text || "I couldn't summarize that.";
+      return reply(content);
     }
     messages.push({ role: "assistant", content, tool_calls: toolCalls });
     for (const call of toolCalls) {
-      const result =
-        call.function.name === QUERY_EXPENSES
-          ? runQueryExpenses(input.expenses, call)
-          : JSON.stringify({ error: `unknown tool ${call.function.name}` });
-      // Tool output is third-party-shaped data (merchant names, notes):
-      // fence it exactly like every other untrusted block.
+      let result: string;
+      if (call.function.name === QUERY_EXPENSES) {
+        result = runQueryExpenses(input.expenses, call);
+      } else if (call.function.name === PLAN_MILEAGE && input.writes) {
+        const planned = await runPlanMileage(input.writes, call);
+        result = planned.result;
+        // Last successful proposal wins: it is the one the user sees.
+        if (planned.pending) pending = planned.pending;
+      } else {
+        result = JSON.stringify({
+          error: `unknown tool ${call.function.name}`,
+        });
+      }
+      // Tool output is third-party-shaped data (merchant names, notes,
+      // addresses the user typed): fence it exactly like every other
+      // untrusted block.
       messages.push({
         role: "tool",
         tool_call_id: call.id,
@@ -347,6 +379,18 @@ const MAX_TOOL_CALLS = 4;
 
 /** How the answer step may use the read tool. */
 const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the computed data doesn't cover: any date range (a single day, a week, a month), zero or more exact category names, an exact report name, unreported-only, receipt/mileage type, or a merchant substring. The computed data below is month-bucketed and covers the chart's current window only, so use the tool rather than saying the data is missing. Call it at most ${MAX_TOOL_ROUNDS} times, then answer.`;
+
+/** Added when the plan tool is available: how to turn "log the drive from
+ * the office back home on Tuesday" into a proposed trip. The tool resolves
+ * and prices; filing it is the user's confirm click. */
+const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — "home" and "back home" are the Home location line; "the office" and "work" are the Work location line, or one of the Recent trip stops when no work address is set. If a stop is not one of those addresses and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
+
+/** The read-tool guidance, plus the plan-tool paragraph when the chat can
+ * propose a trip at all (a read-only call must not be told about a tool it
+ * cannot use). */
+function toolGuidance(writes: boolean): string {
+  return writes ? `${TOOL_GUIDANCE}\n\n${PLAN_GUIDANCE}` : TOOL_GUIDANCE;
+}
 
 export { LLMError };
 
@@ -367,19 +411,23 @@ export function insightReportNames(
  * fixtures work in tests) plus the client's IANA timezone. */
 export interface InsightProfileInput {
   account: { name: string } | undefined;
-  settings: { homeAddress: string };
+  settings: { homeAddress: string; workAddress: string };
   /** The signed-in user's own address; members may share it. */
   userEmail: string;
   members: { email: string }[];
   categories: { name: string }[];
   reports: { name: string; createdAt: Date | string | null }[];
+  /** Stop addresses from the account's most recent trips: what "the
+   * office" resolves to when no work address is set. */
+  recentStops: string[];
   tz: string;
 }
 
 /** The "About the user" context block the answer model sees: account
- * name, home location, the account's email addresses, category and
- * report names (reports timestamped in the user's zone). Empty entries
- * are dropped so the model never sees placeholder lines. Pure. */
+ * name, home and work locations, recent trip stops, the account's email
+ * addresses, category and report names (reports timestamped in the user's
+ * zone). Empty entries are dropped so the model never sees placeholder
+ * lines. Pure. */
 export function insightProfile(input: InsightProfileInput): string {
   const emails = [
     ...new Set([input.userEmail, ...input.members.map((m) => m.email)]),
@@ -389,6 +437,8 @@ export function insightProfile(input: InsightProfileInput): string {
     input.settings.homeAddress
       ? `Home location: ${input.settings.homeAddress}`
       : "",
+    `Work location: ${input.settings.workAddress}`,
+    `Recent trip stops: ${input.recentStops.join(", ")}`,
     `Email addresses: ${emails.join(", ")}`,
     `Categories: ${input.categories.map((c) => c.name).join(", ")}`,
     `Reports: ${insightReportNames(input.reports, input.tz).join(", ")}`,

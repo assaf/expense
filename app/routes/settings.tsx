@@ -65,6 +65,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       count: categoryCounts.get(c.name) ?? 0,
     })),
     homeAddress: settings.homeAddress,
+    workAddress: settings.workAddress,
     userEmail: user.email,
     marketingUnsubscribed: await readMarketingUnsubscribed(user.id),
     rates,
@@ -121,6 +122,21 @@ export async function action({ request }: Route.ActionArgs) {
       await writeSettings(user.accountId, settings);
       break;
     }
+    case "saveWork": {
+      const settings = await readSettings(user.accountId);
+      const address = formString(form, "workAddress").trim();
+      settings.workAddress = address;
+      if (address) {
+        const geocoded = await geocode(address);
+        settings.workLat = geocoded.lat;
+        settings.workLng = geocoded.lng;
+      } else {
+        settings.workLat = null;
+        settings.workLng = null;
+      }
+      await writeSettings(user.accountId, settings);
+      break;
+    }
     case "marketingEmails": {
       const preference = formString(form, "preference");
       if (preference === "unsubscribe") {
@@ -142,6 +158,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
   const {
     categories,
     homeAddress,
+    workAddress,
     rates,
     accountName,
     inviteCode,
@@ -304,6 +321,20 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Field>
           <Button type="submit" size="md">
             <MapPin aria-hidden="true" className="h-4 w-4" /> Save
+          </Button>
+        </Form>
+        <p className="mt-4 mb-2 text-sm text-gray-500 dark:text-gray-400">
+          Set a work address and Insights can file the drive to the office ("log
+          the drive from the office back home").
+        </p>
+        <Form method="post" className="flex items-end gap-2">
+          <input type="hidden" name="intent" value="saveWork" />
+          <Field label="Work address" className="min-w-0 flex-1">
+            <Input type="text" name="workAddress" defaultValue={workAddress} />
+          </Field>
+          <Button type="submit" size="md">
+            <MapPin aria-hidden="true" className="h-4 w-4" /> Save
+            <span className="sr-only"> work address</span>
           </Button>
         </Form>
       </section>
