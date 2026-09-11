@@ -58,7 +58,15 @@ async function gmailJson<T>(token: string, path: string): Promise<T> {
       `Gmail API ${path} returned HTTP ${res.status}: ${text.slice(0, 200)}`,
     );
   }
-  return JSON.parse(text) as T;
+  // A proxy or an outage can turn a 200 into an HTML error page; report it as
+  // an unreadable response rather than a raw SyntaxError.
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `Gmail API ${path} returned an unreadable response: ${text.slice(0, 120)}`,
+    );
+  }
 }
 
 // --- Envelope helpers --------------------------------------------------------
@@ -404,13 +412,15 @@ export async function ensureGmailWatch(
     historyId?: unknown;
     expiration?: unknown;
   };
+  const expirationMs = Number(body.expiration);
   if (
-    typeof body.expiration !== "string" &&
-    typeof body.expiration !== "number"
+    (typeof body.expiration !== "string" &&
+      typeof body.expiration !== "number") ||
+    !Number.isFinite(expirationMs)
   ) {
     throw new Error("Gmail users.watch returned no expiration");
   }
-  const expiresAt = new Date(Number(body.expiration)).toISOString();
+  const expiresAt = new Date(expirationMs).toISOString();
   await saveEmailConnectionWatch(connection.id, expiresAt);
 }
 

@@ -12,8 +12,11 @@ import {
 } from "~/lib/email-confirmation.server";
 import {
   createMimeInboundCache,
+  FASTMAIL_AUTHSERV,
+  GMAIL_AUTHSERV,
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
+import { evaluateAuthChain } from "~/lib/email-auth.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
 // Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
@@ -130,6 +133,9 @@ export function realExtractionDeps(): ConnectionDeps {
 /** Build the InboundDeps fetch collaborators over the connection mailbox. */
 export function connectionInboundDeps(
   connectionId: string,
+  /** The provider whose delivery stamp is trusted for this mailbox: the
+   * authentication chain only counts records from its authserv-id. */
+  provider: string,
   adapter: ConnectionMailAdapter,
   extractionDeps: ConnectionDeps,
 ): InboundDeps {
@@ -139,6 +145,8 @@ export function connectionInboundDeps(
       // every connected account in the process.
       cacheKey: (emailId) => `${connectionId}:${emailId}`,
       foreignAttachmentSuffix: "not produced by the connection adapter",
+      authservIds:
+        provider === "gmail" ? [GMAIL_AUTHSERV] : [FASTMAIL_AUTHSERV],
     }),
     ...extractionDeps,
     sendReply: async () => {
@@ -400,6 +408,35 @@ export async function processConnectionEmail(
     if (hasOwnConfirmationHeader(email.headers)) {
       await log("ignored", true, { reason: "own confirmation" });
       return { status: "ignored", reason: "own confirmation" };
+    }
+
+    // INB-SPOOF-1 parity with the receipts-by-email pipeline: a rule match
+    // decides which senders are worth looking at, not that this message really
+    // came from the sender it claims. The From header is forgeable at SMTP
+    // time, so the delivered message must also carry an authentication result
+    // from the mailbox provider (Fastmail or Gmail) that passes and aligns
+    // with From. Without this, a rule-matching From let anyone inject a fake
+    // expense and have the mail moved to Trash. Failures stay in the Inbox and
+    // remain importable from review, where the user's explicit choice is the
+    // gate (same as the rule and classification gates below).
+    if (!review) {
+      const auth = evaluateAuthChain(
+        email.authResults ?? [],
+        summary.from ?? "",
+      );
+      if (!auth.ok) {
+        await log("ignored", true, { reason: "failed authentication" });
+        captureWarning(
+          "[email-connections] message failed authentication; not importing",
+          {
+            connectionId: connection.id,
+            emailId: summary.id,
+            from: summary.from,
+            reason: auth.reason,
+          },
+        );
+        return { status: "ignored", reason: "failed authentication" };
+      }
     }
 
     // PRECISION-FIRST gate for the auto drain: a "receipt" verdict must
@@ -712,7 +749,12 @@ export async function drainEmailConnection(
   const client = mailClientFor(connection, token);
   const adapter = options.adapter ?? client.adapter;
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
-  const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);
+  const deps = connectionInboundDeps(
+    connection.id,
+    connection.provider,
+    adapter,
+    extractionDeps,
+  );
 
   const lookbackMs = options.lookbackMs ?? 3 * 24 * 60 * 60 * 1000;
   const batchSize = options.batchSize ?? 10;

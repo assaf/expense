@@ -96,9 +96,9 @@ export async function action({ request }: Route.ActionArgs) {
         await setEmailConnectionStatus(connection.id, "error").catch(() => {});
       }
     } catch (err) {
-      console.error("[email-connections-push] touch failed:", {
+      captureWarning("[email-connections-push] touch failed:", {
         connectionId,
-        err,
+        error: err,
       });
     }
   } else {

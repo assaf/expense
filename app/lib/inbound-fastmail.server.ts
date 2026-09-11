@@ -12,6 +12,7 @@ import {
   createMimeInboundCache,
   headerRecord,
   authResultsChain,
+  FASTMAIL_AUTHSERV,
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
 import { captureError, captureWarning } from "~/lib/errors.server";
@@ -102,6 +103,7 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
       // The Fastmail transport keys the cache by the raw JMAP id.
       cacheKey: (emailId) => emailId,
       foreignAttachmentSuffix: "not produced by Fastmail",
+      authservIds: [FASTMAIL_AUTHSERV],
     }),
     classifyAttachment: classifyReceiptAttachment,
     extractReceipt,
@@ -139,7 +141,7 @@ export async function receiptEmailData(
     subject: raw.subject,
     headers: headerRecord(email.headers),
     // The pipeline never reads data.attachments (metadata comes from
-    authResults: authResultsChain(email.headers),
+    authResults: authResultsChain(email.headers, [FASTMAIL_AUTHSERV]),
     attachments: [],
   };
 }

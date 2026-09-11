@@ -4,7 +4,7 @@ import {
   evaluateAuthResults,
   passingAuthDomains,
 } from "~/lib/email-auth.server";
-import { authResultsChain } from "~/lib/mime-inbound.server";
+import { authResultsChain, FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
 /**
  * INB-SPOOF-1: the import gate's Authentication-Results evaluation. The
  * records mirror what Fastmail stamps on delivery (authserv-id
@@ -253,7 +253,7 @@ describe("authResultsChain (collection)", () => {
   it("collects Fastmail-ish stamps newest-first and skips foreign authserv-ids", () => {
     // Document order (mailparser preserves it): Fastmail prepends each
     // stamp above existing headers, so index 0 is the newest delivery.
-    expect(authResultsChain(headers)).toEqual([
+    expect(authResultsChain(headers, [FASTMAIL_AUTHSERV])).toEqual([
       "phl-mx-01.messagingengine.com; dkim=pass header.d=example.com",
       "mx.messagingengine.com.attacker.evil; dkim=pass header.d=example.com",
     ]);
@@ -264,7 +264,7 @@ describe("authResultsChain (collection)", () => {
     // clause-bearing record: a lookalike id survives ingestion and passes
     // this collection filter, so the evaluator's first-record rule is the
     // only defense (FWD-CHAIN-1).
-    const chain = authResultsChain(headers);
+    const chain = authResultsChain(headers, [FASTMAIL_AUTHSERV]);
     expect(chain[1]).toContain("attacker.evil");
   });
 });

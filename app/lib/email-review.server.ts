@@ -557,7 +557,12 @@ export async function scanConnectionInbox(
     moveToTrash: () => Promise.resolve(),
   };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
-  const deps = connectionInboundDeps(connection.id, adapter, extractionDeps);
+  const deps = connectionInboundDeps(
+    connection.id,
+    connection.provider,
+    adapter,
+    extractionDeps,
+  );
 
   const budgetMs = options.budgetMs ?? REVIEW_BUDGET_MS;
   const started = Date.now();
@@ -978,6 +983,7 @@ export async function processReviewItem(input: {
     summary,
     connectionInboundDeps(
       connection.id,
+      connection.provider,
       adapter,
       input.extractionDeps ?? realExtractionDeps(),
     ),

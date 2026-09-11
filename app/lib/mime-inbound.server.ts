@@ -114,23 +114,33 @@ export function headerRecord(
   return out;
 }
 
+/** The authserv-id each provider stamps its own delivery evaluation under.
+ * Only records from these hosts are trusted: a message can carry
+ * attacker-authored Authentication-Results headers, and those sit BELOW the
+ * delivering host's own stamp. */
+export const FASTMAIL_AUTHSERV = "messagingengine.com";
+export const GMAIL_AUTHSERV = "mx.google.com";
+
 /**
- * All Fastmail-stamped Authentication-Results header values, newest first
- * (Authentication-Results headers are PREPENDED in delivery order, so file
- * order = newest first). Attacker-supplied A-R headers are NOT stripped on
- * intake, but they always sit BELOW the host's own stamp, so consumers
+ * All Authentication-Results header values stamped by one of `authservIds`,
+ * newest first (Authentication-Results headers are PREPENDED in delivery order,
+ * so file order = newest first). Attacker-supplied A-R headers are NOT stripped
+ * on intake, but they always sit BELOW the host's own stamp, so consumers
  * evaluate the first clause-bearing record only (see evaluateAuthChain and
  * passingAuthDomains). A record with no dkim/spf/dmarc clauses means the
  * host added a stamp but evaluated nothing — the signature of
  * account-internal delivery (same-account submission or an internal
  * redirect), which never crosses an external hop.
  */
-export function authResultsChain(headers: ParsedEmail["headers"]): string[] {
+export function authResultsChain(
+  headers: ParsedEmail["headers"],
+  authservIds: readonly string[],
+): string[] {
   const out: string[] = [];
   for (const h of headers) {
     if (h.key.toLowerCase() !== "authentication-results") continue;
     const authservId = (h.value.split(";")[0] ?? "").toLowerCase();
-    if (authservId.includes("messagingengine.com")) out.push(h.value);
+    if (authservIds.some((id) => authservId.includes(id))) out.push(h.value);
   }
   return out;
 }
@@ -172,6 +182,9 @@ export function mimeFetchDeps(
     cacheKey(emailId: string): string;
     /** Error suffix when an attachment id doesn't decode as `emailId:index`. */
     foreignAttachmentSuffix: string;
+    /** The delivering host's authserv-id(s), for the authentication chain
+     * (see authResultsChain): Fastmail or Gmail, per transport. */
+    authservIds: readonly string[];
   },
 ): Pick<
   InboundDeps,
@@ -190,7 +203,7 @@ export function mimeFetchDeps(
         html: email.html ?? null,
         text: email.text ?? null,
         headers: headerRecord(email.headers),
-        authResults: authResultsChain(email.headers),
+        authResults: authResultsChain(email.headers, options.authservIds),
         created_at: raw.receivedAt,
         message_id: email.messageId ?? raw.messageId,
       };

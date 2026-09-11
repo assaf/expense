@@ -210,6 +210,11 @@ export async function jmapBatch(
     throw new Error(`JMAP API failed: ${res.status} ${await res.text()}`);
   }
   const j = (await res.json()) as ApiResponse;
+  // A malformed 200 (no methodResponses array) must fail as a provider error,
+  // not as `undefined is not iterable` here or as a bad `[0]` deref upstream.
+  if (!Array.isArray(j.methodResponses) || j.methodResponses.length === 0) {
+    throw new Error("JMAP returned no method responses");
+  }
   for (const [name, args] of j.methodResponses) {
     if (name === "error") {
       throw new Error(`JMAP ${name} error: ${JSON.stringify(args)}`);

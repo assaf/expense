@@ -1,3 +1,4 @@
+import { captureError } from "~/lib/errors.server";
 import { FASTMAIL_TOKEN } from "~/lib/env";
 import {
   pushVerificationOf,
@@ -47,7 +48,9 @@ export async function action({ request }: Route.ActionArgs) {
       await setVerificationCode(id, code);
       console.info("[inbound-push] verified subscription", { id });
     } catch (err) {
-      console.error("[inbound-push] verification update failed:", err);
+      // Sentry as well as stdout: a persistently failing pipeline is otherwise
+      // invisible, since the route still answers and the cron is the only net.
+      captureError(err, { context: "inbound-push verification" });
       return Response.json({ error: "verification failed" }, { status: 500 });
     }
   } else if (type === "StateChange") {
@@ -56,7 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
       const result = await processUnprocessedReceipts();
       console.info("[inbound-push] processed", result);
     } catch (err) {
-      console.error("[inbound-push] processing failed:", err);
+      captureError(err, { context: "inbound-push processing" });
     }
   } else {
     console.warn("[inbound-push] unknown payload type", { type });

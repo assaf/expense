@@ -55,8 +55,17 @@ const mocks = vi.hoisted(() => ({
 const FIXTURE_LOOKBACK_MS =
   Date.now() - Date.parse("2026-07-01T10:00:00.000Z") + 60_000;
 
-function depsFor(adapter: ConnectionMailAdapter, connectionId: string) {
-  return connectionInboundDeps(connectionId, adapter, fakeExtractionDeps());
+function depsFor(
+  adapter: ConnectionMailAdapter,
+  connectionId: string,
+  provider = "fastmail",
+) {
+  return connectionInboundDeps(
+    connectionId,
+    provider,
+    adapter,
+    fakeExtractionDeps(),
+  );
 }
 
 describe("processConnectionEmail", () => {
@@ -133,6 +142,57 @@ describe("processConnectionEmail", () => {
     expect(sent.subject).toContain("Receipt accepted");
     // Logged as partial (category unknown under local extraction).
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
+  });
+
+  it("refuses to import when the delivered message fails authentication (S2-2)", async () => {
+    // INB-SPOOF-1 parity: the receipts-by-email pipeline requires a passing,
+    // From-aligned Authentication-Results stamp from the mail host. This
+    // pipeline only matched a rule, so a forged From that matched one imported
+    // a fake expense and moved the mail to Trash.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 1.23\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const deps = depsFor(adapter, conn.id);
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      {
+        ...deps,
+        // What the mail host stamped on delivery: neither verdict aligns with
+        // the domain in From.
+        fetchReceivedEmail: async (id: string) => ({
+          ...(await deps.fetchReceivedEmail(id)),
+          authResults: [
+            "mx.messagingengine.com; dkim=fail header.d=email.apple.com; spf=fail smtp.mailfrom=evil.example",
+          ],
+        }),
+      },
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: async (email) => {
+          await mocks.notifyOwner(email);
+        },
+      },
+    );
+    expect(result).toEqual({
+      status: "ignored",
+      reason: "failed authentication",
+    });
+    // Nothing imported, nothing trashed, nobody notified: the mail stays in the
+    // Inbox and can still be imported deliberately from review.
+    expect(trashed).toEqual([]);
+    expect(await readExpenses(conn.accountId)).toHaveLength(0);
+    expect(mocks.notifyOwner).not.toHaveBeenCalled();
   });
 
   it("skips the second copy of the same receipt and leaves it in the Inbox", async () => {
@@ -712,7 +772,12 @@ describe("drainEmailConnection", () => {
     // First drain fails at the mailbox level.
     // Process one email directly with a throwing fetch to log an error row.
     const deps = {
-      ...connectionInboundDeps(conn.id, adapter, fakeExtractionDeps()),
+      ...connectionInboundDeps(
+        conn.id,
+        conn.provider,
+        adapter,
+        fakeExtractionDeps(),
+      ),
       fetchReceivedEmail: async () => {
         throw new Error("transient");
       },
