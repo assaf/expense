@@ -107,6 +107,7 @@ export async function action({ request }: Route.LoaderArgs) {
       date: confirmed.date,
       type: confirmed.type,
       report: confirmed.report,
+      roundTrip: confirmed.roundTrip,
     });
     if (!resolved.ok) return { ok: false as const, error: resolved.error };
     const saved = await saveMileageTrip(user.accountId, resolved.trip, {
@@ -729,6 +730,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                           ? formatUsd(Number(ex.pending.amount))
                           : "",
                         MILEAGE_TYPE_LABELS[ex.pending.type],
+                        ex.pending.roundTrip ? "Round trip" : "One way",
                         formatShortDate(ex.pending.date),
                         ex.pending.rate
                           ? `$${formatRate(ex.pending.rate)}/mi`
@@ -758,6 +760,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                             type: ex.pending.type,
                             report: ex.pending.report,
                             description: ex.pending.description,
+                            roundTrip: ex.pending.roundTrip,
                           })}
                         />
                         <Button

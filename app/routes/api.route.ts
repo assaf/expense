@@ -6,6 +6,7 @@ import type { Route } from "./+types/api.route";
 interface RouteRequestBody {
   locations?: unknown;
   rate?: string;
+  roundTrip?: unknown;
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -26,6 +27,9 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
   const rate = typeof body.rate === "string" ? body.rate : "";
-  const result = await recomputeMileage(locations, rate);
+  // Only an explicit false makes it a one-way trip; anything else keeps the
+  // closed loop every stored trip assumed.
+  const roundTrip = body.roundTrip !== false;
+  const result = await recomputeMileage(locations, rate, { roundTrip });
   return Response.json(result);
 }

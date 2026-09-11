@@ -676,6 +676,9 @@ describe("filing a trip from the chat (plan_mileage)", () => {
       amount: "9.38",
       rate: "0.76",
       approximate: false,
+      // The drive the user described, one way: they did not say they came
+      // back, so the card proposes the leg they drove.
+      roundTrip: false,
     });
     expect(asked.pending!.stops.map((s) => s.address)).toEqual([
       "1 Office Way, Testing, CA",
@@ -698,6 +701,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
         type: pending.type,
         report: pending.report,
         description: pending.description,
+        roundTrip: pending.roundTrip,
       }),
     );
     const confirmed = (await callRoute("action", "gratis", confirm)) as {
@@ -729,6 +733,8 @@ describe("filing a trip from the chat (plan_mileage)", () => {
       mileageType: "business",
       distanceMiles: "12.34",
       amount: "9.38",
+      // The shape the card proposed is what the row keeps.
+      roundTrip: false,
     });
     expect(trip.type === "mileage" ? trip.locations : []).toMatchObject([
       { address: "1 Office Way, Testing, CA", lat: 34.02, lng: -118.28 },

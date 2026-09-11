@@ -70,7 +70,7 @@ const TIPS: Tip[] = [
   },
   {
     icon: MapPinned,
-    title: "Every drive is a round trip",
+    title: "One way, or there and back",
     body: (
       <>
         Set a{" "}
@@ -80,7 +80,8 @@ const TIPS: Tip[] = [
         >
           start location
         </Link>{" "}
-        and drives are measured from there and back.
+        and every drive is measured from it. A trip is one way unless you tick
+        the round trip box.
       </>
     ),
   },

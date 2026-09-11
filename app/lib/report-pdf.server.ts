@@ -242,7 +242,10 @@ export async function buildReportPdf(
         // page rather than clipping.
         if (doc.y + locH > doc.page.maxY()) doc.addPage();
         for (const [i, address] of locations.entries()) {
-          const label = i === 0 ? "Start/end" : `Stop ${i}`;
+          // The first stop is the trip's start; it is also its end on a round
+          // trip, where the drive comes back to it.
+          const label =
+            i === 0 ? (e.roundTrip ? "Start/end" : "Start") : `Stop ${i}`;
           const ly = doc.y;
           doc
             .fontSize(9)

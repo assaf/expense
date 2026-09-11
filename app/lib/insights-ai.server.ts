@@ -246,9 +246,10 @@ date tracking.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
 - If the data does not answer the question, say so plainly.
-- When the user asks you to log a drive, state the stops, the distance and
-  the amount the trip tool returned, and tell them to confirm it: filing
-  the trip is their click, not yours.
+- When the user asks you to log a drive, state the stops, whether the drive
+  is one way or a round trip, the distance and the amount the trip tool
+  returned, and tell them to confirm it: filing the trip is their click,
+  not yours.
 - Short answers are plain prose. When the answer has detail worth
   structuring, use markdown: **bold** for key figures and a table for
   breakdowns (see below).
@@ -383,7 +384,7 @@ const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the comp
 /** Added when the plan tool is available: how to turn "log the drive from
  * the office back home on Tuesday" into a proposed trip. The tool resolves
  * and prices; filing it is the user's confirm click. */
-const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — the Locations line lists the account's saved places as Name = address, so "home" and "back home" are the Home entry, and "the office", "work", "the hospital" and any other place the user names resolve to the entry with that name. When the account has not named the place, fall back to the Recent trip stops. If a stop is not one of those and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
+const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — the Locations line lists the account's saved places as Name = address, so "home" and "back home" are the Home entry, and "the office", "work", "the hospital" and any other place the user names resolve to the entry with that name. When the account has not named the place, fall back to the Recent trip stops. If a stop is not one of those and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. The drive is one way unless the user says they went there and back: pass roundTrip true only for "there and back", "round trip", "and back home again", "both ways". "The drive from the office back home" is one way, since home is the destination; so are "drive to work" and "from A to B". Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
 
 /** The read-tool guidance, plus the plan-tool paragraph when the chat can
  * propose a trip at all (a read-only call must not be told about a tool it

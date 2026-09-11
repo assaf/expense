@@ -47,6 +47,7 @@ const makeMileage = (
     { address: "Client Office", lat: 34.06, lng: -118.25 },
   ],
   distanceMiles: "32.00",
+  roundTrip: true,
   route: { coords: [], returnCoords: [] },
   reconciledAt: "",
   createdAt: "2026-03-11T00:00:00.000Z",

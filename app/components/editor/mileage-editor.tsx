@@ -63,6 +63,17 @@ function shortAddress(address: string): string {
   return parts.slice(0, 2).join(", ") || address;
 }
 
+/** What /api/route answers with: the geocoded stops, the routed geometry
+ * both ways, the distance and the priced amount. */
+interface RouteResult {
+  locations: Location[];
+  distanceMiles: string;
+  amount: string;
+  coords: [number, number][];
+  returnCoords: [number, number][];
+  approximate: boolean;
+}
+
 export function MileageEditor({ data }: { data: EditorData }) {
   const {
     reports,
@@ -86,6 +97,11 @@ export function MileageEditor({ data }: { data: EditorData }) {
   const [resolved, setResolved] = useState<Location[]>(() =>
     initLocations(expense, home),
   );
+  // The trip's shape: true = it returns to the first stop, false = a one-way
+  // drive ending at the last stop. A new trip is one way (the shell sets
+  // false); an existing trip loads what was saved, so a trip filed before one
+  // way existed opens as the round trip it is.
+  const [roundTrip, setRoundTrip] = useState(expense.roundTrip);
   const [distanceMiles, setDistanceMiles] = useState(expense.distanceMiles);
   const [amount, setAmount] = useState(expense.amount);
   // Create mode ships an empty date (the server can't know the user's
@@ -167,7 +183,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
     if (geo.length < 2) return;
     let cancelled = false;
     void (async () => {
-      const result = await computeRoute(locations, rate);
+      const result = await computeRoute(locations, rate, roundTrip);
       if (!result || cancelled) return;
       lastRoute.current = {
         coords: result.coords,
@@ -183,18 +199,14 @@ export function MileageEditor({ data }: { data: EditorData }) {
   }, []);
 
   /** Geocode the addresses and compute the route + amount via /api/route.
-   * Pure (no state writes), so callers decide what to apply. */
+   * `roundTrip` is the trip's shape: a closed loop back to the first stop, or
+   * a one-way drive ending at the last. Pure (no state writes), so callers
+   * decide what to apply. */
   async function computeRoute(
     locations: Location[],
     rate: string,
-  ): Promise<{
-    locations: Location[];
-    distanceMiles: string;
-    amount: string;
-    coords: [number, number][];
-    returnCoords: [number, number][];
-    approximate: boolean;
-  } | null> {
+    roundTrip: boolean,
+  ): Promise<RouteResult | null> {
     if (!locations.some((l) => l.address.trim())) {
       // Everything is empty; there is no trip to compute. Return a blank
       // result so callers reset the map and distance to nothing instead of
@@ -213,22 +225,50 @@ export function MileageEditor({ data }: { data: EditorData }) {
       const res = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locations, rate }),
+        body: JSON.stringify({ locations, rate, roundTrip }),
       });
       if (!res.ok) return null;
-      return (await res.json()) as {
-        locations: Location[];
-        distanceMiles: string;
-        amount: string;
-        coords: [number, number][];
-        returnCoords: [number, number][];
-        approximate: boolean;
-      };
+      return (await res.json()) as RouteResult;
     } catch {
       return null;
     } finally {
       setComputing(false);
     }
+  }
+
+  /** Apply a route response to the shared trip state: the resolved stops, the
+   * map geometry, the distance, and the amount when the user hasn't typed one.
+   * Pure result wiring; callers own the stale-sequence and error checks. */
+  function applyRouteResult(result: RouteResult) {
+    setResolved(result.locations);
+    setCoords(result.coords);
+    setReturnCoords(result.returnCoords ?? []);
+    lastRoute.current = {
+      coords: result.coords,
+      returnCoords: result.returnCoords ?? [],
+    };
+    setDistanceMiles(result.distanceMiles);
+    if (!manualAmount.current) setAmount(result.amount);
+    setApproximate(result.approximate);
+  }
+
+  /** Round trip or one way: the shape decides the route, so the distance, the
+   * amount and the map all recompute the moment the box changes, not on the
+   * next blur. */
+  async function changeRoundTrip(next: boolean) {
+    setRoundTrip(next);
+    const seq = ++requestSeq.current;
+    const result = await computeRoute(locations, rate, next);
+    // A newer edit or blur owns the trip now; drop this response.
+    if (requestSeq.current !== seq) return;
+    if (!result) {
+      setRouteError("Route unavailable. Check your connection and try again.");
+      setDistanceMiles("");
+      setAmount("");
+      return;
+    }
+    setRouteError(null);
+    applyRouteResult(result);
   }
 
   function updateLocation(i: number, address: string) {
@@ -267,7 +307,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
     setGeocodingFields((prev) => (prev.includes(i) ? prev : [...prev, i]));
     try {
       const seq = ++requestSeq.current;
-      const result = await computeRoute(all, rate);
+      const result = await computeRoute(all, rate, roundTrip);
       // A stale result (seq already advanced by a newer blur/edit) is
       // silently dropped: a newer request is in flight.
       if (requestSeq.current !== seq) return;
@@ -296,16 +336,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       setAddressErrors((prev) =>
         prev.map((err, idx) => (idx === i ? null : err)),
       );
-      setResolved(result.locations);
-      setCoords(result.coords);
-      setReturnCoords(result.returnCoords ?? []);
-      lastRoute.current = {
-        coords: result.coords,
-        returnCoords: result.returnCoords ?? [],
-      };
-      setDistanceMiles(result.distanceMiles);
-      if (!manualAmount.current) setAmount(result.amount);
-      setApproximate(result.approximate);
+      applyRouteResult(result);
       setLocations((prev) => prev.map((l, idx) => (idx === i ? r : l)));
     } finally {
       setGeocodingFields((prev) => prev.filter((x) => x !== i));
@@ -413,7 +444,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
         setGeocodingFields((prev) => [...new Set([...prev, ...toGeocode])]);
         try {
           const seq = ++requestSeq.current;
-          const result = await computeRoute(locations, rate);
+          const result = await computeRoute(locations, rate, roundTrip);
           if (result && requestSeq.current === seq) {
             // The flush's locations are the canonical geocoded forms (they
             // differ from what was typed), so match on coordinates, not text.
@@ -444,6 +475,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       form.set("category", category);
       form.set("description", description);
       form.set("distanceMiles", saveDistance);
+      form.set("roundTrip", roundTrip ? "1" : "");
       form.set("locations", JSON.stringify(saveLocations));
       form.set(
         "route",
@@ -476,7 +508,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
   // role + its street-and-city form (no state/country), escaped because
   // Leaflet renders tooltip content as HTML.
   const stops = geocodedLocations(resolved).map((l, i) => {
-    const label = i === 0 ? "Start / end" : `Stop ${i}`;
+    const label = i === 0 ? (roundTrip ? "Start / end" : "Start") : `Stop ${i}`;
     return {
       lat: l.lat,
       lng: l.lng,
@@ -613,11 +645,26 @@ export function MileageEditor({ data }: { data: EditorData }) {
             </Button>
           </div>
         ) : null}
+        {/* The trip's shape. Unchecked (the default) is a one-way drive that
+         * ends at the last stop; checked closes the loop back to the first
+         * stop, which changes the route, the distance and the amount. */}
+        <label className="mb-2 flex w-fit cursor-pointer items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+          <input
+            type="checkbox"
+            name="roundTrip"
+            value="1"
+            checked={roundTrip}
+            disabled={reportClosed}
+            onChange={(e) => void changeRoundTrip(e.target.checked)}
+            className="h-4 w-4 shrink-0 accent-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 dark:accent-blue-500 dark:focus-visible:ring-offset-gray-900"
+          />
+          <span>Round trip (returns to the start)</span>
+        </label>
         <ol className="flex flex-col gap-2">
           {locations.map((l, i) => (
             <li key={i} className="flex items-start gap-2">
               <span className="w-20 shrink-0 pt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-                {i === 0 ? "Start / end" : `Stop ${i}`}
+                {i === 0 ? (roundTrip ? "Start / end" : "Start") : `Stop ${i}`}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="relative">
@@ -668,8 +715,9 @@ export function MileageEditor({ data }: { data: EditorData }) {
           ))}
         </ol>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          The route runs Start / end → stops → back to Start / end. Distance
-          updates automatically.
+          {roundTrip
+            ? "The route runs Start / end → stops → back to Start / end. Distance updates automatically."
+            : "The route runs Start → stops, one way. Distance updates automatically."}
         </p>
       </div>
 

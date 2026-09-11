@@ -122,6 +122,10 @@ export async function saveExpenseFromForm(
       description,
       amount,
       mileageType,
+      // The editor's round trip box: ticked means the drive returns to its
+      // first stop, which is how every trip filed before one-way existed
+      // was recorded.
+      roundTrip: formString(form, "roundTrip") === "1",
       // Empty/blank addresses are never persisted: the editor keeps blank
       // rows as placeholders, but a saved trip only stores real stops.
       locations: parseLocations(formString(form, "locations")).filter(

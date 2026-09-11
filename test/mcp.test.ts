@@ -539,6 +539,26 @@ describe("MCP endpoint", () => {
     expect(charity.payload.type).toBe("charity");
     expect(charity.payload.rate).toBe("0.14");
 
+    // The drive is one way unless the caller says it returns: the same stops
+    // round trip cover the leg back too, so the distance and amount grow.
+    expect(payload.roundTrip).toBe(false);
+    const looped = await callTool(accessToken, "log_mileage", {
+      locations: [
+        { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+        { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+      ],
+      date: "2026-05-10",
+      roundTrip: true,
+    });
+    expect(looped.isError).toBe(false);
+    expect(looped.payload.roundTrip).toBe(true);
+    expect(Number(looped.payload.distanceMiles)).toBeGreaterThan(
+      Number(payload.distanceMiles),
+    );
+    expect(Number(looped.payload.amount)).toBeGreaterThan(
+      Number(payload.amount),
+    );
+
     const row = await testPrisma.expense.findFirst({
       where: { id: payload.expenseId as string, accountId: TEST_ACCOUNT_ID },
     });
@@ -546,6 +566,15 @@ describe("MCP endpoint", () => {
     expect(row!.type).toBe("mileage");
     expect(row!.distanceMiles).not.toBeNull();
     expect(row!.amount).not.toBeNull();
+    // The shape is stored with the trip, so a later edit keeps it.
+    expect(row!.roundTrip).toBe(false);
+    const loopRow = await testPrisma.expense.findFirst({
+      where: {
+        id: looped.payload.expenseId as string,
+        accountId: TEST_ACCOUNT_ID,
+      },
+    });
+    expect(loopRow!.roundTrip).toBe(true);
   });
 
   it("queries expenses and summarizes them (scoped to the account)", async () => {

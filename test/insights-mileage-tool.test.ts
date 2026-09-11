@@ -27,6 +27,7 @@ function trip(overrides: Partial<ResolvedTrip> = {}): ResolvedTrip {
     date: "2026-07-14",
     report: "",
     type: "business",
+    roundTrip: false,
     locations: [OFFICE, HOME],
     distanceMiles: "12.34",
     amount: "9.38",
@@ -82,7 +83,8 @@ describe("runPlanMileage", () => {
       resolver,
     );
 
-    // The card's data: the resolved stops and the app's own figures.
+    // The card's data: the resolved stops and the app's own figures, one way
+    // unless the caller said the drive returns.
     expect(out.pending).toEqual({
       stops: [OFFICE, HOME],
       date: "2026-07-14",
@@ -93,6 +95,7 @@ describe("runPlanMileage", () => {
       amount: "9.38",
       rate: "0.76",
       approximate: false,
+      roundTrip: false,
     });
     // The model reads the same trip, structured.
     expect(JSON.parse(out.result)).toEqual({
@@ -108,6 +111,7 @@ describe("runPlanMileage", () => {
       amount: "9.38",
       rate: "0.76",
       approximate: false,
+      roundTrip: false,
     });
     expect(resolver.mock.calls[0]![0]).toBe("acct_1");
     expect(resolver.mock.calls[0]![1]).toEqual({
@@ -115,7 +119,20 @@ describe("runPlanMileage", () => {
       date: "2026-07-15",
       type: undefined,
       report: undefined,
+      roundTrip: false,
     });
+  });
+
+  it("proposes a round trip when the user drove there and back", async () => {
+    const resolver = resolvesTo(trip({ roundTrip: true }));
+    const out = await runPlanMileage(
+      writes,
+      call({ stops: ["a", "b"], roundTrip: true }),
+      resolver,
+    );
+    expect(resolver.mock.calls[0]![1]).toMatchObject({ roundTrip: true });
+    expect(out.pending?.roundTrip).toBe(true);
+    expect(JSON.parse(out.result)).toMatchObject({ roundTrip: true });
   });
 
   it("lets an explicit date win over the user's today", async () => {
@@ -237,6 +254,7 @@ describe("parseTripConfirmation", () => {
       type: "business",
       report: "Q3",
       description: "Client visit",
+      roundTrip: true,
     });
     expect(parseTripConfirmation(raw)).toEqual({
       stops: [OFFICE, HOME],
@@ -244,7 +262,26 @@ describe("parseTripConfirmation", () => {
       type: "business",
       report: "Q3",
       description: "Client visit",
+      roundTrip: true,
     });
+  });
+
+  it("treats a payload with no shape as one way, and rejects a fake one", () => {
+    const payload = (extra: object) =>
+      JSON.stringify({
+        stops: [OFFICE, HOME],
+        date: "2026-07-14",
+        type: "business",
+        report: "",
+        description: "",
+        ...extra,
+      });
+    // A card from before one-way trips existed has no field: one way, never
+    // an implicit loop.
+    expect(parseTripConfirmation(payload({}))).toMatchObject({
+      roundTrip: false,
+    });
+    expect(parseTripConfirmation(payload({ roundTrip: "yes" }))).toBeNull();
   });
 
   it("rejects anything that is not a two-stop trip", () => {

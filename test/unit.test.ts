@@ -80,6 +80,7 @@ const makeMileage = (
     { address: "B", lat: 34.06, lng: -118.25 },
   ],
   distanceMiles: "32.00",
+  roundTrip: true,
   route: { coords: [], returnCoords: [] },
   reconciledAt: "",
   createdAt: "",

@@ -201,6 +201,8 @@ export async function readDuplicateCandidates(
       // must not throw the account-wide duplicate scan on /expense/new.
       locations: parseLocations(r.locations),
       distanceMiles: r.distanceMiles ?? "",
+      // The route shape plays no part in duplicate detection.
+      roundTrip: true,
       route: EMPTY_ROUTE,
     };
   });
@@ -480,6 +482,9 @@ export function expenseData(e: Expense): ExpenseWrite {
     // "" is the domain's "no amount" sentinel → NULL (nullable Decimal).
     amount: e.amount === "" ? null : asNumeric(e.amount),
     mileageType: e.type === "mileage" ? e.mileageType : "business",
+    // Receipts have no route shape; the column keeps its round trip default
+    // for them, exactly like mileageType keeps "business".
+    roundTrip: e.type === "mileage" ? e.roundTrip : true,
     createdAt: fromIso(e.createdAt),
     updatedAt: fromIso(e.updatedAt),
     // reconciledAt / reconciledInRunId are deliberately absent: they are
@@ -580,6 +585,7 @@ function rowToExpense(row: {
   fxRate: string | null;
   distanceMiles: string | null;
   mileageType: string;
+  roundTrip: boolean;
   locations: unknown;
   route: unknown;
   reconciledAt: string | null;
@@ -614,6 +620,9 @@ function rowToExpense(row: {
     mileageType: isMileageType(row.mileageType) ? row.mileageType : "business",
     locations: parseLocations(row.locations),
     distanceMiles: row.distanceMiles ?? "",
+    // Trips filed before one-way existed were closed loops, which is the
+    // column's default; anything but an explicit false is a round trip.
+    roundTrip: row.roundTrip !== false,
     route: parseRoute(row.route),
   };
   return mileage;

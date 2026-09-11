@@ -527,7 +527,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
     "log_mileage",
     {
       description:
-        "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense.",
+        "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense. The trip runs one way, from the first stop to the last; pass roundTrip true when the drive returns to its first stop.",
       inputSchema: z.object({
         locations: z
           .array(
@@ -571,6 +571,12 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
           ),
         category: z.string().optional().describe("Category name."),
         description: z.string().optional().describe("Description or memo."),
+        roundTrip: z
+          .boolean()
+          .optional()
+          .describe(
+            "One way by default: the trip starts at the first stop and ends at the last. Pass true when the drive returns to the first stop (a closed loop), which roughly doubles the distance for a there-and-back pair.",
+          ),
       }),
     },
     async (args) => {

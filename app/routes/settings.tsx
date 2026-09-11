@@ -356,7 +356,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       <section id="start-location" className="mb-8 scroll-mt-6">
         <h2 className="mb-2 text-lg font-semibold">Locations</h2>
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Home is the start and end of every trip, so it can't be removed. The
+          Home is where a trip starts by default, so it can't be removed. The
           other locations are places you drive to; pick one by name when you log
           a trip.
         </p>

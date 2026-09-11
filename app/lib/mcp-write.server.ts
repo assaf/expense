@@ -287,6 +287,9 @@ export interface ResolvedTrip {
   /** True when the routing service was unavailable and the distance is
    * straight-line (the coordinates are still real addresses). */
   approximate: boolean;
+  /** The trip's shape: true returns to the first stop (a closed loop),
+   * false ends at the last stop. */
+  roundTrip: boolean;
   coords: [number, number][];
   returnCoords: [number, number][];
 }
@@ -307,11 +310,15 @@ export async function resolveMileage(
     date?: string;
     type?: MileageType;
     report?: string;
+    /** True when the drive returns to the first stop. A trip is one way
+     * unless the caller says otherwise, so the default is false. */
+    roundTrip?: boolean;
   },
 ): Promise<{ ok: true; trip: ResolvedTrip } | { ok: false; error: string }> {
   const input = await validatedExpenseInput(accountId, args);
   if (!input.ok) return { ok: false, error: input.error };
   const { date, report } = input;
+  const roundTrip = args.roundTrip ?? false;
 
   const stops: Location[] = args.locations.map((l) =>
     typeof l === "string"
@@ -333,7 +340,7 @@ export async function resolveMileage(
     approximate,
     coords,
     returnCoords,
-  } = await recomputeMileage(stops, rate);
+  } = await recomputeMileage(stops, rate, { roundTrip });
 
   return {
     ok: true,
@@ -346,6 +353,7 @@ export async function resolveMileage(
       amount,
       rate,
       approximate,
+      roundTrip,
       coords,
       returnCoords,
     },
@@ -368,6 +376,7 @@ export async function saveMileageTrip(
     amount: trip.amount,
     locations: trip.locations,
     distanceMiles: trip.distanceMiles,
+    roundTrip: trip.roundTrip,
     route: { coords: trip.coords, returnCoords: trip.returnCoords },
   };
   await upsertExpense(expense, accountId);
@@ -388,6 +397,7 @@ export async function logMileage(
     report?: string;
     category?: string;
     description?: string;
+    roundTrip?: boolean;
   },
 ): Promise<ToolResult> {
   const resolved = await resolveMileage(accountId, args);
@@ -404,6 +414,7 @@ export async function logMileage(
     type: trip.type,
     rate: trip.rate || null,
     approximate: trip.approximate,
+    roundTrip: trip.roundTrip,
     ...(trip.approximate
       ? {
           note: "Route service unavailable — distance is straight-line; re-save the expense later to recompute.",

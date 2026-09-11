@@ -235,10 +235,10 @@ describe("Mileage expense", () => {
       timeout: 10_000,
     });
 
-    // A new mileage starts with Start/end + Stop 1 and no remove buttons.
+    // A new mileage starts one way with Start + Stop 1 and no remove buttons.
     const inputs = page.locator("input[placeholder='Address']");
     await expect(inputs).toHaveCount(2);
-    await expect(page.getByText("Start / end", { exact: true })).toBeVisible();
+    await expect(page.getByText("Start", { exact: true })).toBeVisible();
     await expect(page.getByText("Stop 1", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Remove stop" })).toHaveCount(
       0,
@@ -332,6 +332,80 @@ describe("Mileage expense", () => {
         where: { accountId: TEST_ACCOUNT_ID },
       }),
     ).toBe(before);
+  });
+
+  it("measures one way by default, and a round trip when the box is ticked", async () => {
+    await page.goto("/", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Mileage" }).click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+
+    // The stub measures one mile per leg and answers the waypoints the editor
+    // asked for, so the distance is exactly as long as the drive requested:
+    // 2 mi one way, 4 mi with the leg back to the start.
+    const shapes: boolean[] = [];
+    await page.route("**/api/route", async (route) => {
+      const body = JSON.parse(route.request().postData() ?? "{}") as {
+        locations: { address: string }[];
+        roundTrip?: boolean;
+      };
+      shapes.push(body.roundTrip === true);
+      const legs = body.locations.length - 1 + (body.roundTrip ? 1 : 0);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          locations: body.locations.map((l) => ({
+            ...l,
+            lat: 34.05,
+            lng: -118.24,
+          })),
+          distanceMiles: (legs * 2).toFixed(2),
+          amount: (legs * 2 * 0.76).toFixed(2),
+          coords: [
+            [34.05, -118.24],
+            [34.06, -118.23],
+          ],
+          returnCoords: body.roundTrip
+            ? [
+                [34.06, -118.23],
+                [34.05, -118.24],
+              ]
+            : [],
+          approximate: false,
+        }),
+      });
+    });
+
+    // A new trip is the drive the user describes: one way, so the first stop
+    // is a start, not a start and end.
+    const box = page.locator("input[name='roundTrip']");
+    await expect(box).not.toBeChecked();
+    await expect(page.getByText("Start", { exact: true })).toBeVisible();
+    await expect(page.getByText(/one way/i)).toBeVisible();
+
+    await page.getByRole("button", { name: "Add Work as a stop" }).click();
+    await expect(page.getByText("2.00 mi")).toBeVisible();
+    expect(shapes.at(-1)).toBe(false);
+
+    // Ticking the box makes it a closed loop: the same stops, the leg back
+    // included, without a blur or a save.
+    await box.check();
+    await expect(page.getByText("4.00 mi")).toBeVisible();
+    expect(shapes.at(-1)).toBe(true);
+    await expect(page.getByText("Start / end", { exact: true })).toBeVisible();
+
+    // The shape is stored with the trip.
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
+    const saved = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, type: "mileage", roundTrip: true },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(saved).not.toBeNull();
+    expect(Number(saved!.distanceMiles)).toBe(4);
+    await page.unroute("**/api/route");
   });
 
   it("updates the field to the geocoded address on blur, or shows an error", async () => {
@@ -454,8 +528,8 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    // The Start/end is prefilled with the seeded home address; Stop 1 is left
-    // blank. Saving must persist only the real address.
+    // The trip's first stop is prefilled with the seeded home address; Stop 1
+    // is left blank. Saving must persist only the real address.
     const inputs = page.locator("input[placeholder='Address']");
     await expect(inputs).toHaveCount(2);
     await inputs.nth(1).fill("");
@@ -580,7 +654,7 @@ describe("Mileage expense", () => {
     const tooltip = page.locator(".leaflet-tooltip");
     await expect(tooltip).toBeVisible();
     // Street + city only; the state is left off the tooltip.
-    await expect(tooltip).toContainText("Start / end — 1600");
+    await expect(tooltip).toContainText("Start — 1600");
     await expect(tooltip).not.toContainText("Mountain View, CA");
     // The address's HTML-like text is escaped, showing literally as text,
     // never as a real <b> element.

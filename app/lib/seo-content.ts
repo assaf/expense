@@ -836,7 +836,7 @@ export const MCP_TOOLS: Array<{
   {
     name: "log_mileage",
     writes: true,
-    what: "Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate.",
+    what: "Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate. One way unless the trip returns to its first stop.",
   },
   {
     name: "list_expenses",

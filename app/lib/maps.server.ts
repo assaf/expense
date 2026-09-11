@@ -304,25 +304,31 @@ interface RouteResult {
   /** Route geometry in [lat, lng] (the outbound legs, start → last stop). */
   coords: [number, number][];
   /** Return leg (last stop → start) geometry in [lat, lng], drawn dashed
-   *  on the map. Straight line when OSRM is unavailable. */
+   *  on the map. Empty for a one-way trip: there is no way back to draw. */
   returnCoords: [number, number][];
   approximate: boolean;
 }
 
 /**
- * Compute the driving distance for a closed route:
+ * Compute the driving distance for a trip.
+ *
+ * Round trip (`roundTrip` true) closes the loop:
  *   locations[0] → locations[1] → ... → locations[n-1] → locations[0]
+ * One way stops at the last location, which is what the user drove.
  * Uses OSRM; falls back to straight-line (Haversine) when unavailable.
  *
- * OSRM's route service connects waypoints in order but never closes the
- * loop, so the start is repeated as the last waypoint. The response then
- * carries the whole loop (outbound + return) in one call; the geometry is
- * split at the last real stop: its snapped location is a point on the
- * geometry, so the nearest geometry index is exactly where the return leg
- * begins; split there into `coords` (outbound) and `returnCoords` (return to start).
+ * OSRM's route service connects waypoints in order but never closes a loop
+ * by itself, so a round trip repeats the start as the last waypoint and its
+ * response carries the whole loop in one call. That geometry is then split
+ * at the last real stop: its snapped location is a point on the geometry,
+ * so the nearest geometry index is exactly where the return leg begins;
+ * split there into `coords` (outbound) and `returnCoords` (return to start).
+ * A one-way trip sends the stops as they are and keeps the whole geometry
+ * as the outbound route.
  */
 async function computeRouteDistance(
   locations: Location[],
+  roundTrip: boolean,
 ): Promise<RouteResult> {
   const points = geocodedLocations(locations).filter(
     (l) => l.address.trim() !== "",
@@ -336,10 +342,9 @@ async function computeRouteDistance(
     };
   }
 
-  const loopParam = [...points, points[0]]
-    .map((p) => `${p.lng},${p.lat}`)
-    .join(";");
-  const url = `${OSRM_URL}/${loopParam}?overview=full&geometries=geojson`;
+  const waypoints = roundTrip ? [...points, points[0]] : points;
+  const param = waypoints.map((p) => `${p.lng},${p.lat}`).join(";");
+  const url = `${OSRM_URL}/${param}?overview=full&geometries=geojson`;
   try {
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
@@ -353,6 +358,17 @@ async function computeRouteDistance(
       const route = json?.routes[0];
       if (route && route.geometry) {
         const geom = route.geometry.coordinates;
+        const toLatLng = (g: [number, number][]): [number, number][] =>
+          g.map(([lng, lat]): [number, number] => [lat, lng]);
+        // One way: the geometry is the trip, and nothing comes back.
+        if (!roundTrip) {
+          return {
+            distanceMiles: route.distance / METERS_PER_MILE,
+            coords: toLatLng(geom),
+            returnCoords: [],
+            approximate: false,
+          };
+        }
         // The last real waypoint is second-to-last in the response (the
         // final entry is the repeated start). Its snapped location lies on
         // the geometry, so the nearest index is where the return leg
@@ -373,8 +389,6 @@ async function computeRouteDistance(
             }
           }
         }
-        const toLatLng = (g: [number, number][]): [number, number][] =>
-          g.map(([lng, lat]): [number, number] => [lat, lng]);
         return {
           distanceMiles: route.distance / METERS_PER_MILE,
           coords: toLatLng(geom.slice(0, split)),
@@ -387,20 +401,23 @@ async function computeRouteDistance(
     // fall through to Haversine
   }
 
-  // Fallback: sum of straight-line segments including the return to start.
-  const loop = [...points, points[0]];
+  // Fallback: the sum of straight-line segments, plus the leg back to the
+  // start when the trip returns there.
+  const path = roundTrip ? [...points, points[0]] : points;
   let meters = 0;
-  for (let i = 1; i < loop.length; i++) {
-    meters += haversine(loop[i - 1], loop[i]);
+  for (let i = 1; i < path.length; i++) {
+    meters += haversine(path[i - 1], path[i]);
   }
   const last = points[points.length - 1];
   return {
     distanceMiles: meters / METERS_PER_MILE,
     coords: points.map((p) => [p.lat, p.lng]),
-    returnCoords: [
-      [last.lat, last.lng],
-      [points[0]!.lat, points[0]!.lng],
-    ],
+    returnCoords: roundTrip
+      ? [
+          [last.lat, last.lng],
+          [points[0]!.lat, points[0]!.lng],
+        ]
+      : [],
     approximate: true,
   };
 }
@@ -444,6 +461,10 @@ export const MAX_TRIP_STOPS = 12;
 export async function recomputeMileage(
   locations: Location[],
   rate: string,
+  /** The trip's shape: true returns to the first stop (the closed loop every
+   * trip filed before one-way existed used), false ends at the last stop.
+   * Defaults to the round trip those stored rows assume. */
+  opts: { roundTrip?: boolean } = {},
 ): Promise<{
   locations: Location[];
   distanceMiles: string;
@@ -474,7 +495,7 @@ export async function recomputeMileage(
       prevCoord = { lat: match.location.lat, lng: match.location.lng };
     }
   }
-  const route = await computeRouteDistance(geocoded);
+  const route = await computeRouteDistance(geocoded, opts.roundTrip ?? true);
   const distance = new Decimal(route.distanceMiles);
   const distanceStr = distance.gt(0) ? distance.toFixed(2) : "";
   // No rate configured for the year (or an unparseable one) → no amount,

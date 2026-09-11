@@ -90,6 +90,10 @@ export interface MileageExpense extends ExpenseBase {
   mileageType: MileageType;
   locations: Location[];
   distanceMiles: string; // decimal string "122.13", "" when unset
+  /** True when the trip returns to its first stop (the closed loop every
+   * trip used to assume), false for a one-way drive that ends at its last
+   * stop. Trips filed before one-way existed are round trips. */
+  roundTrip: boolean;
   /** Driving-route geometry persisted with the expense so every map (the
    * list thumbnails and the editor on open) shows the routed trip, not
    * straight point-to-point lines. Empty until a route is computed. */
@@ -287,6 +291,9 @@ export function newExpenseShell(type: Expense["type"]): Expense {
     mileageType: "business",
     locations: [],
     distanceMiles: "",
+    // A new trip is the drive the user describes: one way, unless the
+    // editor's round trip box says it returns to its first stop.
+    roundTrip: false,
     route: EMPTY_ROUTE,
   };
   return mileage;

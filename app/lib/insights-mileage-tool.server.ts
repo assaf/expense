@@ -33,6 +33,9 @@ export interface PendingTrip {
   amount: string;
   rate: string;
   approximate: boolean;
+  /** Whether the drive returns to the first stop. One way unless the user
+   * asked to come back. */
+  roundTrip: boolean;
 }
 
 /** What the plan tool needs from the request: the account to resolve
@@ -70,6 +73,12 @@ const planMileageInput = z.object({
     .max(300)
     .optional()
     .describe("Short note for the trip's description field."),
+  roundTrip: z
+    .boolean()
+    .optional()
+    .describe(
+      "True only when the drive returns to the first stop (there and back); one way by default.",
+    ),
 });
 
 export function planMileageTool(): ToolSpec {
@@ -94,6 +103,7 @@ export interface TripConfirmation {
   type: MileageType;
   report: string;
   description: string;
+  roundTrip: boolean;
 }
 
 const confirmationSchema = z.object({
@@ -111,6 +121,9 @@ const confirmationSchema = z.object({
   type: z.enum(["business", "charity", "medical", "moving"]),
   report: z.string().max(200),
   description: z.string().max(300),
+  // A payload without the field (a tab opened before one-way existed, or a
+  // hand-edited request) is a one-way trip: the default, never a loop.
+  roundTrip: z.boolean().optional(),
 });
 
 /** Parse the confirm card's payload (its JSON, in one form field). Returns
@@ -129,7 +142,11 @@ export function parseTripConfirmation(raw: string): TripConfirmation | null {
     (l) => l.address.trim() !== "",
   );
   if (stops.length < 2) return null;
-  return { ...parsed.data, stops };
+  return {
+    ...parsed.data,
+    stops,
+    roundTrip: parsed.data.roundTrip ?? false,
+  };
 }
 
 /**
@@ -183,6 +200,8 @@ export async function runPlanMileage(
     date: args.date || writes.today || undefined,
     type: args.type,
     report: report || undefined,
+    // Explicit: one way unless the user said they came back.
+    roundTrip: args.roundTrip ?? false,
   });
   if (!resolved.ok) {
     return { result: JSON.stringify({ error: resolved.error }) };
@@ -219,6 +238,7 @@ export async function runPlanMileage(
       amount: trip.amount,
       rate: trip.rate || null,
       approximate: trip.approximate,
+      roundTrip: trip.roundTrip,
     }),
     pending: {
       stops: trip.locations,
@@ -230,6 +250,7 @@ export async function runPlanMileage(
       amount: trip.amount,
       rate: trip.rate,
       approximate: trip.approximate,
+      roundTrip: trip.roundTrip,
     },
   };
 }

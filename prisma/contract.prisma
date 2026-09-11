@@ -116,6 +116,10 @@ model Expense {
   accountId                              String
   route                                  Jsonb?
   mileageType                            String                @default("business")
+  /// Mileage: true when the trip returns to its first stop (a closed loop),
+  /// false for a one-way drive that ends at its last stop. Defaults to true
+  /// so every trip filed before one-way trips existed keeps its meaning.
+  roundTrip                              Boolean               @default(true)
   reconciledAt                           TimestampString(3)?
   reconciledInRunId                      String?
   dismissedAsA                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseAId_fkey")
