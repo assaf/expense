@@ -30,7 +30,7 @@ export interface FilterableExpense {
   description?: string;
 }
 
-export const queryExpensesInput = z.object({
+const queryExpensesInput = z.object({
   dateFrom: z.string().optional().describe("Inclusive start date YYYY-MM-DD."),
   dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
   categories: z
