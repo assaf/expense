@@ -485,6 +485,22 @@ describe("period range net (this month)", () => {
 });
 
 describe("conversation months roundtrip (INS-MONTHS-0)", () => {
+  it("preserves a computed window span across the read side", async () => {
+    // The app stores the months a period resolved to (a quarter = 3); the
+    // read side must not flatten it back to the translator's 12.
+    await startNewConversation("user_test1", TEST_ACCOUNT_ID);
+    await appendExchange("user_test1", TEST_ACCOUNT_ID, {
+      question: "what about this quarter?",
+      answer: "three months of travel",
+      chart: true,
+      query: "after:2026-07-01 before:2026-09-10",
+      months: 3,
+      title: "This quarter",
+    });
+    const conversation = await readLatestConversation("user_test1");
+    expect(conversation!.exchanges.at(-1)!.months).toBe(3);
+  });
+
   it("preserves the all-time window (0) across the read side", async () => {
     await startNewConversation("user_test1", TEST_ACCOUNT_ID);
     await appendExchange("user_test1", TEST_ACCOUNT_ID, {

@@ -152,7 +152,7 @@ export async function action({ request }: Route.LoaderArgs) {
     const t = {
       ...translated,
       query: withPeriodRange(translated.query, text, today),
-      ...(scope ? { chart: scope.chart } : {}),
+      ...(scope ? { chart: scope.chart, months: scope.months } : {}),
     };
     // Ground the text answer in real numbers: compute the same view the
     // chart shows and let the model phrase it. Invalid client dates (the

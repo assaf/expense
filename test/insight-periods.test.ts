@@ -175,6 +175,18 @@ describe("periodScope (chart decision)", () => {
     }
   });
 
+  it("spans the chart window over the range's own months", () => {
+    expect(periodScope("this quarter", TODAY)?.months).toBe(3);
+    expect(periodScope("last quarter", TODAY)?.months).toBe(3);
+    expect(periodScope("this year", TODAY)?.months).toBe(9);
+    expect(periodScope("last 30 days", TODAY)?.months).toBe(2);
+    expect(periodScope("today", TODAY)?.months).toBe(1);
+    // A decade-long explicit range still renders (clamped, not unbounded).
+    expect(periodScope("from 2016-01-01 to 2026-09-10", TODAY)?.months).toBe(
+      60,
+    );
+  });
+
   it("leaves the model's choice alone when no period is named", () => {
     expect(periodScope("which merchants cost the most?", TODAY)).toBe(null);
   });

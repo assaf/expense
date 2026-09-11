@@ -54,7 +54,15 @@ function parseExchanges(raw: unknown): StoredExchange[] {
       answer: answer.slice(0, 2000),
       chart,
       query: query.slice(0, 300),
-      months: [-1, 0, 6, 12, 24].includes(months) ? months : 12,
+      // The translator's windows are the offered options, but the app also
+      // stores the span a question's period resolved to (1..60 months), so
+      // the read side accepts any positive span instead of flattening it
+      // back to 12.
+      months:
+        Number.isInteger(months) &&
+        (months === -1 || months === 0 || (months >= 1 && months <= 60))
+          ? months
+          : 12,
       title: title.slice(0, 60),
     });
   }

@@ -34,10 +34,11 @@ export interface DateRange {
   before: string;
 }
 
-/** A resolved period: the range plus whether a monthly chart says anything
- * about it. */
+/** The range plus the shape of the window: the chart decision and the
+ * month count the chart/buckets should span (see the module comment). */
 export interface PeriodScope extends DateRange {
   chart: boolean;
+  months: number;
 }
 
 /** How the range was asked for. Only the shape of the window matters for
@@ -263,6 +264,11 @@ export function periodScope(
     chart:
       CHART_KINDS.has(hit.kind) ||
       (hit.kind === "explicit" && monthsSpanned(hit) > 1),
+    // The buckets (and the chart's axis) span exactly the range's months,
+    // so a quarter question plots three bars over a three-month axis rather
+    // than the model's twelve. Clamped: a decade-long range still renders,
+    // just without hundreds of empty buckets.
+    months: Math.min(60, Math.max(1, monthsSpanned(hit))),
   };
 }
 
