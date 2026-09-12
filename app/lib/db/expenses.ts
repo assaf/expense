@@ -9,9 +9,8 @@ import {
   toIsoOrNull,
 } from "~/lib/db/wire";
 import { closedReportNames } from "~/lib/db/reports";
-import { compareExpenses } from "~/lib/format";
 import { normalizeMerchant } from "~/lib/duplicates";
-import { deleteImage, mimeForFile } from "~/lib/images.server";
+import { deleteImages, mimeForFile } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import type { KnownMerchant } from "~/lib/receipt-ai.server";
 import {
@@ -25,9 +24,34 @@ import {
 
 // --- Expenses --------------------------------------------------------------
 
-export async function readExpenses(accountId: string): Promise<Expense[]> {
+/** The predicates the read tools can push into Postgres: the exact ones
+ * (date range, type, report, unreported). The fuzzy ones (a case-insensitive
+ * merchant substring, a case-insensitive category) stay in JS, where their
+ * semantics already live. Narrowing here shrinks the row set the caller
+ * filters; it never changes what matches. */
+export interface ExpenseNarrow {
+  dateFrom?: string;
+  dateTo?: string;
+  type?: Expense["type"];
+  report?: string;
+  unreported?: boolean;
+}
+
+export async function readExpenses(
+  accountId: string,
+  narrow: ExpenseNarrow = {},
+): Promise<Expense[]> {
   const rows = await db.orm.public.Expense.where((e) =>
-    e.accountId.eq(accountId),
+    and(
+      e.accountId.eq(accountId),
+      // An undated expense falls outside a bounded range on both sides,
+      // which is what the JS filter does with `!e.date` too.
+      ...(narrow.dateFrom ? [e.date.gte(narrow.dateFrom)] : []),
+      ...(narrow.dateTo ? [e.date.lte(narrow.dateTo)] : []),
+      ...(narrow.type ? [e._type.eq(narrow.type)] : []),
+      ...(narrow.report ? [e.report.eq(narrow.report)] : []),
+      ...(narrow.unreported ? [e.report.eq("")] : []),
+    ),
   ).all();
   return rows.map(rowToExpense);
 }
@@ -62,36 +86,64 @@ export type ExpenseImageRow = {
 export async function readExpenseImage(
   id: string,
   accountId: string,
+  opts: {
+    /** False skips the BYTEA column entirely: the list view asks for the
+     * 160px thumbnail, and pulling the full image out of Postgres to throw
+     * it away is the one cost that scales with the number of tiles on a
+     * page. `blobData` comes back null then (callers fall back to a full
+     * read when there is no thumbnail). */
+    bytes?: boolean;
+  } = {},
 ): Promise<ExpenseImageRow | undefined> {
   // Single query via SQL-builder outerLeftJoin (saves a second round trip
   // per image tile on the list page, which historically exhausted the
   // Supabase pooler).
-  const plan = db.sql.public.expenses
-    .outerLeftJoin(db.sql.public.image_blobs.as("ib"), (f, fns) =>
-      fns.and(
-        fns.eq(f.expenses.accountId, f.ib.accountId),
-        fns.eq(f.expenses.imageFile, f.ib.key),
-      ),
-    )
-    .select("id", "imageFile", "imageMime", "updatedAt")
-    .select("_type", (f) => f.expenses.type)
-    .select("blobMime", (f) => f.ib.mime)
-    .select("blobData", (f) => f.ib.data)
-    .select("thumbnail", (f) => f.ib.thumbnail)
-    .where((f, fns) =>
-      fns.and(
-        fns.eq(f.expenses.id, id),
-        fns.eq(f.expenses.accountId, accountId),
-      ),
-    )
-    .limit(1)
-    .build();
+  const base = () =>
+    db.sql.public.expenses
+      .outerLeftJoin(db.sql.public.image_blobs.as("ib"), (f, fns) =>
+        fns.and(
+          fns.eq(f.expenses.accountId, f.ib.accountId),
+          fns.eq(f.expenses.imageFile, f.ib.key),
+        ),
+      )
+      .select("id", "imageFile", "imageMime", "updatedAt")
+      .select("_type", (f) => f.expenses.type)
+      .select("blobMime", (f) => f.ib.mime)
+      .select("thumbnail", (f) => f.ib.thumbnail)
+      .where((f, fns) =>
+        fns.and(
+          fns.eq(f.expenses.id, id),
+          fns.eq(f.expenses.accountId, accountId),
+        ),
+      )
+      .limit(1);
 
-  const rows = await db.runtime().query(plan);
+  if (opts.bytes === false) {
+    const slim = await db.runtime().query(base().build());
+    const r = slim[0];
+    if (!r) return undefined;
+    // The thumbnail lives in its own column, so the tile render needs only
+    // the mime (for the response header).
+    return {
+      type: r._type,
+      imageFile: r.imageFile,
+      imageMime: r.imageMime,
+      updatedAt: toIso(r.updatedAt),
+      blobMime: r.blobMime || mimeForFile(r.imageFile),
+      blobData: null,
+      thumbnail: r.thumbnail ?? null,
+    };
+  }
+
+  const rows = await db.runtime().query(
+    base()
+      .select("blobData", (f) => f.ib.data)
+      .build(),
+  );
   const r = rows[0];
   if (!r) return undefined;
 
-  const base: ExpenseImageRow = {
+  const full: ExpenseImageRow = {
     type: r._type,
     imageFile: r.imageFile,
     imageMime: r.imageMime,
@@ -100,9 +152,9 @@ export async function readExpenseImage(
     blobData: null,
     thumbnail: null,
   };
-  if (!r.blobData) return base;
+  if (!r.blobData) return full;
   return {
-    ...base,
+    ...full,
     blobMime: r.blobMime || mimeForFile(r.imageFile),
     blobData: r.blobData,
     thumbnail: r.thumbnail ?? null,
@@ -112,34 +164,73 @@ export async function readExpenseImage(
 /**
  * The two expenses immediately before and after `expense` in the main list
  * order: the home page renders `sortExpenses` over open reports only, so
- * navigation runs the same shared comparator over the same universe (rows
- * in closed reports are skipped; they are not on the list either). One
- * thin-column query instead of per-side date queries, which cannot see the
- * same-day createdAt tie-break and used to jump over same-day siblings.
+ * navigation runs the same comparator over the same universe (rows in
+ * closed reports are skipped; they are not on the list either).
+ *
+ * The order is (date, createdAt) descending, so each side is one indexed
+ * query for the closest row on that side rather than a read of the whole
+ * account: the old version loaded every expense (thin columns, but every
+ * row) on each editor load. Undated rows sort last, which the same
+ * comparisons express — `""` compares below every date.
  */
 export async function readNeighborIds(
   accountId: string,
   expense: { id: string },
 ): Promise<{ prevId: string | null; nextId: string | null }> {
-  const [reportRows, rows] = await Promise.all([
+  const [target, reportRows] = await Promise.all([
+    db.orm.public.Expense.where((e) =>
+      and(e.id.eq(expense.id), e.accountId.eq(accountId)),
+    )
+      .select("date", "createdAt", "report")
+      .first(),
     db.orm.public.Report.where((r) => r.accountId.eq(accountId))
       .select("name", "closed")
       .all(),
-    db.orm.public.Expense.where((e) => e.accountId.eq(accountId))
-      .select("id", "date", "createdAt", "report")
-      .all(),
   ]);
   const closed = closedReportNames(reportRows);
-  const ordered = rows
-    .filter((r) => !closed.has(r.report))
-    .map((r) => ({ id: r.id, date: r.date, createdAt: toIso(r.createdAt) }))
-    .sort((a, b) => compareExpenses(a, b));
-  const i = ordered.findIndex((r) => r.id === expense.id);
-  if (i === -1) return { prevId: null, nextId: null };
-  return {
-    prevId: ordered[i - 1]?.id ?? null,
-    nextId: ordered[i + 1]?.id ?? null,
-  };
+  // Not on the list at all (the row is in a closed report, or it vanished):
+  // no arrows, exactly like the list-scan version.
+  if (!target || closed.has(target.report)) {
+    return { prevId: null, nextId: null };
+  }
+  const createdAt = fromIso(toIso(target.createdAt));
+  const closedNames = [...closed];
+
+  const [prev, next] = await Promise.all([
+    // prev = the row above: a newer date, or the same date recorded later;
+    // the closest one is the smallest in ascending order.
+    db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        ...(closedNames.length > 0 ? [e.report.notIn(closedNames)] : []),
+        or(
+          e.date.gt(target.date),
+          and(e.date.eq(target.date), e.createdAt.gt(createdAt)),
+        ),
+      ),
+    )
+      .orderBy((e) => e.date.asc())
+      .orderBy((e) => e.createdAt.asc())
+      .select("id")
+      .first(),
+    // next = the row below: an older date, or the same date recorded
+    // earlier; the closest one is the largest in descending order.
+    db.orm.public.Expense.where((e) =>
+      and(
+        e.accountId.eq(accountId),
+        ...(closedNames.length > 0 ? [e.report.notIn(closedNames)] : []),
+        or(
+          e.date.lt(target.date),
+          and(e.date.eq(target.date), e.createdAt.lt(createdAt)),
+        ),
+      ),
+    )
+      .orderBy((e) => e.date.desc())
+      .orderBy((e) => e.createdAt.desc())
+      .select("id")
+      .first(),
+  ]);
+  return { prevId: prev?.id ?? null, nextId: next?.id ?? null };
 }
 
 /**
@@ -453,16 +544,18 @@ export async function readKnownMerchants(
 // --- Shared expense serialization (used by the reconcile module too) --------
 
 /** Delete the stored images of receipt expenses, best-effort (image rows
- * may already be gone). Used when expenses are deleted wholesale. */
+ * may already be gone). Used when expenses are deleted wholesale: one
+ * statement for the whole set instead of a DELETE per receipt. */
 export async function deleteReceiptImages(
   accountId: string,
   expenses: readonly { type: string; imageFile?: string }[],
 ): Promise<void> {
-  for (const e of expenses) {
-    if (e.type === "receipt" && e.imageFile) {
-      await deleteImage(accountId, e.imageFile).catch(() => {});
-    }
-  }
+  await deleteImages(
+    accountId,
+    expenses
+      .filter((e) => e.type === "receipt" && e.imageFile)
+      .map((e) => e.imageFile ?? ""),
+  );
 }
 
 /** The typed create input for the Expense collection. */

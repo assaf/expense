@@ -21,12 +21,19 @@ import type { Route } from "./+types/expense.$id.image";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  // One round trip instead of two: the expense row and its image blob arrive
-  // together (LEFT JOIN on the namespaced key). Blob fields are null when
-  // the expense has no image or its blob row is missing: 404, same as a
-  // null blob read.
-  const row = await readExpenseImage(params.id, user.accountId);
-  if (!row || row.type !== "receipt" || !row.imageFile || !row.blobData) {
+  const url = new URL(request.url);
+  const width = Number(url.searchParams.get("w"));
+  const wantsTile = Number.isInteger(width) && width >= 16 && width <= 160;
+
+  // The list view asks for the 160px thumbnail, which lives in its own
+  // column: read without the BYTEA then (the tile is the hot path, and the
+  // full image would otherwise leave Postgres only to be discarded). Any
+  // other request needs the bytes, and a tile whose row has no thumbnail
+  // (a legacy image) falls back to them below.
+  const row = await readExpenseImage(params.id, user.accountId, {
+    bytes: !wantsTile,
+  });
+  if (!row || row.type !== "receipt" || !row.imageFile) {
     return notFound();
   }
 
@@ -40,18 +47,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     return new Response(null, { status: 304, headers: { ETag: etag } });
   }
 
-  const url = new URL(request.url);
   // `v` is the content key rendered by the list thumbnails and the editor:
   // when it matches the current row, the URL can only ever serve these
   // bytes, so the browser may cache them for a year without revalidating.
   // Absent or mismatched `v` (legacy URLs, stale tabs) keeps the short TTLs
   // so those clients revalidate soon and pick up a replacement.
   const versioned = url.searchParams.get("v") === version;
-  const width = Number(url.searchParams.get("w"));
-  // 160px is the list-view size: serve the precomputed thumbnail. Legacy
-  // images without one get the full stored image (zero CPU, just a bigger
-  // payload for the one-off legacy row).
-  if (Number.isInteger(width) && width >= 16 && width <= 160 && row.thumbnail) {
+  if (wantsTile && row.thumbnail) {
     return new Response(row.thumbnail as BodyInit, {
       headers: {
         ...imageResponseHeaders(
@@ -65,10 +67,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  return new Response(row.blobData as BodyInit, {
+  // No thumbnail (or not a tile request): the full stored image. A tile
+  // whose row predates thumbnails costs a second read here, which is the
+  // one-off case the comment above has always described.
+  const full = row.blobData
+    ? row
+    : await readExpenseImage(params.id, user.accountId);
+  if (!full?.blobData) return notFound();
+  return new Response(full.blobData as BodyInit, {
     headers: {
       ...imageResponseHeaders(
-        row.blobMime || row.imageMime || "image/png",
+        full.blobMime || full.imageMime || "image/png",
         versioned
           ? "private, max-age=31536000, immutable"
           : "private, max-age=3600",

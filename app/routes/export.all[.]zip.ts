@@ -1,7 +1,7 @@
 import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
 import { requireUser } from "~/lib/auth.server";
-import { bareName, readImage } from "~/lib/images.server";
+import { bareName, readImages } from "~/lib/images.server";
 import { readExpenses } from "~/lib/db/expenses";
 import { readMileageRates } from "~/lib/db/seed";
 import { merchantLabel, sortExpenses } from "~/lib/format";
@@ -42,13 +42,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const files: Record<string, Uint8Array> = {
     "expenses.csv": strToU8(csv),
   };
+  const keys: string[] = [];
 
   for (const e of sorted) {
     if (e.type !== "receipt" || !e.imageFile) continue;
-    const image = await readImage(user.accountId, e.imageFile);
-    if (!image) continue;
+    keys.push(e.imageFile);
+  }
+  // One query per chunk instead of one per receipt (an account with 200
+  // receipts issued 200 round trips against a two-connection pool).
+  const images = await readImages(user.accountId, keys);
+  for (const [key, image] of images) {
     // Strip the account namespace so zip entries keep the plain filename.
-    files[bareName(e.imageFile, user.accountId)] = new Uint8Array(image.buffer);
+    files[bareName(key, user.accountId)] = new Uint8Array(image.buffer);
   }
 
   const zip = zipSync(files, { level: 9 });

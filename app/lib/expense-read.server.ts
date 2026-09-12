@@ -109,7 +109,19 @@ export async function readExpensesPage(
   returned: number;
   expenses: ReturnType<typeof serializeExpense>[];
 }> {
-  const expenses = filterExpenses(await readExpenses(accountId), filters);
+  // The exact predicates narrow in SQL (so a date-ranged question reads only
+  // that range); `filterExpenses` still applies every predicate, so what
+  // matches is unchanged.
+  const expenses = filterExpenses(
+    await readExpenses(accountId, {
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      type: filters.type,
+      report: filters.report,
+      unreported: filters.unreported,
+    }),
+    filters,
+  );
   const max =
     Number.isInteger(limit) && limit !== undefined && limit >= 1 && limit <= 500
       ? limit
@@ -132,6 +144,15 @@ export async function readExpenseSummary(
   byCategory: { category: string; count: number; total: string }[];
 }> {
   return summarizeExpenses(
-    filterExpenses(await readExpenses(accountId), filters),
+    filterExpenses(
+      await readExpenses(accountId, {
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        type: filters.type,
+        report: filters.report,
+        unreported: filters.unreported,
+      }),
+      filters,
+    ),
   );
 }

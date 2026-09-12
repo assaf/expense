@@ -649,6 +649,108 @@ describe("Expense CRUD", () => {
     }
   });
 
+  it("navigates an undated expense, which sorts last", async () => {
+    const ids = { dated: ulid(), undated: ulid() };
+    const at = (n: number) =>
+      new Date(Date.parse("2026-09-02T00:00:00.000Z") + n * 1000).toISOString();
+    for (const r of [
+      // Far older than anything the seed holds, so this row is the last
+      // dated one: the boundary the test is about.
+      { id: ids.dated, date: "1999-12-31", createdAt: at(1) },
+      { id: ids.undated, date: "", createdAt: at(2) },
+    ]) {
+      await testPrisma.expense.create({
+        data: {
+          id: r.id,
+          accountId: TEST_ACCOUNT_ID,
+          type: "receipt",
+          date: r.date,
+          report: "2026 Test",
+          category: "Office Supplies",
+          description: "",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          amount: "1.00",
+          merchant: "Nav Undated",
+          locations: [],
+          createdAt: r.createdAt,
+          updatedAt: r.createdAt,
+        },
+      });
+    }
+    try {
+      // The dated row is the last dated one in the list, so the undated row
+      // sits directly below it ("" compares below every date).
+      const dated = await readNeighborIds(TEST_ACCOUNT_ID, { id: ids.dated });
+      expect(dated.nextId).toBe(ids.undated);
+      const undated = await readNeighborIds(TEST_ACCOUNT_ID, {
+        id: ids.undated,
+      });
+      expect(undated.prevId).toBe(ids.dated);
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: { id: { in: Object.values(ids) } },
+      });
+    }
+  });
+
+  it("keeps a narrowed date range inclusive and excludes undated rows", async () => {
+    const ids = {
+      before: ulid(),
+      from: ulid(),
+      to: ulid(),
+      after: ulid(),
+      undated: ulid(),
+    };
+    const now = new Date().toISOString();
+    for (const [key, date] of [
+      ["before", "2026-08-31"],
+      ["from", "2026-09-01"],
+      ["to", "2026-09-30"],
+      ["after", "2026-10-01"],
+      ["undated", ""],
+    ] as const) {
+      await testPrisma.expense.create({
+        data: {
+          id: ids[key],
+          accountId: TEST_ACCOUNT_ID,
+          type: "receipt",
+          date,
+          report: "2026 Test",
+          category: "Office Supplies",
+          description: "",
+          imageFile: "",
+          imageMime: "",
+          originalName: "",
+          amount: "1.00",
+          merchant: "Narrow Range",
+          locations: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+    }
+    try {
+      // The range predicate runs in SQL now; both ends stay inclusive, and
+      // an undated row is outside a bounded range (which is what the JS
+      // filter did with `!e.date`).
+      const mine = (
+        await readExpenses(TEST_ACCOUNT_ID, {
+          dateFrom: "2026-09-01",
+          dateTo: "2026-09-30",
+        })
+      )
+        .filter((e) => Object.values(ids).includes(e.id))
+        .map((e) => e.id);
+      expect(mine.sort()).toEqual([ids.from, ids.to].sort());
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: { id: { in: Object.values(ids) } },
+      });
+    }
+  });
+
   it("serves receipt images with nosniff and a sandboxing CSP", async () => {
     // Defense-in-depth on the image route: even if a stored blob ever had a
     // renderable type, the headers must stop it executing in document mode.

@@ -142,11 +142,11 @@ export function merchantLabel(e: Expense, rates: MileageRateEntry[]): string {
 /**
  * The canonical expense order, one comparator for every consumer that must
  * agree on it: `sortExpenses` (the home list, exports) and the editor's
- * prev/next neighbor lookup. Newest-first by date; same-day rows keep
+ * prev/next neighbor queries. Newest-first by date; same-day rows keep
  * entry order (createdAt desc); undated rows sort last, newest entry
  * first. `desc = false` flips it for chronological exports.
  */
-export function compareExpenses(
+function compareExpenses(
   a: Pick<Expense, "date" | "createdAt">,
   b: Pick<Expense, "date" | "createdAt">,
   desc = true,

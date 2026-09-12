@@ -344,6 +344,53 @@ export async function readImage(
   };
 }
 
+/** Drop several stored images in one statement. The callers sweep a
+ * deleted report's (or account's) receipts, where one DELETE per image is a
+ * round trip per row for no benefit. Best-effort, like deleteImage. */
+export async function deleteImages(
+  accountId: string,
+  filenames: readonly string[],
+): Promise<void> {
+  const keys = filenames.filter((key) => key !== "");
+  if (keys.length === 0) return;
+  try {
+    await db.orm.public.ImageBlob.where((b) =>
+      and(b.accountId.eq(accountId), b.key.in(keys)),
+    ).deleteAll();
+  } catch {
+    // best-effort: the rows may already be gone
+  }
+}
+
+/** Read several stored images in one query, keyed by filename. */
+export async function readImages(
+  accountId: string,
+  filenames: readonly string[],
+): Promise<Map<string, { buffer: Buffer; mime: string }>> {
+  const keys = filenames.filter((key) => key !== "");
+  const found = new Map<string, { buffer: Buffer; mime: string }>();
+  if (keys.length === 0) return found;
+  // Chunked: an unbounded IN list would pull every receipt of a large
+  // account into memory in one statement.
+  const CHUNK = 10;
+  for (let i = 0; i < keys.length; i += CHUNK) {
+    const rows = await db.orm.public.ImageBlob.where((b) =>
+      and(b.accountId.eq(accountId), b.key.in(keys.slice(i, i + CHUNK))),
+    )
+      .select("key", "data", "mime")
+      .all();
+    for (const row of rows) {
+      if (!row.data) continue;
+      found.set(row.key, {
+        buffer: Buffer.from(row.data),
+        mime: row.mime || mimeForFile(row.key),
+      });
+    }
+  }
+  return found;
+}
+
+/** Drop one stored image (best-effort: the row may already be gone). */
 export async function deleteImage(
   accountId: string,
   filename: string,
