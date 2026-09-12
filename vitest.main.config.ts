@@ -19,6 +19,7 @@ export default defineConfig({
     exclude: [
       "test/default-categories.test.ts",
       "test/schedule-c.test.ts",
+      "test/unit.test.ts",
       "test/escape.test.ts",
       "test/file-types.test.ts",
       "test/validation.test.ts",

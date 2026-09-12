@@ -43,6 +43,7 @@ export default defineConfig({
       "test/insight-periods.test.ts",
       "test/expense-table.test.tsx",
       "test/markdown.test.ts",
+      "test/unit.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",
