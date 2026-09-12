@@ -215,7 +215,7 @@ export function renameReport(
     reportsCache,
     accountId,
     renameNamedRow(
-      db.orm.public.Report,
+      (client) => client.orm.public.Report,
       "report",
       "report",
       accountId,

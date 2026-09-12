@@ -62,6 +62,25 @@ import { useToday } from "~/lib/use-today";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
 
+/**
+ * Confirming a proposal writes rows and can call the FX or routing
+ * providers, and the plan tools already gate the question that proposed
+ * them. This is the matching gate on the confirmation itself: a separate
+ * key family from the question budget (a user who asks several questions
+ * must still be able to confirm each one), high enough that only a scripted
+ * loop ever reaches it.
+ */
+async function overWriteBudget(userId: string): Promise<boolean> {
+  const key = `insights-write:${userId}`;
+  if (await authLockedUntil(key)) return true;
+  await recordAuthFailure(key, {
+    windowMs: 15 * 60_000,
+    threshold: 30,
+    lockMs: 5 * 60_000,
+  });
+  return false;
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   const [conversation, expenses] = await Promise.all([
@@ -97,9 +116,16 @@ export async function action({ request }: Route.LoaderArgs) {
     return { ok: true as const, fresh: true };
   }
   if (intent === "confirm") {
+    if (await overWriteBudget(user.id)) {
+      return {
+        ok: false as const,
+        error: "Too many changes in a row. Try again in a few minutes.",
+      };
+    }
     // The confirm card's submission, not a model call: it makes no LLM
-    // request and costs no throttle. The payload carries only the trip's
-    // inputs, so a re-resolved trip is the only thing that gets filed.
+    // request and costs no question budget. The payload carries only the
+    // trip's inputs, so a re-resolved trip is the only thing that gets
+    // filed.
     const confirmed = parseTripConfirmation(formString(form, "pending"));
     if (!confirmed) {
       return {
@@ -155,8 +181,14 @@ export async function action({ request }: Route.LoaderArgs) {
     };
   }
   if (intent === "confirmExpense") {
-    // Same shape as the trip confirm: no LLM call, no throttle. The card
-    // posts the fields the user described, and the server resolves them
+    if (await overWriteBudget(user.id)) {
+      return {
+        ok: false as const,
+        error: "Too many changes in a row. Try again in a few minutes.",
+      };
+    }
+    // Same shape as the trip confirm: no LLM call, no question budget. The
+    // card posts the fields the user described, and the server resolves them
     // again, so nothing the client sends is filed on trust.
     const confirmed = parseExpenseConfirmation(formString(form, "pending"));
     if (!confirmed) {

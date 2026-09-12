@@ -1,4 +1,5 @@
 import { normalizeAmount } from "~/lib/format";
+import { exceedsMaxMoney } from "~/lib/money";
 import {
   deleteImage,
   readImageSha256,
@@ -34,12 +35,12 @@ export async function addReportAction(
 }
 
 /**
- * Validate the inputs every expense write shares: the date (a valid
- * calendar date, not in the future) and the report (must exist and be
- * open, when one is assigned). Returns an error message, or null when the
- * inputs are fine. Callers skip the report check when the expense keeps
- * its existing report unchanged (an expense already in a closed report
- * stays there when saved without changes).
+ * Validate the inputs every expense write shares: the date (a date that
+ * exists; future dates are allowed, an invoice can predate its payment) and
+ * the report (must exist and be open, when one is assigned). Returns an
+ * error message, or null when the inputs are fine. Callers skip the report
+ * check when the expense keeps its existing report unchanged (an expense
+ * already in a closed report stays there when saved without changes).
  */
 export async function validateExpenseInputs(
   accountId: string,
@@ -90,6 +91,16 @@ export async function saveExpenseFromForm(
   const category = formString(form, "category");
   const description = formString(form, "description");
   const amount = normalizeAmount(formString(form, "amount"));
+  // An amount the numeric(10,2) column cannot hold must be refused here:
+  // otherwise the insert raises `numeric field overflow` and the user gets
+  // an error page instead of a message on the form.
+  if (exceedsMaxMoney(amount)) {
+    return { error: "That amount is too large to save.", id: null };
+  }
+  const distanceMiles = normalizeAmount(formString(form, "distanceMiles"));
+  if (exceedsMaxMoney(distanceMiles)) {
+    return { error: "That distance is too large to save.", id: null };
+  }
   const now = new Date().toISOString();
 
   const isMileage = existing
@@ -131,7 +142,7 @@ export async function saveExpenseFromForm(
       locations: parseLocations(formString(form, "locations")).filter(
         (l) => l.address.trim() !== "",
       ),
-      distanceMiles: normalizeAmount(formString(form, "distanceMiles")),
+      distanceMiles,
       route,
       updatedAt: now,
     };
@@ -150,8 +161,14 @@ export async function saveExpenseFromForm(
     return /^[A-Z]{3}$/.test(raw) ? raw : "USD";
   })();
   const originalAmount = normalizeAmount(formString(form, "originalAmount"));
+  // The printed (pre-conversion) amount is a second numeric(10,2) column on
+  // the same row and needs the same bound.
+  if (exceedsMaxMoney(originalAmount)) {
+    return { error: "That amount is too large to save.", id: null };
+  }
   const fxRateRaw = formString(form, "fxRate").trim();
-  const fxRate = /^\d+(?:\.\d{1,6})?$/.test(fxRateRaw) ? fxRateRaw : "";
+  // numeric(10,6) holds four integer digits; anything wider is not a rate.
+  const fxRate = /^\d{1,4}(?:\.\d{1,6})?$/.test(fxRateRaw) ? fxRateRaw : "";
   const fxRateDate = formString(form, "fxRateDate");
   const rateDate = /^\d{4}-\d{2}-\d{2}$/.test(fxRateDate) ? fxRateDate : "";
   const fx = fxProvenance(

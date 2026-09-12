@@ -6,6 +6,7 @@ import { renameImageToConvention, saveImage } from "~/lib/images.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { validateDateNotFuture } from "~/lib/validation";
 import { hasAmount } from "~/lib/completeness";
+import { exceedsMaxMoney } from "~/lib/money";
 import { expenseData } from "~/lib/db/expenses";
 import type {
   NewExpenseDraft,
@@ -369,7 +370,7 @@ export async function completeReconciliationRun(
         );
         continue;
       }
-      if (!hasAmount(draft.amount)) {
+      if (!hasAmount(draft.amount) || exceedsMaxMoney(draft.amount)) {
         errors.push(`Row ${i + 1}: the amount is invalid.`);
         continue;
       }

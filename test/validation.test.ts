@@ -179,6 +179,21 @@ describe("validateDate", () => {
   it("returns an error for partial dates", () => {
     expect(validateDate("2026-01")).toContain("valid");
   });
+
+  it("returns an error for dates that do not exist", () => {
+    // Date.UTC rolls these forward silently (Feb 31 becomes Mar 3), so the
+    // shape check alone would let them into the ledger.
+    expect(validateDate("2026-02-31")).toContain("valid");
+    expect(validateDate("2026-04-31")).toContain("valid");
+    expect(validateDate("2026-13-01")).toContain("valid");
+    expect(validateDate("2026-00-10")).toContain("valid");
+  });
+
+  it("accepts the last real day of a month, including a leap day", () => {
+    expect(validateDate("2026-02-28")).toBeNull();
+    expect(validateDate("2024-02-29")).toBeNull();
+    expect(validateDate("2023-02-28")).toBeNull();
+  });
 });
 
 describe("validateDateNotFuture", () => {

@@ -7,6 +7,7 @@ import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { RemoveButton } from "~/components/settings/name-list";
 import type { NamedLocation } from "~/lib/types";
+import { MAX_ADDRESS_LENGTH } from "~/lib/types";
 
 /** Server reply for an add or edit: success echoes the row, rejection
  * explains why. */
@@ -92,6 +93,7 @@ export function LocationsList({
               <Input
                 type="text"
                 name="homeAddress"
+                maxLength={MAX_ADDRESS_LENGTH}
                 defaultValue={homeAddress}
               />
             </Field>
@@ -139,6 +141,7 @@ export function LocationsList({
             type="text"
             name="address"
             value={draftAddress}
+            maxLength={MAX_ADDRESS_LENGTH}
             onChange={(e) => {
               setDraftAddress(e.target.value);
               setAddError(null);
@@ -233,6 +236,7 @@ function LocationRow({
               type="text"
               name="address"
               value={draftAddress}
+              maxLength={MAX_ADDRESS_LENGTH}
               onChange={(e) => {
                 setDraftAddress(e.target.value);
                 setError(null);

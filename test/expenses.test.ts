@@ -7,7 +7,14 @@ import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
-import { readNeighborIds } from "~/lib/db/expenses";
+import { saveExpenseFromForm } from "~/lib/expense-save.server";
+import {
+  readNeighborIds,
+  readExpenses,
+  upsertExpense,
+} from "~/lib/db/expenses";
+import { renameReport } from "~/lib/db/reports";
+import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { saveImage } from "~/lib/images.server";
 
 /** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
@@ -1006,5 +1013,64 @@ describe("Expense CRUD", () => {
 
   afterAll(async () => {
     await page?.close();
+  });
+});
+
+describe("expense form validation", () => {
+  it("refuses an amount the money column cannot hold, without writing", async () => {
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    const form = new FormData();
+    form.set("date", "2026-07-14");
+    form.set("merchant", "Big Ticket");
+    form.set("amount", "100000000");
+    const result = await saveExpenseFromForm(form, TEST_ACCOUNT_ID, null);
+    // The insert would raise `numeric field overflow` (numeric(10,2) holds
+    // eight integer digits); the form must say so instead of the route
+    // erroring out after the fact.
+    expect(result.error).toMatch(/too large/);
+    expect(result.id).toBeNull();
+    expect(
+      await testPrisma.expense.count({ where: { accountId: TEST_ACCOUNT_ID } }),
+    ).toBe(before);
+  });
+
+  it("refuses a printed (pre-conversion) amount the column cannot hold", async () => {
+    const form = new FormData();
+    form.set("date", "2026-07-14");
+    form.set("merchant", "Big Ticket");
+    form.set("amount", "10.00");
+    form.set("currency", "EUR");
+    form.set("originalAmount", "100000000");
+    const result = await saveExpenseFromForm(form, TEST_ACCOUNT_ID, null);
+    expect(result.error).toMatch(/too large/);
+    expect(result.id).toBeNull();
+  });
+});
+
+describe("report rename", () => {
+  it("leaves expenses untouched when the report row is already gone", async () => {
+    // An expense can name a report whose row no longer exists (a report
+    // deleted while its expenses stayed). Renaming that name must not
+    // rewrite the expenses to a name no report row owns.
+    const expense = {
+      ...(newExpenseShell("receipt") as ReceiptExpense),
+      date: "2026-07-14",
+      report: "Ghost",
+      amount: "5.00",
+      merchant: "Ghost Merchant",
+    };
+    await upsertExpense(expense, TEST_ACCOUNT_ID);
+    try {
+      const result = await renameReport(TEST_ACCOUNT_ID, "Ghost", "Trips");
+      expect(result).toMatchObject({ ok: false });
+      const saved = (await readExpenses(TEST_ACCOUNT_ID)).find(
+        (e) => e.id === expense.id,
+      );
+      expect(saved?.report).toBe("Ghost");
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id: expense.id } });
+    }
   });
 });

@@ -5,7 +5,7 @@ import {
   hashPassword,
   needsRehash,
   normalizeInviteCode,
-  verifyPassword,
+  verifyPasswordWithParity,
 } from "./passwords";
 import { sendAccountVerificationEmail } from "./account-verification.server";
 import { sendVerificationEmail as sendSenderVerificationEmail } from "./sender-verification.server";
@@ -58,6 +58,7 @@ if (!SESSION_SECRET) {
 }
 
 const SESSION_COOKIE = "expense_session";
+
 /** The session key holding the signed-in user id (cookie-session based;
  * the whole session serializes into the signed cookie). */
 export const SESSION_USER_KEY = "userId";
@@ -326,7 +327,10 @@ export async function login(
   await guardLockout(lockKey);
   const user = await findUserByEmail(normalizedEmail);
   const stored = user ? await getPasswordHash(user.id) : "";
-  if (!user || !stored || !(await verifyPassword(password, stored))) {
+  // A missing (or hashless) user still pays the scrypt derivation, so the
+  // response time does not reveal which addresses have accounts.
+  const matches = await verifyPasswordWithParity(password, stored);
+  if (!user || !stored || !matches) {
     await recordFailureBestEffort(lockKey);
     throw new Error("Invalid email or password");
   }
@@ -473,28 +477,21 @@ async function createPendingUser(input: {
 }
 
 /** Re-send the account-verification email for an unverified signup (login
- * page's resend button). Throws with a user-facing message when there is no
- * such account, the email is already verified, or the last email was sent
- * less than a day ago (rate limit). */
+ * page's resend button). The response is the same whether or not the
+ * address has an account, is already verified, or was mailed within the
+ * last day (rate limit): the caller must not be able to probe which
+ * addresses exist, matching requestPasswordReset. Only an existing,
+ * unverified, not-recently-mailed account actually receives mail. */
 export async function resendAccountVerification(
   email: string,
   origin?: string,
 ): Promise<{ email: string }> {
   await initStore();
-  const user = await findUserByEmail(email);
-  if (!user) throw new Error("No account with that email.");
-  if (user.emailVerifiedAt) {
-    throw new Error("That email is already verified — sign in.");
-  }
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await findUserByEmail(normalizedEmail);
+  if (!user || user.emailVerifiedAt) return { email: normalizedEmail };
   const result = await resendUserVerification(user.id);
-  if (!("token" in result)) {
-    if (result.status === "rate-limited") {
-      throw new Error(
-        "We already sent a verification email recently — check your inbox.",
-      );
-    }
-    throw new Error("That email is already verified — sign in.");
-  }
+  if (!("token" in result)) return { email: normalizedEmail };
   const account = await readAccount(user.accountId);
   await sendAccountVerificationEmail({
     to: user.email,

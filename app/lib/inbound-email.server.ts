@@ -57,6 +57,7 @@ import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { convertToUsd, type FxConversion } from "~/lib/fx.server";
 import { fxProvenance, withConversionNote } from "~/lib/fx-note";
+import { exceedsMaxMoney } from "~/lib/money";
 
 /**
  * Inbound email pipeline (receipts by email).
@@ -1089,21 +1090,33 @@ export async function saveExpenseFromExtraction(opts: {
   );
 
   const fx = fxProvenance(receiptCurrency, extraction.amount, conversion);
+  // An amount the money column cannot hold is no amount at all: the receipt
+  // is still imported (the image is worth keeping) but the confirmation
+  // names the field, instead of the insert raising `numeric field overflow`
+  // after the blob was already saved.
+  const amountTooLarge =
+    exceedsMaxMoney(conversion ? conversion.amount : extraction.amount) ||
+    exceedsMaxMoney(extraction.amount);
+  if (amountTooLarge && !missing.includes("amount")) missing.push("amount");
   const expense: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date: opts.expenseDate,
     report,
     category,
     description: withConversionNote(extraction.description, fx),
-    amount: conversion ? conversion.amount : extraction.amount,
+    amount: amountTooLarge
+      ? ""
+      : conversion
+        ? conversion.amount
+        : extraction.amount,
     merchant: extraction.merchant,
     imageFile,
     imageMime,
     originalName: opts.originalName,
     imageSha256,
-    currency: fx.currency,
-    originalAmount: fx.originalAmount,
-    fxRate: fx.fxRate,
+    currency: amountTooLarge ? "USD" : fx.currency,
+    originalAmount: amountTooLarge ? "" : fx.originalAmount,
+    fxRate: amountTooLarge ? "" : fx.fxRate,
   };
   // The exact same image bytes already belong to an expense: importing
   // again would duplicate it, whatever the extracted fields say. The

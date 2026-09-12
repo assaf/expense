@@ -21,3 +21,16 @@ export function parseAmount(amount: string): Decimal | null {
   if (parsed.e > 15) return null;
   return parsed;
 }
+
+/** The largest value the money columns hold: `numeric(10,2)` has eight
+ * integer digits, so 10^8 and up makes Postgres raise `numeric field
+ * overflow` (a 500) instead of the app refusing what it cannot store. */
+const MAX_MONEY = new Decimal("99999999.99");
+
+/** True when an amount is a number the money columns cannot hold. Junk and
+ * empty parse to null and are not "too large": the caller's own
+ * "needs an amount" handling covers those. */
+export function exceedsMaxMoney(amount: string): boolean {
+  const parsed = parseAmount(amount);
+  return parsed !== null && parsed.abs().gt(MAX_MONEY);
+}

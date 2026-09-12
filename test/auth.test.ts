@@ -14,8 +14,14 @@ import {
 } from "./helpers/seedTestData";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { signUp, verifyEmail } from "./helpers/signup-flows";
-import { hashPassword, hashToken, verifyPassword } from "~/lib/passwords";
+import {
+  hashPassword,
+  hashToken,
+  verifyPassword,
+  verifyPasswordWithParity,
+} from "~/lib/passwords";
 import { createAccountWithUser } from "~/lib/auth.server";
+import { action as loginAction } from "~/routes/login";
 
 describe("Access control", () => {
   afterAll(async () => {
@@ -183,6 +189,55 @@ describe("Access control", () => {
     });
     await verifyEmail(page, email, `still-live-${ulid()}`);
     await page.close();
+  });
+
+  it("verifies through the timing-parity path for a missing account and a legacy hash", async () => {
+    // No stored hash (an unknown address, or a user with none): the
+    // derivation still runs, against a throwaway hash, so the caller cannot
+    // tell absence from a wrong password by how long the answer takes.
+    expect(await verifyPasswordWithParity("whatever", "")).toBe(false);
+
+    const current = await hashPassword("parity-test-password");
+    expect(
+      await verifyPasswordWithParity("parity-test-password", current),
+    ).toBe(true);
+    expect(await verifyPasswordWithParity("wrong", current)).toBe(false);
+
+    // A legacy `salt:hash` row derives with the old cost and is leveled up
+    // to the current one; it must still verify (and still reject).
+    const legacySalt = randomBytes(16).toString("base64url");
+    const legacy = `${legacySalt}:${scryptSync("legacy-password", legacySalt, 64).toString("hex")}`;
+    expect(await verifyPasswordWithParity("legacy-password", legacy)).toBe(
+      true,
+    );
+    expect(await verifyPasswordWithParity("wrong", legacy)).toBe(false);
+  });
+
+  it("answers a verification resend the same way for an unknown and a verified address", async () => {
+    const resend = async (email: string): Promise<Response> => {
+      const form = new FormData();
+      form.set("mode", "resend-verification");
+      form.set("email", email);
+      return loginAction({
+        request: new Request("https://expense.test/login", {
+          method: "POST",
+          body: form,
+        }),
+        params: {},
+        context: {},
+      } as Parameters<typeof loginAction>[0]) as Promise<Response>;
+    };
+
+    // The response must not reveal which addresses have accounts: an
+    // unknown address and the seeded (verified) one answer identically to
+    // an unauthenticated caller.
+    const unknown = await resend(`missing-${ulid()}@example.com`.toLowerCase());
+    expect(unknown.status).toBe(200);
+    expect(await unknown.json()).toMatchObject({ ok: true });
+
+    const verified = await resend(TEST_EMAIL);
+    expect(verified.status).toBe(200);
+    expect(await verified.json()).toMatchObject({ ok: true });
   });
 
   it("caps successful signups per IP, not just failures", async () => {

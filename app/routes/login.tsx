@@ -196,9 +196,9 @@ export default function LoginPage() {
         <h1 className="text-xl font-bold">Check your email</h1>
         <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
           <p>
-            We sent a verification link to{" "}
-            <b className="font-mono">{pendingEmail}</b>. Click it to activate
-            your account, then sign in.
+            If <b className="font-mono">{pendingEmail}</b> has an account that
+            still needs verifying, a fresh link is on its way. Click it to
+            activate your account, then sign in.
           </p>
           <p>
             Once you're in, connect your Fastmail account and receipts from your

@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { parseXlsxSheets } from "~/lib/excel.server";
 import { extractPdfLines } from "~/lib/receipt-ocr.server";
 import { parseAmount } from "~/lib/money";
+import { isCalendarDate } from "~/lib/validation";
 import type {
   Expense,
   MatchCandidate,
@@ -73,15 +74,7 @@ export function normalizeDate(value: string): string | null {
   const s = value.trim();
   if (!s) return null;
   const make = (y: number, m: number, d: number): string | null => {
-    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    if (
-      dt.getUTCFullYear() !== y ||
-      dt.getUTCMonth() !== m - 1 ||
-      dt.getUTCDate() !== d
-    ) {
-      return null;
-    }
+    if (!isCalendarDate(y, m, d)) return null;
     return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   };
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);

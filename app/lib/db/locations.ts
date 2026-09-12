@@ -3,7 +3,12 @@ import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { bust, cachedRead, createCache } from "~/lib/db/shared";
 import { fromIso } from "~/lib/db/wire";
-import { HOME_NAME, type NamedLocation } from "~/lib/types";
+import {
+  HOME_NAME,
+  isValidCoords,
+  MAX_ADDRESS_LENGTH,
+  type NamedLocation,
+} from "~/lib/types";
 
 /**
  * The account's named places ("Work", "Hospital", "Restaurant"): what a
@@ -17,10 +22,9 @@ import { HOME_NAME, type NamedLocation } from "~/lib/types";
  * a rule some caller has to remember.
  */
 
-/** Longest name and address stored: the name reaches the insights prompt
- * and both come from a form, so bound them at the ingress. */
+/** Longest name stored: it reaches the insights prompt and comes from a
+ * form, so bound it at the ingress. */
 const MAX_NAME_LENGTH = 60;
-const MAX_ADDRESS_LENGTH = 300;
 
 /** Per-account cache for the named locations, same 5-minute TTL as
  * categories and reports. */
@@ -79,17 +83,15 @@ function coords(input: LocationInput): {
   lng: number | null;
 } {
   const { lat, lng } = input;
-  if (
-    lat === null ||
-    lng === null ||
-    !Number.isFinite(lat) ||
-    !Number.isFinite(lng) ||
-    Math.abs(lat) > 90 ||
-    Math.abs(lng) > 180
-  ) {
-    return { lat: null, lng: null };
-  }
+  if (!isValidCoords(lat, lng)) return { lat: null, lng: null };
   return { lat, lng };
+}
+
+/** Bound an address to what the app stores and sends to the geocoder. The
+ * form's value reaches an outbound query, so the ingress clamps it before
+ * geocoding rather than only on the way into the row. */
+export function boundAddress(address: string): string {
+  return address.trim().slice(0, MAX_ADDRESS_LENGTH);
 }
 
 /** Trim + validate the user's input. Returns the error message, or the
@@ -98,7 +100,7 @@ function clean(
   input: LocationInput,
 ): { error: string } | { name: string; address: string } {
   const name = input.name.trim().slice(0, MAX_NAME_LENGTH);
-  const address = input.address.trim().slice(0, MAX_ADDRESS_LENGTH);
+  const address = boundAddress(input.address);
   if (!name) return { error: "Name can't be empty." };
   if (name.toLowerCase() === HOME_NAME.toLowerCase()) {
     return {

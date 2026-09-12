@@ -34,7 +34,7 @@ export function renameCategory(
     categoriesCache,
     accountId,
     renameNamedRow(
-      db.orm.public.Category,
+      (client) => client.orm.public.Category,
       "category",
       "category",
       accountId,

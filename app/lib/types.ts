@@ -142,6 +142,26 @@ export function parseRoute(raw: unknown): RouteGeometry {
 
 export type Expense = ReceiptExpense | MileageExpense;
 
+/** The longest address the app stores and sends to the geocoder, shared by
+ * the client (input caps) and the server (the stored column and the
+ * outbound query string). */
+export const MAX_ADDRESS_LENGTH = 300;
+
+/** A usable coordinate pair: both finite and inside the globe. A lone value,
+ * NaN/Infinity (a caller can send either as JSON), or an out-of-range point
+ * is not a location the router can use, so it is dropped rather than stored
+ * and later fed to the distance math. */
+export function isValidCoords(lat: number | null, lng: number | null): boolean {
+  return (
+    lat !== null &&
+    lng !== null &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+}
+
 /** Parse stored/transmitted location data (JSON array or array) into
  * typed locations, dropping malformed entries. Used for the DB JSON column
  * and for the editor's `locations` form field. */
@@ -152,11 +172,16 @@ export function parseLocations(raw: unknown): Location[] {
         (v): v is { address: string; lat: number | null; lng: number | null } =>
           v && typeof v === "object" && "address" in v,
       )
-      .map((v) => ({
-        address: typeof v.address === "string" ? v.address : "",
-        lat: typeof v.lat === "number" ? v.lat : null,
-        lng: typeof v.lng === "number" ? v.lng : null,
-      }));
+      .map((v) => {
+        const lat = typeof v.lat === "number" ? v.lat : null;
+        const lng = typeof v.lng === "number" ? v.lng : null;
+        return {
+          address: typeof v.address === "string" ? v.address : "",
+          ...(isValidCoords(lat, lng)
+            ? { lat, lng }
+            : { lat: null, lng: null }),
+        };
+      });
   }
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;

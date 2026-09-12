@@ -5,6 +5,7 @@ import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { addLocation, readLocations, removeLocation } from "~/lib/db/locations";
 import { readSettings, writeSettings } from "~/lib/db/settings";
+import { parseLocations } from "~/lib/types";
 
 /** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
 function todayLocal(): string {
@@ -12,6 +13,30 @@ function todayLocal(): string {
   const tz = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - tz).toISOString().slice(0, 10);
 }
+
+describe("trip stop coordinates", () => {
+  it("drops a pair the router cannot use", () => {
+    // A crafted editor POST (or /api/route body) can carry any number: a
+    // lone value, NaN, or a point off the globe is not a location, so it
+    // must not reach the distance math.
+    const stops = parseLocations([
+      { address: "Work", lat: 34.05, lng: -118.24 },
+      { address: "NaN", lat: Number.NaN, lng: -118.24 },
+      { address: "Huge", lat: 1e308, lng: 0 },
+      { address: "North pole and beyond", lat: 91, lng: 0 },
+      { address: "Off the map", lat: 0, lng: 181 },
+      { address: "Half a pair", lat: 34.05, lng: null },
+    ]);
+    expect(stops.map((s) => [s.lat, s.lng])).toEqual([
+      [34.05, -118.24],
+      [null, null],
+      [null, null],
+      [null, null],
+      [null, null],
+      [null, null],
+    ]);
+  });
+});
 
 describe("Mileage expense", () => {
   let page: Page;

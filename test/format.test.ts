@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { sortExpenses, summarizeAmounts, todayDate } from "~/lib/format";
+import { exceedsMaxMoney } from "~/lib/money";
 import type { Expense } from "~/lib/types";
 
 function receipt(id: string, date: string, createdAt: string): Expense {
@@ -48,6 +49,18 @@ describe("sortExpenses", () => {
       receipt("dated", "2026-08-20", "2026-08-20T09:00:00.000Z"),
     ]);
     expect(sorted.map((e) => e.id)).toEqual(["dated", "undated"]);
+  });
+});
+
+describe("exceedsMaxMoney", () => {
+  it("flags only values the numeric(10,2) columns cannot hold", () => {
+    expect(exceedsMaxMoney("99999999.99")).toBe(false);
+    expect(exceedsMaxMoney("100000000")).toBe(true);
+    expect(exceedsMaxMoney("-100000000.01")).toBe(true);
+    // Junk and empty are not "too large": the caller reports those as a
+    // missing amount.
+    expect(exceedsMaxMoney("")).toBe(false);
+    expect(exceedsMaxMoney("coffee")).toBe(false);
   });
 });
 

@@ -65,6 +65,24 @@ describe("settings locations", () => {
     await removeLocation(TEST_ACCOUNT_ID, body.id);
   });
 
+  it("refuses an address longer than the app stores, before geocoding", async () => {
+    // The value becomes a query string on an outbound request and a stored
+    // column, so the ingress refuses it: truncating would geocode a prefix
+    // and could save coordinates for a different place.
+    vi.mocked(geocode).mockClear();
+    const res = await post(addForm("Long Place", "x".repeat(900)));
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/too long/i),
+    });
+    expect(vi.mocked(geocode)).not.toHaveBeenCalled();
+    expect(
+      (await readLocations(TEST_ACCOUNT_ID)).filter((l) =>
+        l.address.startsWith("xxxx"),
+      ),
+    ).toHaveLength(0);
+  });
+
   it("reports a duplicate name without writing a row", async () => {
     const res = await post(addForm("Work", "9 Dupe St, Testing, CA"));
     expect(await res.json()).toMatchObject({

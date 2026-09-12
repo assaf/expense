@@ -27,10 +27,12 @@ import {
 } from "~/lib/db/categories";
 import {
   addLocation as addLocationRow,
+  boundAddress,
   readLocations,
   removeLocation as removeLocationRow,
   updateLocation as updateLocationRow,
 } from "~/lib/db/locations";
+import { MAX_ADDRESS_LENGTH } from "~/lib/types";
 import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
 import { readCategoryCounts } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
@@ -122,7 +124,10 @@ export async function action({ request }: Route.ActionArgs) {
     }
     case "saveHome": {
       const settings = await readSettings(user.accountId);
-      const address = formString(form, "homeAddress").trim();
+      // The home field has no error surface (a plain form post), so the
+      // stored value stays clamped; the input caps the length client-side,
+      // so only a hand-made request ever reaches this.
+      const address = boundAddress(formString(form, "homeAddress"));
       settings.homeAddress = address;
       if (address) {
         const geocoded = await geocode(address);
@@ -137,6 +142,14 @@ export async function action({ request }: Route.ActionArgs) {
     }
     case "addLocation": {
       const address = formString(form, "address").trim();
+      if (address.length > MAX_ADDRESS_LENGTH) {
+        // Refused rather than truncated: a clamped address would be geocoded
+        // as a prefix, so the saved place could sit somewhere else.
+        return Response.json({
+          ok: false,
+          error: "That address is too long — keep it under 300 characters.",
+        });
+      }
       const geocoded = address ? await geocode(address) : null;
       const result = await addLocationRow(user.accountId, {
         name: formString(form, "name"),
@@ -157,6 +170,12 @@ export async function action({ request }: Route.ActionArgs) {
     }
     case "updateLocation": {
       const address = formString(form, "address").trim();
+      if (address.length > MAX_ADDRESS_LENGTH) {
+        return Response.json({
+          ok: false,
+          error: "That address is too long — keep it under 300 characters.",
+        });
+      }
       const geocoded = address ? await geocode(address) : null;
       const result = await updateLocationRow(
         user.accountId,

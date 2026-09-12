@@ -1204,6 +1204,31 @@ describe("processInboundEvent (body receipt)", () => {
     expect(partial.html).not.toContain("<img");
   });
 
+  it("files an amount the money column cannot hold as a partial row", async () => {
+    // numeric(10,2) tops out at 99999999.99: an extraction past it must not
+    // reach the insert (the image is already saved by then), so the row is
+    // filed incomplete and the reply names the field.
+    const deps = fakeDeps();
+    deps.extractReceipt = async () => ({
+      ...fakeExtract(
+        "MERCHANT: Big Invoice Co\nTOTAL: 1000000000.00\nCATEGORY: office supplies",
+      ),
+      amount: "1000000000.00",
+    });
+    const email = receivedEmail({
+      text: "Begin forwarded message:\n\nFrom: X <x@y.com>\nDate: June 5, 2026\n\nTOTAL: 1000000000.00",
+    });
+    deps.fetchReceivedEmail = async () => email;
+    const result = await processInboundEvent(eventData(), deps);
+    usedEmailIds.push("email-1");
+    usedExpenseIds.push(expenseIdOf(result));
+    expect(result).toMatchObject({ status: "partial" });
+    const saved = (await readExpenses(TEST_ACCOUNT_ID)).find(
+      (e) => e.id === expenseIdOf(result),
+    );
+    expect(saved?.amount ?? "").toBe("");
+  });
+
   it("replies when the email contains no receipt at all", async () => {
     const deps = fakeDeps();
     const email = receivedEmail({ text: "", html: null });

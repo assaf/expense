@@ -1,6 +1,7 @@
 import { MAX_TRIP_STOPS, recomputeMileage } from "~/lib/maps.server";
 import { requireUser } from "~/lib/auth.server";
-import { parseLocations } from "~/lib/types";
+import { badRequest } from "~/lib/validation";
+import { MAX_ADDRESS_LENGTH, parseLocations } from "~/lib/types";
 import type { Route } from "./+types/api.route";
 
 interface RouteRequestBody {
@@ -18,12 +19,18 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
   // The body is untrusted, and every stop without coordinates becomes an
-  // outbound geocode: normalize each stop and bound the count.
+  // outbound geocode: bound the count, and refuse an address the app would
+  // only truncate (the geocoder would route a prefix).
   const locations = parseLocations(body.locations);
   if (locations.length > MAX_TRIP_STOPS) {
     return Response.json(
       { error: `A trip can have at most ${MAX_TRIP_STOPS} stops.` },
       { status: 400 },
+    );
+  }
+  if (locations.some((stop) => stop.address.length > MAX_ADDRESS_LENGTH)) {
+    return badRequest(
+      "A stop address is too long — keep it under 300 characters.",
     );
   }
   const rate = typeof body.rate === "string" ? body.rate : "";

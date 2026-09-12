@@ -16,6 +16,7 @@ import {
 } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { readExpenses } from "~/lib/db/expenses";
+import { recordAuthFailure } from "~/lib/db/auth-attempts";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
 import type { PendingExpense } from "~/lib/insights-expense-tool.server";
 import { addReport } from "~/lib/db/reports";
@@ -1150,5 +1151,45 @@ describe("translate throttle (INS-GATE-1)", () => {
     };
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Too many questions/i);
+  });
+});
+
+describe("write budget (INS-GATE-2)", () => {
+  const receiptIds = async (): Promise<string[]> =>
+    (await readExpenses(TEST_ACCOUNT_ID))
+      .filter((e) => e.type === "receipt")
+      .map((e) => e.id);
+
+  it("refuses a confirmation once the per-user write limit trips, filing nothing", async () => {
+    const before = await receiptIds();
+    // Lock the confirmation budget the way a scripted confirm loop would:
+    // each confirm can reach the FX or routing providers, so the plan
+    // tools' question budget is not the only gate it needs.
+    await recordAuthFailure("insights-write:user_test1", {
+      windowMs: 60_000,
+      threshold: 1,
+      lockMs: 60_000,
+    });
+    const confirm = new FormData();
+    confirm.set("intent", "confirmExpense");
+    confirm.set(
+      "pending",
+      JSON.stringify({
+        merchant: "Costa Coffee",
+        amount: "50.00",
+        currency: "USD",
+        category: "Meals",
+        date: "2026-07-14",
+        report: "",
+        description: "coffee",
+      }),
+    );
+    const res = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      error: string;
+    };
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Too many changes/i);
+    expect(await receiptIds()).toEqual(before);
   });
 });

@@ -77,11 +77,35 @@ export function extractEmailAddress(addr: string): string {
   return candidate.trim().toLowerCase();
 }
 
-/** Validate that a date string is YYYY-MM-DD. Future dates are allowed:
- * an invoice received today can be dated for a payment due next week. */
+/** True when y/m/d is a real calendar date. Date.UTC silently rolls
+ * impossible values forward (month 13, Feb 30), so the round trip is the
+ * only check that catches them; shared by the expense-date validator and
+ * the reconcile parser's date normalization. */
+export function isCalendarDate(
+  year: number,
+  month: number,
+  day: number,
+): boolean {
+  if (!Number.isInteger(year) || month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  return (
+    dt.getUTCFullYear() === year &&
+    dt.getUTCMonth() === month - 1 &&
+    dt.getUTCDate() === day
+  );
+}
+
+/** Validate that a date string is YYYY-MM-DD and a date that exists. Future
+ * dates are allowed: an invoice received today can be dated for a payment
+ * due next week. */
 export function validateDate(date: string): string | null {
   if (!date) return null;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Use a valid calendar date.";
+  const parts = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!parts) return "Use a valid calendar date.";
+  if (!isCalendarDate(Number(parts[1]), Number(parts[2]), Number(parts[3]))) {
+    return "Use a valid calendar date.";
+  }
   return null;
 }
 

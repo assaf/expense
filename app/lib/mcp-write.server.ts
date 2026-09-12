@@ -4,6 +4,7 @@ import { readExtractionContext } from "~/lib/db/extraction-context";
 import { readMileageRates } from "~/lib/db/seed";
 import { captureWarning } from "~/lib/errors.server";
 import { normalizeAmount } from "~/lib/format";
+import { exceedsMaxMoney } from "~/lib/money";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
   MAX_UPLOAD_BYTES,
@@ -214,6 +215,12 @@ export async function captureReceipt(
   );
   const conversion = await convertToUsd(originalAmount, receiptCurrency, date);
   const amount = conversion ? conversion.amount : originalAmount;
+  // Refuse before storing the image: an amount the column cannot hold would
+  // otherwise 500 after the blob was written (the printed figure is stored
+  // as provenance, so it needs the check too).
+  if (exceedsMaxMoney(amount) || exceedsMaxMoney(originalAmount)) {
+    return fail("That amount is too large to save.");
+  }
 
   const saved = await saveImage(accountId, buffer, mime, originalName);
   // The same image bytes are already an expense: drop the just-stored
@@ -480,6 +487,9 @@ export async function resolveExpense(
   if (!stated) {
     return { ok: false, error: "An expense needs an amount, like 12.50." };
   }
+  if (exceedsMaxMoney(stated)) {
+    return { ok: false, error: "That amount is too large to save." };
+  }
   const currency = (args.currency ?? "").trim().toUpperCase() || "USD";
   if (!/^[A-Z]{3}$/.test(currency)) {
     return {
@@ -499,6 +509,11 @@ export async function resolveExpense(
       ok: false,
       error: `No USD rate for ${currency} on ${date}. Log it in the editor instead.`,
     };
+  }
+  // The conversion can push an amount past what the column holds even when
+  // the printed figure fits.
+  if (exceedsMaxMoney(conversion ? conversion.amount : stated)) {
+    return { ok: false, error: "That amount is too large to save." };
   }
   const merchant = (args.merchant ?? "").trim();
   const { categories, knownMerchants } = await readExtractionContext(accountId);
