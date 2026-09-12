@@ -4,15 +4,9 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { addLocation, readLocations, removeLocation } from "~/lib/db/locations";
+import { todayDate } from "~/lib/format";
 import { readSettings, writeSettings } from "~/lib/db/settings";
 import { parseLocations } from "~/lib/types";
-
-/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
-function todayLocal(): string {
-  const now = new Date();
-  const tz = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - tz).toISOString().slice(0, 10);
-}
 
 describe("trip stop coordinates", () => {
   it("drops a pair the router cannot use", () => {
@@ -72,7 +66,7 @@ describe("Mileage expense", () => {
       timeout: 10_000,
     });
     // A new mileage expense starts with today's date too.
-    await expect(page.getByLabel("Date")).toHaveValue(todayLocal());
+    await expect(page.getByLabel("Date")).toHaveValue(todayDate());
     await page.getByText("Save").click();
     await page.waitForURL((url) => url.pathname === "/", {
       timeout: 15_000,

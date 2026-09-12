@@ -1,6 +1,11 @@
 import { readImage } from "~/lib/images.server";
 import { pdfToBuffer } from "~/lib/pdf.server";
-import { formatDate, mileageDistanceLabel, sortExpenses } from "~/lib/format";
+import {
+  formatAmount,
+  formatDate,
+  mileageDistanceLabel,
+  sortExpenses,
+} from "~/lib/format";
 import {
   MILEAGE_TYPE_LABELS,
   mileageRateFor,
@@ -107,7 +112,7 @@ export async function buildReportPdf(
         merchant = e.merchant || "—";
       }
       const date = formatDate(e.date);
-      const amount = e.amount ? `$${e.amount}` : "—";
+      const amount = e.amount ? formatAmount(e.amount) : "—";
       const desc = e.description ?? "";
 
       // Keep the whole row (including the route line) on one page.
@@ -214,7 +219,7 @@ export async function buildReportPdf(
       const fields: [string, string][] = [
         ["Date", formatDate(e.date)],
         ["Mileage", e.distanceMiles ? `${e.distanceMiles} miles` : "—"],
-        ["Amount", e.amount ? `$${e.amount}` : "—"],
+        ["Amount", e.amount ? formatAmount(e.amount) : "—"],
       ];
       for (const [label, value] of fields) {
         doc

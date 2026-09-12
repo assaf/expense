@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { parseXlsxSheets } from "~/lib/excel.server";
+import { isPdf } from "~/lib/file-types";
 import { extractPdfLines } from "~/lib/receipt-ocr.server";
 import { parseAmount } from "~/lib/money";
 import { isCalendarDate } from "~/lib/validation";
@@ -852,7 +853,7 @@ export async function parseStatementUpload(
 }> {
   const head = buffer.subarray(0, 8).toString("latin1");
   const ext = fileName.toLowerCase().split(".").pop() ?? "";
-  if (head.startsWith("%PDF") || ext === "pdf") {
+  if (isPdf({ buffer, originalName: fileName })) {
     const lines = await extractPdfLines(buffer);
     return { ...parsePdfStatementLines(lines), format: "pdf" };
   }

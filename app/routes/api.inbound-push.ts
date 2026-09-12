@@ -1,7 +1,7 @@
 import { captureError } from "~/lib/errors.server";
 import { FASTMAIL_TOKEN } from "~/lib/env";
 import {
-  pushVerificationOf,
+  pushVerificationOrEmpty,
   readFastmailPush,
 } from "~/lib/fastmail-push.server";
 import { setVerificationCode } from "~/lib/fastmail.server";
@@ -40,10 +40,7 @@ export async function action({ request }: Route.ActionArgs) {
     // Absent fields degrade to empty strings, as the old typeof narrowing
     // did; the echo simply fails downstream.
     const { pushSubscriptionId: id, verificationCode: code } =
-      pushVerificationOf(payload) ?? {
-        pushSubscriptionId: "",
-        verificationCode: "",
-      };
+      pushVerificationOrEmpty(payload);
     try {
       await setVerificationCode(id, code);
       console.info("[inbound-push] verified subscription", { id });

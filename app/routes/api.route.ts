@@ -16,17 +16,14 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     body = (await request.json()) as RouteRequestBody;
   } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
+    return badRequest("Invalid JSON");
   }
   // The body is untrusted, and every stop without coordinates becomes an
   // outbound geocode: bound the count, and refuse an address the app would
   // only truncate (the geocoder would route a prefix).
   const locations = parseLocations(body.locations);
   if (locations.length > MAX_TRIP_STOPS) {
-    return Response.json(
-      { error: `A trip can have at most ${MAX_TRIP_STOPS} stops.` },
-      { status: 400 },
-    );
+    return badRequest(`A trip can have at most ${MAX_TRIP_STOPS} stops.`);
   }
   if (locations.some((stop) => stop.address.length > MAX_ADDRESS_LENGTH)) {
     return badRequest(

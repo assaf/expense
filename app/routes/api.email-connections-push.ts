@@ -1,5 +1,5 @@
 import {
-  pushVerificationOf,
+  pushVerificationOrEmpty,
   readFastmailPush,
 } from "~/lib/fastmail-push.server";
 import { setConnectionVerificationCode } from "~/lib/email-connection-push.server";
@@ -58,10 +58,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   if (type === "PushVerification") {
     const { pushSubscriptionId: subscriptionId, verificationCode: code } =
-      pushVerificationOf(payload) ?? {
-        pushSubscriptionId: "",
-        verificationCode: "",
-      };
+      pushVerificationOrEmpty(payload);
     try {
       const token = await connectionAccessToken(connection);
       await setConnectionVerificationCode(token, subscriptionId, code);

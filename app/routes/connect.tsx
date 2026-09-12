@@ -22,6 +22,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/connect";
+import { JsonLd } from "~/components/JsonLd";
 
 const CONNECT_SCHEMA = {
   "@context": "https://schema.org",
@@ -157,11 +158,7 @@ export default function ConnectPage() {
       eyebrow="MCP server"
       title="Connect any AI assistant to Expense."
       summary={MCP_PAGE_SUMMARY}
-      schema={
-        <script type="application/ld+json">
-          {JSON.stringify(CONNECT_SCHEMA)}
-        </script>
-      }
+      schema={<JsonLd data={CONNECT_SCHEMA} />}
     >
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">

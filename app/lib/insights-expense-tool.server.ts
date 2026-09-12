@@ -1,6 +1,9 @@
 import { z } from "zod";
 import type { PlanContext } from "~/lib/insights-plan.server";
-import { MAX_TOOL_ARGUMENTS } from "~/lib/insights-tools.server";
+import {
+  parseConfirmationPayload,
+  parseToolArguments,
+} from "~/lib/insights-tools.server";
 import { resolveExpense } from "~/lib/mcp-write.server";
 import type { ToolSpec } from "~/lib/receipt-ai.server";
 
@@ -134,15 +137,7 @@ const confirmationSchema = z.object({
 export function parseExpenseConfirmation(
   raw: string,
 ): ExpenseConfirmation | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  const parsed = confirmationSchema.safeParse(value);
-  if (!parsed.success) return null;
-  return parsed.data;
+  return parseConfirmationPayload(confirmationSchema, raw);
 }
 
 /**
@@ -158,28 +153,8 @@ export async function runPlanExpense(
   call: { function: { arguments: string } },
   resolve: typeof resolveExpense = resolveExpense,
 ): Promise<{ result: string; pending?: PendingExpense }> {
-  // Same bound the read tool applies: the provider is untrusted, and this
-  // argument string is parsed on the request path.
-  if (call.function.arguments.length > MAX_TOOL_ARGUMENTS) {
-    return { result: JSON.stringify({ error: "arguments were too long" }) };
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(call.function.arguments || "{}");
-  } catch {
-    return {
-      result: JSON.stringify({ error: "arguments were not valid JSON" }),
-    };
-  }
-  const parsed = planExpenseInput.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      result: JSON.stringify({
-        error: "invalid expense",
-        issues: parsed.error.issues.map((i) => i.message).slice(0, 5),
-      }),
-    };
-  }
+  const parsed = parseToolArguments(planExpenseInput, call, "invalid expense");
+  if (!parsed.ok) return { result: parsed.error };
   const args = parsed.data;
   const resolved = await resolve(writes.accountId, {
     merchant: args.merchant,

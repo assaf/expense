@@ -7,6 +7,7 @@ import { ulid } from "ulid";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
+import { todayDate } from "~/lib/format";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import {
@@ -17,13 +18,6 @@ import {
 import { addReport, readReports, renameReport } from "~/lib/db/reports";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { saveImage } from "~/lib/images.server";
-
-/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
-function todayLocal(): string {
-  const now = new Date();
-  const tz = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - tz).toISOString().slice(0, 10);
-}
 
 /** A tiny valid PNG for the receipt-upload tests. */
 async function tinyPng(): Promise<Buffer> {
@@ -99,7 +93,7 @@ describe("Expense CRUD", () => {
       }),
     ).toBe(before);
     // A new receipt always starts with today's date.
-    await expect(page.getByLabel("Date")).toHaveValue(todayLocal());
+    await expect(page.getByLabel("Date")).toHaveValue(todayDate());
     // Should be on the receipt editor (title is "New receipt" if merchant empty)
     await expect(page.locator("h1")).toBeVisible();
     // Amount should be focused on open

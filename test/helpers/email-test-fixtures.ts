@@ -13,7 +13,8 @@ import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server"
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./seedTestData";
 
-const TINY_PNG = Buffer.from(
+/** A real 1x1 transparent PNG used as fake image/render output. */
+export const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );

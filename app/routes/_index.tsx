@@ -56,6 +56,7 @@ import {
 } from "~/lib/format";
 import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import {
@@ -188,9 +189,7 @@ export function headers({ loaderHeaders }: Route.HeadersArgs) {
  * Deleting from the list still goes through the confirm dialog; deletion
  * has no undo, so it always asks first. */
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
 
   if (intent === "dismiss-duplicate") {
     const id = formString(form, "id");

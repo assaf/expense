@@ -5,6 +5,7 @@ import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { normalizeStoredImage, resizeToJpeg } from "~/lib/image-normalize";
+import { MAX_RECEIPT_BYTES } from "~/lib/upload-limits";
 import { sanitizeFilenamePart } from "~/lib/validation";
 
 /**
@@ -192,7 +193,7 @@ export async function readUploadedFile(
  * and sharp must decode. The platform body limit is a backstop, not the
  * check.
  */
-export const MAX_UPLOAD_BYTES = 15_000_000;
+export const MAX_UPLOAD_BYTES = MAX_RECEIPT_BYTES;
 
 export type UploadedFileResult =
   | { ok: true; buffer: Buffer; mime: string; originalName: string }
@@ -202,7 +203,7 @@ export type UploadedFileResult =
  * image-replace, and MCP capture paths so they can't drift apart. */
 export function uploadErrorMessage(error: "missing" | "too-large"): string {
   return error === "too-large"
-    ? "Image too large — receipts must be under 15MB."
+    ? `Image too large — receipts must be under ${MAX_UPLOAD_BYTES / 1_000_000}MB.`
     : "No image received.";
 }
 

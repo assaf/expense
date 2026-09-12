@@ -13,6 +13,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/about";
+import { JsonLd } from "~/components/JsonLd";
 
 const ABOUT_SCHEMA = {
   "@context": "https://schema.org",
@@ -44,11 +45,7 @@ export default function AboutPage() {
       title="Expense – The Free Receipt Tracker for Tax Season."
 
       summary={APP_SUMMARY}
-      schema={
-        <script type="application/ld+json">
-          {JSON.stringify(ABOUT_SCHEMA)}
-        </script>
-      }
+      schema={<JsonLd data={ABOUT_SCHEMA} />}
     >
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">

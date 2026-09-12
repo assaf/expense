@@ -12,6 +12,7 @@ import {
   ruleSenderMatches,
 } from "~/lib/db/email-rules";
 import { findChargeExpenses } from "~/lib/db/expenses";
+import { writeEmailLogRow } from "~/lib/db/email-log";
 import { extractEmailAddress } from "~/lib/validation";
 import {
   type ConnectionDeps,
@@ -25,7 +26,6 @@ import {
 import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { captureError } from "~/lib/errors.server";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
@@ -422,9 +422,10 @@ function emailFromSummary(
  * (only a superseded review-ignored row may flip back to pending; a
  * row the user ignored by hand stays ignored). Flipping a
  * created/processing row would re-offer an already-imported receipt and
- * risk a duplicate expense; the create path's P2002 means someone else
- * claimed it meanwhile: skip. Returns "raced" in that case so callers
- * don't count the row. */
+ * risk a duplicate expense; a create that hits the unique index means
+ * someone else claimed the row meanwhile (the shared writer reports it
+ * as "raced"). Returns "raced" in that case so callers don't count the
+ * row. */
 async function upsertReviewRow(
   connectionId: string,
   email: ReviewEmailLike,
@@ -439,35 +440,33 @@ async function upsertReviewRow(
     expenseId: string | null;
   },
 ): Promise<"written" | "raced"> {
-  const updated = await db.orm.public.EmailProcessLog.where((l) =>
-    and(
-      l.connectionId.eq(connectionId),
-      l.emailId.eq(email.emailId),
-      or(
-        ...recoverable.map((match) =>
-          "reason" in match
-            ? and(l.outcome.eq(match.outcome), l.reason.eq(match.reason))
-            : l.outcome.eq(match.outcome),
+  const result = await writeEmailLogRow({
+    connectionId,
+    emailId: email.emailId,
+    update: {
+      // Only rows still recoverable flip; see the doc above.
+      updatable: (l) =>
+        or(
+          ...recoverable.map((match) =>
+            "reason" in match
+              ? and(l.outcome.eq(match.outcome), l.reason.eq(match.reason))
+              : l.outcome.eq(match.outcome),
+          ),
         ),
-      ),
-    ),
-  ).updateAll({
-    outcome: patch.outcome,
-    matched: false,
-    reason: patch.reason,
-    expenseId: patch.expenseId,
-    error: null,
-    chargeAmount,
-    receivedAt: fromIso(email.receivedAt),
-    fromDisplay: email.fromDisplay,
-    fromAddress: email.fromAddress,
-    subject: email.subject.slice(0, 500),
-  });
-  if (updated.length > 0) return "written";
-  try {
-    await db.orm.public.EmailProcessLog.create({
-      connectionId,
-      emailId: email.emailId,
+      patch: {
+        outcome: patch.outcome,
+        matched: false,
+        reason: patch.reason,
+        expenseId: patch.expenseId,
+        error: null,
+        chargeAmount,
+        receivedAt: fromIso(email.receivedAt),
+        fromDisplay: email.fromDisplay,
+        fromAddress: email.fromAddress,
+        subject: email.subject.slice(0, 500),
+      },
+    },
+    create: {
       fromAddress: email.fromAddress,
       fromDisplay: email.fromDisplay,
       subject: email.subject.slice(0, 500),
@@ -478,12 +477,10 @@ async function upsertReviewRow(
       chargeAmount,
       receivedAt: fromIso(email.receivedAt),
       createdAt: nowWire(),
-    });
-  } catch (err) {
-    if (isUniqueViolation(err)) return "raced"; // claimed meanwhile
-    throw err;
-  }
-  return "written";
+    },
+    onUniqueViolation: "race",
+  });
+  return result === "raced" ? "raced" : "written";
 }
 
 /** Upsert a row to outcome pending-review, carrying the parsed charge

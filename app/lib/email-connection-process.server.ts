@@ -37,6 +37,7 @@ import {
 import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
+import { writeEmailLogRow } from "~/lib/db/email-log";
 import {
   classifyReceiptEmail,
   hasOwnConfirmationHeader,
@@ -44,7 +45,6 @@ import {
 import { htmlToText } from "~/lib/html-text";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { fromIso, nowWire } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
@@ -184,22 +184,19 @@ async function logEmailDecision(input: {
   error?: string;
 }): Promise<void> {
   const now = new Date().toISOString();
-  // The (connectionId, emailId) uniqueness is a unique index, not a
-  // constraint Prisma 8's upsert conflictOn can target, so update the
-  // claimed row in place; the defensive create covers a row that vanished.
-  const updated = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(input.connectionId), l.emailId.eq(input.emailId)),
-  ).updateAll({
-    matched: input.matched,
-    outcome: input.outcome,
-    reason: input.reason ?? null,
-    expenseId: input.expenseId ?? null,
-    error: input.error ?? null,
-  });
-  if (updated.length === 0) {
-    await db.orm.public.EmailProcessLog.create({
-      connectionId: input.connectionId,
-      emailId: input.emailId,
+  await writeEmailLogRow({
+    connectionId: input.connectionId,
+    emailId: input.emailId,
+    update: {
+      patch: {
+        matched: input.matched,
+        outcome: input.outcome,
+        reason: input.reason ?? null,
+        expenseId: input.expenseId ?? null,
+        error: input.error ?? null,
+      },
+    },
+    create: {
       fromAddress: input.fromAddress,
       subject: input.subject.slice(0, 500),
       matched: input.matched,
@@ -208,8 +205,11 @@ async function logEmailDecision(input: {
       expenseId: input.expenseId ?? null,
       error: input.error ?? null,
       createdAt: fromIso(now),
-    });
-  }
+    },
+    // A collision here means the row this decision was rewriting vanished
+    // and something re-created it: not a normal outcome, so let it out.
+    onUniqueViolation: "throw",
+  });
 }
 
 /** Atomically claim an email for processing by inserting its log row
@@ -225,24 +225,21 @@ async function claimEmailForProcessing(
   fromAddress: string,
   subject: string,
 ): Promise<boolean> {
-  try {
-    await db.orm.public.EmailProcessLog.create({
-      connectionId,
-      emailId,
+  // Insert-only: any row already there is another drain's claim.
+  const claimed = await writeEmailLogRow({
+    connectionId,
+    emailId,
+    create: {
       fromAddress,
       subject: subject.slice(0, 500),
       matched: false,
       outcome: "processing",
       error: null,
       createdAt: nowWire(),
-    });
-    return true;
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      return false;
-    }
-    throw err;
-  }
+    },
+    onUniqueViolation: "race",
+  });
+  return claimed === "created";
 }
 
 async function seenEmail(

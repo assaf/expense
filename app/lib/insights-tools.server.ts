@@ -21,6 +21,61 @@ export const MAX_TOOL_ROWS = 50;
  * hundred bytes; the cap bounds hostile provider output. */
 export const MAX_TOOL_ARGUMENTS = 4_096;
 
+/** The prelude every tool call runs before its own schema: bound the
+ * argument string, parse it, validate it, and hand back the model-facing
+ * error when any step fails. `label` names the tool's own contract
+ * ("invalid trip") so the model can tell which call it got wrong, and the
+ * issue list is capped because it lands in the prompt. */
+export function parseToolArguments<T>(
+  schema: z.ZodType<T>,
+  call: { function: { arguments: string } },
+  label: string,
+): { ok: true; data: T } | { ok: false; error: string } {
+  if (call.function.arguments.length > MAX_TOOL_ARGUMENTS) {
+    return {
+      ok: false,
+      error: JSON.stringify({ error: "arguments were too long" }),
+    };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(call.function.arguments || "{}");
+  } catch {
+    return {
+      ok: false,
+      error: JSON.stringify({ error: "arguments were not valid JSON" }),
+    };
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: JSON.stringify({
+        error: label,
+        issues: parsed.error.issues.map((i) => i.message).slice(0, 5),
+      }),
+    };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+/** Parse a confirm card's payload (its JSON, in one form field). Returns
+ * null when it is missing or malformed: the card is the only producer of
+ * this payload, so anything else is a stale tab or an edited request. */
+export function parseConfirmationPayload<T>(
+  schema: z.ZodType<T>,
+  raw: string,
+): T | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 /** The fields the tool reads. Structural, so the route's already-mapped
  * expenses and plain test fixtures both fit. */
 export interface FilterableExpense {
@@ -106,24 +161,12 @@ export function runQueryExpenses(
   expenses: readonly FilterableExpense[],
   call: { function: { arguments: string } },
 ): string {
-  let args: unknown;
-  // The provider is untrusted: a multi-megabyte argument string would be
-  // parsed and scanned on the request path before any filter runs.
-  if (call.function.arguments.length > MAX_TOOL_ARGUMENTS) {
-    return JSON.stringify({ error: "arguments were too long" });
-  }
-  try {
-    args = JSON.parse(call.function.arguments || "{}");
-  } catch {
-    return JSON.stringify({ error: "arguments were not valid JSON" });
-  }
-  const parsed = queryExpensesInput.safeParse(args);
-  if (!parsed.success) {
-    return JSON.stringify({
-      error: "invalid filters",
-      issues: parsed.error.issues.map((i) => i.message).slice(0, 5),
-    });
-  }
+  const parsed = parseToolArguments(
+    queryExpensesInput,
+    call,
+    "invalid filters",
+  );
+  if (!parsed.ok) return parsed.error;
   const matched = filterExpenses(expenses, parsed.data);
   const total = matched.reduce((sum, e) => sum + amountOf(e), 0);
   return JSON.stringify({

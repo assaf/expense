@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { MAX_TOOL_ARGUMENTS } from "~/lib/insights-tools.server";
+import {
+  parseConfirmationPayload,
+  parseToolArguments,
+} from "~/lib/insights-tools.server";
 import type { PlanContext } from "~/lib/insights-plan.server";
 import { MAX_TRIP_STOPS } from "~/lib/maps.server";
 import { resolveMileage } from "~/lib/mcp-write.server";
@@ -122,22 +125,16 @@ const confirmationSchema = z.object({
  * null when it is missing or malformed: the card is the only producer, so
  * anything else is a stale tab or an edited request. */
 export function parseTripConfirmation(raw: string): TripConfirmation | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  const parsed = confirmationSchema.safeParse(value);
-  if (!parsed.success) return null;
-  const stops = parseLocations(parsed.data.stops).filter(
+  const parsed = parseConfirmationPayload(confirmationSchema, raw);
+  if (!parsed) return null;
+  const stops = parseLocations(parsed.stops).filter(
     (l) => l.address.trim() !== "",
   );
   if (stops.length < 2) return null;
   return {
-    ...parsed.data,
+    ...parsed,
     stops,
-    roundTrip: parsed.data.roundTrip ?? false,
+    roundTrip: parsed.roundTrip ?? false,
   };
 }
 
@@ -154,28 +151,8 @@ export async function runPlanMileage(
   call: { function: { arguments: string } },
   resolve: typeof resolveMileage = resolveMileage,
 ): Promise<{ result: string; pending?: PendingTrip }> {
-  // Same bound the read tool applies: the provider is untrusted, and this
-  // argument string is parsed on the request path.
-  if (call.function.arguments.length > MAX_TOOL_ARGUMENTS) {
-    return { result: JSON.stringify({ error: "arguments were too long" }) };
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(call.function.arguments || "{}");
-  } catch {
-    return {
-      result: JSON.stringify({ error: "arguments were not valid JSON" }),
-    };
-  }
-  const parsed = planMileageInput.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      result: JSON.stringify({
-        error: "invalid trip",
-        issues: parsed.error.issues.map((i) => i.message).slice(0, 5),
-      }),
-    };
-  }
+  const parsed = parseToolArguments(planMileageInput, call, "invalid trip");
+  if (!parsed.ok) return { result: parsed.error };
   const args = parsed.data;
   const resolved = await resolve(writes.accountId, {
     locations: args.stops,

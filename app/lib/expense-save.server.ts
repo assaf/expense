@@ -7,7 +7,7 @@ import {
 } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
-import { fxProvenance, withConversionNote } from "~/lib/fx-note";
+import { fxColumns, fxProvenance, withConversionNote } from "~/lib/fx-note";
 import { addReport, findOpenReportFresh } from "~/lib/db/reports";
 import {
   EMPTY_ROUTE,
@@ -204,9 +204,7 @@ export async function saveExpenseFromForm(
           originalName: formString(form, "draftOriginalName"),
         }
       : {}),
-    currency,
-    originalAmount: fx.originalAmount,
-    fxRate: fx.fxRate,
+    ...fxColumns(fx),
     updatedAt: now,
   };
   const replacedImage =

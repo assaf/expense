@@ -15,17 +15,12 @@ import type { RawEmail } from "~/lib/fastmail.server";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import type { Expense, ReceiptExpense } from "~/lib/types";
+import { TINY_PNG } from "./helpers/email-test-fixtures";
 import {
   TEST_ACCOUNT_ID,
   allowSender as sharedAllowSender,
   testPrisma,
 } from "./helpers/seedTestData";
-
-/** A real 1x1 transparent PNG used as fake image/render output. */
-const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
 
 const SENDER = "forwarder@example.com";
 const PDF_BYTES = Buffer.from("%PDF-1.4 fake receipt bytes for testing\n%%EOF");

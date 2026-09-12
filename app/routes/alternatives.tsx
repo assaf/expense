@@ -9,6 +9,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/alternatives";
+import { JsonLd } from "~/components/JsonLd";
 
 const COMPARISON_SCHEMA = {
   "@context": "https://schema.org",
@@ -34,11 +35,7 @@ export default function AlternativesPage() {
       eyebrow="Compare"
       title={`How ${APP_NAME} compares to the other receipt apps.`}
       summary={COMPARISON_SUMMARY}
-      schema={
-        <script type="application/ld+json">
-          {JSON.stringify(COMPARISON_SCHEMA)}
-        </script>
-      }
+      schema={<JsonLd data={COMPARISON_SCHEMA} />}
     >
       <section className="mt-10">
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">

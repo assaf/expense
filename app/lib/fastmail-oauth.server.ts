@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { FASTMAIL_OAUTH_CLIENT_ID } from "~/lib/env";
-import { updateEmailConnectionTokens } from "~/lib/db/email-connections";
-import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
+import {
+  requestTokenSet,
+  resolveConnectionAccessToken,
+} from "~/lib/oauth-token-refresh.server";
 
 /**
  * "Connect with Fastmail" OAuth 2.0 (Authorization Code + PKCE, public
@@ -69,12 +71,6 @@ export function isFlowStale(flow: FmOAuthFlow): boolean {
   return Date.now() - flow.ts > FM_OAUTH_MAX_AGE_S * 1000;
 }
 
-/** Refresh this long before expiry so concurrent JMAP calls never race a
- * dying token (Fastmail access tokens live ~1h). */
-const REFRESH_SKEW_MS = 60_000;
-
-const REQUEST_TIMEOUT_MS = 15_000;
-
 export function isFastmailOAuthConfigured(): boolean {
   return FASTMAIL_OAUTH_CLIENT_ID.length > 0;
 }
@@ -120,37 +116,21 @@ export function buildAuthorizeUrl(input: {
   return `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-async function requestTokenSet(
+/** The Fastmail set: an ISO expiry, and a refresh token the caller MUST
+ * persist (a fresh one comes back on every grant). */
+async function requestFastmailTokenSet(
   form: Record<string, string>,
 ): Promise<OAuthTokenSet> {
-  const res = await fetch(OAUTH_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(form).toString(),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(
-      `Fastmail token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
-    );
-  }
-  const body = JSON.parse(text) as {
-    access_token?: unknown;
-    refresh_token?: unknown;
-    expires_in?: unknown;
-  };
-  if (
-    typeof body.access_token !== "string" ||
-    typeof body.refresh_token !== "string" ||
-    typeof body.expires_in !== "number"
-  ) {
+  const tokens = await requestTokenSet(OAUTH_TOKEN_URL, form, "Fastmail");
+  if (tokens.refreshToken === null) {
+    // Every Fastmail grant rotates the refresh token, so a response
+    // without one cannot be stored.
     throw new Error("Fastmail token endpoint returned an unexpected shape");
   }
   return {
-    accessToken: body.access_token,
-    refreshToken: body.refresh_token,
-    expiresAt: new Date(Date.now() + body.expires_in * 1000).toISOString(),
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
   };
 }
 
@@ -159,7 +139,7 @@ export async function exchangeAuthorizationCode(input: {
   verifier: string;
   redirectUri: string;
 }): Promise<OAuthTokenSet> {
-  return requestTokenSet({
+  return requestFastmailTokenSet({
     grant_type: "authorization_code",
     code: input.code,
     code_verifier: input.verifier,
@@ -171,7 +151,7 @@ export async function exchangeAuthorizationCode(input: {
 async function refreshAccessToken(
   refreshToken: string,
 ): Promise<OAuthTokenSet> {
-  return requestTokenSet({
+  return requestFastmailTokenSet({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
     client_id: FASTMAIL_OAUTH_CLIENT_ID,
@@ -191,17 +171,13 @@ export interface ConnectionCredentials {
   tokenExpiresAt?: string | null;
 }
 
-// Concurrent JMAP calls share one connection and can each hit expiry;
-// dedup them on a single refresh per connection (same pattern as
-// jmapSessionForToken), evicting on settle so a failure retries.
-const inflightRefreshes = new Map<string, Promise<string>>();
-
 /**
  * The single credential resolver for every connection-token consumer:
- * legacy API-token rows decrypt straight through (behavior identical to
- * the pre-OAuth code); OAuth rows return the cached access token until
- * 60s before expiry, then refresh and persist the rotated credentials.
- * Throws on refresh failure (callers' catch blocks flag the row error).
+ * Gmail rows go to the Google resolver, everything else to the shared
+ * refresh path (legacy API-token rows decrypt straight through; OAuth rows
+ * return the cached access token until 60s before expiry, then refresh and
+ * persist the rotated credentials). Throws on refresh failure (callers'
+ * catch blocks flag the row error).
  */
 export async function connectionAccessToken(
   connection: ConnectionCredentials,
@@ -213,39 +189,12 @@ export async function connectionAccessToken(
     const { gmailAccessToken } = await import("~/lib/google-oauth.server");
     return gmailAccessToken(connection);
   }
-  if (!connection.refreshTokenEnc) {
-    return decryptSecret(connection.tokenEnc);
-  }
-  const expiresAt = connection.tokenExpiresAt
-    ? Date.parse(connection.tokenExpiresAt)
-    : 0;
-  const accessToken = decryptSecret(connection.tokenEnc);
-  if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
-    return accessToken;
-  }
-  let pending = inflightRefreshes.get(connection.id);
-  if (!pending) {
-    pending = refreshAccessToken(decryptSecret(connection.refreshTokenEnc))
-      .then(async (tokens) => {
-        await updateEmailConnectionTokens({
-          id: connection.id,
-          tokenEnc: encryptSecret(tokens.accessToken),
-          refreshTokenEnc: encryptSecret(tokens.refreshToken),
-          tokenExpiresAt: tokens.expiresAt,
-        });
-        return tokens.accessToken;
-      })
-      .then(
-        (token) => {
-          inflightRefreshes.delete(connection.id);
-          return token;
-        },
-        (err) => {
-          inflightRefreshes.delete(connection.id);
-          throw err;
-        },
-      );
-    inflightRefreshes.set(connection.id, pending);
-  }
-  return pending;
+  return resolveConnectionAccessToken({
+    connection,
+    refresh: refreshAccessToken,
+    // Fastmail rotates the refresh token on every grant, so the response's
+    // token is the only one worth storing; requestFastmailTokenSet refuses
+    // a response without one.
+    persistRefreshToken: (tokens: OAuthTokenSet) => tokens.refreshToken,
+  });
 }

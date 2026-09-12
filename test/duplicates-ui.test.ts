@@ -2,15 +2,9 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
 import { duplicatePairKey } from "~/lib/duplicates";
+import { todayDate } from "~/lib/format";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
-
-/** Local-date string (YYYY-MM-DD), matching the app's `todayDate()`. */
-function todayLocal(): string {
-  const now = new Date();
-  const tz = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - tz).toISOString().slice(0, 10);
-}
 
 /**
  * End-to-end coverage for duplicate detection:
@@ -24,7 +18,7 @@ function todayLocal(): string {
  * the shared seeded state is untouched for later test files.
  */
 describe("Duplicate detection", () => {
-  const today = todayLocal();
+  const today = todayDate();
   const now = "2026-06-15T00:00:00.000Z";
   const PAIR_A = ["dup-a1", "dup-a2"];
   const PAIR_B = ["dup-b1", "dup-b2"];

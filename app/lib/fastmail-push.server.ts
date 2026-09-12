@@ -154,6 +154,20 @@ export function pushVerificationOf(
   return parsed.success ? parsed.data : undefined;
 }
 
+/** The same, with the missing-field case already degraded to empty strings:
+ * the echo then simply fails downstream, which is what both push routes
+ * want and neither should have to spell out. */
+export function pushVerificationOrEmpty(
+  payload: PushPayload,
+): PushVerification {
+  return (
+    pushVerificationOf(payload) ?? {
+      pushSubscriptionId: "",
+      verificationCode: "",
+    }
+  );
+}
+
 const SUBSCRIPTION_LIFETIME_DAYS = 30;
 const RENEW_WITHIN_DAYS = 7;
 

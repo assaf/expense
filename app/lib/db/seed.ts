@@ -8,7 +8,7 @@ import { all } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asNumericOf, fromIso } from "~/lib/db/wire";
 import { isEmail } from "~/lib/validation";
-import { isTest, userFromRow } from "~/lib/db/shared";
+import { cachedRead, createCache, userFromRow } from "~/lib/db/shared";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import type { MileageType, User } from "~/lib/types";
 
@@ -157,34 +157,21 @@ function rateEntryEquals(a: MileageRateEntry, b: MileageRateEntry): boolean {
   );
 }
 
-/** In-memory cache for the global IRS mileage rates table; it changes at
- * most once a year when new rates are published. 1-hour TTL is safe. */
-let mileageRatesCache: {
-  data: MileageRateEntry[];
-  expiresAt: number;
-} | null = null;
-const MILEAGE_RATES_TTL_MS = 3_600_000;
+/** Cache for the global IRS mileage rates table; it changes at most once a
+ * year when new rates are published. One hour TTL, through the shared cache
+ * so it gets the same test-mode behaviour and bounding as the rest. */
+const mileageRatesCache = createCache<MileageRateEntry[]>(3_600_000);
 
 /** All mileage rates in the global master table (newest period first). */
 export async function readMileageRates(): Promise<MileageRateEntry[]> {
-  if (
-    !isTest &&
-    mileageRatesCache &&
-    mileageRatesCache.expiresAt > Date.now()
-  ) {
-    return mileageRatesCache.data;
-  }
-  await initStore();
-  const rows = await db.orm.public.MileageRate.orderBy([
-    (m) => m.startDate.desc(),
-    (m) => m._type.asc(),
-  ]).all();
-  const data = rows.map(rateRowToEntry);
-  mileageRatesCache = {
-    data,
-    expiresAt: Date.now() + MILEAGE_RATES_TTL_MS,
-  };
-  return data;
+  return cachedRead(mileageRatesCache, "rates", async () => {
+    await initStore();
+    const rows = await db.orm.public.MileageRate.orderBy([
+      (m) => m.startDate.desc(),
+      (m) => m._type.asc(),
+    ]).all();
+    return rows.map(rateRowToEntry);
+  });
 }
 
 async function ensureBootstrapUser(): Promise<User> {

@@ -10,8 +10,10 @@ import type {
   ConnectionCredentials,
   FmOAuthFlow,
 } from "~/lib/fastmail-oauth.server";
-import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
-import { updateEmailConnectionTokens } from "~/lib/db/email-connections";
+import {
+  requestTokenSet,
+  resolveConnectionAccessToken,
+} from "~/lib/oauth-token-refresh.server";
 
 /**
  * "Connect with Gmail" OAuth 2.0 (Authorization Code + PKCE, confidential
@@ -105,43 +107,17 @@ export function buildGmailAuthorizeUrl(input: {
   return `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
 }
 
-const REFRESH_SKEW_MS = 60_000;
-
-const REQUEST_TIMEOUT_MS = 15_000;
-
-async function requestTokenSet(
+/** The Gmail set: an epoch-ms expiry (routes park and store it as a
+ * number), Google's unrotated refresh token, and its id_token. */
+async function requestGmailTokenSet(
   form: Record<string, string>,
 ): Promise<GmailTokenSet> {
-  const res = await fetch(OAUTH_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(form).toString(),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(
-      `Google token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
-    );
-  }
-  const body = JSON.parse(text) as {
-    access_token?: unknown;
-    refresh_token?: unknown;
-    expires_in?: unknown;
-    id_token?: unknown;
-  };
-  if (
-    typeof body.access_token !== "string" ||
-    typeof body.expires_in !== "number"
-  ) {
-    throw new Error("Google token endpoint returned an unexpected shape");
-  }
+  const tokens = await requestTokenSet(OAUTH_TOKEN_URL, form, "Google");
   return {
-    accessToken: body.access_token,
-    refreshToken:
-      typeof body.refresh_token === "string" ? body.refresh_token : null,
-    expiresAt: Date.now() + body.expires_in * 1000,
-    idToken: typeof body.id_token === "string" ? body.id_token : null,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: Date.now() + tokens.expiresIn * 1000,
+    idToken: tokens.idToken,
   };
 }
 
@@ -150,7 +126,7 @@ export async function exchangeGmailAuthorizationCode(input: {
   verifier: string;
   redirectUri: string;
 }): Promise<GmailTokenSet> {
-  return requestTokenSet({
+  return requestGmailTokenSet({
     grant_type: "authorization_code",
     code: input.code,
     code_verifier: input.verifier,
@@ -160,15 +136,29 @@ export async function exchangeGmailAuthorizationCode(input: {
   });
 }
 
+/** What the shared resolver needs out of a Gmail refresh: the access token,
+ * an ISO expiry (the set above carries epoch ms), and Google's unrotated
+ * refresh token, null when the response omitted it. */
+interface RefreshedGmailTokens {
+  accessToken: string;
+  refreshToken: string | null;
+  expiresAt: string;
+}
+
 async function refreshGmailAccessToken(
   refreshToken: string,
-): Promise<GmailTokenSet> {
-  return requestTokenSet({
+): Promise<RefreshedGmailTokens> {
+  const tokens = await requestGmailTokenSet({
     grant_type: "refresh_token",
     refresh_token: refreshToken,
     client_id: GOOGLE_OAUTH_CLIENT_ID,
     client_secret: GOOGLE_OAUTH_CLIENT_SECRET,
   });
+  return {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    expiresAt: new Date(tokens.expiresAt).toISOString(),
+  };
 }
 
 /** base64url-decode an id_token's payload (no signature check: the token
@@ -189,57 +179,22 @@ export function decodeGoogleIdToken(idToken: string): {
   }
 }
 
-// Concurrent drains share one connection and can each hit expiry; dedup
-// them on a single refresh per connection (same pattern as the Fastmail
-// resolver), evicting on settle so a failure retries.
-const inflightRefreshes = new Map<string, Promise<string>>();
-
 /**
- * The credential resolver for Gmail connections: returns the cached access
- * token until 60s before expiry, then refreshes and persists the rotated
- * credentials. Google never rotates refresh tokens, so an omitted
- * refresh_token keeps the stored one (null would clear it). Throws on
- * refresh failure (callers' catch blocks flag the row error).
+ * The credential resolver for Gmail connections: the shared path returns
+ * the cached access token until 60s before expiry, then refreshes and
+ * persists the rotated credentials. Google never rotates refresh tokens, so
+ * an omitted refresh_token keeps the stored one (null would clear it).
+ * Throws on refresh failure (callers' catch blocks flag the row error).
  */
 export async function gmailAccessToken(
   connection: ConnectionCredentials,
 ): Promise<string> {
-  if (!connection.refreshTokenEnc) {
-    return decryptSecret(connection.tokenEnc);
-  }
-  const expiresAt = connection.tokenExpiresAt
-    ? Date.parse(connection.tokenExpiresAt)
-    : 0;
-  const accessToken = decryptSecret(connection.tokenEnc);
-  if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
-    return accessToken;
-  }
-  let pending = inflightRefreshes.get(connection.id);
-  if (!pending) {
-    const storedRefresh = decryptSecret(connection.refreshTokenEnc);
-    pending = refreshGmailAccessToken(storedRefresh)
-      .then(async (tokens) => {
-        await updateEmailConnectionTokens({
-          id: connection.id,
-          tokenEnc: encryptSecret(tokens.accessToken),
-          refreshTokenEnc: tokens.refreshToken
-            ? encryptSecret(tokens.refreshToken)
-            : encryptSecret(storedRefresh),
-          tokenExpiresAt: new Date(tokens.expiresAt).toISOString(),
-        });
-        return tokens.accessToken;
-      })
-      .then(
-        (token) => {
-          inflightRefreshes.delete(connection.id);
-          return token;
-        },
-        (err) => {
-          inflightRefreshes.delete(connection.id);
-          throw err;
-        },
-      );
-    inflightRefreshes.set(connection.id, pending);
-  }
-  return pending;
+  return resolveConnectionAccessToken({
+    connection,
+    refresh: refreshGmailAccessToken,
+    // Google keeps the stored refresh token when the response omits one; a
+    // response that carries a new one replaces it.
+    persistRefreshToken: (tokens: RefreshedGmailTokens, stored: string) =>
+      tokens.refreshToken || stored,
+  });
 }

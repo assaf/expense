@@ -48,6 +48,7 @@ import {
   saveReceiptExpense,
 } from "~/lib/mcp-write.server";
 import { MILEAGE_TYPE_LABELS, formatRate } from "~/lib/mileage-rates";
+import type { ProposalKind } from "~/lib/types";
 import { formatFxRate } from "~/lib/fx-note";
 import {
   answerInsightQuestion,
@@ -60,6 +61,7 @@ import {
 import { periodScope, withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
+import { requireIntent } from "~/lib/route-helpers.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
 
@@ -77,6 +79,30 @@ async function recordExchange(
   } catch (err) {
     captureError(err, { where: "insights-record-exchange" });
   }
+}
+
+/** The transcript entry for a filed proposal: both confirm branches write
+ * the same shape, differing only in the answer, the title, and the review
+ * link they carry. */
+function logFiledExchange(
+  user: { id: string; accountId: string },
+  entry: {
+    title: string;
+    answer: string;
+    expenseId: string;
+    proposalKind: ProposalKind;
+  },
+): Promise<void> {
+  return recordExchange(user, {
+    question: "Log it",
+    answer: entry.answer,
+    chart: false,
+    query: "",
+    months: 12,
+    title: entry.title,
+    expenseId: entry.expenseId,
+    proposalKind: entry.proposalKind,
+  });
 }
 
 /**
@@ -123,9 +149,7 @@ export async function loader({ request }: Route.LoaderArgs) {
  * never invents figures. Chart questions carry their own chart in the
  * transcript. */
 export async function action({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { user, form, intent } = await requireIntent(request);
   if (intent === "new") {
     // Start a fresh conversation; the previous one stays in the database
     // as a record. No LLM call, so no plan gate needed here.
@@ -174,13 +198,9 @@ export async function action({ request }: Route.LoaderArgs) {
       ? " (straight-line estimate — the route service was unavailable)"
       : "";
     const answer = `Logged ${distance}${amount} on ${resolved.trip.date}${note}.`;
-    await recordExchange(user, {
-      question: "Log it",
-      answer,
-      chart: false,
-      query: "",
-      months: 12,
+    await logFiledExchange(user, {
       title: "Logged the trip",
+      answer,
       // The transcript links to the filed trip, so it can be reviewed and
       // corrected long after this reply scrolls away.
       expenseId: saved.expenseId,
@@ -228,13 +248,9 @@ export async function action({ request }: Route.LoaderArgs) {
         ? ` (${filed.currency} ${filed.originalAmount})`
         : "";
     const answer = `Logged ${formatUsd(Number(filed.amount))}${printed}${at} on ${filed.date}.`;
-    await recordExchange(user, {
-      question: "Log it",
-      answer,
-      chart: false,
-      query: "",
-      months: 12,
+    await logFiledExchange(user, {
       title: "Logged the expense",
+      answer,
       expenseId: saved.expenseId,
       proposalKind: "expense",
     });
@@ -421,7 +437,7 @@ interface ConfirmOk {
   answer: string;
   /** Which plan tool the confirmed proposal came from: the transcript labels
    * its review link with it. */
-  proposalKind: "mileage" | "expense";
+  proposalKind: ProposalKind;
   logged: {
     expenseId: string;
     /** Trip only; absent for an expense. */
@@ -445,10 +461,18 @@ interface Exchange {
   /** The expense a logged proposal filed, linked for review. */
   expenseId?: string;
   /** What that link points at; the card is gone by the time it renders. */
-  proposalKind?: "mileage" | "expense";
+  proposalKind?: ProposalKind;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
+
+/** The proposal card's chrome, shared by both kinds: the amber eyebrow, the
+ * primary line, the facts row and the muted note. */
+const PROPOSAL_EYEBROW =
+  "text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300";
+const PROPOSAL_PRIMARY = "mt-1 text-sm text-gray-800 dark:text-gray-100";
+const PROPOSAL_FACTS = "mt-1 text-sm text-gray-600 dark:text-gray-300";
+const PROPOSAL_NOTE = "mt-1 text-xs text-gray-500 dark:text-gray-400";
 
 /** The rows behind a chart: collapsed by default, since the chart answers
  * the question and the table is the evidence. The toggle is a real
@@ -743,6 +767,63 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     askRef.current?.focus({ preventScroll: true });
   }, [today]);
 
+  /**
+   * One proposal card body: the amber eyebrow, the primary line, the facts
+   * row, an optional note, then the confirm form (whose hidden payload is
+   * the only thing submitted) and Discard. A plain function called from the
+   * render rather than a component, so it can use the confirm fetcher and
+   * the discard handler without prop plumbing; it holds no state.
+   */
+  const proposalCard = (proposal: {
+    index: number;
+    eyebrow: string;
+    primary: string;
+    facts: string[];
+    note: string | null;
+    intent: "confirm" | "confirmExpense";
+    payload: unknown;
+    label: string;
+  }) => (
+    <>
+      <p className={PROPOSAL_EYEBROW}>{proposal.eyebrow}</p>
+      <p className={PROPOSAL_PRIMARY}>{proposal.primary}</p>
+      <p className={PROPOSAL_FACTS}>
+        {proposal.facts.filter(Boolean).join(" · ")}
+      </p>
+      {proposal.note ? <p className={PROPOSAL_NOTE}>{proposal.note}</p> : null}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <confirmFetcher.Form
+          method="post"
+          onSubmit={() => setConfirmedIndex(proposal.index)}
+        >
+          <input type="hidden" name="intent" value={proposal.intent} />
+          <input
+            type="hidden"
+            name="pending"
+            value={JSON.stringify(proposal.payload)}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            className="px-2 sm:px-4"
+            disabled={confirmFetcher.state !== "idle"}
+          >
+            <Check aria-hidden="true" className="h-4 w-4" /> {proposal.label}
+          </Button>
+        </confirmFetcher.Form>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="px-2 sm:px-4"
+          onClick={() => discardProposal(proposal.index)}
+        >
+          Discard
+        </Button>
+      </div>
+    </>
+  );
+
   return (
     <PageShell
       icon={<ChartColumn aria-hidden="true" className="h-6 w-6" />}
@@ -823,18 +904,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                  * server's, not the client's). */}
                 {ex.pending ? (
                   <Card variant="amber" className="mt-3 p-3">
-                    {ex.pending.kind === "mileage" ? (
-                      <>
-                        <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
-                          Mileage trip
-                        </p>
-                        <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
-                          {ex.pending.stops
+                    {ex.pending.kind === "mileage"
+                      ? proposalCard({
+                          index: i,
+                          eyebrow: "Mileage trip",
+                          primary: ex.pending.stops
                             .map((stop) => stop.address)
-                            .join(" → ")}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                          {[
+                            .join(" → "),
+                          facts: [
                             ex.pending.distanceMiles
                               ? `${ex.pending.distanceMiles} mi`
                               : "",
@@ -847,140 +924,62 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                             ex.pending.rate
                               ? `$${formatRate(ex.pending.rate)}/mi`
                               : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                        {ex.pending.approximate ? (
-                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Straight-line estimate: the route service was
-                            unavailable.
-                          </p>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <confirmFetcher.Form
-                            method="post"
-                            onSubmit={() => setConfirmedIndex(i)}
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="confirm"
-                            />
-                            <input
-                              type="hidden"
-                              name="pending"
-                              value={JSON.stringify({
-                                stops: ex.pending.stops,
-                                date: ex.pending.date,
-                                type: ex.pending.type,
-                                report: ex.pending.report,
-                                description: ex.pending.description,
-                                roundTrip: ex.pending.roundTrip,
-                              })}
-                            />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              className="px-2 sm:px-4"
-                              disabled={confirmFetcher.state !== "idle"}
-                            >
-                              <Check aria-hidden="true" className="h-4 w-4" />
-                              Log trip
-                            </Button>
-                          </confirmFetcher.Form>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="px-2 sm:px-4"
-                            onClick={() => discardProposal(i)}
-                          >
-                            Discard
-                          </Button>
-                        </div>
-                      </>
-                    ) : null}
-                    {ex.pending.kind === "expense" ? (
-                      <>
-                        <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
-                          Expense
-                        </p>
-                        <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
-                          {ex.pending.merchant ||
+                          ],
+                          note: ex.pending.approximate
+                            ? "Straight-line estimate: the route service was unavailable."
+                            : null,
+                          intent: "confirm",
+                          payload: {
+                            stops: ex.pending.stops,
+                            date: ex.pending.date,
+                            type: ex.pending.type,
+                            report: ex.pending.report,
+                            description: ex.pending.description,
+                            roundTrip: ex.pending.roundTrip,
+                          },
+                          label: "Log trip",
+                        })
+                      : proposalCard({
+                          index: i,
+                          eyebrow: "Expense",
+                          primary:
+                            ex.pending.merchant ||
                             ex.pending.description ||
-                            "Expense"}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                          {[
+                            "Expense",
+                          facts: [
                             formatUsd(Number(ex.pending.amount) || 0),
                             ex.pending.category,
                             ex.pending.report,
                             formatShortDate(ex.pending.date),
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                        {/* What the user actually paid, and the rate the app
-                         * used: the figure above is the converted one. */}
-                        {ex.pending.currency !== "USD" ? (
-                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {`${ex.pending.currency} ${ex.pending.originalAmount}`}
-                            {ex.pending.fxRate
-                              ? ` converted at ${formatFxRate(ex.pending.fxRate)} USD/${ex.pending.currency}`
-                              : ""}
-                            {ex.pending.rateDate
-                              ? ` (rate for ${ex.pending.rateDate})`
-                              : ""}
-                          </p>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <confirmFetcher.Form
-                            method="post"
-                            onSubmit={() => setConfirmedIndex(i)}
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="confirmExpense"
-                            />
-                            <input
-                              type="hidden"
-                              name="pending"
-                              value={JSON.stringify({
-                                merchant: ex.pending.merchant,
-                                // The amount as the user stated it, with its
-                                // currency: confirming converts it again.
-                                amount: ex.pending.originalAmount,
-                                currency: ex.pending.currency,
-                                category: ex.pending.category,
-                                date: ex.pending.date,
-                                report: ex.pending.report,
-                                description: ex.pending.description,
-                              })}
-                            />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              className="px-2 sm:px-4"
-                              disabled={confirmFetcher.state !== "idle"}
-                            >
-                              <Check aria-hidden="true" className="h-4 w-4" />
-                              Log expense
-                            </Button>
-                          </confirmFetcher.Form>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="px-2 sm:px-4"
-                            onClick={() => discardProposal(i)}
-                          >
-                            Discard
-                          </Button>
-                        </div>
-                      </>
-                    ) : null}
+                          ],
+                          // What the user actually paid, and the rate the
+                          // app used: the figure above is the converted one.
+                          note:
+                            ex.pending.currency !== "USD"
+                              ? `${ex.pending.currency} ${ex.pending.originalAmount}${
+                                  ex.pending.fxRate
+                                    ? ` converted at ${formatFxRate(ex.pending.fxRate)} USD/${ex.pending.currency}`
+                                    : ""
+                                }${
+                                  ex.pending.rateDate
+                                    ? ` (rate for ${ex.pending.rateDate})`
+                                    : ""
+                                }`
+                              : null,
+                          intent: "confirmExpense",
+                          payload: {
+                            merchant: ex.pending.merchant,
+                            // The amount as the user stated it, with its
+                            // currency: confirming converts it again.
+                            amount: ex.pending.originalAmount,
+                            currency: ex.pending.currency,
+                            category: ex.pending.category,
+                            date: ex.pending.date,
+                            report: ex.pending.report,
+                            description: ex.pending.description,
+                          },
+                          label: "Log expense",
+                        })}
                     {confirmResult &&
                     !confirmResult.ok &&
                     i === confirmedIndex ? (
@@ -990,9 +989,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                     ) : null}
                   </Card>
                 ) : null}
-                {/* A logged proposal links to the expense itself: the figures
-                 * above are what was filed, and the expense page is where
-                 * the user checks or corrects them. */}
                 {ex.expenseId ? (
                   <p className="mt-1 text-sm">
                     <Link

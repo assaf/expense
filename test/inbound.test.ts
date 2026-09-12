@@ -32,18 +32,13 @@ import {
 import { htmlToText } from "~/lib/html-text";
 import { parseJsonObject } from "~/lib/receipt-ai.server";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
+import { TINY_PNG } from "./helpers/email-test-fixtures";
 import {
   TEST_ACCOUNT_ID,
   OTHER_ACCOUNT_ID,
   testPrisma,
   allowSender as sharedAllowSender,
 } from "./helpers/seedTestData";
-
-/** A real 1x1 transparent PNG used as fake image/PDF render output. */
-const TINY_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
 
 const SENDER = "forwarder@example.com";
 

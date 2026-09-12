@@ -10,6 +10,7 @@ import {
   saveOAuthConsent,
 } from "~/lib/db/oauth";
 import { issueAuthorizationCode, PKCE_METHOD } from "~/lib/oauth.server";
+import type { OAuthClientRecord } from "~/lib/types";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/oauth.authorize";
 
@@ -35,11 +36,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
   if (!parsed.ok) return errorPage(parsed.error);
 
-  const client = await findOAuthClient(parsed.params.clientId);
-  if (!client) return errorPage("Unknown client.");
-  if (!client.redirectUris.includes(parsed.params.redirectUri)) {
-    return errorPage("The redirect URI is not registered for this client.");
-  }
+  const resolved = await resolveAuthorizeClient(
+    parsed.params.clientId,
+    parsed.params.redirectUri,
+  );
+  if ("error" in resolved) return resolved.error;
+  const { client } = resolved;
 
   // Codes are ONLY issued from the approve POST below, never from this
   // GET, so an <img>/<a> request can't mint a code without a click.
@@ -71,11 +73,12 @@ export async function action({ request }: Route.ActionArgs) {
       "This authorization request is incomplete; start over from the app you're connecting.",
     );
   }
-  const client = await findOAuthClient(params.clientId);
-  if (!client) return errorPage("Unknown client.");
-  if (!client.redirectUris.includes(params.redirectUri)) {
-    return errorPage("The redirect URI is not registered for this client.");
-  }
+  const resolvedClient = await resolveAuthorizeClient(
+    params.clientId,
+    params.redirectUri,
+  );
+  if ("error" in resolvedClient) return resolvedClient.error;
+  const { client } = resolvedClient;
 
   if (decision === "deny") {
     return redirect(
@@ -189,6 +192,23 @@ interface AuthorizeParams {
   redirectUri: string;
   codeChallenge: string;
   state: string;
+}
+
+/** Look the client up and check the redirect URI against its registered
+ * list. The allow-list check is the open-redirect guard, so loader and
+ * action share this one copy of it. */
+async function resolveAuthorizeClient(
+  clientId: string,
+  redirectUri: string,
+): Promise<{ client: OAuthClientRecord } | { error: Response }> {
+  const client = await findOAuthClient(clientId);
+  if (!client) return { error: errorPage("Unknown client.") };
+  if (!client.redirectUris.includes(redirectUri)) {
+    return {
+      error: errorPage("The redirect URI is not registered for this client."),
+    };
+  }
+  return { client };
 }
 
 function parseAuthorizeParams(

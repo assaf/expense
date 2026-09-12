@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asJson, fromIso } from "~/lib/db/wire";
+import { isProposalKind, type ProposalKind } from "~/lib/types";
 
 export interface StoredExchange {
   question: string;
@@ -17,7 +18,7 @@ export interface StoredExchange {
    * proposal card knows its own kind, but that card is a one-shot
    * affordance, so the exchange has to carry it for the reloaded transcript
    * to label the link. Absent on every other exchange. */
-  proposalKind?: "mileage" | "expense";
+  proposalKind?: ProposalKind;
 }
 
 /** The in-process cache mirrors the 5-minute pattern used for accounts
@@ -79,9 +80,7 @@ function parseExchange(entry: unknown): StoredExchange | null {
     ...(typeof expenseId === "string" && expenseId
       ? { expenseId: expenseId.slice(0, 40) }
       : {}),
-    ...(proposalKind === "mileage" || proposalKind === "expense"
-      ? { proposalKind }
-      : {}),
+    ...(isProposalKind(proposalKind) ? { proposalKind } : {}),
   };
 }
 

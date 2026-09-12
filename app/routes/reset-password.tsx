@@ -1,5 +1,6 @@
 import { KeyRound, MailCheck, ReceiptText } from "lucide-react";
 import { errorMessage } from "~/lib/errors.server";
+import { parseIntent } from "~/lib/route-helpers.server";
 import { pageMeta } from "~/lib/seo-content";
 import { Link, data } from "react-router";
 import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
@@ -59,8 +60,7 @@ export function meta(): Route.MetaDescriptors {
 
 export async function action({ request }: Route.ActionArgs) {
   rejectCrossSitePost(request);
-  const form = await request.formData();
-  const intent = formString(form, "intent");
+  const { form, intent } = await parseIntent(request);
 
   if (intent === "request") {
     // Anonymous work (an email send per request); cap per IP like signup.

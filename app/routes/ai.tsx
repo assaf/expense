@@ -18,6 +18,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/ai";
+import { JsonLd } from "~/components/JsonLd";
 
 const AI_SCHEMA = {
   "@context": "https://schema.org",
@@ -48,9 +49,7 @@ export default function AiPage() {
       eyebrow="AI assistants"
       title="Connect your AI helper to Expense."
       summary={AI_SUMMARY}
-      schema={
-        <script type="application/ld+json">{JSON.stringify(AI_SCHEMA)}</script>
-      }
+      schema={<JsonLd data={AI_SCHEMA} />}
     >
       <CapabilitiesSection />
 

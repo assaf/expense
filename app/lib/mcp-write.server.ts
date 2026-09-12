@@ -18,7 +18,7 @@ import {
 import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
 import { convertToUsd } from "~/lib/fx.server";
-import { fxProvenance, withConversionNote } from "~/lib/fx-note";
+import { fxColumns, fxProvenance, withConversionNote } from "~/lib/fx-note";
 import { resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
@@ -256,9 +256,7 @@ export async function captureReceipt(
     imageMime: saved.mime,
     originalName,
     imageSha256: saved.sha256,
-    currency: fx.currency,
-    originalAmount: fx.originalAmount,
-    fxRate: fx.fxRate,
+    ...fxColumns(fx),
   };
   if (date && report && originalName) {
     expense.imageFile = await renameImageToConvention(
@@ -592,9 +590,7 @@ export async function saveReceiptExpense(
     description: withConversionNote(expense.description, fx),
     amount: expense.amount,
     merchant: expense.merchant,
-    currency: fx.currency,
-    originalAmount: fx.originalAmount,
-    fxRate: fx.fxRate,
+    ...fxColumns(fx),
   };
   await upsertExpense(receipt, accountId);
   return { expenseId: receipt.id };

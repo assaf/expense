@@ -8,6 +8,7 @@ import {
   pageMeta,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/faq";
+import { JsonLd } from "~/components/JsonLd";
 
 /** FAQPage structured data: the primary signal for FAQ-style AI answers. */
 const FAQ_SCHEMA = {
@@ -40,9 +41,7 @@ export default function FaqPage() {
       title="Frequently Asked Questions"
       summary={APP_SUMMARY}
       className="max-w-3xl"
-      schema={
-        <script type="application/ld+json">{JSON.stringify(FAQ_SCHEMA)}</script>
-      }
+      schema={<JsonLd data={FAQ_SCHEMA} />}
     >
       <div className="mt-10 flex flex-col gap-4">
         {FAQS.map((f) => (

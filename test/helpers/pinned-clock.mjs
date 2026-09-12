@@ -1,7 +1,10 @@
+import { FROZEN_MS } from "./frozen-time.ts";
+
 /**
  * Server-process clock pin. Loaded via NODE_OPTIONS=--import by
  * test/helpers/launchServer.ts so the test server shares the suite-wide
- * pinned instant (test/helpers/frozen-time.ts; keep the instant in sync).
+ * pinned instant from test/helpers/frozen-time.ts (Node strips the .ts type
+ * on import, so the two cannot drift).
  *
  * `new Date()` and `Date.now()` return FROZEN_MS + real elapsed time since
  * this module loaded: the calendar date is pinned (2026-07-15 for any
@@ -10,7 +13,6 @@
  * Explicit dates (`new Date("...")`, `Date.parse`, `Date.UTC`) and real
  * timers / `performance.now()` are untouched.
  */
-const FROZEN_MS = Date.parse("2026-07-15T12:00:00.000Z");
 const RealDate = globalThis.Date;
 const REAL_START = RealDate.now();
 

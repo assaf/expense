@@ -1,3 +1,5 @@
+import type { ReceiptExpense } from "~/lib/types";
+
 /**
  * The human-readable conversion note carried in an expense's description
  * when a receipt was captured in a foreign currency: either the applied USD
@@ -39,6 +41,20 @@ export function fxProvenance(
     originalAmount: foreign ? originalAmount : "",
     fxRate: foreign && conversion ? conversion.fxRate : "",
     rateDate: foreign && conversion ? conversion.rateDate : "",
+  };
+}
+
+/** The three provenance columns for a receipt row, in one place. Every
+ * writer that stores a printed amount pairs this with `withConversionNote`
+ * for the description that explains it, so a new provenance column lands
+ * here instead of at each writer. */
+export function fxColumns(
+  fx: ConversionNoteFields,
+): Pick<ReceiptExpense, "currency" | "originalAmount" | "fxRate"> {
+  return {
+    currency: fx.currency,
+    originalAmount: fx.originalAmount,
+    fxRate: fx.fxRate,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/mileage-rates";
+import { JsonLd } from "~/components/JsonLd";
 
 const MILEAGE_SCHEMA = {
   "@context": "https://schema.org",
@@ -35,11 +36,7 @@ export default function MileageRatesPage() {
       eyebrow="Reference"
       title="IRS standard mileage rates by year"
       summary={MILEAGE_PAGE_SUMMARY}
-      schema={
-        <script type="application/ld+json">
-          {JSON.stringify(MILEAGE_SCHEMA)}
-        </script>
-      }
+      schema={<JsonLd data={MILEAGE_SCHEMA} />}
     >
       <section className="mt-10">
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">

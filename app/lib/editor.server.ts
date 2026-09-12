@@ -1,7 +1,7 @@
 import { readCategories } from "~/lib/db/categories";
 import { readPriorMerchants } from "~/lib/db/expenses";
 import { readLocations } from "~/lib/db/locations";
-import { readReports } from "~/lib/db/reports";
+import { closedReportNames, readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
@@ -42,9 +42,7 @@ export async function loadEditorContext(
       readMileageRates(),
       readLocations(accountId),
     ]);
-  const closedReportNames = new Set(
-    reports.filter((r) => r.closed).map((r) => r.name),
-  );
+  const closed = closedReportNames(reports);
   return {
     expense,
     // Closed reports can't be selected; the expense's current report is
@@ -55,6 +53,6 @@ export async function loadEditorContext(
     home: homeLocation(settings),
     locations,
     rates,
-    reportClosed: closedReportNames.has(expense.report),
+    reportClosed: closed.has(expense.report),
   };
 }

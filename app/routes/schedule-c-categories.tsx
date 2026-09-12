@@ -7,6 +7,7 @@ import {
   SITE_URL,
 } from "~/lib/seo-content";
 import type { Route } from "./+types/schedule-c-categories";
+import { JsonLd } from "~/components/JsonLd";
 
 const SCHEDULE_C_SCHEMA = {
   "@context": "https://schema.org",
@@ -32,11 +33,7 @@ export default function ScheduleCCategoriesPage() {
       eyebrow="Reference"
       title="Schedule C expense categories"
       summary={SCHEDULE_C_PAGE_SUMMARY}
-      schema={
-        <script type="application/ld+json">
-          {JSON.stringify(SCHEDULE_C_SCHEMA)}
-        </script>
-      }
+      schema={<JsonLd data={SCHEDULE_C_SCHEMA} />}
     >
       <section className="mt-10">
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">

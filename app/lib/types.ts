@@ -142,6 +142,17 @@ export function parseRoute(raw: unknown): RouteGeometry {
 
 export type Expense = ReceiptExpense | MileageExpense;
 
+/** What a chat proposal card can be: a mileage trip or a typed purchase.
+ * The stored exchange and the client both need to name it (to label the
+ * review link), so the union lives here rather than being spelled out at
+ * every declaration. */
+export type ProposalKind = "mileage" | "expense";
+
+/** Runtime counterpart of ProposalKind, for values read back out of jsonb. */
+export function isProposalKind(value: unknown): value is ProposalKind {
+  return value === "mileage" || value === "expense";
+}
+
 /** The longest address the app stores and sends to the geocoder, shared by
  * the client (input caps) and the server (the stored column and the
  * outbound query string). */

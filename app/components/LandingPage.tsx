@@ -20,6 +20,7 @@ import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
 import { TipsSlider } from "~/components/tips-slider";
 import { BENEFITS, BLOG_URL, SITE_URL } from "~/lib/seo-content";
+import { JsonLd } from "~/components/JsonLd";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
 const SOFTWARE_SCHEMA = {
@@ -164,9 +165,7 @@ export default function LandingPage({
 }) {
   return (
     <SitePage padBottom>
-      <script type="application/ld+json">
-        {JSON.stringify(SOFTWARE_SCHEMA)}
-      </script>
+      <JsonLd data={SOFTWARE_SCHEMA} />
 
       <main>
         {/* Hero */}

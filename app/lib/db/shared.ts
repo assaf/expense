@@ -46,8 +46,7 @@ export function userFromRow(row: {
   };
 }
 
-export const isTest =
-  typeof process !== "undefined" && process.env.VITEST === "true";
+const isTest = typeof process !== "undefined" && process.env.VITEST === "true";
 
 /** Simple in-memory TTL cache. The read side gates with `isTest` to keep
  * tests deterministic; this helper only handles storage + expiry. */
