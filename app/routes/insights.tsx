@@ -39,11 +39,14 @@ import {
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
+import { parseExpenseConfirmation } from "~/lib/insights-expense-tool.server";
+import { parseTripConfirmation } from "~/lib/insights-mileage-tool.server";
 import {
-  parseTripConfirmation,
-  type PendingTrip,
-} from "~/lib/insights-mileage-tool.server";
-import { resolveMileage, saveMileageTrip } from "~/lib/mcp-write.server";
+  resolveExpense,
+  resolveMileage,
+  saveMileageTrip,
+  saveReceiptExpense,
+} from "~/lib/mcp-write.server";
 import { MILEAGE_TYPE_LABELS, formatRate } from "~/lib/mileage-rates";
 import {
   answerInsightQuestion,
@@ -51,6 +54,7 @@ import {
   insightReportNames,
   translateInsightQuery,
   LLMError,
+  type PendingProposal,
 } from "~/lib/insights-ai.server";
 import { periodScope, withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
@@ -136,15 +140,54 @@ export async function action({ request }: Route.LoaderArgs) {
       // The transcript links to the filed trip, so it can be reviewed and
       // corrected long after this reply scrolls away.
       expenseId: saved.expenseId,
+      proposalKind: "mileage",
     });
     return {
       ok: true as const,
       answer,
+      proposalKind: "mileage" as const,
       logged: {
         expenseId: saved.expenseId,
         distanceMiles: saved.distanceMiles,
         amount: saved.amount,
       },
+    };
+  }
+  if (intent === "confirmExpense") {
+    // Same shape as the trip confirm: no LLM call, no throttle. The card
+    // posts the fields the user described, and the server resolves them
+    // again, so nothing the client sends is filed on trust.
+    const confirmed = parseExpenseConfirmation(formString(form, "pending"));
+    if (!confirmed) {
+      return {
+        ok: false as const,
+        error: "That expense is no longer available. Ask for it again.",
+      };
+    }
+    // Re-resolved against the account, never trusted from the card: the
+    // amount is re-normalized and the category re-picked here.
+    const resolved = await resolveExpense(user.accountId, confirmed);
+    if (!resolved.ok) return { ok: false as const, error: resolved.error };
+    const saved = await saveReceiptExpense(user.accountId, resolved.expense);
+    const at = resolved.expense.merchant
+      ? ` at ${resolved.expense.merchant}`
+      : "";
+    const answer = `Logged ${formatUsd(Number(resolved.expense.amount))}${at} on ${resolved.expense.date}.`;
+    await appendExchange(user.id, user.accountId, {
+      question: "Log it",
+      answer,
+      chart: false,
+      query: "",
+      months: 12,
+      title: "Logged the expense",
+      expenseId: saved.expenseId,
+      proposalKind: "expense",
+    });
+    return {
+      ok: true as const,
+      answer,
+      proposalKind: "expense" as const,
+      logged: { expenseId: saved.expenseId },
     };
   }
   if (intent !== "translate") return unknownIntent();
@@ -308,23 +351,27 @@ interface TranslateOk {
   chart: boolean;
   /** The grounded text answer (computed figures, phrased by the model). */
   answer: string;
-  /** A mileage trip the model worked out for the user to confirm. */
-  pending?: PendingTrip;
+  /** A trip or a purchase the model worked out for the user to confirm. */
+  pending?: PendingProposal;
 }
 interface TranslateErr {
   ok: false;
   error: string;
 }
 
-/** A confirmed trip was filed: the stored figures and the line the server
- * recorded as the exchange's answer. */
+/** A confirmed proposal was filed: what it was, the line the server
+ * recorded as the exchange's answer, and the stored figures. */
 interface ConfirmOk {
   ok: true;
   answer: string;
+  /** Which plan tool the confirmed proposal came from: the transcript labels
+   * its review link with it. */
+  proposalKind: "mileage" | "expense";
   logged: {
     expenseId: string;
-    distanceMiles: string;
-    amount: string;
+    /** Trip only; absent for an expense. */
+    distanceMiles?: string;
+    amount?: string;
   };
 }
 
@@ -337,10 +384,13 @@ interface Exchange {
   query: string;
   months: number;
   title: string;
-  /** A trip this exchange proposed, until the user logs or discards it. */
-  pending?: PendingTrip;
-  /** The expense a logged trip filed, linked for review. */
+  /** A trip or a purchase this exchange proposed, until the user logs or
+   * discards it. */
+  pending?: PendingProposal;
+  /** The expense a logged proposal filed, linked for review. */
   expenseId?: string;
+  /** What that link points at; the card is gone by the time it renders. */
+  proposalKind?: "mileage" | "expense";
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
@@ -490,7 +540,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     }
   }, [result, fetcher.state]);
 
-  // A confirmed trip: the card is replaced by the exchange the server
+  // A confirmed proposal: the card is replaced by the exchange the server
   // recorded, so the transcript reads the same after a reload.
   const confirmResult = confirmFetcher.data as
     | ConfirmOk
@@ -505,6 +555,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     if (!confirmResult.ok || !("logged" in confirmResult)) return;
     const answer = confirmResult.answer;
     const expenseId = confirmResult.logged.expenseId;
+    const proposalKind = confirmResult.proposalKind;
     setTranscript((t) => [
       ...t.map((ex, i) =>
         i === confirmedIndex ? { ...ex, pending: undefined } : ex,
@@ -515,15 +566,17 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         chart: false,
         query: "",
         months: 12,
-        title: "Logged the trip",
+        title:
+          proposalKind === "expense" ? "Logged the expense" : "Logged the trip",
         expenseId,
+        proposalKind,
       },
     ]);
     setConfirmedIndex(null);
   }, [confirmResult, confirmFetcher.state, confirmedIndex]);
 
   /** Drop a proposal the user does not want (nothing was filed). */
-  const discardTrip = (index: number) => {
+  const discardProposal = (index: number) => {
     setTranscript((t) =>
       t.map((ex, i) => (i === index ? { ...ex, pending: undefined } : ex)),
     );
@@ -709,80 +762,154 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       : "No answer recorded."}
                   </p>
                 )}
-                {/* The proposed trip: the model resolved it, the user
-                 * files it. Nothing is written until "Log trip" submits
-                 * (and the server re-resolves then, so the numbers shown
-                 * are the server's, not the client's). */}
+                {/* The proposal: the model resolved it, the user files it.
+                 * Nothing is written until the card's button submits (and
+                 * the server re-resolves then, so the figures shown are the
+                 * server's, not the client's). */}
                 {ex.pending ? (
                   <Card variant="amber" className="mt-3 p-3">
-                    <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
-                      Mileage trip
-                    </p>
-                    <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
-                      {ex.pending.stops.map((stop) => stop.address).join(" → ")}
-                    </p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                      {[
-                        ex.pending.distanceMiles
-                          ? `${ex.pending.distanceMiles} mi`
-                          : "",
-                        ex.pending.amount
-                          ? formatUsd(Number(ex.pending.amount))
-                          : "",
-                        MILEAGE_TYPE_LABELS[ex.pending.type],
-                        ex.pending.roundTrip ? "Round trip" : "One way",
-                        formatShortDate(ex.pending.date),
-                        ex.pending.rate
-                          ? `$${formatRate(ex.pending.rate)}/mi`
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                    {ex.pending.approximate ? (
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Straight-line estimate: the route service was
-                        unavailable.
-                      </p>
+                    {ex.pending.kind === "mileage" ? (
+                      <>
+                        <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                          Mileage trip
+                        </p>
+                        <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
+                          {ex.pending.stops
+                            .map((stop) => stop.address)
+                            .join(" → ")}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                          {[
+                            ex.pending.distanceMiles
+                              ? `${ex.pending.distanceMiles} mi`
+                              : "",
+                            ex.pending.amount
+                              ? formatUsd(Number(ex.pending.amount))
+                              : "",
+                            MILEAGE_TYPE_LABELS[ex.pending.type],
+                            ex.pending.roundTrip ? "Round trip" : "One way",
+                            formatShortDate(ex.pending.date),
+                            ex.pending.rate
+                              ? `$${formatRate(ex.pending.rate)}/mi`
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        {ex.pending.approximate ? (
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Straight-line estimate: the route service was
+                            unavailable.
+                          </p>
+                        ) : null}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <confirmFetcher.Form
+                            method="post"
+                            onSubmit={() => setConfirmedIndex(i)}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="confirm"
+                            />
+                            <input
+                              type="hidden"
+                              name="pending"
+                              value={JSON.stringify({
+                                stops: ex.pending.stops,
+                                date: ex.pending.date,
+                                type: ex.pending.type,
+                                report: ex.pending.report,
+                                description: ex.pending.description,
+                                roundTrip: ex.pending.roundTrip,
+                              })}
+                            />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              className="px-2 sm:px-4"
+                              disabled={confirmFetcher.state !== "idle"}
+                            >
+                              <Check aria-hidden="true" className="h-4 w-4" />
+                              Log trip
+                            </Button>
+                          </confirmFetcher.Form>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="px-2 sm:px-4"
+                            onClick={() => discardProposal(i)}
+                          >
+                            Discard
+                          </Button>
+                        </div>
+                      </>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <confirmFetcher.Form
-                        method="post"
-                        onSubmit={() => setConfirmedIndex(i)}
-                      >
-                        <input type="hidden" name="intent" value="confirm" />
-                        <input
-                          type="hidden"
-                          name="pending"
-                          value={JSON.stringify({
-                            stops: ex.pending.stops,
-                            date: ex.pending.date,
-                            type: ex.pending.type,
-                            report: ex.pending.report,
-                            description: ex.pending.description,
-                            roundTrip: ex.pending.roundTrip,
-                          })}
-                        />
-                        <Button
-                          type="submit"
-                          size="sm"
-                          className="px-2 sm:px-4"
-                          disabled={confirmFetcher.state !== "idle"}
-                        >
-                          <Check aria-hidden="true" className="h-4 w-4" />
-                          Log trip
-                        </Button>
-                      </confirmFetcher.Form>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        className="px-2 sm:px-4"
-                        onClick={() => discardTrip(i)}
-                      >
-                        Discard
-                      </Button>
-                    </div>
+                    {ex.pending.kind === "expense" ? (
+                      <>
+                        <p className="text-xs font-medium tracking-wide text-amber-700 uppercase dark:text-amber-300">
+                          Expense
+                        </p>
+                        <p className="mt-1 text-sm text-gray-800 dark:text-gray-100">
+                          {ex.pending.merchant ||
+                            ex.pending.description ||
+                            "Expense"}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                          {[
+                            formatUsd(Number(ex.pending.amount) || 0),
+                            ex.pending.category,
+                            ex.pending.report,
+                            formatShortDate(ex.pending.date),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <confirmFetcher.Form
+                            method="post"
+                            onSubmit={() => setConfirmedIndex(i)}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="confirmExpense"
+                            />
+                            <input
+                              type="hidden"
+                              name="pending"
+                              value={JSON.stringify({
+                                merchant: ex.pending.merchant,
+                                amount: ex.pending.amount,
+                                category: ex.pending.category,
+                                date: ex.pending.date,
+                                report: ex.pending.report,
+                                description: ex.pending.description,
+                              })}
+                            />
+                            <Button
+                              type="submit"
+                              size="sm"
+                              className="px-2 sm:px-4"
+                              disabled={confirmFetcher.state !== "idle"}
+                            >
+                              <Check aria-hidden="true" className="h-4 w-4" />
+                              Log expense
+                            </Button>
+                          </confirmFetcher.Form>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="px-2 sm:px-4"
+                            onClick={() => discardProposal(i)}
+                          >
+                            Discard
+                          </Button>
+                        </div>
+                      </>
+                    ) : null}
                     {confirmResult &&
                     !confirmResult.ok &&
                     i === confirmedIndex ? (
@@ -792,7 +919,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                     ) : null}
                   </Card>
                 ) : null}
-                {/* A logged trip links to the expense itself: the figures
+                {/* A logged proposal links to the expense itself: the figures
                  * above are what was filed, and the expense page is where
                  * the user checks or corrects them. */}
                 {ex.expenseId ? (
@@ -801,7 +928,9 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                       to={`/expense/${ex.expenseId}`}
                       className="text-blue-600 hover:underline dark:text-blue-400"
                     >
-                      Review the trip
+                      {ex.proposalKind === "expense"
+                        ? "Review the expense"
+                        : "Review the trip"}
                     </Link>
                   </p>
                 ) : null}

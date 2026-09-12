@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { MAX_TOOL_ARGUMENTS } from "~/lib/insights-tools.server";
+import type { PlanContext } from "~/lib/insights-plan.server";
 import { MAX_TRIP_STOPS } from "~/lib/maps.server";
 import { resolveMileage } from "~/lib/mcp-write.server";
 import type { ToolSpec } from "~/lib/receipt-ai.server";
 import { parseLocations, type Location, type MileageType } from "~/lib/types";
 
 /**
- * The insights chat's one write-shaped tool: the model resolves "the drive
+ * The insights chat's mileage plan tool: the model resolves "the drive
  * from the office back home on Tuesday" into a real, priced trip, and the
  * app shows the user a card to confirm. Nothing is written here.
  *
@@ -24,6 +25,7 @@ export const PLAN_MILEAGE = "plan_mileage";
 /** What the chat resolved a trip into: everything the confirm card shows,
  * and the only thing the confirm action accepts back. */
 export interface PendingTrip {
+  kind: "mileage";
   stops: Location[];
   date: string;
   type: MileageType;
@@ -36,16 +38,6 @@ export interface PendingTrip {
   /** Whether the drive returns to the first stop. One way unless the user
    * asked to come back. */
   roundTrip: boolean;
-}
-
-/** What the plan tool needs from the request: the account to resolve
- * against, the plain report names it may file into, and the user's local
- * date (the default trip date, since the server runs UTC: its own "today"
- * is already tomorrow for a west-coast evening). */
-export interface PlanMileageContext {
-  accountId: string;
-  reportNames: string[];
-  today?: string;
 }
 
 const planMileageInput = z.object({
@@ -158,7 +150,7 @@ export function parseTripConfirmation(raw: string): TripConfirmation | null {
  * pending: a wrong trip is worse than no trip.
  */
 export async function runPlanMileage(
-  writes: PlanMileageContext,
+  writes: PlanContext,
   call: { function: { arguments: string } },
   resolve: typeof resolveMileage = resolveMileage,
 ): Promise<{ result: string; pending?: PendingTrip }> {
@@ -241,6 +233,7 @@ export async function runPlanMileage(
       roundTrip: trip.roundTrip,
     }),
     pending: {
+      kind: "mileage",
       stops: trip.locations,
       date: trip.date,
       type: trip.type,

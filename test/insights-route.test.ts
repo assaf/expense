@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { action, loader } from "~/routes/insights";
+import { action as expenseAction } from "~/routes/expense.$id";
 import {
   answerInsightQuestion,
   insightProfile,
@@ -16,6 +17,7 @@ import {
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { readExpenses } from "~/lib/db/expenses";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
+import type { PendingExpense } from "~/lib/insights-expense-tool.server";
 import { addReport } from "~/lib/db/reports";
 import {
   appendExchange,
@@ -23,6 +25,7 @@ import {
   startNewConversation,
 } from "~/lib/db/insights-chat";
 import type { Route as InsightsRoute } from "+types/app/routes/+types/insights";
+import type { Route as ExpenseRoute } from "+types/app/routes/+types/expense.$id";
 
 // The translator boundary is what the route adds on top of the pure lib
 // (covered in test/insights.test.ts): the LLM is reached exactly once for
@@ -48,6 +51,13 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
 
 const chat = vi.mocked(chatCompletion);
 
+/** The signed-in session cookie the route tests post with. */
+async function sessionCookie(): Promise<string> {
+  const session = await sessionStorage.getSession();
+  session.set(SESSION_USER_KEY, "user_test1");
+  return sessionStorage.commitSession(session);
+}
+
 async function callRoute(
   kind: "loader" | "action",
   plan: string | null,
@@ -57,9 +67,7 @@ async function callRoute(
     where: { id: TEST_ACCOUNT_ID },
     data: { plan },
   });
-  const session = await sessionStorage.getSession();
-  session.set(SESSION_USER_KEY, "user_test1");
-  const cookie = await sessionStorage.commitSession(session);
+  const cookie = await sessionCookie();
   const request = new Request("https://expense.test/insights", {
     method: kind === "action" ? "POST" : "GET",
     ...(formData
@@ -668,6 +676,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     expect(prompt).toContain("Recent trip stops: 456 Dev Ave, Coding, CA");
     // The proposal carries the app's own geocoded addresses and figures.
     expect(asked.pending).toMatchObject({
+      kind: "mileage",
       date: "2026-07-14",
       type: "business",
       report: "",
@@ -764,6 +773,186 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/no longer available/);
     expect(await mileageIds()).toEqual(before);
+  });
+});
+
+describe("filing a purchase from the chat (plan_expense)", () => {
+  const receiptIds = async (): Promise<string[]> =>
+    (await readExpenses(TEST_ACCOUNT_ID))
+      .filter((e) => e.type === "receipt")
+      .map((e) => e.id);
+
+  beforeEach(async () => {
+    chat.mockReset();
+    vi.mocked(chatWithTools).mockClear();
+    await startNewConversation("user_test1", TEST_ACCOUNT_ID);
+  });
+
+  it("proposes an expense, files it only on confirm, and reports what it stored", async () => {
+    chat.mockResolvedValue(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    const tools = vi.mocked(chatWithTools);
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_expense",
+            function: {
+              name: "plan_expense",
+              arguments: JSON.stringify({
+                amount: "50",
+                merchant: "Peet's Coffee",
+                category: "Meals and entertainment",
+                date: "2026-07-14",
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: "That's $50.00 at Peet's Coffee; confirm it?",
+        toolCalls: [],
+      });
+
+    const before = await receiptIds();
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "log $50 spent on coffee");
+    form.set("today", "2026-07-15");
+    const asked = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      answer: string;
+      pending?: PendingExpense;
+    };
+
+    expect(asked.ok).toBe(true);
+    // The proposal carries the app's own resolution of what the model
+    // described: the amount is normalized, and the category is one of the
+    // account's own names or nothing at all.
+    expect(asked.pending).toEqual({
+      kind: "expense",
+      merchant: "Peet's Coffee",
+      amount: "50.00",
+      // The seeded account has no "Meals and entertainment" category and no
+      // prior Peet's Coffee expense, so nothing fits: the row shows as
+      // incomplete rather than inventing a category the account lacks.
+      category: "",
+      date: "2026-07-14",
+      report: "",
+      description: "",
+    });
+    // A proposal is not a write: nothing has been filed yet.
+    expect(await receiptIds()).toEqual(before);
+    const conversation = await readLatestConversation("user_test1");
+    expect(conversation!.exchanges).toHaveLength(1);
+
+    // The card's payload: what the user described, no computed field.
+    const pending = asked.pending!;
+    const confirm = new FormData();
+    confirm.set("intent", "confirmExpense");
+    confirm.set(
+      "pending",
+      JSON.stringify({
+        merchant: pending.merchant,
+        amount: pending.amount,
+        category: pending.category,
+        date: pending.date,
+        report: pending.report,
+        description: pending.description,
+      }),
+    );
+    const confirmed = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      answer: string;
+      proposalKind: string;
+      logged: { expenseId: string };
+    };
+
+    expect(confirmed.ok).toBe(true);
+    expect(confirmed.answer).toBe(
+      "Logged $50.00 at Peet's Coffee on 2026-07-14.",
+    );
+    expect(confirmed.proposalKind).toBe("expense");
+
+    // Exactly one new receipt row, with the fields the card showed.
+    const filed = (await readExpenses(TEST_ACCOUNT_ID)).filter(
+      (e) => e.type === "receipt" && !before.includes(e.id),
+    );
+    expect(filed).toHaveLength(1);
+    expect(filed[0]).toMatchObject({
+      id: confirmed.logged.expenseId,
+      date: "2026-07-14",
+      report: "",
+      category: "",
+      merchant: "Peet's Coffee",
+      amount: "50.00",
+      // Nothing to OCR: the user typed it, so no image is attached.
+      imageFile: "",
+    });
+
+    // The conversation recorded the same line the reply carried, plus the
+    // filed expense's id and what it was: that is what the transcript links
+    // to for review, and the kind is what labels the link after a reload
+    // (the card itself is a one-shot affordance).
+    const after = await readLatestConversation("user_test1");
+    expect(after!.exchanges).toHaveLength(2);
+    expect(after!.exchanges.at(-1)).toMatchObject({
+      question: "Log it",
+      answer: "Logged $50.00 at Peet's Coffee on 2026-07-14.",
+      expenseId: confirmed.logged.expenseId,
+      proposalKind: "expense",
+    });
+
+    // Deleting the expense takes the transcript's claim with it. The link
+    // goes and the answer says the expense is gone, because the answer step
+    // reads these exchanges back as fact and would otherwise keep telling the
+    // user the expense is filed (that is how a deleted purchase came back as
+    // "That's already done").
+    const remove = new FormData();
+    remove.set("intent", "delete");
+    await expenseAction({
+      request: new Request(
+        `https://expense.test/expense/${confirmed.logged.expenseId}`,
+        {
+          method: "POST",
+          body: remove,
+          headers: { cookie: await sessionCookie() },
+        },
+      ),
+      params: { id: confirmed.logged.expenseId },
+      context: {},
+    } as ExpenseRoute.ActionArgs);
+    expect(
+      (await readExpenses(TEST_ACCOUNT_ID)).some(
+        (e) => e.id === confirmed.logged.expenseId,
+      ),
+    ).toBe(false);
+    const deleted = (await readLatestConversation("user_test1"))!.exchanges.at(
+      -1,
+    )!;
+    expect(deleted.answer).toBe(
+      "Logged $50.00 at Peet's Coffee on 2026-07-14 (deleted afterwards).",
+    );
+    expect(deleted.question).toBe("Log it");
+    expect(deleted.expenseId).toBeUndefined();
+    expect(deleted.proposalKind).toBeUndefined();
+  });
+
+  it("refuses a stale confirm payload without filing anything", async () => {
+    const before = await receiptIds();
+    const confirm = new FormData();
+    confirm.set("intent", "confirmExpense");
+    // No amount: the card always posts one, so this is a stale tab.
+    confirm.set("pending", JSON.stringify({ merchant: "Peet's Coffee" }));
+    const res = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      error: string;
+    };
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/no longer available/);
+    expect(await receiptIds()).toEqual(before);
   });
 });
 

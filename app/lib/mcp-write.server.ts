@@ -36,6 +36,11 @@ import {
  * functions — the same split as the read tools (mcp.server.ts over
  * expense-read.server.ts). Tool design principle (mcp.server.ts): expose
  * capabilities, not CRUD.
+ *
+ * It also hosts the read/write halves the insights chat shares:
+ * `resolveMileage` and `resolveExpense` validate and resolve without
+ * writing anything (the model's side of a plan tool), and the `save`
+ * functions file a proposal the user confirmed.
  */
 
 // --- Tool results ----------------------------------------------------------
@@ -421,6 +426,88 @@ export async function logMileage(
         }
       : {}),
   });
+}
+
+/** A purchase resolved to the fields the app files, before anything is
+ * written: what the chat shows the user to confirm. */
+export interface ResolvedExpense {
+  date: string;
+  report: string;
+  category: string;
+  merchant: string;
+  description: string;
+  amount: string;
+}
+
+/** Validate a typed purchase and resolve its category. Writes nothing: this
+ * is the read half of the chat's plan_expense tool, and `error` is what the
+ * model is told. */
+export async function resolveExpense(
+  accountId: string,
+  args: {
+    merchant?: string;
+    amount: string;
+    category?: string;
+    date?: string;
+    report?: string;
+    description?: string;
+  },
+): Promise<
+  { ok: true; expense: ResolvedExpense } | { ok: false; error: string }
+> {
+  const serverUtcNow = new Date().toISOString();
+  const date = args.date ?? serverUtcNow.slice(0, 10);
+  const report = args.report?.trim() ?? "";
+  // The editor's own rules: a real calendar date, and a report that exists
+  // and is open (an expense never lands in a closed one).
+  const inputError = await validateExpenseInputs(accountId, date, report, {
+    checkReport: true,
+  });
+  if (inputError) return { ok: false, error: inputError };
+  const amount = normalizeAmount(args.amount);
+  if (!amount) {
+    return { ok: false, error: "An expense needs an amount, like 12.50." };
+  }
+  const merchant = (args.merchant ?? "").trim();
+  const { categories, knownMerchants } = await readExtractionContext(accountId);
+  return {
+    ok: true,
+    expense: {
+      date,
+      report,
+      merchant,
+      description: (args.description ?? "").trim(),
+      amount,
+      // A merchant that already has a category keeps it; otherwise the
+      // model's suggestion is matched onto one of the account's own names
+      // ("" when nothing fits, which only means the row shows as incomplete).
+      category: resolveCategory(
+        merchant,
+        args.category ?? "",
+        knownMerchants,
+        categories,
+      ),
+    },
+  };
+}
+
+/** Build and persist a typed purchase. No image: the user described it, and
+ * the editor can attach a receipt later. */
+export async function saveReceiptExpense(
+  accountId: string,
+  expense: ResolvedExpense,
+): Promise<{ expenseId: string }> {
+  const receipt: ReceiptExpense = {
+    ...(newExpenseShell("receipt") as ReceiptExpense),
+    date: expense.date,
+    report: expense.report,
+    category: expense.category,
+    description: expense.description,
+    amount: expense.amount,
+    merchant: expense.merchant,
+  };
+  await upsertExpense(receipt, accountId);
+  return { expenseId: receipt.id };
 }
 
 function urlFilename(url: string): string {

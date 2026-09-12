@@ -14,12 +14,18 @@ import {
   type FilterableExpense,
 } from "~/lib/insights-tools.server";
 import {
+  PLAN_EXPENSE,
+  planExpenseTool,
+  runPlanExpense,
+  type PendingExpense,
+} from "~/lib/insights-expense-tool.server";
+import {
   PLAN_MILEAGE,
   planMileageTool,
   runPlanMileage,
   type PendingTrip,
-  type PlanMileageContext,
 } from "~/lib/insights-mileage-tool.server";
+import type { PlanContext } from "~/lib/insights-plan.server";
 import { categorySynonyms } from "~/lib/expense-search";
 import { formatUserDate } from "~/lib/format";
 import { stripFenceMarkers } from "~/lib/prompt-fence.server";
@@ -246,10 +252,9 @@ date tracking.
 - Use the exact dollar figures and counts from the data; never invent or
   estimate numbers.
 - If the data does not answer the question, say so plainly.
-- When the user asks you to log a drive, state the stops, whether the drive
-  is one way or a round trip, the distance and the amount the trip tool
-  returned, and tell them to confirm it: filing the trip is their click,
-  not yours.
+- When the user asks you to log a drive or a purchase, state what the plan
+  tool returned (the stops and the distance or the amount and the merchant)
+  and tell them to confirm it: filing it is their click, not yours.
 - Short answers are plain prose. When the answer has detail worth
   structuring, use markdown: **bold** for key figures and a table for
   breakdowns (see below).
@@ -269,11 +274,15 @@ date tracking.
   Never improvise another structure (no indented columns, no bullet
   tables). No links, no headings.`;
 
+/** What a plan tool may hand back: the one proposal the answer step
+ * surfaces for the user to confirm. */
+export type PendingProposal = PendingTrip | PendingExpense;
+
 /** Produce the text answer for a question, grounded in data the app
  * computed from the user's real expenses (the model only phrases it).
- * With `writes` the answer step may also work out a mileage trip; the
- * trip comes back as `pending` for the user to confirm, and nothing is
- * filed here. Throws LLMError on transport failure. */
+ * With `writes` the answer step may also work out a mileage trip or a
+ * typed purchase; the proposal comes back as `pending` for the user to
+ * confirm, and nothing is filed here. Throws LLMError on transport failure. */
 export async function answerInsightQuestion(input: {
   question: string;
   history: { question: string; answer: string }[];
@@ -282,10 +291,10 @@ export async function answerInsightQuestion(input: {
   /** The account's expenses, enabling the read tool. Omitted by callers
    * (and tests) that only want the grounded-summary answer. */
   expenses?: readonly FilterableExpense[];
-  /** Enables the plan_mileage tool; absent = read-only. */
-  writes?: PlanMileageContext;
-}): Promise<{ answer: string; pending?: PendingTrip }> {
-  let pending: PendingTrip | undefined = undefined;
+  /** Enables the plan tools; absent = read-only. */
+  writes?: PlanContext;
+}): Promise<{ answer: string; pending?: PendingProposal }> {
+  let pending: PendingProposal | undefined = undefined;
   const reply = (text: string) => ({
     answer:
       text.trim().replace(/^["']|["']$/g, "") || "I couldn't summarize that.",
@@ -333,7 +342,7 @@ export async function answerInsightQuestion(input: {
         : await chatWithTools(messages, {
             tools: [
               queryExpensesTool(),
-              ...(input.writes ? [planMileageTool()] : []),
+              ...(input.writes ? [planMileageTool(), planExpenseTool()] : []),
             ],
             maxTokens: 300,
           });
@@ -354,6 +363,11 @@ export async function answerInsightQuestion(input: {
         result = runQueryExpenses(input.expenses, call);
       } else if (call.function.name === PLAN_MILEAGE && input.writes) {
         const planned = await runPlanMileage(input.writes, call);
+        result = planned.result;
+        // Last successful proposal wins: it is the one the user sees.
+        if (planned.pending) pending = planned.pending;
+      } else if (call.function.name === PLAN_EXPENSE && input.writes) {
+        const planned = await runPlanExpense(input.writes, call);
         result = planned.result;
         // Last successful proposal wins: it is the one the user sees.
         if (planned.pending) pending = planned.pending;
@@ -381,13 +395,19 @@ const MAX_TOOL_CALLS = 4;
 /** How the answer step may use the read tool. */
 const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the computed data doesn't cover: any date range (a single day, a week, a month), zero or more exact category names, an exact report name, unreported-only, receipt/mileage type, or a merchant substring. The computed data below is month-bucketed and covers the chart's current window only, so use the tool rather than saying the data is missing. Call it at most ${MAX_TOOL_ROUNDS} times, then answer.`;
 
-/** Added when the plan tool is available: how to turn "log the drive from
- * the office back home on Tuesday" into a proposed trip. The tool resolves
- * and prices; filing it is the user's confirm click. */
-const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — the Locations line lists the account's saved places as Name = address, so "home" and "back home" are the Home entry, and "the office", "work", "the hospital" and any other place the user names resolve to the entry with that name. When the account has not named the place, fall back to the Recent trip stops. If a stop is not one of those and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. The drive is one way unless the user says they went there and back: pass roundTrip true only for "there and back", "round trip", "and back home again", "both ways". "The drive from the office back home" is one way, since home is the destination; so are "drive to work" and "from A to B". Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.`;
+/** Added when the plan tools are available: how to turn "log the drive from
+ * the office back home on Tuesday" into a proposed trip, and "log $50 spent
+ * on coffee" into a proposed expense. The tools resolve; filing it is the
+ * user's confirm click, and an earlier exchange records only what was filed
+ * then, which the last paragraph says out loud. */
+const PLAN_GUIDANCE = `You may also call ${PLAN_MILEAGE} when the user asks you to log a drive: pass the trip's stops as addresses, in order. Resolve those addresses from the "About the user" context — the Locations line lists the account's saved places as Name = address, so "home" and "back home" are the Home entry, and "the office", "work", "the hospital" and any other place the user names resolve to the entry with that name. When the account has not named the place, fall back to the Recent trip stops. If a stop is not one of those and the user didn't give it, ask them for it: never call the tool with a guessed address. Resolve relative dates ("Tuesday", "yesterday") against the Current date line and pass the trip date; omit the date only when the user means today. The drive is one way unless the user says they went there and back: pass roundTrip true only for "there and back", "round trip", "and back home again", "both ways". "The drive from the office back home" is one way, since home is the destination; so are "drive to work" and "from A to B". Name a report only when the user names one. Call it at most once per question, then tell the user the stops, the distance and the amount the tool returned. Never say the trip was logged: the app shows a confirm button and the user decides.
 
-/** The read-tool guidance, plus the plan-tool paragraph when the chat can
- * propose a trip at all (a read-only call must not be told about a tool it
+You may also call plan_expense when the user asks you to log something they bought: pass the amount as a plain number, the merchant when they name one, and a short description of what it was. The category is the app's to resolve, so pass one of the Categories listed in "About the user" only when the user's words make it obvious ("coffee" is Meals and entertainment) and leave it out otherwise. The date defaults to today. Never invent an amount: if the user didn't say one, ask for it instead of calling the tool. Call at most one of plan_mileage or plan_expense per question: if the user asks for both a drive and a purchase, plan the first, tell them to confirm it, and log the other on the next turn. Never say an expense was logged: the app shows a confirm button and the user decides.
+
+Previous exchanges are a record of what was filed at the time, not a view of the records now: an expense the user deleted since keeps its "Log it" line, whose answer then ends with "(deleted afterwards)". So never tell the user that something is already logged because an earlier exchange says it was. Check the computed data or query_expenses, and when the records no longer have it, plan it again.`;
+
+/** The read-tool guidance, plus the plan-tool paragraphs when the chat can
+ * propose anything at all (a read-only call must not be told about a tool it
  * cannot use). */
 function toolGuidance(writes: boolean): string {
   return writes ? `${TOOL_GUIDANCE}\n\n${PLAN_GUIDANCE}` : TOOL_GUIDANCE;

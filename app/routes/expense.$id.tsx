@@ -10,6 +10,7 @@ import {
 } from "~/lib/expense-save.server";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
+import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { badRequest, notFound, unknownIntent } from "~/lib/validation";
 import { requireIntent } from "~/lib/route-helpers.server";
@@ -50,6 +51,10 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (intent === "delete") {
     await deleteExpense(params.id, user.accountId);
+    // The chat transcript recorded filing it, and the answer model reads the
+    // last few exchanges back as fact: note the deletion so the transcript
+    // stops claiming the expense is there.
+    await markFiledExpenseDeleted(user.id, params.id);
     return redirect("/");
   }
 

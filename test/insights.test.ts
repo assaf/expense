@@ -23,6 +23,7 @@ import {
   translateInsightQuery,
 } from "~/lib/insights-ai.server";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
+import type { PendingExpense } from "~/lib/insights-expense-tool.server";
 import type { ToolCall } from "~/lib/receipt-ai.server";
 
 // The translator's LLM transport is mocked at the receipt-ai boundary:
@@ -34,10 +35,11 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
   chatCompletion: vi.fn(),
   chatWithTools: vi.fn(async () => ({ content: "", toolCalls: [] })),
 }));
-// The plan tool itself is covered in test/insights-mileage-tool.test.ts
-// (fake resolver) and end-to-end in test/insights-route.test.ts: here only
-// the answer step's dispatch is under test, so the module is stubbed to
-// keep this suite free of the map services and the DB.
+// The plan tools themselves are covered in test/insights-mileage-tool.test.ts
+// and test/insights-expense-tool.test.ts (fake resolvers) and end-to-end in
+// test/insights-route.test.ts: here only the answer step's dispatch is under
+// test, so both modules are stubbed to keep this suite free of the map
+// services, the DB, and the expense pipeline.
 vi.mock("~/lib/insights-mileage-tool.server", () => ({
   PLAN_MILEAGE: "plan_mileage",
   planMileageTool: () => ({
@@ -50,8 +52,21 @@ vi.mock("~/lib/insights-mileage-tool.server", () => ({
   }),
   runPlanMileage: vi.fn(),
 }));
+vi.mock("~/lib/insights-expense-tool.server", () => ({
+  PLAN_EXPENSE: "plan_expense",
+  planExpenseTool: () => ({
+    type: "function",
+    function: {
+      name: "plan_expense",
+      description: "Plan an expense.",
+      parameters: { type: "object" },
+    },
+  }),
+  runPlanExpense: vi.fn(),
+}));
 import { chatCompletion, chatWithTools } from "~/lib/receipt-ai.server";
 import { runPlanMileage } from "~/lib/insights-mileage-tool.server";
+import { runPlanExpense } from "~/lib/insights-expense-tool.server";
 
 const chat = vi.mocked(chatCompletion);
 const tools = vi.mocked(chatWithTools);
@@ -420,6 +435,7 @@ describe("answerInsightQuestion", () => {
 
 describe("answerInsightQuestion plan_mileage dispatch", () => {
   const planned: PendingTrip = {
+    kind: "mileage",
     stops: [
       { address: "1 Office Way, Testing, CA", lat: 34.02, lng: -118.28 },
       { address: "2 Home St, Testing, CA", lat: 34.05, lng: -118.24 },
@@ -508,6 +524,96 @@ describe("answerInsightQuestion plan_mileage dispatch", () => {
     const sent = tools.mock.calls.at(-1)![0];
     const toolMessage = sent.filter((m) => m.role === "tool").at(-1)!;
     expect(toolMessage.content).toContain("unknown tool plan_mileage");
+  });
+});
+
+describe("answerInsightQuestion plan_expense dispatch", () => {
+  const planned: PendingExpense = {
+    kind: "expense",
+    merchant: "Peet's Coffee",
+    amount: "50.00",
+    category: "Meals and entertainment",
+    date: "2026-07-15",
+    report: "",
+    description: "coffee with Dana",
+  };
+  const expenses = [exp({ id: "e1", date: "2026-07-01", amount: "10.00" })];
+  const expenseCall: ToolCall = {
+    id: "call_expense",
+    function: {
+      name: "plan_expense",
+      arguments: JSON.stringify({ amount: "50", merchant: "Peet's Coffee" }),
+    },
+  };
+  const offeredToolNames = () =>
+    tools.mock.calls[0]![1].tools.map((t) => t.function.name);
+
+  it("collects the proposed expense as pending when writes are enabled", async () => {
+    tools.mockClear();
+    vi.mocked(runPlanExpense).mockClear();
+    vi.mocked(runPlanExpense).mockResolvedValueOnce({
+      result: JSON.stringify({ ok: true, amount: "50.00" }),
+      pending: planned,
+    });
+    tools
+      .mockResolvedValueOnce({ content: "", toolCalls: [expenseCall] })
+      .mockResolvedValueOnce({
+        content: "That's $50.00 at Peet's Coffee; confirm it?",
+        toolCalls: [],
+      });
+
+    const result = await answerInsightQuestion({
+      question: "log $50 spent on coffee",
+      history: [],
+      summary: "Total: $0.00 across 0 expenses",
+      expenses,
+      writes: {
+        accountId: "acct_1",
+        reportNames: ["Q3"],
+        today: "2026-07-15",
+      },
+    });
+
+    expect(result.answer).toBe("That's $50.00 at Peet's Coffee; confirm it?");
+    // The proposal comes back for the confirm card, and only that.
+    expect(result.pending).toEqual(planned);
+    expect(offeredToolNames()).toContain("plan_expense");
+    // The call is resolved against the request's own account context.
+    expect(vi.mocked(runPlanExpense).mock.calls[0]![0]).toEqual({
+      accountId: "acct_1",
+      reportNames: ["Q3"],
+      today: "2026-07-15",
+    });
+    // Its result reaches the model, fenced like every other tool output.
+    const sent = tools.mock.calls.at(-1)![0];
+    const toolMessage = sent.filter((m) => m.role === "tool").at(-1)!;
+    expect(toolMessage.content).toContain("<<<DATA>>>");
+    expect(toolMessage.content).toContain("50.00");
+  });
+
+  it("neither offers nor honors the expense tool without writes", async () => {
+    tools.mockClear();
+    vi.mocked(runPlanExpense).mockClear();
+    tools
+      .mockResolvedValueOnce({ content: "", toolCalls: [expenseCall] })
+      .mockResolvedValueOnce({
+        content: "I can't log expenses.",
+        toolCalls: [],
+      });
+
+    const result = await answerInsightQuestion({
+      question: "log $50 spent on coffee",
+      history: [],
+      summary: "Total: $0.00 across 0 expenses",
+      expenses,
+    });
+
+    expect(result.pending).toBeUndefined();
+    expect(runPlanExpense).not.toHaveBeenCalled();
+    expect(offeredToolNames()).not.toContain("plan_expense");
+    const sent = tools.mock.calls.at(-1)![0];
+    const toolMessage = sent.filter((m) => m.role === "tool").at(-1)!;
+    expect(toolMessage.content).toContain("unknown tool plan_expense");
   });
 });
 

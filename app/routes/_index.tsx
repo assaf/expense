@@ -68,6 +68,7 @@ import { usePasteImage } from "~/lib/use-paste-image";
 import { countAccounts, readAccount } from "~/lib/db/accounts";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
 import { listEmailConnections } from "~/lib/db/email-connections";
+import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import {
@@ -203,7 +204,11 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (intent === "delete") {
-    await deleteExpense(formString(form, "id"), user.accountId);
+    const id = formString(form, "id");
+    await deleteExpense(id, user.accountId);
+    // Same as the editor's delete: a chat-filed expense left a transcript
+    // line that would otherwise keep claiming it is filed.
+    await markFiledExpenseDeleted(user.id, id);
     return null;
   }
 

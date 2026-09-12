@@ -86,6 +86,7 @@ describe("runPlanMileage", () => {
     // The card's data: the resolved stops and the app's own figures, one way
     // unless the caller said the drive returns.
     expect(out.pending).toEqual({
+      kind: "mileage",
       stops: [OFFICE, HOME],
       date: "2026-07-14",
       type: "business",

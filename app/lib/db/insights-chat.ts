@@ -12,6 +12,11 @@ export interface StoredExchange {
   /** The expense a "Log it" exchange filed, so the transcript can link to it
    * for review and correction. Absent on every other exchange. */
   expenseId?: string;
+  /** What that link points at: a mileage trip or a typed purchase. The
+   * proposal card knows its own kind, but that card is a one-shot
+   * affordance, so the exchange has to carry it for the reloaded transcript
+   * to label the link. Absent on every other exchange. */
+  proposalKind?: "mileage" | "expense";
 }
 
 /** The in-process cache mirrors the 5-minute pattern used for accounts
@@ -42,6 +47,7 @@ function parseExchanges(raw: unknown): StoredExchange[] {
       continue;
     }
     const { question, answer, chart, query, months, title, expenseId } = entry;
+    const proposalKind = entry.proposalKind;
     if (
       typeof question !== "string" ||
       typeof answer !== "string" ||
@@ -71,6 +77,9 @@ function parseExchanges(raw: unknown): StoredExchange[] {
       // dropped rather than repaired.
       ...(typeof expenseId === "string" && expenseId
         ? { expenseId: expenseId.slice(0, 40) }
+        : {}),
+      ...(proposalKind === "mileage" || proposalKind === "expense"
+        ? { proposalKind }
         : {}),
     });
   }
@@ -136,6 +145,57 @@ export async function appendExchange(
     });
   }
   await bustConversationCache(userId);
+}
+
+/** The transcript's own line for an exchange whose expense is gone: the
+ * answer becomes "Logged ... (deleted afterwards)." An answer that does not
+ * end in a sentence gets the note appended as it is. */
+function withDeletedNote(answer: string): string {
+  return answer.endsWith(".")
+    ? `${answer.slice(0, -1)} (deleted afterwards).`
+    : `${answer} (deleted afterwards)`;
+}
+
+/** Note that the expense a "Log it" exchange filed has been deleted: drop the
+ * link and say so in the answer.
+ *
+ * The transcript is the only thing the answer model reads back about earlier
+ * turns. A plain "Logged $50.00 at Costa Coffee on 2026-09-11." stays in the
+ * history long after the user deletes the row, which is how the model ends up
+ * telling the user something is already logged when nothing is. Rewriting the
+ * answer makes the history a record of what happened rather than a claim about
+ * the records now.
+ *
+ * updatedAt is deliberately untouched: it decides which conversation the chat
+ * opens, and deleting an expense must not jump the user back to an older one. */
+export async function markFiledExpenseDeleted(
+  userId: string,
+  expenseId: string,
+): Promise<void> {
+  // The exchange that filed it lives in the conversation that was current
+  // then: the newest handful covers it (the user would have to start a new
+  // chat between filing and deleting to push it further back).
+  const rows = await db.orm.public.InsightConversation.where((c) =>
+    c.userId.eq(userId),
+  )
+    .orderBy((c) => c.updatedAt.desc())
+    .limit(20)
+    .all();
+  for (const row of rows) {
+    const exchanges = parseExchanges(row.messages);
+    const index = exchanges.findIndex((e) => e.expenseId === expenseId);
+    if (index < 0) continue;
+    const target = exchanges[index]!;
+    // Both fields describe the link that is going away; the "Log it"
+    // question and the answer's own words stay as written.
+    const { expenseId: _filed, proposalKind: _kind, ...rest } = target;
+    exchanges[index] = { ...rest, answer: withDeletedNote(target.answer) };
+    await db.orm.public.InsightConversation.where((c) =>
+      c.id.eq(row.id),
+    ).updateAll({ messages: asJson(exchanges) });
+    await bustConversationCache(userId);
+    return;
+  }
 }
 
 /** Start a fresh conversation for the user; the previous one remains in

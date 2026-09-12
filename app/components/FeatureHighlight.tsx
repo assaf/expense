@@ -269,7 +269,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         chart picks the merchants and the time window for you. You can always
         type a filter by hand instead. Ask it to log a drive ("the drive from
         the office back home on Tuesday") and it works out the route and the IRS
-        amount, then asks you to confirm.
+        amount, then asks you to confirm. Ask for a purchase too ("$50 on
+        coffee") and it fills in the merchant, amount, and category for you to
+        confirm.
       </>
     ),
     cta: { label: "Open Insights", to: "/insights" },
