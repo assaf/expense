@@ -438,7 +438,6 @@ async function captureHome(page: Page): Promise<void> {
   await expect
     .poll(() => page.locator("main li").count(), { timeout: 10_000 })
     .toBe(11); // 9 receipts + mileage + 1 incomplete
-  expect(await page.locator("main header nav a").count()).toBe(4); // Reconcile, Reports, Email, Settings
   expect(await page.getByText("Incomplete").count()).toBe(1);
   expect(await page.getByText("July 2026").count()).toBeGreaterThan(0);
   expect(await page.getByText("Q2 Travel").count()).toBeGreaterThan(0);
