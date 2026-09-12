@@ -22,6 +22,10 @@ function expense(overrides: Partial<ResolvedExpense> = {}): ResolvedExpense {
     merchant: "Peet's Coffee",
     description: "coffee with Dana",
     amount: "50.00",
+    currency: "USD",
+    originalAmount: "50.00",
+    fxRate: "",
+    rateDate: "",
     ...overrides,
   };
 }
@@ -70,6 +74,10 @@ describe("runPlanExpense", () => {
       kind: "expense",
       merchant: "Peet's Coffee",
       amount: "50.00",
+      originalAmount: "50.00",
+      currency: "USD",
+      fxRate: "",
+      rateDate: "",
       category: "Meals and entertainment",
       date: "2026-07-15",
       report: "",
@@ -81,19 +89,66 @@ describe("runPlanExpense", () => {
       date: "2026-07-15",
       merchant: "Peet's Coffee",
       amount: "50.00",
+      originalAmount: "50.00",
+      currency: "USD",
+      fxRate: null,
+      rateDate: null,
       category: "Meals and entertainment",
       report: "",
     });
     // The model's own fields are what the resolver gets: it normalizes the
-    // amount (the unparsed "50" arrives here) and resolves the category.
+    // amount (the unparsed "50" arrives here), converts a stated currency,
+    // and resolves the category.
     expect(resolver.mock.calls[0]![0]).toBe("acct_1");
     expect(resolver.mock.calls[0]![1]).toEqual({
       merchant: "Peet's Coffee",
       amount: "50",
+      currency: undefined,
       category: undefined,
       date: "2026-07-15",
       report: undefined,
       description: "coffee with Dana",
+    });
+  });
+
+  it("hands a stated currency to the resolver and shows both figures", async () => {
+    const resolver = resolvesTo(
+      expense({
+        amount: "58.10",
+        currency: "EUR",
+        originalAmount: "50.00",
+        fxRate: "1.162",
+        rateDate: "2026-07-14",
+      }),
+    );
+    const out = await runPlanExpense(
+      writes,
+      call({ amount: "50", currency: "EUR", merchant: "Costa Coffee" }),
+      resolver,
+    );
+    // The conversion is the app's: the model passes what the user said.
+    expect(resolver.mock.calls[0]![1]).toEqual({
+      merchant: "Costa Coffee",
+      amount: "50",
+      currency: "EUR",
+      category: undefined,
+      date: "2026-07-15",
+      report: undefined,
+      description: undefined,
+    });
+    expect(out.pending).toMatchObject({
+      amount: "58.10",
+      originalAmount: "50.00",
+      currency: "EUR",
+      fxRate: "1.162",
+      rateDate: "2026-07-14",
+    });
+    expect(JSON.parse(out.result)).toMatchObject({
+      amount: "58.10",
+      originalAmount: "50.00",
+      currency: "EUR",
+      fxRate: "1.162",
+      rateDate: "2026-07-14",
     });
   });
 
@@ -172,14 +227,19 @@ describe("parseExpenseConfirmation", () => {
   const payload = {
     merchant: "Peet's Coffee",
     amount: "50.00",
+    currency: "EUR",
     category: "Meals and entertainment",
     date: "2026-07-14",
     report: "Q3",
     description: "coffee with Dana",
   };
 
-  it("round-trips the card's payload", () => {
+  it("round-trips the card's payload, currency and all", () => {
     expect(parseExpenseConfirmation(JSON.stringify(payload))).toEqual(payload);
+    // A dollar purchase posts no currency, and a card opened before the chat
+    // handled currencies posts none either: both mean dollars.
+    const { currency: _currency, ...dollars } = payload;
+    expect(parseExpenseConfirmation(JSON.stringify(dollars))).toEqual(dollars);
   });
 
   it("rejects anything the card did not produce", () => {
@@ -193,6 +253,12 @@ describe("parseExpenseConfirmation", () => {
     expect(parseExpenseConfirmation(JSON.stringify(withoutAmount))).toBeNull();
     expect(
       parseExpenseConfirmation(JSON.stringify({ ...payload, amount: {} })),
+    ).toBeNull();
+    // A currency is a 3-letter code; anything longer never came from a card.
+    expect(
+      parseExpenseConfirmation(
+        JSON.stringify({ ...payload, currency: "EURO" }),
+      ),
     ).toBeNull();
   });
 });

@@ -49,8 +49,10 @@ const NOTE_RE =
   / ?\((?:Converted from [A-Z]{3} \d+(?:\.\d{1,2})? at \d+(?:\.\d{1,6})? USD\/[A-Z]{3}(?:, ECB rate for \d{4}-\d{2}-\d{2})?|Amount is in [A-Z]{3}; no exchange rate was available, stored as-is)\.\)/g;
 
 /** The note's rate display: trailing zeros from the numeric(10,6) wire
- * format are trimmed so a re-save doesn't turn "1.1699" into "1.169900". */
-function formatFxRate(fxRate: string): string {
+ * format are trimmed so a re-save doesn't turn "1.1699" into "1.169900".
+ * Exported so the surfaces that show a rate (the stored note, the chat's
+ * confirm card) display it the same way. */
+export function formatFxRate(fxRate: string): string {
   return fxRate.includes(".")
     ? fxRate.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")
     : fxRate;

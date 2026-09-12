@@ -24,7 +24,19 @@ export const PLAN_EXPENSE = "plan_expense";
 export interface PendingExpense {
   kind: "expense";
   merchant: string;
+  /** The USD figure the app would file (converted when the user paid in
+   * another currency). */
   amount: string;
+  /** The amount as the user stated it, in `currency`; the card posts this
+   * back, so confirming resolves the purchase again from the same inputs.
+   * Equal to `amount` for a dollar purchase. */
+  originalAmount: string;
+  /** ISO 4217 code the user stated, "USD" when they named none. */
+  currency: string;
+  /** USD per unit of `currency` as used, "" for USD. */
+  fxRate: string;
+  /** YYYY-MM-DD the rate is as-of, "" for USD. */
+  rateDate: string;
   category: string;
   date: string;
   report: string;
@@ -37,6 +49,13 @@ const planExpenseInput = z.object({
     .min(1)
     .max(20)
     .describe('The amount as a plain number, like "50" or "12.50".'),
+  currency: z
+    .string()
+    .max(3)
+    .optional()
+    .describe(
+      'ISO 4217 code when the user states a currency other than dollars, like "EUR"; omit for dollars. Never pass a converted amount.',
+    ),
   merchant: z
     .string()
     .max(200)
@@ -71,22 +90,36 @@ export function planExpenseTool(): ToolSpec {
     function: {
       name: PLAN_EXPENSE,
       description:
-        "Work out a purchase the user asked to log as an expense (no image): normalize the amount, resolve the category from the merchant's history or the account's own names, and return the entry for the user to confirm — it files nothing. Call it at most once per question.",
+        "Work out a purchase the user asked to log as an expense (no image): normalize the amount, convert a currency they stated at the ECB rate for the date, resolve the category from the merchant's history or the account's own names, and return the entry for the user to confirm — it files nothing. Call it at most once per question.",
       parameters: z.toJSONSchema(planExpenseInput),
     },
   };
 }
 
-/** The expense inputs the confirm card posts back: the proposal's own
- * fields and nothing computed. */
-export type ExpenseConfirmation = Omit<PendingExpense, "kind">;
+/** The purchase inputs the confirm card posts back: what the user stated and
+ * nothing computed, so confirming resolves (and converts) it again. The
+ * currency is optional because a card opened before the chat handled
+ * currencies posts none, and no currency means dollars. */
+export interface ExpenseConfirmation {
+  merchant: string;
+  /** The amount as the user stated it, in `currency`. */
+  amount: string;
+  currency?: string;
+  category: string;
+  date: string;
+  report: string;
+  description: string;
+}
 
 // Plain strings, not the input schema's coercion: the card is the only
 // producer of this payload, so a non-string amount is a tampered request
-// rather than model output.
+// rather than model output. The currency is optional because a card opened
+// before the chat handled currencies posts none, and "no currency" means
+// dollars, exactly as it did then.
 const confirmationSchema = z.object({
   merchant: z.string().max(200),
   amount: z.string().min(1).max(20),
+  currency: z.string().max(3).optional(),
   category: z.string().max(200),
   date: z.string().max(20),
   report: z.string().max(200),
@@ -149,6 +182,7 @@ export async function runPlanExpense(
   const resolved = await resolve(writes.accountId, {
     merchant: args.merchant,
     amount: args.amount,
+    currency: args.currency,
     category: args.category,
     date: args.date || writes.today || undefined,
     report: args.report,
@@ -163,7 +197,13 @@ export async function runPlanExpense(
       ok: true,
       date: expense.date,
       merchant: expense.merchant,
+      // The amount the expense will store (USD), plus what the user said when
+      // they paid in another currency: the conversion is the app's to make.
       amount: expense.amount,
+      currency: expense.currency,
+      originalAmount: expense.originalAmount,
+      fxRate: expense.fxRate || null,
+      rateDate: expense.rateDate || null,
       category: expense.category,
       report: expense.report,
     }),
@@ -171,6 +211,10 @@ export async function runPlanExpense(
       kind: "expense",
       merchant: expense.merchant,
       amount: expense.amount,
+      originalAmount: expense.originalAmount,
+      currency: expense.currency,
+      fxRate: expense.fxRate,
+      rateDate: expense.rateDate,
       category: expense.category,
       date: expense.date,
       report: expense.report,

@@ -835,6 +835,10 @@ describe("filing a purchase from the chat (plan_expense)", () => {
       kind: "expense",
       merchant: "Peet's Coffee",
       amount: "50.00",
+      originalAmount: "50.00",
+      currency: "USD",
+      fxRate: "",
+      rateDate: "",
       // The seeded account has no "Meals and entertainment" category and no
       // prior Peet's Coffee expense, so nothing fits: the row shows as
       // incomplete rather than inventing a category the account lacks.
@@ -888,6 +892,10 @@ describe("filing a purchase from the chat (plan_expense)", () => {
       category: "",
       merchant: "Peet's Coffee",
       amount: "50.00",
+      // A dollar purchase carries no conversion provenance.
+      currency: "USD",
+      originalAmount: "",
+      fxRate: "",
       // Nothing to OCR: the user typed it, so no image is attached.
       imageFile: "",
     });
@@ -938,6 +946,176 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     expect(deleted.question).toBe("Log it");
     expect(deleted.expenseId).toBeUndefined();
     expect(deleted.proposalKind).toBeUndefined();
+  });
+
+  it("converts a stated currency at the ECB rate and files both figures", async () => {
+    // Frankfurter, the ECB's daily reference feed (mirrored without a key).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ date: "2026-07-14", rates: { USD: 1.162 } }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+    chat.mockResolvedValue(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    const tools = vi.mocked(chatWithTools);
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_expense_eur",
+            function: {
+              name: "plan_expense",
+              arguments: JSON.stringify({
+                amount: "50",
+                currency: "EUR",
+                merchant: "Costa Coffee",
+                date: "2026-07-14",
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: "That's EUR 50.00, about $58.10; confirm it?",
+        toolCalls: [],
+      });
+
+    const before = await receiptIds();
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "log 50 eu on coffee at Costa Coffee");
+    form.set("today", "2026-07-15");
+    const asked = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      pending?: PendingExpense;
+    };
+
+    // The app converts (the model never does): the card carries the dollars
+    // the expense will store plus what the user paid and the rate used.
+    expect(asked.pending).toMatchObject({
+      merchant: "Costa Coffee",
+      amount: "58.10",
+      originalAmount: "50.00",
+      currency: "EUR",
+      fxRate: "1.162",
+      rateDate: "2026-07-14",
+    });
+    // The model is told the converted figure, or it would state the wrong one.
+    const toolMessage = tools.mock.calls[1]![0].filter(
+      (m) => m.role === "tool",
+    ).at(-1)!;
+    expect(toolMessage.content).toContain("58.10");
+    expect(toolMessage.content).toContain("EUR");
+    expect(await receiptIds()).toEqual(before);
+
+    // The card posts what the user said; confirming converts again.
+    const pending = asked.pending!;
+    const confirm = new FormData();
+    confirm.set("intent", "confirmExpense");
+    confirm.set(
+      "pending",
+      JSON.stringify({
+        merchant: pending.merchant,
+        amount: pending.originalAmount,
+        currency: pending.currency,
+        category: pending.category,
+        date: pending.date,
+        report: pending.report,
+        description: pending.description,
+      }),
+    );
+    const confirmed = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      answer: string;
+      logged: { expenseId: string };
+    };
+
+    expect(confirmed.answer).toBe(
+      "Logged $58.10 (EUR 50.00) at Costa Coffee on 2026-07-14.",
+    );
+    const filed = (await readExpenses(TEST_ACCOUNT_ID)).filter(
+      (e) => e.type === "receipt" && !before.includes(e.id),
+    );
+    expect(filed).toHaveLength(1);
+    expect(filed[0]).toMatchObject({
+      id: confirmed.logged.expenseId,
+      amount: "58.10",
+      currency: "EUR",
+      originalAmount: "50.00",
+      // numeric(10,6) on the wire pads the rate; the value is what was used.
+      fxRate: expect.stringMatching(/^1\.1620*$/),
+      // The provenance is written into the description, the same note an
+      // uploaded foreign receipt carries, so a re-save replaces it in place.
+      description:
+        "(Converted from EUR 50.00 at 1.162 USD/EUR, ECB rate for 2026-07-14.)",
+    });
+    const after = await readLatestConversation("user_test1");
+    expect(after!.exchanges.at(-1)).toMatchObject({
+      answer: "Logged $58.10 (EUR 50.00) at Costa Coffee on 2026-07-14.",
+      expenseId: confirmed.logged.expenseId,
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a currency with no published rate instead of inventing one", async () => {
+    // A currency the ECB doesn't publish (or a Frankfurter outage) is a 404:
+    // the app must not file the printed number as dollars.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not found", { status: 404 })),
+    );
+    chat.mockResolvedValue(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    const tools = vi.mocked(chatWithTools);
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_expense_gbp",
+            function: {
+              name: "plan_expense",
+              arguments: JSON.stringify({
+                amount: "50",
+                currency: "GBP",
+                merchant: "Costa Coffee",
+                date: "2026-07-14",
+              }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: "I couldn't price that one.",
+        toolCalls: [],
+      });
+
+    const before = await receiptIds();
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "log 50 gbp on coffee at Costa Coffee");
+    form.set("today", "2026-07-15");
+    const asked = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      pending?: PendingExpense;
+    };
+
+    expect(asked.ok).toBe(true);
+    expect(asked.pending).toBeUndefined();
+    const toolMessage = tools.mock.calls[1]![0].filter(
+      (m) => m.role === "tool",
+    ).at(-1)!;
+    expect(toolMessage.content).toContain("No USD rate for GBP on 2026-07-14");
+    expect(await receiptIds()).toEqual(before);
+    vi.unstubAllGlobals();
   });
 
   it("refuses a stale confirm payload without filing anything", async () => {

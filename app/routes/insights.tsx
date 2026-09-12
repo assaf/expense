@@ -48,6 +48,7 @@ import {
   saveReceiptExpense,
 } from "~/lib/mcp-write.server";
 import { MILEAGE_TYPE_LABELS, formatRate } from "~/lib/mileage-rates";
+import { formatFxRate } from "~/lib/fx-note";
 import {
   answerInsightQuestion,
   insightProfile,
@@ -169,10 +170,15 @@ export async function action({ request }: Route.LoaderArgs) {
     const resolved = await resolveExpense(user.accountId, confirmed);
     if (!resolved.ok) return { ok: false as const, error: resolved.error };
     const saved = await saveReceiptExpense(user.accountId, resolved.expense);
-    const at = resolved.expense.merchant
-      ? ` at ${resolved.expense.merchant}`
-      : "";
-    const answer = `Logged ${formatUsd(Number(resolved.expense.amount))}${at} on ${resolved.expense.date}.`;
+    const filed = resolved.expense;
+    const at = filed.merchant ? ` at ${filed.merchant}` : "";
+    // A foreign purchase reports both figures: the dollars the app stored and
+    // what the user actually paid.
+    const printed =
+      filed.currency !== "USD" && filed.originalAmount
+        ? ` (${filed.currency} ${filed.originalAmount})`
+        : "";
+    const answer = `Logged ${formatUsd(Number(filed.amount))}${printed}${at} on ${filed.date}.`;
     await appendExchange(user.id, user.accountId, {
       question: "Log it",
       answer,
@@ -866,6 +872,19 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
+                        {/* What the user actually paid, and the rate the app
+                         * used: the figure above is the converted one. */}
+                        {ex.pending.currency !== "USD" ? (
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {`${ex.pending.currency} ${ex.pending.originalAmount}`}
+                            {ex.pending.fxRate
+                              ? ` converted at ${formatFxRate(ex.pending.fxRate)} USD/${ex.pending.currency}`
+                              : ""}
+                            {ex.pending.rateDate
+                              ? ` (rate for ${ex.pending.rateDate})`
+                              : ""}
+                          </p>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <confirmFetcher.Form
                             method="post"
@@ -881,7 +900,10 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                               name="pending"
                               value={JSON.stringify({
                                 merchant: ex.pending.merchant,
-                                amount: ex.pending.amount,
+                                // The amount as the user stated it, with its
+                                // currency: confirming converts it again.
+                                amount: ex.pending.originalAmount,
+                                currency: ex.pending.currency,
                                 category: ex.pending.category,
                                 date: ex.pending.date,
                                 report: ex.pending.report,

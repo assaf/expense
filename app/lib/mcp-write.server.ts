@@ -436,17 +436,29 @@ export interface ResolvedExpense {
   category: string;
   merchant: string;
   description: string;
+  /** The USD figure the expense stores (converted when the user paid in
+   * another currency). */
   amount: string;
+  /** ISO 4217 code of what the user stated, "USD" when they named none. */
+  currency: string;
+  /** The amount as stated, in `currency`; equal to `amount` for USD. */
+  originalAmount: string;
+  /** USD per unit of `currency` as used, "" for USD. */
+  fxRate: string;
+  /** YYYY-MM-DD the rate is as-of, "" for USD. */
+  rateDate: string;
 }
 
-/** Validate a typed purchase and resolve its category. Writes nothing: this
- * is the read half of the chat's plan_expense tool, and `error` is what the
- * model is told. */
+/** Validate a typed purchase, convert a foreign amount, and resolve its
+ * category. Writes nothing: this is the read half of the chat's plan_expense
+ * tool, and `error` is what the model is told. */
 export async function resolveExpense(
   accountId: string,
   args: {
     merchant?: string;
     amount: string;
+    /** ISO 4217 code of the amount as the user stated it; USD when absent. */
+    currency?: string;
     category?: string;
     date?: string;
     report?: string;
@@ -464,9 +476,29 @@ export async function resolveExpense(
     checkReport: true,
   });
   if (inputError) return { ok: false, error: inputError };
-  const amount = normalizeAmount(args.amount);
-  if (!amount) {
+  const stated = normalizeAmount(args.amount);
+  if (!stated) {
     return { ok: false, error: "An expense needs an amount, like 12.50." };
+  }
+  const currency = (args.currency ?? "").trim().toUpperCase() || "USD";
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return {
+      ok: false,
+      error: `${currency} is not a currency. Use a three-letter code, like EUR.`,
+    };
+  }
+  // A foreign amount converts at the ECB reference rate for the expense date
+  // (the IRS payment-date rule), the same conversion an uploaded receipt gets.
+  // No rate is no expense: filing the printed number as dollars would put a
+  // wrong figure in the records, which is worse than making the user redo it
+  // in the editor (where they can pick the date's rate by hand).
+  const conversion =
+    currency === "USD" ? null : await convertToUsd(stated, currency, date);
+  if (currency !== "USD" && !conversion) {
+    return {
+      ok: false,
+      error: `No USD rate for ${currency} on ${date}. Log it in the editor instead.`,
+    };
   }
   const merchant = (args.merchant ?? "").trim();
   const { categories, knownMerchants } = await readExtractionContext(accountId);
@@ -477,7 +509,11 @@ export async function resolveExpense(
       report,
       merchant,
       description: (args.description ?? "").trim(),
-      amount,
+      amount: conversion ? conversion.amount : stated,
+      currency,
+      originalAmount: stated,
+      fxRate: conversion ? conversion.fxRate : "",
+      rateDate: conversion ? conversion.rateDate : "",
       // A merchant that already has a category keeps it; otherwise the
       // model's suggestion is matched onto one of the account's own names
       // ("" when nothing fits, which only means the row shows as incomplete).
@@ -492,19 +528,31 @@ export async function resolveExpense(
 }
 
 /** Build and persist a typed purchase. No image: the user described it, and
- * the editor can attach a receipt later. */
+ * the editor can attach a receipt later. A foreign amount keeps the same
+ * provenance an uploaded receipt gets (currency, printed amount, rate) and
+ * carries the conversion note in its description. */
 export async function saveReceiptExpense(
   accountId: string,
   expense: ResolvedExpense,
 ): Promise<{ expenseId: string }> {
+  const fx = fxProvenance(
+    expense.currency,
+    expense.originalAmount,
+    expense.fxRate
+      ? { fxRate: expense.fxRate, rateDate: expense.rateDate }
+      : null,
+  );
   const receipt: ReceiptExpense = {
     ...(newExpenseShell("receipt") as ReceiptExpense),
     date: expense.date,
     report: expense.report,
     category: expense.category,
-    description: expense.description,
+    description: withConversionNote(expense.description, fx),
     amount: expense.amount,
     merchant: expense.merchant,
+    currency: fx.currency,
+    originalAmount: fx.originalAmount,
+    fxRate: fx.fxRate,
   };
   await upsertExpense(receipt, accountId);
   return { expenseId: receipt.id };
