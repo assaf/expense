@@ -10,7 +10,6 @@ import {
   signValue,
   verifySignedValue,
 } from "~/lib/unsubscribe.server";
-import { headers as unsubscribeHeaders } from "~/routes/unsubscribe.$token";
 import {
   marketingEmailHeaders,
   marketingFooter,
@@ -274,9 +273,21 @@ describe("settings marketing preference", () => {
 });
 
 describe("unsubscribe page headers", () => {
-  it("never lets the personalized public page be cached", () => {
-    expect(unsubscribeHeaders()).toEqual({
-      "Cache-Control": "private, max-age=0, must-revalidate",
+  it("never lets the personalized public page be cached", async () => {
+    // Asserted on the response a proxy would see, not on the exported
+    // object: the route's headers() has to reach the wire.
+    const account = await createAccount(`Hdr ${ulid()}`);
+    const user = await createUser({
+      accountId: account.id,
+      email: `hdr-${ulid()}@example.com`,
+      passwordHash: PASSWORD,
     });
+    const res = await fetch(
+      marketingUnsubscribeUrl("http://127.0.0.1:5199", user.id),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe(
+      "private, max-age=0, must-revalidate",
+    );
   });
 });

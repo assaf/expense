@@ -1,5 +1,6 @@
 import { ulid } from "ulid";
 import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import {
   fromIso,
   nowWire,
@@ -108,13 +109,22 @@ export async function createAccount(name: string): Promise<Account> {
   };
   // The account is created with the IRS Schedule C default categories so
   // receipts can be categorized immediately.
-  await db.transaction(async (tx) => {
-    await tx.orm.public.Account.create({
-      ...account,
-      createdAt: fromIso(account.createdAt),
+  try {
+    await db.transaction(async (tx) => {
+      await tx.orm.public.Account.create({
+        ...account,
+        createdAt: fromIso(account.createdAt),
+      });
+      await seedDefaultCategories(tx, account.id);
     });
-    await seedDefaultCategories(tx, account.id);
-  });
+  } catch (err) {
+    // The name pre-check raced another signup: the unique index is the real
+    // gate, so report the same message instead of a raw Postgres error.
+    if (isUniqueViolation(err)) {
+      throw new Error("An account with that name already exists");
+    }
+    throw err;
+  }
   return account;
 }
 
@@ -177,30 +187,39 @@ export async function createUser(input: {
   };
   // The registering email becomes an allowed "receipts by email" sender by
   // default; the account can remove it or add more addresses in Settings.
-  await db.transaction(async (tx) => {
-    await tx.orm.public.User.create({
-      id: user.id,
-      accountId: user.accountId,
-      email: user.email,
-      passwordHash: input.passwordHash,
-      emailVerifiedAt: fromIsoOrNull(user.emailVerifiedAt),
-      verificationTokenHash: input.verificationTokenHash ?? null,
-      verificationSentAt: fromIsoOrNull(input.verificationSentAt ?? null),
-      createdAt: fromIso(user.createdAt),
-    });
-    const existing = await tx.orm.public.InboundSender.where((s) =>
-      s.accountId.eq(input.accountId),
-    )
-      .select("address")
-      .all();
-    if (!existing.some((s) => s.address === email)) {
-      await tx.orm.public.InboundSender.create({
-        accountId: input.accountId,
-        address: email,
+  try {
+    await db.transaction(async (tx) => {
+      await tx.orm.public.User.create({
+        id: user.id,
+        accountId: user.accountId,
+        email: user.email,
+        passwordHash: input.passwordHash,
+        emailVerifiedAt: fromIsoOrNull(user.emailVerifiedAt),
+        verificationTokenHash: input.verificationTokenHash ?? null,
+        verificationSentAt: fromIsoOrNull(input.verificationSentAt ?? null),
         createdAt: fromIso(user.createdAt),
       });
+      const existing = await tx.orm.public.InboundSender.where((s) =>
+        s.accountId.eq(input.accountId),
+      )
+        .select("address")
+        .all();
+      if (!existing.some((s) => s.address === email)) {
+        await tx.orm.public.InboundSender.create({
+          accountId: input.accountId,
+          address: email,
+          createdAt: fromIso(user.createdAt),
+        });
+      }
+    });
+  } catch (err) {
+    // The email pre-check raced another signup: the unique index is the
+    // real gate.
+    if (isUniqueViolation(err)) {
+      throw new Error("That email is already in use");
     }
-  });
+    throw err;
+  }
   return user;
 }
 
@@ -234,6 +253,19 @@ export async function findUserById(id: string): Promise<User | undefined> {
     // same connection-churn relief production gets.
     { evenInTests: true },
   );
+}
+
+/** The user's credential epoch, read straight from Postgres: this is the
+ * value a session cookie is checked against, and a password reset on
+ * another instance must be observed immediately. The cache above is
+ * per-process, so reading the epoch through it would keep admitting a
+ * revoked cookie for the whole TTL on every other instance (one indexed
+ * single-column read instead of the cached row). */
+export async function readCredentialsEpoch(userId: string): Promise<string> {
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("credentialsChangedAt")
+    .first();
+  return toIsoOrNull(row?.credentialsChangedAt ?? null) ?? "";
 }
 
 /** The stored password hash for a user (never exposed on the User type). */

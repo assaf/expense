@@ -1,6 +1,7 @@
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type { EmailConnectionRecord } from "~/lib/types";
 
@@ -229,21 +230,42 @@ export async function createEmailConnection(input: {
           : `${address} is already connected to another workspace.`,
     };
   }
-  const row = await db.orm.public.EmailConnection.create({
-    id: ulid(),
-    accountId: input.accountId,
-    provider: input.provider,
-    emailAddress: address,
-    remoteAccountId: input.remoteAccountId,
-    tokenEnc: input.tokenEnc,
-    refreshTokenEnc: input.refreshTokenEnc,
-    tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
-    status: "active",
-    createdAt: nowWire(),
-  });
+  const created = await (async () => {
+    try {
+      return {
+        ok: true as const,
+        row: await db.orm.public.EmailConnection.create({
+          id: ulid(),
+          accountId: input.accountId,
+          provider: input.provider,
+          emailAddress: address,
+          remoteAccountId: input.remoteAccountId,
+          tokenEnc: input.tokenEnc,
+          refreshTokenEnc: input.refreshTokenEnc,
+          tokenExpiresAt: input.tokenExpiresAt
+            ? fromIso(input.tokenExpiresAt)
+            : null,
+          status: "active",
+          createdAt: nowWire(),
+        }),
+      };
+    } catch (err) {
+      // The address pre-check raced another connection: the unique index is
+      // the real gate, so answer with the same message rather than a raw
+      // Postgres error.
+      if (isUniqueViolation(err)) {
+        return {
+          ok: false as const,
+          error: `${address} is already connected.`,
+        };
+      }
+      throw err;
+    }
+  })();
+  if (!created.ok) return { ok: false, error: created.error };
   return {
     ok: true,
-    connection: toView(row, 0, 0),
+    connection: toView(created.row, 0, 0),
   };
 }
 

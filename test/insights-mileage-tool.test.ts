@@ -174,16 +174,27 @@ describe("runPlanMileage", () => {
     });
   });
 
-  it("rejects a report the account doesn't have", async () => {
-    const resolver = resolvesTo(trip());
+  it("hands the report to the resolver, which owns the rule", async () => {
+    // The resolver validates the report (must exist and be open) and the
+    // tool does not second-guess it, so an invented name comes back as its
+    // message rather than a different one from the tool.
+    const resolver = vi.fn(async () => ({
+      ok: false as const,
+      error: 'Report "Q4" does not exist.',
+    }));
     const out = await runPlanMileage(
       writes,
       call({ stops: ["a", "b"], report: "Q4" }),
       resolver,
     );
-    expect(JSON.parse(out.result)).toEqual({ error: 'No report named "Q4".' });
+    expect(resolver).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ report: "Q4" }),
+    );
+    expect(JSON.parse(out.result)).toEqual({
+      error: 'Report "Q4" does not exist.',
+    });
     expect(out.pending).toBeUndefined();
-    expect(resolver).not.toHaveBeenCalled();
   });
 
   it("rejects more stops than a trip may have", async () => {

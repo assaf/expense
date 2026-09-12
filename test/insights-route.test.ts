@@ -16,7 +16,8 @@ import {
 } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { readExpenses } from "~/lib/db/expenses";
-import { recordAuthFailure } from "~/lib/db/auth-attempts";
+import { clearAuthFailures, recordAuthFailure } from "~/lib/db/auth-attempts";
+import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
 import type { PendingExpense } from "~/lib/insights-expense-tool.server";
 import { addReport } from "~/lib/db/reports";
@@ -282,9 +283,10 @@ describe("prompt fencing (INJ-AI-1)", () => {
     // variant would push the count higher.
     expect(user.match(/<{2,}\s*\/?\s*data\s*>{2,}/gi)).toHaveLength(2);
     expect(user).not.toContain("\u200b");
-    // The spaced close `<<</DATA> >` is stripped whole: the gap merchant
-    // loses its marker, not its words.
-    expect(user).toContain("gap  close");
+    // The spaced close `<<</DATA> >` is neutralized whole: the gap merchant
+    // keeps its words and shows the sentinel where the marker was (deleting
+    // it outright would splice the words together).
+    expect(user).toContain(`gap ${FENCE_SENTINEL} close`);
   });
 
   it("fences profile, history, and summary in the answer prompt", async () => {
@@ -1141,16 +1143,42 @@ describe("translate throttle (INS-GATE-1)", () => {
     const form = new FormData();
     form.set("intent", "translate");
     form.set("text", "coffee");
-    // Trip the limit (threshold 12 in this test's window).
+    // Trip the limit (threshold 12 in this test's window). The file's other
+    // tests share the key, so the request below is refused whatever the
+    // budget's state; what matters is that a refusal costs no model call.
     for (let i = 0; i < 12; i++) {
       await callRoute("action", null, form);
     }
+    const before = chat.mock.calls.length;
     const res = (await callRoute("action", null, form)) as {
       ok: boolean;
       error?: string;
     };
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/Too many questions/i);
+    // The refused request must not reach the model: a "check after the
+    // call" would still run up the bill the counter exists to cap.
+    expect(chat).toHaveBeenCalledTimes(before);
+  });
+
+  it("lets a question through again once the lock has expired", async () => {
+    // A lock row from an earlier burst, written with its own timestamps
+    // (only the DB fixture can move the clock): past the expiry the route
+    // must treat the user as unlocked. The key is cleared first because an
+    // active lock keeps its original expiry even for a backdated write.
+    await clearAuthFailures("insights:user_test1");
+    await recordAuthFailure(
+      "insights:user_test1",
+      { windowMs: 15 * 60_000, threshold: 1, lockMs: 60_000 },
+      Date.now() - 61_000,
+    );
+    chat.mockResolvedValue('{"query":"","title":"T","months":6}');
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "coffee");
+    const res = (await callRoute("action", null, form)) as { ok: boolean };
+    expect(res.ok).toBe(true);
+    expect(chat).toHaveBeenCalled();
   });
 });
 

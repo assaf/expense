@@ -103,6 +103,34 @@ export async function findOpenReport(
   return { report, error: null };
 }
 
+/** The same check as findOpenReport, against a row read straight from
+ * Postgres: the cached list above is per process, so a report closed on
+ * another instance would still accept writes here for the rest of its TTL.
+ * Used by the write paths, where "closed" must mean closed now. */
+export async function findOpenReportFresh(
+  accountId: string,
+  name: string,
+): Promise<{ report: Report; error: null } | { report: null; error: string }> {
+  const row = await db.orm.public.Report.where((r) =>
+    and(r.accountId.eq(accountId), r.name.eq(name)),
+  ).first();
+  if (!row) {
+    return {
+      report: null,
+      error: `Report "${name}" doesn't exist — create it first with create_report.`,
+    };
+  }
+  const report: Report = {
+    name: row.name,
+    closed: row.closed,
+    createdAt: toIsoOrNull(row.createdAt),
+  };
+  if (report.closed) {
+    return { report: null, error: `Report "${name}" is closed.` };
+  }
+  return { report, error: null };
+}
+
 /** One report's expense count and exact total (2-dp string). */
 export interface ReportSummary {
   name: string;
@@ -180,16 +208,19 @@ export async function removeReport(
   name: string,
 ): Promise<void> {
   if (!name.trim()) return;
-  const removed = await db.orm.public.Expense.where((e) =>
-    and(e.accountId.eq(accountId), e.report.eq(name)),
-  )
-    .select("_type", "imageFile")
-    .all();
-  await deleteReceiptImages(
-    accountId,
-    removed.map((r) => ({ type: r._type, imageFile: r.imageFile })),
-  );
+  // The rows are read and deleted in ONE transaction: an expense inserted
+  // between a pre-read and the delete would otherwise be removed without
+  // its blob ever being collected. The blobs are swept only after the
+  // commit, so a failure there leaves an orphan (harmless, reapable)
+  // instead of rows pointing at images that are already gone.
+  let swept: { type: string; imageFile?: string }[] = [];
   await db.transaction(async (tx) => {
+    const removed = await tx.orm.public.Expense.where((e) =>
+      and(e.accountId.eq(accountId), e.report.eq(name)),
+    )
+      .select("_type", "imageFile")
+      .all();
+    swept = removed.map((r) => ({ type: r._type, imageFile: r.imageFile }));
     await tx.orm.public.Expense.where((e) =>
       and(e.accountId.eq(accountId), e.report.eq(name)),
     ).deleteAll();
@@ -197,6 +228,7 @@ export async function removeReport(
       and(r.accountId.eq(accountId), r.name.eq(name)),
     ).deleteAll();
   });
+  await deleteReceiptImages(accountId, swept);
   bust(reportsCache, accountId);
 }
 

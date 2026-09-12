@@ -134,6 +134,7 @@ export async function createOAuthToken(input: {
   type: OAuthTokenRecord["type"];
   scope: string;
   expiresAt: string;
+  familyId?: string | null;
 }): Promise<void> {
   const now = new Date().toISOString();
   await db.transaction(async (tx) => {
@@ -152,8 +153,17 @@ export async function createOAuthToken(input: {
       expiresAt: fromIso(input.expiresAt),
       revokedAt: null,
       createdAt: fromIso(now),
+      familyId: input.familyId ?? null,
     });
   });
+}
+
+/** Revoke a whole rotation family: the response to a replayed refresh
+ * token, where the thief's copy and the victim's live one must both stop. */
+export async function revokeOAuthTokenFamily(familyId: string): Promise<void> {
+  await db.orm.public.OAuthToken.where((t) =>
+    and(t.familyId.eq(familyId), t.revokedAt.isNull()),
+  ).updateAll({ revokedAt: nowWire() });
 }
 
 /** Look up a token by its stored hash. */
@@ -165,11 +175,25 @@ export async function findOAuthToken(
   return oauthTokenFromRow(row);
 }
 
-/** Mark a token revoked (refresh rotation, disconnect, revocation endpoint). */
-export async function revokeOAuthToken(tokenHash: string): Promise<void> {
-  await db.orm.public.OAuthToken.where((t) =>
+/** Mark a token revoked (refresh rotation, disconnect, revocation endpoint).
+ * Returns how many rows it claimed: 0 means the token was already revoked,
+ * i.e. another presentation of it won a concurrent rotation. */
+export async function revokeOAuthToken(tokenHash: string): Promise<number> {
+  const rows = await db.orm.public.OAuthToken.where((t) =>
     and(t.tokenHash.eq(tokenHash), t.revokedAt.isNull()),
   ).updateAll({ revokedAt: nowWire() });
+  return rows.length;
+}
+
+/** Give a legacy (pre-family) token its rotation family, so the pair it
+ * rotates into carries the same id and a later replay revokes the chain. */
+export async function stampOAuthTokenFamily(
+  tokenHash: string,
+  familyId: string,
+): Promise<void> {
+  await db.orm.public.OAuthToken.where((t) =>
+    and(t.tokenHash.eq(tokenHash), t.familyId.isNull()),
+  ).updateAll({ familyId });
 }
 
 /** Revoke every live token this user holds. A password reset is the recovery
@@ -298,6 +322,7 @@ function oauthTokenFromRow(row: {
   expiresAt: string;
   revokedAt: string | null;
   createdAt: string;
+  familyId: string | null;
 }): OAuthTokenRecord {
   return {
     tokenHash: row.tokenHash,
@@ -308,5 +333,6 @@ function oauthTokenFromRow(row: {
     expiresAt: toIso(row.expiresAt),
     revokedAt: toIsoOrNull(row.revokedAt),
     createdAt: toIso(row.createdAt),
+    familyId: row.familyId,
   };
 }

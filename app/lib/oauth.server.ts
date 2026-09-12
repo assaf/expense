@@ -7,6 +7,8 @@ import {
   findOAuthClient,
   findOAuthToken,
   revokeOAuthToken,
+  revokeOAuthTokenFamily,
+  stampOAuthTokenFamily,
 } from "~/lib/db/oauth";
 import type { OAuthClientRecord, OAuthTokenRecord } from "~/lib/types";
 
@@ -35,6 +37,7 @@ export { hashToken, safeEqual };
 export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
 /** Refresh token lifetime in seconds (30 days). */
 const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+
 /** Authorization codes expire after 10 minutes (RFC 6749 §4.1.2). */
 const CODE_TTL_MS = 10 * 60 * 1000;
 /** The only PKCE method we accept (RFC 7636 requires S256 for OAuth 2.1). */
@@ -210,10 +213,12 @@ export function buildRegisteredClient(input: {
 
 // --- Tokens ----------------------------------------------------------------
 
-/** Issue an access + refresh token pair for a user + client. */
+/** Issue an access + refresh token pair for a user + client. The pair joins
+ * a rotation family: a brand new grant starts one, a rotation stays in it. */
 export async function issueTokenPair(
   userId: string,
   clientId: string,
+  familyId: string = generateOpaqueToken(),
 ): Promise<{ accessToken: string; refreshToken: string }> {
   const now = Date.now();
   const accessToken = randomToken("oat");
@@ -226,6 +231,7 @@ export async function issueTokenPair(
       type: "access",
       scope: "",
       expiresAt: new Date(now + ACCESS_TOKEN_TTL_SECONDS * 1000).toISOString(),
+      familyId,
     }),
     createOAuthToken({
       tokenHash: hashToken(refreshToken),
@@ -234,6 +240,7 @@ export async function issueTokenPair(
       type: "refresh",
       scope: "",
       expiresAt: new Date(now + REFRESH_TOKEN_TTL_SECONDS * 1000).toISOString(),
+      familyId,
     }),
   ]);
   return { accessToken, refreshToken };
@@ -276,8 +283,13 @@ export function isOAuthToken(value: string): boolean {
 
 /**
  * Validate a refresh token for a client and rotate it: the old refresh token
- * is revoked and a fresh pair is issued. Returns undefined for unknown,
- * revoked, expired, or mismatched tokens.
+ * is revoked and a fresh pair is issued in the same family.
+ *
+ * A refresh token that was already rotated and came back is treated as a
+ * replay of stolen credentials: the whole family is revoked, so the thief's
+ * copy and the victim's live one both stop and the client re-authorizes.
+ * (A grace window for a lost response would leave the family working, which
+ * makes the detection worthless exactly when it matters.)
  */
 export async function rotateRefreshToken(
   client: OAuthClientRecord,
@@ -285,14 +297,31 @@ export async function rotateRefreshToken(
 ): Promise<
   { accessToken: string; refreshToken: string; userId: string } | undefined
 > {
-  const row = validToken(
-    await findOAuthToken(hashToken(refreshToken)),
-    "refresh",
-    client.id,
-  );
+  const presented = await findOAuthToken(hashToken(refreshToken));
+  if (
+    presented?.type === "refresh" &&
+    presented.clientId === client.id &&
+    presented.revokedAt
+  ) {
+    if (presented.familyId) await revokeOAuthTokenFamily(presented.familyId);
+    return undefined;
+  }
+  const row = validToken(presented, "refresh", client.id);
   if (!row) return undefined;
-  await revokeOAuthToken(row.tokenHash);
-  const pair = await issueTokenPair(row.userId, client.id);
+  // A row written before families existed joins one now, so the pair issued
+  // below and every later replay of this token share it. Without the stamp
+  // the successor would start a fresh family and a replay of THIS token
+  // would revoke nothing.
+  const family = row.familyId ?? generateOpaqueToken();
+  if (!row.familyId) await stampOAuthTokenFamily(row.tokenHash, family);
+  // The revoke is the claim: it only touches a live row, so losing it means
+  // another presentation of the same token won the race. That is the replay
+  // signal — the family goes, and the caller re-authorizes.
+  if ((await revokeOAuthToken(row.tokenHash)) === 0) {
+    await revokeOAuthTokenFamily(family);
+    return undefined;
+  }
+  const pair = await issueTokenPair(row.userId, client.id, family);
   return { ...pair, userId: row.userId };
 }
 

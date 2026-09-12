@@ -394,6 +394,8 @@ export interface OAuthTokenRecord {
   expiresAt: string;
   revokedAt: string | null;
   createdAt: string;
+  /** The rotation family this token belongs to (null on legacy rows). */
+  familyId: string | null;
 }
 
 // --- Reconciliation --------------------------------------------------------

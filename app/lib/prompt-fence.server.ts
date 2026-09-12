@@ -21,7 +21,16 @@ const CLOSE = ">＞⟩";
 // Whitespace and invisible characters that read as separators.
 const JUNK = "\\s\\u00ad\\u200b-\\u200f\\u2060\\ufeff";
 
-/** Remove anything shaped like a `<<<NAME>>>` marker, fuzzily. */
+/**
+ * What a stripped marker leaves behind. Deleting the span outright would
+ * also delete a name that merely looks like a marker (the row then reads as
+ * unnamed and the text becomes unfilterable); a visible sentinel keeps the
+ * fact that something was there, and is shorter than any field's bound so
+ * nothing is truncated away by a later slice.
+ */
+export const FENCE_SENTINEL = "[removed]";
+
+/** Neutralize anything shaped like a `<<<NAME>>>` marker, fuzzily. */
 export function stripFenceMarkers(content: string, name: string): string {
   const word = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return content.replace(
@@ -29,6 +38,6 @@ export function stripFenceMarkers(content: string, name: string): string {
       `(?:[${OPEN}][${JUNK}]{0,64}){2,8}\\/?[${JUNK}]{0,64}${word}(?:[${JUNK}]{0,64}[${CLOSE}]){2,8}`,
       "gi",
     ),
-    "",
+    FENCE_SENTINEL,
   );
 }

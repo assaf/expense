@@ -177,21 +177,13 @@ export async function runPlanMileage(
     };
   }
   const args = parsed.data;
-  const report = args.report?.trim() ?? "";
-  // The profile lists the account's reports, so the valid names are
-  // already in the model's context; this only rejects a name the model
-  // invented (or one that does not exist).
-  if (report && !writes.reportNames.includes(report)) {
-    return {
-      result: JSON.stringify({ error: `No report named "${report}".` }),
-    };
-  }
-
   const resolved = await resolve(writes.accountId, {
     locations: args.stops,
     date: args.date || writes.today || undefined,
     type: args.type,
-    report: report || undefined,
+    // The resolver owns the report rule (it must exist and be open); an
+    // invented name comes back as its message.
+    report: args.report?.trim() || undefined,
     // Explicit: one way unless the user said they came back.
     roundTrip: args.roundTrip ?? false,
   });

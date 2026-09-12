@@ -217,6 +217,15 @@ describe("validateDateNotFuture", () => {
   it("returns an error for partial dates", () => {
     expect(validateDateNotFuture("2026-01")).toContain("valid");
   });
+
+  it("clamps a client ceiling to a day past the server's date", () => {
+    // The reconcile flow sends the browser's local date; a browser in
+    // UTC+14 is legitimately a day ahead, anything further is forged.
+    expect(validateDateNotFuture("2026-07-16", "2026-07-16")).toBeNull();
+    expect(validateDateNotFuture("2026-08-01", "2099-12-31")).toContain(
+      "future",
+    );
+  });
 });
 
 describe("thrown error envelopes carry statusText for error boundaries", () => {

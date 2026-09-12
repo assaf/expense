@@ -8,7 +8,7 @@ import {
 import { isMileageType } from "~/lib/mileage-rates";
 import { upsertExpense } from "~/lib/db/expenses";
 import { fxProvenance, withConversionNote } from "~/lib/fx-note";
-import { addReport, findOpenReport } from "~/lib/db/reports";
+import { addReport, findOpenReportFresh } from "~/lib/db/reports";
 import {
   EMPTY_ROUTE,
   newExpenseShell,
@@ -51,7 +51,7 @@ export async function validateExpenseInputs(
   const dateError = validateDate(date);
   if (dateError) return dateError;
   if (opts.checkReport && report) {
-    const { error } = await findOpenReport(accountId, report);
+    const { error } = await findOpenReportFresh(accountId, report);
     if (error) return error;
   }
   return null;
@@ -209,17 +209,14 @@ export async function saveExpenseFromForm(
     fxRate: fx.fxRate,
     updatedAt: now,
   };
-  if (
+  const replacedImage =
     existing &&
     existing.type === "receipt" &&
     draftKey &&
     existing.imageFile &&
     existing.imageFile !== draftKey
-  ) {
-    // The replacement is a new blob (the draft); the old stored image is
-    // orphaned once the row points at the new key; drop it.
-    await deleteImage(accountId, existing.imageFile);
-  }
+      ? existing.imageFile
+      : "";
   if (receipt.imageFile) {
     receipt.imageFile = await renameImageToConvention(
       accountId,
@@ -235,5 +232,10 @@ export async function saveExpenseFromForm(
     receipt.imageSha256 = await readImageSha256(accountId, receipt.imageFile);
   }
   await upsertExpense(receipt, accountId);
+  // The replaced blob is dropped only now: deleting it first would leave the
+  // row pointing at an image that is already gone if the save failed.
+  if (replacedImage) {
+    await deleteImage(accountId, replacedImage).catch(() => {});
+  }
   return { error: null, id: receipt.id };
 }

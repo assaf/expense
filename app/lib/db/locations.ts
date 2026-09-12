@@ -180,14 +180,27 @@ export async function updateLocation(
       error: `A location named "${cleaned.name}" already exists.`,
     };
   }
-  const rows = await db.orm.public.Location.where({
-    accountId,
-    id,
-  }).updateAll({
-    ...cleaned,
-    ...coords(input),
-    updatedAt: fromIso(new Date().toISOString()),
-  });
+  let rows: { id: string }[] = [];
+  try {
+    rows = await db.orm.public.Location.where({
+      accountId,
+      id,
+    }).updateAll({
+      ...cleaned,
+      ...coords(input),
+      updatedAt: fromIso(new Date().toISOString()),
+    });
+  } catch (err) {
+    // The name pre-check raced another rename to the same name: report the
+    // same message instead of leaking the unique violation.
+    if (isUniqueViolation(err)) {
+      return {
+        ok: false,
+        error: `A location named "${cleaned.name}" already exists.`,
+      };
+    }
+    throw err;
+  }
   if (rows.length === 0) {
     return { ok: false, error: "That location no longer exists." };
   }

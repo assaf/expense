@@ -121,9 +121,17 @@ export function validateDateNotFuture(
 ): string | null {
   const error = validateDate(date);
   if (error) return error;
-  // Trust only a well-formed client-supplied ceiling.
+  // Trust only a well-formed client-supplied ceiling, and only up to one
+  // day past the server's own date: a browser in UTC+14 is legitimately a
+  // day ahead, but anything further is a forged ceiling that would let a
+  // future-dated row through.
+  const serverToday = todayDate();
+  const requested =
+    today && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : serverToday;
+  const tomorrow = new Date(`${serverToday}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   const ceiling =
-    today && /^\d{4}-\d{2}-\d{2}$/.test(today) ? today : todayDate();
+    requested > tomorrow.toISOString().slice(0, 10) ? serverToday : requested;
   if (date > ceiling) return "Date cannot be in the future.";
   return null;
 }

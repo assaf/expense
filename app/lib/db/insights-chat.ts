@@ -1,6 +1,7 @@
 import { ulid } from "ulid";
+import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, fromIso } from "~/lib/db/wire";
+import { asJson, fromIso, toIso } from "~/lib/db/wire";
 
 export interface StoredExchange {
   question: string;
@@ -117,34 +118,103 @@ async function bustConversationCache(userId: string): Promise<void> {
   bust(conversationCache, userId);
 }
 
+/** How many conversations a user keeps. Older ones exist only as a record,
+ * and the delete marker walks the newest 20 looking for a filed expense, so
+ * this leaves plenty of headroom while stopping the table from growing for
+ * every "New chat" click. */
+const MAX_CONVERSATIONS = 50;
+
+/** Drop the user's conversations past MAX_CONVERSATIONS, oldest first. */
+async function pruneConversations(userId: string): Promise<void> {
+  const rows = await db.orm.public.InsightConversation.where((c) =>
+    c.userId.eq(userId),
+  )
+    .orderBy((c) => c.updatedAt.desc())
+    .select("id")
+    .all();
+  const stale = rows.slice(MAX_CONVERSATIONS).map((r) => r.id);
+  if (stale.length === 0) return;
+  await db.orm.public.InsightConversation.where((c) =>
+    c.id.in(stale),
+  ).deleteAll();
+}
+
+/** Claim a conversation row for a rewrite: the write only lands when the
+ * stored `messages` are still the array the caller read (`updatedAt` alone
+ * is not enough — the delete marker deliberately leaves it untouched, and
+ * timestamp(3) cannot tell two writes in one millisecond apart). Returns
+ * false when another writer got there first; the callers retry with a fresh
+ * read. */
+async function swapMessages(
+  id: string,
+  expected: unknown,
+  next: StoredExchange[],
+  update: { updatedAt?: string },
+): Promise<boolean> {
+  const rows = await db.orm.public.InsightConversation.where((c) =>
+    and(c.id.eq(id), c.messages.eq(asJson(expected))),
+  ).updateAll({
+    messages: asJson(next),
+    ...(update.updatedAt ? { updatedAt: fromIso(update.updatedAt) } : {}),
+  });
+  return rows.length > 0;
+}
+
+/** The timestamp for a write that must be strictly newer than the row just
+ * read: `now`, or one millisecond past it when the clock has not moved (the
+ * chat opens the newest conversation by this value, so a tie is ambiguous). */
+function nextWriteTime(readWire: string): string {
+  const readMs = Date.parse(toIso(readWire));
+  const nowMs = Date.now();
+  return new Date(readMs >= nowMs ? readMs + 1 : nowMs).toISOString();
+}
+
 /** Append one exchange to the user's most recent conversation, creating
- * the conversation on first use. All prior conversations stay in the
- * table as a record. */
+ * the conversation on first use.
+ *
+ * The row is read fresh and the write claims it against the array that was
+ * read: the cached copy above can be minutes old, and replacing the array
+ * from it would drop an exchange another request appended (or a deletion
+ * note another request wrote) in the meantime. A lost claim re-reads and
+ * tries again. */
 export async function appendExchange(
   userId: string,
   accountId: string,
   exchange: StoredExchange,
 ): Promise<void> {
-  const existing = await readLatestConversation(userId);
-  if (existing) {
-    const exchanges = [...existing.exchanges, exchange].slice(-200);
-    await db.orm.public.InsightConversation.where((c) =>
-      c.id.eq(existing.id),
-    ).updateAll({
-      messages: asJson(exchanges),
-      updatedAt: fromIso(new Date().toISOString()),
-    });
-  } else {
-    await db.orm.public.InsightConversation.create({
-      id: ulid(),
-      userId,
-      accountId,
-      messages: asJson([exchange]),
-      createdAt: fromIso(new Date().toISOString()),
-      updatedAt: fromIso(new Date().toISOString()),
-    });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await db.orm.public.InsightConversation.where((c) =>
+      c.userId.eq(userId),
+    )
+      .orderBy((c) => c.updatedAt.desc())
+      .first();
+    if (!row) {
+      await db.orm.public.InsightConversation.create({
+        id: ulid(),
+        userId,
+        accountId,
+        messages: asJson([exchange]),
+        createdAt: fromIso(new Date().toISOString()),
+        updatedAt: fromIso(new Date().toISOString()),
+      });
+      await pruneConversations(userId);
+      await bustConversationCache(userId);
+      return;
+    }
+    const exchanges = [...parseExchanges(row.messages), exchange].slice(-200);
+    if (
+      await swapMessages(row.id, row.messages, exchanges, {
+        updatedAt: nextWriteTime(row.updatedAt),
+      })
+    ) {
+      await bustConversationCache(userId);
+      return;
+    }
   }
-  await bustConversationCache(userId);
+  // Three lost races in a row means something is appending in a tight loop;
+  // losing the record of one answer is better than failing the request that
+  // already did its work (the expense or trip is filed by now).
+  console.warn("[insights] dropped an exchange after repeated write conflicts");
 }
 
 /** The transcript's own line for an exchange whose expense is gone: the
@@ -172,30 +242,37 @@ export async function markFiledExpenseDeleted(
   userId: string,
   expenseId: string,
 ): Promise<void> {
-  // The exchange that filed it lives in the conversation that was current
-  // then: the newest handful covers it (the user would have to start a new
-  // chat between filing and deleting to push it further back).
-  const rows = await db.orm.public.InsightConversation.where((c) =>
-    c.userId.eq(userId),
-  )
-    .orderBy((c) => c.updatedAt.desc())
-    .limit(20)
-    .all();
-  for (const row of rows) {
-    const exchanges = parseExchanges(row.messages);
-    const index = exchanges.findIndex((e) => e.expenseId === expenseId);
-    if (index < 0) continue;
-    const target = exchanges[index]!;
-    // Both fields describe the link that is going away; the "Log it"
-    // question and the answer's own words stay as written.
-    const { expenseId: _filed, proposalKind: _kind, ...rest } = target;
-    exchanges[index] = { ...rest, answer: withDeletedNote(target.answer) };
-    await db.orm.public.InsightConversation.where((c) =>
-      c.id.eq(row.id),
-    ).updateAll({ messages: asJson(exchanges) });
-    await bustConversationCache(userId);
-    return;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const rows = await db.orm.public.InsightConversation.where((c) =>
+      c.userId.eq(userId),
+    )
+      .orderBy((c) => c.updatedAt.desc())
+      .limit(20)
+      .all();
+    let lost = false;
+    for (const row of rows) {
+      const exchanges = parseExchanges(row.messages);
+      const index = exchanges.findIndex((e) => e.expenseId === expenseId);
+      if (index < 0) continue;
+      const target = exchanges[index]!;
+      // Both fields describe the link that is going away; the "Log it"
+      // question and the answer's own words stay as written.
+      const { expenseId: _filed, proposalKind: _kind, ...rest } = target;
+      exchanges[index] = { ...rest, answer: withDeletedNote(target.answer) };
+      // No updatedAt: it decides which conversation the chat opens, and
+      // deleting an expense must not jump the user to an older one. The
+      // claim is on the array that was read instead.
+      const won = await swapMessages(row.id, row.messages, exchanges, {});
+      if (!won) {
+        lost = true;
+        break;
+      }
+      await bustConversationCache(userId);
+      return;
+    }
+    if (!lost) return;
   }
+  console.warn("[insights] could not note a deleted expense after retries");
 }
 
 /** Start a fresh conversation for the user; the previous one remains in
@@ -214,6 +291,7 @@ export async function startNewConversation(
     createdAt: now,
     updatedAt: now,
   });
+  await pruneConversations(userId);
   await bustConversationCache(userId);
   return id;
 }

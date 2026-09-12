@@ -379,6 +379,56 @@ describe("MCP OAuth", () => {
     expect(replay.json.error).toBe("invalid_grant");
   });
 
+  it("revokes the whole rotation family when a refresh token is replayed", async () => {
+    const clientId = await registerClient("oauth-test-family");
+    const verifier = generateCodeVerifier();
+    const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
+    const redirected = await runAuthorize(
+      page,
+      authorizeUrl(clientId, verifier),
+      "approve",
+    );
+    const code = redirected.searchParams.get("code")!;
+
+    const first = await exchangeCode({
+      grant_type: "authorization_code",
+      code,
+      code_verifier: verifier,
+      redirect_uri: CALLBACK,
+      client_id: clientId,
+    });
+    const stolenRef = first.json.refresh_token as string;
+
+    // The legitimate client rotates: the stolen token is now the previous
+    // one in the family.
+    const rotated = await exchangeCode({
+      grant_type: "refresh_token",
+      refresh_token: stolenRef,
+      client_id: clientId,
+    });
+    expect(rotated.status).toBe(200);
+    const liveRefresh = rotated.json.refresh_token as string;
+
+    // The replay is rejected…
+    const replay = await exchangeCode({
+      grant_type: "refresh_token",
+      refresh_token: stolenRef,
+      client_id: clientId,
+    });
+    expect(replay.status).toBe(400);
+    expect(replay.json.error).toBe("invalid_grant");
+
+    // …and it takes the whole family with it: the token the rotation issued
+    // must stop working too, or a thief who replays keeps a live grant.
+    const afterReplay = await exchangeCode({
+      grant_type: "refresh_token",
+      refresh_token: liveRefresh,
+      client_id: clientId,
+    });
+    expect(afterReplay.status).toBe(400);
+    expect(afterReplay.json.error).toBe("invalid_grant");
+  });
+
   it("revokes tokens and disconnects the client", async () => {
     const clientId = await registerClient("oauth-test-revoke");
     const verifier = generateCodeVerifier();

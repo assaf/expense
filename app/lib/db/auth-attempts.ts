@@ -129,6 +129,12 @@ export async function recordAuthFailure(
   // grow auth_attempts unboundedly with unique keys (distinct emails or
   // rotated IPs). A row is dead when its window elapsed AND it is not
   // currently locking (nextFailureState would reset it anyway).
+  //
+  // The sweep window is the CALLER's (options.windowMs), not the auth
+  // default: a caller passing a shorter window than the key family it is
+  // sweeping could delete a row another caller's longer window still needs
+  // (the counter would then restart early). Keep callers' windows at least
+  // as long as AUTH_WINDOW_MS.
   writesSinceSweep += 1;
   if (writesSinceSweep >= SWEEP_EVERY_WRITES) {
     writesSinceSweep = 0;

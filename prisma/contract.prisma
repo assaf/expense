@@ -127,6 +127,15 @@ model Expense {
   account                                Account              @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "expenses_accountId_fkey", index: false)
   reconciliationRun                      ReconciliationRun?   @relation(fields: [reconciledInRunId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "expenses_reconciledInRunId_fkey", index: false)
 
+  /// Every account-scoped read (the home list, insights, exports) filters
+  /// on these two; without the index that filter is a full table scan.
+  @@index([accountId, date], map: "expenses_accountId_date_idx")
+  /// One expense per image fingerprint per account: the capture path's
+  /// duplicate check is a pre-check followed by an insert, so this is the
+  /// backstop that makes a concurrent double capture collide instead of
+  /// filing twice. Postgres treats NULLs as distinct, so rows without a
+  /// fingerprint (mileage rows, legacy images) never collide.
+  @@unique([accountId, imageSha256], map: "expenses_accountId_imageSha256_key")
   @@map("expenses")
 }
 
@@ -334,10 +343,15 @@ model OAuthToken {
   expiresAt TimestampString(3)
   revokedAt TimestampString(3)?
   createdAt TimestampString(3)
+  /// The rotation family this token belongs to: every pair a grant mints
+  /// carries the same id, so a reused (already rotated) refresh token can
+  /// revoke the whole chain instead of only itself.
+  familyId  String?
   client    OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_tokens_clientId_fkey")
 
   @@index([clientId], map: "oauth_tokens_clientId_idx")
   @@index([userId], map: "oauth_tokens_userId_idx")
+  @@index([familyId], map: "oauth_tokens_familyId_idx")
   @@map("oauth_tokens")
 }
 

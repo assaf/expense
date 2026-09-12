@@ -157,6 +157,29 @@ describe("password reset", () => {
     expect(pending?.passwordResetTokenHash).toBeNull();
   });
 
+  it("rejects a session whose epoch changed on another instance", async () => {
+    const email = `epoch-${ulid().toLowerCase()}@example.com`;
+    const { user } = await seedUser(email);
+    const pair = (await createSessionCookie(user)).split(";")[0]!;
+    const request = () =>
+      new Request("http://localhost/", { headers: { cookie: pair } });
+
+    // Warm this process's user cache, then bump the epoch the way a reset
+    // on another instance would: nothing here busts that cache, so only a
+    // fresh read of the epoch can reject the cookie.
+    await expect(requireUser(request())).resolves.toMatchObject({
+      id: user.id,
+    });
+    await testPrisma.user.updateMany({
+      where: { id: user.id },
+      data: { credentialsChangedAt: new Date() },
+    });
+
+    const after = await requireUser(request()).catch((err: unknown) => err);
+    expect(after).toBeInstanceOf(Response);
+    expect((after as Response).headers.get("location")).toContain("/login");
+  });
+
   it("revokes sessions and OAuth tokens minted before the reset (L2)", async () => {
     const email = `reset-${ulid().toLowerCase()}@example.com`;
     const { user } = await seedUser(email);
@@ -193,6 +216,9 @@ describe("password reset", () => {
     ).catch((err: unknown) => err);
     expect(after).toBeInstanceOf(Response);
     expect((after as Response).headers.get("location")).toContain("/login");
+    await expect(
+      verifyAccessToken(issued.accessToken),
+    ).resolves.toBeUndefined();
     await expect(
       verifyAccessToken(issued.accessToken),
     ).resolves.toBeUndefined();

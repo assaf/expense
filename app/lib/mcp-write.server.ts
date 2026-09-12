@@ -1,6 +1,7 @@
 import { hasEnoughStops } from "~/lib/completeness";
 import { findSameImageExpense, upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { readMileageRates } from "~/lib/db/seed";
 import { captureWarning } from "~/lib/errors.server";
 import { normalizeAmount } from "~/lib/format";
@@ -83,7 +84,12 @@ async function validatedExpenseInput(
   const serverUtcNow = new Date().toISOString();
   const date = args.date ?? serverUtcNow.slice(0, 10);
   const report = args.report?.trim() ?? "";
-  const inputError = await validateExpenseInputs(accountId, date, report);
+  const inputError = await validateExpenseInputs(accountId, date, report, {
+    // Every write path applies the same rule: a report that does not exist,
+    // or is closed, is refused (the MCP tool descriptions promise it, and
+    // the chat's own resolver already did).
+    checkReport: true,
+  });
   if (inputError) return { ok: false, error: inputError };
   return { ok: true, date, report, serverUtcNow };
 }

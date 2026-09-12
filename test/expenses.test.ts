@@ -8,12 +8,13 @@ import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
 import { saveExpenseFromForm } from "~/lib/expense-save.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import {
   readNeighborIds,
   readExpenses,
   upsertExpense,
 } from "~/lib/db/expenses";
-import { renameReport } from "~/lib/db/reports";
+import { addReport, readReports, renameReport } from "~/lib/db/reports";
 import { newExpenseShell, type ReceiptExpense } from "~/lib/types";
 import { saveImage } from "~/lib/images.server";
 
@@ -1046,6 +1047,61 @@ describe("expense form validation", () => {
     const result = await saveExpenseFromForm(form, TEST_ACCOUNT_ID, null);
     expect(result.error).toMatch(/too large/);
     expect(result.id).toBeNull();
+  });
+  it("refuses a report closed on another instance, with no local bust", async () => {
+    // Warm the process's report cache, then close the report out-of-band the
+    // way another instance's action would: the save path must read the row,
+    // not the cached list, or a closed report keeps accepting expenses.
+    const name = `Close Me ${Date.now()}`;
+    await addReport(TEST_ACCOUNT_ID, name);
+    await readReports(TEST_ACCOUNT_ID);
+    await testPrisma.report.updateMany({
+      where: { accountId: TEST_ACCOUNT_ID, name },
+      data: { closed: true },
+    });
+    try {
+      const form = new FormData();
+      form.set("date", "2026-07-14");
+      form.set("amount", "10.00");
+      form.set("merchant", "Closed Co");
+      form.set("report", name);
+      const result = await saveExpenseFromForm(form, TEST_ACCOUNT_ID, null);
+      expect(result.error).toMatch(/closed/i);
+      expect(result.id).toBeNull();
+    } finally {
+      await testPrisma.report.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, name },
+      });
+    }
+  });
+});
+
+describe("image fingerprint backstop", () => {
+  it("rejects a second row carrying the same image bytes", async () => {
+    // The MCP capture path checks for a duplicate and then inserts; this
+    // index is what makes two captures of the same bytes collide instead of
+    // filing twice, and the app must recognize the violation as one.
+    const sha = `backstop-${Date.now()}`;
+    const shell = () => ({
+      ...(newExpenseShell("receipt") as ReceiptExpense),
+      date: "2026-07-14",
+      amount: "5.00",
+      merchant: "Backstop Co",
+      imageSha256: sha,
+    });
+    const first = shell();
+    const second = shell();
+    await upsertExpense(first, TEST_ACCOUNT_ID);
+    try {
+      const error = await upsertExpense(second, TEST_ACCOUNT_ID).catch(
+        (err: unknown) => err,
+      );
+      expect(isUniqueViolation(error)).toBe(true);
+    } finally {
+      await testPrisma.expense.deleteMany({
+        where: { id: { in: [first.id, second.id] } },
+      });
+    }
   });
 });
 

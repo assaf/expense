@@ -6,6 +6,7 @@ import {
   LLM_VISION_MODEL,
 } from "~/lib/env";
 import { extractReceipt } from "~/lib/receipt-ai.server";
+import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 
 /**
  * LLM request-shape contract for receipt extraction. The fetch is stubbed
@@ -181,6 +182,9 @@ describe("prompt-injection defenses", () => {
       expect(field).not.toContain("<<</RECEIPT>>>");
       expect(field).not.toContain("<<</RECEIPT>");
     }
+    // The marker is neutralized, not deleted: a name the model wrote as a
+    // marker would otherwise vanish and leave an unfilterable empty field.
+    expect(result.merchant).toContain(FENCE_SENTINEL);
     // Legitimate fullwidth brackets are not markers and survive intact.
     expect(result.category).toContain("＜Supplies＜ cat");
     expect(result.amount).toBe("99.99");

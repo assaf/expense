@@ -19,6 +19,7 @@ import {
   findAccountByInviteCode,
   findUserByEmail,
   findUserById,
+  readCredentialsEpoch,
   getPasswordHash,
   passwordResetRecentlySent,
   readAccount,
@@ -97,7 +98,10 @@ export async function sessionUser(request: Request): Promise<User | undefined> {
   if (!user) return undefined;
   const minted = session.get(SESSION_CREDENTIALS_KEY);
   const epoch = typeof minted === "string" ? minted : "";
-  return epoch === (user.credentialsChangedAt ?? "") ? user : undefined;
+  // The epoch is read fresh: the user row above is cached per process for
+  // 30s, and a password reset on another instance must revoke this cookie
+  // now, not when that cache happens to expire.
+  return epoch === (await readCredentialsEpoch(userId)) ? user : undefined;
 }
 
 /** Require an authenticated request. Returns the user or redirects to /login. */

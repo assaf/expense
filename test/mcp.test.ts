@@ -354,6 +354,47 @@ describe("MCP endpoint", () => {
     expect(row?.date).toBe(serverUtcNow.slice(0, 10));
   });
 
+  it("refuses a capture into a report that is closed", async () => {
+    // The MCP tool descriptions promise the report must exist and be open;
+    // the shared write prelude now enforces it (it used to skip the check
+    // while the chat's own resolver applied it).
+    await initialize(accessToken);
+    const name = `Closed ${Date.now()}`;
+    expect(
+      (await callTool(accessToken, "create_report", { name })).isError,
+    ).toBe(false);
+    expect(
+      (await callTool(accessToken, "close_report", { name, closed: true }))
+        .isError,
+    ).toBe(false);
+
+    const png = await sharp({
+      create: {
+        width: 20,
+        height: 10,
+        channels: 3,
+        background: { r: 9, g: 9, b: 9 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    const result = await callTool(accessToken, "capture_receipt", {
+      imageData: png.toString("base64"),
+      mime: "image/png",
+      filename: "closed-report.png",
+      date: "2026-04-28",
+      report: name,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.payload)).toMatch(/closed/i);
+    expect(
+      await testPrisma.expense.count({ where: { accountId: TEST_ACCOUNT_ID } }),
+    ).toBe(before);
+  });
+
   it("reports a duplicate instead of importing the same image twice", async () => {
     const png = await sharp({
       create: {
