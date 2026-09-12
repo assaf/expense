@@ -80,6 +80,25 @@ describe("extraction cache store", () => {
     expect(await readCachedExtraction(OTHER_ACCOUNT_ID, key)).toBeNull();
   });
 
+  it("treats a row this build cannot read as a miss", async () => {
+    // A row written by an older build (or edited by hand) must not be handed
+    // out as a complete extraction: the fields this build reads would be
+    // silently undefined.
+    const hash = extractionCacheKey({ text: "unreadable-row" })!;
+    await testPrisma.receiptExtraction.create({
+      data: {
+        accountId: TEST_ACCOUNT_ID,
+        hash,
+        result: { merchant: "Starbucks" },
+        createdAt: new Date().toISOString(),
+      },
+    });
+    expect(await readCachedExtraction(TEST_ACCOUNT_ID, hash)).toBeNull();
+    await testPrisma.receiptExtraction.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID, hash },
+    });
+  });
+
   it("treats expired rows as misses and sweeps them", async () => {
     const key = extractionCacheKey({ text: "MERCHANT: Amazon\nTOTAL: 8.88" })!;
     await testPrisma.receiptExtraction.create({

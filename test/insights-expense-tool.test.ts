@@ -155,10 +155,22 @@ describe("runPlanExpense", () => {
   it("accepts an amount the model sent as a number", async () => {
     const resolver = resolvesTo(expense({ amount: "50.00" }));
     const out = await runPlanExpense(writes, call({ amount: 50 }), resolver);
-    // A model asked for an amount often emits a bare number; the coercion
-    // keeps "50" working while the advertised schema stays a string.
+    // A model asked for an amount often emits a bare number: the schema
+    // takes a number or a numeric string, and the resolver gets text.
     expect(resolver.mock.calls[0]![1]).toMatchObject({ amount: "50" });
     expect(out.pending?.amount).toBe("50.00");
+  });
+
+  it("rejects a present-but-null amount instead of coercing it to text", async () => {
+    // `z.coerce.string()` used to turn the null a model sends for an empty
+    // required field into the amount "null", which the resolver then
+    // reported as a *missing* amount — so the model retried the same broken
+    // call instead of being told the argument was malformed.
+    const resolver = resolvesTo(expense({ amount: "null" }));
+    const out = await runPlanExpense(writes, call({ amount: null }), resolver);
+    expect(JSON.parse(out.result).error).toBe("invalid expense");
+    expect(out.pending).toBeUndefined();
+    expect(resolver).not.toHaveBeenCalled();
   });
 
   it("lets an explicit date win over the user's today", async () => {

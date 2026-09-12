@@ -168,6 +168,37 @@ describe("api.email-connections-cron", () => {
     );
   });
 
+  it("keeps renewing when the failure flag itself cannot be written", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "a" }),
+      connection({ id: "b" }),
+    ]);
+    mocks.ensureConnectionPushSubscription.mockImplementation(
+      async (c: { id: string }) => {
+        if (c.id === "a") throw new Error("token revoked");
+        return { subscriptionId: "sub-1", expires: "x", created: false };
+      },
+    );
+    // The status write is the last thing the failure path does: a database
+    // hiccup there must not abort the tick, or every connection after the
+    // failing one gets neither renewal nor drain.
+    mocks.setEmailConnectionStatus.mockRejectedValueOnce(new Error("db down"));
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { total: number; failed: number };
+    expect(body.total).toBe(2);
+    expect(body.failed).toBe(1);
+    expect(mocks.drainEmailConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "b" }),
+    );
+  });
+
   it("handles an empty registry", async () => {
     const res = await loader(
       args(

@@ -139,6 +139,34 @@ describe("gmailInboxSummaries", () => {
     expect(summaries.map((s) => s.id)).toEqual(["m3", "m2", "m1b", "m1"]);
   });
 
+  it("skips a message whose metadata is malformed instead of failing the scan", async () => {
+    // One wire-shape surprise (or a message deleted between the list and the
+    // get) is one message, not the whole account's scan.
+    const baseline = respond;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown, _init?: RequestInit) => {
+        const url = new URL(String(input));
+        const path = `${url.pathname}${url.search}`;
+        if (path.includes("/messages/m2?")) {
+          return new Response(JSON.stringify({ id: 42 }), { status: 200 });
+        }
+        if (path.includes("/messages/m1b?")) {
+          return new Response("gone", { status: 404 });
+        }
+        return new Response(baseline(path), { status: 200 });
+      }),
+    );
+
+    const summaries = await gmailInboxSummaries({
+      token: "t",
+      afterIso: new Date(T0 - 3 * DAY).toISOString(),
+      limit: 10,
+      descending: true,
+    });
+    expect(summaries.map((s) => s.id)).toEqual(["m3", "m1"]);
+  });
+
   it("carries the snippet as preview only when asked", async () => {
     const opts = {
       token: "t",

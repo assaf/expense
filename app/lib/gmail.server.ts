@@ -142,7 +142,10 @@ async function listInboxMessageIds(
       messages?: MessageListItem[];
       nextPageToken?: string;
     }>(token, `/gmail/v1/users/me/messages?${params.toString()}`);
-    for (const m of page.messages ?? []) {
+    // `messages` is a cast over unvalidated JSON: a non-array (an error
+    // object a proxy returned with a 200) must not throw here.
+    const list = Array.isArray(page.messages) ? page.messages : [];
+    for (const m of list) {
       if (typeof m.id === "string") ids.push(m.id);
     }
     pageToken =
@@ -237,12 +240,32 @@ async function fetchSummaries(
   const CHUNK = 20;
   const metas: z.infer<typeof messageMetaSchema>[] = [];
   for (let i = 0; i < ids.length; i += CHUNK) {
-    const chunk = await Promise.all(
+    // allSettled: one message that vanished between the list and the get (a
+    // 404) must not fail the whole batch, and the rest still get scanned.
+    const chunk = await Promise.allSettled(
       ids
         .slice(i, i + CHUNK)
         .map((id) => gmailJson<unknown>(token, metaPath(id))),
     );
-    metas.push(...chunk.map((m) => messageMetaSchema.parse(m)));
+    for (const [index, result] of chunk.entries()) {
+      if (result.status === "rejected") {
+        console.warn("[gmail] skipping unreadable message meta:", {
+          id: ids[i + index],
+          error: String(result.reason),
+        });
+        continue;
+      }
+      const parsed = messageMetaSchema.safeParse(result.value);
+      if (!parsed.success) {
+        // A wire-shape surprise is one message, not the whole account: the
+        // JMAP sibling skips the same way.
+        console.warn("[gmail] skipping malformed message meta:", {
+          id: ids[i + index],
+        });
+        continue;
+      }
+      metas.push(parsed.data);
+    }
   }
   return metas.map((m) => toSummary(m, includePreview));
 }
@@ -260,24 +283,28 @@ async function gmailRawEmail(
   if (typeof rawMsg.raw !== "string") {
     throw new Error(`Gmail API raw message ${id} has no raw field`);
   }
-  const meta = messageMetaSchema.parse(
+  const meta = messageMetaSchema.safeParse(
     await gmailJson<unknown>(
       token,
       `/gmail/v1/users/me/messages/${id}?format=metadata`,
     ),
   );
+  if (!meta.success) {
+    throw new Error(`Gmail API message ${id} has an unreadable metadata row`);
+  }
   // To can repeat; metadata headers hold one row per address.
-  const to = headerValues(meta.payload?.headers, "To")
+  const row = meta.data;
+  const to = headerValues(row.payload?.headers, "To")
     .map((value) => formatAddress({ name: null, email: value || null }))
     .filter((v): v is string => v !== null);
   return {
     id,
     raw: Buffer.from(rawMsg.raw, "base64url"),
-    receivedAt: receivedAtOf(meta),
-    subject: headerValue(meta.payload?.headers, "Subject") ?? "",
-    from: headerValue(meta.payload?.headers, "From"),
+    receivedAt: receivedAtOf(row),
+    subject: headerValue(row.payload?.headers, "Subject") ?? "",
+    from: headerValue(row.payload?.headers, "From"),
     to,
-    messageId: headerValue(meta.payload?.headers, "Message-ID") ?? "",
+    messageId: headerValue(row.payload?.headers, "Message-ID") ?? "",
   } satisfies RawRfc822Email;
 }
 
@@ -408,10 +435,16 @@ export async function ensureGmailWatch(
       `Gmail users.watch returned HTTP ${res.status}: ${text.slice(0, 200)}`,
     );
   }
-  const body = JSON.parse(text) as {
-    historyId?: unknown;
-    expiration?: unknown;
-  };
+  let body: { historyId?: unknown; expiration?: unknown };
+  try {
+    body = JSON.parse(text) as { historyId?: unknown; expiration?: unknown };
+  } catch {
+    // A proxy or an outage page can answer 200 with HTML; say so instead of
+    // surfacing a bare SyntaxError from the renewal cron.
+    throw new Error(
+      `Gmail users.watch returned an unreadable body: ${text.slice(0, 200)}`,
+    );
+  }
   const expirationMs = Number(body.expiration);
   if (
     (typeof body.expiration !== "string" &&

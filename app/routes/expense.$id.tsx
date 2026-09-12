@@ -2,6 +2,7 @@ import { redirect } from "react-router";
 import type { EditorData } from "~/components/editor/editor-shared";
 import { MileageEditor } from "~/components/editor/mileage-editor";
 import { ReceiptEditor } from "~/components/editor/receipt-editor";
+import { captureError } from "~/lib/errors.server";
 import { requireUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import {
@@ -53,8 +54,11 @@ export async function action({ request, params }: Route.ActionArgs) {
     await deleteExpense(params.id, user.accountId);
     // The chat transcript recorded filing it, and the answer model reads the
     // last few exchanges back as fact: note the deletion so the transcript
-    // stops claiming the expense is there.
-    await markFiledExpenseDeleted(user.id, params.id);
+    // stops claiming the expense is there. The row is already gone, so a
+    // transcript failure logs instead of failing the delete.
+    await markFiledExpenseDeleted(user.id, params.id).catch((err: unknown) => {
+      captureError(err, { where: "insights-delete-marker" });
+    });
     return redirect("/");
   }
 

@@ -19,7 +19,10 @@ import { readExpenses } from "~/lib/db/expenses";
 import { clearAuthFailures, recordAuthFailure } from "~/lib/db/auth-attempts";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 import type { PendingTrip } from "~/lib/insights-mileage-tool.server";
-import type { PendingExpense } from "~/lib/insights-expense-tool.server";
+import {
+  runPlanExpense,
+  type PendingExpense,
+} from "~/lib/insights-expense-tool.server";
 import { addReport } from "~/lib/db/reports";
 import {
   appendExchange,
@@ -49,6 +52,21 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
       }),
     ),
   };
+});
+
+// The plan tool and the transcript writer delegate to the real modules, so
+// every other test exercises them unchanged; the failure tests below flip one
+// call to a rejection to prove the route absorbs it.
+vi.mock("~/lib/insights-expense-tool.server", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("~/lib/insights-expense-tool.server")>();
+  return { ...actual, runPlanExpense: vi.fn(actual.runPlanExpense) };
+});
+
+vi.mock("~/lib/db/insights-chat", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("~/lib/db/insights-chat")>();
+  return { ...actual, appendExchange: vi.fn(actual.appendExchange) };
 });
 
 const chat = vi.mocked(chatCompletion);
@@ -1119,6 +1137,115 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     expect(toolMessage.content).toContain("No USD rate for GBP on 2026-07-14");
     expect(await receiptIds()).toEqual(before);
     vi.unstubAllGlobals();
+  });
+
+  it("answers anyway when the plan tool throws", async () => {
+    // This file shares the per-user question budget; clear it so the call
+    // under test is the one being exercised.
+    await clearAuthFailures("insights:user_test1");
+    // The resolvers read the database and call the map/FX providers: a
+    // throw there must reach the model as the tool's error, not take the
+    // whole answer (and the user's question) down.
+    vi.mocked(runPlanExpense).mockRejectedValueOnce(new Error("database down"));
+    chat.mockResolvedValue(
+      '{"query":"","title":"T","months":12,"chart":false}',
+    );
+    const tools = vi.mocked(chatWithTools);
+    tools
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_fail",
+            function: {
+              name: "plan_expense",
+              arguments: JSON.stringify({ amount: "50", merchant: "Costa" }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: "I couldn't work that one out; try again?",
+        toolCalls: [],
+      });
+
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "log $50 at Costa");
+    form.set("today", "2026-07-15");
+    const res = (await callRoute("action", "gratis", form)) as {
+      ok: boolean;
+      answer: string;
+      pending?: unknown;
+    };
+
+    expect(res.ok).toBe(true);
+    expect(res.answer).toBe("I couldn't work that one out; try again?");
+    expect(res.pending).toBeUndefined();
+    const toolMessage = tools.mock.calls[1]![0].filter(
+      (m) => m.role === "tool",
+    ).at(-1)!;
+    expect(toolMessage.content).toContain("database down");
+  });
+
+  it("files the expense even when the transcript write fails", async () => {
+    await clearAuthFailures("insights:user_test1");
+    vi.mocked(appendExchange).mockRejectedValueOnce(new Error("no transcript"));
+    chat.mockResolvedValue(
+      '{"query":"","title":"Expenses","months":12,"chart":false}',
+    );
+    vi.mocked(chatWithTools)
+      .mockResolvedValueOnce({
+        content: "",
+        toolCalls: [
+          {
+            id: "call_ok",
+            function: {
+              name: "plan_expense",
+              arguments: JSON.stringify({ amount: "50", merchant: "Costa" }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ content: "Confirm it?", toolCalls: [] });
+
+    const ask = new FormData();
+    ask.set("intent", "translate");
+    ask.set("text", "log $50 at Costa");
+    ask.set("today", "2026-07-15");
+    const asked = (await callRoute("action", "gratis", ask)) as {
+      ok: boolean;
+      pending?: unknown;
+    };
+    expect(asked.ok).toBe(true);
+
+    const before = await receiptIds();
+    const confirm = new FormData();
+    confirm.set("intent", "confirmExpense");
+    confirm.set(
+      "pending",
+      JSON.stringify({
+        merchant: "Costa",
+        amount: "50",
+        currency: "USD",
+        category: "",
+        date: "2026-07-14",
+        report: "",
+        description: "",
+      }),
+    );
+    const res = (await callRoute("action", "gratis", confirm)) as {
+      ok: boolean;
+      answer: string;
+      logged?: { expenseId: string };
+    };
+
+    // The row is the deliverable: the transcript is the retelling, and a
+    // failure to write it must not turn a filed expense into an error the
+    // user would retry (filing a second copy).
+    expect(res.ok).toBe(true);
+    expect(res.logged?.expenseId).toBeTruthy();
+    expect(await receiptIds()).toHaveLength(before.length + 1);
   });
 
   it("refuses a stale confirm payload without filing anything", async () => {

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { ulid } from "ulid";
 
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -20,6 +21,23 @@ import type { ExtractionResult } from "~/lib/receipt-ai.server";
  * the table stays small without a cron.
  */
 const TTL_MS = 7 * 24 * 3600 * 1000;
+
+/** The stored extraction, checked on the way out: a row written by an older
+ * build (or edited by hand) must read as a miss, not as a complete result
+ * whose new fields are silently undefined. Typed against the interface so a
+ * field added there fails to compile here. */
+const extractionResultSchema: z.ZodType<ExtractionResult> = z.object({
+  isReceipt: z.boolean(),
+  merchant: z.string(),
+  description: z.string(),
+  amount: z.string(),
+  currency: z.string(),
+  category: z.string(),
+  report: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  notes: z.string(),
+});
+
 /** sha256 hex of the cacheable input, or null when there is nothing to key
  * on (no text and no image). */
 export function extractionCacheKey(input: {
@@ -56,7 +74,14 @@ export async function readCachedExtraction(
       .catch(() => {});
     return null;
   }
-  return row.result as unknown as ExtractionResult;
+  const parsed = extractionResultSchema.safeParse(row.result);
+  if (!parsed.success) {
+    // A row from an older build (or a hand-edited one) reads as a miss: the
+    // extraction runs again rather than handing out a result whose fields
+    // are missing behind a type that says they are there.
+    return null;
+  }
+  return parsed.data;
 }
 
 /** Store (or refresh) the extraction for (accountId, hash). Best-effort:

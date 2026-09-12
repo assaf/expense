@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   extractionCacheKey,
   readCachedExtraction,
@@ -525,12 +526,22 @@ export type ChatMessage = {
   tool_call_id?: string;
 };
 
-/** A tool call the model asked for (OpenAI-compatible shape). */
+/** A tool call the model asked for (OpenAI-compatible shape). Validated
+ * against `toolCallSchema` before any dispatcher reads it: the provider is
+ * untrusted, and those readers touch `function.name`/`function.arguments`
+ * directly. */
 export type ToolCall = {
   id: string;
   type?: "function";
   function: { name: string; arguments: string };
 };
+
+/** The wire shape of one tool call (see ToolCall). */
+const toolCallSchema = z.object({
+  id: z.string(),
+  type: z.literal("function").optional(),
+  function: z.object({ name: z.string(), arguments: z.string() }),
+});
 
 /** A tool the model may call. */
 export type ToolSpec = {
@@ -694,15 +705,21 @@ async function llmMessage(
     throw err;
   }
   const data = (await res.json()) as {
-    choices?: {
-      message?: { content?: string; tool_calls?: ToolCall[] };
-    }[];
+    choices?: { message?: { content?: string; tool_calls?: unknown } }[];
   };
-  const message = data.choices?.[0]?.message ?? {};
-  if (
-    !message.content &&
-    !(message.tool_calls && message.tool_calls.length > 0)
-  ) {
+  const raw = data.choices?.[0]?.message ?? {};
+  // The endpoint is untrusted: the dispatchers read `call.function.name` and
+  // `call.function.arguments` directly, so a call without a `function` (or
+  // with a non-string `arguments`) has to be dropped here rather than blow up
+  // the answer path with a TypeError. A malformed call is not repaired.
+  const toolCalls = Array.isArray(raw.tool_calls)
+    ? raw.tool_calls.flatMap((call) => {
+        const parsed = toolCallSchema.safeParse(call);
+        return parsed.success ? [parsed.data] : [];
+      })
+    : [];
+  const message = { content: raw.content, tool_calls: toolCalls };
+  if (!message.content && toolCalls.length === 0) {
     throw new LLMError(
       `${providerLabel} returned neither content nor a tool call`,
       502,

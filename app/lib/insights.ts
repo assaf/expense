@@ -1,9 +1,11 @@
+import Decimal from "decimal.js";
 import {
   matchesSearch,
   parseQuery,
   type SearchableExpense,
 } from "~/lib/expense-search";
 import { countLabel, formatUsd } from "~/lib/format";
+import { parseAmount } from "~/lib/money";
 import type { Expense } from "~/lib/types";
 
 /** The flattened expense row the insights page charts: the search-box view
@@ -146,90 +148,107 @@ export function monthlyTotals(
   return keys.map((k) => byKey.get(k)!);
 }
 
+/** "YYYY-MM" → its parts, or null when either is not a finite number. */
+function parseMonthKey(key: string): { year: number; month: number } | null {
+  const [year, month] = key.split("-").map(Number);
+  if (year === undefined || month === undefined) return null;
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+  return { year, month };
+}
+
 /** All-time window: every month from the oldest expense to `today`'s
  * month, oldest first (empty when there are no dated expenses). */
 function allTimeWindow(expenses: InsightExpense[], today: string): string[] {
   const dated = expenses
     .map((e) => e.date)
     .filter((d) => /^\d{4}-\d{2}/.test(d));
-  if (dated.length === 0) return monthWindow(today, 1);
-  const first = dated.toSorted()[0]!.slice(0, 7);
-  const [fy, fm] = first.split("-").map(Number);
-  const [ty, tm] = today.split("-").map(Number);
+  const oldest = dated.toSorted()[0];
+  if (!oldest) return monthWindow(today, 1);
+  const first = parseMonthKey(oldest.slice(0, 7));
+  const last = parseMonthKey(today);
+  // The caller always sends a full date, but the window must not depend on
+  // that: an unparseable end would make the month count NaN and blank the
+  // chart instead of degrading to a single month.
+  if (!first || !last) return monthWindow(today, 1);
   // A single ancient date (a forwarded receipt's Date: header, or a typed one)
   // must not turn into a chart with tens of thousands of buckets: same 60-month
   // cap the question-derived windows use (insight-periods.ts).
-  const count = Math.min(60, (ty! - fy!) * 12 + (tm! - fm!) + 1);
+  const count = Math.min(
+    60,
+    (last.year - first.year) * 12 + (last.month - first.month) + 1,
+  );
   return monthWindow(today, Math.max(1, count));
 }
 
 /** The computed numbers behind a chart (or a text answer): totals, the
  * monthly breakdown, and the biggest merchants — formatted for the
- * answer model, which phrases it but must never invent figures. */
+ * answer model, which phrases it but must never invent figures.
+ *
+ * Every printed figure is accumulated with decimal.js: the bucket totals
+ * above are chart geometry (display-only numbers), and a cent that drifts
+ * between the chart and the ledger is exactly the kind of "fact" the model
+ * reads back to the user. */
 export function insightSummary(
   buckets: MonthBucket[],
   matched: InsightExpense[],
 ): string {
-  const total = buckets.reduce((sum, b) => sum + b.total, 0);
+  const zero = new Decimal(0);
+  const amountOf = (e: InsightExpense): Decimal =>
+    parseAmount(e.amount) ?? zero;
+  const byMonth = new Map<string, Decimal>();
+  for (const e of matched) {
+    const key = e.date.slice(0, 7);
+    byMonth.set(key, (byMonth.get(key) ?? zero).add(amountOf(e)));
+  }
+  const total = [...byMonth.values()].reduce((sum, v) => sum.add(v), zero);
   const lines = [
     `Total: $${total.toFixed(2)} across ${matched.length} expenses`,
   ];
-  const byMonth = buckets
+  const monthLines = buckets
     .filter((b) => b.count > 0)
-    .map((b) => `${b.label}: $${b.total.toFixed(2)} (${b.count} expenses)`);
-  if (byMonth.length > 0) lines.push(`By month: ${byMonth.join("; ")}`);
-  const byMerchant = new Map<string, { total: number; count: number }>();
-  for (const e of matched) {
-    if (!e.merchant) continue;
-    const entry = byMerchant.get(e.merchant) ?? { total: 0, count: 0 };
-    entry.total += Number(e.amount) || 0;
-    entry.count += 1;
-    byMerchant.set(e.merchant, entry);
-  }
-  const top = [...byMerchant.entries()]
-    .toSorted((a, b) => b[1].total - a[1].total)
-    .slice(0, 5)
     .map(
-      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
+      (b) =>
+        `${b.label}: $${(byMonth.get(b.key) ?? zero).toFixed(2)} (${b.count} expenses)`,
     );
-  if (top.length > 0) lines.push(`Top merchants: ${top.join("; ")}`);
-  const byCategory = new Map<string, { total: number; count: number }>();
-  for (const e of matched) {
-    if (!e.category) continue;
-    const entry = byCategory.get(e.category) ?? { total: 0, count: 0 };
-    entry.total += Number(e.amount) || 0;
-    entry.count += 1;
-    byCategory.set(e.category, entry);
-  }
-  const categories = [...byCategory.entries()]
-    .toSorted((a, b) => b[1].total - a[1].total)
-    .slice(0, 5)
-    .map(
-      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
-    );
+  if (monthLines.length > 0) lines.push(`By month: ${monthLines.join("; ")}`);
+
+  /** Group the matched rows by one dimension, with exact totals. */
+  const byDimension = (
+    field: (e: InsightExpense) => string,
+  ): Map<string, { total: Decimal; count: number }> => {
+    const map = new Map<string, { total: Decimal; count: number }>();
+    for (const e of matched) {
+      const key = field(e);
+      if (!key) continue;
+      const entry = map.get(key) ?? { total: zero, count: 0 };
+      entry.total = entry.total.add(amountOf(e));
+      entry.count += 1;
+      map.set(key, entry);
+    }
+    return map;
+  };
+  const topLines = (
+    map: Map<string, { total: Decimal; count: number }>,
+  ): string[] =>
+    [...map.entries()]
+      .toSorted((a, b) => b[1].total.comparedTo(a[1].total))
+      .slice(0, 5)
+      .map(
+        ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
+      );
+
+  const merchants = topLines(byDimension((e) => e.merchant));
+  if (merchants.length > 0)
+    lines.push(`Top merchants: ${merchants.join("; ")}`);
+  const categories = topLines(byDimension((e) => e.category));
   if (categories.length > 0) {
     lines.push(`By category: ${categories.join("; ")}`);
   }
   // Report is a first-class dimension on every row (and on the query
   // tool's results), so the summary must break it out too: without it,
   // "which report did I spend most on?" has no report-level data to read.
-  const byReport = new Map<string, { total: number; count: number }>();
-  for (const e of matched) {
-    if (!e.report) continue;
-    const entry = byReport.get(e.report) ?? { total: 0, count: 0 };
-    entry.total += Number(e.amount) || 0;
-    entry.count += 1;
-    byReport.set(e.report, entry);
-  }
-  const reports = [...byReport.entries()]
-    .toSorted((a, b) => b[1].total - a[1].total)
-    .slice(0, 5)
-    .map(
-      ([name, v]) => `${name}: $${v.total.toFixed(2)} (${v.count} expenses)`,
-    );
-  if (reports.length > 0) {
-    lines.push(`By report: ${reports.join("; ")}`);
-  }
+  const reports = topLines(byDimension((e) => e.report));
+  if (reports.length > 0) lines.push(`By report: ${reports.join("; ")}`);
   const unreported = matched.filter((e) => !e.report).length;
   if (unreported > 0) {
     lines.push(`Not in any report: ${unreported} expenses`);

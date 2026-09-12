@@ -270,7 +270,28 @@ export async function captureReceipt(
       saved.mime,
     );
   }
-  await upsertExpense(expense, accountId);
+  try {
+    await upsertExpense(expense, accountId);
+  } catch (err) {
+    // Two captures of the same bytes raced past the pre-check above: the
+    // unique index on (accountId, imageSha256) is the real gate, so the
+    // loser drops its blob and reports the duplicate instead of failing.
+    if (isUniqueViolation(err)) {
+      await deleteImage(accountId, expense.imageFile).catch(() => {});
+      const existing = saved.sha256
+        ? await findSameImageExpense(accountId, saved.sha256)
+        : undefined;
+      return ok({
+        captured: false,
+        duplicate: true,
+        // The pre-check above found nothing (that is why the insert ran), so
+        // the winner is looked up again by fingerprint.
+        duplicateOf: existing?.id ?? null,
+        serverUtcNow,
+      });
+    }
+    throw err;
+  }
 
   const warning =
     extracted === null

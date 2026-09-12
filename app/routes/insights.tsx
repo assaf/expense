@@ -59,8 +59,25 @@ import {
 } from "~/lib/insights-ai.server";
 import { periodScope, withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
+import { captureError } from "~/lib/errors.server";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
+
+/**
+ * Record an exchange without failing the work that produced it: the row (or
+ * the answer) is the deliverable, and the transcript is the retelling the
+ * model reads back next turn.
+ */
+async function recordExchange(
+  user: { id: string; accountId: string },
+  exchange: Parameters<typeof appendExchange>[2],
+): Promise<void> {
+  try {
+    await appendExchange(user.id, user.accountId, exchange);
+  } catch (err) {
+    captureError(err, { where: "insights-record-exchange" });
+  }
+}
 
 /**
  * Confirming a proposal writes rows and can call the FX or routing
@@ -157,7 +174,7 @@ export async function action({ request }: Route.LoaderArgs) {
       ? " (straight-line estimate — the route service was unavailable)"
       : "";
     const answer = `Logged ${distance}${amount} on ${resolved.trip.date}${note}.`;
-    await appendExchange(user.id, user.accountId, {
+    await recordExchange(user, {
       question: "Log it",
       answer,
       chart: false,
@@ -211,7 +228,7 @@ export async function action({ request }: Route.LoaderArgs) {
         ? ` (${filed.currency} ${filed.originalAmount})`
         : "";
     const answer = `Logged ${formatUsd(Number(filed.amount))}${printed}${at} on ${filed.date}.`;
-    await appendExchange(user.id, user.accountId, {
+    await recordExchange(user, {
       question: "Log it",
       answer,
       chart: false,
@@ -343,7 +360,7 @@ export async function action({ request }: Route.LoaderArgs) {
             : []),
         ].join("\n"),
       });
-      await appendExchange(user.id, user.accountId, {
+      await recordExchange(user, {
         question: text,
         answer,
         chart: t.chart,

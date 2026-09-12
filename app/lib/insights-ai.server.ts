@@ -27,6 +27,7 @@ import {
 } from "~/lib/insights-mileage-tool.server";
 import type { PlanContext } from "~/lib/insights-plan.server";
 import { categorySynonyms } from "~/lib/expense-search";
+import { captureError } from "~/lib/errors.server";
 import { formatUserDate } from "~/lib/format";
 import { stripFenceMarkers } from "~/lib/prompt-fence.server";
 
@@ -357,17 +358,18 @@ export async function answerInsightQuestion(input: {
       return reply(content);
     }
     messages.push({ role: "assistant", content, tool_calls: toolCalls });
+    const writes = input.writes;
     for (const call of toolCalls) {
       let result: string;
       if (call.function.name === QUERY_EXPENSES) {
         result = runQueryExpenses(input.expenses, call);
-      } else if (call.function.name === PLAN_MILEAGE && input.writes) {
-        const planned = await runPlanMileage(input.writes, call);
+      } else if (call.function.name === PLAN_MILEAGE && writes) {
+        const planned = await planSafely(() => runPlanMileage(writes, call));
         result = planned.result;
         // Last successful proposal wins: it is the one the user sees.
         if (planned.pending) pending = planned.pending;
-      } else if (call.function.name === PLAN_EXPENSE && input.writes) {
-        const planned = await runPlanExpense(input.writes, call);
+      } else if (call.function.name === PLAN_EXPENSE && writes) {
+        const planned = await planSafely(() => runPlanExpense(writes, call));
         result = planned.result;
         // Last successful proposal wins: it is the one the user sees.
         if (planned.pending) pending = planned.pending;
@@ -391,6 +393,26 @@ export async function answerInsightQuestion(input: {
 /** How many tool calls one model response may request before the answer step
  * stops honoring them (a compliant model asks for one). */
 const MAX_TOOL_CALLS = 4;
+
+/** Run a plan tool without letting its failure take the whole answer down.
+ * The resolvers read the database and call the map/FX providers, so a
+ * transient error there would otherwise reject the question (and lose it):
+ * the model gets the error as the tool result instead, exactly like a
+ * validation failure, and can tell the user what went wrong. */
+async function planSafely(
+  run: () => Promise<{ result: string; pending?: PendingProposal }>,
+): Promise<{ result: string; pending?: PendingProposal }> {
+  try {
+    return await run();
+  } catch (err) {
+    captureError(err, { where: "insights-plan-tool" });
+    return {
+      result: JSON.stringify({
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    };
+  }
+}
 
 /** How the answer step may use the read tool. */
 const TOOL_GUIDANCE = `You may call ${QUERY_EXPENSES} to check expenses the computed data doesn't cover: any date range (a single day, a week, a month), zero or more exact category names, an exact report name, unreported-only, receipt/mileage type, or a merchant substring. The computed data below is month-bucketed and covers the chart's current window only, so use the tool rather than saying the data is missing. Call it at most ${MAX_TOOL_ROUNDS} times, then answer.`;

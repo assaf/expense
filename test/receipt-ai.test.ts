@@ -5,7 +5,7 @@ import {
   LLM_VISION_MAX_TOKENS,
   LLM_VISION_MODEL,
 } from "~/lib/env";
-import { extractReceipt } from "~/lib/receipt-ai.server";
+import { chatWithTools, extractReceipt } from "~/lib/receipt-ai.server";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 
 /**
@@ -52,6 +52,55 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("chatWithTools provider shapes", () => {
+  it("drops a malformed tool call instead of handing it to a dispatcher", async () => {
+    // The dispatch reads `call.function.name` / `.arguments` directly, so a
+    // call the provider sent without a `function` has to be dropped here.
+    vi.stubGlobal("fetch", async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: "",
+              tool_calls: [
+                { id: "broken" },
+                {
+                  id: "ok",
+                  type: "function",
+                  function: { name: "query_expenses", arguments: "{}" },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = await chatWithTools(
+      [{ role: "user", content: "how much on coffee?" }],
+      { tools: [] },
+    );
+    expect(result.toolCalls).toEqual([
+      {
+        id: "ok",
+        type: "function",
+        function: { name: "query_expenses", arguments: "{}" },
+      },
+    ]);
+  });
+
+  it("treats a response with only malformed calls as no tool call", async () => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json({
+        choices: [{ message: { content: "", tool_calls: [{ id: "broken" }] } }],
+      }),
+    );
+    await expect(
+      chatWithTools([{ role: "user", content: "hi" }], { tools: [] }),
+    ).rejects.toThrow(/neither content nor a tool call/i);
+  });
 });
 
 describe("receipt extraction LLM request shape", () => {

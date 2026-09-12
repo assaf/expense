@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, fromIso, toIso } from "~/lib/db/wire";
+import { asJson, fromIso } from "~/lib/db/wire";
 
 export interface StoredExchange {
   question: string;
@@ -29,62 +29,87 @@ const conversationCache = createCache<{
   exchanges: StoredExchange[];
 }>(300_000);
 
-/** Defensive parse of the jsonb messages column: only well-shaped
- * exchanges survive, strings are length-capped. */
-function parseExchanges(raw: unknown): StoredExchange[] {
+/** One stored entry as a typed exchange, or null when it is not shaped like
+ * one (a hand-written row, or an entry from a schema this build does not
+ * know). */
+function parseExchange(entry: unknown): StoredExchange | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  if (
+    !("question" in entry) ||
+    !("answer" in entry) ||
+    !("chart" in entry) ||
+    !("query" in entry) ||
+    !("months" in entry) ||
+    !("title" in entry)
+  ) {
+    return null;
+  }
+  const { question, answer, chart, query, months, title } = entry;
+  const { expenseId, proposalKind } = entry as {
+    expenseId?: unknown;
+    proposalKind?: unknown;
+  };
+  if (
+    typeof question !== "string" ||
+    typeof answer !== "string" ||
+    typeof chart !== "boolean" ||
+    typeof query !== "string" ||
+    typeof months !== "number" ||
+    typeof title !== "string"
+  ) {
+    return null;
+  }
+  return {
+    question: question.slice(0, 300),
+    answer: answer.slice(0, 2000),
+    chart,
+    query: query.slice(0, 300),
+    // The translator's windows are the offered options, but the app also
+    // stores the span a question's period resolved to (1..60 months), so
+    // the read side accepts any positive span instead of flattening it
+    // back to 12.
+    months:
+      Number.isInteger(months) &&
+      (months === -1 || months === 0 || (months >= 1 && months <= 60))
+        ? months
+        : 12,
+    title: title.slice(0, 60),
+    // Only the app writes this (a filed expense's id), so a non-string is
+    // dropped rather than repaired.
+    ...(typeof expenseId === "string" && expenseId
+      ? { expenseId: expenseId.slice(0, 40) }
+      : {}),
+    ...(proposalKind === "mileage" || proposalKind === "expense"
+      ? { proposalKind }
+      : {}),
+  };
+}
+
+/** The stored array positionally: a typed exchange where the entry parses,
+ * and the entry verbatim where it does not. Rewrites go through this (not
+ * through `parseExchanges`) so an entry this build cannot read is carried
+ * along instead of being deleted by the next append. */
+function readEntries(
+  raw: unknown,
+): { exchange: StoredExchange | null; raw: unknown }[] {
   const list = typeof raw === "string" ? safeParse(raw) : raw;
   if (!Array.isArray(list)) return [];
-  const out: StoredExchange[] = [];
-  for (const entry of list) {
-    if (typeof entry !== "object" || entry === null) continue;
-    if (
-      !("question" in entry) ||
-      !("answer" in entry) ||
-      !("chart" in entry) ||
-      !("query" in entry) ||
-      !("months" in entry) ||
-      !("title" in entry)
-    ) {
-      continue;
-    }
-    const { question, answer, chart, query, months, title, expenseId } = entry;
-    const proposalKind = entry.proposalKind;
-    if (
-      typeof question !== "string" ||
-      typeof answer !== "string" ||
-      typeof chart !== "boolean" ||
-      typeof query !== "string" ||
-      typeof months !== "number" ||
-      typeof title !== "string"
-    ) {
-      continue;
-    }
-    out.push({
-      question: question.slice(0, 300),
-      answer: answer.slice(0, 2000),
-      chart,
-      query: query.slice(0, 300),
-      // The translator's windows are the offered options, but the app also
-      // stores the span a question's period resolved to (1..60 months), so
-      // the read side accepts any positive span instead of flattening it
-      // back to 12.
-      months:
-        Number.isInteger(months) &&
-        (months === -1 || months === 0 || (months >= 1 && months <= 60))
-          ? months
-          : 12,
-      title: title.slice(0, 60),
-      // Only the app writes this (a filed expense's id), so a non-string is
-      // dropped rather than repaired.
-      ...(typeof expenseId === "string" && expenseId
-        ? { expenseId: expenseId.slice(0, 40) }
-        : {}),
-      ...(proposalKind === "mileage" || proposalKind === "expense"
-        ? { proposalKind }
-        : {}),
-    });
-  }
-  return out;
+  return list.map((entry) => ({ exchange: parseExchange(entry), raw: entry }));
+}
+
+/** The entries as they should be written back after a rewrite. */
+function entriesForWrite(
+  entries: { exchange: StoredExchange | null; raw: unknown }[],
+): unknown[] {
+  return entries.map((entry) => entry.exchange ?? entry.raw);
+}
+
+/** Defensive read of the jsonb messages column: only well-shaped exchanges
+ * survive, strings are length-capped. */
+function parseExchanges(raw: unknown): StoredExchange[] {
+  return readEntries(raw).flatMap((entry) =>
+    entry.exchange ? [entry.exchange] : [],
+  );
 }
 
 function safeParse(raw: string): unknown {
@@ -101,10 +126,14 @@ export async function readLatestConversation(
   userId: string,
 ): Promise<{ id: string; exchanges: StoredExchange[] } | null> {
   return cachedRead(conversationCache, userId, async () => {
+    // Newest first by id: conversation ids are ULIDs (creation-ordered), and
+    // unlike `updatedAt` — millisecond resolution — the id is unique, so two
+    // conversations created in the same millisecond cannot swap places
+    // between reads. Every append goes to the newest conversation anyway.
     const row = await db.orm.public.InsightConversation.where((c) =>
       c.userId.eq(userId),
     )
-      .orderBy((c) => c.updatedAt.desc())
+      .orderBy((c) => c.id.desc())
       .first();
     if (!row) return null;
     return {
@@ -129,7 +158,7 @@ async function pruneConversations(userId: string): Promise<void> {
   const rows = await db.orm.public.InsightConversation.where((c) =>
     c.userId.eq(userId),
   )
-    .orderBy((c) => c.updatedAt.desc())
+    .orderBy((c) => c.id.desc())
     .select("id")
     .all();
   const stale = rows.slice(MAX_CONVERSATIONS).map((r) => r.id);
@@ -148,7 +177,7 @@ async function pruneConversations(userId: string): Promise<void> {
 async function swapMessages(
   id: string,
   expected: unknown,
-  next: StoredExchange[],
+  next: unknown[],
   update: { updatedAt?: string },
 ): Promise<boolean> {
   const rows = await db.orm.public.InsightConversation.where((c) =>
@@ -158,15 +187,6 @@ async function swapMessages(
     ...(update.updatedAt ? { updatedAt: fromIso(update.updatedAt) } : {}),
   });
   return rows.length > 0;
-}
-
-/** The timestamp for a write that must be strictly newer than the row just
- * read: `now`, or one millisecond past it when the clock has not moved (the
- * chat opens the newest conversation by this value, so a tie is ambiguous). */
-function nextWriteTime(readWire: string): string {
-  const readMs = Date.parse(toIso(readWire));
-  const nowMs = Date.now();
-  return new Date(readMs >= nowMs ? readMs + 1 : nowMs).toISOString();
 }
 
 /** Append one exchange to the user's most recent conversation, creating
@@ -186,7 +206,7 @@ export async function appendExchange(
     const row = await db.orm.public.InsightConversation.where((c) =>
       c.userId.eq(userId),
     )
-      .orderBy((c) => c.updatedAt.desc())
+      .orderBy((c) => c.id.desc())
       .first();
     if (!row) {
       await db.orm.public.InsightConversation.create({
@@ -201,10 +221,11 @@ export async function appendExchange(
       await bustConversationCache(userId);
       return;
     }
-    const exchanges = [...parseExchanges(row.messages), exchange].slice(-200);
+    const entries = readEntries(row.messages);
+    const exchanges = [...entriesForWrite(entries), exchange].slice(-200);
     if (
       await swapMessages(row.id, row.messages, exchanges, {
-        updatedAt: nextWriteTime(row.updatedAt),
+        updatedAt: new Date().toISOString(),
       })
     ) {
       await bustConversationCache(userId);
@@ -236,8 +257,9 @@ function withDeletedNote(answer: string): string {
  * answer makes the history a record of what happened rather than a claim about
  * the records now.
  *
- * updatedAt is deliberately untouched: it decides which conversation the chat
- * opens, and deleting an expense must not jump the user back to an older one. */
+ * updatedAt is deliberately untouched: it is a record of when the file was
+ * written, and the chat opens the newest conversation by id, so a deletion
+ * must not restamp (or otherwise reorder) anything. */
 export async function markFiledExpenseDeleted(
   userId: string,
   expenseId: string,
@@ -246,23 +268,33 @@ export async function markFiledExpenseDeleted(
     const rows = await db.orm.public.InsightConversation.where((c) =>
       c.userId.eq(userId),
     )
-      .orderBy((c) => c.updatedAt.desc())
+      .orderBy((c) => c.id.desc())
       .limit(20)
       .all();
     let lost = false;
     for (const row of rows) {
-      const exchanges = parseExchanges(row.messages);
-      const index = exchanges.findIndex((e) => e.expenseId === expenseId);
+      const entries = readEntries(row.messages);
+      const index = entries.findIndex(
+        (entry) => entry.exchange?.expenseId === expenseId,
+      );
       if (index < 0) continue;
-      const target = exchanges[index]!;
+      const target = entries[index]!.exchange!;
       // Both fields describe the link that is going away; the "Log it"
       // question and the answer's own words stay as written.
       const { expenseId: _filed, proposalKind: _kind, ...rest } = target;
-      exchanges[index] = { ...rest, answer: withDeletedNote(target.answer) };
+      entries[index] = {
+        exchange: { ...rest, answer: withDeletedNote(target.answer) },
+        raw: null,
+      };
       // No updatedAt: it decides which conversation the chat opens, and
       // deleting an expense must not jump the user to an older one. The
       // claim is on the array that was read instead.
-      const won = await swapMessages(row.id, row.messages, exchanges, {});
+      const won = await swapMessages(
+        row.id,
+        row.messages,
+        entriesForWrite(entries),
+        {},
+      );
       if (!won) {
         lost = true;
         break;

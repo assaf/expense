@@ -90,7 +90,11 @@ export async function loader({ request }: Route.LoaderArgs) {
             address: connection.emailAddress,
             error: err,
           });
-          await setEmailConnectionStatus(connection.id, "error");
+          // Best-effort: a failed status write must not abort the tick (the
+          // remaining connections still get their renewal and drain).
+          await setEmailConnectionStatus(connection.id, "error").catch(
+            () => {},
+          );
           results.push({ id: connection.id, error: String(err) });
           continue;
         }

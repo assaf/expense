@@ -209,6 +209,19 @@ describe("api.email-connections-gmail-push", () => {
     );
   });
 
+  it("answers 503 when the connection lookup itself fails", async () => {
+    // A database failure is ours, not the sender's: answer 5xx so Pub/Sub
+    // retries, with a warning naming the mailbox (and without the raw throw
+    // that would surface as an unhandled 500).
+    mocks.findEmailConnectionByAddress.mockRejectedValue(
+      new Error("db unavailable"),
+    );
+    const res = await action(args(request(envelope("user@gmail.com"))));
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: "lookup failed" });
+    expect(drainMock.drainEmailConnection).not.toHaveBeenCalled();
+  });
+
   it("rejects non-POST with 405", async () => {
     const res = await action(
       args(

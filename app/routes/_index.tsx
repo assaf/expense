@@ -55,6 +55,7 @@ import {
   summarizeAmounts,
 } from "~/lib/format";
 import { useToday } from "~/lib/use-today";
+import { captureError } from "~/lib/errors.server";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import {
@@ -207,8 +208,11 @@ export async function action({ request }: Route.ActionArgs) {
     const id = formString(form, "id");
     await deleteExpense(id, user.accountId);
     // Same as the editor's delete: a chat-filed expense left a transcript
-    // line that would otherwise keep claiming it is filed.
-    await markFiledExpenseDeleted(user.id, id);
+    // line that would otherwise keep claiming it is filed. The row is gone
+    // either way, so a transcript failure logs instead of failing the delete.
+    await markFiledExpenseDeleted(user.id, id).catch((err: unknown) => {
+      captureError(err, { where: "insights-delete-marker" });
+    });
     return null;
   }
 

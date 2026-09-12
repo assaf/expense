@@ -212,10 +212,23 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ error: "malformed body" }, { status: 400 });
   }
 
-  const found = await findEmailConnectionByAddress(emailAddress);
-  const connection = found
-    ? await readEmailConnectionByAddressSecret(emailAddress)
-    : undefined;
+  // The lookups are database work: a failure here is ours, not the sender's
+  // (Pub/Sub retries a 5xx, and the warning says which mailbox it was).
+  let connection: Awaited<
+    ReturnType<typeof readEmailConnectionByAddressSecret>
+  >;
+  try {
+    const found = await findEmailConnectionByAddress(emailAddress);
+    connection = found
+      ? await readEmailConnectionByAddressSecret(emailAddress)
+      : undefined;
+  } catch (err) {
+    captureWarning("[gmail-push] connection lookup failed:", {
+      emailAddress,
+      error: err,
+    });
+    return Response.json({ error: "lookup failed" }, { status: 503 });
+  }
   if (!connection || connection.provider !== "gmail") {
     // Never retry a mailbox we don't serve (Pub/Sub retries non-2xx).
     console.warn("[gmail-push] ignoring unknown or non-gmail mailbox", {

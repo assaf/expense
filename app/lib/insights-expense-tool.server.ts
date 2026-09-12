@@ -44,10 +44,12 @@ export interface PendingExpense {
 }
 
 const planExpenseInput = z.object({
-  amount: z.coerce
-    .string()
-    .min(1)
-    .max(20)
+  // A number or a numeric string, never a coerced anything: `z.coerce.string()`
+  // would turn a null/object the model sent into "null"/"[object Object]" and
+  // the resolver would report it as a missing amount instead of a malformed
+  // argument. (No `.transform`: the tool spec publishes this as JSON Schema.)
+  amount: z
+    .union([z.number(), z.string().min(1).max(20)])
     .describe('The amount as a plain number, like "50" or "12.50".'),
   currency: z
     .string()
@@ -181,7 +183,9 @@ export async function runPlanExpense(
   const args = parsed.data;
   const resolved = await resolve(writes.accountId, {
     merchant: args.merchant,
-    amount: args.amount,
+    // The schema accepts a JSON number too (a model often emits `50`); the
+    // resolver works on strings, like every other money entry point.
+    amount: String(args.amount),
     currency: args.currency,
     category: args.category,
     date: args.date || writes.today || undefined,
