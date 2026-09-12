@@ -182,6 +182,12 @@ then `pnpm db:push` locally. DDL uses `DATABASE_URL_UNPOOLED` (session pooler);
 runtime uses the transaction pooler with `max: 2`. Never raise the pool above
 80% of `max_connections` (see the `(EMAXCONN)` incident in `docs/operations.md`).
 
+**`app/lib/jmap.server.ts` stays env-free.** It must not import `app/lib/env.ts`,
+or anything that does (`app/lib/images.server.ts`, hence `app/lib/upload-limits.ts`
+is its own dependency-free module). `env.ts` re-wraps `globalThis.fetch` in the
+test network guard whenever a test's `vi.resetModules()` re-imports it, which
+breaks the stubbed fetches in `test/token-crypto.test.ts`.
+
 **Heavy dependencies stay lazy.** `pdfkit`, `pdfjs-dist`, `tesseract.js`,
 `@napi-rs/canvas`, `@resvg/resvg-js`, `puppeteer-core`/`@sparticuz/chromium`,
 and the MCP SDK all load through dynamic `import()` inside the module that needs
@@ -218,8 +224,13 @@ stored image filenames until they are re-saved. Fastmail API tokens cannot
 submit mail (403 on the submission scope), so connected-mailbox confirmations
 are written to the owner's Inbox via `Email/import`; a valid token also proves
 mailbox control, so onboarding stamps `emailVerifiedAt` without an emailed link.
-Keep `prisma/backup.sql` (~300MB) out of Vercel uploads through the
-`.vercelignore` `backup*.sql` entries.
+An amount, distance, printed (pre-conversion) amount or FX rate the column
+cannot hold is refused with a message, never a 500: `exceedsMaxMoney` in
+`app/lib/money.ts` is the one guard, and every writer calls it (the chat's
+resolve and confirm, MCP `capture_receipt`, the editor, the inbound pipeline,
+which files a partial row instead of failing after the blob is saved, and the
+reconcile row gate). Keep `prisma/backup.sql` (~300MB) out of Vercel uploads
+through the `.vercelignore` `backup*.sql` entries.
 
 **Security invariants.** Every mail-importing path gates on the delivered
 authentication verdict before it writes: the receipts pipeline and the
