@@ -5,7 +5,7 @@ import { sendVerificationEmail as sendVerificationEmailCore } from "~/lib/verifi
 /**
  * Account-verification emails: sent after signup/join (and on resend) with
  * a single-use link. Clicking it marks the user's email verified
- * (verifyUserEmailAddress in database.ts); until then the account can't
+ * (verifyUserEmailAddress in app/lib/db/accounts.ts); until then the account can't
  * sign in. Sends via Resend from the same verified domain as the
  * receipts-by-email mailbox (INBOUND_EMAIL_ADDRESS); when Resend isn't
  * configured the send is skipped and logged: the user row stays pending

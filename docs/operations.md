@@ -31,8 +31,8 @@ long-standing behavior. A URL pasted from the Supabase dashboard's copy
 button has NO sslmode param, so every DB call then fails `(ESSLREQUIRED)`;
 this is how prod broke in Aug 2026 (URL re-pasted without the param).
 
-**`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy`,
-`scripts/migrate-prod` and `scripts/clone`): session-mode pooler, port 5432.** Migrations and DDL want stable sessions; the session pooler behaves
+**`DATABASE_URL_UNPOOLED` (psql/prisma DDL in `scripts/deploy` and
+`scripts/clone`): session-mode pooler, port 5432.** Migrations and DDL want stable sessions; the session pooler behaves
 like a direct connection. Keep it here, not on the transaction pooler. Also
 mirrored as the `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI
 `migrate-db` job (the CI `VERCEL_TOKEN` can't read project settings, so the
@@ -74,7 +74,7 @@ and asks for destructive consent, and CI's migrate-db job grants it, which
 would drop the column and its data on prod. The test suite never catches
 this (the test reset recreates the schema with no data). The operative
 schema path is `prisma db update` (CI migrate-db + `scripts/deploy`);
-there is no `prisma/migrations` history anymore (the v7 history was
+there is no `prisma/migrations` directory anymore (the v7 history was
 retired with the Prisma 8 migration; prod's `_prisma_migrations` table is
 a tolerated leftover, declared as `LegacyPrismaMigrations` with
 `@@control(tolerated)` in the contract).
@@ -113,8 +113,8 @@ indexes, update-where + create-if-missing (see `extraction-cache.ts`).
 
 ## Secrets
 
-Env load order: `process.env` (Vercel/inline) → local `.env` (via dotenv in
-`app/lib/env.ts`). `DATABASE_URL` is required: no file fallback. Dev/test use
+Env load order: `process.env` (Vercel/inline) → local `.env` (via
+`process.loadEnvFile` in `app/lib/env.ts`). `DATABASE_URL` is required: no file fallback. Dev/test use
 `.env` (`DATABASE_URL`, and auth: `APP_EMAIL`, `APP_PASSWORD`,
 `SESSION_SECRET`); prod uses the Vercel dashboard (`DATABASE_URL`, plus the same
 three auth vars). Pull prod env with `vercel env pull
@@ -230,7 +230,7 @@ Workspace.
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
 is disabled (404) and `scripts/deploy` skips the check with a warning. It must
 also be set as a **GitHub Actions secret** (same value) for
-`.github/workflows/deployment-smoke.yml`.
+`.github/workflows/deployment-checks.yml`.
 
 `PUBLIC_URL` (optional) is the public base URL the OAuth metadata advertises as
 its issuer + endpoint origin. Set it when the app sits behind a TLS-terminating
@@ -241,6 +241,10 @@ it, the request origin is used, honoring `x-forwarded-proto`/`x-forwarded-host`
 for http requests. Also used as the base URL for the “Edit this receipt”
 link in inbound confirmation emails. Set it to the production origin
 (`https://expense.labnotes.org`) or those emails have no edit link.
+
+`UMAMI_SCRIPT_URL` + `UMAMI_WEBSITE_ID` (optional, both required) load the
+self-hosted analytics script on the public pages; one alone is inert. No
+analytics runs when either is unset.
 
 `SENTRY_DSN` + `VITE_SENTRY_DSN` (optional, same DSN value twice) enable Sentry
 error monitoring (server runtime + browser build-time respectively; see

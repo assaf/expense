@@ -77,21 +77,21 @@ flowchart LR
 
 ## Key Directories
 
-| Path                 | Purpose                                                                       |
-| -------------------- | ----------------------------------------------------------------------------- |
-| `app/routes/`        | 58 route modules; file-based routing, loaders/actions live here               |
-| `app/components/`    | React components; `app/components/ui/` holds the shared primitives            |
-| `app/lib/`           | 87 modules: domain logic, server integrations (`*.server.ts`), data access    |
-| `app/lib/db/`        | One module per domain (`expenses`, `reports`, `categories`, `accounts`, ...)  |
-| `test/`              | 102 test files plus `helpers/` and `fixtures/`                                |
-| `scripts/`           | Operational and one-off scripts (deploy, clone, check, smoke, redactors)      |
-| `docs/`              | 15 reference docs; `docs/files.md` is the closest thing to an index           |
-| `prisma/`            | `contract.prisma` (source of truth), emitted `contract.json`/`contract.d.ts`  |
-| `migrations/`        | Contract snapshots, **not** `prisma/migrations/` (which is a v7-era leftover) |
-| `public/`            | `robots.txt`, `sitemap.xml`, static images                                    |
-| `patches/`           | `tesseract.js` wasm-core patch, asserted by `scripts/check`                   |
-| `vendor/`            | `pdfkit-standard-fonts`, a tracer-bridge package for the Vercel build         |
-| `.github/workflows/` | `deployment-checks.yml` (the CI gate), `publish-mcp.yml` (registry publish)   |
+| Path                 | Purpose                                                                      |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `app/routes/`        | 58 route modules; file-based routing, loaders/actions live here              |
+| `app/components/`    | React components; `app/components/ui/` holds the shared primitives           |
+| `app/lib/`           | 92 modules: domain logic, server integrations (`*.server.ts`), data access   |
+| `app/lib/db/`        | One module per domain (`expenses`, `reports`, `categories`, `accounts`, ...) |
+| `test/`              | 108 test files plus `helpers/` and `fixtures/`                               |
+| `scripts/`           | Operational and one-off scripts (deploy, clone, check, smoke, redactors)     |
+| `docs/`              | 15 reference docs; `docs/files.md` is the closest thing to an index          |
+| `prisma/`            | `contract.prisma` (source of truth), emitted `contract.json`/`contract.d.ts` |
+| `migrations/`        | Contract snapshots written by `pnpm build:prisma`                            |
+| `public/`            | `robots.txt`, `sitemap.xml`, static images                                   |
+| `patches/`           | `tesseract.js` wasm-core patch, asserted by `scripts/check`                  |
+| `vendor/`            | `pdfkit-standard-fonts`, a tracer-bridge package for the Vercel build        |
+| `.github/workflows/` | `deployment-checks.yml` (the CI gate), `publish-mcp.yml` (registry publish)  |
 
 ## Development Commands
 
@@ -107,7 +107,6 @@ flowchart LR
 | `pnpm test:ocr`                                   | `RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts ...`          | Real OCR round trip (script still says `vpr`; use `vp`)        |
 | `pnpm test:db:push`                               | `bash scripts/reset-test-db`                                     | Drops and recreates `expense_test`                             |
 | `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
-| `pnpm db:migrate`                                 | `prisma db migrate`                                              | Applies planned migrations                                     |
 | `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                  |
 | `pnpm screenshot`                                 | `SCREENSHOT=1 vp test run test/screenshot.test.ts`               | Regenerates README screenshots                                 |
 | `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                |
@@ -300,7 +299,8 @@ Every link in `llms.txt` must also exist in `public/sitemap.xml`
   `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`,
   `GOOGLE_PUSH_SERVICE_ACCOUNT`); LLM/OCR (`LLM_BASE_URL`, `LLM_API_KEY` (alias
   `DEEPSEEK_API_KEY`), `LLM_MODEL`, `LLM_VISION_MODEL`, `RECEIPT_OCR_MODE`);
-  observability (`SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`). `.env*`
+  observability (`SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`,
+  `UMAMI_WEBSITE_ID` — both are needed or the script does not load). `.env*`
   is gitignored; read [`docs/operations.md`](docs/operations.md) before touching
   any of them.
 
@@ -352,26 +352,15 @@ Every link in `llms.txt` must also exist in `public/sitemap.xml`
 Docs and comments reference several things that no longer exist. Verify against
 the tree before acting on a doc:
 
-- `scripts/migrate-prod`, `scripts/migrate-legacy`, `scripts/import-expensify.ts`,
-  and `scripts/compress-images.ts` are cited in `docs/deploy.md`,
-  `docs/operations.md`, `docs/accounts.md`, `docs/files.md`, and
-  `app/lib/image-normalize.ts`, but none exist. The CI job runs
-  `prisma db update` inline instead.
+- `scripts/import-expensify.ts` is cited in `docs/files.md` and
+  `scripts/compress-images.ts` in `app/lib/image-normalize.ts`, but neither
+  exists.
 - `docs/mcp-demo.md` prescribes `pnpm demo:seed` / `pnpm demo:run`; neither
   alias exists.
-- Four files name `.github/workflows/deployment-smoke.yml`: `docs/deploy.md`,
-  `docs/operations.md`, `scripts/smoke-check`, and `test/pdf-ocr.test.ts`. The
-  smoke job lives inside `deployment-checks.yml`.
-- `docs/files.md` documents `prisma/migrations/0_init` and a migrate history
-  that is no longer used; the directory holds v7-era dated dirs nothing runs.
+- `prisma/migrations/` was deleted (its handful of dated dirs were never run;
+  the schema is applied with `prisma db update` / `db init`), and files.md no
+  longer documents them.
 - `docs/mcp-directories.md` gives `server.json`'s name as
   `io.github.assaf/expense`; the manifest says `org.labnotes/expense`.
-- `docs/operations.md` attributes `.env` loading to dotenv; `app/lib/env.ts`
-  uses `process.loadEnvFile`.
 - `vpr` is a real vite-plus binary, not a typo: it rewrites to `vp run`, so
   `pnpm test:ocr` and `scripts/upgrade` are fine as written.
-- `scripts/upgrade` auto-commits and runs `pnpm pnpm audit --prod` (a no-op
-  typo). It contradicts the repo's never-commit-automatically rule; do not treat
-  it as a template.
-- `docs/testing.md` and `docs/deploy.md` describe the older `db push
---force-reset` flow; the reset now drops the schema and runs `prisma db init`.

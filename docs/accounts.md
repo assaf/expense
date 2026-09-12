@@ -28,7 +28,7 @@ reads and writes are scoped; see `app/lib/db/`).
   replace flow can't be used to re-send email on demand. Users created
   before this requirement (and the
   APP_EMAIL bootstrap user) are grandfathered as verified (`emailVerifiedAt`
-  backfilled by the migration / `scripts/migrate-prod`).
+  backfilled by the schema update that added the column).
 - **Password recovery** (`/reset-password`, public): "Forgot password?"
   on the login page and on the onboarding attach step emails a single-use
   reset link (7-day TTL, once-a-day resend, sha256 of the token at rest on

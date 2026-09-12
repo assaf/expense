@@ -10,9 +10,6 @@ import {
   AI_INSIGHTS_SUMMARY,
   AI_STEPS,
   AI_SUMMARY,
-  APP_NAME,
-  AUTHOR_NAME,
-  BLOG_URL,
   marketingPageHeaders,
   pageMeta,
   SITE_URL,
@@ -23,19 +20,19 @@ import { JsonLd } from "~/components/JsonLd";
 const AI_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: `Connect your AI assistant: ${APP_NAME}`,
+  name: `Connect your AI assistant: Expense`,
   url: `${SITE_URL}/ai`,
   description: AI_SUMMARY,
   author: {
     "@type": "Person",
-    name: AUTHOR_NAME,
-    url: BLOG_URL,
+    name: "Assaf Arkin",
+    url: "https://labnotes.org",
   },
 };
 
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    `${APP_NAME}: connect your AI assistant`,
+    `Expense: connect your AI assistant`,
     "Connect Claude, OpenAI, or any MCP client over the Expense MCP endpoint, or let a browser agent use Expense's in-page WebMCP tools: capture receipts, log mileage, answer spending questions, and build reports. No API keys.",
     "/ai",
   );

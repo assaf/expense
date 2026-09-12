@@ -1,7 +1,7 @@
 /**
  * Domain model for the expense tracker.
  *
- * State is persisted in Postgres (see database.ts) with receipt images in
+ * State is persisted in Postgres (see app/lib/db/) with receipt images in
  * Postgres BYTEA (see images.server.ts). These types describe the
  * in-memory shape after parsing.
  */
@@ -239,8 +239,9 @@ export interface Account {
   name: string;
   /** Secret code used to join the account (regenerable). */
   inviteCode: string;
-  /** Billing tier: "paid" or "gratis" unlock conversational AI
-   * (insights); null = no plan yet, AI surfaces show an upgrade prompt. */
+  /** Billing tier ("paid" / "gratis"), null when no plan is set. Reserved
+   * for billing: every account has the conversational AI surfaces, and
+   * nothing reads this field today. */
   plan: string | null;
   createdAt: string;
 }

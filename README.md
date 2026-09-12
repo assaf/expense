@@ -147,22 +147,18 @@ service.
 | `categories` / `settings` / |                                |
 | `mileage` / `image_blobs`   |                                |
 
-All reads/writes are done via `app/lib/database.ts` (Prisma queries scoped by
-`accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
+All reads/writes go through the modules in `app/lib/db/` (Prisma queries scoped
+by `accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
 `imageBlob`). Image blobs are kept in `images/{accountId}/...` pathnames on all
 backends. They are namespaced per account, so two accounts can never have a
 name conflict. Schema changes: edit `prisma/contract.prisma`, run
 `pnpm build:prisma` (contract emit), then `pnpm db:push` locally and on
 deploy (see `docs/deploy.md`).
 
-## Quick start
-
 ## Environment variables
 
 Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
 `.env` is used to fill holes. `DATABASE_URL` is required; `.env` is gitignored.
-if (!hasDatabase()) {
-
 **dev / test (local `.env`):**
 
 ```bash
@@ -219,10 +215,10 @@ How it determines what to import:
 
 ### Setup DeepSeek
 
-- **DeepSeek vision**: the hosted DeepSeek API is text-only, so receipt images
-  are OCR'd locally with tesseract.js (worker/fonts fetched from a CDN at
-  runtime). Set `RECEIPT_OCR_MODE=deepseek` if/when the hosted model will be
-  able to handle receipt images (vision tries first and falls back on `auto`).
+- **DeepSeek vision**: receipt images go to the hosted vision model first
+  (`LLM_VISION_MODEL`), and tesseract.js (worker/fonts fetched from a CDN at
+  runtime) runs only when the provider errors. `RECEIPT_OCR_MODE=tesseract`
+  forces local OCR, `=deepseek` forces the model.
 - **Scanned PDFs** (without the text layer) are rasterized and OCR'd; the first
   pages are uploaded as receipt image.
 - **HTML receipts** are converted to a text image (receipt form on the paper);

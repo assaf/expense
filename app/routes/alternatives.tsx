@@ -1,6 +1,5 @@
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import {
-  APP_NAME,
   COMPETITOR_PRICING_NOTE,
   COMPETITOR_ROWS,
   COMPARISON_SUMMARY,
@@ -14,7 +13,7 @@ import { JsonLd } from "~/components/JsonLd";
 const COMPARISON_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: `How ${APP_NAME} compares to the other receipt apps`,
+  name: `How Expense compares to the other receipt apps`,
   url: `${SITE_URL}/alternatives`,
   description: COMPARISON_SUMMARY,
 };
@@ -22,7 +21,7 @@ const COMPARISON_SCHEMA = {
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
     `Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave`,
-    `Where ${APP_NAME} fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.`,
+    `Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.`,
     "/alternatives",
   );
 }
@@ -33,7 +32,7 @@ export default function AlternativesPage() {
   return (
     <MarketingPage
       eyebrow="Compare"
-      title={`How ${APP_NAME} compares to the other receipt apps.`}
+      title={`How Expense compares to the other receipt apps.`}
       summary={COMPARISON_SUMMARY}
       schema={<JsonLd data={COMPARISON_SCHEMA} />}
     >
@@ -91,7 +90,7 @@ export default function AlternativesPage() {
       </section>
 
       <MarketingCta
-        heading={`Try ${APP_NAME} free.`}
+        heading={`Try Expense free.`}
         body="No subscription, no 25-scan monthly cap, no ads."
         className="mt-12 py-10"
         buttonRow="mt-6"

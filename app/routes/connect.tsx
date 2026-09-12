@@ -10,9 +10,6 @@ import {
 } from "~/components/mcp-sections";
 import { cn } from "cn";
 import {
-  APP_NAME,
-  AUTHOR_NAME,
-  BLOG_URL,
   MCP_CLIENTS,
   MCP_ENDPOINT,
   MCP_PAGE_SUMMARY,
@@ -27,19 +24,19 @@ import { JsonLd } from "~/components/JsonLd";
 const CONNECT_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: `${APP_NAME} MCP server`,
+  name: `Expense MCP server`,
   url: `${SITE_URL}/connect`,
   description: MCP_PAGE_SUMMARY,
   author: {
     "@type": "Person",
-    name: AUTHOR_NAME,
-    url: BLOG_URL,
+    name: "Assaf Arkin",
+    url: "https://labnotes.org",
   },
 };
 
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    `${APP_NAME}: MCP server`,
+    `Expense: MCP server`,
     "Install instructions for the Expense MCP server in Claude, ChatGPT, Gemini CLI, and other MCP clients, the full tool list, and example usage. Remote HTTP + OAuth, no API keys.",
     "/connect",
   );

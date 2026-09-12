@@ -935,7 +935,7 @@ function resolvePriorField(
   return match(suggested, existing);
 }
 
-/** The extraction context resolved by `readExtractionContext` (database.ts):
+/** The extraction context resolved by `readExtractionContext` (app/lib/db/extraction-context.ts):
  * the account's category/report names plus the known-merchant map (which
  * also supplies the prior category/report lookups and drives the LLM-skip
  * path). */

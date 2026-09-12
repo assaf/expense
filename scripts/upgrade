@@ -13,7 +13,6 @@ pnpm prune --ignore-scripts
 
 echo -e "\033[32m  Security audit …\033[0m"
 pnpm install
-git add package.json pnpm-lock.yaml
 
 echo -e "\033[32m  Installing Playwright browsers …\033[0m"
 # Browsers must match the just-upgraded playwright package (pnpm exec, NOT
@@ -30,11 +29,7 @@ vpr check
 vpr test
 
 echo -e "\033[32m  Auditing dependencies …\033[0m"
-pnpm pnpm audit --prod || echo "Security audit failed"
-
-echo -e "\033[32m  Commiting changes …\033[0m"
-git --no-pager diff --unified=0 --color --word-diff HEAD~1 package.json
-git commit -m "Upgrade dependencies" || echo
+pnpm audit --prod || echo "Security audit failed"
 
 echo -e "\033[32m  Cleaning up …\033[0m"
 git gc --prune=now || echo

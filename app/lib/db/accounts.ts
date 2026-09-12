@@ -102,8 +102,8 @@ export async function createAccount(name: string): Promise<Account> {
     id: ulid(),
     name: clean,
     inviteCode: generateInviteCode(),
-    // New signups start without a plan; conversational AI is for
-    // "paid"/"gratis" accounts (existing accounts were grandfathered).
+    // New signups start without a plan (a billing marker; nothing reads
+    // it yet, and it does not gate any feature).
     plan: null,
     createdAt: new Date().toISOString(),
   };

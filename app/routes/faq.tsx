@@ -1,7 +1,6 @@
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
 import {
-  APP_NAME,
   APP_SUMMARY,
   FAQS,
   marketingPageHeaders,
@@ -26,7 +25,7 @@ const FAQ_SCHEMA = {
 
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    `${APP_NAME} FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
+    `Expense FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
     "Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.",
     "/faq",
   );

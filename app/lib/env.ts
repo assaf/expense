@@ -185,9 +185,8 @@ export const LLM_VISION_MAX_TOKENS =
 
 /**
  * OCR backend for image/scanned receipts:
- *  - "auto"     local tesseract OCR first (cheap); the vision model is the
- *               fallback when the OCR text is empty or too weak to name a
- *               total (photocopies, glare, skew)
+ *  - "auto"     DeepSeek vision first (no local OCR CPU on the happy path);
+ *               tesseract runs only when the provider errors
  *  - "deepseek" DeepSeek vision only (errors are reported back)
  *  - "tesseract"local OCR only
  */

@@ -7,15 +7,15 @@ Real coverage: `test/pdf-ocr.test.ts` (text extraction + rasterization in
 `pnpm test`; tesseract round-trip opt-in via `RUN_OCR_TESTS=1`, on in CI)
 and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
 runs in the deployed serverless bundle; `scripts/deploy` curls it after
-CLI deploys, and `.github/workflows/deployment-smoke.yml` runs it on every
+CLI deploys, and `.github/workflows/deployment-checks.yml` runs it on every
 push to `main`. The workflow: `secretlint` runs first and gates the whole
 pipeline, then `check` + `test` run in parallel, then
-`migrate-db` (runs `./scripts/migrate-prod --ci` against prod via the
-`DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass, never
-before) → `pdf-ocr-smoke`. The smoke job fails fast when
+`migrate-db` (runs `pnpm prisma db update --no-interactive` against prod
+through the `DATABASE_URL_UNPOOLED` GitHub secret, only after tests pass,
+never before) → `pdf-ocr-smoke`. The smoke job fails fast when
 CI or the migration fails, so a broken build or an unmigrated schema never
-reports a passing smoke check. Job timeouts (2/2/4/1/2 minutes) bound the
-whole run to a ~10m ceiling; typical runs are ~5m.
+reports a passing smoke check. Job timeouts (secretlint 10m, check 5m, test 15m, migrate-db 10m,
+pdf-ocr-smoke 15m) bound the whole run; typical runs are ~5m.
 **Deployment Checks gate: REMOVED (Aug 2026).** Production promotion is no
 longer gated on a Vercel Deployment Check; the alias follows the latest
 READY production deployment automatically. The gate broke twice: a stale

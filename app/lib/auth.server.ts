@@ -49,7 +49,7 @@ import type { User } from "./types";
  * account's expenses/settings.
  *
  * The very first user/account is bootstrapped from APP_EMAIL /
- * APP_PASSWORD when the database is empty (see database.ts).
+ * APP_PASSWORD when the database is empty (see app/lib/db/accounts.ts).
  */
 
 if (!SESSION_SECRET) {

@@ -2,11 +2,8 @@ import { CheckCircle2 } from "lucide-react";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
 import {
-  APP_NAME,
   APP_SUMMARY,
-  AUTHOR_NAME,
   BENEFITS,
-  BLOG_URL,
   KEY_FACTS,
   marketingPageHeaders,
   pageMeta,
@@ -18,19 +15,19 @@ import { JsonLd } from "~/components/JsonLd";
 const ABOUT_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "AboutPage",
-  name: `About ${APP_NAME}`,
+  name: "About Expense",
   url: `${SITE_URL}/about`,
   description: APP_SUMMARY,
   author: {
     "@type": "Person",
-    name: AUTHOR_NAME,
-    url: BLOG_URL,
+    name: "Assaf Arkin",
+    url: "https://labnotes.org",
   },
 };
 
 export function meta(): Route.MetaDescriptors {
   return pageMeta(
-    `About ${APP_NAME}: a free expense tracker built for tax season`,
+    `About Expense: a free expense tracker built for tax season`,
     "Expense is a free expense tracker built for tax season: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF or ZIP export is ready when you are.",
     "/about",
   );

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Post-deploy smoke check: curl /api/smoke on a deployment and validate the
 # PDF/OCR/MCP result. Shared by scripts/deploy (after CLI deploys) and the
-# CI workflow's pdf-ocr-smoke job (.github/workflows/deployment-smoke.yml),
+# CI workflow's pdf-ocr-smoke job (.github/workflows/deployment-checks.yml),
 # so the two can never drift apart.
 #
 # Usage: ./scripts/smoke-check <deployment-url-or-host>

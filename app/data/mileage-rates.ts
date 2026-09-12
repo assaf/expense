@@ -2,7 +2,7 @@ import type { MileageRateEntry } from "~/lib/mileage-rates";
 
 /**
  * IRS standard mileage rates: the seed for the global `mileage_rates`
- * master table, synced by initStore at startup (see database.ts). Source:
+ * master table, synced by initStore at startup (see app/lib/db/seed.ts). Source:
  * the IRS standard-mileage-rates page; docs/2026-08-04 IRS standard mileage
  * rates.md holds the point-in-time snapshot with the source links.
  *

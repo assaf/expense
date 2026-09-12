@@ -76,9 +76,6 @@ export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 
 /** The social-card image shared by every marketing page's og:image. */
 export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
-export const APP_NAME = "Expense";
-export const BLOG_URL = "https://labnotes.org";
-export const AUTHOR_NAME = "Assaf Arkin";
 
 const APP_TAGLINE =
   "Free expense tracking for tax season: receipts, mileage, and exports.";
@@ -100,7 +97,7 @@ month.`;
 
 /** Short factual bullets an LLM can quote about the product. */
 export const KEY_FACTS = [
-  `Name: ${APP_NAME}`,
+  `Name: Expense`,
   `URL: ${SITE_URL}`,
   "Price: free until the app reaches 100 users, then a paid plan applies, still free up to 25 invoices a month. No ads",
   "Built for the tax time: categories are from IRS Schedule C lines, expenses are grouped into the reports you name, mileage deduction is calculated at the IRS rate for the drive date/type",
@@ -614,7 +611,7 @@ ${table}
 ${wrap(`Source: [About Schedule C (Form 1040)](https://www.irs.gov/forms-pubs/about-schedule-c-form-1040).
 Car and truck expenses can also use the standard mileage rate: see
 [IRS standard mileage rates by year](${SITE_URL}/mileage-rates).
-[${APP_NAME}](${SITE_URL}/) seeds every new account with this exact list,
+[Expense](${SITE_URL}/) seeds every new account with this exact list,
 in this order, so yearly totals line up with the return without re-bucketing.`)}
 `;
 }
@@ -697,7 +694,7 @@ export function aiMarkdown(): string {
   const steps = AI_STEPS.map(
     (s, i) => `${i + 1}. **${s.title}** — ${wrap(s.body)}`,
   ).join("\n");
-  return `# ${APP_NAME}: connect your AI assistant
+  return `# Expense: connect your AI assistant
 
 ${AI_SUMMARY}
 
@@ -928,7 +925,7 @@ ${clients}
 
 ${AI_SECURITY}
 
-For the browser-based in-page tools (WebMCP), and the app's own Insights page that answers questions about your spending with nothing connected, see [${APP_NAME}: connect your AI assistant](${SITE_URL}/ai.md).
+For the browser-based in-page tools (WebMCP), and the app's own Insights page that answers questions about your spending with nothing connected, see [Expense: connect your AI assistant](${SITE_URL}/ai.md).
 `;
 }
 
@@ -938,7 +935,7 @@ export function aboutMarkdown(): string {
     (b) => `- **${b.title}** — ${wrap(b.body)}`,
   ).join("\n");
   const facts = KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n");
-  return `# ${APP_NAME}: a free expense tracker built for tax season
+  return `# Expense: a free expense tracker built for tax season
 
 ${APP_SUMMARY}
 
@@ -952,7 +949,7 @@ ${benefits}
 
 ${facts}
 
-Built by ${AUTHOR_NAME} (${BLOG_URL}).
+Stewarded by Assaf Arkin (https://labnotes.org).
 `;
 }
 
@@ -961,7 +958,7 @@ export function faqMarkdown(): string {
   const qa = FAQS.map((f) => `## ${f.question}\n\n${wrap(f.answer)}`).join(
     "\n\n",
   );
-  return `# ${APP_NAME}: frequently asked questions
+  return `# Expense: frequently asked questions
 
 ${APP_SUMMARY}
 
@@ -977,7 +974,7 @@ export function alternativesMarkdown(): string {
     (r) =>
       `- **${r.app}** (${r.site}): ${wrap(r.bestFor)} Pricing: ${wrap(r.pricing)} Tax-filing focus: ${wrap(r.taxFiling)}`,
   ).join("\n");
-  return `# How ${APP_NAME} compares to the other receipt apps
+  return `# How Expense compares to the other receipt apps
 
 ${COMPARISON_SUMMARY}
 
@@ -987,7 +984,7 @@ ${competitorRows}
 
 ${COMPETITOR_PRICING_NOTE}
 
-${APP_NAME} (${SITE_URL}) is free, uses OCR and AI to categorize receipts, tracks
+Expense (${SITE_URL}) is free, uses OCR and AI to categorize receipts, tracks
 mileage at the IRS rate, and organizes expenses into Schedule C-based
 categories and reports for tax filing.
 
@@ -1019,7 +1016,7 @@ ${table}
 
 ${wrap(`Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates).
 The moving rate applies only to Armed Forces and Intelligence Community members
-moving under orders, and the charitable rate is fixed by statute. [${APP_NAME}](${SITE_URL}/)
+moving under orders, and the charitable rate is fixed by statute. [Expense](${SITE_URL}/)
 applies these rates automatically: each drive's deduction follows its date and
 type, with no configuration. Current through ${latest.period}.`)}
 `;
@@ -1027,7 +1024,7 @@ type, with no configuration. Current through ${latest.period}.`)}
 
 /** The /llms.txt file: a curated overview for LLM retrieval, per llmstxt.org. */
 export function llmsTxt(): string {
-  return `# ${APP_NAME}
+  return `# Expense
 
 > ${APP_SUMMARY}
 
@@ -1037,17 +1034,17 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 
 ## Core pages
 
-- [${APP_NAME}: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
-- [About ${APP_NAME}](${SITE_URL}/about.md): What the app does and the full feature list.
-- [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how ${APP_NAME} compares to Expensify.
+- [Expense: every receipt, ready for tax season](${SITE_URL}/): The home page; free account signup.
+- [About Expense](${SITE_URL}/about.md): What the app does and the full feature list.
+- [Frequently asked questions](${SITE_URL}/faq.md): Answers to common questions, including how Expense compares to Expensify.
 - [IRS standard mileage rates by year](${SITE_URL}/mileage-rates.md): The rate table for business, medical, moving, and charity drives by period, 2011 to today, including mid-year changes. Expense applies the right rate to each drive automatically.
 - [Schedule C expense categories](${SITE_URL}/schedule-c-categories.md): The 23 expense lines from IRS Schedule C, Part II, with a plain-language note for each; every new Expense account starts pre-filled with this list.
-- [How ${APP_NAME} compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
+- [How Expense compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements. Covers Insights too, the built-in question page that answers from your own expenses with nothing connected.
 
 ## Optional
 
-- [Blog](${BLOG_URL}): Posts by the author.
+- [Blog](https://labnotes.org): Posts by the author.
 `;
 }

@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import { cn } from "cn";
 import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
-import { BLOG_URL } from "~/lib/seo-content";
 
 const FOOTER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
@@ -13,7 +12,7 @@ const FOOTER_NAV: SiteNavItem[] = [
   { label: "Compare", to: "/alternatives" },
   { label: "Mileage", to: "/mileage-rates" },
   { label: "Categories", to: "/schedule-c-categories" },
-  { label: "Blog", to: BLOG_URL, external: true },
+  { label: "Blog", to: "https://labnotes.org", external: true },
 ];
 
 /**
@@ -75,7 +74,7 @@ export function SiteFooter() {
     <footer className="border-t border-gray-100 dark:border-gray-700">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <Logo icon /> · © {new Date().getFullYear()} · Built by{" "}
+          <Logo icon /> · © {new Date().getFullYear()} · Stewarded by{" "}
           <a href="https://labnotes.org">Assaf Arkin</a>
         </div>
         <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
