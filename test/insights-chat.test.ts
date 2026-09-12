@@ -133,23 +133,28 @@ describe("insights transcript", () => {
     expect(entries).toEqual([legacy, exchange("new")]);
   });
 
-  it("keeps the newest conversation newest even when the clocks tie", async () => {
+  it("picks the newest conversation by id when the timestamps tie", async () => {
     const userId = newUser();
-    const first = await startNewConversation(userId, TEST_ACCOUNT_ID);
-    const second = await startNewConversation(userId, TEST_ACCOUNT_ID);
-    // Force the tie the millisecond clock allows: with `updatedAt` as the
-    // ordering key the reader could then return either row (which is how the
-    // chat opened the wrong conversation, and how a test on "the newest one"
-    // flaked). Ids are unique, so the order is stable.
-    await db.orm.public.InsightConversation.where({ id: first }).updateAll({
-      updatedAt: nowWire(),
-    });
-    await db.orm.public.InsightConversation.where({ id: second }).updateAll({
-      updatedAt: nowWire(),
-    });
+    // Two rows written in the same millisecond: with `updatedAt` as the
+    // ordering key the reader could return either one (which is how the chat
+    // opened the wrong conversation, and how a test on "the newest one"
+    // flaked). Ids are unique, so the pick is stable.
+    const older = "01AAAAAAAAAAAAAAAAAAAAAAAA";
+    const newer = "01BBBBBBBBBBBBBBBBBBBBBBBB";
+    for (const id of [older, newer]) {
+      await db.orm.public.InsightConversation.create({
+        id,
+        userId,
+        accountId: TEST_ACCOUNT_ID,
+        messages: asJson([]),
+        createdAt: nowWire(),
+        updatedAt: nowWire(),
+      });
+    }
+
     await appendExchange(userId, TEST_ACCOUNT_ID, exchange("newest"));
     const conversation = await readLatestConversation(userId);
-    expect(conversation?.id).toBe(second);
+    expect(conversation?.id).toBe(newer);
     expect(conversation?.exchanges.map((e) => e.question)).toEqual(["newest"]);
   });
 
