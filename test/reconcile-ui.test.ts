@@ -117,30 +117,62 @@ describe("Reconcile flow", () => {
     await expect(page.getByText("Needs your decision")).toBeVisible();
   });
 
-  it("picks up a statement dropped on the page", async () => {
+  it("drags a statement onto the page: dashed outline, then upload", async () => {
     await page.goto("/reconcile", { waitUntil: "load" });
     await page.waitForTimeout(500);
+    const main = page.locator("main#main-content");
+    const submit = page.getByRole("button", { name: "Match my expenses" });
+    const STATEMENT_CSV = [
+      "date,description,amount",
+      "2026-08-02,DROPPED CAFE,4.25",
+    ].join("\n");
+
     // A drop carries its files on a DataTransfer, which only the page can
-    // build; hand it to the dispatched event from a page handle.
-    const dataTransfer = await page.evaluateHandle(() => {
-      const transfer = new DataTransfer();
-      const csv = [
-        "date,description,amount",
-        "2026-08-02,DROPPED CAFE,4.25",
-      ].join("\n");
-      transfer.items.add(
-        new File([csv], "dropped-statement.csv", { type: "text/csv" }),
+    // build; hand it to each dispatched event from its own handle (a
+    // DataTransfer is spent by the drop it carries).
+    const dropData = (name: string, type: string, body: string) =>
+      page.evaluateHandle(
+        ([n, t, b]) => {
+          const transfer = new DataTransfer();
+          transfer.items.add(new File([b], n, { type: t }));
+          return transfer;
+        },
+        [name, type, body] as [string, string, string],
       );
-      return transfer;
-    });
-    // Dropped on the page header, not the upload card: the whole page is the
-    // drop target, the way the expense list's is.
-    await page.dispatchEvent("h1", "dragenter", { dataTransfer });
-    // Over the page: the live region announces what a drop would do.
-    await expect(page.getByText(/Statement file detected/)).toBeVisible();
-    await page.dispatchEvent("h1", "drop", { dataTransfer });
-    // The drop fills the picker, so the visible filename is the browser's
-    // own and the submit enables exactly as if the file had been chosen.
+
+    // Over the page: the whole page is the drop target (the header is not
+    // special), highlighted with the same dashed outline the expense list
+    // shows and announced to screen readers.
+    const hover = await dropData(
+      "dropped-statement.csv",
+      "text/csv",
+      STATEMENT_CSV,
+    );
+    await page.dispatchEvent("h1", "dragenter", { dataTransfer: hover });
+    await expect(main).toHaveClass(/outline-dashed/);
+    await expect(
+      page.locator('.sr-only[role="status"][aria-live="polite"]'),
+    ).toContainText("Statement file detected");
+
+    // Leaving clears the highlight.
+    await page.dispatchEvent("h1", "dragleave", { dataTransfer: hover });
+    await expect(main).not.toHaveClass(/outline-dashed/);
+
+    // A file the page does not take is ignored: browsers drop the picker's
+    // accept filter, so the drop target screens, and nothing is submitted.
+    const ignored = await dropData("note.png", "image/png", "not a statement");
+    await page.dispatchEvent("h1", "drop", { dataTransfer: ignored });
+    await expect(submit).toBeDisabled();
+
+    // The statement fills the picker, so the browser shows the filename and
+    // the submit enables exactly as if the file had been chosen.
+    const statement = await dropData(
+      "dropped-statement.csv",
+      "text/csv",
+      STATEMENT_CSV,
+    );
+    await page.dispatchEvent("h1", "drop", { dataTransfer: statement });
+    await expect(submit).toBeEnabled();
     expect(
       await page.evaluate(() => {
         const input = document.querySelector('input[type="file"]');
@@ -149,7 +181,7 @@ describe("Reconcile flow", () => {
           : "";
       }),
     ).toBe("dropped-statement.csv");
-    await page.getByRole("button", { name: "Match my expenses" }).click();
+    await submit.click();
     await page.waitForURL(/\/reconcile\?run=/);
     await expect(page.getByText("DROPPED CAFE")).toBeVisible();
   });
