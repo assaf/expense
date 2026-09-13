@@ -23,8 +23,10 @@ import type { Route } from "./+types/api.email-connections-cron";
  * - Gmail: watches expire after ~7 days; renew at a 48h margin, which
  *   gives the daily cron five chances before a lapse.
  *
- * A connection whose renewal fails (revoked token, provider error) is
- * flagged status=error so the user sees "Needs attention" in Settings.
+ * A connection whose renewal or catch-up drain fails (revoked token,
+ * provider error) is flagged status=error so the user sees "Needs
+ * attention" in Settings, and the failure is reported once per transition
+ * rather than once per tick.
  *
  * Auth, monitoring, and the response envelopes are the shared cronTick
  * helper (app/lib/cron.server.ts), same as /api/inbound-cron: Vercel cron
@@ -109,10 +111,20 @@ export async function loader({ request }: Route.LoaderArgs) {
             created: drain.created,
           };
         } catch (err) {
-          captureWarning("[email-connections-cron] drain failed", {
-            connectionId: connection.id,
-            error: err,
-          });
+          // A dead credential is the user's to fix and their receipts have
+          // silently stopped, so flag the connection exactly as a failed
+          // renewal does. Warn on the transition only: a connection nobody
+          // reconnects must not re-open the same issue every day.
+          if (connection.status !== "error") {
+            captureWarning("[email-connections-cron] drain failed", {
+              connectionId: connection.id,
+              error: err,
+            });
+          }
+          await setEmailConnectionStatus(connection.id, "error").catch(
+            () => {},
+          );
+          results[results.length - 1]!.error = String(err);
         }
       }
 

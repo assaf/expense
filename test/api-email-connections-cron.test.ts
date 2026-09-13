@@ -12,13 +12,14 @@ const mocks = vi.hoisted(() => ({
   setEmailConnectionStatus: vi.fn(async () => {}),
   ensureGmailWatch: vi.fn(async () => {}),
   connectionAccessToken: vi.fn(async () => "test-token"),
-  drainEmailConnection: vi.fn(async () => ({
+  drainEmailConnection: vi.fn(async (_connection: { id: string }) => ({
     evaluated: 0,
     created: 0,
     partial: 0,
     ignored: 0,
     failed: 0,
   })),
+  captureWarning: vi.fn(),
   ensureConnectionPushSubscription: vi.fn(
     async (_connection: { id: string }) => ({
       subscriptionId: "sub-1",
@@ -55,6 +56,10 @@ vi.mock("~/lib/fastmail-oauth.server", () => ({
 
 vi.mock("~/lib/email-connection-process.server", () => ({
   drainEmailConnection: mocks.drainEmailConnection,
+}));
+
+vi.mock("~/lib/errors.server", () => ({
+  captureWarning: mocks.captureWarning,
 }));
 
 import { loader } from "~/routes/api.email-connections-cron";
@@ -94,6 +99,14 @@ describe("api.email-connections-cron", () => {
     mocks.ensureGmailWatch.mockClear();
     mocks.connectionAccessToken.mockClear();
     mocks.drainEmailConnection.mockClear();
+    mocks.drainEmailConnection.mockImplementation(async () => ({
+      evaluated: 0,
+      created: 0,
+      partial: 0,
+      ignored: 0,
+      failed: 0,
+    }));
+    mocks.captureWarning.mockClear();
     mocks.ensureGmailWatch.mockResolvedValue(undefined);
     mocks.ensureConnectionPushSubscription.mockImplementation(async () => ({
       subscriptionId: "sub-1",
@@ -166,6 +179,51 @@ describe("api.email-connections-cron", () => {
       "a",
       "error",
     );
+  });
+
+  it("flags a connection as error when the catch-up drain fails", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "a" }),
+      connection({ id: "b" }),
+    ]);
+    mocks.drainEmailConnection.mockImplementation(async (c: { id: string }) => {
+      if (c.id === "b") throw new Error("invalid_grant");
+      return { evaluated: 0, created: 0, partial: 0, ignored: 0, failed: 0 };
+    });
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    // The renewal succeeded, so the drain is where a dead token surfaces.
+    // The user has to see it in Settings, and the tick carries on.
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("b", "error");
+    expect(mocks.captureWarning).toHaveBeenCalledTimes(1);
+    expect(mocks.drainEmailConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a" }),
+    );
+  });
+
+  it("reports a connection that is already flagged only once", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "a", status: "error" }),
+    ]);
+    mocks.drainEmailConnection.mockRejectedValue(new Error("invalid_grant"));
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    // Already flagged: nothing new for the user, and no daily Sentry event
+    // for a mailbox nobody has reconnected.
+    expect(mocks.captureWarning).not.toHaveBeenCalled();
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("a", "error");
   });
 
   it("keeps renewing when the failure flag itself cannot be written", async () => {
