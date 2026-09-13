@@ -234,13 +234,10 @@ describe("Settings", () => {
       .locator("ul li")
       .filter({ hasText: "Office Supplies" });
 
-    let dialogShown = false;
-    page.on("dialog", () => {
-      dialogShown = true;
-    });
+    // One expense: no confirmation step, the row goes on the first click.
     await row.getByRole("button", { name: /remove office supplies/i }).click();
     await expect(row).toHaveCount(0);
-    expect(dialogShown).toBe(false);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.close();
   });
 
@@ -252,18 +249,15 @@ describe("Settings", () => {
     const row = categories.locator("ul li").filter({ hasText: "Development" });
 
     // Dismiss the confirmation: nothing is deleted.
-    page.once("dialog", (d) => void d.dismiss());
     await row.getByRole("button", { name: /remove development/i }).click();
+    await expect(page.getByText(/2 expenses in open reports/)).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(row).toBeVisible();
 
-    // Accept the confirmation; the category is deleted, its expenses stay.
-    let message = "";
-    page.once("dialog", (d) => {
-      message = d.message();
-      void d.accept();
-    });
+    // Accept it instead; the category is deleted, its expenses stay.
     await row.getByRole("button", { name: /remove development/i }).click();
-    expect(message).toContain("2 expenses");
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(row).toHaveCount(0);
     // Categories don't cascade: the expenses keep their category reference.
     expect(
@@ -392,13 +386,17 @@ describe("Settings", () => {
     await expect(row).toBeVisible();
 
     // Dismissing the confirmation keeps the place.
-    page.once("dialog", (d) => void d.dismiss());
     await row.getByRole("button", { name: "Delete Hospital" }).click();
+    await expect(
+      page.getByText(/Trips already saved keep its address/),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(row).toBeVisible();
 
     // Accepting removes it; nothing else in the list changes.
-    page.once("dialog", (d) => void d.accept());
     await row.getByRole("button", { name: "Delete Hospital" }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
     await expect(row).toHaveCount(0);
     await expect(
       section.locator("ul li").filter({ hasText: "Work" }),

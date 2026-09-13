@@ -1,8 +1,11 @@
 import { KeyRound } from "lucide-react";
 import { useFetcher } from "react-router";
-import { RemoveButton } from "~/components/settings/name-list";
 import { Card } from "~/components/ui/Card";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 import { LocalDate } from "~/components/ui/LocalTime";
+import { RemoveButton } from "~/components/ui/RemoveButton";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 
 /**
  * Agents & API (MCP): the OAuth-connected apps for this account. Each app
@@ -24,8 +27,7 @@ export function AgentsSection({
   const removeFetcher = useFetcher<{ ok: boolean }>();
 
   return (
-    <section id="agents" className="mb-8 scroll-mt-6">
-      <h2 className="mb-2 text-lg font-semibold">Agents &amp; API (MCP)</h2>
+    <Section id="agents" title="Agents & API (MCP)">
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Connect your AI assistant (Claude, OpenAI, or any MCP client) to this
         account. Point the client at the endpoint below and approve the
@@ -40,9 +42,9 @@ export function AgentsSection({
       </p>
       <Card className="p-4">
         <div className="mb-4">
-          <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+          <FieldLabel as="div" className="mb-1">
             Endpoint
-          </div>
+          </FieldLabel>
           <div className="font-mono text-sm text-gray-600 dark:text-gray-300">
             {mcpUrl}
           </div>
@@ -53,14 +55,14 @@ export function AgentsSection({
         </div>
 
         <div>
-          <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+          <FieldLabel as="div" className="mb-1">
             Connected apps
-          </div>
+          </FieldLabel>
           {oauthSessions.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <StatusNote>
               None yet. The first time an assistant connects, you approve it
               here by signing in.
-            </p>
+            </StatusNote>
           ) : (
             <ul className="flex flex-col gap-2">
               {oauthSessions.map(({ client, lastUsedAt, expiresAt }) => (
@@ -112,6 +114,6 @@ export function AgentsSection({
           </p>
         </div>
       </Card>
-    </section>
+    </Section>
   );
 }

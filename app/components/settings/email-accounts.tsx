@@ -2,13 +2,15 @@ import { useState } from "react";
 import { ArrowRight, Mail, Plug, PlugZap } from "lucide-react";
 import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Link, useFetcher } from "react-router";
-import { RemoveButton } from "~/components/settings/name-list";
 import { Button } from "~/components/ui/Button";
 import { OrDivider } from "~/components/ui/OrDivider";
 import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
 import { LocalDate } from "~/components/ui/LocalTime";
+import { RemoveButton } from "~/components/ui/RemoveButton";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 import type { EmailConnectionView } from "~/lib/db/email-connections";
 
 /**
@@ -44,8 +46,7 @@ export function EmailAccountsSection({
   oauthNotice: { ok: boolean; text: string } | null;
 }) {
   return (
-    <section id="email-accounts" className="mb-8 scroll-mt-6">
-      <h2 className="mb-2 text-lg font-semibold">Email accounts</h2>
+    <Section id="email-accounts" title="Email accounts">
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Connect an email account and receipts in it are imported automatically —
         the expense is added, the email is moved to Trash, and a reply with an
@@ -63,9 +64,9 @@ export function EmailAccountsSection({
           <>
             <ul className="flex flex-col gap-2">
               {connections.length === 0 ? (
-                <li className="text-sm text-gray-500 dark:text-gray-400">
+                <StatusNote as="li">
                   No email accounts connected yet.
-                </li>
+                </StatusNote>
               ) : (
                 connections.map((connection) => (
                   <ConnectionRow key={connection.id} connection={connection} />
@@ -86,13 +87,13 @@ export function EmailAccountsSection({
             />
           </>
         ) : (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <StatusNote>
             Email account connections are not configured on this deployment
             (missing <code>EMAIL_TOKEN_ENCRYPTION_KEY</code>).
-          </p>
+          </StatusNote>
         )}
       </Card>
-    </section>
+    </Section>
   );
 }
 

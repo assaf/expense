@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2, MapPinned, Plus, X } from "lucide-react";
 import MapView from "~/components/MapView";
 import { Button } from "~/components/ui/Button";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
 import { findDuplicates } from "~/lib/duplicates";
@@ -606,9 +607,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
       />
 
       <div className="mt-4">
-        <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
-          Locations
-        </span>
+        <FieldLabel className="mb-1 block">Locations</FieldLabel>
         {/* One row of "add a stop" buttons: each saved place adds itself as
          * a stop (the first empty row, or a new one), and Add stop adds an
          * empty row. They read the same way and the plain Add stop sits

@@ -4,14 +4,13 @@ import { redirect, useFetcher } from "react-router";
 import { AddNameForm } from "~/components/AddNameForm";
 import { cn } from "cn";
 import { PageShell } from "~/components/PageShell";
-import {
-  RemoveButton,
-  RenameButton,
-  RenameForm,
-} from "~/components/settings/name-list";
+import { RenameButton, RenameForm } from "~/components/settings/name-list";
 import { Badge } from "~/components/ui/Badge";
 import { Button } from "~/components/ui/Button";
 import { LiveStatus } from "~/components/ui/LiveStatus";
+import { RemoveButton } from "~/components/ui/RemoveButton";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 import { cardSurface } from "~/components/ui/Card";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
@@ -77,34 +76,31 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
       icon={<FileDown aria-hidden="true" className="h-6 w-6" />}
       title="Reports"
     >
-      <section className="mb-8">
-        <h2 className="mb-2 text-lg font-semibold">Open reports</h2>
+      <Section title="Open reports" className="mb-8">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Expenses can still be added or edited. Close a report when you're
           ready to file: it freezes the expenses and you can export a PDF.
         </p>
         <ReportSection reports={open} />
-      </section>
+      </Section>
 
       <AddReportForm />
 
       {closed.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="mb-2 flex items-center gap-1.5 text-lg font-semibold">
-            <Lock aria-hidden="true" className="h-4 w-4" /> Closed reports
-          </h2>
+        <Section
+          title="Closed reports"
+          icon={<Lock aria-hidden="true" className="h-4 w-4" />}
+          className="mb-8"
+        >
           <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
             Expenses in closed reports are read-only. You can still export and
             reopen them.
           </p>
           <ReportSection reports={closed} />
-        </section>
+        </Section>
       ) : null}
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">
-          Download everything (ZIP)
-        </h2>
+      <Section title="Download everything (ZIP)" className="">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Every expense across all reports (all time) as a ZIP containing all
           receipt images and a CSV of every expense.
@@ -118,7 +114,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
             <FileArchive aria-hidden="true" className="h-4 w-4" /> Download ZIP
           </a>
         </Button>
-      </section>
+      </Section>
     </PageShell>
   );
 }
@@ -127,7 +123,7 @@ export default function ExportPage({ loaderData }: Route.ComponentProps) {
 
 function ReportSection({ reports }: { reports: ReportSummary[] }) {
   if (reports.length === 0) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">None.</p>;
+    return <StatusNote>None.</StatusNote>;
   }
   return (
     <ul className="flex flex-col gap-2">
@@ -224,9 +220,10 @@ function ReportRow({ report }: { report: ReportSummary }) {
 }
 
 // --- Rename/remove row actions --------------------------------------------
-// RenameForm, RenameButton and RemoveButton live in name-list.tsx (the
-// Settings report/category lists); the export page reuses them so a change
-// to the inline-rename or remove behavior lands in one place.
+// RenameForm and RenameButton live in name-list.tsx (the Settings
+// report/category lists) and RemoveButton in the ui primitives; the export
+// page reuses them so a change to the inline-rename or remove behavior lands
+// in one place.
 
 // --- Add report form -------------------------------------------------------
 

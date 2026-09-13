@@ -7,6 +7,9 @@ import {
   SenderRow,
 } from "~/components/settings/receipts-by-email";
 import { Card } from "~/components/ui/Card";
+import { FieldLabel } from "~/components/ui/FieldLabel";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
@@ -274,8 +277,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
         oauthNotice={oauthNotice}
       />
 
-      <section id="receipts-by-email" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Receipts by email</h2>
+      <Section id="receipts-by-email" title="Receipts by email">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Forward receipt emails to the address below and they are parsed
           (merchant, amount, category) and added automatically. The expense date
@@ -291,34 +293,32 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
         <Card className="p-4">
           {inboundAddress ? (
             <div className="mb-4">
-              <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <FieldLabel as="div" muted>
                 Forward receipts to
-              </div>
+              </FieldLabel>
               <div className="font-mono text-lg font-semibold">
                 {inboundAddress}
               </div>
             </div>
           ) : (
-            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+            <StatusNote className="mb-4">
               Set the INBOUND_EMAIL_ADDRESS environment variable to show the
               forwarding address here.
-            </p>
+            </StatusNote>
           )}
           <div className="mb-3">
-            <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+            <FieldLabel as="div" className="mb-1">
               Sender addresses
-            </div>
-            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            </FieldLabel>
+            <StatusNote className="mb-2 text-xs">
               Receipts are imported only from <b>verified</b> addresses. Adding
               an address sends a verification link to that inbox. Once the link
               is clicked, the address is locked to your account (no one else can
               claim it) and receipts start importing.
-            </p>
+            </StatusNote>
             <ul className="flex flex-col gap-1">
               {inboundSenders.length === 0 ? (
-                <li className="text-sm text-gray-500 dark:text-gray-400">
-                  None yet.
-                </li>
+                <StatusNote as="li">None yet.</StatusNote>
               ) : (
                 inboundSenders.map((sender) => (
                   <SenderRow
@@ -332,7 +332,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
           </div>
           <AddSenderForm />
         </Card>
-      </section>
+      </Section>
     </PageShell>
   );
 }

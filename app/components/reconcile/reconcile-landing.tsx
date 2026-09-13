@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, X } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 import { LiveStatus } from "~/components/ui/LiveStatus";
 import { cardSurface, Card } from "~/components/ui/Card";
 import {
@@ -86,9 +87,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
           >
             <input type="hidden" name="intent" value="upload" />
             <label className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                Statement file
-              </span>
+              <FieldLabel>Statement file</FieldLabel>
               <input
                 ref={fileInputRef}
                 type="file"

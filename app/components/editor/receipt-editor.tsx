@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
@@ -493,9 +494,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
 
       <div className="mb-6">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-            Receipt image
-          </span>
+          <FieldLabel>Receipt image</FieldLabel>
           <span className="flex gap-1">
             {showImage && !reportClosed && !pdfDraft ? (
               <>

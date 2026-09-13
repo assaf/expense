@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { MapPin, Pencil, Plus } from "lucide-react";
 import { Form, useFetcher } from "react-router";
-import { cn } from "cn";
 import { Button } from "~/components/ui/Button";
 import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
-import { RemoveButton } from "~/components/settings/name-list";
+import { ListRow, useFlashRow } from "~/components/ui/ListRow";
+import { RemoveButton } from "~/components/ui/RemoveButton";
 import type { NamedLocation } from "~/lib/types";
 import { MAX_ADDRESS_LENGTH } from "~/lib/types";
 
@@ -39,9 +39,10 @@ export function LocationsList({
   const [draftName, setDraftName] = useState("");
   const [draftAddress, setDraftAddress] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
-  const [flashId, setFlashId] = useState<string | null>(null);
   const [noteId, setNoteId] = useState<string | null>(null);
-  const flashRef = useRef<HTMLLIElement | null>(null);
+  // A new row landed: flash it. The loader revalidation has already added
+  // it by the time this runs, so the flash ref is available.
+  const { flashKey, rowRef, flash } = useFlashRow<string>();
 
   useEffect(() => {
     const { data } = addFetcher;
@@ -51,7 +52,7 @@ export function LocationsList({
       setDraftAddress("");
       setAddError(null);
       if (data.id) {
-        setFlashId(data.id);
+        flash(data.id);
         if (data.geocoded === false) setNoteId(data.id);
       }
     } else if (data.error) {
@@ -59,27 +60,15 @@ export function LocationsList({
     }
   }, [addFetcher.data]);
 
-  // A new row landed: flash it. The loader revalidation has already added
-  // it by the time this runs, so the flash ref is available.
-  useEffect(() => {
-    if (!flashId) return;
-    flashRef.current?.scrollIntoView({
-      block: "nearest",
-      behavior: "smooth",
-    });
-    const timer = setTimeout(() => setFlashId(null), 3000);
-    return () => clearTimeout(timer);
-  }, [flashId]);
-
   const [announcement, setAnnouncement] = useState<string | null>(null);
   useEffect(() => {
-    if (!flashId) {
+    if (!flashKey) {
       setAnnouncement(null);
       return;
     }
-    const name = locations.find((l) => l.id === flashId)?.name;
+    const name = locations.find((l) => l.id === flashKey)?.name;
     setAnnouncement(name ? `Added ${name}` : null);
-  }, [flashId, locations]);
+  }, [flashKey, locations]);
 
   return (
     <>
@@ -102,21 +91,16 @@ export function LocationsList({
           </Form>
         </li>
         {locations.map((location) => (
-          <li
+          <ListRow
             key={location.id}
-            ref={location.id === flashId ? flashRef : undefined}
-            className={cn(
-              "flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition-colors duration-500",
-              location.id === flashId
-                ? "bg-amber-200 dark:bg-amber-800"
-                : "bg-gray-50 dark:bg-gray-900",
-            )}
+            flash={location.id === flashKey}
+            rowRef={rowRef}
           >
             <LocationRow
               location={location}
               addedNote={location.id === noteId ? GEOCODE_NOTE : undefined}
             />
-          </li>
+          </ListRow>
         ))}
       </ul>
       <addFetcher.Form method="post" className="flex flex-wrap items-end gap-2">

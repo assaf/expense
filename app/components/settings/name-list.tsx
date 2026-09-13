@@ -1,12 +1,15 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useFetcher } from "react-router";
-import { cn } from "cn";
 import { AddNameForm } from "~/components/AddNameForm";
 import { Button } from "~/components/ui/Button";
-import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Input } from "~/components/ui/Input";
+import { ListRow, useFlashRow } from "~/components/ui/ListRow";
+import { LiveStatus } from "~/components/ui/LiveStatus";
+import { RemoveButton } from "~/components/ui/RemoveButton";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 import { countLabel } from "~/lib/format";
 
 /**
@@ -33,59 +36,41 @@ export function NameList<T extends { name: string }>({
   /** Full row content for every item in the list. */
   renderItem: (item: T) => ReactNode;
 }) {
-  const [flashName, setFlashName] = useState<string | null>(null);
-  const flashRef = useRef<HTMLLIElement | null>(null);
-
   // A new entry landed (the add fetcher, no page navigation): flash it.
   // The loader revalidation has already added the row by the time this
   // runs, so the flash ref is available on the next render.
-  useEffect(() => {
-    if (!flashName) return;
-    flashRef.current?.scrollIntoView({
-      block: "nearest",
-      behavior: "smooth",
-    });
-    const timer = setTimeout(() => setFlashName(null), 3000);
-    return () => clearTimeout(timer);
-  }, [flashName]);
+  const { flashKey, rowRef, flash } = useFlashRow<string>();
 
   const [announcement, setAnnouncement] = useState<string | null>(null);
   useEffect(() => {
-    if (flashName) setAnnouncement(`Added ${flashName}`);
+    if (flashKey) setAnnouncement(`Added ${flashKey}`);
     else setAnnouncement(null);
-  }, [flashName]);
+  }, [flashKey]);
 
   return (
-    <section id={id} className="mb-8 scroll-mt-6">
-      <h2 className="mb-2 text-lg font-semibold">{title}</h2>
+    <Section id={id} title={title}>
       <LiveStatus>{announcement}</LiveStatus>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (
-          <li className="text-sm text-gray-500 dark:text-gray-400">
-            None yet.
-          </li>
+          <StatusNote as="li">None yet.</StatusNote>
         ) : (
           items.map((item) => (
-            <li
+            <ListRow
               key={item.name}
-              ref={item.name === flashName ? flashRef : undefined}
-              className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition-colors duration-500 ${
-                item.name === flashName
-                  ? "bg-amber-200 dark:bg-amber-800"
-                  : "bg-gray-50 dark:bg-gray-900"
-              }`}
+              flash={item.name === flashKey}
+              rowRef={rowRef}
             >
               {renderItem(item)}
-            </li>
+            </ListRow>
           ))
         )}
       </ul>
       <AddNameForm
         intent={addIntent}
         placeholder={addPlaceholder}
-        onAdded={(name) => setFlashName(name)}
+        onAdded={(name) => flash(name)}
       />
-    </section>
+    </Section>
   );
 }
 
@@ -176,62 +161,6 @@ export const RenameButton = forwardRef<
     </button>
   );
 });
-
-/**
- * The trash button for a settings row: hidden intent + row-identifying
- * inputs inside the row's own fetcher form, with an optional confirm
- * prompt before submitting. Shared by category/report rows, connected
- * apps, connected mailboxes, and receipt senders.
- */
-export function RemoveButton({
-  fetcher,
-  intent,
-  fields,
-  label,
-  confirm,
-  disabled,
-  title,
-  className,
-}: {
-  fetcher: ReturnType<typeof useFetcher>;
-  intent: string;
-  /** Hidden inputs carrying the row's identity, e.g. { name } or { id }. */
-  fields: Record<string, string>;
-  /** Accessible label, e.g. "Remove Groceries". */
-  label: string;
-  /** When set, asks for confirmation with this message before deleting. */
-  confirm?: string;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
-}) {
-  return (
-    <fetcher.Form
-      method="post"
-      className="contents"
-      onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="intent" value={intent} />
-      {Object.entries(fields).map(([fieldName, value]) => (
-        <input key={fieldName} type="hidden" name={fieldName} value={value} />
-      ))}
-      <button
-        type="submit"
-        disabled={disabled}
-        className={cn(
-          "text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50",
-          className,
-        )}
-        aria-label={label}
-        title={title}
-      >
-        <Trash2 aria-hidden="true" className="h-4 w-4" />
-      </button>
-    </fetcher.Form>
-  );
-}
 
 export function CategoryRow({ category }: { category: CategoryItem }) {
   const [editing, setEditing] = useState(false);

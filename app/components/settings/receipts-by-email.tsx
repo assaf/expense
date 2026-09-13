@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { useFetcher } from "react-router";
-import { RemoveButton } from "~/components/settings/name-list";
 import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Input } from "~/components/ui/Input";
+import { RemoveButton } from "~/components/ui/RemoveButton";
+import { StatusNote } from "~/components/ui/StatusNote";
 import type { InboundSenderRecord } from "~/lib/types";
 
 /**
@@ -80,9 +81,7 @@ export function SenderRow({
         </div>
       </div>
       {resendFetcher.state !== "idle" ? (
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Sending verification email…
-        </p>
+        <StatusNote className="text-xs">Sending verification email…</StatusNote>
       ) : resendFetcher.data?.ok ? (
         <p className="text-xs text-green-700 dark:text-green-400">
           {resendFetcher.data.recent
@@ -161,10 +160,10 @@ export function AddSenderForm() {
           {notice.text}
         </p>
       ) : (
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <StatusNote className="mt-1 text-xs">
           A verification email is sent to the address before receipts are
           accepted.
-        </p>
+        </StatusNote>
       )}
     </div>
   );

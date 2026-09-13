@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "cn";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 
 /** Label + caption wrapper for a form control. The label wraps the control
  * directly, so clicking the label focuses the field via implicit
@@ -15,9 +16,7 @@ export function Field({
 }) {
   return (
     <label className={cn("flex flex-col gap-1", className)}>
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        {label}
-      </span>
+      <FieldLabel>{label}</FieldLabel>
       {children}
     </label>
   );

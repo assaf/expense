@@ -4,6 +4,9 @@ import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
+import { FieldLabel } from "~/components/ui/FieldLabel";
+import { Section } from "~/components/ui/Section";
+import { StatusNote } from "~/components/ui/StatusNote";
 import { PageShell } from "~/components/PageShell";
 import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
@@ -245,8 +248,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       icon={<Settings aria-hidden="true" className="h-6 w-6" />}
       title="Settings"
     >
-      <section className="mb-8">
-        <h2 className="mb-2 text-lg font-semibold">Account</h2>
+      <Section title="Account" className="mb-8">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Everyone in this account shares expenses, reports, categories, and
           settings.
@@ -254,9 +256,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         <Card className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
-              <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <FieldLabel as="div" muted>
                 Account name
-              </div>
+              </FieldLabel>
               <div className="font-semibold">{accountName}</div>
             </div>
             <Form method="post" className="contents">
@@ -267,17 +269,17 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </Form>
           </div>
           <div id="invite-code" className="scroll-mt-6">
-            <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
+            <FieldLabel as="div" muted>
               Invite code: share to let someone join this account
-            </div>
+            </FieldLabel>
             <div className="font-mono text-2xl font-bold tracking-widest">
               {inviteCode}
             </div>
           </div>
           <div className="mt-4 border-t border-gray-100 dark:border-gray-800 pt-3">
-            <div className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">
+            <FieldLabel as="div" className="mb-1">
               Members
-            </div>
+            </FieldLabel>
             <ul className="flex flex-col gap-1">
               {/* The current user first, then everyone else by join date. */}
               {[
@@ -319,15 +321,15 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <StatusNote className="mt-2 text-xs">
               A member appears here as soon as they join with the invite code.
               "Active" means they've verified their email and can sign in;
               "Waiting to verify" means they joined but haven't clicked the
               emailed verification link yet.
-            </p>
+            </StatusNote>
           </div>
         </Card>
-      </section>
+      </Section>
 
       <NameList
         title="Categories"
@@ -340,8 +342,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         )}
       />
 
-      <section id="mileage-rates" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Mileage rates</h2>
+      <Section id="mileage-rates" title="Mileage rates">
         <p className="text-sm text-gray-500 dark:text-gray-400">
           The IRS rate for a trip is picked automatically from its date and type
           (business, charity, medical, moving).{" "}
@@ -370,20 +371,18 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </a>
           .
         </p>
-      </section>
+      </Section>
 
-      <section id="start-location" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Locations</h2>
+      <Section id="start-location" title="Locations">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Home is where a trip starts by default, so it can't be removed. The
           other locations are places you drive to; pick one by name when you log
           a trip.
         </p>
         <LocationsList homeAddress={homeAddress} locations={locations} />
-      </section>
+      </Section>
 
-      <section id="emails" className="mb-8 scroll-mt-6">
-        <h2 className="mb-2 text-lg font-semibold">Emails</h2>
+      <Section id="emails" title="Emails">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Marketing emails (product news and tips) go to{" "}
           <span className="font-medium text-gray-700 dark:text-gray-200">
@@ -421,12 +420,14 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </Button>
           </Form>
         </Card>
-      </section>
+      </Section>
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
 
-      <section className="border-t border-gray-100 dark:border-gray-800 pt-6">
-        <h2 className="mb-2 text-lg font-semibold">Session</h2>
+      <Section
+        title="Session"
+        className="border-t border-gray-100 dark:border-gray-800 pt-6"
+      >
         <div className="flex items-center justify-between gap-4">
           <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-gray-400">
             Sign out of this device. You will need your email and password to
@@ -438,7 +439,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
             </Button>
           </Form>
         </div>
-      </section>
+      </Section>
     </PageShell>
   );
 }
