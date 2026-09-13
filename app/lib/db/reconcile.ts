@@ -1,5 +1,7 @@
 import { ulid } from "ulid";
 import { and, or } from "@prisma/orm-postgres/orm-client";
+import type { ModelAccessor } from "@prisma/orm-postgres/orm-client";
+import type { Contract } from "../../../prisma/contract.d";
 import { db } from "~/lib/prisma.server";
 import { asJson, fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
 import { renameImageToConvention, saveImage } from "~/lib/images.server";
@@ -20,6 +22,17 @@ import type {
 } from "~/lib/types";
 
 // --- Reconciliation --------------------------------------------------------
+
+/** The account's own run, and only while it is still a draft: every write
+ * path (decision, discard, save) matches on this, so a completed or
+ * discarded run can never be edited. */
+function draftRun(
+  r: ModelAccessor<Contract, "ReconciliationRun">,
+  accountId: string,
+  runId: string,
+) {
+  return and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft"));
+}
 
 /** Everything needed to create a draft reconciliation run. */
 interface CreateReconciliationRunInput {
@@ -162,7 +175,7 @@ export async function updateReconciliationDecision(
   decision: ReconciliationDecision | null,
 ): Promise<boolean> {
   const run = await db.orm.public.ReconciliationRun.where((r) =>
-    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+    draftRun(r, accountId, runId),
   )
     .select("data")
     .first();
@@ -179,7 +192,7 @@ export async function updateReconciliationDecision(
     data.decisions[key] = decision;
   }
   await db.orm.public.ReconciliationRun.where((r) =>
-    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+    draftRun(r, accountId, runId),
   ).updateAll({ data: asJson(data) });
   return true;
 }
@@ -191,7 +204,7 @@ export async function discardReconciliationRun(
   runId: string,
 ): Promise<boolean> {
   const res = await db.orm.public.ReconciliationRun.where((r) =>
-    and(r.id.eq(runId), r.accountId.eq(accountId), r.status.eq("draft")),
+    draftRun(r, accountId, runId),
   ).updateAll({
     status: "discarded",
     completedAt: nowWire(),

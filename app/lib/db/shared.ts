@@ -6,6 +6,22 @@ import type { Account, User } from "~/lib/types";
  * flag, the in-memory TTL cache, the email-verification TTL constants
  * used by both the account and the receipts-by-email sender flows, and the
  * Account/User row mappers every read path shares.
+ *
+ * Create-or-update, in four idioms. Pick by what guarantees the row exists
+ * and what a lost race must mean:
+ *
+ * 1. ORM `upsert({ create, update })` when the conflict target is a real
+ *    unique constraint (`db/auth-attempts.ts`, `db/inbound.ts`,
+ *    `db/oauth.ts`).
+ * 2. Update first, insert when nothing matched, when the id is
+ *    client-generated so a miss can only mean "new row" and no race can
+ *    collide (`db/expenses.ts` `upsertExpense`).
+ * 3. Select, then update-or-insert, catching `isUniqueViolation` and
+ *    re-reading, when the uniqueness is a plain unique INDEX that `conflictOn`
+ *    cannot target (`db/email-log.ts`, `db/extraction-cache.ts`).
+ * 4. A conditional `updateAll` used as a claim: an empty result is a lost
+ *    race, and the caller decides what that means (`db/inbound.ts` claim,
+ *    `db/reconcile.ts` `draftRun`).
  */
 
 /** Map an Account row to the domain shape (cache reads, invite lookups,

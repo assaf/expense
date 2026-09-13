@@ -14,7 +14,6 @@ import { deleteImages, mimeForFile } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
 import type { KnownMerchant } from "~/lib/receipt-ai.server";
 import {
-  EMPTY_ROUTE,
   parseLocations,
   parseRoute,
   type Expense,
@@ -264,39 +263,23 @@ export async function readDuplicateCandidates(
     )
     .orderBy((e) => e.createdAt.asc())
     .all();
-  return rows.map((r) => {
-    const base = {
-      ...expenseBase(r),
-      type: r._type as Expense["type"],
-    };
-    if (r._type === "receipt") {
-      return {
-        ...base,
-        type: "receipt" as const,
-        merchant: r.merchant,
-        imageFile: "",
-        imageMime: "",
-        originalName: "",
-        imageSha256: r.imageSha256 ?? "",
-        // Currency metadata isn't part of duplicate detection.
-        currency: "USD",
-        originalAmount: "",
-        fxRate: "",
-      };
-    }
-    return {
-      ...base,
-      type: "mileage" as const,
-      mileageType: "business" as const,
-      // Same tolerant parse as the canonical mapper: one malformed legacy row
-      // must not throw the account-wide duplicate scan on /expense/new.
-      locations: parseLocations(r.locations),
-      distanceMiles: r.distanceMiles ?? "",
-      // The route shape plays no part in duplicate detection.
+  // One mapping path for the module: the columns this thin read skips go in
+  // as the blanks rowToExpense already tolerates for legacy rows, so a new
+  // Expense field can't be added to one mapper and missed in the other.
+  return rows.map((r) =>
+    rowToExpense({
+      ...r,
+      imageFile: "",
+      imageMime: "",
+      originalName: "",
+      currency: null,
+      originalAmount: null,
+      fxRate: null,
+      mileageType: "",
       roundTrip: true,
-      route: EMPTY_ROUTE,
-    };
-  });
+      route: null,
+    }),
+  );
 }
 
 export async function upsertExpense(
