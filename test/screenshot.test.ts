@@ -586,10 +586,13 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       await capture(page, "/expense/new", "expense-new");
       await capture(page, "/insights", "insights");
 
-      // The editor needs a real expense row; the global seed provides one,
-      // but a test that ran earlier may have deleted them.
+      // The editor needs a real expense row: the seeded Test Store receipt.
+      // Target it by merchant, never by an unordered `findFirst`: the seed
+      // also holds a deliberately incomplete row (2026-01-01, amount 0.00,
+      // no merchant) and whichever one Postgres returns first depends on the
+      // plan, so the capture would silently show an empty editor.
       let editor = await testPrisma.expense.findFirst({
-        where: { accountId: TEST_ACCOUNT_ID },
+        where: { accountId: TEST_ACCOUNT_ID, merchant: "Test Store" },
         select: { id: true },
       });
       if (!editor) {
@@ -600,13 +603,13 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
             type: "receipt",
             date: "2026-01-15",
             report: "2026 Test",
-            category: "Office Supplies",
+            category: "Testing",
             description: "",
             amount: 42.5,
-            merchant: "Screenshot Fallback",
+            merchant: "Test Store",
             imageFile: "",
-            imageMime: "image/jpeg",
-            originalName: "fallback.jpg",
+            imageMime: "",
+            originalName: "",
             locations: [],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

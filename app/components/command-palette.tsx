@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  ChartColumn,
   CreditCard,
-  Download,
   FileDown,
   FolderPlus,
   Home,
-  ListChecks,
   Loader2,
-  Mail,
   MapPinned,
   ReceiptText,
   Search,
-  Settings,
   Upload,
 } from "lucide-react";
 import {
@@ -35,6 +30,7 @@ import {
 } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
+import { NAV_ITEMS } from "~/components/nav-items";
 import { requestCommand } from "~/lib/command-requests";
 import { cn } from "cn";
 
@@ -140,51 +136,17 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         icon: <Home aria-hidden="true" className="h-4 w-4" />,
         perform: () => void navigate("/"),
       },
-      {
-        id: "nav-reports",
-        shortcut: ACTION_SHORTCUTS["nav-reports"],
-        name: "Go to Reports",
+      // The header's destinations, in the header's own order: one list feeds
+      // both the nav row and this section.
+      ...NAV_ITEMS.map((item) => ({
+        id: item.id,
+        shortcut: ACTION_SHORTCUTS[item.id],
+        name: `Go to ${item.label}`,
         section: "Navigate",
-        keywords: "export pdf download",
-        icon: <Download aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/export"),
-      },
-      {
-        id: "nav-insights",
-        shortcut: ACTION_SHORTCUTS["nav-insights"],
-        name: "Go to Insights",
-        section: "Navigate",
-        keywords: "chart trends monthly ai",
-        icon: <ChartColumn aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/insights"),
-      },
-      {
-        id: "nav-emails",
-        shortcut: ACTION_SHORTCUTS["nav-emails"],
-        name: "Go to Emails",
-        section: "Navigate",
-        keywords: "mail inbox fastmail gmail",
-        icon: <Mail aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/emails"),
-      },
-      {
-        id: "nav-reconcile",
-        shortcut: ACTION_SHORTCUTS["nav-reconcile"],
-        name: "Go to Reconcile",
-        section: "Navigate",
-        keywords: "statement credit card match",
-        icon: <ListChecks aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/reconcile"),
-      },
-      {
-        id: "nav-settings",
-        shortcut: ACTION_SHORTCUTS["nav-settings"],
-        name: "Go to Settings",
-        section: "Navigate",
-        keywords: "preferences account",
-        icon: <Settings aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/settings"),
-      },
+        keywords: item.keywords,
+        icon: item.icon,
+        perform: () => void navigate(item.path),
+      })),
       {
         id: "new-receipt",
         shortcut: ACTION_SHORTCUTS["new-receipt"],

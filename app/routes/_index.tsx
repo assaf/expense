@@ -2,15 +2,10 @@ import {
   Upload,
   MapPinned,
   ReceiptText,
-  Settings,
-  Download,
-  ChartColumn,
   AlertTriangle,
   Search,
   X,
   BadgeCheck,
-  ListChecks,
-  Mail,
   Loader2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -29,6 +24,7 @@ import {
 } from "~/components/FeatureHighlight";
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
+import { NAV_ITEMS } from "~/components/nav-items";
 import { FilterCombobox } from "~/components/FilterCombobox";
 import { WelcomePanel } from "~/components/WelcomePanel";
 import { cardSurface } from "~/components/ui/Card";
@@ -522,48 +518,24 @@ function ExpenseList({
           <Logo link />
         </h1>
         <nav className="flex items-center gap-0.5 sm:gap-2">
-          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
-            <Link
-              to="/reconcile"
-              data-shortcut="nav-reconcile"
-              aria-label="Reconcile"
+          {NAV_ITEMS.map((item) => (
+            <Button
+              key={item.id}
+              asChild
+              variant="ghost"
+              size="sm"
+              className="px-1 sm:px-3"
             >
-              <ListChecks aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Reconcile</span>
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
-            <Link to="/export" data-shortcut="nav-reports" aria-label="Reports">
-              <Download aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Reports</span>
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
-            <Link
-              to="/insights"
-              data-shortcut="nav-insights"
-              aria-label="Insights"
-            >
-              <ChartColumn aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Insights</span>
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
-            <Link to="/emails" data-shortcut="nav-emails" aria-label="Email">
-              <Mail aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Email</span>
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="px-1 sm:px-3">
-            <Link
-              to="/settings"
-              data-shortcut="nav-settings"
-              aria-label="Settings"
-            >
-              <Settings aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Link>
-          </Button>
+              <Link
+                to={item.path}
+                data-shortcut={item.id}
+                aria-label={item.label}
+              >
+                {item.icon}
+                <span className="hidden sm:inline">{item.label}</span>
+              </Link>
+            </Button>
+          ))}
         </nav>
       </header>
 

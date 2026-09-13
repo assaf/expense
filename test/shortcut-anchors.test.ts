@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ACTION_SHORTCUTS } from "~/components/command-palette";
+import { NAV_ITEMS } from "~/components/nav-items";
 
 /**
  * The Shift+? hint layer fails SILENTLY when the wiring drifts: a
@@ -29,9 +30,12 @@ function appSources(): Map<string, string> {
 
 /** Ids referenced by data-shortcut attributes and the expressions that
  * compute them (lines mentioning data-shortcut or the PageShell's
- * homeShortcut), pulled from string literals on those lines. */
+ * homeShortcut), pulled from string literals on those lines, plus the nav
+ * ids the home header renders from NAV_ITEMS (`data-shortcut={item.id}` is
+ * not a literal on a data-shortcut line). */
 function anchorIds(): Set<string> {
   const ids = new Set<string>();
+  for (const item of NAV_ITEMS) ids.add(item.id);
   for (const source of appSources().values()) {
     for (const line of source.split("\n")) {
       if (!/data-shortcut|homeShortcut/.test(line)) continue;
