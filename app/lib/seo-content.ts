@@ -929,6 +929,101 @@ For the browser-based in-page tools (WebMCP), and the app's own Insights page th
 `;
 }
 
+// --- Privacy policy (/privacy) ---------------------------------------------
+
+/** The date the policy last changed; the page and its mirror both show it. */
+export const PRIVACY_UPDATED = "September 13, 2026";
+
+/** One-paragraph summary of the policy, quoted by /privacy and /privacy.md. */
+export const PRIVACY_SUMMARY =
+  "Expense is a personal expense tracker run by one person. It keeps what you put into it, sends receipts to a model to be read, and gives nothing to anyone else.";
+
+export interface PrivacySection {
+  title: string;
+  paragraphs: string[];
+}
+
+/**
+ * The policy itself, section by section: one source for the page and its
+ * markdown mirror. Every claim here is a fact about this app's code, not a
+ * template. It has to stay true as the app changes: add a provider, add a
+ * section.
+ */
+export const PRIVACY_SECTIONS: PrivacySection[] = [
+  {
+    title: "What the app stores",
+    paragraphs: [
+      "Your account: the email address you signed up with, a password hash (never the password itself), and the account's invite code.",
+      "What you put in: receipts and their images, the merchant, amount, date, category, report, and any notes; mileage trips with their stops, addresses, and route; and the questions and answers in the Insights chat.",
+      "An account is shared with everyone you invite: members see the same expenses, so invite deliberately.",
+    ],
+  },
+  {
+    title: "Email",
+    paragraphs: [
+      "If you forward receipts by email, the app reads those messages and keeps a log of what it did with each one, so the same message is never imported twice.",
+      "If you connect Gmail or Fastmail, the app stores that mailbox's OAuth tokens encrypted, reads the mail it needs to find receipts, and stops reading when you disconnect.",
+    ],
+  },
+  {
+    title: "Where it lives",
+    paragraphs: [
+      "Vercel runs the app and Supabase Postgres (US West) holds the data, receipt images included. There is no separate file store and no copy in your browser.",
+    ],
+  },
+  {
+    title: "Who else sees it",
+    paragraphs: [
+      "The model provider: receipt images and your questions are sent to the LLM this deployment is configured with (DeepSeek's API by default) to be read and answered. Every figure on Insights is computed by the app from your own expenses; the model only phrases it, so it cannot invent a number.",
+      "Google or Fastmail for the mailbox you choose to connect, and nobody else.",
+      "Frankfurter, which publishes the ECB reference rates, for currency conversion; it is asked for a currency and a date, never for your data.",
+      "OpenStreetMap's Nominatim and OSRM for looking up addresses and measuring driving routes.",
+      "Sentry receives error reports (the URL has its query string stripped first, so emailed tokens are not part of them) and Umami counts visits, tagging signed-in ones with your account id. Neither runs ads or follows you to other sites.",
+    ],
+  },
+  {
+    title: "What it never does",
+    paragraphs: [
+      "No selling or sharing your data, no ad networks, no cross-site trackers, and no bank connections: a statement is a file you upload, not an account you hand over.",
+      "An assistant you connect over MCP can read and write your expenses while it is connected, reaches only your own account, and stops the moment you revoke it in Settings.",
+    ],
+  },
+  {
+    title: "Cookies",
+    paragraphs: [
+      "One session cookie that keeps you signed in, and your theme preference in local storage. Nothing else is stored in the browser.",
+    ],
+  },
+  {
+    title: "Your controls",
+    paragraphs: [
+      "Delete any expense or report, disconnect a mailbox (which deletes its stored tokens), or revoke an assistant's access, all in the app.",
+      "There is no self-serve account deletion yet. Email assaf@labnotes.org and the account and everything in it is deleted.",
+    ],
+  },
+  {
+    title: "Changes",
+    paragraphs: [
+      "When this policy changes, the date above changes with it. Questions go to assaf@labnotes.org.",
+    ],
+  },
+];
+
+/** Full markdown for /privacy.md; mirrors the /privacy page content. */
+export function privacyMarkdown(): string {
+  const sections = PRIVACY_SECTIONS.map(
+    (s) => `## ${s.title}\n\n${s.paragraphs.map((p) => wrap(p)).join("\n\n")}`,
+  ).join("\n\n");
+  return `# Privacy
+
+${PRIVACY_SUMMARY}
+
+Last updated: ${PRIVACY_UPDATED}
+
+${sections}
+`;
+}
+
 /** Full markdown for /about.md. Mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = BENEFITS.map(
@@ -1042,6 +1137,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [How Expense compares to the other receipt apps](${SITE_URL}/alternatives.md): Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements. Covers Insights too, the built-in question page that answers from your own expenses with nothing connected.
+- [Privacy](${SITE_URL}/privacy.md): What the app stores, where it lives, which providers see what, and what it never does.
 
 ## Optional
 

@@ -59,6 +59,7 @@ const PUBLIC_PAGES = new Set([
   "/mileage-rates",
   "/schedule-c-categories",
   "/alternatives",
+  "/privacy",
   "/llms.txt",
 ]);
 

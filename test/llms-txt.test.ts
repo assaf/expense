@@ -6,12 +6,14 @@ import { loader as mileageRatesLoader } from "~/routes/mileage-rates[.]md";
 import { loader as alternativesLoader } from "~/routes/alternatives[.]md";
 import { loader as connectLoader } from "~/routes/connect[.]md";
 import { loader as faqLoader } from "~/routes/faq[.]md";
+import { loader as privacyLoader } from "~/routes/privacy[.]md";
 import { loader as llmsTxtLoader } from "~/routes/llms[.]txt";
 import {
   aboutMarkdown,
   alternativesMarkdown,
   connectMarkdown,
   faqMarkdown,
+  privacyMarkdown,
   scheduleCCategoriesMarkdown,
   llmsTxt,
   mileageRatesMarkdown,
@@ -65,6 +67,12 @@ const MIRRORS = [
     path: "/mileage-rates.md",
     loader: mileageRatesLoader,
     content: mileageRatesMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/privacy.md",
+    loader: privacyLoader,
+    content: privacyMarkdown,
     type: "text/markdown",
   },
 ] as const;

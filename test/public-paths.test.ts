@@ -36,9 +36,11 @@ const PUBLIC_PATHS = [
   "/mileage-rates",
   "/schedule-c-categories",
   "/alternatives",
+  "/privacy",
   "/llms.txt",
   "/about.data",
   "/faq.md",
+  "/privacy.md",
 ];
 
 describe("root loader public-path gate (GATE-REGR-1)", () => {
