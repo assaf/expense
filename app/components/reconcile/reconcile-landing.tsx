@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, X } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
@@ -7,6 +7,9 @@ import {
   consumeCommandRequest,
   useCommandRequest,
 } from "~/lib/command-requests";
+import { STATEMENT_ACCEPT, isStatementFile } from "~/lib/file-types";
+import { useDropTarget } from "~/lib/use-drop-target";
+import { ReconcileShell } from "./reconcile-shell";
 import { cn } from "cn";
 import { LocalDateTime } from "~/components/ui/LocalTime";
 import type { ReconciliationRunRecord } from "~/lib/types";
@@ -46,143 +49,170 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
       void navigate(`/reconcile?run=${uploaded.id}`, { replace: true });
   }, [uploaded, navigate]);
 
+  /** Point the native input at a dropped file, so the visible filename and
+   * the submit path stay the browser's own (browsers ignore `accept` on a
+   * drop, and the server re-checks the bytes either way). */
+  const selectFile = useCallback((next: File) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(next);
+    if (fileInputRef.current) fileInputRef.current.files = transfer.files;
+    setFile(next);
+  }, []);
+
+  const drop = useDropTarget({
+    accepts: isStatementFile,
+    onFile: selectFile,
+    message: "Statement file detected — drop to upload",
+  });
+
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="p-6">
-        <h2 className="mb-1 font-semibold">Upload a statement</h2>
-        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-          Download this month's transactions from your credit card website and
-          upload them here: CSV, QFX/OFX, QBO, XLSX, or PDF. Expense matches
-          every charge against your logged receipts; you review the close
-          matches and decide what to keep. Nothing is changed until you finish.
-        </p>
-        <fetcher.Form
-          method="post"
-          encType="multipart/form-data"
-          className="flex flex-col gap-3"
-        >
-          <input type="hidden" name="intent" value="upload" />
-          <label className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-              Statement file
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              name="file"
-              accept=".csv,.qfx,.ofx,.qbo,.xlsx,.pdf,text/csv,application/pdf"
-              onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 dark:file:bg-gray-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 dark:file:text-gray-200 hover:file:bg-gray-200 dark:hover:file:bg-gray-500"
-            />
-          </label>
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={!file || busy}>
-              {busy ? (
-                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard aria-hidden="true" className="h-4 w-4" />
-              )}
-              {busy ? "Reading statement…" : "Match my expenses"}
-            </Button>
-            {error ? (
-              <span
-                role="alert"
-                className="text-sm text-red-600 dark:text-red-400"
-              >
-                {alreadyReconciledAt ? (
-                  <>
-                    This statement was already reconciled on{" "}
-                    <LocalDateTime iso={alreadyReconciledAt} />.
-                  </>
-                ) : (
-                  error
-                )}
+    <ReconcileShell drop={drop}>
+      <div className="flex flex-col gap-6">
+        <div className="sr-only" role="status" aria-live="polite">
+          {drop.message}
+        </div>
+        <Card className="p-6">
+          <h2 className="mb-1 font-semibold">Upload a statement</h2>
+          <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+            Download this month's transactions from your credit card website and
+            upload them here: CSV, QFX/OFX, QBO, XLSX, or PDF. You can also drag
+            the file onto this page. Expense matches every charge against your
+            logged receipts; you review the close matches and decide what to
+            keep. Nothing is changed until you finish.
+          </p>
+          <fetcher.Form
+            method="post"
+            encType="multipart/form-data"
+            className="flex flex-col gap-3"
+          >
+            <input type="hidden" name="intent" value="upload" />
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                Statement file
               </span>
-            ) : null}
-          </div>
-        </fetcher.Form>
-      </Card>
+              <input
+                ref={fileInputRef}
+                type="file"
+                name="file"
+                accept={STATEMENT_ACCEPT}
+                onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)}
+                className="block w-full text-sm text-gray-600 dark:text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 dark:file:bg-gray-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-gray-700 dark:file:text-gray-200 hover:file:bg-gray-200 dark:hover:file:bg-gray-500"
+              />
+            </label>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={!file || busy}>
+                {busy ? (
+                  <Loader2
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin"
+                  />
+                ) : (
+                  <CreditCard aria-hidden="true" className="h-4 w-4" />
+                )}
+                {busy ? "Reading statement…" : "Match my expenses"}
+              </Button>
+              {error ? (
+                <span
+                  role="alert"
+                  className="text-sm text-red-600 dark:text-red-400"
+                >
+                  {alreadyReconciledAt ? (
+                    <>
+                      This statement was already reconciled on{" "}
+                      <LocalDateTime iso={alreadyReconciledAt} />.
+                    </>
+                  ) : (
+                    error
+                  )}
+                </span>
+              ) : null}
+            </div>
+          </fetcher.Form>
+        </Card>
 
-      {(() => {
-        const inProgress = runs.filter((r) => r.status === "draft");
-        const previous = runs.filter((r) => r.status !== "draft");
-        return (
-          <>
-            {inProgress.length > 0 ? (
-              <section>
-                <h2 className="mb-2 font-semibold">In progress</h2>
-                <ul className="flex flex-col gap-2">
-                  {inProgress.map((run) => (
-                    <li
-                      key={run.id}
-                      className={cn(
-                        cardSurface,
-                        "flex items-center justify-between gap-3 p-3",
-                      )}
-                    >
-                      <Link
-                        to={`/reconcile?run=${run.id}`}
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 transition-colors hover:text-gray-600 dark:text-gray-300"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {run.fileName}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {run.rowCount} transactions · started{" "}
-                            <LocalDateTime iso={run.createdAt} />
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-sm text-blue-600 dark:text-blue-400">
-                          Keep going →
-                        </span>
-                      </Link>
-                      <DiscardRunButton runId={run.id} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
-            {previous.length > 0 ? (
-              <section>
-                <h2 className="mb-2 font-semibold">Previous reconciliations</h2>
-                <ul className="flex flex-col gap-2">
-                  {previous.map((run) => (
-                    <li key={run.id}>
-                      <Link
-                        to={`/reconcile?run=${run.id}`}
+        {(() => {
+          const inProgress = runs.filter((r) => r.status === "draft");
+          const previous = runs.filter((r) => r.status !== "draft");
+          return (
+            <>
+              {inProgress.length > 0 ? (
+                <section>
+                  <h2 className="mb-2 font-semibold">In progress</h2>
+                  <ul className="flex flex-col gap-2">
+                    {inProgress.map((run) => (
+                      <li
+                        key={run.id}
                         className={cn(
                           cardSurface,
-                          "flex items-center justify-between gap-3 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-600",
+                          "flex items-center justify-between gap-3 p-3",
                         )}
                       >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {run.fileName}
+                        <Link
+                          to={`/reconcile?run=${run.id}`}
+                          className="flex min-w-0 flex-1 items-center justify-between gap-3 transition-colors hover:text-gray-600 dark:text-gray-300"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
+                              {run.fileName}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {run.rowCount} transactions · started{" "}
+                              <LocalDateTime iso={run.createdAt} />
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            <LocalDateTime
-                              iso={run.completedAt ?? run.createdAt}
-                            />
-                            {run.status === "discarded" ? " · discarded" : ""}
+                          <span className="shrink-0 text-sm text-blue-600 dark:text-blue-400">
+                            Keep going →
+                          </span>
+                        </Link>
+                        <DiscardRunButton runId={run.id} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {previous.length > 0 ? (
+                <section>
+                  <h2 className="mb-2 font-semibold">
+                    Previous reconciliations
+                  </h2>
+                  <ul className="flex flex-col gap-2">
+                    {previous.map((run) => (
+                      <li key={run.id}>
+                        <Link
+                          to={`/reconcile?run=${run.id}`}
+                          className={cn(
+                            cardSurface,
+                            "flex items-center justify-between gap-3 p-3 transition-colors hover:border-gray-300 dark:hover:border-gray-600",
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
+                              {run.fileName}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              <LocalDateTime
+                                iso={run.completedAt ?? run.createdAt}
+                              />
+                              {run.status === "discarded" ? " · discarded" : ""}
+                            </div>
                           </div>
-                        </div>
-                        <div className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
-                          {run.status === "completed"
-                            ? `${run.matchedCount} reconciled · ${run.createdCount} added`
-                            : `${run.rowCount} rows`}
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </>
-        );
-      })()}
-    </div>
+                          <div className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+                            {run.status === "completed"
+                              ? `${run.matchedCount} reconciled · ${run.createdCount} added`
+                              : `${run.rowCount} rows`}
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </>
+          );
+        })()}
+      </div>
+    </ReconcileShell>
   );
 }
 

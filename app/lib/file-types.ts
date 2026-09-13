@@ -1,7 +1,8 @@
 /**
- * File-type detection for uploaded receipt files (images + PDFs). Shared by
- * the image routes, the OCR pipeline, and the inbound-email attachment
- * scoring, so each check lives in exactly one place.
+ * File-type detection for uploaded files: receipt images and PDFs, and the
+ * statement formats the reconcile page takes. Shared by the image routes,
+ * the OCR pipeline, the inbound-email attachment scoring, and the
+ * drag-drop targets, so each check lives in exactly one place.
  *
  * Each predicate takes whichever of mime / filename / bytes the caller has:
  *  - mime: tolerates parameters ("application/pdf; charset=…") via splitting
@@ -124,5 +125,34 @@ export function isReceiptFile(file: File): boolean {
     file.type.startsWith("image/") ||
     file.type === "application/pdf" ||
     isPdfName(file.name)
+  );
+}
+
+/** Statement formats the reconcile page accepts, as extensions. Single
+ * source for the file input's `accept` and the page's drop target, and the
+ * set `parseStatementUpload` recognizes server-side. */
+const STATEMENT_EXTENSIONS = ["csv", "qfx", "ofx", "qbo", "xlsx", "pdf"];
+
+const STATEMENT_NAME_RE = new RegExp(
+  `\\.(${STATEMENT_EXTENSIONS.join("|")})$`,
+  "i",
+);
+
+/** The `accept` attribute for the statement file input. */
+export const STATEMENT_ACCEPT = [
+  ...STATEMENT_EXTENSIONS.map((ext) => `.${ext}`),
+  "text/csv",
+  "application/pdf",
+].join(",");
+
+/** True when a dropped file looks like a bank statement: a known extension,
+ * or the text/PDF mime a browser reports for a download that lost its name.
+ * Browsers ignore `accept` on a drop, so the drop target screens with this
+ * and the server still parses whatever arrives. */
+export function isStatementFile(file: File): boolean {
+  return (
+    STATEMENT_NAME_RE.test(file.name) ||
+    file.type === "text/csv" ||
+    file.type === "application/pdf"
   );
 }

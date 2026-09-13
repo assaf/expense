@@ -5,10 +5,9 @@ import { Button } from "~/components/ui/Button";
 
 /**
  * Optional drag-and-drop target for the page shell: while a file is dragged
- * over the page a dashed outline shows, and the drop handlers fire on
- * release. Used by the receipt editor so a receipt file can be dropped
- * anywhere on the page to replace/upload it. Handlers are attached to the
- * same <main> as the home page's drop zone, so the outline hugs the card.
+ * over the page a dashed outline shows around <main>, and the drop handlers
+ * fire on release. Used by the receipt editor and the reconcile landing, so a
+ * file can be dropped anywhere on the page.
  */
 export type DropTarget = {
   over: boolean;
@@ -17,6 +16,11 @@ export type DropTarget = {
   onDragLeave: (e: DragEvent<HTMLElement>) => void;
   onDrop: (e: DragEvent<HTMLElement>) => void;
 };
+
+/** Dashed outline while a file is over the page, shared by both layouts so
+ * the highlight can't drift between them. */
+const DROP_OUTLINE =
+  "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400";
 /**
  * Shared page chrome inside the standard centered container, in one of two
  * layouts:
@@ -93,7 +97,11 @@ export function PageShell({
   // and their actions on one wrapping row. Static; no dim transition.
   if (icon) {
     return (
-      <main id="main-content" className={containerClass} {...dropHandlers}>
+      <main
+        id="main-content"
+        className={`${containerClass} ${drop?.over ? DROP_OUTLINE : ""}`}
+        {...dropHandlers}
+      >
         <header className="mb-6 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold">
             {icon}
@@ -121,7 +129,7 @@ export function PageShell({
   return (
     <main
       id="main-content"
-      className={`mx-auto ${maxWidth} px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400" : ""}`}
+      className={`mx-auto ${maxWidth} px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? DROP_OUTLINE : ""}`}
       {...dropHandlers}
     >
       <div className="mb-4 flex items-center justify-between">

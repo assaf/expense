@@ -116,4 +116,41 @@ describe("Reconcile flow", () => {
     await page.waitForURL(/\/reconcile\?run=/);
     await expect(page.getByText("Needs your decision")).toBeVisible();
   });
+
+  it("picks up a statement dropped on the page", async () => {
+    await page.goto("/reconcile", { waitUntil: "load" });
+    await page.waitForTimeout(500);
+    // A drop carries its files on a DataTransfer, which only the page can
+    // build; hand it to the dispatched event from a page handle.
+    const dataTransfer = await page.evaluateHandle(() => {
+      const transfer = new DataTransfer();
+      const csv = [
+        "date,description,amount",
+        "2026-08-02,DROPPED CAFE,4.25",
+      ].join("\n");
+      transfer.items.add(
+        new File([csv], "dropped-statement.csv", { type: "text/csv" }),
+      );
+      return transfer;
+    });
+    // Dropped on the page header, not the upload card: the whole page is the
+    // drop target, the way the expense list's is.
+    await page.dispatchEvent("h1", "dragenter", { dataTransfer });
+    // Over the page: the live region announces what a drop would do.
+    await expect(page.getByText(/Statement file detected/)).toBeVisible();
+    await page.dispatchEvent("h1", "drop", { dataTransfer });
+    // The drop fills the picker, so the visible filename is the browser's
+    // own and the submit enables exactly as if the file had been chosen.
+    expect(
+      await page.evaluate(() => {
+        const input = document.querySelector('input[type="file"]');
+        return input instanceof HTMLInputElement
+          ? (input.files?.[0]?.name ?? "")
+          : "";
+      }),
+    ).toBe("dropped-statement.csv");
+    await page.getByRole("button", { name: "Match my expenses" }).click();
+    await page.waitForURL(/\/reconcile\?run=/);
+    await expect(page.getByText("DROPPED CAFE")).toBeVisible();
+  });
 });

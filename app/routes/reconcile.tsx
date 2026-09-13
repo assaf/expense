@@ -1,8 +1,6 @@
 import { hash } from "node:crypto";
-import { ListChecks } from "lucide-react";
 import { redirect } from "react-router";
 import { ulid } from "ulid";
-import { PageShell } from "~/components/PageShell";
 import { Landing } from "~/components/reconcile/reconcile-landing";
 import { RunPage } from "~/components/reconcile/reconcile-run";
 import { requireUser } from "~/lib/auth.server";
@@ -214,21 +212,13 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function ReconcilePage({ loaderData }: Route.ComponentProps) {
   const run = loaderData.run;
-  return (
-    <PageShell
-      maxWidth="max-w-4xl"
-      icon={<ListChecks aria-hidden="true" className="h-6 w-6" />}
-      title="Reconcile"
-    >
-      {run ? (
-        <RunPage
-          run={run}
-          openReports={loaderData.openReports}
-          categories={loaderData.categoryNames}
-        />
-      ) : (
-        <Landing runs={loaderData.runs} />
-      )}
-    </PageShell>
+  return run ? (
+    <RunPage
+      run={run}
+      openReports={loaderData.openReports}
+      categories={loaderData.categoryNames}
+    />
+  ) : (
+    <Landing runs={loaderData.runs} />
   );
 }

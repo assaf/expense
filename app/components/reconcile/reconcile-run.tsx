@@ -4,9 +4,27 @@ import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { DraftReview } from "./reconcile-review";
+import { ReconcileShell } from "./reconcile-shell";
 import type { ReconciliationRunRecord } from "~/lib/types";
 
 export function RunPage({
+  run,
+  openReports,
+  categories,
+}: {
+  run: ReconciliationRunRecord;
+  openReports: string[];
+  categories: string[];
+}) {
+  return (
+    <ReconcileShell>
+      <RunBody run={run} openReports={openReports} categories={categories} />
+    </ReconcileShell>
+  );
+}
+
+/** The body each run status renders: completed, discarded, or under review. */
+function RunBody({
   run,
   openReports,
   categories,
