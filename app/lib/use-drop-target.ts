@@ -1,5 +1,36 @@
 import { useCallback, useRef, useState, type DragEvent } from "react";
-import type { DropTarget } from "~/components/PageShell";
+
+/**
+ * Everything a drop zone needs: the hook that tracks the drag state, the
+ * handlers a container spreads, and the outline class it shows while a file
+ * is over it. The home list, the receipt editor, and the reconcile landing
+ * all read from here, so no two of them can highlight differently.
+ */
+
+/** A drop target's state and handlers, as a page's container spreads them. */
+export interface DropTarget {
+  over: boolean;
+  onDragEnter: (e: DragEvent<HTMLElement>) => void;
+  onDragOver: (e: DragEvent<HTMLElement>) => void;
+  onDragLeave: (e: DragEvent<HTMLElement>) => void;
+  onDrop: (e: DragEvent<HTMLElement>) => void;
+}
+
+/** Dashed outline while a file is over the page. */
+export const DROP_OUTLINE =
+  "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400";
+
+/** The four handler props for a drop container, or nothing when the page has
+ * no drop target (an undroppable page must not look droppable). */
+export function dropHandlers(drop?: DropTarget): Partial<DropTarget> {
+  if (!drop) return {};
+  return {
+    onDragEnter: drop.onDragEnter,
+    onDragOver: drop.onDragOver,
+    onDragLeave: drop.onDragLeave,
+    onDrop: drop.onDrop,
+  };
+}
 
 /**
  * Depth-counted drag-and-drop target state. dragenter/dragleave fire for

@@ -11,6 +11,7 @@ import {
 } from "~/components/settings/name-list";
 import { Badge } from "~/components/ui/Badge";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { cardSurface } from "~/components/ui/Card";
 import { requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
@@ -240,9 +241,7 @@ function AddReportForm() {
 
   return (
     <section className="mb-8">
-      <div className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </div>
+      <LiveStatus>{announcement}</LiveStatus>
       <AddNameForm
         intent="addReport"
         placeholder="New report name"

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, it } from "vitest";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import { ulid } from "ulid";
+import { fileTransfer } from "./helpers/dropFile";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 import { imageVersion } from "~/lib/image-version";
@@ -878,12 +879,12 @@ describe("Expense CRUD", () => {
     await page.goto("/", { waitUntil: "load" });
 
     // Dropping an unsupported file does nothing (no navigation).
-    const textDrop = await page.evaluateHandle(() => new DataTransfer());
-    await textDrop.evaluate((dt) => {
-      dt.items.add(new File(["hello"], "note.txt", { type: "text/plain" }));
-    });
     await page.locator("main").dispatchEvent("drop", {
-      dataTransfer: textDrop,
+      dataTransfer: await fileTransfer(page, {
+        name: "note.txt",
+        type: "text/plain",
+        body: "hello",
+      }),
     });
     await expect(page).toHaveURL("/");
 
@@ -896,15 +897,11 @@ describe("Expense CRUD", () => {
 
     // Dropping a receipt image opens the editor and uploads it as a draft.
     const png = await tinyPng();
-    const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
-    await dataTransfer.evaluate(
-      (dt, bytes) => {
-        dt.items.add(
-          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
-        );
-      },
-      [...png],
-    );
+    const dataTransfer = await fileTransfer(page, {
+      name: "drop.png",
+      type: "image/png",
+      body: [...png],
+    });
     const [resp] = await Promise.all([
       page.waitForResponse(
         (r) =>
@@ -971,15 +968,11 @@ describe("Expense CRUD", () => {
     // it shows in the editor (blob preview) and re-reads the fields, but
     // nothing is written to the row until Save.
     const png = await tinyPng();
-    const drop = await page.evaluateHandle(() => new DataTransfer());
-    await drop.evaluate(
-      (dt, bytes) => {
-        dt.items.add(
-          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
-        );
-      },
-      [...png],
-    );
+    const drop = await fileTransfer(page, {
+      name: "drop.png",
+      type: "image/png",
+      body: [...png],
+    });
     // draft-upload then ocr; both hit /api/expense in that order.
     const draft = page.waitForResponse(
       (r) =>
@@ -1015,15 +1008,11 @@ describe("Expense CRUD", () => {
 
     // Dropping again and saving attaches the draft to the row.
     const main2 = page.locator("main#main-content");
-    const drop2 = await page.evaluateHandle(() => new DataTransfer());
-    await drop2.evaluate(
-      (dt, bytes) => {
-        dt.items.add(
-          new File([new Uint8Array(bytes)], "drop.png", { type: "image/png" }),
-        );
-      },
-      [...png],
-    );
+    const drop2 = await fileTransfer(page, {
+      name: "drop.png",
+      type: "image/png",
+      body: [...png],
+    });
     const draft2 = page.waitForResponse(
       (r) =>
         r.url().includes("/api/expense") && r.request().method() === "POST",

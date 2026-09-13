@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { useNameAdd } from "~/components/AddNameForm";
-import { PageShell, type DropTarget } from "~/components/PageShell";
+import { PageShell } from "~/components/PageShell";
+import type { DropTarget } from "~/lib/use-drop-target";
 import { Alert } from "~/components/ui/Alert";
 import { Button } from "~/components/ui/Button";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";

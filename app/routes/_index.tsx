@@ -33,6 +33,7 @@ import {
   useCommandRequest,
 } from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Badge } from "~/components/ui/Badge";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { EmptyState } from "~/components/ui/EmptyState";
@@ -42,7 +43,11 @@ import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import { matchesSearch, parseQuery } from "~/lib/expense-search";
 import type { DuplicateMatch } from "~/lib/duplicates";
 import { isReceiptFile } from "~/lib/file-types";
-import { useDropTarget } from "~/lib/use-drop-target";
+import {
+  DROP_OUTLINE,
+  dropHandlers,
+  useDropTarget,
+} from "~/lib/use-drop-target";
 import {
   countLabel,
   formatAmount,
@@ -503,16 +508,11 @@ function ExpenseList({
   return (
     <main
       id="main-content"
-      className={`mx-auto max-w-4xl px-4 py-8 ${drop.over ? "outline-dashed outline-2 -outline-offset-2 outline-blue-500" : ""}`}
-      onDragEnter={drop.onDragEnter}
-      onDragOver={drop.onDragOver}
-      onDragLeave={drop.onDragLeave}
-      onDrop={drop.onDrop}
+      className={`mx-auto max-w-4xl px-4 py-8 ${drop.over ? DROP_OUTLINE : ""}`}
+      {...dropHandlers(drop)}
       aria-label="Expense list — drag a receipt image anywhere to upload"
     >
-      <div className="sr-only" role="status" aria-live="polite">
-        {drop.message}
-      </div>
+      <LiveStatus>{drop.message}</LiveStatus>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1>
           <Logo link />

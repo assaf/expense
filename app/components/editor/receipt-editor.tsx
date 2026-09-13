@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RotateCcw, RotateCw, Trash2, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { isComplete } from "~/lib/completeness";
@@ -483,9 +484,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
       onBack={isNew ? onCancel : undefined}
       drop={drop}
     >
-      <div className="sr-only" role="status" aria-live="polite">
-        {drop.message}
-      </div>
+      <LiveStatus>{drop.message}</LiveStatus>
       <ErrorBanner error={error} />
       {reportClosed ? <ClosedReportBanner /> : null}
       {duplicateMatches.length > 0 ? (

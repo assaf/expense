@@ -1,26 +1,13 @@
-import type { DragEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "~/components/ui/Button";
+import {
+  DROP_OUTLINE,
+  dropHandlers,
+  type DropTarget,
+} from "~/lib/use-drop-target";
 
-/**
- * Optional drag-and-drop target for the page shell: while a file is dragged
- * over the page a dashed outline shows around <main>, and the drop handlers
- * fire on release. Used by the receipt editor and the reconcile landing, so a
- * file can be dropped anywhere on the page.
- */
-export type DropTarget = {
-  over: boolean;
-  onDragEnter: (e: DragEvent<HTMLElement>) => void;
-  onDragOver: (e: DragEvent<HTMLElement>) => void;
-  onDragLeave: (e: DragEvent<HTMLElement>) => void;
-  onDrop: (e: DragEvent<HTMLElement>) => void;
-};
-
-/** Dashed outline while a file is over the page, shared by both layouts so
- * the highlight can't drift between them. */
-const DROP_OUTLINE =
-  "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400";
 /**
  * Shared page chrome inside the standard centered container, in one of two
  * layouts:
@@ -67,18 +54,11 @@ export function PageShell({
    * a transcript can scroll internally and a composer sits flush at the
    * bottom of the screen. */
   fullHeight?: boolean;
-  /** Drag-and-drop target handlers + outline (receipt editor). */
+  /** Drag-and-drop target handlers + outline (receipt editor, reconcile
+   * landing). */
   drop?: DropTarget;
   children: ReactNode;
 }) {
-  const dropHandlers = drop
-    ? {
-        onDragEnter: drop.onDragEnter,
-        onDragOver: drop.onDragOver,
-        onDragLeave: drop.onDragLeave,
-        onDrop: drop.onDrop,
-      }
-    : {};
   // The Shift+? hint layer pins "G E" on the control that goes home; the
   // email-review back link goes to /emails, so it must not claim the chord.
   const homeShortcut = backTo === "/" ? "nav-expenses" : undefined;
@@ -100,7 +80,7 @@ export function PageShell({
       <main
         id="main-content"
         className={`${containerClass} ${drop?.over ? DROP_OUTLINE : ""}`}
-        {...dropHandlers}
+        {...dropHandlers(drop)}
       >
         <header className="mb-6 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -130,7 +110,7 @@ export function PageShell({
     <main
       id="main-content"
       className={`mx-auto ${maxWidth} px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? DROP_OUTLINE : ""}`}
-      {...dropHandlers}
+      {...dropHandlers(drop)}
     >
       <div className="mb-4 flex items-center justify-between">
         {onBack ? (

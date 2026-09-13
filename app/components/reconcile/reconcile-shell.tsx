@@ -1,6 +1,7 @@
 import { ListChecks } from "lucide-react";
 import type { ReactNode } from "react";
-import { PageShell, type DropTarget } from "~/components/PageShell";
+import { PageShell } from "~/components/PageShell";
+import type { DropTarget } from "~/lib/use-drop-target";
 
 /**
  * The reconcile page chrome, shared by the landing and the run view so its

@@ -17,10 +17,17 @@ function isPdfMime(mime: string): boolean {
   return mime.split(";")[0]!.trim().toLowerCase() === "application/pdf";
 }
 
-/** True when the filename ends in .pdf (case-insensitive). */
-function isPdfName(name: string): boolean {
-  return /\.pdf$/i.test(name);
+/** Case-insensitive "ends in one of these extensions" matcher, built once
+ * per extension list so each list keeps a single compiled pattern. */
+function extensionMatcher(
+  extensions: readonly string[],
+): (name: string) => boolean {
+  const pattern = new RegExp(`\\.(${extensions.join("|")})$`, "i");
+  return (name) => pattern.test(name);
 }
+
+/** True when the filename ends in .pdf (case-insensitive). */
+const isPdfName = extensionMatcher(["pdf"]);
 
 /** True when the buffer starts with the PDF magic bytes ("%PDF-"). */
 function isPdfMagicBytes(buffer: Buffer): boolean {
@@ -62,7 +69,7 @@ const IMAGE_EXTENSIONS = [
   "avif",
 ] as const;
 
-const IMAGE_NAME_RE = new RegExp(`\\.(${IMAGE_EXTENSIONS.join("|")})$`, "i");
+const isImageName = extensionMatcher(IMAGE_EXTENSIONS);
 
 /** Sniff the real image mime from the leading bytes: "image/png",
  * "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/tiff",
@@ -105,10 +112,7 @@ export function isImage(input: {
   ) {
     return true;
   }
-  if (
-    input.originalName !== undefined &&
-    IMAGE_NAME_RE.test(input.originalName)
-  ) {
+  if (input.originalName !== undefined && isImageName(input.originalName)) {
     return true;
   }
   if (input.buffer !== undefined && detectImageMime(input.buffer) !== null) {
@@ -133,10 +137,7 @@ export function isReceiptFile(file: File): boolean {
  * set `parseStatementUpload` recognizes server-side. */
 const STATEMENT_EXTENSIONS = ["csv", "qfx", "ofx", "qbo", "xlsx", "pdf"];
 
-const STATEMENT_NAME_RE = new RegExp(
-  `\\.(${STATEMENT_EXTENSIONS.join("|")})$`,
-  "i",
-);
+const isStatementName = extensionMatcher(STATEMENT_EXTENSIONS);
 
 /** The `accept` attribute for the statement file input. */
 export const STATEMENT_ACCEPT = [
@@ -151,7 +152,7 @@ export const STATEMENT_ACCEPT = [
  * and the server still parses whatever arrives. */
 export function isStatementFile(file: File): boolean {
   return (
-    STATEMENT_NAME_RE.test(file.name) ||
+    isStatementName(file.name) ||
     file.type === "text/csv" ||
     file.type === "application/pdf"
   );

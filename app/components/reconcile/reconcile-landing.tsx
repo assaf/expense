@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CreditCard, Loader2, X } from "lucide-react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { cardSurface, Card } from "~/components/ui/Card";
 import {
   consumeCommandRequest,
@@ -68,9 +69,7 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
   return (
     <ReconcileShell drop={drop}>
       <div className="flex flex-col gap-6">
-        <div className="sr-only" role="status" aria-live="polite">
-          {drop.message}
-        </div>
+        <LiveStatus>{drop.message}</LiveStatus>
         <Card className="p-6">
           <h2 className="mb-1 font-semibold">Upload a statement</h2>
           <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">

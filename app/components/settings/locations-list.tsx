@@ -3,6 +3,7 @@ import { MapPin, Pencil, Plus } from "lucide-react";
 import { Form, useFetcher } from "react-router";
 import { cn } from "cn";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Field } from "~/components/ui/Field";
 import { Input } from "~/components/ui/Input";
 import { RemoveButton } from "~/components/settings/name-list";
@@ -82,9 +83,7 @@ export function LocationsList({
 
   return (
     <>
-      <div className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </div>
+      <LiveStatus>{announcement}</LiveStatus>
       <ul className="mb-3 flex flex-col gap-1">
         <li className="rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-900">
           <Form method="post" className="flex items-end gap-2">

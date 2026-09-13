@@ -5,6 +5,7 @@ import { useFetcher } from "react-router";
 import { cn } from "cn";
 import { AddNameForm } from "~/components/AddNameForm";
 import { Button } from "~/components/ui/Button";
+import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Input } from "~/components/ui/Input";
 import { countLabel } from "~/lib/format";
 
@@ -57,9 +58,7 @@ export function NameList<T extends { name: string }>({
   return (
     <section id={id} className="mb-8 scroll-mt-6">
       <h2 className="mb-2 text-lg font-semibold">{title}</h2>
-      <div className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </div>
+      <LiveStatus>{announcement}</LiveStatus>
       <ul className="mb-3 flex flex-col gap-1">
         {items.length === 0 ? (
           <li className="text-sm text-gray-500 dark:text-gray-400">

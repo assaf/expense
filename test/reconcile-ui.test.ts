@@ -1,6 +1,7 @@
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vitest";
+import { fileTransfer } from "./helpers/dropFile";
 import { goto } from "./helpers/launchBrowser";
 
 /**
@@ -128,26 +129,17 @@ describe("Reconcile flow", () => {
     ].join("\n");
 
     // A drop carries its files on a DataTransfer, which only the page can
-    // build; hand it to each dispatched event from its own handle (a
-    // DataTransfer is spent by the drop it carries).
-    const dropData = (name: string, type: string, body: string) =>
-      page.evaluateHandle(
-        ([n, t, b]) => {
-          const transfer = new DataTransfer();
-          transfer.items.add(new File([b], n, { type: t }));
-          return transfer;
-        },
-        [name, type, body] as [string, string, string],
-      );
+    // build: one fresh transfer per event (a DataTransfer is spent by the
+    // drop it carries).
 
     // Over the page: the whole page is the drop target (the header is not
     // special), highlighted with the same dashed outline the expense list
     // shows and announced to screen readers.
-    const hover = await dropData(
-      "dropped-statement.csv",
-      "text/csv",
-      STATEMENT_CSV,
-    );
+    const hover = await fileTransfer(page, {
+      name: "dropped-statement.csv",
+      type: "text/csv",
+      body: STATEMENT_CSV,
+    });
     await page.dispatchEvent("h1", "dragenter", { dataTransfer: hover });
     await expect(main).toHaveClass(/outline-dashed/);
     await expect(
@@ -160,17 +152,21 @@ describe("Reconcile flow", () => {
 
     // A file the page does not take is ignored: browsers drop the picker's
     // accept filter, so the drop target screens, and nothing is submitted.
-    const ignored = await dropData("note.png", "image/png", "not a statement");
+    const ignored = await fileTransfer(page, {
+      name: "note.png",
+      type: "image/png",
+      body: "not a statement",
+    });
     await page.dispatchEvent("h1", "drop", { dataTransfer: ignored });
     await expect(submit).toBeDisabled();
 
     // The statement fills the picker, so the browser shows the filename and
     // the submit enables exactly as if the file had been chosen.
-    const statement = await dropData(
-      "dropped-statement.csv",
-      "text/csv",
-      STATEMENT_CSV,
-    );
+    const statement = await fileTransfer(page, {
+      name: "dropped-statement.csv",
+      type: "text/csv",
+      body: STATEMENT_CSV,
+    });
     await page.dispatchEvent("h1", "drop", { dataTransfer: statement });
     await expect(submit).toBeEnabled();
     expect(
