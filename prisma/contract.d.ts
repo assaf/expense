@@ -22,6 +22,7 @@ import type {
 
 import type {
   ContractWithTypeMaps,
+  RelationKeys,
   TypeMaps as TypeMapsType,
 } from "@prisma/orm-postgres/family-contract/types";
 import type {
@@ -1570,6 +1571,370 @@ export type StorageColumnInputTypes = {
     };
   };
 };
+
+export namespace Models {
+  export type public_Account = {
+    id: CodecTypes["pg/text@1"]["output"];
+    name: CodecTypes["pg/text@1"]["output"];
+    inviteCode: CodecTypes["pg/text@1"]["output"];
+    plan: CodecTypes["pg/text@1"]["output"] | null;
+    createdAt: TimestampString<3>;
+    categories: public_Category[];
+    duplicateDismissals: public_DuplicateDismissal[];
+    emailConnections: public_EmailConnection[];
+    expenses: public_Expense[];
+    imageBlobs: public_ImageBlob[];
+    inboundEmails: public_InboundEmail[];
+    inboundSenderVerifications: public_InboundSenderVerification[];
+    inboundSenders: public_InboundSender[];
+    locations: public_Location[];
+    receiptExtractions: public_ReceiptExtraction[];
+    reconciliationRuns: public_ReconciliationRun[];
+    reports: public_Report[];
+    settings: public_Settings[];
+    users: public_User[];
+    readonly [RelationKeys]?:
+      | "categories"
+      | "duplicateDismissals"
+      | "emailConnections"
+      | "expenses"
+      | "imageBlobs"
+      | "inboundEmails"
+      | "inboundSenderVerifications"
+      | "inboundSenders"
+      | "locations"
+      | "receiptExtractions"
+      | "reconciliationRuns"
+      | "reports"
+      | "settings"
+      | "users";
+  };
+  export type public_AuthAttempt = {
+    key: CodecTypes["pg/text@1"]["output"];
+    failures: CodecTypes["pg/int4@1"]["output"];
+    windowStart: TimestampString<3>;
+    lockedUntil: TimestampString<3> | null;
+    updatedAt: TimestampString<3>;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_Category = {
+    id: CodecTypes["pg/int8@1"]["output"];
+    name: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_Location = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    name: CodecTypes["pg/text@1"]["output"];
+    address: CodecTypes["pg/text@1"]["output"];
+    lat: CodecTypes["pg/float8@1"]["output"] | null;
+    lng: CodecTypes["pg/float8@1"]["output"] | null;
+    createdAt: TimestampString<3>;
+    updatedAt: TimestampString<3>;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_ReconciliationRun = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    fileName: CodecTypes["pg/text@1"]["output"];
+    fileHash: CodecTypes["pg/text@1"]["output"];
+    status: CodecTypes["pg/text@1"]["output"];
+    rowCount: CodecTypes["pg/int4@1"]["output"];
+    matchedCount: CodecTypes["pg/int4@1"]["output"];
+    createdCount: CodecTypes["pg/int4@1"]["output"];
+    skipped: CodecTypes["pg/jsonb@1"]["output"];
+    data: CodecTypes["pg/jsonb@1"]["output"];
+    createdAt: TimestampString<3>;
+    completedAt: TimestampString<3> | null;
+    account: public_Account;
+    expenses: public_Expense[];
+    readonly [RelationKeys]?: "account" | "expenses";
+  };
+  export type public_Expense = {
+    id: CodecTypes["pg/text@1"]["output"];
+    _type: CodecTypes["pg/text@1"]["output"];
+    date: CodecTypes["pg/text@1"]["output"];
+    report: CodecTypes["pg/text@1"]["output"];
+    category: CodecTypes["pg/text@1"]["output"];
+    description: CodecTypes["pg/text@1"]["output"];
+    amount: Numeric<10, 2> | null;
+    currency: CodecTypes["pg/text@1"]["output"];
+    originalAmount: Numeric<10, 2> | null;
+    fxRate: Numeric<10, 6> | null;
+    merchant: CodecTypes["pg/text@1"]["output"];
+    imageFile: CodecTypes["pg/text@1"]["output"];
+    imageMime: CodecTypes["pg/text@1"]["output"];
+    originalName: CodecTypes["pg/text@1"]["output"];
+    imageSha256: CodecTypes["pg/text@1"]["output"] | null;
+    distanceMiles: Numeric<10, 2> | null;
+    locations: CodecTypes["pg/jsonb@1"]["output"];
+    createdAt: TimestampString<3>;
+    updatedAt: TimestampString<3>;
+    accountId: CodecTypes["pg/text@1"]["output"];
+    route: CodecTypes["pg/jsonb@1"]["output"] | null;
+    mileageType: CodecTypes["pg/text@1"]["output"];
+    roundTrip: CodecTypes["pg/bool@1"]["output"];
+    reconciledAt: TimestampString<3> | null;
+    reconciledInRunId: CodecTypes["pg/text@1"]["output"] | null;
+    account: public_Account;
+    dismissedAsA: public_DuplicateDismissal[];
+    dismissedAsB: public_DuplicateDismissal[];
+    reconciliationRun: public_ReconciliationRun | null;
+    readonly [RelationKeys]?:
+      | "account"
+      | "dismissedAsA"
+      | "dismissedAsB"
+      | "reconciliationRun";
+  };
+  export type public_DuplicateDismissal = {
+    id: CodecTypes["pg/text@1"]["output"];
+    expenseAId: CodecTypes["pg/text@1"]["output"];
+    expenseBId: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    account: public_Account;
+    expenseA: public_Expense;
+    expenseB: public_Expense;
+    readonly [RelationKeys]?: "account" | "expenseA" | "expenseB";
+  };
+  export type public_EmailConnection = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    provider: CodecTypes["pg/text@1"]["output"];
+    emailAddress: CodecTypes["pg/text@1"]["output"];
+    remoteAccountId: CodecTypes["pg/text@1"]["output"];
+    tokenEnc: CodecTypes["pg/text@1"]["output"];
+    refreshTokenEnc: CodecTypes["pg/text@1"]["output"] | null;
+    tokenExpiresAt: TimestampString<3> | null;
+    status: CodecTypes["pg/text@1"]["output"];
+    receivedCount: CodecTypes["pg/int4@1"]["output"];
+    processedCount: CodecTypes["pg/int4@1"]["output"];
+    lastPushAt: TimestampString<3> | null;
+    pushSubscriptionId: CodecTypes["pg/text@1"]["output"] | null;
+    pushExpiresAt: TimestampString<3> | null;
+    createdAt: TimestampString<3>;
+    reviewScannedAt: TimestampString<3> | null;
+    account: public_Account;
+    emailProcessLogs: public_EmailProcessLog[];
+    readonly [RelationKeys]?: "account" | "emailProcessLogs";
+  };
+  export type public_EmailProcessLog = {
+    id: CodecTypes["pg/int8@1"]["output"];
+    connectionId: CodecTypes["pg/text@1"]["output"];
+    emailId: CodecTypes["pg/text@1"]["output"];
+    fromAddress: CodecTypes["pg/text@1"]["output"];
+    subject: CodecTypes["pg/text@1"]["output"];
+    matched: CodecTypes["pg/bool@1"]["output"];
+    outcome: CodecTypes["pg/text@1"]["output"];
+    error: CodecTypes["pg/text@1"]["output"] | null;
+    reason: CodecTypes["pg/text@1"]["output"] | null;
+    expenseId: CodecTypes["pg/text@1"]["output"] | null;
+    chargeAmount: CodecTypes["pg/text@1"]["output"] | null;
+    createdAt: TimestampString<3>;
+    fromDisplay: CodecTypes["pg/text@1"]["output"] | null;
+    receivedAt: TimestampString<3> | null;
+    connection: public_EmailConnection;
+    readonly [RelationKeys]?: "connection";
+  };
+  export type public_EmailRule = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    sender: CodecTypes["pg/text@1"]["output"];
+    source: CodecTypes["pg/text@1"]["output"];
+    createdAt: TimestampString<3>;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_ImageBlob = {
+    key: CodecTypes["pg/text@1"]["output"];
+    mime: CodecTypes["pg/text@1"]["output"];
+    data: CodecTypes["pg/bytea@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    thumbnail: CodecTypes["pg/bytea@1"]["output"] | null;
+    sha256: CodecTypes["pg/text@1"]["output"] | null;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_InboundEmail = {
+    emailId: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    subject: CodecTypes["pg/text@1"]["output"];
+    status: CodecTypes["pg/text@1"]["output"];
+    error: CodecTypes["pg/text@1"]["output"];
+    createdAt: TimestampString<3>;
+    updatedAt: TimestampString<3>;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_InboundSenderVerification = {
+    address: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    verifiedAt: TimestampString<3>;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_InboundSender = {
+    accountId: CodecTypes["pg/text@1"]["output"];
+    address: CodecTypes["pg/text@1"]["output"];
+    createdAt: TimestampString<3>;
+    verificationSentAt: TimestampString<3> | null;
+    verificationTokenHash: CodecTypes["pg/text@1"]["output"] | null;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_InboundEmailCooldown = {
+    address: CodecTypes["pg/text@1"]["output"];
+    sentAt: TimestampString<3>;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_MileageRate = {
+    id: CodecTypes["pg/int8@1"]["output"];
+    _type: CodecTypes["pg/text@1"]["output"];
+    startDate: CodecTypes["pg/text@1"]["output"];
+    endDate: CodecTypes["pg/text@1"]["output"];
+    rate: Numeric<5, 3>;
+    createdAt: TimestampString<3>;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_OAuthClient = {
+    id: CodecTypes["pg/text@1"]["output"];
+    secretHash: CodecTypes["pg/text@1"]["output"] | null;
+    name: CodecTypes["pg/text@1"]["output"];
+    redirectUris: CodecTypes["pg/text@1"]["output"];
+    authMethod: CodecTypes["pg/text@1"]["output"];
+    createdAt: TimestampString<3>;
+    oauthCodes: public_OAuthCode[];
+    oauthConsents: public_OAuthConsent[];
+    oauthTokens: public_OAuthToken[];
+    readonly [RelationKeys]?: "oauthCodes" | "oauthConsents" | "oauthTokens";
+  };
+  export type public_OAuthCode = {
+    id: CodecTypes["pg/text@1"]["output"];
+    userId: CodecTypes["pg/text@1"]["output"];
+    clientId: CodecTypes["pg/text@1"]["output"];
+    challenge: CodecTypes["pg/text@1"]["output"];
+    redirectUri: CodecTypes["pg/text@1"]["output"];
+    expiresAt: TimestampString<3>;
+    used: CodecTypes["pg/bool@1"]["output"];
+    createdAt: TimestampString<3>;
+    client: public_OAuthClient;
+    readonly [RelationKeys]?: "client";
+  };
+  export type public_OAuthConsent = {
+    userId: CodecTypes["pg/text@1"]["output"];
+    clientId: CodecTypes["pg/text@1"]["output"];
+    grantedAt: TimestampString<3>;
+    client: public_OAuthClient;
+    readonly [RelationKeys]?: "client";
+  };
+  export type public_OAuthToken = {
+    tokenHash: CodecTypes["pg/text@1"]["output"];
+    userId: CodecTypes["pg/text@1"]["output"];
+    clientId: CodecTypes["pg/text@1"]["output"];
+    _type: CodecTypes["pg/text@1"]["output"];
+    scope: CodecTypes["pg/text@1"]["output"];
+    expiresAt: TimestampString<3>;
+    revokedAt: TimestampString<3> | null;
+    createdAt: TimestampString<3>;
+    familyId: CodecTypes["pg/text@1"]["output"] | null;
+    client: public_OAuthClient;
+    readonly [RelationKeys]?: "client";
+  };
+  export type public_LegacyPrismaMigrations = {
+    id: Varchar<36>;
+    checksum: Varchar<64>;
+    finishedAt: CodecTypes["pg/timestamptz-string@1"]["output"] | null;
+    migrationName: Varchar<255>;
+    logs: CodecTypes["pg/text@1"]["output"] | null;
+    rolledBackAt: CodecTypes["pg/timestamptz-string@1"]["output"] | null;
+    startedAt: CodecTypes["pg/timestamptz-string@1"]["output"];
+    appliedStepsCount: CodecTypes["pg/int4@1"]["output"];
+    readonly [RelationKeys]?: never;
+  };
+  export type public_ReceiptExtraction = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    hash: CodecTypes["pg/text@1"]["output"];
+    result: CodecTypes["pg/jsonb@1"]["output"];
+    createdAt: TimestampString<3>;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_Report = {
+    id: CodecTypes["pg/int8@1"]["output"];
+    name: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    closed: CodecTypes["pg/bool@1"]["output"];
+    createdAt: TimestampString<3> | null;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_InsightConversation = {
+    id: CodecTypes["pg/text@1"]["output"];
+    userId: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    messages: CodecTypes["pg/jsonb@1"]["output"];
+    createdAt: TimestampString<3>;
+    updatedAt: TimestampString<3>;
+    readonly [RelationKeys]?: never;
+  };
+  export type public_Settings = {
+    accountId: CodecTypes["pg/text@1"]["output"];
+    key: CodecTypes["pg/text@1"]["output"];
+    value: CodecTypes["pg/text@1"]["output"];
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+  export type public_User = {
+    id: CodecTypes["pg/text@1"]["output"];
+    accountId: CodecTypes["pg/text@1"]["output"];
+    email: CodecTypes["pg/text@1"]["output"];
+    passwordHash: CodecTypes["pg/text@1"]["output"];
+    createdAt: TimestampString<3>;
+    emailVerifiedAt: TimestampString<3> | null;
+    verificationSentAt: TimestampString<3> | null;
+    verificationTokenHash: CodecTypes["pg/text@1"]["output"] | null;
+    passwordResetSentAt: TimestampString<3> | null;
+    passwordResetTokenHash: CodecTypes["pg/text@1"]["output"] | null;
+    credentialsChangedAt: TimestampString<3> | null;
+    marketingUnsubscribedAt: TimestampString<3> | null;
+    account: public_Account;
+    readonly [RelationKeys]?: "account";
+  };
+}
+
+export declare const models: {
+  public: {
+    Account: Models.public_Account;
+    AuthAttempt: Models.public_AuthAttempt;
+    Category: Models.public_Category;
+    Location: Models.public_Location;
+    ReconciliationRun: Models.public_ReconciliationRun;
+    Expense: Models.public_Expense;
+    DuplicateDismissal: Models.public_DuplicateDismissal;
+    EmailConnection: Models.public_EmailConnection;
+    EmailProcessLog: Models.public_EmailProcessLog;
+    EmailRule: Models.public_EmailRule;
+    ImageBlob: Models.public_ImageBlob;
+    InboundEmail: Models.public_InboundEmail;
+    InboundSenderVerification: Models.public_InboundSenderVerification;
+    InboundSender: Models.public_InboundSender;
+    InboundEmailCooldown: Models.public_InboundEmailCooldown;
+    MileageRate: Models.public_MileageRate;
+    OAuthClient: Models.public_OAuthClient;
+    OAuthCode: Models.public_OAuthCode;
+    OAuthConsent: Models.public_OAuthConsent;
+    OAuthToken: Models.public_OAuthToken;
+    LegacyPrismaMigrations: Models.public_LegacyPrismaMigrations;
+    ReceiptExtraction: Models.public_ReceiptExtraction;
+    Report: Models.public_Report;
+    InsightConversation: Models.public_InsightConversation;
+    Settings: Models.public_Settings;
+    User: Models.public_User;
+  };
+};
+
 export type TypeMaps = TypeMapsType<
   CodecTypes,
   QueryOperationTypes,
@@ -3809,6 +4174,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -3863,6 +4229,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -3874,6 +4241,7 @@ type ContractBase = Omit<
                   readonly model: "Expense";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["expenseAId"];
                   readonly targetFields: readonly ["id"];
@@ -3885,6 +4253,7 @@ type ContractBase = Omit<
                   readonly model: "Expense";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["expenseBId"];
                   readonly targetFields: readonly ["id"];
@@ -4029,6 +4398,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -4187,6 +4557,7 @@ type ContractBase = Omit<
                   readonly model: "EmailConnection";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["connectionId"];
                   readonly targetFields: readonly ["id"];
@@ -4470,6 +4841,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -4503,6 +4875,7 @@ type ContractBase = Omit<
                   readonly model: "ReconciliationRun";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: true;
                 readonly on: {
                   readonly localFields: readonly ["reconciledInRunId"];
                   readonly targetFields: readonly ["id"];
@@ -4595,6 +4968,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -4675,6 +5049,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -4770,6 +5145,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -4824,6 +5200,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5049,6 +5426,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5296,6 +5674,7 @@ type ContractBase = Omit<
                   readonly model: "OAuthClient";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["clientId"];
                   readonly targetFields: readonly ["id"];
@@ -5349,6 +5728,7 @@ type ContractBase = Omit<
                   readonly model: "OAuthClient";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["clientId"];
                   readonly targetFields: readonly ["id"];
@@ -5441,6 +5821,7 @@ type ContractBase = Omit<
                   readonly model: "OAuthClient";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["clientId"];
                   readonly targetFields: readonly ["id"];
@@ -5509,6 +5890,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5623,6 +6005,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5705,6 +6088,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5754,6 +6138,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];
@@ -5870,6 +6255,7 @@ type ContractBase = Omit<
                   readonly model: "Account";
                 };
                 readonly cardinality: "N:1";
+                readonly nullable: false;
                 readonly on: {
                   readonly localFields: readonly ["accountId"];
                   readonly targetFields: readonly ["id"];

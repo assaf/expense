@@ -429,6 +429,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -489,6 +490,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -500,6 +502,7 @@
               },
               "expenseA": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["expenseAId"],
                   "targetFields": ["id"]
@@ -511,6 +514,7 @@
               },
               "expenseB": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["expenseBId"],
                   "targetFields": ["id"]
@@ -673,6 +677,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -859,6 +864,7 @@
             "relations": {
               "connection": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["connectionId"],
                   "targetFields": ["id"]
@@ -1188,6 +1194,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -1221,6 +1228,7 @@
               },
               "reconciliationRun": {
                 "cardinality": "N:1",
+                "nullable": true,
                 "on": {
                   "localFields": ["reconciledInRunId"],
                   "targetFields": ["id"]
@@ -1361,6 +1369,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -1457,6 +1466,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -1576,6 +1586,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -1638,6 +1649,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -1909,6 +1921,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -2204,6 +2217,7 @@
             "relations": {
               "client": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["clientId"],
                   "targetFields": ["id"]
@@ -2275,6 +2289,7 @@
             "relations": {
               "client": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["clientId"],
                   "targetFields": ["id"]
@@ -2379,6 +2394,7 @@
             "relations": {
               "client": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["clientId"],
                   "targetFields": ["id"]
@@ -2467,6 +2483,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -2595,6 +2612,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -2703,6 +2721,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -2762,6 +2781,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
@@ -2896,6 +2916,7 @@
             "relations": {
               "account": {
                 "cardinality": "N:1",
+                "nullable": false,
                 "on": {
                   "localFields": ["accountId"],
                   "targetFields": ["id"]
