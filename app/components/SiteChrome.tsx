@@ -13,6 +13,7 @@ const FOOTER_NAV: SiteNavItem[] = [
   { label: "Mileage", to: "/mileage-rates" },
   { label: "Categories", to: "/schedule-c-categories" },
   { label: "Privacy", to: "/privacy" },
+  { label: "Terms", to: "/terms" },
   { label: "Blog", to: "https://labnotes.org", external: true },
 ];
 

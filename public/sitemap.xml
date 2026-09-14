@@ -74,6 +74,15 @@
     <changefreq>monthly</changefreq>
   </url>
   <url>
+    <loc>https://expense.labnotes.org/terms</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://expense.labnotes.org/terms.md</loc>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
     <loc>https://expense.labnotes.org/login</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>

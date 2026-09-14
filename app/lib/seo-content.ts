@@ -1021,6 +1021,105 @@ ${sections}
 `;
 }
 
+// --- Terms of service (/terms) ---------------------------------------------
+
+/** The date the terms last changed; the page and its mirror both show it. */
+export const TERMS_UPDATED = "September 13, 2026";
+
+/** One-paragraph summary of the terms, quoted by /terms and /terms.md. */
+export const TERMS_SUMMARY =
+  "Expense is a free expense tracker run by one person. Use it for your own receipts, keep them out of other people's accounts, and check what it fills in before you file: the reading is good, not infallible.";
+
+export interface TermsSection {
+  title: string;
+  paragraphs: string[];
+}
+
+/**
+ * The terms themselves, section by section: one source for the page and its
+ * markdown mirror. Plain-language on purpose, and specific to this app: it is
+ * a personal project, not a company with a legal department.
+ */
+export const TERMS_SECTIONS: TermsSection[] = [
+  {
+    title: "What this is",
+    paragraphs: [
+      "Expense is an expense tracker for people filing taxes as individuals, built and run by one person, Assaf Arkin, in Los Angeles. It is free and carries no ads: free until the app reaches 100 users, and free up to 25 invoices a month after that.",
+      "Creating an account means you agree to these terms. If you do not agree with them, please do not use the app.",
+    ],
+  },
+  {
+    title: "Your account",
+    paragraphs: [
+      "Keep your password to yourself. Everyone you invite with the account's invite code sees the same expenses, so invite deliberately, and remember that you are responsible for what your account's members do.",
+      "An assistant you connect over MCP acts with your account's permissions: what it writes lands in your expenses, and it reaches nothing else. Revoke it in Settings whenever you like.",
+    ],
+  },
+  {
+    title: "Your data stays yours",
+    paragraphs: [
+      "You own the receipts, expenses, trips, and notes you put into the app. You give the app permission to store and process them in order to do what you asked: read a receipt, match a statement, answer an Insights question, build a report or an export.",
+      "What is stored, where it lives, and which providers see what is spelled out in the privacy policy.",
+    ],
+  },
+  {
+    title: "What not to do",
+    paragraphs: [
+      "Do not upload receipts that are not yours to upload, use the app for anything illegal, poke at accounts that are not yours, scrape or hammer the service, or pass it off as your own.",
+      "An account that does gets suspended, which nobody enjoys.",
+    ],
+  },
+  {
+    title: "Not tax, legal, or accounting advice",
+    paragraphs: [
+      "The app applies IRS mileage rates and Schedule C categories, totals what you spent, and reads receipts. That is bookkeeping help, not advice, and the reading is not perfect: OCR and the model misread a merchant, a total, or a date now and then.",
+      "Check what it filled in before you file, and take real tax questions to a professional.",
+    ],
+  },
+  {
+    title: "Availability",
+    paragraphs: [
+      "The app comes as it is, with no uptime or availability promise. Features change, break, and sometimes go away, and the free limits can change with them.",
+      "Keep your own copy of anything you cannot afford to lose: the ZIP export downloads every expense and its receipts in one file.",
+    ],
+  },
+  {
+    title: "Ending it",
+    paragraphs: [
+      "You can stop using the app whenever you like. Delete expenses and reports in the app, and disconnect your mailboxes in Settings. There is no self-serve account deletion yet: email assaf@labnotes.org and the account and everything in it is deleted.",
+      "I may suspend an account that abuses the service or breaks these terms.",
+    ],
+  },
+  {
+    title: "Liability",
+    paragraphs: [
+      "The app is free, so the practical limit on what I owe you is nothing. In plain terms: I am not liable for data that is lost or read wrong, for deductions missed, or for anything indirect that follows from using the app.",
+      "These terms are governed by the laws of California, in the United States, where I live.",
+    ],
+  },
+  {
+    title: "Changes",
+    paragraphs: [
+      "When these terms change, the date above changes with it, and carrying on using the app means you accept the new version. Questions go to assaf@labnotes.org.",
+    ],
+  },
+];
+
+/** Full markdown for /terms.md; mirrors the /terms page content. */
+export function termsMarkdown(): string {
+  const sections = TERMS_SECTIONS.map(
+    (s) => `## ${s.title}\n\n${s.paragraphs.map((p) => wrap(p)).join("\n\n")}`,
+  ).join("\n\n");
+  return `# Terms of service
+
+${TERMS_SUMMARY}
+
+Last updated: ${TERMS_UPDATED}
+
+${sections}
+`;
+}
+
 /** Full markdown for /about.md. Mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = BENEFITS.map(
@@ -1135,6 +1234,7 @@ ${KEY_FACTS.map((f) => `- ${wrap(f)}`).join("\n")}
 - [Connect your AI assistant (MCP server)](${SITE_URL}/connect.md): Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is ${SITE_URL}/mcp (Streamable HTTP + OAuth).
 - [Connect your AI assistant](${SITE_URL}/ai.md): What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements. Covers Insights too, the built-in question page that answers from your own expenses with nothing connected.
 - [Privacy](${SITE_URL}/privacy.md): What the app stores, where it lives, which providers see what, and what it never does.
+- [Terms of service](${SITE_URL}/terms.md): The rules for using the app: your account, your data, what is not allowed, and what the app does not promise.
 
 ## Optional
 

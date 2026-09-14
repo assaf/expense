@@ -37,10 +37,12 @@ const PUBLIC_PATHS = [
   "/schedule-c-categories",
   "/alternatives",
   "/privacy",
+  "/terms",
   "/llms.txt",
   "/about.data",
   "/faq.md",
   "/privacy.md",
+  "/terms.md",
 ];
 
 describe("root loader public-path gate (GATE-REGR-1)", () => {

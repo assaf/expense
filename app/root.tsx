@@ -60,6 +60,7 @@ const PUBLIC_PAGES = new Set([
   "/schedule-c-categories",
   "/alternatives",
   "/privacy",
+  "/terms",
   "/llms.txt",
 ]);
 
