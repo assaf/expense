@@ -391,7 +391,7 @@ export default function LandingPage({
            * larger heading, taller padding, transparent Sign in. */}
           <MarketingCta
             heading="Start collecting this year's expenses."
-            body="No credit card, no subscription. Free until we reach 100 users, then still free up to 25 invoices a month."
+            body="No credit card, no subscription, no ads."
             secondaryLabel="Sign in"
             secondaryHref="/login"
             className="py-14"
