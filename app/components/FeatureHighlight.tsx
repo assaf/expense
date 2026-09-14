@@ -1,4 +1,5 @@
 import {
+  AtSign,
   Bot,
   ChartColumn,
   Command,
@@ -51,6 +52,7 @@ export type HighlightId =
   | "search-operators"
   | "shortcut-hints"
   | "email-preferences"
+  | "change-email"
   | "change-password"
   | "close-account"
   | "webmcp";
@@ -304,6 +306,17 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Manage emails", to: "/settings#emails" },
   },
+  "change-email": {
+    icon: AtSign,
+    title: "Moved to a new address?",
+    body: () => (
+      <>
+        Your sign-in email is in Settings, under Emails. Change it with your
+        password, and the old address gets a note saying it happened.
+      </>
+    ),
+    cta: { label: "Change email", to: "/settings#sign-in-email" },
+  },
   "change-password": {
     icon: KeyRound,
     title: "Your password, your timing",
@@ -348,6 +361,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reports",
     "search-operators",
     "email-preferences",
+    "change-email",
     "change-password",
     "close-account",
   ];

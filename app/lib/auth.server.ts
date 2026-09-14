@@ -8,11 +8,13 @@ import {
   verifyPasswordWithParity,
 } from "./passwords";
 import { sendAccountVerificationEmail } from "./account-verification.server";
+import { sendEmailChangeNotice } from "./email-change-notice.server";
 import { sendVerificationEmail as sendSenderVerificationEmail } from "./sender-verification.server";
 import { sendVerificationEmail as sendPasswordResetEmail } from "./verification-email.server";
 import { escapeHtml } from "./escape";
 import { paragraph } from "./email-layout.server";
 import {
+  changeUserEmail,
   changeUserPassword,
   createAccount,
   createUser,
@@ -409,7 +411,7 @@ export async function createAccountWithUser(
 ): Promise<{ email: string }> {
   await initStore();
   validateSignup(input.email, input.password);
-  await replaceUnverifiedSignup(input.email);
+  await claimEmailAddress(input.email);
   const account = await createAccount(input.accountName);
   return createPendingUser({
     accountId: account.id,
@@ -448,7 +450,7 @@ export async function joinAccountWithInviteCode(
     throw new Error("That invite code is not valid");
   }
   await clearFailuresBestEffort(lockKey);
-  await replaceUnverifiedSignup(input.email);
+  await claimEmailAddress(input.email);
   return createPendingUser({
     accountId: account.id,
     email: input.email,
@@ -459,12 +461,15 @@ export async function joinAccountWithInviteCode(
 }
 
 /**
- * Discard an earlier unverified signup with the same email so a fresh
- * signup/join can proceed: the old account and its verification link are
- * deleted and the email is free again. Throws when the email belongs to a
- * verified account (it can't be replaced) or the replacement fails.
+ * Make an email address available to the caller: an earlier UNVERIFIED
+ * signup holding it is discarded (the account and its verification link are
+ * deleted, and the address is free again). Throws when the address belongs to
+ * a VERIFIED account, since that one can't be replaced, and when a
+ * verification email went out too recently to tell whether the signup is
+ * abandoned. Signup, join and a change of sign-in email all come through
+ * here, so the rule about who owns an address is one rule.
  */
-async function replaceUnverifiedSignup(email: string): Promise<void> {
+async function claimEmailAddress(email: string): Promise<void> {
   const existing = await findUserByEmail(email);
   if (existing?.emailVerifiedAt) {
     throw new Error("That email is already in use.");
@@ -490,7 +495,7 @@ async function replaceUnverifiedSignup(email: string): Promise<void> {
  * The pending-signup tail shared by signup and join: create the user, mint
  * + store the verification token, ensure the default receipts-by-email
  * sender, and email the verification link. The account must already exist
- * and the email must be free (see replaceUnverifiedSignup). Returns the
+ * and the email must be free (see claimEmailAddress). Returns the
  * pending signup's email (never a session).
  */
 async function createPendingUser(input: {
@@ -650,13 +655,73 @@ export async function changePassword(
 }
 
 /**
+ * Point a signed-in user's sign-in email at another address. Takes effect
+ * immediately, like the receipts-by-email sender flow does for a new mailbox:
+ * the address is a login identifier, and the account has already been
+ * verified. Three things happen around the write.
+ *
+ * The current password is checked first, so a stolen session can't move the
+ * account to an address its owner controls (nor probe which addresses are
+ * already taken, which the uniqueness rule would otherwise reveal).
+ *
+ * The new address becomes the account's default receipts-by-email sender, so
+ * it gets a verification link of its own: that link is what proves the
+ * mailbox before receipts from it are accepted.
+ *
+ * The OLD address gets a notice naming the new one (sendEmailChangeNotice).
+ * Nothing about the session changes: the password, the credentials epoch and
+ * the cookie are untouched, so the device that made the change stays signed
+ * in, and a mailbox that just lost the account is told about it.
+ *
+ * Never throws on bad input; the message belongs to the form.
+ */
+export async function changeEmail(
+  user: Pick<User, "id" | "accountId" | "email">,
+  newEmail: string,
+  currentPassword: string,
+  origin?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const email = newEmail.trim().toLowerCase();
+  if (!isEmail(email)) {
+    return { ok: false, error: "Enter a valid email address" };
+  }
+  if (email === user.email.trim().toLowerCase()) {
+    return { ok: false, error: "That's the address you already use." };
+  }
+  const confirmed = await confirmPassword(user, currentPassword);
+  if (!confirmed.ok) return confirmed;
+  try {
+    await claimEmailAddress(email);
+  } catch (error) {
+    // claimEmailAddress owns this wording: it is the same rule signup and
+    // join apply to an address someone else already holds.
+    if (error instanceof Error) return { ok: false, error: error.message };
+    throw error;
+  }
+  const previous = user.email;
+  await changeUserEmail(user.id, email);
+  await ensureDefaultSender({ accountId: user.accountId, email }, origin);
+  const account = await readAccount(user.accountId);
+  await sendEmailChangeNotice({
+    to: previous,
+    newEmail: email,
+    accountName: account?.name ?? email,
+    origin,
+  });
+  return { ok: true };
+}
+
+/**
  * The user's login email is their default receipts-by-email sender. Make
  * sure the sender row exists and email a verification link when one is owed
  * (freshly added, or the last one is stale). Receipts only start flowing
  * after the link is clicked. Failures never break sign-in: a skipped email
  * just means the address waits to be verified from Settings.
  */
-async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
+async function ensureDefaultSender(
+  user: Pick<User, "accountId" | "email">,
+  origin?: string,
+): Promise<void> {
   try {
     const { token, claimedByOther } = await ensureInboundSenderForUser(
       user.accountId,

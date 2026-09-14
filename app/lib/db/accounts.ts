@@ -295,6 +295,35 @@ export async function updateUserPasswordHash(
   await db.orm.public.User.where({ id: userId }).update({ passwordHash });
 }
 
+/** Point a user's login email at another address. Normalized here as well as
+ * at the form boundary: the address is the login identifier `findUserByEmail`
+ * matches on. The id→user cache holds the old address for its TTL and every
+ * request resolves the user through it, so it is busted; nothing else moves
+ * (password, credentials epoch and sessions are untouched, so the device that
+ * made the change stays signed in, and the receipts-by-email sender rows stay
+ * as they are because they are keyed by address, not by user). */
+export async function changeUserEmail(
+  userId: string,
+  email: string,
+): Promise<void> {
+  await db.orm.public.User.where({ id: userId }).update({
+    email: email.trim().toLowerCase(),
+  });
+  bust(userCache, userId);
+}
+
+/** The user's login email, read straight from Postgres rather than through
+ * the cache above: the settings page shows it as the address this account
+ * signs in with, and for the cache's TTL after a change it would still serve
+ * the previous one (another instance answers the post-change redirect). Same
+ * reasoning as readCredentialsEpoch. */
+export async function readUserEmail(userId: string): Promise<string | null> {
+  const row = await db.orm.public.User.where({ id: userId })
+    .select("email")
+    .first();
+  return row?.email ?? null;
+}
+
 /** Change a signed-in user's password: the new hash plus a fresh credentials
  * epoch, so a session minted under the old password is refused from the next
  * request on (requireUser compares the epoch), the user's OAuth tokens are

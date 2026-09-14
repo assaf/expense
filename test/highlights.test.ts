@@ -29,6 +29,7 @@ describe("feature highlights", () => {
     expect(availableHighlights(EMPTY).sort()).toEqual([
       "capture",
       "categories",
+      "change-email",
       "change-password",
       "close-account",
       "command-palette",

@@ -50,6 +50,21 @@ reads and writes are scoped; see `app/lib/db/`).
   use as well. `/.well-known/change-password` publishes the section
   as the origin's change-password URL (W3C WebAppSec): a 302, the only redirect
   kind that spec allows, to `/settings#change-password`.
+- **Changing your sign-in email** is self-serve too (Settings → Emails): the
+  new address plus the current password. It lands immediately, because the
+  address is a login identifier on an already-verified account, and it reuses
+  the rule signup applies (`claimEmailAddress`): an unverified signup holding
+  the address yields, a verified account makes it refuse. `users.email` moves
+  (normalized; the id→user cache is busted and the settings card reads the
+  address through `readUserEmail`, so it can't show the old one), while the
+  password, the credentials epoch and the sessions stay put, so the device
+  that made the change stays signed in. Two emails go out:
+  `sendEmailChangeNotice` tells the OLD address what happened and names the new
+  one (that notice is the security half, since whoever still reads that mailbox
+  can act), and the new address becomes the default receipts-by-email sender,
+  so it gets its own verification link before receipts from it are accepted.
+  Sender rows are keyed by address, so the old address keeps importing until it
+  is removed in Emails.
 - **Closing your own account** is self-serve (Settings → Close account): the
   user re-enters their password (`confirmPassword` in `app/lib/auth.server.ts`
   reuses login's lockout key and constant-time comparison), then

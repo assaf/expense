@@ -15,7 +15,9 @@ import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
 import { LocationsList } from "~/components/settings/locations-list";
 import { PasswordSection } from "~/components/settings/password-section";
+import { SignInEmailForm } from "~/components/settings/sign-in-email";
 import {
+  changeEmail,
   changePassword,
   confirmPassword,
   logout,
@@ -28,6 +30,7 @@ import {
   readAccountFootprint,
   readAccount,
   readAccountUsers,
+  readUserEmail,
   regenerateInviteCode,
   readMarketingUnsubscribed,
   resubscribeMarketingEmail,
@@ -76,6 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     members,
     locations,
     footprint,
+    email,
   ] = await Promise.all([
     readCategories(user.accountId),
     readSettings(user.accountId),
@@ -85,6 +89,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     readAccountUsers(user.accountId),
     readLocations(user.accountId),
     readAccountFootprint(user.accountId),
+    // Not user.email: the section that shows this address is the one a change
+    // lands on, and the id→user cache can still hold the previous address for
+    // its TTL (another instance may answer the redirect).
+    readUserEmail(user.id),
   ]);
   // The "current rate" line is computed CLIENT-side from the browser's
   // local today; the server runs UTC and must not guess the user's day.
@@ -98,7 +106,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     })),
     homeAddress: settings.homeAddress,
     locations,
-    userEmail: user.email,
+    userEmail: email ?? user.email,
     marketingUnsubscribed: await readMarketingUnsubscribed(user.id),
     footprint,
     rates,
@@ -274,6 +282,20 @@ export async function action({ request }: Route.ActionArgs) {
         return unknownIntent();
       }
       break;
+    }
+    // Same shape as changePassword: a refusal answers JSON for the inline
+    // error, success navigates so the card re-renders with the new address
+    // and the confirmation. No cookie here: the session, the password and the
+    // credentials epoch are untouched by an email change.
+    case "changeEmail": {
+      const result = await changeEmail(
+        user,
+        formString(form, "email"),
+        formString(form, "password"),
+        new URL(request.url).origin,
+      );
+      if (!result.ok) return Response.json(result);
+      return redirect("/settings?email=changed#sign-in-email");
     }
     // Refusals come back as JSON so the section can show the reason inline
     // (a wrong current password, a mismatch, a too-short new one). Success
@@ -508,13 +530,11 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
 
       <Section id="emails" title="Emails">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Marketing emails (product news and tips) go to{" "}
-          <span className="font-medium text-gray-700 dark:text-gray-200">
-            {userEmail}
-          </span>
-          . Receipts-by-email notices and security emails (sign-in verification,
-          password resets) are always sent.
+          Receipts-by-email notices and security emails (sign-in verification,
+          password resets) go to your sign-in email. Marketing emails (product
+          news and tips) go there too, and you can turn those off below.
         </p>
+        <SignInEmailForm userEmail={userEmail} />
         <Card className="flex items-center justify-between gap-4 p-4">
           <div className="min-w-0 text-sm">
             {marketingUnsubscribed ? (
