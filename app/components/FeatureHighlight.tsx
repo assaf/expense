@@ -7,6 +7,7 @@ import {
   Fuel,
   Globe,
   Keyboard,
+  KeyRound,
   Mail,
   MailCheck,
   MapPinned,
@@ -50,6 +51,7 @@ export type HighlightId =
   | "search-operators"
   | "shortcut-hints"
   | "email-preferences"
+  | "change-password"
   | "close-account"
   | "webmcp";
 
@@ -302,6 +304,18 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Manage emails", to: "/settings#emails" },
   },
+  "change-password": {
+    icon: KeyRound,
+    title: "Your password, your timing",
+    body: () => (
+      <>
+        Settings → Password takes your current password and sets a new one. It
+        signs out every other device, and connected assistants reconnect on
+        their next sign-in.
+      </>
+    ),
+    cta: { label: "Change password", to: "/settings#change-password" },
+  },
   "close-account": {
     icon: Trash2,
     title: "Leave whenever you want",
@@ -334,6 +348,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reports",
     "search-operators",
     "email-preferences",
+    "change-password",
     "close-account",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.

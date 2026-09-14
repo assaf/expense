@@ -36,6 +36,20 @@ reads and writes are scoped; see `app/lib/db/`).
   outcome (no account enumeration); unverified accounts are skipped (their
   verification link is the recovery). The token is consumed on use, and the
   password contract matches signup (`validateSignup` rules).
+- **Changing your password** is self-serve (Settings → Password): the current
+  password goes through `confirmPassword` (login's lockout key and constant-time
+  comparison, so a stolen session can't grind passwords through this form),
+  then `changeUserPassword` (`app/lib/db/accounts.ts`) writes the new hash with
+  a fresh `credentialsChangedAt`. The epoch bump ends every session minted
+  under the old password, `revokeAllUserOAuthTokens` ends the connected apps,
+  and the response re-mints this device's cookie from the epoch Postgres
+  actually stored, so the person who made the change stays signed in. A reset
+  link requested earlier is dropped in the same write: it is a credential that
+  would otherwise still set a password without the new one. The length bounds
+  come from `validatePassword`, the contract signup, join and the reset link
+  use as well. `/.well-known/change-password` publishes the section
+  as the origin's change-password URL (W3C WebAppSec): a 302, the only redirect
+  kind that spec allows, to `/settings#change-password`.
 - **Closing your own account** is self-serve (Settings → Close account): the
   user re-enters their password (`confirmPassword` in `app/lib/auth.server.ts`
   reuses login's lockout key and constant-time comparison), then

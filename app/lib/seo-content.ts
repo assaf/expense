@@ -259,6 +259,10 @@ const STANDALONE_FAQS: Faq[] = [
     answer: `Yes. Share the invitation code, and any new users you invite will see the same expense information. Any other accounts will remain completely separate.`,
   },
   {
+    question: "How do I change my password?",
+    answer: `Settings has a Password section: enter your current password, then the new one twice. Changing it signs you out on every other device and disconnects any assistant app, since those were authorized under the old password. If you don't remember the current password, use "Forgot password?" on the login page instead: a single-use link arrives by email and sets a new one.`,
+  },
+  {
     question: "Where is my expense data stored?",
     answer: `On your account only. Expense doesn't serve ads, it doesn't sell your data; receipts and expenses are restricted to your account, and exported as PDF or ZIP anytime you wish.`,
   },
@@ -994,7 +998,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     title: "Your controls",
     paragraphs: [
-      "Delete any expense or report, disconnect a mailbox (which deletes its stored tokens), or revoke an assistant's access, all in the app.",
+      "Change your password in Settings (which signs out your other devices), delete any expense or report, disconnect a mailbox (which deletes its stored tokens), or revoke an assistant's access, all in the app.",
       "Close your account in Settings whenever you like: your expenses, receipt images, reports, trips and connected mailboxes are deleted straight away, and the account itself goes with them when you are its last member. If other people are still on the account, only your login leaves.",
     ],
   },

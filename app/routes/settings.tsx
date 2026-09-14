@@ -14,7 +14,13 @@ import { PageShell } from "~/components/PageShell";
 import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
 import { LocationsList } from "~/components/settings/locations-list";
-import { confirmPassword, logout, requireUser } from "~/lib/auth.server";
+import { PasswordSection } from "~/components/settings/password-section";
+import {
+  changePassword,
+  confirmPassword,
+  logout,
+  requireUser,
+} from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { geocode } from "~/lib/maps.server";
 import {
@@ -269,6 +275,31 @@ export async function action({ request }: Route.ActionArgs) {
       }
       break;
     }
+    // Refusals come back as JSON so the section can show the reason inline
+    // (a wrong current password, a mismatch, a too-short new one). Success
+    // navigates instead of answering JSON: password managers watch the
+    // submission to decide the change worked and the new password is worth
+    // saving (Chrome's automated password change is explicit about wanting a
+    // navigation), and the response re-mints this device's session cookie so
+    // the navigation stays signed in.
+    case "changePassword": {
+      const newPassword = formString(form, "newPassword");
+      if (newPassword !== formString(form, "confirmPassword")) {
+        return Response.json({
+          ok: false,
+          error: "Those passwords don't match.",
+        });
+      }
+      const result = await changePassword(
+        user,
+        formString(form, "currentPassword"),
+        newPassword,
+      );
+      if (!result.ok) return Response.json(result);
+      return redirect("/settings?password=changed#change-password", {
+        headers: { "Set-Cookie": result.cookie },
+      });
+    }
     // JSON rather than a redirect, so a wrong password leaves the dialog open
     // with its inline error. On success the cookie is cleared in the same
     // response and the client does a full navigation (see the page component).
@@ -516,6 +547,8 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       </Section>
 
       <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
+
+      <PasswordSection userEmail={userEmail} />
 
       <Section
         title="Session"

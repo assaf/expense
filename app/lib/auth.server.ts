@@ -13,6 +13,7 @@ import { sendVerificationEmail as sendPasswordResetEmail } from "./verification-
 import { escapeHtml } from "./escape";
 import { paragraph } from "./email-layout.server";
 import {
+  changeUserPassword,
   createAccount,
   createUser,
   deleteUnverifiedUser,
@@ -595,14 +596,7 @@ export async function resetPasswordWithToken(
   await initStore();
   // Same password contract as signup: check BEFORE the token is consumed,
   // so a bad password doesn't burn a live link.
-  if (password.length < 8) {
-    throw new Error("Password must be at least 8 characters");
-  }
-  if (password.length > MAX_PASSWORD_LENGTH) {
-    throw new Error(
-      `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
-    );
-  }
+  validatePassword(password);
   // The hash is derived inside the store call, after the token row
   // validates: an invalid token must not buy a scrypt derivation.
   const outcome = await resetUserPasswordWithToken(rawToken, password);
@@ -613,6 +607,46 @@ export async function resetPasswordWithToken(
     throw new Error("This reset link has expired — request a new one.");
   }
   return { email: outcome.email };
+}
+
+/**
+ * Change a signed-in user's password. The current one is verified the way
+ * login verifies it (same lockout key, same constant-time comparison, same
+ * failure bookkeeping), so a stolen session can't use this form to grind
+ * through passwords it doesn't know.
+ *
+ * On success the new password supersedes the old credential: other devices
+ * are signed out, connected apps are revoked (see changeUserPassword), and
+ * that includes the session that asked for the change. The returned cookie
+ * re-mints it, and the caller has to send it back or the user signs
+ * themselves out. Never throws on bad input; the message belongs to the form.
+ */
+export async function changePassword(
+  user: Pick<User, "id" | "email">,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ ok: true; cookie: string } | { ok: false; error: string }> {
+  const confirmed = await confirmPassword(user, currentPassword);
+  if (!confirmed.ok) return confirmed;
+  const problem = passwordProblem(newPassword);
+  if (problem) return { ok: false, error: problem };
+  // Setting the same password again would bump the epoch and revoke every
+  // connected app for nothing, so it is refused instead of silently landed.
+  const stored = await getPasswordHash(user.id);
+  if (await verifyPasswordWithParity(newPassword, stored)) {
+    return { ok: false, error: "That's already your password." };
+  }
+  const epoch = await changeUserPassword(
+    user.id,
+    await hashPassword(newPassword),
+  );
+  return {
+    ok: true,
+    cookie: await commitUserSession({
+      id: user.id,
+      credentialsChangedAt: epoch,
+    }),
+  };
 }
 
 /**
@@ -652,21 +686,35 @@ async function ensureDefaultSender(user: User, origin?: string): Promise<void> {
   }
 }
 
-/** Shared signup validation: email format + password length bounds. The
- * Fastmail onboarding flow reuses this for the create step, so the
- * password contract is identical to email signup. */
+/** The password contract, in one place: signup, join, the emailed reset link
+ * and the Settings change all check the same two bounds. Returns the
+ * user-facing message, or null when the password is acceptable; the callers
+ * that hand a message to a form use this form, the rest wrap it. */
+function passwordProblem(password: string): string | null {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return `Password must be at most ${MAX_PASSWORD_LENGTH} characters`;
+  }
+  return null;
+}
+
+/** The password contract as a throwing validator (the signup/join/reset
+ * shape: the message bubbles up to the form that rendered it). */
+function validatePassword(password: string): void {
+  const problem = passwordProblem(password);
+  if (problem) throw new Error(problem);
+}
+
+/** Shared signup validation: email format + the password contract above. The
+ * Fastmail onboarding flow reuses this for the create step, so the password
+ * rules are identical to email signup. */
 export function validateSignup(email: string, password: string): void {
   if (!isEmail(email)) {
     throw new Error("Enter a valid email address");
   }
-  if (password.length < 8) {
-    throw new Error("Password must be at least 8 characters");
-  }
-  if (password.length > MAX_PASSWORD_LENGTH) {
-    throw new Error(
-      `Password must be at most ${MAX_PASSWORD_LENGTH} characters`,
-    );
-  }
+  validatePassword(password);
 }
 
 /** Destroy the session and return the Set-Cookie header value that clears it. */

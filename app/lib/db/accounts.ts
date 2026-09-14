@@ -295,6 +295,35 @@ export async function updateUserPasswordHash(
   await db.orm.public.User.where({ id: userId }).update({ passwordHash });
 }
 
+/** Change a signed-in user's password: the new hash plus a fresh credentials
+ * epoch, so a session minted under the old password is refused from the next
+ * request on (requireUser compares the epoch), the user's OAuth tokens are
+ * revoked, and the id→user cache is busted. `updateUserPasswordHash` above is
+ * only the login-time rehash; this one supersedes the old credential.
+ *
+ * A reset link that was requested earlier dies here too: it is a credential
+ * that would set a password without the new one, and the usual reason to
+ * change a password is that the old one may be in someone else's hands.
+ *
+ * Returns the stored epoch, which is what the session check compares against:
+ * the caller re-mints its own cookie with it (the epoch it bumped includes the
+ * session that asked for the change), and the stored text is the only value
+ * that matches byte for byte. */
+export async function changeUserPassword(
+  userId: string,
+  passwordHash: string,
+): Promise<string> {
+  await db.orm.public.User.where({ id: userId }).update({
+    passwordHash,
+    credentialsChangedAt: nowWire(),
+    passwordResetTokenHash: null,
+    passwordResetSentAt: null,
+  });
+  await revokeAllUserOAuthTokens(userId);
+  bust(userCache, userId);
+  return readCredentialsEpoch(userId);
+}
+
 /** Store the current verification token for a user (sha256 at rest) with a
  * fresh sent-at time. Called by the signup/join flows and the resend path. */
 export async function setUserVerificationToken(
