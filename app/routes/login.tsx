@@ -226,6 +226,16 @@ export default function LoginPage() {
     );
   }
 
+  // The close-account flow lands here with the session already gone; say what
+  // happened. The two outcomes differ: the last member's whole account went
+  // with them, a member of a shared account only lost their own login.
+  const closeNotice =
+    searchParams.get("closed") === "1"
+      ? "Your account is closed and everything in it has been deleted. You can create a new one any time."
+      : searchParams.get("left") === "1"
+        ? "You've left the account. Your login, apps and receipts-by-email address are removed; the account and its expenses stay with the other members. You can create a new account any time."
+        : null;
+
   const titles: Record<Mode, { title: string; blurb: string }> = {
     signin: {
       title: "Sign in to Expense",
@@ -256,6 +266,13 @@ export default function LoginPage() {
         title={titles[mode].title}
         blurb={titles[mode].blurb}
       />
+
+      {/* Never alongside an error: the error line is the more urgent one. */}
+      {closeNotice && !error ? (
+        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+          {closeNotice}
+        </p>
+      ) : null}
 
       <fetcher.Form method="post" className="flex flex-col gap-4">
         <input type="hidden" name="mode" value={mode} />

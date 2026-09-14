@@ -1,26 +1,32 @@
-import { useMemo } from "react";
-import { Check, LogOut, RefreshCw, Settings } from "lucide-react";
-import { Form, redirect } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Check, LogOut, RefreshCw, Settings, Trash2 } from "lucide-react";
+import { Form, redirect, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
+import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
+import { Field } from "~/components/ui/Field";
 import { FieldLabel } from "~/components/ui/FieldLabel";
+import { Input } from "~/components/ui/Input";
 import { Section } from "~/components/ui/Section";
 import { StatusNote } from "~/components/ui/StatusNote";
 import { PageShell } from "~/components/PageShell";
 import { AgentsSection } from "~/components/settings/agents-section";
 import { CategoryRow, NameList } from "~/components/settings/name-list";
 import { LocationsList } from "~/components/settings/locations-list";
-import { requireUser } from "~/lib/auth.server";
+import { confirmPassword, logout, requireUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { geocode } from "~/lib/maps.server";
 import {
+  closeUserAccount,
+  readAccountFootprint,
   readAccount,
   readAccountUsers,
   regenerateInviteCode,
   readMarketingUnsubscribed,
   resubscribeMarketingEmail,
   unsubscribeMarketingEmail,
+  type AccountFootprint,
 } from "~/lib/db/accounts";
 import {
   addCategory,
@@ -63,6 +69,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     rates,
     members,
     locations,
+    footprint,
   ] = await Promise.all([
     readCategories(user.accountId),
     readSettings(user.accountId),
@@ -71,6 +78,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     readMileageRates(),
     readAccountUsers(user.accountId),
     readLocations(user.accountId),
+    readAccountFootprint(user.accountId),
   ]);
   // The "current rate" line is computed CLIENT-side from the browser's
   // local today; the server runs UTC and must not guess the user's day.
@@ -86,6 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     locations,
     userEmail: user.email,
     marketingUnsubscribed: await readMarketingUnsubscribed(user.id),
+    footprint,
     rates,
     oauthSessions,
     members,
@@ -95,6 +104,51 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export function meta(): Route.MetaDescriptors {
   return [{ title: "Settings — Expense" }];
+}
+
+/** The sentence under "Close account": what the button actually does right
+ * now, with the live counts. Each clause is dropped when its count is zero,
+ * and trips only apply to the last-member case (a shared account keeps them
+ * either way). */
+function closeAccountSummary(footprint: AccountFootprint): string {
+  const parts: string[] = [];
+  if (footprint.receipts > 0) {
+    parts.push(
+      `${footprint.receipts} receipt${footprint.receipts === 1 ? "" : "s"}`,
+    );
+  }
+  if (footprint.members === 1 && footprint.trips > 0) {
+    parts.push(`${footprint.trips} trip${footprint.trips === 1 ? "" : "s"}`);
+  }
+  if (footprint.reports > 0) {
+    parts.push(
+      `${footprint.reports} report${footprint.reports === 1 ? "" : "s"}`,
+    );
+  }
+  if (footprint.mailboxes > 0) {
+    parts.push(
+      `${footprint.mailboxes} connected mailbox${footprint.mailboxes === 1 ? "" : "es"}`,
+    );
+  }
+  const listed =
+    parts.length < 2
+      ? (parts[0] ?? "")
+      : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]!}`;
+  if (footprint.members === 1) {
+    return `Close your account and everything in it is deleted${listed ? `: ${listed}` : ""}.`;
+  }
+  const others = footprint.members - 1;
+  return [
+    "Close your account and your login, apps and receipts-by-email address are removed.",
+    listed
+      ? `The account's ${listed} stay with its other ${others} member${others === 1 ? "" : "s"}.`
+      : "",
+    footprint.mailboxes
+      ? "Mailboxes connected to this account keep importing until someone disconnects them."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -215,6 +269,25 @@ export async function action({ request }: Route.ActionArgs) {
       }
       break;
     }
+    // JSON rather than a redirect, so a wrong password leaves the dialog open
+    // with its inline error. On success the cookie is cleared in the same
+    // response and the client does a full navigation (see the page component).
+    case "closeAccount": {
+      const confirmed = await confirmPassword(
+        user,
+        formString(form, "password"),
+      );
+      if (!confirmed.ok) return Response.json(confirmed);
+      const outcome = await closeUserAccount({
+        id: user.id,
+        accountId: user.accountId,
+        email: user.email,
+      });
+      return Response.json(
+        { ok: true, ...outcome },
+        { headers: { "Set-Cookie": await logout(request) } },
+      );
+    }
     default:
       return unknownIntent();
   }
@@ -234,6 +307,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     members,
     mcpUrl,
     marketingUnsubscribed,
+    footprint,
   } = loaderData;
   // The "current rate" line depends on the browser's local today (the
   // server runs UTC); computed client-side after mount.
@@ -242,6 +316,25 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
     () => (today ? currentMileageRates(rates, today) : null),
     [today, rates],
   );
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const [closePassword, setClosePassword] = useState("");
+  const closeFetcher = useFetcher<{
+    ok?: true;
+    deleted?: "account" | "user";
+    error?: string;
+  }>();
+  // The account (and this session) is gone once the action succeeds, so the
+  // whole route tree has to re-resolve anonymously: a fetch-based redirect
+  // would leave the root loader's cached user in place. The landing notice
+  // tells the two outcomes apart.
+  useEffect(() => {
+    if (!closeFetcher.data?.ok) return;
+    window.location.assign(
+      closeFetcher.data.deleted === "user"
+        ? "/login?left=1"
+        : "/login?closed=1",
+    );
+  }, [closeFetcher.data]);
   return (
     <PageShell
       className="settings-page"
@@ -440,6 +533,72 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
           </Form>
         </div>
       </Section>
+
+      <Section
+        id="close-account"
+        title="Close account"
+        className="border-t border-gray-100 dark:border-gray-800 pt-6 scroll-mt-6"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-gray-400">
+            {closeAccountSummary(footprint)}
+          </p>
+          <Button
+            type="button"
+            size="md"
+            variant="danger"
+            className="shrink-0"
+            onClick={() => setConfirmingClose(true)}
+          >
+            <Trash2 aria-hidden="true" className="h-4 w-4" /> Close my account
+          </Button>
+        </div>
+      </Section>
+
+      {confirmingClose ? (
+        <ConfirmDialog
+          message={
+            footprint.members === 1
+              ? "Close your account?"
+              : "Leave this account?"
+          }
+          confirmLabel={
+            footprint.members === 1 ? "Close my account" : "Leave account"
+          }
+          onConfirm={() => {
+            void closeFetcher.submit(
+              { intent: "closeAccount", password: closePassword },
+              { method: "post" },
+            );
+          }}
+          onCancel={() => {
+            setConfirmingClose(false);
+            setClosePassword("");
+          }}
+          deleting={closeFetcher.state !== "idle"}
+        >
+          <p>
+            {footprint.members === 1
+              ? "Everything in it is deleted, now and permanently."
+              : "Your login leaves; the account and its receipts stay with the others."}
+          </p>
+          <Field label="Password" className="mt-3">
+            <Input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              value={closePassword}
+              onChange={(e) => setClosePassword(e.currentTarget.value)}
+              invalid={Boolean(closeFetcher.data?.error)}
+            />
+          </Field>
+          {closeFetcher.data?.error ? (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+              {closeFetcher.data.error}
+            </p>
+          ) : null}
+        </ConfirmDialog>
+      ) : null}
     </PageShell>
   );
 }

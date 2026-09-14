@@ -929,7 +929,7 @@ For the browser-based in-page tools (WebMCP), and the app's own Insights page th
 // --- Privacy policy (/privacy) ---------------------------------------------
 
 /** The date the policy last changed; the page and its mirror both show it. */
-export const PRIVACY_UPDATED = "September 13, 2026";
+export const PRIVACY_UPDATED = "September 14, 2026";
 
 /** One-paragraph summary of the policy, quoted by /privacy and /privacy.md. */
 export const PRIVACY_SUMMARY =
@@ -995,7 +995,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
     title: "Your controls",
     paragraphs: [
       "Delete any expense or report, disconnect a mailbox (which deletes its stored tokens), or revoke an assistant's access, all in the app.",
-      "There is no self-serve account deletion yet. Email assaf@labnotes.org and the account and everything in it is deleted.",
+      "Close your account in Settings whenever you like: your expenses, receipt images, reports, trips and connected mailboxes are deleted straight away, and the account itself goes with them when you are its last member. If other people are still on the account, only your login leaves.",
     ],
   },
   {
@@ -1024,7 +1024,7 @@ ${sections}
 // --- Terms of service (/terms) ---------------------------------------------
 
 /** The date the terms last changed; the page and its mirror both show it. */
-export const TERMS_UPDATED = "September 13, 2026";
+export const TERMS_UPDATED = "September 14, 2026";
 
 /** One-paragraph summary of the terms, quoted by /terms and /terms.md. */
 export const TERMS_SUMMARY =
@@ -1086,7 +1086,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: "Ending it",
     paragraphs: [
-      "You can stop using the app whenever you like. Delete expenses and reports in the app, and disconnect your mailboxes in Settings. There is no self-serve account deletion yet: email assaf@labnotes.org and the account and everything in it is deleted.",
+      "You can close your account in Settings whenever you like: everything in it is deleted, and the account goes with it when you are its last member. If others are still on the account, only your login leaves and you will need to disconnect any mailbox you connected to it first.",
       "I may suspend an account that abuses the service or breaks these terms.",
     ],
   },

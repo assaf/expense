@@ -36,6 +36,19 @@ reads and writes are scoped; see `app/lib/db/`).
   outcome (no account enumeration); unverified accounts are skipped (their
   verification link is the recovery). The token is consumed on use, and the
   password contract matches signup (`validateSignup` rules).
+- **Closing your own account** is self-serve (Settings → Close account): the
+  user re-enters their password (`confirmPassword` in `app/lib/auth.server.ts`
+  reuses login's lockout key and constant-time comparison), then
+  `closeUserAccount` (`app/lib/db/accounts.ts`) runs. The last member's
+  account is deleted outright: the `Account` cascade plus the rows no FK
+  reaches (`email_rules`, and the user's OAuth tokens/consents/codes and
+  insights conversations). Any other member loses only their own login, the
+  address claim, and those user-keyed rows. Deletion is immediate and
+  permanent, and the closed session dies with it: `readCredentialsEpoch`
+  answers a sentinel when the user row is gone, so a cookie for a deleted
+  user is refused on every instance instead of surviving for the 30-second
+  `findUserById` cache. `deleteUnverifiedUser` (the re-signup path) is the
+  same primitive behind its guards.
 - **Marketing emails are opt-out per user** (`users.marketingUnsubscribedAt`):
   every marketing email carries one permanent unsubscribe link
   (`/unsubscribe/<token>`, also in the `List-Unsubscribe` header for

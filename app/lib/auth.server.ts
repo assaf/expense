@@ -85,9 +85,12 @@ export const sessionStorage = createCookieSessionStorage({
  * session minted before the user's last password change is not valid: the
  * epoch comparison is what revokes it. A cookie from before this check existed
  * carries no epoch, and a user who never reset has none either, so both
- * normalize to "" and existing sessions keep working. Exported for the OAuth
- * callbacks, which resolve the parked session's user without requireUser
- * (they must not redirect). */
+ * normalize to "" and existing sessions keep working. A user row that is gone
+ * reads as the `DELETED_EPOCH` sentinel instead (see readCredentialsEpoch), so
+ * a closed account's cookie is refused immediately rather than when the
+ * process-local user cache expires. Exported
+ * for the OAuth callbacks, which resolve the parked session's user without
+ * requireUser (they must not redirect). */
 export async function sessionUser(request: Request): Promise<User | undefined> {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
@@ -351,6 +354,40 @@ export async function login(
   }
   await ensureDefaultSender(user, origin);
   return commitUserSession(user);
+}
+
+/** Re-authenticate a signed-in user for a destructive action. Same lockout
+ * key, same constant-time comparison, and the same failure bookkeeping login
+ * uses, so a stolen session cannot brute-force the password through this path.
+ * Never throws on a mismatch; the error text is the caller's to render. */
+export async function confirmPassword(
+  user: Pick<User, "id" | "email">,
+  password: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const lockKey = `login:${user.email.trim().toLowerCase()}`;
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    // Same short-circuit login uses: nothing the app stored could be this
+    // long, so scrypt never runs.
+    return { ok: false, error: "That password doesn't match." };
+  }
+  try {
+    await guardLockout(lockKey);
+  } catch (error) {
+    // The lockout owns its user-facing text; a different failure is a bug.
+    if (error instanceof TooManyAttemptsError) {
+      return { ok: false, error: error.message };
+    }
+    throw error;
+  }
+  const stored = await getPasswordHash(user.id);
+  if (!(await verifyPasswordWithParity(password, stored))) {
+    await recordFailureBestEffort(lockKey);
+    // Deliberately not login's "Invalid email or password": the caller is
+    // already signed in, so the address is not a secret here.
+    return { ok: false, error: "That password doesn't match." };
+  }
+  await clearFailuresBestEffort(lockKey);
+  return { ok: true };
 }
 
 /**

@@ -1,3 +1,4 @@
+import { and } from "@prisma/orm-postgres/orm-client";
 import { ulid } from "ulid";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
@@ -26,6 +27,7 @@ import {
   withinWindow,
 } from "~/lib/db/shared";
 import { initStore, seedDefaultCategories } from "~/lib/db/seed";
+import { extractEmailAddress } from "~/lib/validation";
 import type { Account, User } from "~/lib/types";
 
 // --- Accounts --------------------------------------------------------------
@@ -254,6 +256,11 @@ export async function findUserById(id: string): Promise<User | undefined> {
   );
 }
 
+/** The value readCredentialsEpoch returns when the user row is gone. A real
+ * epoch is ISO text or "" (a user who never reset), so a closed account's
+ * cookie can never match it. */
+const DELETED_EPOCH = "deleted";
+
 /** The user's credential epoch, read straight from Postgres: this is the
  * value a session cookie is checked against, and a password reset on
  * another instance must be observed immediately. The cache above is
@@ -264,7 +271,10 @@ export async function readCredentialsEpoch(userId: string): Promise<string> {
   const row = await db.orm.public.User.where({ id: userId })
     .select("credentialsChangedAt")
     .first();
-  return toIsoOrNull(row?.credentialsChangedAt ?? null) ?? "";
+  // "" would match the epoch a never-reset session carries, and the 30s user
+  // cache serves deleted users meanwhile: a closed account's cookie would keep
+  // working on a warm instance. The sentinel closes that window.
+  return row ? (toIsoOrNull(row.credentialsChangedAt) ?? "") : DELETED_EPOCH;
 }
 
 /** The stored password hash for a user (never exposed on the User type). */
@@ -329,6 +339,121 @@ export async function verifyUserEmailAddress(
   return { status: "verified", email: row.email };
 }
 
+/** What closing this account would delete, for the confirm dialog. */
+export interface AccountFootprint {
+  members: number;
+  receipts: number;
+  trips: number;
+  reports: number;
+  mailboxes: number;
+}
+
+/** Per-table counts for the close-account dialog. `readExpenses` would load
+ * every row to answer the same question, and the per-category counts the
+ * settings page already has exclude closed reports, so a footprint read is
+ * the only way to state the receipt total exactly. */
+export async function readAccountFootprint(
+  accountId: string,
+): Promise<AccountFootprint> {
+  const [members, receipts, trips, reports, mailboxes] = await Promise.all([
+    db.orm.public.User.where((u) => u.accountId.eq(accountId)).aggregate(
+      (a) => ({
+        count: a.count(),
+      }),
+    ),
+    db.orm.public.Expense.where((e) =>
+      and(e.accountId.eq(accountId), e._type.eq("receipt")),
+    ).aggregate((a) => ({ count: a.count() })),
+    db.orm.public.Expense.where((e) =>
+      and(e.accountId.eq(accountId), e._type.eq("mileage")),
+    ).aggregate((a) => ({ count: a.count() })),
+    db.orm.public.Report.where((r) => r.accountId.eq(accountId)).aggregate(
+      (a) => ({ count: a.count() }),
+    ),
+    db.orm.public.EmailConnection.where((c) =>
+      c.accountId.eq(accountId),
+    ).aggregate((a) => ({ count: a.count() })),
+  ]);
+  return {
+    members: members.count,
+    receipts: receipts.count,
+    trips: trips.count,
+    reports: reports.count,
+    mailboxes: mailboxes.count,
+  };
+}
+
+/** Close one user's own account: the account and everything in it when they
+ * are its last member, otherwise only that user and the rows keyed to them.
+ * Returns which happened. */
+export async function closeUserAccount(user: {
+  id: string;
+  accountId: string;
+  email: string;
+}): Promise<{ deleted: "account" | "user" }> {
+  const normalized = extractEmailAddress(user.email);
+  const deleted = await db.transaction(async (tx) => {
+    // The rows keyed to this user that no FK reaches: an assistant's tokens,
+    // consents and in-flight codes, and the insights chat history. Deleting
+    // the account below would not take them (their FKs point at the client,
+    // not the account).
+    await tx.orm.public.OAuthToken.where((t) =>
+      t.userId.eq(user.id),
+    ).deleteAll();
+    await tx.orm.public.OAuthConsent.where((c) =>
+      c.userId.eq(user.id),
+    ).deleteAll();
+    await tx.orm.public.OAuthCode.where((c) =>
+      c.userId.eq(user.id),
+    ).deleteAll();
+    await tx.orm.public.InsightConversation.where((c) =>
+      c.userId.eq(user.id),
+    ).deleteAll();
+    // Lock the account row before counting its members: two members closing
+    // at the same instant would otherwise both read "2 members" and each
+    // leave a userless account behind. Account has no updatedAt, so writing
+    // the name back is a pure row lock. A 0-row update means another close
+    // already deleted the account, which needs no serializing.
+    const account = await readAccount(user.accountId);
+    if (account) {
+      await tx.orm.public.Account.where({ id: user.accountId }).update({
+        name: account.name,
+      });
+    }
+    // The leaver's receipts-by-email claim, exactly as removeInboundSender
+    // drops it: a pending sender row would otherwise keep a verification link
+    // alive for an address that is no longer anyone's.
+    await tx.orm.public.InboundSender.where((s) =>
+      and(s.accountId.eq(user.accountId), s.address.eq(normalized)),
+    ).deleteAll();
+    await tx.orm.public.InboundSenderVerification.where((s) =>
+      and(s.accountId.eq(user.accountId), s.address.eq(normalized)),
+    ).deleteAll();
+    await tx.orm.public.User.where({ id: user.id }).delete();
+    const { count } = await tx.orm.public.User.where((u) =>
+      u.accountId.eq(user.accountId),
+    ).aggregate((a) => ({ count: a.count() }));
+    // Other members are still on the account: only the login left.
+    if (count > 0) return "user";
+    // Last member: delete what the Account cascade cannot reach (email_rules
+    // has no relation), then the account itself, which cascades categories,
+    // locations, reconciliation runs, expenses, duplicate dismissals, email
+    // connections (and their process log), image blobs (the receipt bytes),
+    // inbound emails, senders, sender verifications, receipt extractions,
+    // reports, settings and users. The user's own conversations, tokens and
+    // consents went above; there is nobody else left to own any.
+    await tx.orm.public.EmailRule.where((r) =>
+      r.accountId.eq(user.accountId),
+    ).deleteAll();
+    await tx.orm.public.Account.where({ id: user.accountId }).delete();
+    return "account";
+  });
+  // This instance would otherwise keep serving the deleted user (and, with
+  // the epoch sentinel, keep refusing them) until the cache TTL expired.
+  bust(userCache, user.id);
+  return { deleted };
+}
+
 /** Outcome of a re-signup attempt against an existing email. */
 export type ReplaceUnverifiedOutcome =
   | { status: "replaced" }
@@ -337,37 +462,21 @@ export type ReplaceUnverifiedOutcome =
   | { status: "no-user" };
 
 /** Discard a user's unverified account so a fresh signup with the same
- * email can proceed: deletes the user (and its account when it was the
- * only user) plus its receipts-by-email sender rows, so the old
- * verification link stops working and the email is free again. */
+ * email can proceed: closes the user (deletes the account and everything in
+ * it when they were its only member, otherwise just the user and its
+ * receipts-by-email sender rows), so the old verification link stops
+ * working and the email is free again. */
 export async function deleteUnverifiedUser(
   email: string,
 ): Promise<ReplaceUnverifiedOutcome> {
   const user = await findUserByEmail(email);
   if (!user) return { status: "no-user" };
   if (user.emailVerifiedAt) return { status: "verified" };
-  const { count } = await db.orm.public.User.where((u) =>
-    u.accountId.eq(user.accountId),
-  ).aggregate((a) => ({ count: a.count() }));
-  if (count <= 1) {
-    // The throwaway account holds only this user; drop it (cascades the
-    // user and every account-scoped row).
-    await db.orm.public.Account.where({ id: user.accountId }).delete();
-  } else {
-    // The user joined an existing account: drop just the user and its
-    // receipts-by-email sender rows (the address claim is abandoned too).
-    await db.transaction(async (tx) => {
-      await tx.orm.public.User.where({ id: user.id }).delete();
-      await tx.orm.public.InboundSender.where((s) =>
-        s.accountId.eq(user.accountId),
-      )
-        .where((s) => s.address.eq(email))
-        .deleteAll();
-      await tx.orm.public.InboundSenderVerification.where((s) =>
-        s.address.eq(email),
-      ).deleteAll();
-    });
-  }
+  await closeUserAccount({
+    id: user.id,
+    accountId: user.accountId,
+    email: user.email,
+  });
   return { status: "replaced" };
 }
 

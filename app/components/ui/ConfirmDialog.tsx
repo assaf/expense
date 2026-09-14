@@ -7,7 +7,8 @@ import { Button } from "~/components/ui/Button";
  * label and tone.
  *
  * Traps focus inside the dialog while open and restores it on close. Escape
- * cancels; Tab wraps between Cancel and the action button. */
+ * cancels; Tab cycles through the dialog's controls (the buttons, plus any
+ * focusable `children`). */
 export function ConfirmDialog({
   message,
   onConfirm,
@@ -44,7 +45,10 @@ export function ConfirmDialog({
     };
   }, []);
 
-  // Trap focus: Tab / Shift+Tab cycle between Cancel and the action button.
+  // Trap focus: Tab / Shift+Tab cycle through every control in the dialog.
+  // The children may hold a field (the close-account password), so the cycle
+  // is read from the DOM rather than assumed to be the two buttons: a
+  // hardcoded Cancel/confirm pair would leave that field unreachable by Tab.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -53,9 +57,11 @@ export function ConfirmDialog({
         return;
       }
       if (e.key !== "Tab") return;
-      const focusable = [cancelRef.current, confirmRef.current].filter(
-        (el): el is HTMLButtonElement => el !== null,
-      );
+      const focusable = [
+        ...(dialogRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? []),
+      ].filter((el) => el.offsetParent !== null);
       if (focusable.length < 2) return;
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;

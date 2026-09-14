@@ -14,6 +14,7 @@ import {
   ReceiptText,
   Search,
   Tags,
+  Trash2,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -49,6 +50,7 @@ export type HighlightId =
   | "search-operators"
   | "shortcut-hints"
   | "email-preferences"
+  | "close-account"
   | "webmcp";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
@@ -300,6 +302,18 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Manage emails", to: "/settings#emails" },
   },
+  "close-account": {
+    icon: Trash2,
+    title: "Leave whenever you want",
+    body: () => (
+      <>
+        Settings can close your account and delete everything in it: expenses,
+        receipt images, reports, trips and connected mailboxes. If others are
+        still on the account, only your login leaves.
+      </>
+    ),
+    cta: { label: "Close account", to: "/settings#close-account" },
+  },
 };
 /** Every highlight id, for the /_highlights preview page. */
 export const HIGHLIGHT_IDS = Object.keys(HIGHLIGHTS) as HighlightId[];
@@ -320,6 +334,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reports",
     "search-operators",
     "email-preferences",
+    "close-account",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.
   if (!data.hasEmailConnection) pool.push("connect-email");
