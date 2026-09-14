@@ -264,7 +264,7 @@ const STANDALONE_FAQS: Faq[] = [
   },
   {
     question: "How do I change my email address?",
-    answer: `In Settings, under Emails, enter the new address and your current password. Your old address gets an email telling you it changed, so you find out either way, and the new one gets a link to confirm it before receipts sent from there are accepted.`,
+    answer: `In Settings, open Your email and enter the new address plus your current password. Your old address gets an email telling you it changed, so you find out either way, and the new one gets a link to confirm it before receipts sent from there are accepted.`,
   },
   {
     question: "Where is my expense data stored?",

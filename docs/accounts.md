@@ -50,7 +50,7 @@ reads and writes are scoped; see `app/lib/db/`).
   use as well. `/.well-known/change-password` publishes the section
   as the origin's change-password URL (W3C WebAppSec): a 302, the only redirect
   kind that spec allows, to `/settings#change-password`.
-- **Changing your sign-in email** is self-serve too (Settings → Emails): the
+- **Changing your sign-in email** is self-serve too (Settings → Your email): the
   new address plus the current password. It lands immediately, because the
   address is a login identifier on an already-verified account, and it reuses
   the rule signup applies (`claimEmailAddress`): an unverified signup holding
@@ -64,7 +64,7 @@ reads and writes are scoped; see `app/lib/db/`).
   can act), and the new address becomes the default receipts-by-email sender,
   so it gets its own verification link before receipts from it are accepted.
   Sender rows are keyed by address, so the old address keeps importing until it
-  is removed in Emails.
+  is removed on the Email page.
 - **Closing your own account** is self-serve (Settings → Close account): the
   user re-enters their password (`confirmPassword` in `app/lib/auth.server.ts`
   reuses login's lockout key and constant-time comparison), then
@@ -85,7 +85,7 @@ reads and writes are scoped; see `app/lib/db/`).
   user id (`app/lib/unsubscribe.server.ts`, purpose-salted so tokens can't
   be reused across flows), never expires, and IS the credential: no login.
   GET renders a confirmation (mail scanners follow links; the write is
-  POST-only), the same POST serves one-click, and Settings → Emails can
+  POST-only), the same POST serves one-click, and Settings → Your email can
   re-subscribe. Any future marketing sender must gate on
   `readMarketingUnsubscribed(userId)` and use `marketingFooter` +
   `marketingEmailHeaders` from `email-layout.server.ts`. Transactional

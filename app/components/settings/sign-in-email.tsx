@@ -10,7 +10,7 @@ import { Input } from "~/components/ui/Input";
 import { StatusNote } from "~/components/ui/StatusNote";
 
 /**
- * Settings → Emails: the address this account signs in with, and the form
+ * Settings → Your email: the address this account signs in with, and the form
  * that moves it. The change is immediate, so the address shown here is read
  * fresh by the loader (not from the 30-second user cache), and the action
  * navigates on success (see the action) so this card re-renders with the new
@@ -102,8 +102,8 @@ export function SignInEmailForm({ userEmail }: { userEmail: string }) {
       ) : (
         <StatusNote className="mt-3 text-xs">
           We email the new address a link to confirm it before receipts sent
-          from there are accepted. Until you remove it in Emails, the old
-          address keeps importing receipts.
+          from there are accepted. Until you remove it on the Email page, the
+          old address keeps importing receipts.
         </StatusNote>
       )}
     </Card>

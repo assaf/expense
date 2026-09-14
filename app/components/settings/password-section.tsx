@@ -57,11 +57,7 @@ export function PasswordSection({ userEmail }: { userEmail: string }) {
   }
 
   return (
-    <Section
-      id="change-password"
-      title="Password"
-      className="border-t border-gray-100 dark:border-gray-800 pt-6 scroll-mt-6"
-    >
+    <Section id="change-password" title="Password">
       <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
         Change the password you sign in with. Every other device is signed out
         and connected assistants have to be reconnected; your expenses, reports

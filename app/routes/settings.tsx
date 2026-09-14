@@ -394,7 +394,66 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
       icon={<Settings aria-hidden="true" className="h-6 w-6" />}
       title="Settings"
     >
-      <Section title="Account" className="mb-8">
+      {/* The page reads as three groups: the settings everyone in the account
+          shares, the account itself (name, members and the code that adds
+          them), then what belongs to the signed-in user. The rules separate
+          the groups; sections inside one are spaced, not ruled. */}
+      <NameList
+        title="Categories"
+        id="categories"
+        items={categories}
+        addIntent="addCategory"
+        addPlaceholder="Add category"
+        renderItem={(category) => (
+          <CategoryRow key={category.name} category={category} />
+        )}
+      />
+
+      <Section id="mileage-rates" title="Mileage rates">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          The IRS rate for a trip is picked automatically from its date and type
+          (business, charity, medical, moving).{" "}
+          {currentRates ? (
+            <>
+              <span className="font-medium text-gray-700 dark:text-gray-200">
+                {currentRates.isCurrent ? "Current" : "Latest published"}:{" "}
+                {MILEAGE_TYPES.map(
+                  (t) =>
+                    `${MILEAGE_TYPE_LABELS[t]} $${formatRate(currentRates.byType[t] ?? "")}`,
+                ).join(" · ")}{" "}
+                / mi
+              </span>{" "}
+              ({periodLabel(currentRates.startDate, currentRates.endDate)}
+              ).{" "}
+            </>
+          ) : null}
+          Updated from the{" "}
+          <a
+            href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            IRS standard mileage rates page
+          </a>
+          .
+        </p>
+      </Section>
+
+      <Section id="start-location" title="Locations">
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+          Home is where a trip starts by default, so it can't be removed. The
+          other locations are places you drive to; pick one by name when you log
+          a trip.
+        </p>
+        <LocationsList homeAddress={homeAddress} locations={locations} />
+      </Section>
+
+      <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
+
+      <hr className="mb-8 border-t border-gray-200 dark:border-gray-700" />
+
+      <Section title="Account">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Everyone in this account shares expenses, reports, categories, and
           settings.
@@ -477,58 +536,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </Card>
       </Section>
 
-      <NameList
-        title="Categories"
-        id="categories"
-        items={categories}
-        addIntent="addCategory"
-        addPlaceholder="Add category"
-        renderItem={(category) => (
-          <CategoryRow key={category.name} category={category} />
-        )}
-      />
+      <hr className="mb-8 border-t border-gray-200 dark:border-gray-700" />
 
-      <Section id="mileage-rates" title="Mileage rates">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          The IRS rate for a trip is picked automatically from its date and type
-          (business, charity, medical, moving).{" "}
-          {currentRates ? (
-            <>
-              <span className="font-medium text-gray-700 dark:text-gray-200">
-                {currentRates.isCurrent ? "Current" : "Latest published"}:{" "}
-                {MILEAGE_TYPES.map(
-                  (t) =>
-                    `${MILEAGE_TYPE_LABELS[t]} $${formatRate(currentRates.byType[t] ?? "")}`,
-                ).join(" · ")}{" "}
-                / mi
-              </span>{" "}
-              ({periodLabel(currentRates.startDate, currentRates.endDate)}
-              ).{" "}
-            </>
-          ) : null}
-          Updated from the{" "}
-          <a
-            href="https://www.irs.gov/tax-professionals/standard-mileage-rates"
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            IRS standard mileage rates page
-          </a>
-          .
-        </p>
-      </Section>
-
-      <Section id="start-location" title="Locations">
-        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Home is where a trip starts by default, so it can't be removed. The
-          other locations are places you drive to; pick one by name when you log
-          a trip.
-        </p>
-        <LocationsList homeAddress={homeAddress} locations={locations} />
-      </Section>
-
-      <Section id="emails" title="Emails">
+      <Section id="emails" title="Your email">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
           Receipts-by-email notices and security emails (sign-in verification,
           password resets) go to your sign-in email. Marketing emails (product
@@ -566,14 +576,9 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </Card>
       </Section>
 
-      <AgentsSection oauthSessions={oauthSessions} mcpUrl={mcpUrl} />
-
       <PasswordSection userEmail={userEmail} />
 
-      <Section
-        title="Session"
-        className="border-t border-gray-100 dark:border-gray-800 pt-6"
-      >
+      <Section title="Session">
         <div className="flex items-center justify-between gap-4">
           <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-gray-400">
             Sign out of this device. You will need your email and password to
@@ -587,11 +592,7 @@ export default function SettingsPage({ loaderData }: Route.ComponentProps) {
         </div>
       </Section>
 
-      <Section
-        id="close-account"
-        title="Close account"
-        className="border-t border-gray-100 dark:border-gray-800 pt-6 scroll-mt-6"
-      >
+      <Section id="close-account" title="Close account">
         <div className="flex items-center justify-between gap-4">
           <p className="min-w-0 flex-1 text-sm text-gray-500 dark:text-gray-400">
             {closeAccountSummary(footprint)}

@@ -149,7 +149,7 @@ describe("changing your sign-in email", () => {
     const cookie = await sessionCookie(user.id);
     // The old address is an approved receipts sender; changing the sign-in
     // email doesn't touch sender rows, so it keeps importing until the user
-    // says otherwise in Emails.
+    // says otherwise on the Email page.
     await testPrisma.inboundSender.create({
       data: { accountId: user.accountId, address: user.email, createdAt: NOW },
     });

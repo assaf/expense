@@ -311,8 +311,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Moved to a new address?",
     body: () => (
       <>
-        Your sign-in email is in Settings, under Emails. Change it with your
-        password, and the old address gets a note saying it happened.
+        Change your sign-in email in Settings with your password, and the old
+        address gets a note saying it happened.
       </>
     ),
     cta: { label: "Change email", to: "/settings#sign-in-email" },
