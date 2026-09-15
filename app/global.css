@@ -12,6 +12,10 @@
   --color-paper: #ffffff;
   --color-canvas: #f8f7f2;
   --color-incomplete: #f7eed6;
+  /* The tile behind the mark (public/logo-icon-1024.png): the wordmark wears
+   * it so the lockup reads as one piece. It is a dark color, so dark mode
+   * lightens the wordmark instead (see Logo.tsx). */
+  --color-brand-navy: #15203c;
 
   /* Palette borrowed from judgmentkit.ai: warm paper neutrals in light,
    * green-tinted graphite in dark (body/.dark rules below), deep teal as

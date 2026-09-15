@@ -39,7 +39,7 @@ export function Logo({
         className="h-8 w-8 flex-shrink-0 sm:h-10 sm:w-10"
         draggable={false}
       />
-      <span className="text-2xl font-bold text-teal-600 select-text sm:text-3xl">
+      <span className="text-2xl font-bold text-brand-navy select-text sm:text-3xl dark:text-gray-100">
         Expense
       </span>
     </>
