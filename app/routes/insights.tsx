@@ -14,7 +14,7 @@ import { PageShell } from "~/components/PageShell";
 import { Alert } from "~/components/ui/Alert";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
-import { Input } from "~/components/ui/Input";
+import { Textarea } from "~/components/ui/Textarea";
 import { MonthlyChart } from "~/components/MonthlyChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
@@ -487,6 +487,10 @@ interface Exchange {
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 
+/** How many lines the composer's question field grows to before it starts to
+ * scroll: past that it would eat the transcript it is asking about. */
+const ASK_MAX_LINES = 5;
+
 /** The newest exchange with no answer yet: the question the composer is
  * waiting on, or -1 when nothing is in flight. A stopped exchange is not
  * pending: its request was aborted, so nothing is coming for it. */
@@ -805,7 +809,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // scrollbar); new answers scroll into view only when the user is
   // already near the bottom, never yanking them out of history.
   const scrollRef = useRef<HTMLDivElement>(null);
-  const askRef = useRef<HTMLInputElement>(null);
+  const askRef = useRef<HTMLTextAreaElement>(null);
   const nearBottom = useRef(true);
   // Observes the transcript content: a rendered answer (markdown blocks,
   // chart SVG, images) keeps growing after the state update lands, so the
@@ -844,6 +848,40 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     askRef.current?.focus({ preventScroll: true });
   }, [today]);
+
+  // Grow the field with the question, up to ASK_MAX_LINES; past that it
+  // scrolls. A textarea needs its height measured from the live element (CSS
+  // cannot), and every bound comes from that element's computed style, so the
+  // cap tracks the theme instead of a hardcoded pixel size. Runs on every path
+  // that changes the text, including the Try chips and Stop handing the
+  // question back.
+  useEffect(() => {
+    const el = askRef.current;
+    if (!el) return;
+    const styles = getComputedStyle(el);
+    const lineHeight = Number.parseFloat(styles.lineHeight);
+    const padding =
+      Number.parseFloat(styles.paddingTop) +
+      Number.parseFloat(styles.paddingBottom);
+    // scrollHeight covers the padding box, not the border: without this the
+    // box lands 2px short of its own text (a permanent 2px scroll).
+    const border =
+      Number.parseFloat(styles.borderTopWidth) +
+      Number.parseFloat(styles.borderBottomWidth);
+    const cap = lineHeight * ASK_MAX_LINES + padding + border;
+    // Collapse to one row first, or a shrink measures the box it is still
+    // sitting in and never comes back down.
+    el.style.height = "auto";
+    // Chrome sizes an empty textarea's intrinsic height from its placeholder,
+    // so a phone (where the hint wraps) rests two lines tall and shows the
+    // whole hint: clipping it leaves a sliver of the second line under the
+    // text, which reads as damage.
+    const needed = el.scrollHeight + border;
+    el.style.height = `${Math.min(needed, cap)}px`;
+    // Only a field past the cap scrolls: a scrollbar on an empty composer
+    // (or one holding a clipped placeholder) is noise.
+    el.style.overflowY = needed > cap ? "auto" : "hidden";
+  }, [ask]);
 
   /**
    * One proposal card body: the amber eyebrow, the primary line, the facts
@@ -1144,23 +1182,36 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             name="tz"
             value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
           />
-          <div className="flex gap-2">
-            {/* h-11 + text-base, and a fixed-width button beside it: the
-                field's geometry never changes when the button flips between
-                Ask and Stop, and a 16px font keeps mobile Safari from
-                zooming the page on focus. */}
-            <Input
+          <div className="flex items-end gap-2">
+            {/* One line at rest (the 44px touch target the button shares),
+                growing with the question to ASK_MAX_LINES before it scrolls;
+                text-base keeps mobile Safari from zooming the page on focus. */}
+            <Textarea
               ref={askRef}
               id="insights-ask"
               name="text"
-              type="text"
+              rows={1}
               value={ask}
               onChange={(e) => setAsk(e.target.value)}
+              onKeyDown={(e) => {
+                // A textarea owns Enter, so the send key is handled here
+                // instead of by implicit submission: Shift+Enter is the
+                // newline (and an IME's Enter commits its candidate, it does
+                // not send).
+                if (
+                  e.key === "Enter" &&
+                  !e.shiftKey &&
+                  !e.nativeEvent.isComposing
+                ) {
+                  e.preventDefault();
+                  askQuestion();
+                }
+              }}
               autoComplete="off"
               autoCapitalize="off"
               enterKeyHint="send"
               placeholder='e.g. "did I spend more on AI this month than last?"'
-              className="h-11 min-w-0 flex-1 text-base"
+              className="min-h-11 min-w-0 flex-1 resize-none text-base"
             />
             {/* One button whose `type` never changes: React DOM's form-action
                 support rebuilds FormData from the submit event's submitter

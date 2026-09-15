@@ -135,7 +135,13 @@ describe("insights composer", () => {
     expect(await field.evaluate((el) => getComputedStyle(el).fontSize)).toBe(
       "16px",
     );
-    expect((await field.boundingBox())?.height).toBe(44);
+    // The field rests at least at the 44px touch target the button shares,
+    // and hides nothing: on a phone the hint wraps to two lines, and the
+    // field fits it rather than clipping a sliver of the second line.
+    expect((await field.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(
+      await field.evaluate((el) => el.scrollHeight <= el.clientHeight),
+    ).toBe(true);
     expect((await ask.boundingBox())?.height).toBe(44);
     // A phone keyboard that capitalizes a question and an autofill overlay
     // both make the composer worse; the Return key says what it does.
@@ -203,6 +209,83 @@ describe("insights composer", () => {
     await pwExpect(second.getByText(FAILURE)).toBeVisible();
     // Only that card: the stopped one never got an answer.
     await pwExpect(cards.getByText(FAILURE)).toHaveCount(1);
+  });
+
+  it("grows with a long question, up to five lines", async () => {
+    const page = watch(await goto("/insights"));
+    const field = page.locator("#insights-ask");
+    const ask = page.getByRole("button", { name: "Ask" });
+    const box = await field.evaluate((el) => {
+      const styles = getComputedStyle(el);
+      return {
+        lineHeight: Number.parseFloat(styles.lineHeight),
+        padding:
+          Number.parseFloat(styles.paddingTop) +
+          Number.parseFloat(styles.paddingBottom),
+        border:
+          Number.parseFloat(styles.borderTopWidth) +
+          Number.parseFloat(styles.borderBottomWidth),
+      };
+    });
+    const linesNeeded = () =>
+      field.evaluate((el) => {
+        const styles = getComputedStyle(el);
+        return (
+          (el.scrollHeight - Number.parseFloat(styles.paddingTop)) /
+          Number.parseFloat(styles.lineHeight)
+        );
+      });
+    // One line at rest: the 44px touch target the button shares.
+    expect((await field.boundingBox())!.height).toBe(44);
+
+    // A wrapped question is taller by exactly the lines it wraps to.
+    await page.fill("#insights-ask", "wrapping question ".repeat(10).trim());
+    const wrapped = Math.round(await linesNeeded());
+    expect(wrapped).toBeGreaterThan(1);
+    expect((await field.boundingBox())!.height).toBe(
+      box.lineHeight * wrapped + box.padding + box.border,
+    );
+    // The button does not move with it.
+    expect((await ask.boundingBox())!.height).toBe(44);
+
+    // Past the cap the field stops growing and scrolls instead.
+    await page.fill("#insights-ask", "wrapping question ".repeat(40).trim());
+    expect(Math.round(await linesNeeded())).toBeGreaterThan(5);
+    expect((await field.boundingBox())!.height).toBe(
+      box.lineHeight * 5 + box.padding + box.border,
+    );
+    expect(
+      await field.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    await page.close();
+  });
+
+  it("sends on Enter and takes a newline on Shift+Enter", async () => {
+    const page = watch(await goto("/insights"));
+    // Held, so the in-flight state after Enter is observable.
+    await answerWithFailure(page, 1500);
+    const field = page.locator("#insights-ask");
+    const rest = (await field.boundingBox())!.height;
+
+    await page.fill("#insights-ask", "one line");
+    await field.press("Shift+Enter");
+    await field.pressSequentially("second line");
+    // Shift+Enter is a newline, not a send: the question is still here.
+    expect(await field.inputValue()).toBe("one line\nsecond line");
+    expect((await field.boundingBox())!.height).toBeGreaterThan(rest);
+
+    await field.press("Enter");
+    // Enter sent it: the field clears and collapses, and the question is in
+    // flight.
+    await pwExpect.poll(() => field.inputValue()).toBe("");
+    await pwExpect
+      .poll(async () => (await field.boundingBox())!.height)
+      .toBe(rest);
+    await pwExpect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+    // Both lines reached the transcript, in order.
+    const asked = transcript(page).locator(":scope > div > div").last();
+    await pwExpect(asked).toContainText("one line");
+    await pwExpect(asked).toContainText("second line");
   });
 
   it("stops on demand and hands the question back", async () => {
