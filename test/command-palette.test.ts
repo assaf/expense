@@ -115,14 +115,45 @@ describe("Command palette", () => {
     await blurFocus(page);
     // kbar's chained shortcuts (["g", "r"] etc.) complete silently (the
     // palette does not open on "g" alone), so the navigation itself is the
-    // success signal. kbar binds its document listener in a mount effect,
-    // and the previous chord's navigation may still be settling, so retry
-    // the whole chord rather than trusting a single press.
+    // success signal.
+    //
+    // The pair has to arrive back-to-back: kbar matches a sequence with a
+    // 400ms window (InternalEvents.js passes `timeout: 400` to tinykeys), and
+    // a driver-level press is two protocol round trips per key, which on a
+    // loaded CI runner can exceed it (runs 34541098715, 34986216084). A
+    // missed window is not a harmless no-op: the second key of "g e" is also
+    // the single-key "e" export shortcut, and since that action has children
+    // kbar opens the palette for it, whose focused search box then rejects
+    // every later keystroke. That is why the retry loop below never
+    // recovered. So: clear any palette a stray action opened, dispatch the
+    // pair inside one task so the keys are back-to-back by construction, and
+    // fall back to real presses first so the input path stays covered.
+    const pressChord = (keys: string[]) =>
+      page.evaluate((ks) => {
+        for (const key of ks) {
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key,
+              bubbles: true,
+              cancelable: true,
+            }),
+          );
+        }
+      }, keys);
+    const clearPalette = () => page.keyboard.press("Escape");
     const navVia = async (urlGlob: string, ...keys: string[]) => {
+      const chord = ["g", ...keys];
       for (let attempt = 0; attempt < 4; attempt += 1) {
+        // A stray single-key action leaves the palette open, and kbar
+        // unregisters its shortcuts while it is: close it before pressing.
+        await clearPalette();
         await blurFocus(page);
-        await page.keyboard.press("g");
-        for (const k of keys) await page.keyboard.press(k);
+        if (attempt === 0) {
+          await page.keyboard.press("g");
+          for (const k of keys) await page.keyboard.press(k);
+        } else {
+          await pressChord(chord);
+        }
         const moved = await page.waitForURL(urlGlob, { timeout: 2500 }).then(
           () => true,
           () => false,
@@ -138,7 +169,7 @@ describe("Command palette", () => {
       );
       if (!arrived) {
         throw new Error(
-          `chord "${["g", ...keys].join(" ")}" never navigated to ${urlGlob}`,
+          `chord "${chord.join(" ")}" never navigated to ${urlGlob}`,
         );
       }
     };
