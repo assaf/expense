@@ -172,8 +172,13 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export const links: LinksFunction = () => [
-  { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "icon", href: "/favicon.ico", sizes: "any" },
+  {
+    rel: "icon",
+    href: "/logo-icon-192.png",
+    type: "image/png",
+    sizes: "192x192",
+  },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
   {
     rel: "apple-touch-icon-precomposed",

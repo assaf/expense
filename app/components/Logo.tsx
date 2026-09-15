@@ -16,7 +16,7 @@ export function Logo({
   if (icon) {
     const img = (
       <img
-        src="/logo-icon.svg"
+        src="/logo-icon-192.png"
         alt="Expense"
         className="h-8 w-8"
         draggable={false}
@@ -33,7 +33,7 @@ export function Logo({
   const content = (
     <>
       <img
-        src="/logo-icon.svg"
+        src="/logo-icon-192.png"
         alt=""
         aria-hidden="true"
         className="h-8 w-8 flex-shrink-0 sm:h-10 sm:w-10"
