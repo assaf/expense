@@ -33,8 +33,8 @@ export interface EmailChangeNoticeInput {
   origin?: string;
 }
 
-/** Build (without sending) the notice HTML, so the render is testable. */
-export function emailChangeNoticeHtml(input: EmailChangeNoticeInput): string {
+/** Build the notice HTML; `sendEmailChangeNotice` sends this body. */
+function emailChangeNoticeHtml(input: EmailChangeNoticeInput): string {
   const home = (input.origin || PUBLIC_URL || "").replace(/\/$/, "");
   return emailShell({
     title: "Sign-in email changed",
