@@ -161,6 +161,9 @@ export async function translateInsightQuery(input: {
   merchants: string[];
   categories: string[];
   reports: string[];
+  /** The caller's request signal: the answer is worthless once the client
+   * is gone, so the provider call is cancelled with it. */
+  signal?: AbortSignal;
 }): Promise<InsightTranslation> {
   const text = input.text.trim().slice(0, 500);
   const context: string[] = [];
@@ -198,6 +201,7 @@ export async function translateInsightQuery(input: {
   const raw = await chatCompletion(messages, {
     json: true,
     maxTokens: 200,
+    signal: input.signal,
   });
   return parseInsightTranslation(raw);
 }
@@ -294,6 +298,9 @@ export async function answerInsightQuestion(input: {
   expenses?: readonly FilterableExpense[];
   /** Enables the plan tools; absent = read-only. */
   writes?: PlanContext;
+  /** The caller's request signal: passed to every provider call in the tool
+   * loop, so a client that went away stops costing tokens. */
+  signal?: AbortSignal;
 }): Promise<{ answer: string; pending?: PendingProposal }> {
   let pending: PendingProposal | undefined = undefined;
   const reply = (text: string) => ({
@@ -328,7 +335,10 @@ export async function answerInsightQuestion(input: {
   messages.push({ role: "system", content: ANSWER_PROMPT });
   messages.push({ role: "user", content: parts.join("\n\n") });
   if (!input.expenses) {
-    const raw = await chatCompletion(messages, { maxTokens: 200 });
+    const raw = await chatCompletion(messages, {
+      maxTokens: 200,
+      signal: input.signal,
+    });
     return reply(raw);
   }
   // Bounded tool loop: at most MAX_TOOL_ROUNDS tool rounds, then one
@@ -337,7 +347,10 @@ export async function answerInsightQuestion(input: {
     const { content, toolCalls } =
       round >= MAX_TOOL_ROUNDS
         ? {
-            content: await chatCompletion(messages, { maxTokens: 300 }),
+            content: await chatCompletion(messages, {
+              maxTokens: 300,
+              signal: input.signal,
+            }),
             toolCalls: [] as ToolCall[],
           }
         : await chatWithTools(messages, {
@@ -346,6 +359,7 @@ export async function answerInsightQuestion(input: {
               ...(input.writes ? [planMileageTool(), planExpenseTool()] : []),
             ],
             maxTokens: 300,
+            signal: input.signal,
           });
     if (toolCalls.length === 0) {
       return reply(content);

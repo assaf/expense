@@ -5,7 +5,11 @@ import {
   LLM_VISION_MAX_TOKENS,
   LLM_VISION_MODEL,
 } from "~/lib/env";
-import { chatWithTools, extractReceipt } from "~/lib/receipt-ai.server";
+import {
+  chatWithTools,
+  extractReceipt,
+  LLMError,
+} from "~/lib/receipt-ai.server";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 
 /**
@@ -100,6 +104,21 @@ describe("chatWithTools provider shapes", () => {
     await expect(
       chatWithTools([{ role: "user", content: "hi" }], { tools: [] }),
     ).rejects.toThrow(/neither content nor a tool call/i);
+  });
+
+  it("classifies a transport failure as an LLM boundary error", async () => {
+    // A provider that never answers (unreachable, timed out, cancelled) is
+    // the same class of event as a bad status: the answer is missing, the
+    // app is not broken. Callers handle LLMError; a bare TypeError used to
+    // escape all the way to the page's error boundary.
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("Blocked live network call in tests");
+    });
+    const call = chatWithTools([{ role: "user", content: "hi" }], {
+      tools: [],
+    });
+    await expect(call).rejects.toBeInstanceOf(LLMError);
+    await expect(call).rejects.toThrow(/unreachable/i);
   });
 });
 

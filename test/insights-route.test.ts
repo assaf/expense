@@ -132,6 +132,39 @@ describe("insights route", () => {
     expect(res.answer).toContain("Charting");
   });
 
+  it("does not record an exchange the client stopped", async () => {
+    // The shared question budget is per user: clear it so this call is the
+    // one being exercised.
+    await clearAuthFailures("insights:user_test1");
+    vi.mocked(appendExchange).mockClear();
+    chat.mockResolvedValue('{"query":"","title":"Expenses","months":12}');
+    const controller = new AbortController();
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "everything");
+    // A valid client date: this is the path that would persist the row.
+    form.set("today", "2026-06-15");
+    const request = new Request("https://expense.test/insights", {
+      method: "POST",
+      body: form,
+      headers: { cookie: await sessionCookie() },
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    const res = (await action({
+      request,
+      params: {},
+      context: {},
+    } as InsightsRoute.ActionArgs)) as { ok: boolean; error: string };
+
+    // Pressing Stop aborts the browser's fetch, which aborts this request:
+    // the answer has no reader, so the transcript must not gain an exchange
+    // nobody saw.
+    expect(res).toEqual({ ok: false, error: "Stopped." });
+    expect(appendExchange).not.toHaveBeenCalled();
+  });
+
   it("grounds the text answer in computed numbers for a plan account", async () => {
     // Call 1: the question is text-shaped (chart:false). Call 2 phrases
     // the answer from the computed data.

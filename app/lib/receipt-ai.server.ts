@@ -608,6 +608,9 @@ export async function chatCompletion(
     /** False suppresses the DeepSeek `thinking` param for providers that
      * reject it; the default emits `{ type: "disabled" }` (DeepSeek only). */
     thinking?: boolean;
+    /** Cancels the provider request: the caller's own request went away
+     * (the chat's Stop), so there is nobody left to answer. */
+    signal?: AbortSignal;
   } = {},
 ): Promise<string> {
   const message = await llmMessage(messages, opts);
@@ -622,7 +625,7 @@ export async function chatCompletion(
  * continue the conversation (see insights-ai's answer loop). */
 export async function chatWithTools(
   messages: ChatMessage[],
-  opts: { tools: ToolSpec[]; maxTokens?: number },
+  opts: { tools: ToolSpec[]; maxTokens?: number; signal?: AbortSignal },
 ): Promise<{ content: string; toolCalls: ToolCall[] }> {
   const message = await llmMessage(messages, opts);
   return {
@@ -648,6 +651,7 @@ async function llmMessage(
     model?: string;
     thinking?: boolean;
     tools?: ToolSpec[];
+    signal?: AbortSignal;
   } = {},
 ): Promise<{ content?: string; tool_calls?: ToolCall[] }> {
   if (!LLM_API_KEY) {
@@ -685,15 +689,38 @@ async function llmMessage(
     temperature: 0.1,
     max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
   };
-  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${LLM_API_KEY}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
-  });
+  // The caller's signal (the browser gave up) and the provider timeout are
+  // one bound: whichever fires first ends the wait.
+  const signal = opts.signal
+    ? AbortSignal.any([
+        opts.signal,
+        AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+      ])
+    : AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    // The provider never answered (unreachable, timed out, or cancelled).
+    // That is the same class of event as a bad status — the answer is
+    // missing, the app is not broken — so callers get the error envelope
+    // they already handle instead of an unhandled throw.
+    throw new LLMError(
+      `${providerLabel} unreachable: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      502,
+      "",
+    );
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     const err = new LLMError(

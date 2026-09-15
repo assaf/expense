@@ -3,6 +3,7 @@ import {
   Check,
   Lightbulb,
   Sparkles,
+  Square,
   SquarePen,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { Link, useFetcher } from "react-router";
 import { RevealText } from "~/components/RevealText";
 import { authLockedUntil, recordAuthFailure } from "~/lib/db/auth-attempts";
 import { PageShell } from "~/components/PageShell";
+import { Alert } from "~/components/ui/Alert";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -331,6 +333,9 @@ export async function action({ request }: Route.LoaderArgs) {
       merchants,
       categories: categoryNames,
       reports: reportNames,
+      // The browser's own signal: pressing Stop aborts the fetch, which
+      // aborts this request, which cancels the provider call.
+      signal: request.signal,
     });
     // The app owns the period (range and chart shape): a day, a week, or a
     // single-month window has no monthly shape to plot, so the model's
@@ -375,7 +380,14 @@ export async function action({ request }: Route.LoaderArgs) {
             ? [`Current time: ${localTime} (user's local clock)`]
             : []),
         ].join("\n"),
+        signal: request.signal,
       });
+      // The browser went away (the user pressed Stop): the answer has no
+      // reader, and a transcript row nobody saw is a lie about the
+      // conversation.
+      if (request.signal.aborted) {
+        return { ok: false as const, error: "Stopped." };
+      }
       await recordExchange(user, {
         question: text,
         answer,
@@ -399,6 +411,12 @@ export async function action({ request }: Route.LoaderArgs) {
       answer: `Charting ${t.title}.`,
     };
   } catch (err) {
+    // A cancelled request is not a failure to report: the user asked for
+    // it. Checked first because the cancelled provider call arrives here
+    // as an LLMError, and Sentry should not hear about an intentional stop.
+    if (request.signal.aborted) {
+      return { ok: false as const, error: "Stopped." };
+    }
     if (err instanceof LLMError) {
       return {
         ok: false as const,
@@ -462,9 +480,28 @@ interface Exchange {
   expenseId?: string;
   /** What that link points at; the card is gone by the time it renders. */
   proposalKind?: ProposalKind;
+  /** The user stopped this question before it answered; client-only, never
+   * persisted (see markPendingStopped). */
+  stopped?: boolean;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
+
+/** The newest exchange with no answer yet: the question the composer is
+ * waiting on, or -1 when nothing is in flight. A stopped exchange is not
+ * pending: its request was aborted, so nothing is coming for it. */
+function pendingIndex(t: Exchange[]): number {
+  const last = t[t.length - 1];
+  return last && last.answer === "" && !last.stopped ? t.length - 1 : -1;
+}
+
+/** Mark the in-flight question stopped: the card keeps the question the user
+ * asked and drops the "Thinking…" placeholder. Pure. */
+function markPendingStopped(t: Exchange[]): Exchange[] {
+  const i = pendingIndex(t);
+  if (i === -1) return t;
+  return t.map((ex, j) => (j === i ? { ...ex, stopped: true } : ex));
+}
 
 /** The proposal card's chrome, shared by both kinds: the amber eyebrow, the
  * primary line, the facts row and the muted note. */
@@ -578,45 +615,48 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // True while the newest answer is being revealed; restored history
   // never animates.
   const [revealing, setRevealing] = useState(false);
+  // The composer's own failure line. Held in state rather than read from
+  // fetcher.data, so it clears the moment the next question is sent (and
+  // never reappears from a fetcher's retained data).
+  const [composerError, setComposerError] = useState<string | null>(null);
+  // The composer form, submitted imperatively: the hidden intent/today/
+  // localTime/tz inputs stay the single source of the request body, and
+  // `text` is overridden with the trimmed question.
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const result = fetcher.data as
-    | (TranslateOk & { fresh?: boolean })
-    | TranslateErr
-    | undefined;
+  const result = fetcher.data as TranslateOk | TranslateErr | undefined;
   useEffect(() => {
     if (!result) return;
-    // "New conversation" starts a fresh exchange stream.
-    if ("fresh" in result && result.fresh) {
-      if (fetcher.state === "idle") setTranscript([]);
-      setRevealing(false);
-    }
-    // Fill the answer into the newest exchange (pushed optimistically at
-    // submit time); idempotent across re-renders.
-    if (fetcher.state === "idle") {
-      setTranscript((t) => {
-        const last = t[t.length - 1];
-        if (!last || last.answer !== "") return t;
-        const copy = [...t];
-        copy[copy.length - 1] = {
-          ...last,
-          answer: result.ok
-            ? result.answer
-            : (result.error ?? "Something went wrong."),
-          ...(result.ok
-            ? {
-                chart: result.chart,
-                query: result.query,
-                months: result.months,
-                title: result.title,
-                ...(result.pending ? { pending: result.pending } : {}),
-              }
-            : {}),
-        };
-        return copy;
-      });
-      // A fresh answer reveals progressively; see RevealText.
-      setRevealing(true);
-    }
+    if (fetcher.state !== "idle") return;
+    // Fill the answer into the question the composer is waiting on (pushed
+    // optimistically at submit time); idempotent across re-renders, and a
+    // stopped card is skipped: its row was never recorded.
+    setTranscript((t) => {
+      const i = pendingIndex(t);
+      if (i === -1) return t;
+      const copy = [...t];
+      copy[i] = {
+        ...copy[i]!,
+        answer: result.ok
+          ? result.answer
+          : (result.error ?? "Something went wrong."),
+        ...(result.ok
+          ? {
+              chart: result.chart,
+              query: result.query,
+              months: result.months,
+              title: result.title,
+              ...(result.pending ? { pending: result.pending } : {}),
+            }
+          : {}),
+      };
+      return copy;
+    });
+    // A fresh answer reveals progressively; see RevealText.
+    setRevealing(true);
+    setComposerError(
+      result.ok ? null : (result.error ?? "Something went wrong."),
+    );
   }, [result, fetcher.state]);
 
   // A confirmed proposal: the card is replaced by the exchange the server
@@ -661,18 +701,61 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     );
   };
 
-  // "New conversation" clears the transcript once the fresh conversation
-  // row exists.
-  const newResult = newFetcher.data as
-    | { ok: boolean; fresh: boolean }
-    | undefined;
-  useEffect(() => {
-    if (newResult?.ok && newResult.fresh && newFetcher.state === "idle") {
-      setTranscript([]);
-    }
-  }, [newResult, newFetcher.state]);
+  // "New conversation" clears the transcript optimistically (see the
+  // header form): the intent has no failure branch, so waiting for the
+  // round trip would only make the button feel broken.
 
   const busy = fetcher.state !== "idle";
+  // While a question is in flight an empty field means Stop; a field with the
+  // next question means Ask (which interrupts). The composer is never dead.
+  const stopping = busy && !ask.trim();
+
+  /** Send the typed question. While one is already in flight this is a
+   * barge-in: that question is marked stopped, its request is aborted, and
+   * the new question goes out. */
+  const askQuestion = () => {
+    const text = ask.trim();
+    const form = formRef.current;
+    if (!text || !form) return;
+    setTranscript((t) => [
+      ...markPendingStopped(t),
+      {
+        question: text,
+        answer: "",
+        chart: false,
+        query: "",
+        months: 12,
+        title: "",
+      },
+    ]);
+    setAsk("");
+    setRevealing(false);
+    setComposerError(null);
+    // Abort the in-flight question before submitting: reset() is the
+    // documented way to cancel a fetcher, and the interrupted answer must
+    // not land in the new card.
+    if (busy) fetcher.reset();
+    const data = new FormData(form);
+    data.set("text", text);
+    // flushSync flips the composer to Stop in the same paint as the click,
+    // instead of riding a transition behind the reveal's interval. The
+    // submission itself reports through fetcher state, not this promise.
+    void fetcher.submit(data, { method: "post", flushSync: true });
+    // Keep the field hot: the next question is typed, not re-targeted.
+    askRef.current?.focus({ preventScroll: true });
+  };
+
+  /** Stop waiting on the in-flight question. Its request is aborted, so the
+   * server records nothing. */
+  const stopAnswer = () => {
+    const i = pendingIndex(transcript);
+    const question = i === -1 ? null : transcript[i]!.question;
+    setTranscript(markPendingStopped);
+    // Hand the question back, unless the user has already typed the next one.
+    if (question && !ask.trim()) setAsk(question);
+    fetcher.reset();
+    askRef.current?.focus({ preventScroll: true });
+  };
 
   // The opening card: one computed fact about the account, rotating per
   // visit (the "start with an answer" pattern). Computed client-side
@@ -728,19 +811,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // chart SVG, images) keeps growing after the state update lands, so the
   // "scroll to the new answer" effect alone strands the view above it.
   const contentRef = useRef<HTMLDivElement>(null);
-  // True while a question is in flight: follow the bottom unconditionally
-  // (asking a question is an explicit request to watch the answer).
-  const busyRef = useRef(busy);
-  busyRef.current = busy;
   useEffect(() => {
     const content = contentRef.current;
     const el = scrollRef.current;
     if (!content || !el) return;
+    // Follow a growing answer only while the user is at the bottom:
+    // scrolling up during a slow answer means they are reading, not waiting.
     const ro = new ResizeObserver(() => {
-      if (nearBottom.current || busyRef.current) {
-        nearBottom.current = true;
-        el.scrollTo({ top: el.scrollHeight });
-      }
+      if (nearBottom.current) el.scrollTo({ top: el.scrollHeight });
     });
     ro.observe(content);
     return () => ro.disconnect();
@@ -831,7 +909,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       maxWidth="max-w-3xl"
       fullHeight
       headerRight={
-        <newFetcher.Form method="post">
+        <newFetcher.Form
+          method="post"
+          onSubmit={() => {
+            setTranscript([]);
+            setRevealing(false);
+            setComposerError(null);
+          }}
+        >
           <input type="hidden" name="intent" value="new" />
           <Button
             type="submit"
@@ -893,9 +978,11 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                   </div>
                 ) : (
                   <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                    {busy && i === views.length - 1
-                      ? "Thinking…"
-                      : "No answer recorded."}
+                    {ex.stopped
+                      ? "Stopped."
+                      : busy && i === views.length - 1
+                        ? "Thinking…"
+                        : "No answer recorded."}
                   </p>
                 )}
                 {/* The proposal: the model resolved it, the user files it.
@@ -1033,82 +1120,95 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       <Card className="p-4">
-        <div className="flex flex-col gap-2">
-          <fetcher.Form
-            method="post"
-            className="flex flex-col gap-2"
-            onSubmit={(e) => {
-              if (!ask.trim() || busy) {
-                e.preventDefault();
-                return;
-              }
-              setTranscript((t) => [
-                ...t,
-                {
-                  question: ask.trim(),
-                  answer: "",
-                  chart: false,
-                  query: "",
-                  months: 12,
-                  title: "",
-                },
-              ]);
-              setAsk("");
-              setRevealing(false);
-            }}
-          >
-            <input type="hidden" name="intent" value="translate" />
-            <input type="hidden" name="today" value={today ?? ""} />
-            <input
-              type="hidden"
-              name="localTime"
-              value={new Date().toLocaleTimeString("en-US", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
+        <fetcher.Form
+          ref={formRef}
+          method="post"
+          className="flex flex-col gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            askQuestion();
+          }}
+        >
+          <input type="hidden" name="intent" value="translate" />
+          <input type="hidden" name="today" value={today ?? ""} />
+          <input
+            type="hidden"
+            name="localTime"
+            value={new Date().toLocaleTimeString("en-US", {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          />
+          <input
+            type="hidden"
+            name="tz"
+            value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
+          />
+          <div className="flex gap-2">
+            {/* h-11 + text-base, and a fixed-width button beside it: the
+                field's geometry never changes when the button flips between
+                Ask and Stop, and a 16px font keeps mobile Safari from
+                zooming the page on focus. */}
+            <Input
+              ref={askRef}
+              id="insights-ask"
+              name="text"
+              type="text"
+              value={ask}
+              onChange={(e) => setAsk(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="off"
+              enterKeyHint="send"
+              placeholder='e.g. "did I spend more on AI this month than last?"'
+              className="h-11 min-w-0 flex-1 text-base"
             />
-            <input
-              type="hidden"
-              name="tz"
-              value={Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
-            />
-            <div className="flex gap-2">
-              <Input
-                ref={askRef}
-                id="insights-ask"
-                name="text"
-                type="text"
-                value={ask}
-                onChange={(e) => setAsk(e.target.value)}
-                autoComplete="off"
-                placeholder='e.g. "did I spend more on AI this month than last?"'
-                className="min-w-0 flex-1"
-              />
-              <Button type="submit" disabled={busy}>
-                <Sparkles aria-hidden="true" className="h-4 w-4" />
-                {busy ? "Thinking…" : "Ask"}
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-gray-500 dark:text-gray-400">Try:</span>
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => setAsk(ex)}
-                  className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-            {result && !result.ok ? (
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {result.error}
-              </p>
-            ) : null}
-          </fetcher.Form>
-        </div>
+            {/* One button whose `type` never changes: React DOM's form-action
+                support rebuilds FormData from the submit event's submitter
+                after this form's onSubmit prevents the default, so flipping
+                the submitter's type to `button` in the same dispatch throws.
+                Only the label swaps: Stop cancels the pending submission
+                instead. */}
+            <Button
+              type="submit"
+              onClick={(e) => {
+                if (stopping) {
+                  e.preventDefault();
+                  stopAnswer();
+                }
+              }}
+              className="h-11 min-w-24 shrink-0"
+            >
+              {stopping ? (
+                <>
+                  <Square aria-hidden="true" className="h-4 w-4" />
+                  Stop
+                </>
+              ) : (
+                <>
+                  <Sparkles aria-hidden="true" className="h-4 w-4" />
+                  Ask
+                </>
+              )}
+            </Button>
+          </div>
+          {composerError ? <Alert icon>{composerError}</Alert> : null}
+          <div className="flex flex-wrap items-center gap-1.5 text-sm">
+            <span className="text-gray-500 dark:text-gray-400">Try:</span>
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => {
+                  setAsk(ex);
+                  askRef.current?.focus();
+                }}
+                className="rounded-full border border-gray-300 px-2.5 py-0.5 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </fetcher.Form>
       </Card>
     </PageShell>
   );
