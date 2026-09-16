@@ -1,46 +1,43 @@
+import { InlineText } from "~/components/Markdown";
 import { MarketingPage } from "~/components/MarketingPage";
-import {
-  PRIVACY_SECTIONS,
-  PRIVACY_SUMMARY,
-  PRIVACY_UPDATED,
-  marketingPageHeaders,
-  pageMeta,
-} from "~/lib/seo-content";
+import { PRIVACY } from "~/lib/content.server";
+import { marketingPageHeaders, pageMeta } from "~/lib/seo-content";
 import type { Route } from "./+types/privacy";
 
-export function meta(): Route.MetaDescriptors {
-  return pageMeta(
-    "Privacy policy",
-    "What Expense stores, where it lives, which providers see what, and what it never does.",
-    "/privacy",
-  );
+export function loader() {
+  return PRIVACY;
+}
+
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (!loaderData) return [];
+  return pageMeta(loaderData.metaTitle, loaderData.description, "/privacy");
 }
 
 export const headers = marketingPageHeaders;
 
-export default function PrivacyPage() {
+export default function PrivacyPage({ loaderData }: Route.ComponentProps) {
   return (
     <MarketingPage
-      eyebrow="Privacy"
-      title="What Expense does with your data"
-      summary={PRIVACY_SUMMARY}
+      eyebrow={loaderData.eyebrow}
+      title={loaderData.title}
+      summary={loaderData.summary}
     >
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        Last updated {PRIVACY_UPDATED}.
+        Last updated {loaderData.updated}.
       </p>
 
       <div className="mt-6 flex flex-col gap-10">
-        {PRIVACY_SECTIONS.map((section) => (
+        {loaderData.sections.map((section) => (
           <section key={section.title}>
             <h2 className="text-2xl font-bold tracking-tight text-ink">
               {section.title}
             </h2>
-            {section.paragraphs.map((paragraph) => (
+            {section.paragraphs.map((paragraph, index) => (
               <p
-                key={paragraph}
+                key={index}
                 className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
               >
-                {paragraph}
+                <InlineText segments={paragraph} />
               </p>
             ))}
           </section>

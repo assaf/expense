@@ -19,7 +19,7 @@ import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
 import { TipsSlider } from "~/components/tips-slider";
-import { BENEFITS, SITE_URL } from "~/lib/seo-content";
+import { SITE_URL } from "~/lib/seo-content";
 import { JsonLd } from "~/components/JsonLd";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -45,9 +45,9 @@ const SOFTWARE_SCHEMA = {
   },
 };
 
-/** The icons for the landing-page features, keyed by the BENEFITS
- * title so the copy itself stays in seo-content.ts (the single source of
- * the site's public copy). Order here is the card order. */
+/** The icons for the landing-page features, keyed by the benefit title so
+ * the copy itself stays in app/data/about.yaml (the single source of the
+ * site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
   "AI invoice & receipt extraction": Sparkles,
   "Stop losing receipts in your gallery": ReceiptText,
@@ -60,23 +60,6 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   "Log drives without Excel": MapPinned,
   "Reconcile against your monthly statement": CreditCard,
 };
-
-const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
-  Object.keys(FEATURE_ICONS).map((title) => {
-    const benefit = BENEFITS.find((b) => b.title === title);
-    // A missing title breaks at module load instead of silently dropping a
-    // card; the two lists can't drift apart without a loud error.
-    if (!benefit) {
-      throw new Error(
-        `LandingPage feature "${title}" is missing from BENEFITS in seo-content.ts`,
-      );
-    }
-    return {
-      icon: FEATURE_ICONS[title]!,
-      title: benefit.title,
-      body: benefit.body,
-    };
-  });
 
 const STEPS = [
   {
@@ -160,9 +143,28 @@ function BrowserFrame({
 }
 export default function LandingPage({
   signupCount = 0,
+  benefits,
 }: {
   signupCount?: number;
+  benefits: Array<{ title: string; body: string }>;
 }) {
+  const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
+    Object.keys(FEATURE_ICONS).map((title) => {
+      const benefit = benefits.find((b) => b.title === title);
+      // A missing title breaks the page instead of silently dropping a card;
+      // the two lists can't drift apart without a loud error.
+      if (!benefit) {
+        throw new Error(
+          `LandingPage feature "${title}" is missing from the benefits list in app/data/about.yaml`,
+        );
+      }
+      return {
+        icon: FEATURE_ICONS[title]!,
+        title: benefit.title,
+        body: benefit.body,
+      };
+    });
+
   return (
     <SitePage padBottom>
       <JsonLd data={SOFTWARE_SCHEMA} />

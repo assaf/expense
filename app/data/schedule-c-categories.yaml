@@ -1,0 +1,109 @@
+# The Schedule C reference page at /schedule-c-categories and its markdown
+# mirror /schedule-c-categories.md. Category names are NOT here: they come from
+# app/data/default-categories.csv (the list every new account is seeded with),
+# paired with these notes by position.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  Schedule C expense categories: Part II, lines 8 to 27a
+description: |-
+  The {{categoryCount}} expense lines on IRS Schedule C, Part II, in the form's order, with a plain-language note for each. {{categoryCount}} categories, the same list Expense seeds every new account with.
+eyebrow: "Reference"
+title: |-
+  Schedule C expense categories
+summary: |-
+  The expense categories on IRS Schedule C, Part II (lines 8 to 27a), in the form's order, with a plain-language note for each. Every new Expense account starts with these categories pre-filled, so receipts land in the same buckets your tax return uses; rename or add your own in settings anytime.
+
+tableHeadings:
+  - "Line"
+  - "Category"
+  - "What goes there"
+
+notes:
+  - line: "8"
+    note: |-
+      Ads and promotion: mailers, web ads, print, business cards.
+  - line: "9"
+    note: |-
+      Driving for the business, via the standard mileage rate or actual vehicle costs. Commutes don't count.
+  - line: "10"
+    note: |-
+      Sales commissions and platform or service fees.
+  - line: "11"
+    note: |-
+      Payments to contractors and freelancers (1099 work), not employees.
+  - line: "12"
+    note: |-
+      Costs of extracting natural resources. Most service businesses never touch this line.
+  - line: "13"
+    note: |-
+      Recovering the cost of equipment and property over time, or all at once under section 179.
+  - line: "14"
+    note: |-
+      Benefits for employees: health and life plans, dependent care. As a sole proprietor you generally can't count your own.
+  - line: "15"
+    note: |-
+      Business insurance: liability, malpractice, workers' comp. Health insurance for the self-employed goes on Schedule 1 instead.
+  - line: "16a"
+    note: |-
+      Interest on a mortgage for business property.
+  - line: "16b"
+    note: |-
+      Other business borrowing: credit lines, business cards, equipment loans.
+  - line: "17"
+    note: |-
+      Lawyers, accountants, consultants, and similar professional fees.
+  - line: "18"
+    note: |-
+      Small consumables: pens, paper, toner. Furniture and equipment belong on the depreciation line.
+  - line: "19"
+    note: |-
+      Contributions to retirement plans: SEP, SIMPLE, 401(k).
+  - line: "20a"
+    note: |-
+      Renting vehicles and equipment for the business.
+  - line: "20b"
+    note: |-
+      Rent for an office, storefront, or workspace.
+  - line: "21"
+    note: |-
+      Fixing and maintaining business property and equipment. Improvements that extend its life depreciate instead.
+  - line: "22"
+    note: |-
+      Materials the business consumes: stock, raw materials, shipping supplies.
+  - line: "23"
+    note: |-
+      Payroll tax, sales tax, licenses, permits. Federal income tax is never deductible.
+  - line: "24a"
+    note: |-
+      Business trips: airfare, hotels, and transport while away overnight.
+  - line: "24b"
+    note: |-
+      Business meals are 50% deductible; entertainment stopped being deductible in 2018. Expense splits the receipt for you.
+  - line: "25"
+    note: |-
+      Phone, internet, and power for the business; often a partial percentage for a home office.
+  - line: "26"
+    note: |-
+      Salaries and wages paid to employees. Not you, and not contractors (line 11).
+  - line: "27a"
+    note: |-
+      Anything that fits no line above, itemized in Part V of the form.
+
+sourceNote: |-
+  Source: [About Schedule C (Form 1040)](https://www.irs.gov/forms-pubs/about-schedule-c-form-1040). Car and truck expenses can also use the standard mileage rate; see the IRS mileage rates page for the full table.
+
+cta:
+  heading: |-
+    Your categories, ready for the form.
+  body: |-
+    Every new Expense account starts with these {{categoryCount}} categories in place, so receipts land where the return expects them.
+
+mirror:
+  title: "Schedule C expense categories"
+  intro: |-
+    When you file as a sole proprietor or single-member LLC, business profit and expenses are reported on Schedule C of Form 1040, and Part II of that form is where the expense categories live. These are the {{categoryCount}} lines.
+  footer: |-
+    Source: [About Schedule C (Form 1040)](https://www.irs.gov/forms-pubs/about-schedule-c-form-1040). Car and truck expenses can also use the standard mileage rate: see [IRS standard mileage rates by year]({{siteUrl}}/mileage-rates). [Expense]({{siteUrl}}/) seeds every new account with this exact list, in this order, so yearly totals line up with the return without re-bucketing.

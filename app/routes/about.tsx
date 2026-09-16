@@ -1,55 +1,49 @@
 import { CheckCircle2 } from "lucide-react";
+import { JsonLd } from "~/components/JsonLd";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
-import {
-  APP_SUMMARY,
-  BENEFITS,
-  KEY_FACTS,
-  marketingPageHeaders,
-  pageMeta,
-  SITE_URL,
-} from "~/lib/seo-content";
+import { ABOUT, SITE } from "~/lib/content.server";
+import { marketingPageHeaders, pageMeta, SITE_URL } from "~/lib/seo-content";
 import type { Route } from "./+types/about";
-import { JsonLd } from "~/components/JsonLd";
 
-const ABOUT_SCHEMA = {
-  "@context": "https://schema.org",
-  "@type": "AboutPage",
-  name: "About Expense",
-  url: `${SITE_URL}/about`,
-  description: APP_SUMMARY,
-  author: {
-    "@type": "Person",
-    name: "Assaf Arkin",
-    url: "https://labnotes.org",
-  },
-};
+export function loader() {
+  return { ...ABOUT, keyFacts: SITE.keyFacts };
+}
 
-export function meta(): Route.MetaDescriptors {
-  return pageMeta(
-    `About Expense: a free expense tracker built for tax season`,
-    "Expense is a free expense tracker built for tax season: OCR reads receipts, AI suggests categories, mileage logs at the IRS rate, and PDF or ZIP export is ready when you are.",
-    "/about",
-  );
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (!loaderData) return [];
+  return pageMeta(loaderData.metaTitle, loaderData.description, "/about");
 }
 
 export const headers = marketingPageHeaders;
 
-export default function AboutPage() {
+export default function AboutPage({ loaderData }: Route.ComponentProps) {
+  const aboutSchema = {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: "About Expense",
+    url: `${SITE_URL}/about`,
+    description: loaderData.summary,
+    author: {
+      "@type": "Person",
+      name: "Assaf Arkin",
+      url: "https://labnotes.org",
+    },
+  };
+
   return (
     <MarketingPage
-      eyebrow="About"
-      title="Expense – The Free Receipt Tracker for Tax Season."
-
-      summary={APP_SUMMARY}
-      schema={<JsonLd data={ABOUT_SCHEMA} />}
+      eyebrow={loaderData.eyebrow}
+      title={loaderData.title}
+      summary={loaderData.summary}
+      schema={<JsonLd data={aboutSchema} />}
     >
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">
-          What do you get
+          {loaderData.benefitsHeading}
         </h2>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {BENEFITS.map((b) => (
+          {loaderData.benefits.map((b) => (
             <Card key={b.title} className="p-5">
               <h3 className="font-semibold text-ink">{b.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
@@ -62,10 +56,10 @@ export default function AboutPage() {
 
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">
-          Key facts
+          {loaderData.factsHeading}
         </h2>
         <ul className="mt-6 flex flex-col gap-3">
-          {KEY_FACTS.map((fact) => (
+          {loaderData.keyFacts.map((fact) => (
             <li key={fact} className="flex items-start gap-2">
               <CheckCircle2
                 aria-hidden="true"
@@ -80,9 +74,9 @@ export default function AboutPage() {
       </section>
 
       <MarketingCta
-        heading="Start collecting this year's expenses."
-        body="Accounts are free and start empty. Add your first receipt in under a minute."
-        secondaryLabel="Read the FAQ"
+        heading={loaderData.cta.heading}
+        body={loaderData.cta.body}
+        secondaryLabel={loaderData.cta.secondaryLabel}
         secondaryHref="/faq"
       />
     </MarketingPage>

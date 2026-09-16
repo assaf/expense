@@ -230,9 +230,9 @@ instead" on the sign-up flow, /login?mode=create).
 
 ## Discovery surfaces (how users hear about connecting)
 
-The feature is promoted in the public marketing copy (`app/lib/seo-content.ts`,
-the single source; renders /, /about, /faq, /alternatives + their .md mirrors
-and llms.txt) and with in-app nudges:
+The feature is promoted in the public marketing copy (`app/data/`, the single
+source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
+/alternatives + their .md mirrors and llms.txt) and with in-app nudges:
 
 - **Sign-up flow** (`/login?mode=create`): blue "Connect your Fastmail
   account" button under an "or" divider.
@@ -240,7 +240,7 @@ and llms.txt) and with in-app nudges:
   "Connect your Fastmail account" feature card.
 - **FAQ**: "Does Expense work with Fastmail"? The "only support Gmail"
   positioning lives in the FAQ, the /alternatives "Email import" comparison
-  row, and the /about benefit + KEY_FACTS.
+  row, and the /about benefit + the key facts in `app/data/site.yaml`.
 - **Home page highlight** (`FeatureHighlight`): the `connect-email` highlight
   is in the rotation ONLY while the account has no connected mailbox
   (`HighlightData.hasEmailConnection`), and `pickHighlight(data, boost)`
@@ -319,7 +319,7 @@ and llms.txt) and with in-app nudges:
   the key invalidates all stored tokens (users reconnect); it cannot be
   rotated without that cost.
 
-- **Rules** (`app/lib/db/email-rules.ts` + `app/data/email-rules.ts`):
+- **Rules** (`app/lib/db/email-rules.ts` + `app/data/email-rules.csv`):
   general rules (seeded: Apple, Amazon, Uber, …) synced on boot by
   `initStore`; user rules learned automatically when a receipt forward
   imports successfully (`learnRuleFromForward` in the inbound pipeline:

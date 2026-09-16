@@ -11,7 +11,8 @@ import { parseCategoryCsv } from "~/data/parse-categories";
  * no header; fields containing commas are wrapped in double quotes) so
  * it can be edited without touching code. Loaded at build time via Vite's
  * `?raw` import, so the file is bundled into the server output. The parsing
- * rules live in `~/data/parse-categories`, shared with the marketing
- * surfaces so the CSV and the public Schedule C page can't drift.
+ * rules live in `~/data/parse-categories`; `~/lib/content.server` reads the
+ * same list for the public Schedule C page, so the CSV, the categories new
+ * accounts get, and that page can't drift.
  */
 export const DEFAULT_CATEGORIES: string[] = parseCategoryCsv(categoriesCsv);

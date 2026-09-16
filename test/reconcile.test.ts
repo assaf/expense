@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import Decimal from "decimal.js";
+import { parseCsv } from "~/lib/csv";
 import { strToU8, zipSync } from "fflate";
 import {
   DATE_TOLERANCE_DAYS,
   matchStatementRows,
   normalizeDate,
-  parseCsv,
   parseMoney,
   parseOfxStatement,
   parsePdfStatementLines,

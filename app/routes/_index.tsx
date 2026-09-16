@@ -57,6 +57,7 @@ import {
 } from "~/lib/format";
 import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
+import { ABOUT } from "~/lib/content.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
@@ -90,7 +91,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!(await isAuthenticated(request))) {
     // The landing page shows how many of the 100 free spots are claimed.
     const signupCount = await countAccounts();
-    return data({ mode: "landing" as const, signupCount });
+    return data({
+      mode: "landing" as const,
+      signupCount,
+      benefits: ABOUT.benefits,
+    });
   }
   const user = await requireUser(request);
   const [
@@ -330,6 +335,7 @@ export default function IndexPage({ loaderData }: Route.ComponentProps) {
   return loaderData.mode === "landing" ? (
     <LandingPage
       signupCount={loaderData.mode === "landing" ? loaderData.signupCount : 0}
+      benefits={loaderData.mode === "landing" ? loaderData.benefits : []}
     />
   ) : (
     <ExpenseList

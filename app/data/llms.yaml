@@ -1,0 +1,51 @@
+# The link hub at /llms.txt (the llmstxt.org convention). Key facts and the
+# summary come from site.yaml. Every link must also be in public/sitemap.xml,
+# which test/llms-txt.test.ts asserts.
+
+corePages:
+  - title: "Expense: every receipt, ready for tax season"
+    url: "{{siteUrl}}/"
+    blurb: |-
+      The home page; free account signup.
+  - title: "About Expense"
+    url: "{{siteUrl}}/about.md"
+    blurb: |-
+      What the app does and the full feature list.
+  - title: "Frequently asked questions"
+    url: "{{siteUrl}}/faq.md"
+    blurb: |-
+      Answers to common questions, including how Expense compares to Expensify.
+  - title: "IRS standard mileage rates by year"
+    url: "{{siteUrl}}/mileage-rates.md"
+    blurb: |-
+      The rate table for business, medical, moving, and charity drives by period, 2011 to today, including mid-year changes. Expense applies the right rate to each drive automatically.
+  - title: "Schedule C expense categories"
+    url: "{{siteUrl}}/schedule-c-categories.md"
+    blurb: |-
+      The 23 expense lines from IRS Schedule C, Part II, with a plain-language note for each; every new Expense account starts pre-filled with this list.
+  - title: "How Expense compares to the other receipt apps"
+    url: "{{siteUrl}}/alternatives.md"
+    blurb: |-
+      Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
+  - title: "Connect your AI assistant (MCP server)"
+    url: "{{siteUrl}}/connect.md"
+    blurb: |-
+      Setup instructions for every MCP client (Claude, ChatGPT, Gemini CLI, Pi, OMP), the full tool list, and example usage. The MCP endpoint is {{siteUrl}}/mcp (Streamable HTTP + OAuth).
+  - title: "Connect your AI assistant"
+    url: "{{siteUrl}}/ai.md"
+    blurb: |-
+      What an assistant can do with your account and how to connect: capture receipts, log mileage, answer spending questions, build reports, reconcile statements. Covers Insights too, the built-in question page that answers from your own expenses with nothing connected.
+  - title: "Privacy"
+    url: "{{siteUrl}}/privacy.md"
+    blurb: |-
+      What the app stores, where it lives, which providers see what, and what it never does.
+  - title: "Terms of service"
+    url: "{{siteUrl}}/terms.md"
+    blurb: |-
+      The rules for using the app: your account, your data, what is not allowed, and what the app does not promise.
+
+optionalPages:
+  - title: "Blog"
+    url: "https://labnotes.org"
+    blurb: |-
+      Posts by the author.

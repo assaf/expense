@@ -1,5 +1,5 @@
 import { markdownRouteLoader } from "~/lib/markdown-route.server";
-import { alternativesMarkdown } from "~/lib/seo-content";
+import { alternativesMarkdown } from "~/lib/content.server";
 
 /** /alternatives.md is the llmstxt.org convention: markdown mirror of
  * /alternatives. */

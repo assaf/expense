@@ -1,6 +1,6 @@
 import { Bot, Check, Copy, Link2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
 import {
@@ -9,11 +9,9 @@ import {
   SecuritySection,
 } from "~/components/mcp-sections";
 import { cn } from "cn";
+import { CONNECT, MCP } from "~/lib/content.server";
 import {
-  MCP_CLIENTS,
   MCP_ENDPOINT,
-  MCP_PAGE_SUMMARY,
-  MCP_TOOLS,
   marketingPageHeaders,
   pageMeta,
   SITE_URL,
@@ -21,25 +19,13 @@ import {
 import type { Route } from "./+types/connect";
 import { JsonLd } from "~/components/JsonLd";
 
-const CONNECT_SCHEMA = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  name: `Expense MCP server`,
-  url: `${SITE_URL}/connect`,
-  description: MCP_PAGE_SUMMARY,
-  author: {
-    "@type": "Person",
-    name: "Assaf Arkin",
-    url: "https://labnotes.org",
-  },
-};
+export function loader() {
+  return { ...CONNECT, mcp: MCP };
+}
 
-export function meta(): Route.MetaDescriptors {
-  return pageMeta(
-    `Expense: MCP server`,
-    "Install instructions for the Expense MCP server in Claude, ChatGPT, Gemini CLI, and other MCP clients, the full tool list, and example usage. Remote HTTP + OAuth, no API keys.",
-    "/connect",
-  );
+export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
+  if (!loaderData) return [];
+  return pageMeta(loaderData.metaTitle, loaderData.description, "/connect");
 }
 
 export const headers = marketingPageHeaders;
@@ -135,15 +121,28 @@ function StepText({ text }: { text: string }) {
   );
 }
 
-export default function ConnectPage() {
+export default function ConnectPage({ loaderData }: Route.ComponentProps) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: `Expense MCP server`,
+    url: `${SITE_URL}/connect`,
+    description: loaderData.summary,
+    author: {
+      "@type": "Person",
+      name: "Assaf Arkin",
+      url: "https://labnotes.org",
+    },
+  };
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get("client");
   // Unknown ids fall back to the first client; the default client keeps the
   // canonical /connect URL (no ?client= in the link).
-  const active = MCP_CLIENTS.find((c) => c.id === requested) ?? MCP_CLIENTS[0];
+  const active =
+    loaderData.clients.find((c) => c.id === requested) ?? loaderData.clients[0];
   const selectClient = (id: string) => {
     const next = new URLSearchParams(searchParams);
-    if (id === MCP_CLIENTS[0].id) {
+    if (id === loaderData.clients[0].id) {
       next.delete("client");
     } else {
       next.set("client", id);
@@ -152,17 +151,17 @@ export default function ConnectPage() {
   };
   return (
     <MarketingPage
-      eyebrow="MCP server"
-      title="Connect any AI assistant to Expense."
-      summary={MCP_PAGE_SUMMARY}
-      schema={<JsonLd data={CONNECT_SCHEMA} />}
+      eyebrow={loaderData.eyebrow}
+      title={loaderData.title}
+      summary={loaderData.summary}
+      schema={<JsonLd data={schema} />}
     >
       <section className="mt-14">
         <h2 className="text-2xl font-bold tracking-tight text-ink">
-          Setup instructions
+          {loaderData.setupHeading}
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-          The base MCP server address is:
+          {loaderData.baseAddressLabel}
         </p>
         <CodeBlock
           label="Server URL"
@@ -170,12 +169,11 @@ export default function ConnectPage() {
           copyLabel="Copy server URL"
         />
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-          All connections use OAuth: the first connection opens a sign-in flow
-          to your Expense account. No API keys.
+          {loaderData.oauthNote}
         </p>
 
         <div className="mt-8 flex flex-wrap gap-2">
-          {MCP_CLIENTS.map((c) => {
+          {loaderData.clients.map((c) => {
             const selected = c.id === active.id;
             return (
               <button
@@ -232,10 +230,15 @@ export default function ConnectPage() {
         </Card>
       </section>
 
-      <CapabilitiesSection />
+      <CapabilitiesSection
+        heading={loaderData.mcp.capabilitiesHeading}
+        capabilities={loaderData.mcp.capabilities}
+      />
 
       <section className="mt-14">
-        <h2 className="text-2xl font-bold tracking-tight text-ink">Tools</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
+          {loaderData.toolsHeading}
+        </h2>
         <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
           <table className="w-full border-collapse text-left text-sm">
             <thead>
@@ -248,7 +251,7 @@ export default function ConnectPage() {
               </tr>
             </thead>
             <tbody>
-              {MCP_TOOLS.map((t) => (
+              {loaderData.tools.map((t) => (
                 <tr
                   key={t.name}
                   className="border-b border-gray-100 dark:border-gray-800 last:border-0"
@@ -282,35 +285,22 @@ export default function ConnectPage() {
         </div>
       </section>
 
-      <PromptsSection heading="Example prompts" />
+      <PromptsSection
+        heading={loaderData.promptsHeading}
+        prompts={loaderData.mcp.prompts}
+      />
 
-      <SecuritySection>
-        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-          Signed in? Manage or revoke existing connections in Settings → Agents
-          &amp; API (MCP). For the read-only in-page tools a browser agent can
-          use while you're signed in, see{" "}
-          <Link
-            to="/ai"
-            className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
-          >
-            the WebMCP page
-          </Link>
-          . Prefer to skip the connection?{" "}
-          <Link
-            to="/ai"
-            className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
-          >
-            Insights
-          </Link>{" "}
-          answers questions about your spending inside the app.
-        </p>
-      </SecuritySection>
+      <SecuritySection
+        heading={loaderData.mcp.securityHeading}
+        security={loaderData.mcp.security}
+        note={loaderData.securityNote}
+      />
 
       <MarketingCta
-        heading="Your expenses, on speaking terms with your assistant."
-        body="Accounts are free and start empty. Add your first receipt in under a minute, then connect your assistant whenever you're ready."
+        heading={loaderData.cta.heading}
+        body={loaderData.cta.body}
         icon={<Bot aria-hidden="true" className="h-6 w-6 text-white" />}
-        secondaryLabel="Read the FAQ"
+        secondaryLabel={loaderData.cta.secondaryLabel}
         secondaryHref="/faq"
       />
     </MarketingPage>

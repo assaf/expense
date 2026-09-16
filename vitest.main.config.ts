@@ -19,6 +19,7 @@ export default defineConfig({
     exclude: [
       "test/default-categories.test.ts",
       "test/schedule-c.test.ts",
+      "test/email-rules-seed.test.ts",
       "test/completeness.test.ts",
       "test/errors.test.ts",
       "test/maps.test.ts",
@@ -51,6 +52,7 @@ export default defineConfig({
       "test/insight-periods.test.ts",
       "test/expense-table.test.tsx",
       "test/markdown.test.ts",
+      "test/public-content.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

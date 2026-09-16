@@ -1,56 +1,61 @@
-import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
-import {
-  COMPETITOR_PRICING_NOTE,
-  COMPETITOR_ROWS,
-  COMPARISON_SUMMARY,
-  marketingPageHeaders,
-  pageMeta,
-  SITE_URL,
-} from "~/lib/seo-content";
-import type { Route } from "./+types/alternatives";
 import { JsonLd } from "~/components/JsonLd";
+import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
+import { ALTERNATIVES } from "~/lib/content.server";
+import { marketingPageHeaders, pageMeta, SITE_URL } from "~/lib/seo-content";
+import type { Route } from "./+types/alternatives";
 
-const COMPARISON_SCHEMA = {
-  "@context": "https://schema.org",
-  "@type": "WebPage",
-  name: `How Expense compares to the other receipt apps`,
-  url: `${SITE_URL}/alternatives`,
-  description: COMPARISON_SUMMARY,
-};
+export function loader() {
+  return ALTERNATIVES;
+}
 
-export function meta(): Route.MetaDescriptors {
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (!loaderData) return [];
   return pageMeta(
-    `Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave`,
-    `Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.`,
+    loaderData.metaTitle,
+    loaderData.description,
     "/alternatives",
   );
 }
 
 export const headers = marketingPageHeaders;
 
-export default function AlternativesPage() {
+export default function AlternativesPage({ loaderData }: Route.ComponentProps) {
+  const comparisonSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: `How Expense compares to the other receipt apps`,
+    url: `${SITE_URL}/alternatives`,
+    description: loaderData.summary,
+  };
+
   return (
     <MarketingPage
-      eyebrow="Compare"
-      title={`How Expense compares to the other receipt apps.`}
-      summary={COMPARISON_SUMMARY}
-      schema={<JsonLd data={COMPARISON_SCHEMA} />}
+      eyebrow={loaderData.eyebrow}
+      title={loaderData.title}
+      summary={loaderData.summary}
+      schema={<JsonLd data={comparisonSchema} />}
     >
       <section className="mt-10">
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
           <table className="w-full min-w-180 border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                <th className="px-4 py-3 font-semibold text-ink">App</th>
-                <th className="px-4 py-3 font-semibold text-ink">Best for</th>
-                <th className="px-4 py-3 font-semibold text-ink">Pricing</th>
                 <th className="px-4 py-3 font-semibold text-ink">
-                  Tax-filing focus
+                  {loaderData.tableHeadings[0]}
+                </th>
+                <th className="px-4 py-3 font-semibold text-ink">
+                  {loaderData.tableHeadings[1]}
+                </th>
+                <th className="px-4 py-3 font-semibold text-ink">
+                  {loaderData.tableHeadings[2]}
+                </th>
+                <th className="px-4 py-3 font-semibold text-ink">
+                  {loaderData.tableHeadings[3]}
                 </th>
               </tr>
             </thead>
             <tbody>
-              {COMPETITOR_ROWS.map((row) => (
+              {loaderData.competitors.map((row) => (
                 <tr
                   key={row.app}
                   className="border-b border-gray-100 dark:border-gray-800 last:border-0"
@@ -85,13 +90,13 @@ export default function AlternativesPage() {
           </table>
         </div>
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-          {COMPETITOR_PRICING_NOTE}
+          {loaderData.pricingNote}
         </p>
       </section>
 
       <MarketingCta
-        heading={`Try Expense free.`}
-        body="No subscription, no 25-scan monthly cap, no ads."
+        heading={loaderData.cta.heading}
+        body={loaderData.cta.body}
         className="mt-12 py-10"
         buttonRow="mt-6"
       />

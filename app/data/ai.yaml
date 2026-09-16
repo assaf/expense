@@ -1,0 +1,61 @@
+# The AI-assistant page at /ai and its markdown mirror /ai.md. The shared
+# capability, prompt, and security copy lives in mcp.yaml.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  Expense: connect your AI assistant
+description: |-
+  Connect Claude, OpenAI, or any MCP client over the Expense MCP endpoint, or let a browser agent use Expense's in-page WebMCP tools: capture receipts, log mileage, answer spending questions, and build reports. No API keys.
+eyebrow: "AI assistants"
+title: |-
+  Connect your AI helper to Expense.
+summary: |-
+  Expense follows the Model Context Protocol (MCP) at https://expense.labnotes.org/mcp. Connect any MCP client like Claude, OpenAI, or some other assistant, then log in via OAuth authentication (no API keys necessary). Your assistant will be able to recognize receipts from photos and PDF files in the same way as the web application does, log drives according to the IRS rate, answer questions about spending based on your data, generate and export reports, and reconcile bank statements with your expenses. In browsers with WebMCP (Chrome's origin trial), Expense also registers in-page read tools for the browser's own agent: same data, your signed-in session, no setup.
+stepsHeading: |-
+  How to connect
+
+steps:
+  - title: "Direct your assistant to the endpoint"
+    body: |-
+      Tell your assistant to connect to {{mcpEndpoint}} (or just add it to your MCP configuration).
+  - title: "Log in and grant access"
+    body: |-
+      Your browser window pops up and you authorize your usual account and click Allow on the consent page.
+  - title: "It’s done. You control it anytime"
+    body: |-
+      Settings → Agents & API (MCP) contains the list of all connected applications; you may remove particular tokens or disconnect completely.
+
+mcpConfigHeading: "Claude: .mcp.json"
+mcpConfigJson: |-
+  {
+    "mcpServers": {
+      "expense": {
+        "type": "http",
+        "url": "{{mcpEndpoint}}"
+      }
+    }
+  }
+connectNote: |-
+  No headers or keys. The client discovers the sign-in flow itself. Claude and OpenAI connect the same way. Per-client setup instructions for Claude, Cursor, VS Code, ChatGPT, and more: [Connect with MCP]({{siteUrl}}/connect).
+webmcpHeading: |-
+  In the browser (WebMCP)
+webmcpBody: |-
+  In browsers with WebMCP support (Chrome's origin trial), Expense also registers read-only in-page tools for the browser's own agent while you're signed in: list expenses, summarize spending, and list reports. Same data as the MCP server, your signed-in session, no setup. It's read-only; write actions still go through the MCP endpoint.
+insightsHeading: |-
+  In the app, with nothing connected
+insightsSummary: |-
+  Expense answers questions on its own too, with nothing to connect. On the Insights page you ask in plain words ("how much have I spent this year?", "where does my money go?") and the app computes the answer from your own expenses; the model only phrases it, it never supplies a number. A question that covers several months comes back with a chart, and the chart opens to the exact expenses behind it.
+
+cta:
+  heading: |-
+    Your expenses, on speaking terms with your assistant.
+  body: |-
+    Accounts are free and start empty. Add your first receipt in under a minute, then connect your assistant whenever you're ready.
+  secondaryLabel: "Read the FAQ"
+
+mirror:
+  title: "Expense: connect your AI assistant"
+  promptsHeading: "Example prompts"
+  footer: "No ads."

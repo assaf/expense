@@ -1,0 +1,16 @@
+sender,note
+apple.com,App Store + Apple Store receipts
+amazon.com,Order confirmations and digital receipts
+stripe.com,Payment receipts from Stripe-billed merchants
+paypal.com,Payment receipts
+uber.com,Ride receipts
+lyft.com,Ride receipts
+doordash.com,Order receipts
+grubhub.com,Order receipts
+instacart.com,Order receipts
+squareup.com,Square receipts
+shopify.com,Shopify subscription bills (recurring biller)
+conservice.com,Conservice utility statements (recurring biller)
+spectrum.com,Spectrum internet/cable bills (recurring biller)
+spectrum.net,Spectrum billing notices (separate TLD rather than a subdomain)
+verizonwireless.com,Verizon Wireless phone bills (recurring biller)

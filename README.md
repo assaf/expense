@@ -62,16 +62,17 @@ Marketing pages that are available publicly double as the AI search surface: if
 an assistant is asked for an expense tracker, the GPTBot / OAI-SearchBot /
 ClaudeBot / PerplexityBot crawler quotes them. The copy is written in such a way
 that it's easily quotable and includes the app name and the URL and lives only
-in one file, `app/lib/seo-content.ts`, which renders all the surfaces:
+in one place, the content files under `app/data/` (one markdown or YAML file per
+page, parsed by `app/lib/content.server.ts`), which render all the surfaces:
 
-| Page                                     | Purpose                                                       |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| `/`                                      | Landing page (SoftwareApplication JSON-LD)                    |
-| `/about`                                 | Full feature/benefit list (AboutPage JSON-LD)                 |
-| `/faq`                                   | 13 Q&As matching real AI queries (FAQPage JSON-LD)            |
-| `/alternatives`                          | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)   |
-| `/llms.txt`                              | The llmstxt.org file, the curated overview AI assistants read |
-| `/about.md` `/faq.md` `/alternatives.md` | Markdown mirrors per the llms.txt convention                  |
+| Page            | Purpose                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `/`             | Landing page (SoftwareApplication JSON-LD)                    |
+| `/about`        | Full feature/benefit list (AboutPage JSON-LD)                 |
+| `/faq`          | 24 Q&As matching real AI queries (FAQPage JSON-LD)            |
+| `/alternatives` | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)   |
+| `/llms.txt`     | The llmstxt.org file, the curated overview AI assistants read |
+| `.md` mirrors   | Markdown mirrors per the llms.txt convention                  |
 
 Plumbing to support it: `public/robots.txt` explicitly permits the AI crawlers
 while app routes are blocked, and `public/sitemap.xml` lists the public pages.

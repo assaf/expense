@@ -1,33 +1,84 @@
 /**
- * A deliberately small markdown subset for LLM answers: paragraphs,
- * `-` bullet lists, GFM tables (`| a | b |` with a `|---|` separator
- * row), and inline `**bold**`. Everything else renders as plain text —
- * importantly, the parser produces plain strings and structure only, so
- * the React renderer can build text nodes without ever injecting HTML
- * from model output.
+ * A deliberately small markdown subset, shared by the LLM answers on the
+ * Insights page and the public content files under `app/data/`:
+ * paragraphs, `-` bullet lists, GFM tables (`| a | b |` with a `|---|`
+ * separator row), `#`/`##`/`###` headings, and inline `**bold**` and
+ * `[text](https://…)` links.
+ *
+ * Everything else renders as plain text — importantly, the parser produces
+ * plain strings and structure only, so the React renderer can build text
+ * nodes without ever injecting HTML from model output. Only absolute
+ * http(s) hrefs become links: `javascript:`, `mailto:`, and relative hrefs
+ * stay literal `[text](url)` text, so no host or model can put a hostile
+ * scheme into an `href`. Bold and links do not nest, so a `**` inside link
+ * text stays literal.
+ *
+ * Each line is one block: a paragraph is a single line, never a soft-wrapped
+ * run of lines. Blank lines separate blocks, and a table separator row is
+ * optional (model output often omits it).
  */
 
-export type InlineSegment = { text: string; bold: boolean };
+export type InlineSegment = { text: string; bold: boolean; href?: string };
 
 export type Block =
   | { kind: "paragraph"; segments: InlineSegment[] }
   | { kind: "bullets"; items: InlineSegment[][] }
-  | { kind: "table"; header: string[]; rows: string[][] };
+  | { kind: "table"; header: string[]; rows: string[][] }
+  | { kind: "heading"; level: 1 | 2 | 3; segments: InlineSegment[] };
 
-/** Split a line into plain and **bold** segments. Separators pair left
- * to right; an odd count leaves the last one unpaired, and it stays
- * literal text. */
+/** One `[text](https://…)` link, absolute and http(s) only. */
+const LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/;
+
+/** The same link, for a global replace (never used with `exec`). */
+const LINK_ALL = new RegExp(LINK.source, "g");
+
+const HEADING = /^(#{1,3})\s+(.+)$/;
+
+/** Split one run of text into plain/link segments. */
+function withLinks(text: string, bold: boolean): InlineSegment[] {
+  const segments: InlineSegment[] = [];
+  let rest = text;
+  for (;;) {
+    const match = LINK.exec(rest);
+    if (!match) break;
+    const at = match.index;
+    if (at > 0) segments.push({ text: rest.slice(0, at), bold });
+    segments.push({ text: match[1]!, bold, href: match[2]! });
+    rest = rest.slice(at + match[0].length);
+  }
+  if (rest !== "" || segments.length === 0) segments.push({ text: rest, bold });
+  return segments;
+}
+
+/** Split a line into plain and **bold** segments, then into links.
+ * Bold separators pair left to right; an odd count leaves the last one
+ * unpaired, and it stays literal text. */
 export function parseInline(line: string): InlineSegment[] {
   const raw = line.split("**");
-  if (raw.length === 1) return [{ text: line, bold: false }];
+  if (raw.length === 1) return withLinks(line, false);
   const unpaired = (raw.length - 1) % 2 === 1 ? raw.length - 1 : -1;
   const segments: InlineSegment[] = [];
   for (let i = 0; i < raw.length; i++) {
-    const text = i === unpaired ? `**${raw[i]}` : raw[i];
+    const text = i === unpaired ? `**${raw[i]}` : raw[i]!;
     if (text === "") continue;
-    segments.push({ text, bold: i % 2 === 1 && i !== unpaired });
+    segments.push(...withLinks(text, i % 2 === 1 && i !== unpaired));
   }
   return segments;
+}
+
+/** The plain text of an inline segment list: markdown syntax removed, so it
+ * is safe inside JSON-LD answer text. */
+export function plainText(text: string): string {
+  return text
+    .replace(
+      LINK_ALL,
+      (_match, label: string, href: string) => `${label} (${href})`,
+    )
+    .replaceAll("**", "");
+}
+
+function segmentText(segments: InlineSegment[]): string {
+  return segments.map((segment) => segment.text).join("");
 }
 
 const TABLE_SEPARATOR = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/;
@@ -69,6 +120,16 @@ export function parseMarkdown(text: string): Block[] {
       flushAll();
       continue;
     }
+    const heading = HEADING.exec(trimmed);
+    if (heading) {
+      flushAll();
+      blocks.push({
+        kind: "heading",
+        level: heading[1]!.length as 1 | 2 | 3,
+        segments: parseInline(heading[2]!),
+      });
+      continue;
+    }
     if (/^-\s+/.test(trimmed)) {
       flushTable();
       bullets ??= [];
@@ -102,4 +163,25 @@ export function parseMarkdown(text: string): Block[] {
   }
   flushAll();
   return blocks;
+}
+
+/** A document split at its level-2 headings: the blocks before the first
+ * `## ` are `intro`, and each section's title carries its own blocks
+ * (level-1 and level-3 headings stay inside the section). */
+export function splitSections(blocks: Block[]): {
+  intro: Block[];
+  sections: Array<{ title: string; blocks: Block[] }>;
+} {
+  const intro: Block[] = [];
+  const sections: Array<{ title: string; blocks: Block[] }> = [];
+  for (const block of blocks) {
+    if (block.kind === "heading" && block.level === 2) {
+      sections.push({ title: segmentText(block.segments), blocks: [] });
+      continue;
+    }
+    const current = sections.at(-1);
+    if (current) current.blocks.push(block);
+    else intro.push(block);
+  }
+  return { intro, sections };
 }

@@ -13,6 +13,18 @@ declare module "*.csv?raw" {
   export default src;
 }
 
+// Bundled public copy (raw UTF-8 string): the markdown documents and the
+// YAML name/value bundles under app/data.
+declare module "*.md?raw" {
+  const src: string;
+  export default src;
+}
+
+declare module "*.yaml?raw" {
+  const src: string;
+  export default src;
+}
+
 interface ImportMetaEnv {
   BASE_URL: string;
   MODE: string;

@@ -1,0 +1,38 @@
+# The mileage-rate table at /mileage-rates and its markdown mirror
+# /mileage-rates.md. The table itself is computed from app/data/mileage-rates.ts.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  IRS standard mileage rates by year ({{mileageFirstYear}} to {{mileageLastYear}})
+description: |-
+  {{mileage}} The full table by period, with mid-year changes.
+eyebrow: "Reference"
+title: |-
+  IRS standard mileage rates by year
+summary: |-
+  The IRS standard mileage rates for every period since 2011 in one table: business, medical, moving, and charitable, including any mid-year changes. Expense uses the same table to compute the mileage deduction from each drive's date and type, so it never asks you to look a rate up.
+
+tableHeadings:
+  - "Period"
+  - "Business"
+  - "Medical"
+  - "Moving"
+  - "Charity"
+
+explanation: |-
+  Reimbursement and deduction rates per mile, newest first. A rate is effective for its whole period; mid-year changes appear as two rows for the same year.
+sourceNote: |-
+  Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates). The moving rate applies only to Armed Forces and Intelligence Community members moving under orders, and the charitable rate is fixed by statute.
+
+cta:
+  heading: |-
+    Expense applies these rates for you.
+  body: |-
+    Log a drive on the map and the deduction follows the IRS rate for its date and type. No tables to check.
+
+mirror:
+  title: "IRS standard mileage rates by year"
+  footer: |-
+    Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates). The moving rate applies only to Armed Forces and Intelligence Community members moving under orders, and the charitable rate is fixed by statute. [Expense]({{siteUrl}}/) applies these rates automatically: each drive's deduction follows its date and type, with no configuration. Current through {{mileagePeriod}}.

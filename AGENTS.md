@@ -249,10 +249,17 @@ arguments are length-bounded before parsing. Never call `db` from inside a
 request and splits the commit. Use the `tx` handle (the reconcile completion was
 fixed for this; `renameNamedRow` in `app/lib/db/names.ts` still is not).
 
-**Marketing and LLM copy.** All public copy, JSON-LD, `/llms.txt`, and the `.md`
-mirrors come from `app/lib/seo-content.ts`. Edit there, not in the route files.
-Every link in `llms.txt` must also exist in `public/sitemap.xml`
-(`test/llms-txt.test.ts`), and auth-gated pages must stay out of both.
+**Marketing and LLM copy.** All public copy lives in `app/data/`, one content
+file per page: markdown with YAML front matter for the prose documents,
+name/value YAML for the rest, plus the shared `site.yaml` and `mcp.yaml`.
+`app/lib/content.server.ts` parses those files and fills their `{{tokens}}`; the
+marketing routes read the parsed bundles as loader data and the `.md` /
+`/llms.txt` mirrors are assembled from the same fields. Edit the content files,
+not the route files or the builders. `app/lib/seo-content.ts` keeps only the
+site config (`SITE_URL`, `MCP_ENDPOINT`, `OG_IMAGE`), the shared meta helpers,
+and the computed mileage helpers. Every link in `llms.txt` must also exist in
+`public/sitemap.xml` (`test/llms-txt.test.ts`), and auth-gated pages must stay
+out of both.
 
 ## Important Files
 
@@ -270,7 +277,9 @@ Every link in `llms.txt` must also exist in `public/sitemap.xml`
 | `app/lib/env.ts`                      | Env constants; server-only (reads `.env` via `process.loadEnvFile`)        |
 | `app/lib/cron.server.ts`              | `cronTick`, the only supported cron wrapper                                |
 | `app/lib/mcp.server.ts`               | MCP tool registry and OAuth `authenticateRequest`                          |
-| `app/lib/seo-content.ts`              | Every string the public and AI-search surfaces render                      |
+| `app/data/`                           | The public copy: one markdown/YAML content file per page                   |
+| `app/lib/content.server.ts`           | Parses `app/data/`, exports the parsed bundles and the `.md` mirrors       |
+| `app/lib/seo-content.ts`              | Site config, shared meta helpers, and the computed mileage helpers         |
 | `app/lib/images.server.ts`            | BYTEA image storage and `images/{accountId}/...` keys                      |
 | `app/global.css`                      | Tailwind v4 entry: `@theme` tokens and the `.dark` variant                 |
 | `prisma/contract.prisma`              | Schema source of truth; `prisma.config.ts` points the CLI here             |

@@ -5,9 +5,14 @@
  * malformed rows (an unquoted comma, a quote inside a name, an unterminated
  * quoted field) and on duplicate names so a bad edit fails loudly.
  *
- * Lives in `app/data/` (no `.server` suffix) because the marketing surfaces
- * parse the same CSV at build time to render the Schedule C reference page;
- * the parser touches nothing beyond string handling, so it bundles safely.
+ * Deliberately narrower than the statement reader (`parseCsv` in
+ * `app/lib/reconcile.server.ts`): a name list has no second column, so a comma
+ * or a quote is an editing mistake to report, not a field to parse. A plain
+ * module, no Node or DB access, so either side can read the CSV.
+ *
+ * The seeder (`app/lib/default-categories.server.ts`) and the public Schedule C
+ * page (through `app/lib/content.server.ts`) both go through here, so the
+ * categories new accounts get and the page's table can't drift.
  */
 
 const CSV_PATH = "app/data/default-categories.csv";

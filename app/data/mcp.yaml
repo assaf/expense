@@ -1,0 +1,47 @@
+# The MCP copy /ai and /connect share: the capability cards, the example
+# prompts, and the security card. Both pages render these, and so do /ai.md
+# and /connect.md.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+capabilitiesHeading: |-
+  What your assistant can do
+
+capabilities:
+  - title: "Capture receipts"
+    body: |-
+      Upload a photo or PDF of a receipt to the chat and it will OCR and classify it based on your merchant history, just like in the web application—no manual work is required.
+  - title: "Log drives in natural language"
+    body: |-
+      “Log the drive home from the office on Tuesday.” It geocodes, calculates the route, and prices the drive at the IRS rate for the current year.
+  - title: "Answer questions about spending"
+    body: |-
+      “What amount did I spend on flights last quarter?” The question will get an answer based on your data.
+  - title: "Build and export reports"
+    body: |-
+      Create or close reports, assign expenses to them, and export a PDF version of the report in one sentence instead of filling out a form.
+  - title: "Reconcile statements"
+    body: |-
+      Upload the bank statement CSV file and it will find all charges without a receipt. Read-only: no data is written and no receipt is marked as not reconciled.
+  - title: "Tax-season answers"
+    body: |-
+      The categories match the ones in IRS Schedule C, so a question like “what’s my meals and entertainment total?” maps to your tax form perfectly.
+
+promptsHeading: |-
+  Try asking
+
+prompts:
+  - |-
+    “Here's my receipt, log it under Q3.”
+  - |-
+    “How much did I spend on meals and entertainment last quarter?”
+  - |-
+    “Move all unreported June expenses into the Q2 report and export the PDF.”
+  - |-
+    “Reconcile this statement.” (paste the CSV)
+
+securityHeading: |-
+  Security
+security: |-
+  Connecting is OAuth 2.1 with PKCE: the assistant never sees your password, access tokens live one hour, refresh tokens rotate, and only hashes are stored. A connection only ever reaches your own account. Revoke it anytime in Settings → Agents & API (MCP). Delete a single token or disconnect the whole app.

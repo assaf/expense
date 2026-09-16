@@ -2,16 +2,17 @@ import { ulid } from "ulid";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { nowWire } from "~/lib/db/wire";
-import { EMAIL_SHAPE_RE, extractEmailAddress } from "~/lib/validation";
+import { extractEmailAddress, normalizeRuleSender } from "~/lib/validation";
 
 /**
  * Email rules: which senders a connected account auto-imports. General
- * rules (accountId = "", synced from app/data/email-rules.ts) apply to
+ * rules (accountId = "", seeded from app/data/email-rules.csv) apply to
  * everyone; user rules are scoped to a workspace and learned from forwards.
  *
  * A rule's `sender` is either a full address ("receipts@stripe.com", exact
  * match) or a bare domain ("apple.com", which matches the domain and any
- * subdomain).
+ * subdomain). `normalizeRuleSender` owns that shape, so the store and the
+ * seed parser can't disagree about what counts.
  */
 
 export interface EmailRuleRecord {
@@ -67,12 +68,12 @@ export async function addEmailRule(input: {
   sender: string;
   source: string;
 }): Promise<AddEmailRuleResult> {
-  const sender = input.sender.trim().toLowerCase();
-  const valid = sender.includes("@")
-    ? EMAIL_SHAPE_RE.test(sender)
-    : /^[a-z0-9.-]+\.[a-z]{2,}$/.test(sender);
-  if (!valid) {
-    return { ok: false, error: `"${sender}" is not an address or domain.` };
+  const sender = normalizeRuleSender(input.sender);
+  if (sender === null) {
+    return {
+      ok: false,
+      error: `"${input.sender.trim().toLowerCase()}" is not an address or domain.`,
+    };
   }
   const existing = await db.orm.public.EmailRule.where((r) =>
     and(r.accountId.eq(input.accountId), r.sender.eq(sender)),

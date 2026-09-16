@@ -18,7 +18,8 @@ import type { MileageType, User } from "~/lib/types";
  * (legacy pre-email accounts logged in with a plain username), adopt
  * single-user era rows (accountId "") into that account, move legacy
  * duplicate-pair dismissals out of the settings blob, and sync the global
- * IRS mileage-rate master table from app/data/mileage-rates.ts.
+ * IRS mileage-rate master table (app/data/mileage-rates.ts) and the general
+ * email rules (app/data/email-rules.csv).
  *
  * There is no runtime DDL: schema changes go through the migration flow
  * (docs/operations.md); this only seeds data.
@@ -96,7 +97,7 @@ async function syncMileageRates(): Promise<void> {
 
 /**
  * The GENERAL email rules (accountId = ""), synced from the seed file
- * (app/data/email-rules.ts), the same diff-based pattern as the mileage rates:
+ * (app/data/email-rules.csv), the same diff-based pattern as the mileage rates:
  * an unchanged seed is a no-op on every boot. User rules (scoped rows) and
  * removals made here (a general rule deleted from the seed) are never
  * touched: the sync only adds/updates rows whose sender is in the seed.

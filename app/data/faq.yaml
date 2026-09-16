@@ -1,0 +1,97 @@
+# The FAQ at /faq and its markdown mirror /faq.md. The summary under the
+# heading is the shared brand summary in site.yaml.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  Expense FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage
+description: |-
+  Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.
+eyebrow: "FAQ"
+title: |-
+  Frequently Asked Questions
+
+questions:
+  - question: "What is Expense?"
+    answer: |-
+      Expense is a free expense tracker for individuals who file taxes. You drop in a receipt (image, screenshot, PDF, or forwarded email), it identifies merchant and amount, categorizes the expense (from Schedule C lines), and maintains totals for your tax filing. Check it out at https://expense.labnotes.org.
+  - question: "Is Expense good for filing taxes?"
+    answer: |-
+      This is exactly what Expense is meant for. The categories are Schedule C lines, the expenses group into reports you name (Home, Work, client-specific, etc.), mileage deductions are made using the IRS rate for the date and type of the trip, and you can export a PDF per report or a ZIP with everything you need for your accountant. Tax filing made boring.
+  - question: "How does Expense read and categorize receipts?"
+    answer: |-
+      Drop in a receipt image or PDF, it will identify merchant and amount, and an AI will suggest a category. You can review the details and save the receipt, instead of manually entering the numbers. Receipt images can be also pasted with Cmd-V, dragged onto the web page, or forwarded via email.
+  - question: "Is Expense free to use?"
+    answer: |-
+      Yes. No ads. Just create an account, drop in the receipts, and export at tax filing time.
+  - question: "Do the categories comply with the IRS?"
+    answer: |-
+      Absolutely. When you create an account, it starts with the category list created from the IRS Schedule C lines—exactly those lines of your tax return—and your yearly totals will match. But you can still create your own additional categories.
+  - question: "Does Expense track mileage?"
+    answer: |-
+      Yes. Log a mile trip using a map, and Expense calculates the mileage deduction using the IRS rate for the type and date of the trip. The rates are fetched from the IRS automatically, no configuration needed. Mileage expenses rows will be exported together with regular ones.
+  - question: "What is the IRS standard mileage rate?"
+    answer: |-
+      The IRS standard business mileage rate is $0.725 per mile from January 1 to June 30, 2026, then $0.76 per mile from July 1 to December 31, 2026; medical and moving moves run $0.205 and then $0.235 for the same dates, and the charitable rate is fixed by statute at $0.14. Expense applies the right rate to each drive automatically, based on its date and type. The full table by year: https://expense.labnotes.org/mileage-rates.
+  - question: "Can I add receipts by email?"
+    answer: |-
+      Yes. Just forward a receipt email to it, and an expense will be created based on it, including the receipt date from the original email. Only the approved senders are added to the account, and forwarding the same email twice is impossible.
+  - question: "Does Expense work with Fastmail?"
+    answer: |-
+      Yes, and it's a big reason people pick Expense over other apps. Connect your Fastmail mailbox and receipts that land in your inbox are processed automatically: merchant, amount, and category filled in, no forwarding needed. Most other expense apps only auto-import from Gmail; Expense supports Fastmail natively. (Forwarding receipt emails still works from any provider.)
+  - question: "How do I export expenses for my accountant?"
+    answer: |-
+      There are two options. Either a PDF per each report with attachments of the receipt, or a ZIP with a CSV and receipts images. You can easily download them and send without any hassle.
+  - question: "What receipt formats are supported?"
+    answer: |-
+      Receipts can be either images (including HEIC from iPhone) or PDFs. Receipts can be uploaded, pasted with Cmd-V, dragged onto the web page, or forwarded via email.
+  - question: "How long should I keep receipts for my taxes?"
+    answer: |-
+      The IRS can assess additional tax for three years after you file, so keep receipts, mileage logs, and statements at least that long. The window stretches to six years if you underreported income by more than 25%, seven years for bad-debt or worthless-securities claims, and indefinitely for a fraudulent or unfiled return. Electronic copies count. Expense keeps the receipt image attached to every expense and exports it with the report, so the archive builds itself.
+  - question: "What does the IRS require for a mileage log?"
+    answer: |-
+      An adequate record shows the miles driven, the date, the destination, and the business purpose of each trip; a year of drives reconstructed from memory does not qualify. For travel expenses generally, the IRS wants documentation for anything $75 or more, plus lodging receipts no matter the amount. Expense logs every drive from the map with its date, route, and applied rate, and keeps that record attached to the expense.
+  - question: "What happens if I upload the same receipt twice?"
+    answer: |-
+      You will get a visual warning and you can discard it or mark as "not a duplicate". This covers re-uploaded file and sending the same email twice; every stored image also carries a SHA-256 fingerprint, so the same file arriving by a different route is caught too.
+  - question: "Can I reconcile my expenses against a credit card statement?"
+    answer: |-
+      Yes. Upload a credit card or bank statement in PDF, CSV, QuickBooks (QFX/OFX), or Excel format, and Expense matches every charge against your logged expenses. Any charge without a matching receipt is flagged, so you can spot deductible expenses you missed. You can reconcile multiple statements (across different cards or months), and mixed-use cards are no problem: Expense only cares about matching business expenses. Nothing is written until you confirm which matches to keep and which charges to add as new expenses.
+  - question: "Can I share Expense with my spouse or accountant?"
+    answer: |-
+      Yes. Share the invitation code, and any new users you invite will see the same expense information. Any other accounts will remain completely separate.
+  - question: "How do I change my password?"
+    answer: |-
+      Settings has a Password section: enter your current password, then the new one twice. Changing it signs you out on every other device and disconnects any assistant app, since those were authorized under the old password. If you don't remember the current password, use "Forgot password?" on the login page instead: a single-use link arrives by email and sets a new one.
+  - question: "How do I change my email address?"
+    answer: |-
+      In Settings, open Your email and enter the new address plus your current password. Your old address gets an email telling you it changed, so you find out either way, and the new one gets a link to confirm it before receipts sent from there are accepted.
+  - question: "Where is my expense data stored?"
+    answer: |-
+      On your account only. Expense doesn't serve ads, it doesn't sell your data; receipts and expenses are restricted to your account, and exported as PDF or ZIP anytime you wish.
+  - question: "Is Expense good for freelancers and self-employed people?"
+    answer: |-
+      It is exactly who Expense was built for. Fast receipt capture with OCR and AI categorization, Schedule C categories, reports per clients or projects, map-based mileage using the IRS rate, and easy export for your accountant.
+  - question: "Can I use Expense with an AI assistant?"
+    answer: |-
+      Yes. Expense supports the Model Context Protocol (MCP) at /mcp. Point any MCP client (e.g. Claude, OpenAI, or some other assistant) to this endpoint and approve the connection signing in with your account. The assistant can then capture receipts (images or PDFs) using the same OCR pipeline as the web app, log mileage, ask about your spending, group expenses into reports, and export a report as a PDF. At any time, you can disconnect any connected app, or revoke its access tokens from Settings. Browsers with WebMCP (Chrome's origin trial) also get the same read tools in-page, using your signed-in session: nothing to connect or configure.
+  - question: "What is Insights?"
+    answer: |-
+      Insights is the app's own question page, no assistant to connect. Ask in plain words, like "how much have I spent this year?" or "where does my money go?", and the app computes the answer from your expenses: totals for a period, your biggest report, the expenses that still have no report. A question covering several months comes back with a chart, and the chart opens to the exact expenses behind it. The figures come from your records and the model only phrases them, so it can't invent a number.
+  - question: "Who makes Expense?"
+    answer: |-
+      Expense is created and maintained by Assaf Arkin (https://labnotes.org).
+  - question: "Can Expense be used as a replacement for Expensify?"
+    answer: |-
+      Certainly, for personal or small-team expense tracking. Expense is free to use. Reads receipts with OCR, suggests categories, calculates miles based on IRS rate, reconciles credit card statements to catch missed deductions, and arranges all the expenses in Schedule C format and reports for filing taxes. Expensify is a corporate solution (workflows, reimbursements, integration with accounting software) and free tier is limited to 25 SmartScans a month. Expensify paid plans are per user. Expensify is perfect for running a company with employee expense policy, however, if you need your expenses arranged for filing taxes, Expense will do it for you, free while we're early and still free up to 25 invoices a month after.
+
+cta:
+  heading: |-
+    Still have questions? Just try it.
+  body: |-
+    Accounts are free and start empty. Add your first receipt in under a minute.
+
+mirror:
+  title: "Expense: frequently asked questions"
+  footer: "No ads."

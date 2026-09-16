@@ -60,9 +60,9 @@ export function notFound(): Response {
  * Not RFC-complete (no IDN/quoting rules), good enough to keep typos and
  * junk out of the login identity, which is all this app needs.
  */
-/** Address shape only (no 254-char cap); shared by isEmail and the
- * sender-rule matcher, which intentionally accept longer addresses. */
-export const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+/** Address shape only (no 254-char cap): `isEmail` caps the length, and
+ * `normalizeRuleSender` deliberately accepts longer addresses. */
+const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function isEmail(input: string): boolean {
   const email = input.trim().toLowerCase();
@@ -75,6 +75,21 @@ export function extractEmailAddress(addr: string): string {
   const m = addr.match(/<([^<>@\s]+@[^<>@\s]+)>/);
   const candidate = m ? m[1]! : addr;
   return candidate.trim().toLowerCase();
+}
+
+/** Canonical form of an email-rule sender: a lowercased full address
+ * ("receipts@stripe.com", matched exactly) or bare domain ("apple.com",
+ * matched on the domain and any subdomain), or null when the text is neither.
+ *
+ * Lowercasing is the point, not a convenience: rules are matched against the
+ * lowercased From address, so a capital in a hand-edited list would silently
+ * never match. Shared by the rule store (`addEmailRule`) and the seed parser
+ * for `app/data/email-rules.csv`, so a seeded rule is one the store would
+ * accept. */
+export function normalizeRuleSender(sender: string): string | null {
+  const value = sender.trim().toLowerCase();
+  if (value.includes("@")) return EMAIL_SHAPE_RE.test(value) ? value : null;
+  return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value) ? value : null;
 }
 
 /** True when y/m/d is a real calendar date. Date.UTC silently rolls

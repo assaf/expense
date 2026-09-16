@@ -1,61 +1,59 @@
+import { JsonLd } from "~/components/JsonLd";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
-import {
-  APP_SUMMARY,
-  FAQS,
-  marketingPageHeaders,
-  pageMeta,
-} from "~/lib/seo-content";
+import { FAQ } from "~/lib/content.server";
+import { plainText } from "~/lib/markdown";
+import { marketingPageHeaders, pageMeta } from "~/lib/seo-content";
 import type { Route } from "./+types/faq";
-import { JsonLd } from "~/components/JsonLd";
 
-/** FAQPage structured data: the primary signal for FAQ-style AI answers. */
-const FAQ_SCHEMA = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQS.map((f) => ({
-    "@type": "Question",
-    name: f.question,
-    acceptedAnswer: {
-      "@type": "Answer",
-      text: f.answer,
-    },
-  })),
-};
+export function loader() {
+  return FAQ;
+}
 
-export function meta(): Route.MetaDescriptors {
-  return pageMeta(
-    `Expense FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage`,
-    "Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.",
-    "/faq",
-  );
+export function meta({ loaderData }: Route.MetaArgs) {
+  if (!loaderData) return [];
+  return pageMeta(loaderData.metaTitle, loaderData.description, "/faq");
 }
 
 export const headers = marketingPageHeaders;
 
-export default function FaqPage() {
+export default function FaqPage({ loaderData }: Route.ComponentProps) {
+  /** FAQPage structured data: the primary signal for FAQ-style AI answers. */
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: loaderData.questions.map((question) => ({
+      "@type": "Question",
+      name: question.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: plainText(question.answer),
+      },
+    })),
+  };
+
   return (
     <MarketingPage
-      eyebrow="FAQ"
-      title="Frequently Asked Questions"
-      summary={APP_SUMMARY}
+      eyebrow={loaderData.eyebrow}
+      title={loaderData.title}
+      summary={loaderData.summary}
       className="max-w-3xl"
-      schema={<JsonLd data={FAQ_SCHEMA} />}
+      schema={<JsonLd data={faqSchema} />}
     >
       <div className="mt-10 flex flex-col gap-4">
-        {FAQS.map((f) => (
-          <Card key={f.question} className="p-5">
-            <h2 className="font-semibold text-ink">{f.question}</h2>
+        {loaderData.questions.map((question) => (
+          <Card key={question.question} className="p-5">
+            <h2 className="font-semibold text-ink">{question.question}</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-              {f.answer}
+              {question.answer}
             </p>
           </Card>
         ))}
       </div>
 
       <MarketingCta
-        heading="Still have questions? Just try it."
-        body="Accounts are free and start empty. Add your first receipt in under a minute."
+        heading={loaderData.cta.heading}
+        body={loaderData.cta.body}
         className="mt-12 py-10"
         buttonRow="mt-6"
       />

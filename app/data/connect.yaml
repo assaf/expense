@@ -1,0 +1,188 @@
+# The MCP setup page at /connect and its markdown mirror /connect.md. The
+# capability, prompt, and security copy lives in mcp.yaml.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  Expense: MCP server
+description: |-
+  Install instructions for the Expense MCP server in Claude, ChatGPT, Gemini CLI, and other MCP clients, the full tool list, and example usage. Remote HTTP + OAuth, no API keys.
+eyebrow: "MCP server"
+title: |-
+  Connect any AI assistant to Expense.
+summary: |-
+  Expense speaks the Model Context Protocol: connect any MCP client (Claude, ChatGPT, Gemini CLI, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth; there are no API keys.
+setupHeading: |-
+  Setup instructions
+baseAddressLabel: |-
+  The base MCP server address is:
+oauthNote: |-
+  All connections use OAuth: the first connection opens a sign-in flow to your Expense account. No API keys.
+
+clients:
+  - id: "claude"
+    name: "Claude (claude.ai and Claude Desktop)"
+    short: "Claude"
+    steps:
+      - |-
+        Go to claude.ai/customize/connectors
+      - |-
+        Click the + icon, then "Add custom connector"
+      - |-
+        Enter the server URL: https://expense.labnotes.org/mcp
+      - |-
+        Claude opens a browser to sign in to Expense; approve the connection
+    note: |-
+      The connector also appears in Claude Desktop and Claude Code when signed in with the same Claude account.
+  - id: "chatgpt"
+    name: "ChatGPT"
+    steps:
+      - |-
+        Go to Settings > Apps > Advanced settings and enable Developer mode
+      - |-
+        Click "Create app" and enter the server URL: https://expense.labnotes.org/mcp
+      - |-
+        Select Developer mode from the Plus menu to use Expense in conversations
+    note: |-
+      Requires a Pro, Plus, Business, Enterprise, or Education plan.
+  - id: "gemini-cli"
+    name: "Gemini CLI"
+    steps:
+      - |-
+        Add to ~/.gemini/settings.json:
+    code:
+      lang: "json"
+      body: |-
+        {
+          "mcpServers": {
+            "expense": {
+              "httpUrl": "https://expense.labnotes.org/mcp"
+            }
+          }
+        }
+  - id: "pi"
+    name: "Pi"
+    steps:
+      - |-
+        Install the MCP adapter and restart Pi: pi install npm:pi-mcp-adapter
+      - |-
+        Add to .mcp.json (project) or ~/.config/mcp/mcp.json (global):
+      - |-
+        Ask for a tool: the first call opens the Expense sign-in, or run /mcp-auth expense.
+    code:
+      lang: "json"
+      body: |-
+        {
+          "mcpServers": {
+            "expense": {
+              "url": "https://expense.labnotes.org/mcp",
+              "auth": "oauth"
+            }
+          }
+        }
+    note: |-
+      Pi has no built-in MCP client by design; pi-mcp-adapter is the community package that adds one.
+  - id: "omp"
+    name: "Oh My Pi (OMP)"
+    short: "Oh My Pi"
+    steps:
+      - |-
+        Add to ~/.omp/agent/mcp.json (user) or .omp/mcp.json (project):
+    code:
+      lang: "json"
+      body: |-
+        {
+          "mcpServers": {
+            "expense": {
+              "type": "http",
+              "url": "https://expense.labnotes.org/mcp"
+            }
+          }
+        }
+    note: |-
+      Or run /mcp add in a session. OMP opens the Expense sign-in when the server asks for auth; /mcp reauth expense re-approves later.
+  - id: "other"
+    name: "Anything else"
+    short: "Other"
+    steps:
+      - |-
+        Any MCP client with Streamable HTTP transport works: point it at the server URL above.
+      - |-
+        The client discovers the OAuth flow automatically via /.well-known/oauth-authorization-server and opens the Expense sign-in; approve once and consent is remembered.
+
+promptsHeading: |-
+  Example prompts
+toolsHeading: |-
+  Tools
+
+tools:
+  - name: "capture_receipt"
+    writes: true
+    what: |-
+      Capture a receipt from an image or PDF (file data or URL): extraction pipeline, stores the image, creates the expense.
+  - name: "log_mileage"
+    writes: true
+    what: |-
+      Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate. One way unless the trip returns to its first stop.
+  - name: "list_expenses"
+    writes: false
+    what: |-
+      Query expenses by date range, category, merchant, report, or type.
+  - name: "expense_summary"
+    writes: false
+    what: |-
+      Totals and per-category breakdown: the "how much did I spend on X?" tool.
+  - name: "list_reports"
+    writes: false
+    what: |-
+      Reports with expense counts and exact totals.
+  - name: "create_report"
+    writes: true
+    what: |-
+      Create a report (fails if the name exists).
+  - name: "close_report"
+    writes: true
+    what: |-
+      Close (or reopen) a report; closed reports refuse new expenses.
+  - name: "add_to_report"
+    writes: true
+    what: |-
+      Move an expense into an open report.
+  - name: "export_report"
+    writes: false
+    what: |-
+      Render a report as a PDF (same layout as the web export) and return it base64-encoded.
+  - name: "list_categories"
+    writes: false
+    what: |-
+      The account's categories; use these when categorizing.
+  - name: "list_merchants"
+    writes: false
+    what: |-
+      Merchant names previously used, most recent first.
+  - name: "get_settings"
+    writes: false
+    what: |-
+      Home address, the account's named locations (work, hospital), and the IRS mileage-rate table.
+  - name: "reconcile"
+    writes: false
+    what: |-
+      Match a bank statement (CSV/QFX/OFX) against logged expenses; pure analysis, writes nothing.
+
+securityNote: |-
+  Signed in? Manage or revoke existing connections in Settings → Agents & API (MCP). For the read-only in-page tools a browser agent can use while you're signed in, see [the WebMCP page]({{siteUrl}}/ai). Prefer to skip the connection? [Insights]({{siteUrl}}/ai) answers questions about your spending inside the app.
+
+cta:
+  heading: |-
+    Your expenses, on speaking terms with your assistant.
+  body: |-
+    Accounts are free and start empty. Add your first receipt in under a minute, then connect your assistant whenever you're ready.
+  secondaryLabel: "Read the FAQ"
+
+mirror:
+  title: "Connect your AI assistant to Expense: the MCP server"
+  intro: |-
+    The base MCP server address is {{mcpEndpoint}} (Streamable HTTP + OAuth). All connections use OAuth: the first connection opens a sign-in flow to your Expense account; there are no API keys.
+  footer: |-
+    For the browser-based in-page tools (WebMCP), and the app's own Insights page that answers questions about your spending with nothing connected, see [Expense: connect your AI assistant]({{siteUrl}}/ai.md).

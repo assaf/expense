@@ -1,0 +1,98 @@
+# The comparison page at /alternatives and its markdown mirror
+# /alternatives.md.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
+# app/lib/content.server.ts.
+
+metaTitle: |-
+  Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave
+description: |-
+  Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.
+eyebrow: "Compare"
+title: |-
+  How Expense compares to the other receipt apps.
+summary: |-
+  How Expense stacks up against the receipt
+  apps it is most often listed next to: Expensify, Zoho Expense, SparkReceipt,
+  Shoeboxed, and Wave. Expense is built for one job: getting a private person's
+  or small team's expenses ready for tax season. It is free while the app is
+  early (then still free up to 25 invoices a month), reads receipts with OCR,
+  suggests categories, reconciles credit card statements to catch missed
+  deductions, arranges everything in Schedule C format with mileage at the IRS
+  rate, and answers questions about your spending on its own Insights page,
+  computing the answer from your records instead of guessing at it. The apps it
+  gets compared to mostly aim at company expense management or general
+  bookkeeping; the table below shows who is best for what.
+
+tableHeadings:
+  - "App"
+  - "Best for"
+  - "Pricing"
+  - "Tax-filing focus"
+
+competitors:
+  - app: "Expense"
+    site: "{{siteUrl}}"
+    bestFor: |-
+      Freelancers and individuals getting their expenses ready for tax season.
+    pricing: |-
+      Free. No ads.
+    taxFiling: |-
+      IRS Schedule C categories, mileage at the IRS rate, statement reconciliation, PDF or ZIP export for your accountant, plus Insights: ask a question in plain words and get the answer computed from your own expenses, with a chart across months.
+  - app: "Expensify"
+    site: "https://www.expensify.com"
+    bestFor: |-
+      Companies with employee expense policies, approval workflows, and reimbursements.
+    pricing: |-
+      Free tier limited to 25 SmartScans a month; paid plans about $5-$9 per user a month in 2026 (expensify.com).
+    taxFiling: |-
+      Corporate reimbursement and accounting exports, not personal tax prep.
+  - app: "Zoho Expense"
+    site: "https://www.zoho.com/expense/"
+    bestFor: |-
+      Small teams already working in the Zoho suite.
+    pricing: |-
+      Free for up to 3 users with 20 receipt scans per user a month; Standard is $4 per user a month (zoho.com).
+    taxFiling: |-
+      Expense reports and accounting integrations, without a Schedule C structure.
+  - app: "SparkReceipt"
+    site: "https://sparkreceipt.com"
+    bestFor: |-
+      Solo owners who want AI extraction across many currencies.
+    pricing: |-
+      No free plan; $99.99 a year (about $8.33 a month) for 3 seats, 7-day trial (sparkreceipt.com).
+    taxFiling: |-
+      AI categorization that maps to any tax system; currency-global, not tied to a US form.
+  - app: "Shoeboxed"
+    site: "https://www.shoeboxed.com"
+    bestFor: |-
+      Clearing piles of paper receipts through the mail-in Magic Envelope.
+    pricing: |-
+      No free plan; Starter is $9 a month with 30 digital scans a month (shoeboxed.com).
+    taxFiling: |-
+      Audit-ready reports, unlimited mileage tracking, and CSV export.
+  - app: "Wave"
+    site: "https://www.waveapps.com"
+    bestFor: |-
+      Invoicing and bookkeeping first, receipts second.
+    pricing: |-
+      Starter is free but scans no receipts; receipt capture needs Pro at $19 a month (waveapps.com).
+    taxFiling: |-
+      General bookkeeping reports rather than a specific tax form.
+
+pricingNote: |-
+  Pricing from each vendor's pricing page, checked August 2026; check the vendor for current numbers.
+
+cta:
+  heading: |-
+    Try Expense free.
+  body: |-
+    No subscription, no 25-scan monthly cap, no ads.
+
+mirror:
+  title: "How Expense compares to the other receipt apps"
+  heading: "Expense and the other receipt apps"
+  footer: |-
+    Expense ({{siteUrl}}) is free, uses OCR and AI to categorize receipts, tracks
+    mileage at the IRS rate, and organizes expenses into Schedule C-based
+    categories and reports for tax filing.

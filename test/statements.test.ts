@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseCsv, parseStatementUpload } from "~/lib/reconcile.server";
+import { parseCsv } from "~/lib/csv";
+import { parseStatementUpload } from "~/lib/reconcile.server";
 
 /**
  * Every statement fixture in test/fixtures/statements/ is paired with a
