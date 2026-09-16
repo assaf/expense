@@ -24,54 +24,54 @@ mirror:
   title: "Terms of service"
 ---
 
-## What this is
+## This is
 
-Expense is an expense tracker for people filing taxes as individuals, built and run by one person, Assaf Arkin, in Los Angeles. It is free and carries no ads: free until the app reaches 100 users, and free up to 25 invoices a month after that.
+Expense is a free expense tracker for individual taxpayers, developed and operated by one person, Assaf Arkin, in LA. It doesn't show ads and is free to use.
 
-Creating an account means you agree to these terms. If you do not agree with them, please do not use the app.
+By creating an account you agree to those terms. If you don't agree, please don't use the app.
 
 ## Your account
 
-Keep your password to yourself. Everyone you invite with the account's invite code sees the same expenses, so invite deliberately, and remember that you are responsible for what your account's members do.
+Keep your password private. Everybody you invite with your account's invite code sees the same expenses, so please invite carefully, and know that you're responsible for what your account's members are doing.
 
-An assistant you connect over MCP acts with your account's permissions: what it writes lands in your expenses, and it reaches nothing else. Revoke it in Settings whenever you like.
+Assistant you connect via MCP works within the permissions of your account: whatever it writes ends up in your expenses, and sees nothing else. You can revoke it in Settings whenever you wish.
 
-## Your data stays yours
+## Your data is yours
 
-You own the receipts, expenses, trips, and notes you put into the app. You give the app permission to store and process them in order to do what you asked: read a receipt, match a statement, answer an Insights question, build a report or an export.
+You own receipts, expenses, trips, and notes you enter into the app. You give the app permissions to store and process them to perform whatever task you requested: read a receipt, match a statement, answer Insights question, make a report or an export.
 
-What is stored, where it lives, and which providers see what is spelled out in the privacy policy.
+Where the data is stored, which cloud services it uses and what they have access to is detailed in the privacy policy.
 
 ## What not to do
 
-Do not upload receipts that are not yours to upload, use the app for anything illegal, poke at accounts that are not yours, scrape or hammer the service, or pass it off as your own.
+Don't upload receipts which are not yours, don't abuse the app for anything illegal, don't interact with accounts that are not yours, don't scrape or flood the service, and don't pretend it's your own.
 
-An account that does gets suspended, which nobody enjoys.
+An account exhibiting such behavior will likely get suspended, which nobody likes.
 
 ## Not tax, legal, or accounting advice
 
-The app applies IRS mileage rates and Schedule C categories, totals what you spent, and reads receipts. That is bookkeeping help, not advice, and the reading is not perfect: OCR and the model misread a merchant, a total, or a date now and then.
+App uses IRS mileage rates, Schedule C categories, adds up expenses and reads receipts. It is bookkeeping help, not advice, and the reading is far from being flawless: OCR and the model can misread a merchant, total and a date from time to time.
 
-Check what it filled in before you file, and take real tax questions to a professional.
+Always double check what it filled before you file, and consult a professional on actual tax questions.
 
 ## Availability
 
-The app comes as it is, with no uptime or availability promise. Features change, break, and sometimes go away, and the free limits can change with them.
+App is provided as is, without any guarantee regarding uptime or availability. Features come and go, break and get fixed, sometimes even disappear, and limits applicable to free plan might change along with them.
 
-Keep your own copy of anything you cannot afford to lose: the ZIP export downloads every expense and its receipts in one file.
+Keep your own copies of any data that you can't afford to lose: ZIP export dumps all expenses and their receipts into one file.
 
-## Ending it
+## Summary
 
-You can close your account in Settings whenever you like: everything in it is deleted, and the account goes with it when you are its last member. If others are still on the account, only your login leaves and you will need to disconnect any mailbox you connected to it first.
+You can delete your account in Settings any time you want: all data in it will get deleted, and the account itself – if there's no other account member anymore. If there are still other members left in the account, your login will be disabled and you'll have to disconnect any mailbox you've connected first.
 
-I may suspend an account that abuses the service or breaks these terms.
+I may suspend account which abuses the service or violates the terms above.
 
 ## Liability
 
-The app is free, so the practical limit on what I owe you is nothing. In plain terms: I am not liable for data that is lost or read wrong, for deductions missed, or for anything indirect that follows from using the app.
+The app is free, so there is no real monetary consideration I owe you. In clear language: I am not responsible for any lost data, any data that has been read incorrectly, any missed deduction, or any indirect consequence of using the app.
 
-These terms are governed by the laws of California, in the United States, where I live.
+Those terms are governed by California law in the US, where I live.
 
-## Changes
+## Updates
 
-When these terms change, the date above changes with it, and carrying on using the app means you accept the new version. Questions go to assaf@labnotes.org.
+Whenever terms of use are updated, the date above changes, and you agree to the new version of them by continuing to use the app. If you have questions, contact me at [assaf@labnotes.org](mailto:assaf@labnotes.org).

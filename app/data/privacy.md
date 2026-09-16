@@ -24,52 +24,44 @@ mirror:
   title: "Privacy"
 ---
 
-## What the app stores
+## Your personal information
 
-Your account: the email address you signed up with, a password hash (never the password itself), and the account's invite code.
-
-What you put in: receipts and their images, the merchant, amount, date, category, report, and any notes; mileage trips with their stops, addresses, and route; and the questions and answers in the Insights chat.
-
-An account is shared with everyone you invite: members see the same expenses, so invite deliberately.
+- Your account: your sign-up email address, hashed password (not your actual password) and account invite code.
+- What you enter: receipts and their image, merchant, amount, date, category, report and notes; mileage trips with stops, addresses, and route; and the Q&A from Insights chat.
+- The account is shared with everybody you invite: they all see the same expenses, so invite with care.
 
 ## Email
 
-If you forward receipts by email, the app reads those messages and keeps a log of what it did with each one, so the same message is never imported twice.
+- If you forward receipts by email, the app parses the emails and maintains a log of how it processed each one, to avoid importing a receipt more than once.
+- If you connect Gmail or Fastmail, the app stores encrypted OAuth tokens of that mailbox, reads relevant emails to find receipts and stops when you disconnect.
 
-If you connect Gmail or Fastmail, the app stores that mailbox's OAuth tokens encrypted, reads the mail it needs to find receipts, and stops reading when you disconnect.
+## Storage locations
 
-## Where it lives
+- Vercel hosts the app, and Supabase Postgres (US West region) contains the data, including receipt images.
 
-Vercel runs the app and Supabase Postgres (US West) holds the data, receipt images included. There is no separate file store and no copy in your browser.
+## People who can see it
 
-## Who else sees it
+- The model provider: receipt images and your questions are sent to the LLM that this solution uses to parse and answer. Every number in Insights is computed by the app using your expenses; the model provides the wording and cannot make up numbers.
+- Google/Fastmail for the mailbox you connect, and nobody else.
+- Frankfurter, publisher of ECB reference rates for currency conversion; it needs the currency and a date of transaction, nothing else.
+- OpenStreetMap’s Nominatim and OSRM for geocoding addresses and routing.
+- Sentry receives error reports (it strips the query string from the URL, so the emailed token is not included) and Umami analytics, signing in sessions are tagged by your account id. Neither shows you ads or follows you to other sites.
 
-The model provider: receipt images and your questions are sent to the LLM this deployment is configured with (DeepSeek's API by default) to be read and answered. Every figure on Insights is computed by the app from your own expenses; the model only phrases it, so it cannot invent a number.
+## It never
 
-Google or Fastmail for the mailbox you choose to connect, and nobody else.
-
-Frankfurter, which publishes the ECB reference rates, for currency conversion; it is asked for a currency and a date, never for your data.
-
-OpenStreetMap's Nominatim and OSRM for looking up addresses and measuring driving routes.
-
-Sentry receives error reports (the URL has its query string stripped first, so emailed tokens are not part of them) and Umami counts visits, tagging signed-in ones with your account id. Neither runs ads or follows you to other sites.
-
-## What it never does
-
-No selling or sharing your data, no ad networks, no cross-site trackers, and no bank connections: a statement is a file you upload, not an account you hand over.
-
-An assistant you connect over MCP can read and write your expenses while it is connected, reaches only your own account, and stops the moment you revoke it in Settings.
+- sells, shares or otherwise exposes your data, uses any ad network, cross-site tracker, or connects with your banking accounts. A statement is a file you upload, not an account you give.
+- connects an assistant over the MCP protocol and allows it to read and write your expenses while it is connected to your account; the assistant only sees your account, and stops as soon as you revoke it in Settings.
 
 ## Cookies
 
-One session cookie that keeps you signed in, and your theme preference in local storage. Nothing else is stored in the browser.
+- One session cookie to keep you signed in, and your theme preference in the local storage. Nothing else is stored locally.
 
 ## Your controls
 
-Change your password or your sign-in email in Settings: a password change signs out your other devices, an email change notifies the old address. Delete any expense or report, disconnect a mailbox (which deletes its stored tokens), or revoke an assistant's access, all in the app.
+Change your password or sign-in email in Settings. Password change logs you out of other devices, email change sends notification to your old email. Delete any expense or report, disconnect a mailbox (this also deletes its stored tokens), or revoke assistant access – all in the app.
 
-Close your account in Settings whenever you like: your expenses, receipt images, reports, trips and connected mailboxes are deleted straight away, and the account itself goes with them when you are its last member. If other people are still on the account, only your login leaves.
+Delete your account in Settings anytime: your expenses, receipt images, reports, trips, and connected mailboxes are immediately deleted, and the account disappears when you are the last member. If there are other members on the account, your login is just deleted.
 
 ## Changes
 
-When this policy changes, the date above changes with it. Questions go to assaf@labnotes.org.
+This privacy policy may change at any time. The date below will be updated whenever it happens. If you have any questions, please contact [assaf@labnotes.org](mailto:assaf@labnotes.org).

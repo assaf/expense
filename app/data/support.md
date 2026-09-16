@@ -23,32 +23,32 @@ mirror:
   title: "Support"
 ---
 
-## How to reach support
+## Getting support
 
-Expense is built and maintained by one person, Assaf Arkin, and support goes straight to him rather than into a queue: [assaf@labnotes.org](mailto:assaf@labnotes.org). There is no ticket system, no chat window, and no phone tree to get through first.
+Expense is maintained by a single person, Assaf Arkin. Support requests are directed directly to him, without going through a helpdesk ticket system: [assaf@labnotes.org](mailto:assaf@labnotes.org). No ticket system, no chat window, and no phone tree need to be navigated prior to contacting him.
 
-Say which email address your account signs in with, what you were doing when something went wrong, and what you expected instead. If it is about one expense, a link to it, or its date, merchant, and amount, saves a round trip, and a screenshot of the screen helps.
+Describe your account's login email, what was being done when an issue occurred, and what the expectation was.
 
-Replies come from Los Angeles, usually within a couple of days.
+In case of an error with a particular expense, linking to that expense, including the date, merchant, and amount may be enough to avoid additional back and forth. A screenshot of the screen you're viewing is also very helpful.
 
-## Answers you can find right now
+## Questions that are currently answered
 
-The [FAQ]({{siteUrl}}/faq) covers how receipts are read, how mileage is priced, and how Expense compares to other apps. Connecting an assistant, and the tools it gets once it's in, is on the [MCP page]({{siteUrl}}/connect). What the app stores and who else sees it is the [privacy policy]({{siteUrl}}/privacy).
+The [FAQ]({{siteUrl}}/faq) describes how the receipts are parsed, how mileage is priced, and how the application compares to similar applications. To learn how to connect an assistant and the tools it will have access to after the connection, visit the [MCP page]({{siteUrl}}/connect). The [privacy policy]({{siteUrl}}/privacy) provides information about what the app collects and who else might have access.
 
-If a forwarded receipt never arrived, open the [Email page]({{siteUrl}}/emails). It shows the address to forward to and which senders are allowed to use it.
+In case a forwarded receipt hasn't been received, the [Email page]({{siteUrl}}/emails) should be visited for more information, including the forwarding email address and the approved senders.
 
 ## Your account
 
-Everything you can change about your account lives in [Settings]({{siteUrl}}/settings): your password, your sign-in email, the mailboxes you connected, the assistants you authorized, and closing the account, which deletes your expenses and receipt images.
+Everything you can configure on your account can be changed in the [Settings]({{siteUrl}}/settings): password, sign-in email, connected mailboxes, authorized assistants, and account closure (deletion of your expenses and receipt images).
 
-Locked out? Use the password reset on the [sign-in page]({{siteUrl}}/login). If the reset email never shows up, write to support and name the address the account uses.
+Account lockout is possible. In that case, the password reset option on the [sign-in page]({{siteUrl}}/login) can be used. In case of problems receiving the password reset email, email support with the email associated with your account.
 
 ## Mailboxes
 
-Connect a mailbox on the [Email page]({{siteUrl}}/emails). Gmail connects with a Google sign-in. Fastmail connects the same way.
+To add a mailbox, visit the [Emails page]({{siteUrl}}/emails). To connect a Gmail account, you'll need to provide credentials using Google sign-in. To connect a Fastmail account, you'll need to do the same.
 
-Disconnect a mailbox on the same page, and that deletes the token the app stored. Access can also be cut off at the provider: in Fastmail, Settings -> Privacy & Security -> Connected apps & API tokens, then Remove access, and in Google, the third-party access page of your Google Account.
+To disconnect a mailbox, visit the same page to revoke the token stored by the application. Access can also be revoked at the provider. To do that for Fastmail, visit Settings -> Privacy & Security -> Connected apps & API tokens -> Remove access. For Google, visit the third-party access page of your Google Account.
 
-## Reporting a security problem
+## Security reporting
 
-If you find a way to reach another account's expenses or data, email the address above and give it time to get fixed before writing about it in public. There is no bug bounty here, just a fix and a thank you.
+If you find a way to access another user's expenses or data, please contact us at the above email address, and allow some time to address the problem. There's no bug bounty offered at this point – just a fix and a thank you.
