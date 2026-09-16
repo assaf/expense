@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { cn } from "cn";
 import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
+import { useSignedIn } from "~/lib/use-signed-in";
 
 const FOOTER_NAV: SiteNavItem[] = [
   { label: "About", to: "/about" },
@@ -21,10 +22,10 @@ const FOOTER_NAV: SiteNavItem[] = [
 /**
  * Site header + footer for the public marketing/SEO pages (the landing page
  * and the /about, /faq, /alternatives SitePage). Both pages render the same
- * chrome: the wordmark header with a "Sign in" button and the
- * brand + copyright footer with the fixed FOOTER_NAV link list, so the
- * chrome lives here and every public page just mounts SiteHeader +
- * SiteFooter.
+ * chrome: the wordmark header with a "Sign in" button (a "Dashboard" link to
+ * the expenses list once the visitor has a session) and the brand +
+ * copyright footer with the fixed FOOTER_NAV link list, so the chrome lives
+ * here and every public page just mounts SiteHeader + SiteFooter.
  */
 
 /** One entry in a site header/footer nav. External links render as real
@@ -60,12 +61,20 @@ function SiteNavLink({ item }: { item: SiteNavItem }) {
 }
 
 export function SiteHeader() {
+  const signedIn = useSignedIn();
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
       <Logo link />
       <nav className="flex items-center gap-4 text-sm">
         <Button asChild variant="ghost" size="sm" className="ml-2">
-          <Link to="/login">Sign in</Link>
+          {signedIn ? (
+            // The expenses list is "/" for a signed-in visitor (the landing
+            // page is its anonymous face), which is also where the nav to
+            // Settings and sign-out lives.
+            <Link to="/">Dashboard</Link>
+          ) : (
+            <Link to="/login">Sign in</Link>
+          )}
         </Button>
       </nav>
     </header>

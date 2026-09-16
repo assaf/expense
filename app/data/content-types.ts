@@ -46,7 +46,8 @@ export interface MirrorMeta {
 interface CtaContent {
   heading: string;
   body: string;
-  /** Defaults to "Create your account" in `MarketingCta`. */
+  /** Defaults to "Create your account" in `MarketingCta`, which a visitor
+   * with a session never sees (they get "Dashboard"). */
   primaryLabel?: string;
   /** Rendered only when the route also passes `secondaryHref`. */
   secondaryLabel?: string;

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { SitePage } from "~/components/SitePage";
 import { Button } from "~/components/ui/Button";
 import { cn } from "cn";
+import { useSignedIn } from "~/lib/use-signed-in";
 
 /**
  * Shared layout for the public marketing/SEO subpages (/about, /ai, /faq,
@@ -61,7 +62,8 @@ export function MarketingPage({
  * The dark "create your account" panel that closes every marketing page:
  * ink background, centered heading + body, and a primary CTA button (white
  * variant on FAQ/Compare) with an optional ghost secondary button. The panel
- * always links to the signup; pages only vary the copy, the icon, the
+ * links to the signup, or to the dashboard (`/`, the expenses list) for a
+ * visitor who already has a session; pages only vary the copy, the icon, the
  * heading size, and the spacing.
  */
 export function MarketingCta({
@@ -94,6 +96,7 @@ export function MarketingCta({
    * transparent instead of blue). */
   secondaryClassName?: string;
 }) {
+  const signedIn = useSignedIn();
   return (
     <section
       className={cn(
@@ -127,7 +130,11 @@ export function MarketingCta({
           size="lg"
           className="w-full bg-white dark:bg-gray-700 text-ink hover:bg-gray-100 dark:hover:bg-gray-800 sm:w-auto"
         >
-          <Link to="/login?mode=create">{primaryLabel}</Link>
+          {signedIn ? (
+            <Link to="/">Dashboard</Link>
+          ) : (
+            <Link to="/login?mode=create">{primaryLabel}</Link>
+          )}
         </Button>
         {secondaryLabel && secondaryHref ? (
           <Button
