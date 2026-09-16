@@ -104,13 +104,24 @@ function renderInline(segments: InlineSegment[]) {
       segment.text
     );
     // A link to this site navigates in the client, the way the hand-written
-    // links on these pages do; anything else opens in a new tab.
+    // links on these pages do. A mailto hands off to a mail client, so it
+    // opens no tab at all; anything else opens in a new one.
     const path = internalPath(segment.href);
-    return path !== null ? (
-      <Link key={i} to={path} className={LINK_CLASS}>
-        {label}
-      </Link>
-    ) : (
+    if (path !== null) {
+      return (
+        <Link key={i} to={path} className={LINK_CLASS}>
+          {label}
+        </Link>
+      );
+    }
+    if (segment.href.startsWith("mailto:")) {
+      return (
+        <a key={i} href={segment.href} className={LINK_CLASS}>
+          {label}
+        </a>
+      );
+    }
+    return (
       <a
         key={i}
         href={segment.href}

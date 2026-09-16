@@ -21,8 +21,6 @@ tableHeadings:
   - "Moving"
   - "Charity"
 
-explanation: |-
-  Reimbursement and deduction rates per mile, newest first. A rate is effective for its whole period; mid-year changes appear as two rows for the same year.
 sourceNote: |-
   Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates). The moving rate applies only to Armed Forces and Intelligence Community members moving under orders, and the charitable rate is fixed by statute.
 
@@ -32,7 +30,11 @@ cta:
   body: |-
     Log a drive on the map and the deduction follows the IRS rate for its date and type. No tables to check.
 
+# The mirror carries a lead line above the table that the page does not: the
+# page shows the same ordering visually.
 mirror:
   title: "IRS standard mileage rates by year"
+  explanation: |-
+    Reimbursement and deduction rates per mile, newest first. A rate is effective for its whole period; mid-year changes appear as two rows for the same year.
   footer: |-
     Source: [IRS standard mileage rates](https://www.irs.gov/tax-professionals/standard-mileage-rates). The moving rate applies only to Armed Forces and Intelligence Community members moving under orders, and the charitable rate is fixed by statute. [Expense]({{siteUrl}}/) applies these rates automatically: each drive's deduction follows its date and type, with no configuration. Current through {{mileagePeriod}}.

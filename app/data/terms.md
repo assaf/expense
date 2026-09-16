@@ -6,8 +6,8 @@
 # app/lib/content.server.ts.
 
 # The body is the document: "## " starts a section, and each paragraph is one
-# line (a line break inside a paragraph starts a new one). Inline **bold** and
-# [links](https://…) are supported.
+# line (a line break inside a paragraph starts a new one). Inline **bold**,
+# [links](https://…), and [mailto links](mailto:you@example.com) are supported.
 
 metaTitle: |-
   Terms of service

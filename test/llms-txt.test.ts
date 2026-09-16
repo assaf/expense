@@ -144,15 +144,17 @@ describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {
     await expect(res.text()).resolves.toBe(content());
   });
 
-  it("only links absolute https URLs with non-empty titles", () => {
+  it("only links absolute URLs with non-empty titles", () => {
     // The mirrors may legitimately contain zero markdown links (about.md
     // cites bare URLs in prose); the per-link rules apply to whatever
-    // exists.
+    // exists. Absolute is the point: a reader that fetched the text by URL
+    // cannot resolve a relative one. A mailto is absolute too, and is how a
+    // support address stays clickable in a text mirror.
     for (const [, title, href] of content().matchAll(
       /\[([^\]]+)\]\(([^)\s]+)\)/g,
     )) {
       expect(title.trim()).not.toBe("");
-      expect(href).toMatch(/^https:\/\//);
+      expect(href).toMatch(/^(https:\/\/|mailto:)/);
       expect(href).not.toMatch(/\s/);
     }
   });
@@ -160,11 +162,13 @@ describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {
   it("keeps every link on the canonical domains", () => {
     for (const href of markdownLinks(content())) {
       // irs.gov is the primary source on the mileage-rate page; every other
-      // link stays on the canonical domains.
+      // link stays on the canonical domains, and a mailto is an address
+      // rather than a host.
       expect(
         href.startsWith(`${SITE_URL}/`) ||
           href.startsWith("https://labnotes.org") ||
-          href.startsWith("https://www.irs.gov/"),
+          href.startsWith("https://www.irs.gov/") ||
+          href.startsWith("mailto:"),
         `${href} is off the canonical domains`,
       ).toBe(true);
     }
@@ -275,7 +279,7 @@ describe("mirrors lose no content", () => {
 
   it("carries every rate period with its four rates", () => {
     const text = mileageRatesMarkdown();
-    expect(text).toContain(plain(MILEAGE_PAGE.explanation));
+    expect(text).toContain(plain(MILEAGE_PAGE.mirror.explanation));
     for (const row of mileageRateRows()) {
       expect(text).toContain(
         `| ${row.period} | $${row.business} | $${row.medical} | $${row.moving} | $${row.charity} |`,

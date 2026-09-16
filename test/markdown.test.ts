@@ -48,9 +48,21 @@ describe("parseInline", () => {
     ]);
   });
 
-  it("keeps a link with a non-http scheme or a relative href literal", () => {
-    const line =
-      "Open [this](javascript:alert(1)), [mail](mailto:x@y.z) and [that](/faq)";
+  it("turns a mailto link into a segment carrying its href", () => {
+    expect(
+      parseInline("Write to [assaf@labnotes.org](mailto:assaf@labnotes.org)"),
+    ).toEqual([
+      { text: "Write to ", bold: false },
+      {
+        text: "assaf@labnotes.org",
+        bold: false,
+        href: "mailto:assaf@labnotes.org",
+      },
+    ]);
+  });
+
+  it("keeps a script scheme or a relative href literal", () => {
+    const line = "Open [this](javascript:alert(1)) and [that](/faq)";
     expect(parseInline(line)).toEqual([{ text: line, bold: false }]);
   });
 

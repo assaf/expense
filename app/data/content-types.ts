@@ -152,12 +152,12 @@ export interface ConnectPage extends PageMeta {
 /** `mileage-rates.yaml`. */
 export interface MileageRatesPage extends PageMeta {
   tableHeadings: string[];
-  /** A mirror-only paragraph above the table. */
-  explanation: string;
   /** The IRS attribution under the table, page and mirror. */
   sourceNote: string;
   cta: CtaContent;
-  mirror: MirrorMeta & { footer: string };
+  /** `explanation` is the mirror's lead line above the table: the page shows
+   * the same ordering visually, so it never renders it. */
+  mirror: MirrorMeta & { footer: string; explanation: string };
 }
 
 /** `schedule-c-categories.yaml`. Category names are NOT here: they come

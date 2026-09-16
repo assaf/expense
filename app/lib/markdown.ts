@@ -8,10 +8,11 @@
  * Everything else renders as plain text — importantly, the parser produces
  * plain strings and structure only, so the React renderer can build text
  * nodes without ever injecting HTML from model output. Only absolute
- * http(s) hrefs become links: `javascript:`, `mailto:`, and relative hrefs
- * stay literal `[text](url)` text, so no host or model can put a hostile
- * scheme into an `href`. Bold and links do not nest, so a `**` inside link
- * text stays literal.
+ * http(s) and `mailto:` hrefs become links: `javascript:` and relative
+ * hrefs stay literal `[text](url)` text, so no host or model can put a
+ * hostile scheme into an `href`, and a mailto only ever hands off to a mail
+ * client. Bold and links do not nest, so a `**` inside link text stays
+ * literal.
  *
  * Each line is one block: a paragraph is a single line, never a soft-wrapped
  * run of lines. Blank lines separate blocks, and a table separator row is
@@ -26,8 +27,8 @@ export type Block =
   | { kind: "table"; header: string[]; rows: string[][] }
   | { kind: "heading"; level: 1 | 2 | 3; segments: InlineSegment[] };
 
-/** One `[text](https://…)` link, absolute and http(s) only. */
-const LINK = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/;
+/** One `[text](https://…)` or `[text](mailto:…)` link, absolute only. */
+const LINK = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/;
 
 /** The same link, for a global replace (never used with `exec`). */
 const LINK_ALL = new RegExp(LINK.source, "g");

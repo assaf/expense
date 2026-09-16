@@ -375,7 +375,6 @@ export const MILEAGE_PAGE: Readonly<MileageRatesPage> = bundle(
     "title",
     "summary",
     "tableHeadings",
-    "explanation",
     "sourceNote",
     "cta",
     "mirror",
@@ -557,7 +556,7 @@ export function mileageRatesMarkdown(): string {
         `| ${row.period} | $${row.business} | $${row.medical} | $${row.moving} | $${row.charity} |`,
     ),
   ].join("\n");
-  return `# ${MILEAGE_PAGE.mirror.title}\n\n> ${wrap(MILEAGE_PAGE.summary)}\n\n${wrap(MILEAGE_PAGE.explanation)}\n\n${table}\n\n${mileageSourceMarkdown()}\n`;
+  return `# ${MILEAGE_PAGE.mirror.title}\n\n> ${wrap(MILEAGE_PAGE.summary)}\n\n${wrap(MILEAGE_PAGE.mirror.explanation)}\n\n${table}\n\n${mileageSourceMarkdown()}\n`;
 }
 
 /** The mirror's longer mileage attribution: the page's note plus the current
