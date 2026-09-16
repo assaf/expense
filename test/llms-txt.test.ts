@@ -8,6 +8,7 @@ import { loader as connectLoader } from "~/routes/connect[.]md";
 import { loader as aiLoader } from "~/routes/ai[.]md";
 import { loader as faqLoader } from "~/routes/faq[.]md";
 import { loader as privacyLoader } from "~/routes/privacy[.]md";
+import { loader as supportLoader } from "~/routes/support[.]md";
 import { loader as termsLoader } from "~/routes/terms[.]md";
 import { loader as llmsTxtLoader } from "~/routes/llms[.]txt";
 import {
@@ -22,6 +23,7 @@ import {
   PRIVACY,
   SCHEDULE_C_PAGE,
   SITE,
+  SUPPORT,
   TERMS,
   aboutMarkdown,
   aiMarkdown,
@@ -34,6 +36,7 @@ import {
   scheduleCRows,
   llmsTxt,
   mileageRatesMarkdown,
+  supportMarkdown,
 } from "~/lib/content.server";
 import { mileageRateRows, SITE_URL } from "~/lib/seo-content";
 
@@ -102,6 +105,12 @@ const MIRRORS = [
     path: "/terms.md",
     loader: termsLoader,
     content: termsMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/support.md",
+    loader: supportLoader,
+    content: supportMarkdown,
     type: "text/markdown",
   },
 ] as const;
@@ -174,6 +183,7 @@ describe("mirrors lose no content", () => {
     for (const [text, page] of [
       [termsMarkdown(), TERMS],
       [privacyMarkdown(), PRIVACY],
+      [supportMarkdown(), SUPPORT],
     ] as const) {
       const body = plain(text);
       expect(text).toContain(`# ${page.mirror.title}`);

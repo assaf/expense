@@ -12,6 +12,7 @@ import {
   PRIVACY,
   SCHEDULE_C_PAGE,
   SITE,
+  SUPPORT,
   TERMS,
   aboutMarkdown,
   aiMarkdown,
@@ -22,6 +23,7 @@ import {
   mileageRatesMarkdown,
   privacyMarkdown,
   scheduleCCategoriesMarkdown,
+  supportMarkdown,
   termsMarkdown,
 } from "~/lib/content.server";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
@@ -57,12 +59,14 @@ const CONTENT_FILES = [
   "privacy.md",
   "schedule-c-categories.yaml",
   "site.yaml",
+  "support.md",
   "terms.md",
 ];
 
 const PAGES = [
   ["terms", TERMS],
   ["privacy", PRIVACY],
+  ["support", SUPPORT],
   ["faq", FAQ],
   ["about", ABOUT],
   ["alternatives", ALTERNATIVES],
@@ -119,6 +123,7 @@ describe("public page content", () => {
       MCP,
       TERMS,
       PRIVACY,
+      SUPPORT,
       FAQ,
       ABOUT,
       ALTERNATIVES,
@@ -131,6 +136,7 @@ describe("public page content", () => {
     const mirrors = [
       termsMarkdown(),
       privacyMarkdown(),
+      supportMarkdown(),
       faqMarkdown(),
       aboutMarkdown(),
       alternativesMarkdown(),

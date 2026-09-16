@@ -61,6 +61,7 @@ const PUBLIC_PAGES = new Set([
   "/alternatives",
   "/privacy",
   "/terms",
+  "/support",
   "/llms.txt",
 ]);
 

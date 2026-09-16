@@ -50,7 +50,8 @@ flowchart LR
 - **Auth gate is centralized** in the root loader (`app/root.tsx:65`): a
   hard-coded public set plus `PUBLIC_PAGES` (`/about`, `/ai`, `/connect`,
   `/faq`, `/mileage-rates`, `/schedule-c-categories`, `/alternatives`,
-  `/llms.txt`). Everything else calls `requireUser(request)` and redirects to
+  `/privacy`, `/terms`, `/support`, `/llms.txt`). Everything else calls
+  `requireUser(request)` and redirects to
   `/login?next=...`. The list is pinned by `test/public-paths.test.ts`; it strips
   `.data` and `.md` before matching, because client loader fetches append
   `.data`.

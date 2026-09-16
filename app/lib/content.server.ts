@@ -25,6 +25,7 @@ import mileageRatesYaml from "~/data/mileage-rates.yaml?raw";
 import privacyMd from "~/data/privacy.md?raw";
 import scheduleCYaml from "~/data/schedule-c-categories.yaml?raw";
 import siteYaml from "~/data/site.yaml?raw";
+import supportMd from "~/data/support.md?raw";
 import termsMd from "~/data/terms.md?raw";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import {
@@ -43,13 +44,14 @@ import {
  * The site's public copy: parsed from the markdown documents and YAML bundles
  * under `app/data/`, and exported as one frozen bundle per page. This is the
  * only module that reads the raw files, and everything else consumes what it
- * builds: the nine marketing routes render these objects, and the ten
+ * builds: the ten marketing routes render these objects, and the eleven
  * `.md` / `.txt` mirrors assemble their bodies from the same fields, so a
  * page and its mirror cannot drift apart.
  *
  * Two kinds of file:
  *
- * - A **document** (`terms.md`, `privacy.md`) is markdown with front matter.
+ * - A **document** (`terms.md`, `privacy.md`, `support.md`) is markdown with
+ *   front matter.
  *   YAML front matter carries the page's meta, and the body is the copy:
  *   `## ` opens a section, and each paragraph is one line.
  * - A **bundle** (`about.yaml`, `faq.yaml`, …) is name/value YAML, one file
@@ -73,6 +75,7 @@ const FILE = {
   mcp: "app/data/mcp.yaml",
   terms: "app/data/terms.md",
   privacy: "app/data/privacy.md",
+  support: "app/data/support.md",
   faq: "app/data/faq.yaml",
   about: "app/data/about.yaml",
   alternatives: "app/data/alternatives.yaml",
@@ -269,6 +272,10 @@ export const TERMS: Readonly<DocumentPage> = document(FILE.terms, termsMd);
 export const PRIVACY: Readonly<DocumentPage> = document(
   FILE.privacy,
   privacyMd,
+);
+export const SUPPORT: Readonly<DocumentPage> = document(
+  FILE.support,
+  supportMd,
 );
 
 /** The FAQ's summary under the heading is the shared brand summary. */
@@ -467,6 +474,11 @@ export function termsMarkdown(): string {
 /** Full markdown for /privacy.md; mirrors the /privacy page content. */
 export function privacyMarkdown(): string {
   return documentMarkdown(PRIVACY);
+}
+
+/** Full markdown for /support.md; mirrors the /support page content. */
+export function supportMarkdown(): string {
+  return documentMarkdown(SUPPORT);
 }
 
 /** Full markdown for /about.md. Mirrors the /about page content. */

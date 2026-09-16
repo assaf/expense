@@ -43,6 +43,10 @@ corePages:
     url: "{{siteUrl}}/terms.md"
     blurb: |-
       The rules for using the app: your account, your data, what is not allowed, and what the app does not promise.
+  - title: "Support"
+    url: "{{siteUrl}}/support.md"
+    blurb: |-
+      How to reach the person who builds Expense, what to include in a message, how to connect or disconnect a mailbox, and how to close your account.
 
 optionalPages:
   - title: "Blog"
