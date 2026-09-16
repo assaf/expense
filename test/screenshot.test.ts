@@ -405,13 +405,23 @@ async function shrinkForReadme(path: string): Promise<void> {
   await rename(`${path}.tmp`, path);
 }
 /** Wait for React to attach (fiber keys, not just the bundle globals) and
- * every image to finish loading. */
+ * every image to finish loading and decoding. */
 async function waitForSettled(page: Page): Promise<void> {
   // React attached (fiber keys): a capture taken while the bundle has run
   // but React has not attached diffs every client-rendered detail.
   await waitForHydration(page);
   await page.waitForFunction(() =>
     [...document.querySelectorAll("img")].every((img) => img.complete),
+  );
+  // Complete is not painted: a large PNG (the landing's app screenshots) can
+  // be loaded and still rasterize late, so a full-page capture catches it as
+  // a patch of noise. Decode every image before the screenshot.
+  await page.evaluate(() =>
+    Promise.all(
+      [...document.querySelectorAll("img")].map((img) =>
+        img.decode().catch(() => {}),
+      ),
+    ),
   );
 }
 
