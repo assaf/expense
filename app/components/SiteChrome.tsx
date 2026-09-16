@@ -5,27 +5,44 @@ import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
 import { useSignedIn } from "~/lib/use-signed-in";
 
-const FOOTER_NAV: SiteNavItem[] = [
-  { label: "About", to: "/about" },
-  { label: "AI", to: "/ai" },
-  { label: "MCP", to: "/connect" },
-  { label: "FAQ", to: "/faq" },
-  { label: "Compare", to: "/alternatives" },
-  { label: "Mileage", to: "/mileage-rates" },
-  { label: "Categories", to: "/schedule-c-categories" },
-  { label: "Support", to: "/support" },
-  { label: "Privacy", to: "/privacy" },
-  { label: "Terms", to: "/terms" },
-  { label: "Blog", to: "https://labnotes.org", external: true },
+/** The footer's link columns: what the site is, how to connect to it, the
+ * reference pages, and the policy pages. */
+const FOOTER_COLUMNS: SiteNavItem[][] = [
+  [
+    { label: "About", to: "/about" },
+    { label: "Compare", to: "/alternatives" },
+    { label: "FAQ", to: "/faq" },
+  ],
+  [
+    { label: "AI", to: "/ai" },
+    { label: "MCP", to: "/connect" },
+  ],
+  [
+    { label: "Mileage", to: "/mileage-rates" },
+    { label: "Categories", to: "/schedule-c-categories" },
+  ],
+  [
+    { label: "Privacy", to: "/privacy" },
+    { label: "Terms", to: "/terms" },
+    { label: "Support", to: "/support" },
+  ],
 ];
+
+/** The one off-site link, so it sits with the credit rather than in a column
+ * of site pages. */
+const FOOTER_BLOG: SiteNavItem = {
+  label: "Blog",
+  to: "https://labnotes.org",
+  external: true,
+};
 
 /**
  * Site header + footer for the public marketing/SEO pages (the landing page
  * and the /about, /faq, /alternatives SitePage). Both pages render the same
  * chrome: the wordmark header with a "Sign in" button (a "Dashboard" link to
  * the expenses list once the visitor has a session) and the brand +
- * copyright footer with the fixed FOOTER_NAV link list, so the chrome lives
- * here and every public page just mounts SiteHeader + SiteFooter.
+ * copyright footer with the link columns in FOOTER_COLUMNS, so the chrome
+ * lives here and every public page just mounts SiteHeader + SiteFooter.
  */
 
 /** One entry in a site header/footer nav. External links render as real
@@ -84,14 +101,24 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-gray-100 dark:border-gray-700">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6">
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+      <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
           <Logo icon /> · © {new Date().getFullYear()} · Stewarded by{" "}
-          <a href="https://labnotes.org">Assaf Arkin</a>
+          <a href="https://labnotes.org">Assaf Arkin</a> ·{" "}
+          <SiteNavLink item={FOOTER_BLOG} />
         </div>
-        <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
-          {FOOTER_NAV.map((item) => (
-            <SiteNavLink key={item.label} item={item} />
+        <nav
+          aria-label="Site pages"
+          className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-4"
+        >
+          {FOOTER_COLUMNS.map((column, index) => (
+            <ul key={index} className="flex flex-col gap-2 text-sm">
+              {column.map((item) => (
+                <li key={item.label}>
+                  <SiteNavLink item={item} />
+                </li>
+              ))}
+            </ul>
           ))}
         </nav>
       </div>
