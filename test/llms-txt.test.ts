@@ -132,6 +132,24 @@ function collapse(text: string): string {
   return text.replaceAll(/\s+/g, " ").trim();
 }
 
+/** A document body with the values the loader fills at build time blanked: a
+ * `{{token}}` and the URL it resolves to collapse to the same `<url>`, so a
+ * value can never hide a dropped line. */
+function filled(text: string): string {
+  return text
+    .replaceAll(/\{\{\w+\}\}/g, "https://token.invalid")
+    .replaceAll(/https?:\/\/[^\s)]+/g, "<url>")
+    .trim();
+}
+
+/** A document's sections, past its front matter and the mirror's own
+ * title/summary preamble. */
+function documentSections(text: string): string {
+  const body = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+  const at = body.indexOf("## ");
+  return filled(at === -1 ? "" : body.slice(at));
+}
+
 describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {
   it("serves the right content type with the shared public cache header", async () => {
     const res = await loader();
@@ -195,8 +213,13 @@ describe("mirrors lose no content", () => {
       expect(text).toContain(`Last updated: ${page.updated}`);
       for (const section of page.sections) {
         expect(text).toContain(`## ${section.title}`);
-        for (const paragraph of section.paragraphs) {
-          expect(body).toContain(paragraph.map((seg) => seg.text).join(""));
+        for (const block of section.blocks) {
+          // A bullet item is prose too: the mirror drops it just as easily.
+          const paragraphs =
+            block.kind === "paragraph" ? [block.segments] : block.items;
+          for (const paragraph of paragraphs) {
+            expect(body).toContain(paragraph.map((seg) => seg.text).join(""));
+          }
         }
       }
     }
@@ -306,6 +329,28 @@ describe("mirrors lose no content", () => {
     for (const fact of SITE.keyFacts) {
       expect(text).toContain(collapse(fact));
     }
+  });
+});
+
+describe("document mirrors are their source files", () => {
+  // The documents are hand-edited prose (bullet lists included), and the
+  // mirror is assembled from the parse of them. Compared with the filled
+  // values blanked, the structure has to come back line for line: a bullet
+  // list the mirror flattens into paragraphs, or a section that loses its
+  // blank line, fails here instead of reaching a reader.
+  it.each([
+    ["terms", termsMarkdown()],
+    ["privacy", privacyMarkdown()],
+    ["support", supportMarkdown()],
+  ] as const)("%s.md reproduces app/data/%s.md", (name, mirror) => {
+    expect(documentSections(mirror)).toBe(
+      documentSections(
+        readFileSync(
+          new URL(`../app/data/${name}.md`, import.meta.url),
+          "utf8",
+        ),
+      ),
+    );
   });
 });
 

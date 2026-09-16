@@ -7,6 +7,7 @@ import type {
   AiPage,
   AlternativesPage,
   ConnectPage,
+  DocumentBlock,
   DocumentPage,
   FaqPage,
   LlmsContent,
@@ -238,13 +239,16 @@ function document(file: string, raw: string): Readonly<DocumentPage> {
     ...front,
     sections: sections.map((section) => ({
       title: section.title,
-      paragraphs: section.blocks.map((block) => {
-        if (block.kind !== "paragraph") {
-          throw new Error(
-            `${file}: section "${section.title}" holds a ${block.kind} block; documents take paragraphs only`,
-          );
+      blocks: section.blocks.map((block) => {
+        if (block.kind === "paragraph") {
+          return { kind: "paragraph" as const, segments: block.segments };
         }
-        return block.segments;
+        if (block.kind === "bullets") {
+          return { kind: "bullets" as const, items: block.items };
+        }
+        throw new Error(
+          `${file}: section "${section.title}" holds a ${block.kind} block; documents take paragraphs and bullet lists`,
+        );
       }),
     })),
   });
@@ -453,12 +457,20 @@ function createAccountMarkdown(): string {
   return `[${SITE.createAccountLabel}](${SITE_URL}/login?mode=create)`;
 }
 
+/** One document block as mirror markdown: a paragraph, or a bullet list with
+ * one item per line. */
+function documentBlockMarkdown(block: DocumentBlock): string {
+  return block.kind === "paragraph"
+    ? wrap(inlineMarkdown(block.segments))
+    : block.items.map((item) => `- ${wrap(inlineMarkdown(item))}`).join("\n");
+}
+
 function documentMarkdown(page: DocumentPage): string {
   const sections = page.sections
     .map(
       (section) =>
-        `## ${section.title}\n\n${section.paragraphs
-          .map((paragraph) => wrap(inlineMarkdown(paragraph)))
+        `## ${section.title}\n\n${section.blocks
+          .map(documentBlockMarkdown)
           .join("\n\n")}`,
     )
     .join("\n\n");

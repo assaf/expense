@@ -4,9 +4,10 @@
 # Filled in at build time: {{siteUrl}} (the full list is in
 # app/lib/content.server.ts).
 
-# The body is the document: "## " starts a section, and each paragraph is one
-# line (a line break inside a paragraph starts a new one). Inline **bold** and
-# [links](https://…) are supported.
+# The body is the document: "## " starts a section, each paragraph is one line
+# (a line break inside a paragraph starts a new one), and a line starting with
+# "- " makes a bullet list. Inline **bold**, [links](https://…), and
+# [mailto links](mailto:you@example.com) are supported.
 
 metaTitle: |-
   Expense support: how to get help and who to write to

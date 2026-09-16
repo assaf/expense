@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { parseInline, parseMarkdown, type InlineSegment } from "~/lib/markdown";
 import { SITE_URL } from "~/lib/seo-content";
+import type { DocumentPage } from "~/data/content-types";
 
 /**
  * Renders the small markdown subset (paragraphs, bullets, tables, headings,
@@ -72,10 +73,43 @@ export function Markdown({ text }: { text: string }) {
   );
 }
 
-/** Already-parsed prose, for markup a page owns: paragraphs of a document,
- * a source note, a table cell. */
-export function InlineText({ segments }: { segments: InlineSegment[] }) {
-  return renderInline(segments);
+/** The sections of a prose document (/privacy, /terms, /support): the section
+ * heading, then its paragraphs and bullet lists, in file order. */
+export function DocumentSections({
+  sections,
+}: {
+  sections: DocumentPage["sections"];
+}) {
+  return (
+    <>
+      {sections.map((section) => (
+        <section key={section.title}>
+          <h2 className="text-2xl font-bold tracking-tight text-ink">
+            {section.title}
+          </h2>
+          {section.blocks.map((block, index) =>
+            block.kind === "paragraph" ? (
+              <p
+                key={index}
+                className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
+              >
+                {renderInline(block.segments)}
+              </p>
+            ) : (
+              <ul
+                key={index}
+                className="mt-3 list-disc space-y-0.5 pl-5 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
+              >
+                {block.items.map((item, itemIndex) => (
+                  <li key={itemIndex}>{renderInline(item)}</li>
+                ))}
+              </ul>
+            ),
+          )}
+        </section>
+      ))}
+    </>
+  );
 }
 
 /** Prose that carries `**bold**` or `[links](…)` as text, for markup a page

@@ -53,11 +53,18 @@ interface CtaContent {
   secondaryLabel?: string;
 }
 
+/** One block of a document section: a paragraph, or a bullet list. Documents
+ * are prose, so tables and headings stay out of them (a `## ` line is the
+ * section boundary, which is why `splitSections` owns it). */
+export type DocumentBlock =
+  | { kind: "paragraph"; segments: InlineSegment[] }
+  | { kind: "bullets"; items: InlineSegment[][] };
+
 /** A prose document: a `##`-sectioned markdown file with front matter. */
 export interface DocumentPage extends PageMeta {
   /** The "last updated" date, shown by the page and the mirror. */
   updated: string;
-  sections: Array<{ title: string; paragraphs: InlineSegment[][] }>;
+  sections: Array<{ title: string; blocks: DocumentBlock[] }>;
   mirror: MirrorMeta;
 }
 

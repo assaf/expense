@@ -5,9 +5,10 @@
 # {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
 # app/lib/content.server.ts.
 
-# The body is the document: "## " starts a section, and each paragraph is one
-# line (a line break inside a paragraph starts a new one). Inline **bold**,
-# [links](https://…), and [mailto links](mailto:you@example.com) are supported.
+# The body is the document: "## " starts a section, each paragraph is one line
+# (a line break inside a paragraph starts a new one), and a line starting with
+# "- " makes a bullet list. Inline **bold**, [links](https://…), and
+# [mailto links](mailto:you@example.com) are supported.
 
 metaTitle: |-
   Privacy policy

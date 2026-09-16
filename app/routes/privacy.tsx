@@ -1,4 +1,4 @@
-import { InlineText } from "~/components/Markdown";
+import { DocumentSections } from "~/components/Markdown";
 import { MarketingPage } from "~/components/MarketingPage";
 import { PRIVACY } from "~/lib/content.server";
 import { marketingPageHeaders, pageMeta } from "~/lib/seo-content";
@@ -27,21 +27,7 @@ export default function PrivacyPage({ loaderData }: Route.ComponentProps) {
       </p>
 
       <div className="mt-6 flex flex-col gap-10">
-        {loaderData.sections.map((section) => (
-          <section key={section.title}>
-            <h2 className="text-2xl font-bold tracking-tight text-ink">
-              {section.title}
-            </h2>
-            {section.paragraphs.map((paragraph, index) => (
-              <p
-                key={index}
-                className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
-              >
-                <InlineText segments={paragraph} />
-              </p>
-            ))}
-          </section>
-        ))}
+        <DocumentSections sections={loaderData.sections} />
       </div>
     </MarketingPage>
   );

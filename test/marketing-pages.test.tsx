@@ -126,14 +126,19 @@ function hero(page: {
   return [page.eyebrow, page.title, page.summary, ...labels];
 }
 
-/** A document's copy: its date, then each section heading and paragraph. */
+/** A document's copy: its date, then each section heading and its prose
+ * (paragraphs and bullet items alike). */
 function sections(page: Readonly<DocumentPage>): string[] {
   return [
     page.updated,
     ...page.sections.flatMap((section) => [
       section.title,
-      ...section.paragraphs.map((paragraph) =>
-        paragraph.map((segment) => segment.text).join(""),
+      ...section.blocks.flatMap((block) =>
+        block.kind === "paragraph"
+          ? [block.segments.map((segment) => segment.text).join("")]
+          : block.items.map((item) =>
+              item.map((segment) => segment.text).join(""),
+            ),
       ),
     ]),
   ];
