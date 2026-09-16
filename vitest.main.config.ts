@@ -20,7 +20,7 @@ export default defineConfig({
       "test/default-categories.test.ts",
       "test/schedule-c.test.ts",
       "test/email-rules-seed.test.ts",
-      "test/support-page.test.tsx",
+      "test/marketing-pages.test.tsx",
       "test/completeness.test.ts",
       "test/errors.test.ts",
       "test/maps.test.ts",
