@@ -8,6 +8,7 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
+  redirect,
   useNavigation,
   useRouteError,
   useRouteLoaderData,
@@ -18,6 +19,7 @@ import { CommandMenu } from "~/components/command-palette";
 import { ShortcutHints } from "~/components/shortcut-hints";
 import { isAuthenticated, requireUser } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
+import { discoveryLinks, securityHeaders } from "~/lib/seo-content";
 import { umamiConfig } from "~/lib/umami.server";
 import type { Route } from "./+types/root";
 
@@ -62,8 +64,53 @@ const PUBLIC_PAGES = new Set([
   "/privacy",
   "/terms",
   "/support",
+  // /auth.md describes agent authentication (the Auth.md convention). The
+  // gate strips the .md suffix, so this entry is what opens it; /auth itself
+  // has no route and falls through to the 404 page.
+  "/auth",
   "/llms.txt",
 ]);
+
+/** Marketing pages that publish a markdown mirror, page path -> mirror. Each
+ * mirror is a resource route beside the page (app/routes/<page>[.]md.ts).
+ * A request that asks for markdown gets the mirror instead of the HTML app
+ * shell; nothing else negotiates. */
+const MARKDOWN_MIRRORS: Record<string, string> = {
+  "/about": "/about.md",
+  "/ai": "/ai.md",
+  "/alternatives": "/alternatives.md",
+  "/connect": "/connect.md",
+  "/faq": "/faq.md",
+  "/mileage-rates": "/mileage-rates.md",
+  "/privacy": "/privacy.md",
+  "/schedule-c-categories": "/schedule-c-categories.md",
+  "/support": "/support.md",
+  "/terms": "/terms.md",
+};
+
+/** The quality an Accept header assigns to one exact media type, or -1 when
+ * it never names it. Wildcards are ignored on purpose: a wildcard expresses
+ * no preference between two representations. */
+function acceptQuality(accept: string, type: string): number {
+  let best = -1;
+  for (const entry of accept.split(",")) {
+    const [media, ...params] = entry.trim().toLowerCase().split(";");
+    if (media?.trim() !== type) continue;
+    const q = params.find((param) => param.trim().startsWith("q="));
+    const value = q === undefined ? 1 : Number(q.trim().slice(2));
+    if (Number.isFinite(value)) best = Math.max(best, value);
+  }
+  return best;
+}
+
+/** True when a client asked for markdown over HTML (an agent, not a
+ * browser). */
+function prefersMarkdown(accept: string | null): boolean {
+  if (!accept) return false;
+  return (
+    acceptQuality(accept, "text/markdown") > acceptQuality(accept, "text/html")
+  );
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -77,6 +124,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   // navigation (e.g. /about.data for a Link click on /about). Match the
   // page path, not the fetch path, so public pages stay public.
   if (path.endsWith(".data")) path = path.slice(0, -5);
+  // Markdown for agents: a client that asks for markdown over HTML gets the
+  // page's published mirror instead of the app shell. The mirrors themselves
+  // (resource routes) and React Router's own .data fetches never negotiate,
+  // and only GET does.
+  if (
+    request.method === "GET" &&
+    !url.pathname.endsWith(".md") &&
+    !url.pathname.endsWith(".data")
+  ) {
+    const mirror = MARKDOWN_MIRRORS[path];
+    if (mirror && prefersMarkdown(request.headers.get("accept"))) {
+      throw redirect(mirror, { headers: { Vary: "Accept" } });
+    }
+  }
   // React Router maps `_index` layout index routes to `/_` for their
   // `.data` URLs (e.g. `/_.data` for the root `_index`). Treat `/_`
   // as `/` so client-side navigations back to the home page don't get
@@ -142,17 +203,22 @@ export function shouldRevalidate({
 }
 
 /**
- * Clickjacking defense on every HTML response: no page may render inside a
- * frame. The loader's `headers` key is inert loader data; only this
- * function emits real HTTP headers; React Router merges them with the
- * child route's headers() (e.g. the marketing Cache-Control). HSTS is set
- * by the platform: Vercel emits strict-transport-security for production
- * domains.
+ * Clickjacking defense plus the agent discovery links on every HTML response
+ * (see ~/lib/seo-content for both sets). The loader's `headers` key is inert
+ * loader data; only this function emits real HTTP headers, and React Router
+ * merges them with the child route's headers() (e.g. the marketing
+ * Cache-Control) — except that a child's own `headers` export replaces this
+ * one, which is why the shared helpers exist and the pages that declare
+ * headers spread them in. HSTS is set by the platform: Vercel emits
+ * strict-transport-security for production domains.
  */
 export function headers(): HeadersInit {
   return {
-    "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "frame-ancestors 'none'",
+    ...securityHeaders(),
+    ...discoveryLinks(),
+    // Two representations per marketing URL (the HTML page and its markdown
+    // mirror), chosen by Accept.
+    Vary: "Accept",
   };
 }
 

@@ -25,6 +25,7 @@ import {
 import LandingPage from "~/components/LandingPage";
 import { Logo } from "~/components/Logo";
 import { NAV_ITEMS } from "~/components/nav-items";
+import { discoveryLinks, securityHeaders } from "~/lib/seo-content";
 import { FilterCombobox } from "~/components/FilterCombobox";
 import { WelcomePanel } from "~/components/WelcomePanel";
 import { cardSurface } from "~/components/ui/Card";
@@ -179,15 +180,21 @@ export async function loader({ request }: Route.LoaderArgs) {
  * expense list (authenticated) based on the session cookie. Browsers and
  * CDNs must revalidate on every request and segment by cookie so an
  * authenticated user never sees the cached landing page.
+ *
+ * A route's headers replace the root's rather than merging, so the shared
+ * security and discovery headers are spread in here too; the page itself is
+ * never negotiated for markdown (it has no mirror), which is why Vary stays
+ * Cookie-only.
  */
 export function headers({ loaderHeaders }: Route.HeadersArgs) {
+  const shared = { ...securityHeaders(), ...discoveryLinks(), Vary: "Cookie" };
   if (loaderHeaders.has("Cache-Control")) {
     // Already set by the loader (authenticated response); keep it.
-    return { Vary: "Cookie" };
+    return shared;
   }
   return {
+    ...shared,
     "Cache-Control": "no-cache, no-store, must-revalidate",
-    Vary: "Cookie",
   };
 }
 

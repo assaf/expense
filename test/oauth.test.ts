@@ -543,13 +543,25 @@ describe("MCP OAuth", () => {
     const resource = (await resourceRes.json()) as {
       resource: string;
       authorization_servers: string[];
+      bearer_methods_supported: string[];
     };
     expect(resource.resource).toBe("https://expense.localhost/mcp");
     expect(resource.authorization_servers).toEqual([
       "https://expense.localhost",
     ]);
+    expect(resource.bearer_methods_supported).toEqual(["header"]);
 
-    // And the /mcp 401 WWW-Authenticate hint carries the public origin too.
+    // The path-aware location (RFC 9728 §3.1) carries the same document: it
+    // is what MCP SDK clients probe before the origin-level one.
+    const pathAwareRes = await fetch(
+      `${baseURL}/.well-known/oauth-protected-resource/mcp`,
+      { headers },
+    );
+    expect(pathAwareRes.status).toBe(200);
+    expect(await pathAwareRes.json()).toEqual(resource);
+
+    // And the /mcp 401 WWW-Authenticate hint carries the public origin too,
+    // pointing at the path-aware document for the endpoint being called.
     const mcpRes = await fetch(`${baseURL}/mcp`, {
       method: "POST",
       headers: {
@@ -570,7 +582,7 @@ describe("MCP OAuth", () => {
     });
     expect(mcpRes.status).toBe(401);
     expect(mcpRes.headers.get("www-authenticate")).toContain(
-      "https://expense.localhost/.well-known/oauth-protected-resource",
+      "https://expense.localhost/.well-known/oauth-protected-resource/mcp",
     );
   });
 

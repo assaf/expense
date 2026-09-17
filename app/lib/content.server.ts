@@ -2,6 +2,7 @@ import { parse as parseYaml } from "yaml";
 import aboutYaml from "~/data/about.yaml?raw";
 import aiYaml from "~/data/ai.yaml?raw";
 import alternativesYaml from "~/data/alternatives.yaml?raw";
+import authMd from "~/data/auth.md?raw";
 import type {
   AboutPage,
   AiPage,
@@ -77,6 +78,7 @@ const FILE = {
   terms: "app/data/terms.md",
   privacy: "app/data/privacy.md",
   support: "app/data/support.md",
+  auth: "app/data/auth.md",
   faq: "app/data/faq.yaml",
   about: "app/data/about.yaml",
   alternatives: "app/data/alternatives.yaml",
@@ -490,6 +492,14 @@ export function privacyMarkdown(): string {
 /** Full markdown for /support.md; mirrors the /support page content. */
 export function supportMarkdown(): string {
   return documentMarkdown(SUPPORT);
+}
+
+/** The /auth.md document: how an agent authenticates against this service,
+ * addressed to the agent rather than to a reader of the site. It has no HTML
+ * twin, so unlike the page mirrors it is not assembled from a page object;
+ * the file's own text is what ships, with placeholders filled. */
+export function authMarkdown(): string {
+  return fill(FILE.auth, authMd);
 }
 
 /** Full markdown for /about.md. Mirrors the /about page content. */

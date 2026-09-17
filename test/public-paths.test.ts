@@ -40,6 +40,7 @@ const PUBLIC_PATHS = [
   "/terms",
   "/support",
   "/llms.txt",
+  "/auth.md",
   "/about.data",
   "/faq.md",
   "/privacy.md",

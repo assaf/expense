@@ -130,6 +130,35 @@ export function oauthMetadataResponse(request: Request): Response {
   });
 }
 
+/**
+ * RFC 9728 protected resource metadata, served at both discovery URLs: the
+ * origin-level `/.well-known/oauth-protected-resource` and the path-aware
+ * `/.well-known/oauth-protected-resource/mcp` that RFC 9728 §3.1 prescribes
+ * for a resource with a path (the one every MCP SDK probes first). One
+ * document, two locations, exactly like the authorization server metadata.
+ *
+ * `resource` names the MCP endpoint in both, on purpose: the origin-level
+ * copy is what an older client falls back to, and those clients match the
+ * value against the URL they are calling. A scanner that validates the
+ * origin-level document against its own origin therefore reads a mismatch;
+ * naming the origin instead would break exactly those clients.
+ *
+ * `scopes_supported` is empty because the flow grants the whole account, and
+ * the authorization server metadata publishes the same empty list.
+ */
+export function protectedResourceMetadataResponse(request: Request): Response {
+  const origin = publicOrigin(request);
+  return Response.json(
+    {
+      resource: `${origin}/mcp`,
+      authorization_servers: [origin],
+      scopes_supported: [],
+      bearer_methods_supported: ["header"],
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 /** OAuth error response per RFC 6749 §5.2: `{ error, error_description }`.
  * Shared by the token and revocation endpoints. */
 export function oauthError(

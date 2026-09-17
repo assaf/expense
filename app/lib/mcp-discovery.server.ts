@@ -2,22 +2,31 @@ import { createHash } from "node:crypto";
 import { MCP_ENDPOINT, SITE_URL } from "~/lib/seo-content";
 
 /**
- * Pre-connection discovery for the MCP server: the Server Card served at
- * /mcp/server-card and the AI Catalog at /.well-known/ai-catalog.json.
+ * What an agent fetches before it connects: the MCP Server Card, the AI
+ * Catalog that lists it, and the API catalog that describes the endpoint.
  *
- * A client reads both before it connects, so the identity declared here also
- * drives the runtime `serverInfo` (app/lib/mcp.server.ts): the card and the
- * live server/discover result must not contradict each other. The shape is
- * the experimental Server Card extension
- * (github.com/modelcontextprotocol/ext-server-card), whose wire format is
- * still moving, so every path, field, and literal lives in this one module.
+ * Four documents, all built from one identity:
  *
- * Two placements the spec allows but this app does not use, so nobody moves
- * these back: a card under /.well-known (not recommended — .well-known is
- * site-wide metadata while a card is application-level, and the catalog
- * already carries the card's exact URL) and an `mcp://server-card.json` MCP
- * resource (removed from the spec as useless for pre-connection discovery).
- * /.well-known stays right for the catalog itself.
+ * - `/mcp/server-card` is the card at the location the Server Card extension
+ *   reserves for a streamable-HTTP endpoint
+ *   (github.com/modelcontextprotocol/ext-server-card).
+ * - `/.well-known/mcp/server-card.json` is the same identity in the older
+ *   SEP-1649 shape, which is the only card path scanners and shipped clients
+ *   actually probe. Two shapes, one set of constants.
+ * - `/.well-known/ai-catalog.json` is the catalog: the domain-level entry
+ *   point that carries the card's exact URL.
+ * - `/.well-known/api-catalog` is the RFC 9727 linkset, pointing at the card
+ *   as the endpoint's machine-readable description.
+ *
+ * The identity declared here also drives the runtime `serverInfo`
+ * (app/lib/mcp.server.ts), so the card and the live server/discover result
+ * cannot contradict each other. The extension's wire format is still moving,
+ * which is why every path, field, and literal lives in this one module.
+ *
+ * Not here, deliberately: an `mcp://server-card.json` MCP resource (removed
+ * from the spec as useless for pre-connection discovery) and any tool or
+ * resource listing (primitives stay runtime-listed; app/lib/mcp.server.ts is
+ * their only home).
  */
 
 /** Reverse-DNS server name; matches server.json's `name`, and satisfies the
@@ -63,6 +72,9 @@ export const SERVER_CARD_URL = `${MCP_ENDPOINT}${SERVER_CARD_PATH}`;
 export const SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json";
 
 export const AI_CATALOG_MEDIA_TYPE = "application/ai-catalog+json";
+
+/** RFC 9727 fixes this one: `application/json` there fails silently. */
+export const LINKSET_MEDIA_TYPE = "application/linkset+json";
 
 /**
  * The card: identity and connection details only. No `repository` field (the
@@ -110,20 +122,73 @@ const SERVER_CARD = {
 
 /**
  * The catalog: the entry point for domain-level discovery, listing this
- * domain's cards. The identifier follows urn:air:{publisher}:{namespace}:{name},
- * with the publisher domain and namespace matching the card name's
- * org.labnotes. No `host` object (optional, and it would mean inventing
- * operator copy no content file carries) and no entry displayName/description
- * (the spec says to omit them when the referenced card carries its own title
- * and description, as this one does).
+ * domain's cards. Two specs describe it and they disagree in places, so this
+ * follows the stricter one and stays legal under both. From the extension's
+ * discovery doc: `specVersion` names the ai-catalog data model (1.0, not the
+ * ARD spec's own version) and the entry identifier follows
+ * urn:air:{publisher}:{namespace}:{name}, matching the card name's
+ * org.labnotes. From the ARD spec: a `host` block and an entry `displayName`,
+ * which the extension says may be omitted when the card carries its own
+ * title. `representativeQueries` are the tasks the server actually answers,
+ * for registries that build embeddings from the catalog.
  */
 const AI_CATALOG = {
   specVersion: "1.0",
+  host: {
+    displayName: MCP_SERVER_TITLE,
+    identifier: SITE_URL,
+  },
   entries: [
     {
       identifier: "urn:air:labnotes.org:mcp:expense",
+      displayName: MCP_SERVER_TITLE,
       type: SERVER_CARD_MEDIA_TYPE,
       url: SERVER_CARD_URL,
+      representativeQueries: [
+        "how much did I spend on flights last quarter",
+        "capture this receipt photo as an expense",
+        "log a drive to the client office and price it at the IRS rate",
+      ],
+    },
+  ],
+};
+
+/**
+ * The same identity in the SEP-1649 shape, at the well-known path scanners
+ * and shipped clients have probed since 2025. The current extension calls the
+ * card application-level metadata and reserves /mcp/server-card instead, but
+ * nothing looks there yet, so both paths stay served from these constants.
+ * `capabilities.tools` declares that tools exist without listing them: the
+ * names live in app/lib/mcp.server.ts, and a second copy here would drift.
+ */
+const WELL_KNOWN_SERVER_CARD = {
+  serverInfo: {
+    name: MCP_SERVER_NAME,
+    title: MCP_SERVER_TITLE,
+    version: MCP_SERVER_VERSION,
+    description: MCP_SERVER_DESCRIPTION,
+  },
+  transport: { type: "streamable-http", endpoint: MCP_ENDPOINT },
+  capabilities: { tools: {} },
+  authentication: { type: "oauth2" },
+};
+
+/**
+ * The RFC 9727 catalog: one linkset entry per public API. The MCP endpoint is
+ * the only public API this service has (the app's own routes are
+ * session-gated, and /api/webmcp mirrors the read tools only behind that
+ * session), so there is one anchor, described by the Server Card. Written in
+ * the RFC's own "link context object" form (Appendix A.1), not the `links`
+ * array form some examples use.
+ */
+const API_CATALOG = {
+  linkset: [
+    {
+      anchor: MCP_ENDPOINT,
+      "service-desc": [{ href: SERVER_CARD_URL, type: SERVER_CARD_MEDIA_TYPE }],
+      "service-doc": [
+        { href: `${SITE_URL}/connect.md`, type: "text/markdown" },
+      ],
     },
   ],
 };
@@ -136,6 +201,15 @@ const SERVER_CARD_ETAG = `"${createHash("sha256").update(SERVER_CARD_BODY).diges
 const AI_CATALOG_BODY = JSON.stringify(AI_CATALOG, null, 2) + "\n";
 
 const AI_CATALOG_ETAG = `"${createHash("sha256").update(AI_CATALOG_BODY).digest("base64url").slice(0, 32)}"`;
+
+const WELL_KNOWN_SERVER_CARD_BODY =
+  JSON.stringify(WELL_KNOWN_SERVER_CARD, null, 2) + "\n";
+
+const WELL_KNOWN_SERVER_CARD_ETAG = `"${createHash("sha256").update(WELL_KNOWN_SERVER_CARD_BODY).digest("base64url").slice(0, 32)}"`;
+
+const API_CATALOG_BODY = JSON.stringify(API_CATALOG, null, 2) + "\n";
+
+const API_CATALOG_ETAG = `"${createHash("sha256").update(API_CATALOG_BODY).digest("base64url").slice(0, 32)}"`;
 
 /** RFC 9110 If-None-Match: `*`, or a comma-separated list compared weakly
  * (the `W/` prefix ignored). */
@@ -188,5 +262,26 @@ export function aiCatalogResponse(request: Request): Response {
     AI_CATALOG_BODY,
     AI_CATALOG_ETAG,
     AI_CATALOG_MEDIA_TYPE,
+  );
+}
+
+/** 200 the SEP-1649 card at /.well-known/mcp/server-card.json. Plain
+ * `application/json`: the older shape never had a media type of its own. */
+export function wellKnownServerCardResponse(request: Request): Response {
+  return cachedJsonResponse(
+    request,
+    WELL_KNOWN_SERVER_CARD_BODY,
+    WELL_KNOWN_SERVER_CARD_ETAG,
+    "application/json",
+  );
+}
+
+/** 200 the RFC 9727 API catalog at /.well-known/api-catalog. */
+export function apiCatalogResponse(request: Request): Response {
+  return cachedJsonResponse(
+    request,
+    API_CATALOG_BODY,
+    API_CATALOG_ETAG,
+    LINKSET_MEDIA_TYPE,
   );
 }

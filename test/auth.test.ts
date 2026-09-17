@@ -59,12 +59,44 @@ describe("Access control", () => {
   });
 
   it("denies framing on every page with real HTTP headers", async () => {
+    // The root exports these, but a route's own `headers` replaces the
+    // parent's rather than merging: a page that declares headers without
+    // spreading the shared set silently drops frame-ancestors. The landing
+    // page and the marketing pages are exactly that shape, so they are the
+    // ones worth fetching.
     const page = await openPage();
-    const res = await page.request.get("http://localhost:5199/login");
-    expect(res.headers()["x-frame-options"]).toBe("DENY");
-    expect(res.headers()["content-security-policy"]).toContain(
-      "frame-ancestors",
-    );
+    for (const path of [
+      "/login",
+      "/",
+      "/about",
+      "/faq",
+      "/terms",
+      "/mileage-rates",
+    ]) {
+      const res = await page.request.get(`http://localhost:5199${path}`);
+      expect(res.headers()["x-frame-options"], path).toBe("DENY");
+      expect(res.headers()["content-security-policy"], path).toContain(
+        "frame-ancestors",
+      );
+    }
+    await page.close();
+  });
+
+  it("points agents at the discovery documents from every page", async () => {
+    // RFC 8288 Link headers: a client that only reads the envelope still
+    // finds the catalog, the server card, and the LLM overview. Same
+    // replace-not-merge trap as the framing headers above.
+    const page = await openPage();
+    for (const path of ["/", "/about", "/login"]) {
+      const link = (
+        await page.request.get(`http://localhost:5199${path}`)
+      ).headers()["link"];
+      expect(link, path).toContain('rel="api-catalog"');
+      expect(link, path).toContain("</.well-known/api-catalog>");
+      expect(link, path).toContain('rel="service-desc"');
+      expect(link, path).toContain('rel="describedby"');
+      expect(link, path).toContain("</llms.txt>");
+    }
     await page.close();
   });
 

@@ -241,7 +241,11 @@ function jsonError(
     {
       status,
       headers: {
-        "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+        // The path-aware URL (RFC 9728 §3.1) for this endpoint's metadata:
+        // the resource is /mcp, so its document sits under the well-known
+        // prefix with the same path. Clients that follow the hint land on
+        // the document whose `resource` matches what they are calling.
+        "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`,
       },
     },
   );

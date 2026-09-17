@@ -76,26 +76,35 @@ succeed either way.
 ### Discovery
 
 A client can read the server's identity and connection details before it
-connects, from two static documents that need no auth:
+connects, from static documents that need no auth:
 
-- `GET https://<your-host>/mcp/server-card` (the location the
-  [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card)
-  reserves for a streamable-HTTP endpoint) returns the card as
-  `application/mcp-server-card+json`: the name `org.labnotes/expense`, the
-  title, version, description, the three icons, and one `streamable-http`
-  remote listing every protocol revision the endpoint speaks.
-- `GET https://<your-host>/.well-known/ai-catalog.json` returns the
-  domain-level [AI Catalog](https://github.com/Agent-Card/ai-catalog) as
-  `application/ai-catalog+json`, with one entry pointing at the card URL
-  above. Start here: the catalog is how a client discovers servers on a
-  domain, and the card is how it learns how to reach one.
+| Path                                                 | What it is                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/mcp/server-card`                                   | The Server Card (`application/mcp-server-card+json`), at the location the [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card) reserves for a streamable-HTTP endpoint: the name `org.labnotes/expense`, title, version, description, icons, and one `streamable-http` remote listing every protocol revision the endpoint speaks. |
+| `/.well-known/mcp/server-card.json`                  | The same identity in the older SEP-1649 shape (`application/json`), which is the only card path scanners and shipped clients actually probe.                                                                                                                                                                                                                   |
+| `/.well-known/ai-catalog.json`                       | The domain-level [AI Catalog](https://github.com/Agent-Card/ai-catalog) (`application/ai-catalog+json`) with one entry pointing at the card. Start here: the catalog is how a client discovers servers on a domain, and the card is how it learns how to reach one.                                                                                            |
+| `/.well-known/api-catalog`                           | The RFC 9727 linkset (`application/linkset+json`) listing the endpoint and pointing at the card as its machine-readable description.                                                                                                                                                                                                                           |
+| `/auth.md`                                           | [Auth.md](https://workos.com/auth-md): how an agent gets access, which methods are supported, what the tokens are, and how access ends.                                                                                                                                                                                                                        |
+| `/.well-known/oauth-protected-resource` (and `/mcp`) | RFC 9728 protected resource metadata; the path-aware URL is the one the SDK probes first, and the one the 401 hint carries.                                                                                                                                                                                                                                    |
 
-Both are public by design and both cache for an hour with an `ETag` you can
-revalidate with `If-None-Match`. The card's identity is the same one `/mcp`
-reports in `serverInfo` (`server/discover` on the modern leg), so a client
-that read the card and then connects sees no contradiction. Everything about
-them lives in `app/lib/mcp-discovery.server.ts`, which the runtime also reads,
-so the two cannot drift apart.
+Every one of them is public by design, caches for an hour, and revalidates
+with `If-None-Match`. HTML responses also carry `Link` headers naming the API
+catalog (`rel="api-catalog"`), the card (`rel="service-desc"`), and
+`/llms.txt` (`rel="describedby"`), and a request for `Accept: text/markdown`
+on a marketing page gets that page's `.md` mirror instead of the app shell
+(`Vary: Accept` on both). `robots.txt` declares
+`Content-Signal: ai-train=yes, search=yes, ai-input=yes` in its wildcard
+block and points at the catalog with `Agentmap:`.
+
+The card's identity is the same one `/mcp` reports in `serverInfo`
+(`server/discover` on the modern leg), so a client that read the card and
+then connects sees no contradiction. Everything about them lives in
+`app/lib/mcp-discovery.server.ts`, which the runtime also reads, so the two
+cannot drift apart.
+
+The tool list is deliberately absent from both cards:
+`capabilities.tools` declares that tools exist without enumerating them,
+because `app/lib/mcp.server.ts` is their only home and a copy would drift.
 
 ## Tools
 
@@ -216,12 +225,17 @@ curl -s https://expense.example.com/mcp \
 ## How it's built
 
 - `app/routes/mcp.ts`: the HTTP endpoint (loader + action → `handleMcpRequest`).
-- `app/lib/mcp-discovery.server.ts`: the pre-connection identity plus the two
-  discovery documents it builds (the Server Card and the AI Catalog), served
-  by `app/routes/mcp.server-card.ts` at `/mcp/server-card` and
-  `app/routes/[.]well-known.ai-catalog[.]json.ts` at
-  `/.well-known/ai-catalog.json`. The same identity feeds the runtime
-  `serverInfo`, so card and protocol cannot disagree.
+- `app/lib/mcp-discovery.server.ts`: the pre-connection identity plus the
+  discovery documents it builds (the Server Card, the SEP-1649 copy of it, the
+  AI Catalog, and the RFC 9727 API catalog), served by
+  `app/routes/mcp.server-card.ts` at `/mcp/server-card`,
+  `app/routes/[.]well-known.mcp.server-card[.]json.ts`,
+  `app/routes/[.]well-known.ai-catalog[.]json.ts`, and
+  `app/routes/[.]well-known.api-catalog.ts`. The same identity feeds the
+  runtime `serverInfo`, so card and protocol cannot disagree.
+  `app/routes/auth[.]md.ts` serves the agent auth document, and
+  `app/routes/[.]well-known.oauth-protected-resource.mcp.ts` the path-aware
+  protected resource metadata.
 - `app/lib/mcp.server.ts`, the MCP server, with the dual-era stateless handler
   (`createMcpHandler`), OAuth bearer auth, the 13 tools, and the
   reconciliation matcher.

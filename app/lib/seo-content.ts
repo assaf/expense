@@ -30,15 +30,50 @@ export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 
 /**
+ * Clickjacking defense, on every HTML response. A route's own `headers`
+ * export replaces its parent's rather than merging with it (React Router
+ * hands the leaf's set to the response), so every route that declares headers
+ * spreads this in: without it the page silently ships without frame-ancestors
+ * (the marketing pages and the landing page did exactly that).
+ */
+export function securityHeaders(): Record<string, string> {
+  return {
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+  };
+}
+
+/**
+ * Agent discovery from the response envelope, so a client learns where the
+ * machine-readable documents are without reading the page (RFC 8288 rels; the
+ * catalog rel is RFC 9727 §3). Every target resolves: the catalog is a
+ * resource route, the card is the endpoint's own, and llms.txt is the LLM
+ * overview.
+ */
+export function discoveryLinks(): Record<string, string> {
+  return {
+    Link: [
+      '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"',
+      '</mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
+      '</llms.txt>; rel="describedby"; type="text/plain"',
+    ].join(", "),
+  };
+}
+
+/**
  * Cache-Control header shared by the marketing/SEO pages. These SSR
  * documents embed session-dependent loader data for signed-in visitors
  * (the root loader feeds the global command palette the account's report
  * names), so shared caches must never store them: the first signed-in hit
  * would otherwise pin personalized HTML for every visitor (MKT-CACHE-1).
- * Browsers revalidate on every request.
+ * Browsers revalidate on every request. `Vary: Accept` is here because these
+ * pages have two representations: the HTML page and its `.md` mirror.
  */
 export function marketingPageHeaders(): Record<string, string> {
   return {
+    ...securityHeaders(),
+    ...discoveryLinks(),
+    Vary: "Accept",
     "Cache-Control": "private, max-age=0, must-revalidate",
   };
 }

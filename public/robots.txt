@@ -6,6 +6,10 @@ Disallow: /export
 Disallow: /api/
 Disallow: /_highlights
 Disallow: /sign-out
+# Content Signals (contentsignals.org): what a crawler may do with what it
+# reads here. Training is allowed, matching the AI bot rules below, which
+# allow the -Extended / -Bot agents that carry exactly that permission.
+Content-Signal: ai-train=yes, search=yes, ai-input=yes
 
 # AI assistants and search engines that answer questions with AI-generated
 # summaries are welcome to crawl the public pages (the app routes above stay
@@ -35,3 +39,7 @@ User-agent: meta-externalagent
 Allow: /
 
 Sitemap: https://expense.labnotes.org/sitemap.xml
+
+# The ARD catalog: everything this domain offers agents, in one document
+# (served directly at /.well-known/ai-catalog.json too).
+Agentmap: https://expense.labnotes.org/.well-known/ai-catalog.json

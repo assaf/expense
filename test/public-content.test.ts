@@ -17,6 +17,7 @@ import {
   aboutMarkdown,
   aiMarkdown,
   alternativesMarkdown,
+  authMarkdown,
   connectMarkdown,
   faqMarkdown,
   llmsTxt,
@@ -44,6 +45,7 @@ const CONTENT_FILES = [
   "about.yaml",
   "ai.yaml",
   "alternatives.yaml",
+  "auth.md",
   "connect.yaml",
   "content-types.ts",
   "default-categories.csv",
@@ -145,6 +147,7 @@ describe("public page content", () => {
       mileageRatesMarkdown(),
       scheduleCCategoriesMarkdown(),
       llmsTxt(),
+      authMarkdown(),
     ];
     for (const text of [
       ...bundles.map((bundle) => JSON.stringify(bundle)),
