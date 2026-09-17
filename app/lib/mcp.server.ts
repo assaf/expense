@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
+import * as Sentry from "@sentry/node";
 import { z } from "zod";
 import {
   readExpenseSummary,
@@ -460,13 +461,22 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   const { McpServer } = await import("@modelcontextprotocol/server");
   // The identity the Server Card declares (app/lib/mcp-discovery.server.ts),
   // so the live serverInfo cannot drift from the published card.
-  const server = new McpServer({
-    name: MCP_SERVER_NAME,
-    title: MCP_SERVER_TITLE,
-    version: MCP_SERVER_VERSION,
-    description: MCP_SERVER_DESCRIPTION,
-    websiteUrl: MCP_SERVER_WEBSITE_URL,
-  });
+  //
+  // The Sentry wrapper has to be applied to the instance *before* the tools
+  // are registered, so it patches `registerTool` itself; it reads the same
+  // `_registeredTools` field this SDK version keeps. Tool arguments and
+  // results stay out of Sentry on purpose: a receipt arrives as base64 image
+  // bytes and a statement as the customer's own bank rows.
+  const server = Sentry.wrapMcpServerWithSentry(
+    new McpServer({
+      name: MCP_SERVER_NAME,
+      title: MCP_SERVER_TITLE,
+      version: MCP_SERVER_VERSION,
+      description: MCP_SERVER_DESCRIPTION,
+      websiteUrl: MCP_SERVER_WEBSITE_URL,
+    }),
+    { recordInputs: false, recordOutputs: false },
+  );
 
   // --- capture_receipt -----------------------------------------------------
 
