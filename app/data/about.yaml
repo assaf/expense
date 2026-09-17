@@ -11,7 +11,7 @@ description: |-
   Expense is a free expense tracker built for tax season: OCR reads your receipts, AI picks the category, drives are logged at the IRS rate, and reports export as PDF or ZIP.
 eyebrow: "About"
 title: |-
-  Expense – The Free Receipt Tracker for Tax Season.
+  A free expense tracker for tax season.
 benefitsHeading: |-
   What do you get
 factsHeading: |-
@@ -23,31 +23,19 @@ benefits:
       No credit card, no payment, no ads. Join now while it's free.
   - title: "Stop losing receipts in your gallery"
     body: |-
-      The receipts are already on your phone: photos in the gallery, screenshots, a PDF in Downloads. Take a photo or drop a file in and it becomes an expense, instead of one more thing you lose.
-  - title: "AI invoice & receipt extraction"
-    body: |-
-      Drop in a photo, screenshot or PDF. OCR and AI pull out the merchant, amount, date and category, then file the expense. Invoices work the same as receipts, whether you upload, paste or forward them.
+      The receipts are already on your phone: photos in the gallery, screenshots, a PDF in Downloads. Drop one in, or paste it or forward the email, and OCR and AI pull out the merchant, amount, date and category and file the expense. Invoices work the same way, and an attachment on a receipt email, PDF or image, is pulled out and read, not just the text in the body.
   - title: "Email receipts effortless"
     body: |-
       Forward a receipt email to your account and the expense is recorded for you, dated from the original email.
   - title: "Connect your Fastmail account"
     body: |-
-      Connect your Fastmail mailbox and receipts are processed as they land: merchant, amount and category filled in, nothing to forward. Most other expense apps only auto-import from Gmail; Expense works with Fastmail.
-  - title: "Smart pre-classification"
-    body: |-
-      Mail is screened locally before any AI runs, so newsletters and bank alerts are ignored, and a merchant you have paid before skips the model entirely.
-  - title: "Retroactive scan (last 90 days)"
-    body: |-
-      Connect a mailbox and it doesn't just watch for new mail. It scans back through your inbox and picks up the receipt emails already sitting there, so your records start the day you connect, not the day after.
-  - title: "Capture PDF attachments"
-    body: |-
-      A receipt email with a PDF attached is captured whole. The attachment is pulled out, read and stored with the expense, not just the text in the email body. Image attachments too.
+      Connect your Fastmail mailbox and receipts are processed as they land: merchant, amount and category filled in, nothing to forward. Mail is screened locally before any AI runs, so newsletters and bank alerts are ignored, and a merchant you have paid before skips the model entirely. Connecting also scans back through the last 90 days of inbox, so your records start the day you connect, not the day after. Most other expense apps only auto-import from Gmail; Expense works with Fastmail.
   - title: "Get ready with your deductions on time"
     body: |-
       Every account starts with the categories from the IRS Schedule C lines, so a receipt is filed on the line it belongs to and nothing has to be sorted out at tax time.
   - title: "PDF reports to show your accountant"
     body: |-
-      Group your expenses into reports you name, Home or Work or Travel. Each report keeps its own total.
+      Group your expenses into reports you name, Home or Work or Travel, and each report keeps its own total. Download a PDF per report with its receipts attached, or a ZIP with the CSV and all the receipt images, ready to hand to your accountant.
   - title: "Log drives without Excel"
     body: |-
       Map the drive and the app works out the distance and the deduction, at the IRS rate for the date you drove.
@@ -57,9 +45,6 @@ benefits:
   - title: "Reconcile against your monthly statement"
     body: |-
       Upload a credit card or bank statement (PDF, CSV, QuickBooks, or Excel) and Expense matches the charges against what you logged. Anything you never logged stands out, and you can reconcile as many statements as you like, personal and business spending on one card included.
-  - title: "Export for the tax time"
-    body: |-
-      Download a PDF per report with its receipts attached, or a ZIP with the CSV and all the receipt images. Either one is ready to hand to your accountant.
   - title: "Share with your family or accountant"
     body: |-
       Invite someone with a code and you all see the same expenses. Your other accounts stay private.

@@ -30,7 +30,7 @@ keyFacts:
   - |-
     Price: free. No ads
   - |-
-    Built for the tax time: categories are from IRS Schedule C lines, expenses are grouped into the reports you name, mileage deduction is calculated at the IRS rate for the drive date/type
+    Built for the tax time: categories come from the IRS Schedule C lines, expenses are grouped into reports you name, and the mileage deduction uses the IRS rate for the drive date and type
   - |-
     Receipt capture: upload, paste, drag & drop, or forward from email (images and PDFs)
   - |-
@@ -44,7 +44,7 @@ keyFacts:
   - |-
     Mileage: map-based drives at the IRS mileage rate for the drive date/type
   - |-
-    AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth); the assistant can capture receipts, log mileage, answer your spending questions, and build and export reports. In Chrome, the app also registers read-only in-page tools for browser agents (WebMCP)
+    AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth), no API keys. The assistant can capture receipts, log mileage, answer questions about your spending, and build and export reports. In Chrome, the app also registers read-only in-page tools for browser agents (WebMCP), no setup
   - |-
     Insights: the app's own question page, with no assistant to connect. Ask "where does my money go?" or "what still needs a report?" and the answer is computed from your expenses, with a chart when the question spans months
   - |-

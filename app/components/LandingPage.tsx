@@ -1,10 +1,7 @@
 import {
   Bot,
   CreditCard,
-  FileText,
   FolderOpen,
-  History,
-  ListFilter,
   MapPinned,
   Plug,
   ReceiptText,
@@ -49,12 +46,8 @@ const SOFTWARE_SCHEMA = {
  * the copy itself stays in app/data/about.yaml (the single source of the
  * site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
-  "AI invoice & receipt extraction": Sparkles,
   "Stop losing receipts in your gallery": ReceiptText,
-  "Smart pre-classification": ListFilter,
   "Connect your Fastmail account": Plug,
-  "Retroactive scan (last 90 days)": History,
-  "Capture PDF attachments": FileText,
   "Get ready with your deductions on time": Tags,
   "PDF reports to show your accountant": FolderOpen,
   "Log drives without Excel": MapPinned,
