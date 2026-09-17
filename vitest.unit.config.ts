@@ -53,6 +53,7 @@ export default defineConfig({
       "test/money.test.ts",
       "test/passwords.test.ts",
       "test/route-map.test.ts",
+      "test/server-card.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

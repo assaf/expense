@@ -73,6 +73,30 @@ serves **both protocol generations** from one URL: 2025-era clients (the
 negotiate (e.g. the v2 SDK with `versionNegotiation: { mode: 'auto' }`)
 succeed either way.
 
+### Discovery
+
+A client can read the server's identity and connection details before it
+connects, from two static documents that need no auth:
+
+- `GET https://<your-host>/mcp/server-card` (the location the
+  [Server Card extension](https://github.com/modelcontextprotocol/ext-server-card)
+  reserves for a streamable-HTTP endpoint) returns the card as
+  `application/mcp-server-card+json`: the name `org.labnotes/expense`, the
+  title, version, description, the three icons, and one `streamable-http`
+  remote listing every protocol revision the endpoint speaks.
+- `GET https://<your-host>/.well-known/ai-catalog.json` returns the
+  domain-level [AI Catalog](https://github.com/Agent-Card/ai-catalog) as
+  `application/ai-catalog+json`, with one entry pointing at the card URL
+  above. Start here: the catalog is how a client discovers servers on a
+  domain, and the card is how it learns how to reach one.
+
+Both are public by design and both cache for an hour with an `ETag` you can
+revalidate with `If-None-Match`. The card's identity is the same one `/mcp`
+reports in `serverInfo` (`server/discover` on the modern leg), so a client
+that read the card and then connects sees no contradiction. Everything about
+them lives in `app/lib/mcp-discovery.server.ts`, which the runtime also reads,
+so the two cannot drift apart.
+
 ## Tools
 
 | Tool              | Writes | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -192,6 +216,12 @@ curl -s https://expense.example.com/mcp \
 ## How it's built
 
 - `app/routes/mcp.ts`: the HTTP endpoint (loader + action → `handleMcpRequest`).
+- `app/lib/mcp-discovery.server.ts`: the pre-connection identity plus the two
+  discovery documents it builds (the Server Card and the AI Catalog), served
+  by `app/routes/mcp.server-card.ts` at `/mcp/server-card` and
+  `app/routes/[.]well-known.ai-catalog[.]json.ts` at
+  `/.well-known/ai-catalog.json`. The same identity feeds the runtime
+  `serverInfo`, so card and protocol cannot disagree.
 - `app/lib/mcp.server.ts`, the MCP server, with the dual-era stateless handler
   (`createMcpHandler`), OAuth bearer auth, the 13 tools, and the
   reconciliation matcher.

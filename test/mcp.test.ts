@@ -5,8 +5,15 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
+import { SERVER_INFO_META_KEY } from "@modelcontextprotocol/server";
 import { hashToken, issueTokenPair } from "~/lib/oauth.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
+import {
+  MCP_PROTOCOL_VERSIONS,
+  MCP_SERVER_NAME,
+  MCP_SERVER_TITLE,
+  MCP_SERVER_VERSION,
+} from "~/lib/mcp-discovery.server";
 import {
   deleteOAuthClient,
   registerOAuthClient,
@@ -78,7 +85,8 @@ describe("MCP endpoint", () => {
     return { status: res.status, json };
   }
 
-  /** 2025-era handshake, served statelessly (no session id is issued). */
+  /** 2025-era handshake, served statelessly (no session id is issued). Its
+   * result carries the identity the Server Card publishes. */
   async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
@@ -91,6 +99,12 @@ describe("MCP endpoint", () => {
       },
     });
     expect(init.status).toBe(200);
+    const initBody = init.json as { result?: { serverInfo?: unknown } };
+    expect(initBody.result?.serverInfo).toMatchObject({
+      name: MCP_SERVER_NAME,
+      title: MCP_SERVER_TITLE,
+      version: MCP_SERVER_VERSION,
+    });
   }
 
   /** Parse the content from a MCP tools/call response into { isError, payload }. */
@@ -236,8 +250,28 @@ describe("MCP endpoint", () => {
       { "Mcp-Method": "server/discover" },
     );
     expect(discover.status).toBe(200);
-    const discoverResult = (discover.json as { result: unknown }).result;
+    // JSON-RPC envelope from the live server: the cast names the shape this
+    // case reads, which the SDK does not export.
+    const discoverBody = discover.json as {
+      result?: {
+        supportedVersions?: string[];
+        _meta?: Record<string, unknown>;
+      };
+    };
+    const discoverResult = discoverBody.result;
     expect(discoverResult).toBeTruthy();
+    // The Server Card publishes the same identity. server/discover carries
+    // only supportedVersions and capabilities; on this protocol era the
+    // identity rides in every result's _meta.
+    expect(discoverResult?._meta?.[SERVER_INFO_META_KEY]).toMatchObject({
+      name: MCP_SERVER_NAME,
+      title: MCP_SERVER_TITLE,
+      version: MCP_SERVER_VERSION,
+    });
+    // Every revision the endpoint reports is one the card advertises.
+    for (const version of discoverResult?.supportedVersions ?? []) {
+      expect(MCP_PROTOCOL_VERSIONS).toContain(version);
+    }
 
     const list = await mcpPost(
       accessToken,

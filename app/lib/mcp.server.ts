@@ -10,6 +10,13 @@ import {
   expenseFilterSchema,
   READ_TOOLS,
 } from "~/lib/expense-read-tools";
+import {
+  MCP_SERVER_DESCRIPTION,
+  MCP_SERVER_NAME,
+  MCP_SERVER_TITLE,
+  MCP_SERVER_VERSION,
+  MCP_SERVER_WEBSITE_URL,
+} from "~/lib/mcp-discovery.server";
 import { ok, fail, captureReceipt, logMileage } from "~/lib/mcp-write.server";
 import {
   isOAuthToken,
@@ -447,7 +454,15 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
 
 async function createMcpServer(accountId: string): Promise<McpServer> {
   const { McpServer } = await import("@modelcontextprotocol/server");
-  const server = new McpServer({ name: "expense", version: "0.1.0" });
+  // The identity the Server Card declares (app/lib/mcp-discovery.server.ts),
+  // so the live serverInfo cannot drift from the published card.
+  const server = new McpServer({
+    name: MCP_SERVER_NAME,
+    title: MCP_SERVER_TITLE,
+    version: MCP_SERVER_VERSION,
+    description: MCP_SERVER_DESCRIPTION,
+    websiteUrl: MCP_SERVER_WEBSITE_URL,
+  });
 
   // --- capture_receipt -----------------------------------------------------
 
