@@ -1,8 +1,8 @@
 # The comparison page at /alternatives and its markdown mirror
 # /alternatives.md.
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
-# app/lib/content.server.ts.
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
+# {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 metaTitle: |-
   Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave

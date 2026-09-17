@@ -7,6 +7,7 @@ import {
 } from "~/lib/email-layout.server";
 import { PUBLIC_URL } from "~/lib/env";
 import { sendEmail } from "~/lib/reply.server";
+import { SUPPORT_EMAIL } from "~/lib/seo-content";
 
 /**
  * The notice that goes to a user's OLD address when their sign-in email
@@ -18,10 +19,6 @@ import { sendEmail } from "~/lib/reply.server";
  * would mail a stranger), and it gets its own email anyway: the
  * receipts-by-email verification link for the account's new default sender.
  */
-
-/** Where "I didn't do this" goes: the address the app's policy pages already
- * point at for account problems. */
-const SUPPORT_EMAIL = "assaf@labnotes.org";
 
 export interface EmailChangeNoticeInput {
   /** The address that just stopped being the sign-in email. */

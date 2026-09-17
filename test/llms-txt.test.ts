@@ -30,6 +30,7 @@ import {
   alternativesMarkdown,
   connectMarkdown,
   faqMarkdown,
+  fillPlaceholders,
   privacyMarkdown,
   termsMarkdown,
   scheduleCCategoriesMarkdown,
@@ -132,22 +133,13 @@ function collapse(text: string): string {
   return text.replaceAll(/\s+/g, " ").trim();
 }
 
-/** A document body with the values the loader fills at build time blanked: a
- * `{{token}}` and the URL it resolves to collapse to the same `<url>`, so a
- * value can never hide a dropped line. */
-function filled(text: string): string {
-  return text
-    .replaceAll(/\{\{\w+\}\}/g, "https://token.invalid")
-    .replaceAll(/https?:\/\/[^\s)]+/g, "<url>")
-    .trim();
-}
-
 /** A document's sections, past its front matter and the mirror's own
- * title/summary preamble. */
+ * title/summary preamble. Placeholders are filled first, so a source file and
+ * the mirror built from it carry the same values. */
 function documentSections(text: string): string {
-  const body = text.replace(/^---\n[\s\S]*?\n---\n/, "");
+  const body = fillPlaceholders(text.replace(/^---\n[\s\S]*?\n---\n/, ""));
   const at = body.indexOf("## ");
-  return filled(at === -1 ? "" : body.slice(at));
+  return at === -1 ? "" : body.slice(at);
 }
 
 describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {
@@ -334,10 +326,10 @@ describe("mirrors lose no content", () => {
 
 describe("document mirrors are their source files", () => {
   // The documents are hand-edited prose (bullet lists included), and the
-  // mirror is assembled from the parse of them. Compared with the filled
-  // values blanked, the structure has to come back line for line: a bullet
-  // list the mirror flattens into paragraphs, or a section that loses its
-  // blank line, fails here instead of reaching a reader.
+  // mirror is assembled from the parse of them. Compared with the placeholders
+  // filled from the same values, the structure has to come back line for line:
+  // a bullet list the mirror flattens into paragraphs, or a section that loses
+  // its blank line, fails here instead of reaching a reader.
   it.each([
     ["terms", termsMarkdown()],
     ["privacy", privacyMarkdown()],

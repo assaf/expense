@@ -2,8 +2,8 @@
 # The privacy policy at /privacy, and its markdown mirror /privacy.md.
 
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
-# app/lib/content.server.ts.
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
+# {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 # The body is the document: "## " starts a section, each paragraph is one line
 # (a line break inside a paragraph starts a new one), and a line starting with
@@ -65,4 +65,4 @@ Delete your account in Settings anytime: your expenses, receipt images, reports,
 
 ## Changes
 
-This privacy policy may change at any time. The date below will be updated whenever it happens. If you have any questions, please contact [assaf@labnotes.org](mailto:assaf@labnotes.org).
+This privacy policy may change at any time. The date below will be updated whenever it happens. If you have any questions, please contact [{{supportEmail}}](mailto:{{supportEmail}}).

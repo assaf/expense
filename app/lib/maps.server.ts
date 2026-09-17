@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { z } from "zod";
 
 import { mileageAmount } from "~/lib/mileage-rates";
+import { SUPPORT_EMAIL } from "~/lib/seo-content";
 import { geocodedLocations, type Location } from "~/lib/types";
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
@@ -10,8 +11,10 @@ const METERS_PER_MILE = 1609.344;
 
 /** The app's descriptive User-Agent for map-service requests (Nominatim's
  * usage policy requires one; Carto tiles use the same identity). Shared
- * with the report-map tile fetcher (route-map.server.ts). */
-export const MAP_USER_AGENT = "expense-personal/1.0 (assaf@labnotes.org)";
+ * with the report-map tile fetcher (route-map.server.ts), and carrying the
+ * site's contact address, so a service operator who needs to reach someone
+ * reads the same address the site publishes. */
+export const MAP_USER_AGENT = `expense-personal/1.0 (${SUPPORT_EMAIL})`;
 
 /** A Nominatim coordinate: a string that parses to a finite number. A
  * junk value must fall back to "no match", never become NaN lat/lng on a

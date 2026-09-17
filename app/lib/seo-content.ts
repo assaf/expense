@@ -12,8 +12,9 @@ import { formatRate, periodLabel } from "~/lib/mileage-rates";
  *
  * Three things stay, because a content file must not own them:
  *
- * - The canonical URLs and the social card, which the app itself points at
- *   (OAuth metadata, the email footer, the JSON-LD blocks).
+ * - The canonical URLs, the social card, and the support address, which the
+ *   app itself points at (OAuth metadata, the email footer, the JSON-LD
+ *   blocks, the account-security notice).
  * - `pageMeta` and `marketingPageHeaders`: the meta-tag shape and the cache
  *   contract every marketing page shares, so they can't drift apart.
  * - The mileage-rate helpers, computed from `app/data/mileage-rates.ts` (the
@@ -28,6 +29,12 @@ export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 
 /** The social-card image shared by every marketing page's og:image. */
 export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
+
+/** The one address the site publishes for itself: the support and policy
+ * pages quote it as `{{supportEmail}}`, the User-Agent that identifies the app
+ * to the map services carries it, and the sign-in change notice sends account
+ * problems to it. Typed here so a change of address is one edit. */
+export const SUPPORT_EMAIL = "assaf@labnotes.org";
 
 /**
  * Clickjacking defense, on every HTML response. A route's own `headers`

@@ -2,8 +2,8 @@
 # The terms of service at /terms, and its markdown mirror /terms.md.
 
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
-# app/lib/content.server.ts.
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
+# {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 # The body is the document: "## " starts a section, each paragraph is one line
 # (a line break inside a paragraph starts a new one), and a line starting with
@@ -75,4 +75,4 @@ Those terms are governed by California law in the US, where I live.
 
 ## Updates
 
-Whenever terms of use are updated, the date above changes, and you agree to the new version of them by continuing to use the app. If you have questions, contact me at [assaf@labnotes.org](mailto:assaf@labnotes.org).
+Whenever terms of use are updated, the date above changes, and you agree to the new version of them by continuing to use the app. If you have questions, contact me at [{{supportEmail}}](mailto:{{supportEmail}}).

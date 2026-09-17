@@ -1,8 +1,8 @@
 # The mileage-rate table at /mileage-rates and its markdown mirror
 # /mileage-rates.md. The table itself is computed from app/data/mileage-rates.ts.
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
-# app/lib/content.server.ts.
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
+# {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 metaTitle: |-
   IRS standard mileage rates by year ({{mileageFirstYear}} to {{mileageLastYear}})

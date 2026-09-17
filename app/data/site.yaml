@@ -4,8 +4,8 @@
 # Values are read verbatim, line breaks included, so re-wrap a value only when
 # you also want the mirrors to re-wrap.
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}}, {{categoryCount}}. See
-# app/lib/content.server.ts.
+# {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
+# {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 appSummary: |-
   Expense is an expense tracker for those filing taxes

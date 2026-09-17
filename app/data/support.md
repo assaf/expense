@@ -17,7 +17,7 @@ eyebrow: "Support"
 title: |-
   How to get help with Expense
 summary: |-
-  Expense is built and run by one person, so support email reaches him directly: assaf@labnotes.org.
+  Expense is built and run by one person, so support email reaches him directly: {{supportEmail}}.
 updated: "September 15, 2026"
 
 mirror:
@@ -26,7 +26,7 @@ mirror:
 
 ## Getting support
 
-Expense is maintained by a single person, Assaf Arkin. Support requests are directed directly to him, without going through a helpdesk ticket system: [assaf@labnotes.org](mailto:assaf@labnotes.org). No ticket system, no chat window, and no phone tree need to be navigated prior to contacting him.
+Expense is maintained by a single person, Assaf Arkin. Support requests are directed directly to him, without going through a helpdesk ticket system: [{{supportEmail}}](mailto:{{supportEmail}}). No ticket system, no chat window, and no phone tree need to be navigated prior to contacting him.
 
 Describe your account's login email, what was being done when an issue occurred, and what the expectation was.
 

@@ -40,6 +40,7 @@ import {
   MCP_ENDPOINT,
   mileageRateRows,
   SITE_URL,
+  SUPPORT_EMAIL,
 } from "~/lib/seo-content";
 
 /**
@@ -60,12 +61,12 @@ import {
  *   per page, plus the shared `site.yaml` (brand copy) and `mcp.yaml` (the
  *   MCP copy /ai and /connect share).
  *
- * Placeholders — `{{siteUrl}}`, `{{mcpEndpoint}}`, `{{mileage}}`,
- * `{{mileagePeriod}}`, `{{mileageFirstYear}}`, `{{mileageLastYear}}`,
- * `{{categoryCount}}` — are filled in here from the values the app already
- * computes, so a domain or an IRS rate never has to be typed twice. An
- * unknown or malformed placeholder throws at build time rather than
- * shipping braces to a reader.
+ * Placeholders — `{{siteUrl}}`, `{{mcpEndpoint}}`, `{{supportEmail}}`,
+ * `{{mileage}}`, `{{mileagePeriod}}`, `{{mileageFirstYear}}`,
+ * `{{mileageLastYear}}`, `{{categoryCount}}` — are filled in here from the
+ * values the app already computes, so a domain, a contact address, or an IRS
+ * rate never has to be typed twice. An unknown or malformed placeholder
+ * throws at build time rather than shipping braces to a reader.
  *
  * Anything wrong with a file (a missing key, an empty value, a table in a
  * document) throws with the file name: a content edit that breaks a page
@@ -92,10 +93,12 @@ const FILE = {
 // --- Placeholders -----------------------------------------------------------
 
 /** Whatever an edit can leave in a file that the app computes: the canonical
- * URLs the app already knows, and the IRS figures it derives from data. */
+ * URLs and the contact address the app already knows, and the IRS figures it
+ * derives from data. */
 const CONTENT_VALUES: Record<string, string> = {
   siteUrl: SITE_URL,
   mcpEndpoint: MCP_ENDPOINT,
+  supportEmail: SUPPORT_EMAIL,
   mileage: currentMileageSummary(),
   mileagePeriod: mileageRateRows()[0]!.period,
   mileageFirstYear: mileageRateRows().at(-1)!.start.slice(0, 4),
@@ -104,6 +107,14 @@ const CONTENT_VALUES: Record<string, string> = {
 };
 
 const PLACEHOLDER = /\{\{(\w+)\}\}/g;
+
+/** Fill a string's placeholders with the values this module computes, using
+ * the same map the pages are built from. Exported for the mirror tests, which
+ * compare a document's raw source file against the mirror built from it: both
+ * sides have to carry the same values for the comparison to mean anything. */
+export function fillPlaceholders(text: string): string {
+  return fill("<string>", text);
+}
 
 /** Fill the placeholders in one string, rejecting anything left behind. */
 function fill(file: string, text: string): string {
