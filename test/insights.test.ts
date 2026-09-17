@@ -83,6 +83,9 @@ function exp(fields: Partial<InsightExpense>): InsightExpense {
     report: "",
     amount: "0",
     date: "",
+    hasImage: false,
+    distanceMiles: "",
+    imageSha256: "",
     ...fields,
   };
 }
@@ -420,6 +423,14 @@ describe("answerInsightQuestion", () => {
     expect(user).toContain("Previous exchanges:");
     expect(user).toContain("Q: earlier question\nA: earlier answer");
     expect(user).toContain("Question: did I spend more on AI this month?");
+    // A judgment question is answered from the checkup, not refused.
+    const system = messages.find((m) => m.role === "system")!;
+    expect(system.content).toContain(
+      "Do not answer a question about whether they are doing well by refusing",
+    );
+    expect(system.content).toContain(
+      'A "Money checkup" block in the computed data covers the whole account',
+    );
   });
 
   it("falls back to a placeholder when the model returns nothing", async () => {
@@ -644,6 +655,39 @@ describe("insightExpense", () => {
       merchant: "",
       date: "2026-07-22",
       amount: "9.94",
+      // The checkup's own fields: a trip's distance, and no image to
+      // fingerprint.
+      distanceMiles: "14.2",
+      hasImage: false,
+      imageSha256: "",
+    });
+  });
+
+  it("carries the image fields a receipt's findings read", () => {
+    const e = insightExpense({
+      id: "e1",
+      type: "receipt",
+      merchant: "Blue Bottle",
+      imageFile: "images/acct_1/2026-07-22_Q3_receipt.jpg",
+      imageMime: "image/jpeg",
+      originalName: "receipt.jpg",
+      imageSha256: "abc123",
+      currency: "USD",
+      originalAmount: "",
+      fxRate: "",
+      description: "",
+      category: "Meals",
+      report: "Q3",
+      amount: "6.50",
+      date: "2026-07-22",
+      reconciledAt: "",
+      createdAt: "",
+      updatedAt: "",
+    });
+    expect(e).toMatchObject({
+      hasImage: true,
+      imageSha256: "abc123",
+      distanceMiles: "",
     });
   });
 });
@@ -918,6 +962,38 @@ describe("insightStarters", () => {
 
   it("offers nothing for an account without expenses", () => {
     expect(insightStarters([], today)).toEqual([]);
+  });
+
+  it("offers the checkup as the opening judgment fact", () => {
+    const starters = insightStarters(data, today);
+    const checkup = starters.find(
+      (s) => s.question === "Am I being smart with my money?",
+    );
+    expect(checkup?.answer).toBe(
+      "This year: $455.70 across 6 expenses. Worth fixing first: 1 expense worth $32.00 with no category.",
+    );
+  });
+
+  it("says the year is clean when nothing is outstanding", () => {
+    const clean = insightStarters(
+      [
+        exp({
+          merchant: "Z.ai",
+          amount: "10.00",
+          date: "2026-07-02",
+          category: "Software",
+          report: "2026 Test",
+          hasImage: true,
+        }),
+      ],
+      today,
+    );
+    expect(
+      clean.find((s) => s.question === "Am I being smart with my money?")
+        ?.answer,
+    ).toBe(
+      "This year: $10.00 across 1 expense. Nothing outstanding: every expense has a category and a report, and no receipt is missing its image.",
+    );
   });
 
   it("picks a different starter as the rng walks", () => {

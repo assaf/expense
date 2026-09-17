@@ -9,6 +9,7 @@ import {
   Globe,
   Keyboard,
   KeyRound,
+  Lightbulb,
   Mail,
   MailCheck,
   MapPinned,
@@ -39,6 +40,7 @@ import { Card } from "~/components/ui/Card";
 export type HighlightId =
   | "capture"
   | "categories"
+  | "checkup"
   | "command-palette"
   | "connect-email"
   | "email"
@@ -111,6 +113,19 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       </>
     ),
     cta: { label: "Manage categories", to: "/settings#categories" },
+  },
+  checkup: {
+    icon: Lightbulb,
+    title: "Get a second pair of eyes on the year",
+    body: () => (
+      <>
+        Insights opens with a checkup of the whole tax year: what has no
+        category, what is in no report, what looks double-entered, what charges
+        repeat monthly, and what changed since last year. Ask it a question and
+        it answers from those figures.
+      </>
+    ),
+    cta: { label: "See your checkup", to: "/insights" },
   },
   "command-palette": {
     icon: Command,
@@ -353,6 +368,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   const pool: HighlightId[] = [
     "capture",
     "categories",
+    "checkup",
     "command-palette",
     "shortcut-hints",
     "webmcp",

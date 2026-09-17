@@ -14,6 +14,9 @@ function exp(fields: Partial<InsightExpense>): InsightExpense {
     report: "",
     amount: "0",
     date: "",
+    hasImage: false,
+    distanceMiles: "",
+    imageSha256: "",
     ...fields,
   };
 }

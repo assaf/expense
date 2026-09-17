@@ -31,6 +31,7 @@ describe("feature highlights", () => {
       "categories",
       "change-email",
       "change-password",
+      "checkup",
       "close-account",
       "command-palette",
       "connect-email",

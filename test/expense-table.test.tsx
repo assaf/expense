@@ -18,6 +18,9 @@ function row(overrides: Partial<InsightExpense> = {}): InsightExpense {
     category: "Meals",
     amount: "12.50",
     report: "2026 Business",
+    hasImage: true,
+    distanceMiles: "",
+    imageSha256: "",
     ...overrides,
   };
 }

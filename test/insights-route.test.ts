@@ -207,6 +207,12 @@ describe("insights route", () => {
     const userMessage = answerCall[answerCall.length - 1]!.content;
     expect(userMessage).toContain("Computed data:");
     expect(userMessage).toContain("DevShop");
+    // The checkup rides in the same computed data: it is what a judgment
+    // question is answered from, and it covers the whole year, not the
+    // chart's window.
+    expect(userMessage).toContain(
+      "Money checkup (whole account, 2026-01-01 to 2026-07-15; ignores the chart filter):",
+    );
     expect(userMessage).toContain(
       "Question: all reports and when they were created",
     );

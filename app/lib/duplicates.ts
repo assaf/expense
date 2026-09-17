@@ -1,6 +1,6 @@
 import { formatAmount, formatDate } from "~/lib/format";
 import { parseAmount } from "~/lib/money";
-import type { Expense, MileageExpense, ReceiptExpense } from "~/lib/types";
+import type { Expense } from "~/lib/types";
 
 /**
  * Duplicate detection for the expense list and the create editor.
@@ -33,9 +33,47 @@ export type DuplicateReason =
   | "same-date-merchant-amount"
   | "same-route";
 
-/** One existing expense that looks like the same entry as another. */
-export interface DuplicateMatch {
-  expense: Expense;
+/**
+ * The fields duplicate matching reads, one shape per expense type. Two
+ * kinds of row satisfy it: a stored `Expense` (the list page, the editors,
+ * MCP) and the insights snapshot, which flattens both types into one row
+ * and carries no `createdAt`.
+ */
+export type DuplicateRow = ReceiptDuplicateRow | MileageDuplicateRow;
+
+interface ReceiptDuplicateRow {
+  id: string;
+  type: "receipt";
+  date: string;
+  merchant: string;
+  amount: string;
+  category: string;
+  report: string;
+  description: string;
+  imageSha256: string;
+  /** ISO timestamp; the insights snapshot omits it. The "oldest match
+   * first" sort below treats a missing one as oldest. */
+  createdAt?: string;
+}
+
+interface MileageDuplicateRow {
+  id: string;
+  type: "mileage";
+  date: string;
+  amount: string;
+  category: string;
+  report: string;
+  description: string;
+  locations: { address: string }[];
+  distanceMiles: string;
+  createdAt?: string;
+}
+
+/** One existing expense that looks like the same entry as another. `T` is
+ * the row type the caller matched over: a stored `Expense` for the list
+ * page and the editors, the insights snapshot for the money checkup. */
+export interface DuplicateMatch<T extends DuplicateRow = Expense> {
+  expense: T;
   reason: DuplicateReason;
 }
 
@@ -61,14 +99,11 @@ export function findDuplicates(
   );
 }
 
-export function groupDuplicateMatches(
-  expenses: readonly Expense[],
+export function groupDuplicateMatches<T extends DuplicateRow>(
+  expenses: readonly T[],
   dismissed: ReadonlySet<string> = new Set(),
-): Map<string, DuplicateMatch[]> {
-  const byKey = new Map<
-    string,
-    { reason: DuplicateReason; expenses: Expense[] }
-  >();
+): Map<string, DuplicateMatch<T>[]> {
+  const byKey = new Map<string, { reason: DuplicateReason; expenses: T[] }>();
   for (const e of expenses) {
     for (const keyed of matchKeys(e)) {
       const bucket = byKey.get(keyed.key) ?? {
@@ -80,7 +115,7 @@ export function groupDuplicateMatches(
     }
   }
 
-  const matches = new Map<string, DuplicateMatch[]>();
+  const matches = new Map<string, DuplicateMatch<T>[]>();
   // Directional: a pair reports a→b AND b→a; two buckets sharing the pair
   // (same image AND same fields) report it once per direction, from the
   // strongest reason. matchKeys orders the image key first and each
@@ -102,9 +137,13 @@ export function groupDuplicateMatches(
       }
     }
   }
-  // Oldest match first, so the warning points at the original entry.
+  // Oldest match first, so the warning points at the original entry. Rows
+  // without a createdAt (the insights snapshot) tie and keep the order the
+  // ids produced.
   for (const list of matches.values()) {
-    list.sort((a, b) => a.expense.createdAt.localeCompare(b.expense.createdAt));
+    list.sort((a, b) =>
+      (a.expense.createdAt ?? "").localeCompare(b.expense.createdAt ?? ""),
+    );
   }
   return matches;
 }
@@ -125,7 +164,7 @@ export function duplicateLabel(e: Expense): string {
  * Mileage has one (date + ordered route + distance).
  */
 function matchKeys(
-  e: Expense,
+  e: DuplicateRow,
 ): Array<{ key: string; reason: DuplicateReason }> {
   if (e.type === "mileage") {
     const keyed = mileageKey(e);
@@ -141,7 +180,7 @@ function matchKeys(
 }
 
 function receiptKey(
-  e: ReceiptExpense,
+  e: ReceiptDuplicateRow,
 ): { key: string; reason: DuplicateReason } | null {
   if (!e.date) return null;
   const merchant = normalizeMerchant(e.merchant);
@@ -163,7 +202,7 @@ function receiptKey(
 }
 
 function mileageKey(
-  e: MileageExpense,
+  e: MileageDuplicateRow,
 ): { key: string; reason: DuplicateReason } | null {
   if (!e.date) return null;
   const distance = parseAmount(e.distanceMiles);

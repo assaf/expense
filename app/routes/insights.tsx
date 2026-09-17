@@ -16,13 +16,14 @@ import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Textarea } from "~/components/ui/Textarea";
 import { InsightChart } from "~/components/InsightChart";
+import { MoneyCheckup } from "~/components/MoneyCheckup";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
 import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
 import { readLocations } from "~/lib/db/locations";
 import { readReports } from "~/lib/db/reports";
-import { readSettings } from "~/lib/db/settings";
+import { readDuplicateDismissals, readSettings } from "~/lib/db/settings";
 import {
   appendExchange,
   readLatestConversation,
@@ -47,6 +48,7 @@ import {
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
+import { checkupText, moneyCheckup } from "~/lib/money-checkup";
 import { parseExpenseConfirmation } from "~/lib/insights-expense-tool.server";
 import { parseTripConfirmation } from "~/lib/insights-mileage-tool.server";
 import {
@@ -135,12 +137,16 @@ async function overWriteBudget(userId: string): Promise<boolean> {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireUser(request);
-  const [conversation, expenses] = await Promise.all([
+  const [conversation, expenses, dismissed] = await Promise.all([
     readLatestConversation(user.id),
     readExpenses(user.accountId),
+    readDuplicateDismissals(user.accountId),
   ]);
   return {
     expenses: expenses.map(insightExpense),
+    // Sorted: the payload is serialized for hydration, so an unordered
+    // Set iteration must not reach the client.
+    duplicateDismissals: [...dismissed].sort(),
     // The most recent conversation reloads with the page; older ones stay
     // in the database as a record.
     messages: conversation?.exchanges ?? [],
@@ -301,15 +307,23 @@ export async function action({ request }: Route.LoaderArgs) {
     lockMs: 15 * 60_000,
   });
 
-  const [account, categories, reports, settings, members, locations] =
-    await Promise.all([
-      readAccount(user.accountId),
-      readCategories(user.accountId),
-      readReports(user.accountId),
-      readSettings(user.accountId),
-      readAccountUsers(user.accountId),
-      readLocations(user.accountId),
-    ]);
+  const [
+    account,
+    categories,
+    reports,
+    settings,
+    members,
+    locations,
+    dismissed,
+  ] = await Promise.all([
+    readAccount(user.accountId),
+    readCategories(user.accountId),
+    readReports(user.accountId),
+    readSettings(user.accountId),
+    readAccountUsers(user.accountId),
+    readLocations(user.accountId),
+    readDuplicateDismissals(user.accountId),
+  ]);
   const expenses = (await readExpenses(user.accountId)).map(insightExpense);
   const merchants = knownMerchants(expenses);
   // The settings lists are authoritative (they include unused entries,
@@ -360,10 +374,18 @@ export async function action({ request }: Route.LoaderArgs) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(today)) {
       const buckets = monthlyTotals(expenses, t.query, today, t.months);
       const matched = matchingExpenses(expenses, t.query, buckets);
+      // The checkup covers the whole account and the whole tax year, not
+      // the chart's window or its filter, and it is what a judgment
+      // question ("am I being smart with my money?") is answered from. It
+      // rides in the same computed-data fence as the summary, so the
+      // injection guard and its prompt-fencing tests still apply.
+      const checkup = moneyCheckup({ expenses, today, dismissed });
       const { answer, pending } = await answerInsightQuestion({
         question: text,
         history: conversation?.exchanges.slice(-3) ?? [],
-        summary: insightSummary(buckets, matched),
+        summary: [insightSummary(buckets, matched), checkupText(checkup)].join(
+          "\n",
+        ),
         // The read tool queries the request's own snapshot, so a follow-up
         // question ("what about this week?") needs no second DB read.
         expenses,
@@ -782,15 +804,30 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // from the loaded expenses and the local today, so no server timezone
   // and no LLM call. Under the screenshot pin (loaderData.pinStarter)
   // the pick is the first starter so captures stay deterministic.
+  const dismissed = useMemo(
+    () => new Set(loaderData.duplicateDismissals),
+    [loaderData.duplicateDismissals],
+  );
+  // The checkup the page opens with: the same computation the answer step
+  // and the starters read, from the loaded snapshot and the browser's local
+  // date (so the server render and the first client render agree: `today`
+  // is null until mount, and the panel waits for it).
+  const checkup = useMemo(
+    () =>
+      today
+        ? moneyCheckup({ expenses: loaderData.expenses, today, dismissed })
+        : null,
+    [loaderData.expenses, dismissed, today],
+  );
   const starter = useMemo(
     () =>
       today
         ? pickStarter(
-            insightStarters(loaderData.expenses, today),
+            insightStarters(loaderData.expenses, today, dismissed),
             loaderData.pinStarter ? () => 0 : undefined,
           )
         : null,
-    [loaderData.expenses, loaderData.pinStarter, today],
+    [dismissed, loaderData.expenses, loaderData.pinStarter, today],
   );
 
   // Each chart exchange renders its own view from the shared expense
@@ -998,6 +1035,11 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div ref={contentRef} className="space-y-4">
+          {checkup && checkup.count > 0 ? (
+            <Card className="p-4">
+              <MoneyCheckup checkup={checkup} />
+            </Card>
+          ) : null}
           {transcript.length === 0 && starter ? (
             <Card className="p-4">
               <div className="flex items-start gap-2">

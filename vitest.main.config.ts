@@ -54,6 +54,8 @@ export default defineConfig({
       "test/insight-charts.test.ts",
       "test/insight-chart.test.tsx",
       "test/expense-table.test.tsx",
+      "test/money-checkup.test.ts",
+      "test/money-checkup-panel.test.tsx",
       "test/markdown.test.ts",
       "test/public-content.test.ts",
       "test/agent-discovery.test.ts",

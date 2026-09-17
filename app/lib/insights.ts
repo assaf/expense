@@ -5,6 +5,7 @@ import {
   type SearchableExpense,
 } from "~/lib/expense-search";
 import { countLabel, formatUsd } from "~/lib/format";
+import { NOTHING_OUTSTANDING, moneyCheckup } from "~/lib/money-checkup";
 import { parseAmount } from "~/lib/money";
 import type { Expense } from "~/lib/types";
 
@@ -14,6 +15,16 @@ import type { Expense } from "~/lib/types";
 export type InsightExpense = SearchableExpense & {
   id: string;
   date: string;
+  /** A receipt with stored image bytes; mileage rows are never one, so
+   * they read false. Duplicate matching and the money checkup's "no image"
+   * finding read it. */
+  hasImage: boolean;
+  /** Mileage rows only ("" on a receipt): the trip distance duplicate
+   * matching compares. */
+  distanceMiles: string;
+  /** Receipts only ("" without an image, and on a mileage row): the image
+   * fingerprint duplicate matching compares. */
+  imageSha256: string;
 };
 
 export function insightExpense(e: Expense): InsightExpense {
@@ -28,6 +39,12 @@ export function insightExpense(e: Expense): InsightExpense {
     report: e.report,
     amount: e.amount,
     date: e.date,
+    // The three fields the money checkup needs: the image, the trip
+    // distance, and the image fingerprint, so a duplicate scan over the
+    // snapshot finds exactly what the home page finds over the rows.
+    hasImage: e.type === "receipt" && e.imageFile !== "",
+    distanceMiles: e.type === "mileage" ? e.distanceMiles : "",
+    imageSha256: e.type === "receipt" ? e.imageSha256 : "",
   };
 }
 
@@ -353,10 +370,13 @@ function starterLabel(e: InsightExpense): string {
 }
 
 /** The fact pool for the opening card. Only facts with something to say
- * make the pool, so an empty account keeps the plain empty state. */
+ * make the pool, so an empty account keeps the plain empty state.
+ * `dismissed` is the account's duplicate pair dismissals (see
+ * readDuplicateDismissals), so the checkup fact agrees with the list page. */
 export function insightStarters(
   expenses: InsightExpense[],
   today: string,
+  dismissed?: ReadonlySet<string>,
 ): InsightStarter[] {
   const dated = expenses.filter((e) => e.date);
   const inWindow = (from: string) =>
@@ -418,6 +438,20 @@ export function insightStarters(
     starters.push({
       question: "What still needs a report?",
       answer: `${countLabel(unfiled.length)} worth ${formatUsd(total(unfiled))} ${unfiled.length === 1 ? "has" : "have"} no report yet.`,
+    });
+  }
+
+  // The checkup leads when it has something to say: the account's own
+  // "am I being smart with my money?" answer, from the same computation the
+  // panel and the answer step read.
+  const checkup = moneyCheckup({ expenses, today, dismissed });
+  if (checkup.count > 0) {
+    const top = checkup.findings[0];
+    starters.push({
+      question: "Am I being smart with my money?",
+      answer: top
+        ? `This year: ${formatUsd(checkup.spent)} across ${countLabel(checkup.count)}. Worth fixing first: ${top.title.toLowerCase()}.`
+        : `This year: ${formatUsd(checkup.spent)} across ${countLabel(checkup.count)}. ${NOTHING_OUTSTANDING}`,
     });
   }
 
