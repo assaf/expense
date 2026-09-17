@@ -62,6 +62,7 @@ beforeAll(async () => {
       question: `seeded question ${i}`,
       answer: `seeded answer ${i} `.repeat(20).trim(),
       chart: false,
+      shape: "monthly-totals",
       query: "",
       months: 12,
       title: "",

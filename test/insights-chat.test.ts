@@ -25,6 +25,7 @@ function exchange(question: string): StoredExchange {
     question,
     answer: `${question} answered.`,
     chart: false,
+    shape: "monthly-totals",
     query: "",
     months: 12,
     title: question,
@@ -131,6 +132,35 @@ describe("insights transcript", () => {
     const entries = Array.isArray(raw) ? raw : [];
     expect(entries).toHaveLength(2);
     expect(entries).toEqual([legacy, exchange("new")]);
+  });
+
+  it("draws a row written before the chart vocabulary as the default", async () => {
+    const userId = newUser();
+    await startNewConversation(userId, TEST_ACCOUNT_ID);
+    // A readable row from a build that had no `shape`: it must keep drawing
+    // (as monthly totals), not vanish from the transcript.
+    const legacy = {
+      question: "how much on coffee?",
+      answer: "Some.",
+      chart: true,
+      query: "merchant:peet's",
+      months: 12,
+      title: "Coffee",
+    };
+    const row = await db.orm.public.InsightConversation.where((c) =>
+      c.userId.eq(userId),
+    ).first();
+    await db.orm.public.InsightConversation.where({ id: row!.id }).updateAll({
+      messages: asJson([legacy]),
+      updatedAt: nowWire(),
+    });
+
+    const conversation = await readLatestConversation(userId);
+
+    expect(conversation?.exchanges.at(-1)).toMatchObject({
+      question: "how much on coffee?",
+      shape: "monthly-totals",
+    });
   });
 
   it("picks the newest conversation by id when the timestamps tie", async () => {

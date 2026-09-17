@@ -2,12 +2,21 @@ import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asJson, fromIso } from "~/lib/db/wire";
+import {
+  DEFAULT_CHART_SHAPE,
+  isChartShape,
+  type ChartShape,
+} from "~/lib/insight-charts";
 import { isProposalKind, type ProposalKind } from "~/lib/types";
 
 export interface StoredExchange {
   question: string;
   answer: string;
   chart: boolean;
+  /** Which chart this exchange draws. Repaired to the default on read when
+   * the stored value is missing (a row from an earlier build) or names a
+   * shape this build does not draw. */
+  shape: ChartShape;
   query: string;
   months: number;
   title: string;
@@ -46,9 +55,10 @@ function parseExchange(entry: unknown): StoredExchange | null {
     return null;
   }
   const { question, answer, chart, query, months, title } = entry;
-  const { expenseId, proposalKind } = entry as {
+  const { expenseId, proposalKind, shape } = entry as {
     expenseId?: unknown;
     proposalKind?: unknown;
+    shape?: unknown;
   };
   if (
     typeof question !== "string" ||
@@ -64,6 +74,9 @@ function parseExchange(entry: unknown): StoredExchange | null {
     question: question.slice(0, 300),
     answer: answer.slice(0, 2000),
     chart,
+    // Absent in rows written before the vocabulary existed, and dropped
+    // when an unknown name arrives: both draw the default chart.
+    shape: isChartShape(shape) ? shape : DEFAULT_CHART_SHAPE,
     query: query.slice(0, 300),
     // The translator's windows are the offered options, but the app also
     // stores the span a question's period resolved to (1..60 months), so

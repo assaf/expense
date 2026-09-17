@@ -652,13 +652,14 @@ describe("parseInsightTranslation", () => {
   it("parses a good answer", () => {
     expect(
       parseInsightTranslation(
-        '{"query":"merchant:z.ai merchant:deepseek","title":"AI expenses","months":12}',
+        '{"query":"merchant:z.ai merchant:deepseek","title":"AI expenses","months":12,"shape":"cumulative"}',
       ),
     ).toEqual({
       query: "merchant:z.ai merchant:deepseek",
       title: "AI expenses",
       months: 12,
       chart: true,
+      shape: "cumulative",
     });
   });
 
@@ -672,6 +673,7 @@ describe("parseInsightTranslation", () => {
       title: "Coffee",
       months: 24,
       chart: true,
+      shape: "monthly-totals",
     });
   });
 
@@ -683,12 +685,21 @@ describe("parseInsightTranslation", () => {
     expect(t.months).toBe(12);
   });
 
+  it("draws a shape outside the vocabulary as the default", () => {
+    // The chart the model asked for and the chart this build draws are not
+    // the same thing: an unknown shape still renders, as monthly totals.
+    expect(
+      parseInsightTranslation('{"query":"","title":"Mix","shape":"pie"}'),
+    ).toMatchObject({ chart: true, shape: "monthly-totals" });
+  });
+
   it("falls back to show-everything on unusable output", () => {
     expect(parseInsightTranslation("I cannot answer that")).toEqual({
       query: "",
       title: "Expenses",
       months: 12,
       chart: true,
+      shape: "monthly-totals",
     });
   });
 });

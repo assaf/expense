@@ -29,6 +29,12 @@ import type { PlanContext } from "~/lib/insights-plan.server";
 import { categorySynonyms } from "~/lib/expense-search";
 import { captureError } from "~/lib/errors.server";
 import { formatUserDate } from "~/lib/format";
+import {
+  CHART_SHAPES,
+  DEFAULT_CHART_SHAPE,
+  isChartShape,
+  type ChartShape,
+} from "~/lib/insight-charts";
 import { stripFenceMarkers } from "~/lib/prompt-fence.server";
 
 /**
@@ -54,6 +60,10 @@ export interface InsightTranslation {
   /** false = the question is best answered in words (a comparison,
    * total, or count); true = show the chart. */
   chart: boolean;
+  /** Which chart shows it best (see CHART_SHAPES). Ignored when chart is
+   * false; repaired to the default when the model names something this
+   * build does not draw. */
+  shape: ChartShape;
 }
 
 const MAX_QUERY_LENGTH = 300;
@@ -127,13 +137,13 @@ Rules:
 - Keep the query under 300 characters.
 
 Answer ONLY a JSON object:
-{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|-1|0, "chart": true|false}
-Set chart=false ONLY when the answer is a single sentence a monthly
-chart cannot show: yes/no or "did I spend more A than B" comparisons,
+{"query": "<filter string>", "title": "<2-4 word chart title>", "months": 6|12|24|-1|0, "chart": true|false, "shape": ${CHART_SHAPES.map((s) => `"${s}"`).join("|")}}
+Set chart=false ONLY when the answer is a single sentence a chart
+cannot show: yes/no or "did I spend more A than B" comparisons,
 counts of matching expenses, or questions about non-time data (lists of
 categories, merchants, reports). EVERYTHING else is chart=true — any
 "what's my X spend <window>?", "how much did I spend on gas?", trends,
-or spending-over-time questions: the monthly chart and expense table
+or spending-over-time questions: the chart and expense table
 are part of the answer, alongside the text summary.
 Chart decision examples:
 - "what's my medical spend this year?" -> chart:true
@@ -142,6 +152,22 @@ Chart decision examples:
 - "did I spend more on AI this month than last?" -> chart:false
 - "how many expenses over $100?" -> chart:false
 - "what categories do I have?" -> chart:false.
+Choose the shape that shows the answer best (ignored when chart is
+false):
+- "monthly-totals": what was spent in each month. The default: any
+  filtered spend over time ("how much did I spend on gas?", "my
+  software expenses").
+- "cumulative": the running total, so the end of the line is the figure
+  that matters ("how much so far this year?", "am I on pace?").
+- "category-trend": the category mix month by month ("what's driving my
+  spending?", "how has my mix changed?").
+- "by-category": one bar per category across the whole window ("where
+  does my money go?", "my biggest categories").
+- "top-merchants": one bar per merchant across the whole window ("who do
+  I pay the most?", "my biggest merchants").
+A question that only narrows the rows (one merchant, one category, an
+amount range) is monthly-totals: the shape changes when the question asks
+about the mix or the ranking, not when it filters.
 Use months 6, 12, or 24 when the question names a rolling window ("last
 two years" -> 24, "the past year" -> 12, "recent" -> 6), -1 when it means
 the current calendar year ("this year", "for the year", "in 2026"), or 0
@@ -215,7 +241,13 @@ export function parseInsightTranslation(raw: string): InsightTranslation {
   try {
     obj = parseJsonObject(raw);
   } catch {
-    return { query: "", title: "Expenses", months: 12, chart: true };
+    return {
+      query: "",
+      title: "Expenses",
+      months: 12,
+      chart: true,
+      shape: DEFAULT_CHART_SHAPE,
+    };
   }
   const query = sanitizeQuery(obj.query);
   const months = normalizeMonths(obj.months);
@@ -225,7 +257,11 @@ export function parseInsightTranslation(raw: string): InsightTranslation {
       : "Expenses";
   // Absent field -> true: showing the chart stays the default.
   const chart = typeof obj.chart === "boolean" ? obj.chart : true;
-  return { query, title, months, chart };
+  // Anything outside the vocabulary draws as the default shape: the chart
+  // the model asked for and the chart the app can draw are not the same
+  // thing, and a wrong-but-readable chart beats no chart.
+  const shape = isChartShape(obj.shape) ? obj.shape : DEFAULT_CHART_SHAPE;
+  return { query, title, months, chart, shape };
 }
 
 function sanitizeQuery(value: unknown): string {

@@ -545,6 +545,33 @@ describe("period range net (this month)", () => {
     );
   });
 
+  it("carries the model's chart shape into the answer and the transcript", async () => {
+    // The chart's shape travels with the exchange, so a reload redraws the
+    // same chart the answer came with.
+    // This file shares the per-user question budget; clear it so the call
+    // under test is the one being exercised.
+    await clearAuthFailures("insights:user_test1");
+    await startNewConversation("user_test1", TEST_ACCOUNT_ID);
+    chat
+      .mockResolvedValueOnce(
+        '{"query":"","title":"Where it goes","months":12,"chart":true,"shape":"by-category"}',
+      )
+      .mockResolvedValueOnce("Meals took most of it.");
+    const form = new FormData();
+    form.set("intent", "translate");
+    form.set("text", "where does my money go?");
+    form.set("today", "2026-09-10");
+    const res = (await callRoute("action", null, form)) as {
+      ok: boolean;
+      shape: string;
+    };
+
+    expect(res.ok).toBe(true);
+    expect(res.shape).toBe("by-category");
+    const conversation = await readLatestConversation("user_test1");
+    expect(conversation!.exchanges.at(-1)!.shape).toBe("by-category");
+  });
+
   it("suppresses a chart the model asked for on a 30-day window", async () => {
     // "last 30 days" is too granular to plot monthly: the app's decision
     // wins even when the model set chart:true.
@@ -579,12 +606,16 @@ describe("conversation months roundtrip (INS-MONTHS-0)", () => {
       question: "what about this quarter?",
       answer: "three months of travel",
       chart: true,
+      shape: "by-category",
       query: "after:2026-07-01 before:2026-09-10",
       months: 3,
       title: "This quarter",
     });
     const conversation = await readLatestConversation("user_test1");
     expect(conversation!.exchanges.at(-1)!.months).toBe(3);
+    // The chart's shape rides the same row: a reload draws the chart the
+    // answer came with, not the default one.
+    expect(conversation!.exchanges.at(-1)!.shape).toBe("by-category");
   });
 
   it("preserves the all-time window (0) across the read side", async () => {
@@ -593,6 +624,7 @@ describe("conversation months roundtrip (INS-MONTHS-0)", () => {
       question: "everything ever",
       answer: "all time",
       chart: true,
+      shape: "monthly-totals",
       query: "",
       months: 0,
       title: "All time",

@@ -15,7 +15,7 @@ import { Alert } from "~/components/ui/Alert";
 import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Textarea } from "~/components/ui/Textarea";
-import { MonthlyChart } from "~/components/MonthlyChart";
+import { InsightChart } from "~/components/InsightChart";
 import { requireUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
 import { readCategories } from "~/lib/db/categories";
@@ -29,6 +29,12 @@ import {
   startNewConversation,
 } from "~/lib/db/insights-chat";
 import { countLabel, formatShortDate, formatUsd } from "~/lib/format";
+import {
+  DEFAULT_CHART_SHAPE,
+  planChart,
+  type ChartPlan,
+  type ChartShape,
+} from "~/lib/insight-charts";
 import {
   insightExpense,
   insightStarters,
@@ -99,6 +105,7 @@ function logFiledExchange(
     question: "Log it",
     answer: entry.answer,
     chart: false,
+    shape: DEFAULT_CHART_SHAPE,
     query: "",
     months: 12,
     title: entry.title,
@@ -392,6 +399,7 @@ export async function action({ request }: Route.LoaderArgs) {
         question: text,
         answer,
         chart: t.chart,
+        shape: t.shape,
         query: t.query,
         months: t.months,
         title: t.title,
@@ -438,6 +446,8 @@ interface TranslateOk {
   months: number;
   /** Whether the question was best answered with a chart. */
   chart: boolean;
+  /** Which chart the question is drawn as. */
+  shape: ChartShape;
   /** The grounded text answer (computed figures, phrased by the model). */
   answer: string;
   /** A trip or a purchase the model worked out for the user to confirm. */
@@ -470,6 +480,9 @@ interface Exchange {
   question: string;
   answer: string;
   chart: boolean;
+  /** Which chart this exchange draws; the plan is built from it on the
+   * client (see insight-charts). */
+  shape: ChartShape;
   query: string;
   months: number;
   title: string;
@@ -647,6 +660,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         ...(result.ok
           ? {
               chart: result.chart,
+              shape: result.shape,
               query: result.query,
               months: result.months,
               title: result.title,
@@ -687,6 +701,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         question: "Log it",
         answer,
         chart: false,
+        shape: DEFAULT_CHART_SHAPE,
         query: "",
         months: 12,
         title:
@@ -727,6 +742,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         question: text,
         answer: "",
         chart: false,
+        shape: DEFAULT_CHART_SHAPE,
         query: "",
         months: 12,
         title: "",
@@ -778,7 +794,9 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   );
 
   // Each chart exchange renders its own view from the shared expense
-  // snapshot and its own filter/window.
+  // snapshot and its own filter/window, then plans the chart: the shape the
+  // model picked, drawn over the numbers in hand, with whatever the guard
+  // had to roll up or cap reported under it (see insight-charts).
   const views = useMemo(
     () =>
       transcript.map((ex) => {
@@ -787,6 +805,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             ex,
             buckets: [] as MonthBucket[],
             matched: [] as InsightExpense[],
+            plan: null as ChartPlan | null,
           };
         }
         const buckets = monthlyTotals(
@@ -800,7 +819,12 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           ex.query,
           buckets,
         );
-        return { ex, buckets, matched };
+        return {
+          ex,
+          buckets,
+          matched,
+          plan: planChart({ shape: ex.shape, buckets, matched }),
+        };
       }),
     [transcript, loaderData.expenses, today],
   );
@@ -998,7 +1022,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               </p>
             </div>
           ) : null}
-          {views.map(({ ex, buckets, matched }, i) => {
+          {views.map(({ ex, buckets, matched, plan }, i) => {
             const total = buckets.reduce((sum, b) => sum + b.total, 0);
             const count = matched.length;
             return (
@@ -1145,7 +1169,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                             : `${ex.months} months`}
                       </p>
                     </div>
-                    <MonthlyChart buckets={buckets} />
+                    {plan ? <InsightChart plan={plan} /> : null}
                     {matched.length > 0 ? (
                       <ExpenseTable expenses={matched} />
                     ) : null}

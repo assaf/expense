@@ -51,6 +51,8 @@ export default defineConfig({
       "test/insights-mileage-tool.test.ts",
       "test/insights-expense-tool.test.ts",
       "test/insight-periods.test.ts",
+      "test/insight-charts.test.ts",
+      "test/insight-chart.test.tsx",
       "test/expense-table.test.tsx",
       "test/markdown.test.ts",
       "test/public-content.test.ts",
