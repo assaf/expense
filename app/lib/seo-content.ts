@@ -48,16 +48,20 @@ export function securityHeaders(): Record<string, string> {
  * machine-readable documents are without reading the page (RFC 8288 rels; the
  * catalog rel is RFC 9727 §3). Every target resolves: the catalog is a
  * resource route, the card is the endpoint's own, and llms.txt is the LLM
- * overview.
+ * overview. A page that has a markdown mirror also advertises it as
+ * `rel="alternate"`, which is how the llms.txt v2 proposal says to point at
+ * the markdown version of a page.
  */
-export function discoveryLinks(): Record<string, string> {
-  return {
-    Link: [
-      '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"',
-      '</mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
-      '</llms.txt>; rel="describedby"; type="text/plain"',
-    ].join(", "),
-  };
+export function discoveryLinks(mirror?: string): Record<string, string> {
+  const links = [
+    '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json"',
+    '</mcp/server-card>; rel="service-desc"; type="application/mcp-server-card+json"',
+    '</llms.txt>; rel="describedby"; type="text/plain"',
+  ];
+  if (mirror) {
+    links.push(`<${mirror}>; rel="alternate"; type="text/markdown"`);
+  }
+  return { Link: links.join(", ") };
 }
 
 /**
@@ -67,12 +71,13 @@ export function discoveryLinks(): Record<string, string> {
  * names), so shared caches must never store them: the first signed-in hit
  * would otherwise pin personalized HTML for every visitor (MKT-CACHE-1).
  * Browsers revalidate on every request. `Vary: Accept` is here because these
- * pages have two representations: the HTML page and its `.md` mirror.
+ * pages have two representations: the HTML page and its `.md` mirror, whose
+ * location `mirror` advertises as `rel="alternate"`.
  */
-export function marketingPageHeaders(): Record<string, string> {
+export function marketingPageHeaders(mirror?: string): Record<string, string> {
   return {
     ...securityHeaders(),
-    ...discoveryLinks(),
+    ...discoveryLinks(mirror),
     Vary: "Accept",
     "Cache-Control": "private, max-age=0, must-revalidate",
   };

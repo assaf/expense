@@ -15,7 +15,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/about");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/about.md");
 
 export default function AboutPage({ loaderData }: Route.ComponentProps) {
   const aboutSchema = {

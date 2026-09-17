@@ -20,7 +20,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/ai");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/ai.md");
 
 export default function AiPage({ loaderData }: Route.ComponentProps) {
   const schema = {

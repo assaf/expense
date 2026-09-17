@@ -13,7 +13,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/support");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/support.md");
 
 export default function SupportPage({ loaderData }: Route.ComponentProps) {
   return (

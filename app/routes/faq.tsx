@@ -15,7 +15,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/faq");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/faq.md");
 
 export default function FaqPage({ loaderData }: Route.ComponentProps) {
   /** FAQPage structured data: the primary signal for FAQ-style AI answers. */

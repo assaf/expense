@@ -18,7 +18,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   );
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/schedule-c-categories.md");
 
 export default function ScheduleCCategoriesPage({
   loaderData,

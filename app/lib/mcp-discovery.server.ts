@@ -154,23 +154,34 @@ const AI_CATALOG = {
 };
 
 /**
- * The same identity in the SEP-1649 shape, at the well-known path scanners
- * and shipped clients have probed since 2025. The current extension calls the
- * card application-level metadata and reserves /mcp/server-card instead, but
- * nothing looks there yet, so both paths stay served from these constants.
- * `capabilities.tools` declares that tools exist without listing them: the
- * names live in app/lib/mcp.server.ts, and a second copy here would drift.
+ * The same identity in the shape SEP-1649 documented, at the well-known path
+ * scanners and shipped clients have probed since 2025. That SEP is closed and
+ * the current card lives in the extension (see SERVER_CARD above), but this
+ * path is the one a scanner actually fetches, so it stays served. The fields
+ * follow the SEP's list rather than the looser shape the scorecard accepts:
+ * `$schema` and `version` (the card-schema version, not the server's),
+ * `protocolVersion` (the modern revision; the extension card carries the full
+ * list), `serverInfo`, `transport.endpoint`, `capabilities`, and an
+ * `authentication` object. Tools are declared as the reserved `["dynamic"]`
+ * value, which is how the SEP says "discover these over the protocol" - a
+ * second copy of the names here would drift from app/lib/mcp.server.ts.
  */
 const WELL_KNOWN_SERVER_CARD = {
+  $schema:
+    "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
+  version: "1.0",
+  protocolVersion: MCP_PROTOCOL_VERSIONS[0],
   serverInfo: {
     name: MCP_SERVER_NAME,
     title: MCP_SERVER_TITLE,
     version: MCP_SERVER_VERSION,
     description: MCP_SERVER_DESCRIPTION,
   },
+  documentationUrl: MCP_SERVER_WEBSITE_URL,
   transport: { type: "streamable-http", endpoint: MCP_ENDPOINT },
   capabilities: { tools: {} },
-  authentication: { type: "oauth2" },
+  authentication: { required: true, schemes: ["oauth2"] },
+  tools: ["dynamic"],
 };
 
 /**

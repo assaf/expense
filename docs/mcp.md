@@ -90,11 +90,11 @@ connects, from static documents that need no auth:
 Every one of them is public by design, caches for an hour, and revalidates
 with `If-None-Match`. HTML responses also carry `Link` headers naming the API
 catalog (`rel="api-catalog"`), the card (`rel="service-desc"`), and
-`/llms.txt` (`rel="describedby"`), and a request for `Accept: text/markdown`
-on a marketing page gets that page's `.md` mirror instead of the app shell
-(`Vary: Accept` on both). `robots.txt` declares
-`Content-Signal: ai-train=yes, search=yes, ai-input=yes` in its wildcard
-block and points at the catalog with `Agentmap:`.
+`/llms.txt` (`rel="describedby"`); a page that has a `.md` mirror names it too
+(`rel="alternate"`), and a request for `Accept: text/markdown` on that page
+gets the mirror instead of the app shell (`Vary: Accept` on both). `robots.txt`
+declares `Content-Signal: ai-train=yes, search=yes, ai-input=yes` in its
+wildcard block and points at the catalog with `Agentmap:`.
 
 The card's identity is the same one `/mcp` reports in `serverInfo`
 (`server/discover` on the modern leg), so a client that read the card and

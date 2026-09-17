@@ -13,7 +13,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/privacy");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/privacy.md");
 
 export default function PrivacyPage({ loaderData }: Route.ComponentProps) {
   return (

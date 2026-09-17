@@ -17,7 +17,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   );
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/alternatives.md");
 
 export default function AlternativesPage({ loaderData }: Route.ComponentProps) {
   const comparisonSchema = {

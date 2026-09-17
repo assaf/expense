@@ -85,9 +85,14 @@ describe("Access control", () => {
   it("points agents at the discovery documents from every page", async () => {
     // RFC 8288 Link headers: a client that only reads the envelope still
     // finds the catalog, the server card, and the LLM overview. Same
-    // replace-not-merge trap as the framing headers above.
+    // replace-not-merge trap as the framing headers above, and the mirror is
+    // advertised only on the page that has one (llms.txt v2).
     const page = await openPage();
-    for (const path of ["/", "/about", "/login"]) {
+    for (const [path, mirror] of [
+      ["/", undefined],
+      ["/login", undefined],
+      ["/about", "/about.md"],
+    ] as const) {
       const link = (
         await page.request.get(`http://localhost:5199${path}`)
       ).headers()["link"];
@@ -96,6 +101,13 @@ describe("Access control", () => {
       expect(link, path).toContain('rel="service-desc"');
       expect(link, path).toContain('rel="describedby"');
       expect(link, path).toContain("</llms.txt>");
+      if (mirror) {
+        expect(link, path).toContain(
+          `<${mirror}>; rel="alternate"; type="text/markdown"`,
+        );
+      } else {
+        expect(link, path).not.toContain("alternate");
+      }
     }
     await page.close();
   });

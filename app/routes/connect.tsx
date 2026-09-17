@@ -28,7 +28,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   return pageMeta(loaderData.metaTitle, loaderData.description, "/connect");
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/connect.md");
 
 /** One-click copy for a snippet: the icon swaps to a check for two seconds. */
 function CopyButton({

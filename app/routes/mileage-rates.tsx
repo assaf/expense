@@ -23,7 +23,7 @@ export function meta({ loaderData }: Route.MetaArgs) {
   );
 }
 
-export const headers = marketingPageHeaders;
+export const headers = () => marketingPageHeaders("/mileage-rates.md");
 
 export default function MileageRatesPage({ loaderData }: Route.ComponentProps) {
   const mileageSchema = {

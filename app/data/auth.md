@@ -39,7 +39,15 @@ Clients register themselves at `{{siteUrl}}/oauth/register` (RFC 7591
 dynamic client registration). Registration returns a public client id and
 needs no credentials of its own: the flow is PKCE, so there is no client
 secret to leak. Registered clients are per-account rows, so a client
-registered against one account is not visible to another.
+registered against one account is not visible to another. A client id
+created out of band works too, without calling the endpoint.
+
+One caveat in the current MCP specification: dynamic client registration is
+deprecated in favor of Client ID Metadata Documents, which this server does
+not implement. Its metadata does not advertise
+`client_id_metadata_document_supported`, and a URL-shaped `client_id` is
+rejected as an unknown client. Register here instead, or use a client id
+issued out of band.
 
 ## Supported methods
 

@@ -145,6 +145,14 @@ describe("MCP Server Card", () => {
     expectDiscoveryHeaders(response, "application/json");
 
     const body = JSON.parse(await response.text());
+    // The SEP's required fields: the card schema it conforms to, the card
+    // schema version (not the server's), the protocol revision, identity,
+    // transport, and capabilities.
+    expect(body.$schema).toBe(
+      "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
+    );
+    expect(body.version).toBe("1.0");
+    expect(body.protocolVersion).toBe("2026-07-28");
     expect(body.serverInfo.name).toBe("org.labnotes/expense");
     expect(body.serverInfo.title).toBe("Expense");
     expect(body.serverInfo.version).toBe("1.0.0");
@@ -153,10 +161,15 @@ describe("MCP Server Card", () => {
       type: "streamable-http",
       endpoint: MCP_ENDPOINT,
     });
-    // Tools are declared, never enumerated: their names live in
+    expect(body.authentication).toEqual({
+      required: true,
+      schemes: ["oauth2"],
+    });
+    // Capabilities are declared; the tools themselves are marked dynamic, the
+    // SEP's way of saying "list them over the protocol". Their names live in
     // app/lib/mcp.server.ts and a copy here would drift.
     expect(body.capabilities).toEqual({ tools: {} });
-    expect(body.authentication).toEqual({ type: "oauth2" });
+    expect(body.tools).toEqual(["dynamic"]);
     // Same identity as the reserved-path card, so the two cannot disagree.
     const canonical = JSON.parse(await card().text());
     expect(body.serverInfo.name).toBe(canonical.name);
@@ -271,10 +284,17 @@ describe("discovery pointers", () => {
     });
     // Markdown negotiation only makes sense when caches are told about it.
     expect(new Headers(headers()).get("Vary")).toContain("Accept");
+    // The root's generic header names no mirror: it is served on pages
+    // without one (the app, /login).
+    expect(link).not.toContain("alternate");
     // A marketing page's own headers replace the root's, so they carry the
-    // links and the framing defense themselves.
-    const marketing = new Headers(marketingPageHeaders());
-    expect(marketing.get("Link")).toBe(link);
+    // links, the framing defense, and their own mirror (llms.txt v2 asks for
+    // `rel="alternate"` on the page that has one).
+    const marketing = new Headers(marketingPageHeaders("/about.md"));
+    expect(marketing.get("Link")).toContain('rel="api-catalog"');
+    expect(marketing.get("Link")).toContain(
+      '</about.md>; rel="alternate"; type="text/markdown"',
+    );
     expect(marketing.get("Vary")).toContain("Accept");
     expect(marketing.get("X-Frame-Options")).toBe("DENY");
   });
