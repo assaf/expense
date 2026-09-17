@@ -94,7 +94,11 @@ export interface FaqPage extends PageMeta {
   mirror: MirrorMeta & { footer: string };
 }
 
-/** `alternatives.yaml`. */
+/** `alternatives.yaml`. Two tables, because they answer two questions: how
+ * Expense fits among the receipt apps, and, for the apps a self-employed filer
+ * is pointed at, which ones read receipts out of a mailbox. Every cell about
+ * another app is sourced to that vendor's own documentation, and `sources`
+ * records the pages and the date they were read. */
 export interface AlternativesPage extends PageMeta {
   tableHeadings: string[];
   competitors: Array<{
@@ -105,6 +109,28 @@ export interface AlternativesPage extends PageMeta {
     taxFiling: string;
   }>;
   pricingNote: string;
+  inboxHeading: string;
+  inboxNote: string;
+  inboxTableHeadings: string[];
+  inboxApps: Array<{
+    app: string;
+    site: string;
+    price: string;
+    inbox: string;
+    scheduleC: string;
+    mileage: string;
+  }>;
+  exampleHeading: string;
+  exampleIntro: string;
+  example: Array<{ step: string; what: string }>;
+  mappingHeading: string;
+  mapping: Array<{ email: string; lands: string }>;
+  mappingNote: string;
+  limitsHeading: string;
+  limits: string[];
+  sourcesHeading: string;
+  sourcesNote: string;
+  sources: Array<{ app: string; checked: string; urls: string[] }>;
   cta: CtaContent;
   mirror: MirrorMeta & { heading: string; footer: string };
 }

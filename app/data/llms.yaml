@@ -30,7 +30,7 @@ corePages:
   - title: "How Expense compares to the other receipt apps"
     url: "{{siteUrl}}/alternatives.md"
     blurb: |-
-      Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing and tax-filing focus.
+      Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed and Wave, and then the self-employed comparison: QuickBooks Solopreneur, Keeper and TaxClip against Expense on the row that decides it, whether the app reads receipts out of your inbox and from which mail providers. Includes a worked receipt email turning into a Schedule C category, and the vendor page and date behind every claim.
   - title: "Connect your AI assistant (MCP server)"
     url: "{{siteUrl}}/connect.md"
     blurb: |-

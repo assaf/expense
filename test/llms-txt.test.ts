@@ -259,7 +259,38 @@ describe("mirrors lose no content", () => {
       expect(body).toContain(collapse(row.pricing));
       expect(body).toContain(collapse(row.taxFiling));
     }
-    expect(body).toContain(collapse(ALTERNATIVES.pricingNote));
+    expect(body).toContain(collapse(plain(ALTERNATIVES.pricingNote)));
+    expect(body).toContain(collapse(ALTERNATIVES.inboxNote));
+    expect(body).toContain(collapse(ALTERNATIVES.exampleIntro));
+    expect(body).toContain(collapse(plain(ALTERNATIVES.mappingNote)));
+    expect(body).toContain(collapse(plain(ALTERNATIVES.sourcesNote)));
+    for (const app of ALTERNATIVES.inboxApps) {
+      expect(body).toContain(collapse(app.app));
+      expect(body).toContain(collapse(app.inbox));
+      expect(body).toContain(collapse(app.scheduleC));
+      expect(body).toContain(collapse(app.mileage));
+    }
+    for (const step of ALTERNATIVES.example) {
+      expect(body).toContain(collapse(step.step));
+      expect(body).toContain(collapse(step.what));
+    }
+    for (const row of ALTERNATIVES.mapping) {
+      expect(body).toContain(collapse(row.email));
+      expect(body).toContain(collapse(row.lands));
+    }
+    for (const limit of ALTERNATIVES.limits) {
+      expect(body).toContain(collapse(limit));
+    }
+    // Provenance travels with the claims: a cell about a rival's product has
+    // to name the page it came from and the date it was read.
+    const text2 = alternativesMarkdown();
+    for (const source of ALTERNATIVES.sources) {
+      expect(body).toContain(collapse(source.app));
+      expect(body).toContain(collapse(source.checked));
+      for (const url of source.urls) {
+        expect(text2).toContain(url);
+      }
+    }
   });
 
   it("carries every capability, step, prompt and the security note", () => {

@@ -1,13 +1,18 @@
 # The comparison page at /alternatives and its markdown mirror
-# /alternatives.md.
+# /alternatives.md: the receipt apps it started with, then the inbox-import
+# comparison for the apps a self-employed filer is pointed at. Every cell about
+# another app comes from that vendor's own documentation, and `sources` records
+# the pages and the date they were fetched. Re-check the sources before editing
+# a cell, and keep a claim that a rival CANNOT do something tied to the
+# vendor's own words.
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
 # {{mileagePeriod}}, {{mileageFirstYear}}, {{mileageLastYear}},
 # {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 metaTitle: |-
-  Expense alternatives: how it compares to Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave
+  Expense alternatives: how it compares to Expensify, Zoho, QuickBooks Solopreneur, Keeper, TaxClip, and more
 description: |-
-  Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave: pricing, tax-filing focus, and who each app is best for.
+  Where Expense fits among Expensify, Zoho Expense, SparkReceipt, Shoeboxed and Wave, plus the apps a self-employed filer is pointed at, QuickBooks Solopreneur, Keeper and TaxClip, compared on the row that decides it: which ones read receipts out of your inbox.
 eyebrow: "Compare"
 title: |-
   How Expense compares to the other receipt apps.
@@ -82,7 +87,7 @@ competitors:
       General bookkeeping reports rather than a specific tax form.
 
 pricingNote: |-
-  Pricing from each vendor's pricing page, checked August 2026; check the vendor for current numbers.
+  Pricing from each vendor's pricing page, checked August 2026; check the vendor before quoting one.
 
 cta:
   heading: |-
@@ -97,3 +102,153 @@ mirror:
     Expense ({{siteUrl}}) is free, uses OCR and AI to categorize receipts, tracks
     mileage at the IRS rate, and organizes expenses into Schedule C-based
     categories and reports for tax filing.
+
+inboxHeading: |-
+  Best expense tracker for the self-employed: the row that decides it
+inboxNote: |-
+  Every app in this category scans a photo, and that is not where a
+  freelancer's receipts are. They arrive as email: the hotel confirmation, the
+  software invoice, the client lunch. So the row that decides this comparison
+  is which apps read your inbox. Forwarding and reading are not the same
+  feature, and the difference is who does the work: forwarding asks you to
+  notice the receipt, find the email, and send it somewhere, which is the step
+  people skip in a busy month, while reading a mailbox puts the receipt in your
+  records before you think about it. Checked on September 17, 2026, none of the
+  three apps below documents a mailbox connection. Expense reads Gmail and
+  Fastmail, so the mailbox you already use is the one that gets read.
+
+inboxTableHeadings:
+  - "App"
+  - "Price"
+  - "Receipts from your inbox"
+  - "Schedule C"
+  - "Mileage"
+
+inboxApps:
+  - app: "Expense"
+    site: "{{siteUrl}}"
+    price: |-
+      Free. No card, no ads, no paid tier
+    inbox: |-
+      Reads Gmail and Fastmail. Nothing to forward
+    scheduleC: |-
+      All {{categoryCount}} Part II lines, 8 to 27a, seeded in every account
+    mileage: |-
+      Map the route; priced at the IRS rate for the drive's date and type
+  - app: "QuickBooks Solopreneur"
+    site: "https://quickbooks.intuit.com/solopreneur/"
+    price: |-
+      Free plan, capped at 2 receipt uploads and 5 mileage trips a month. Lite is $20 a month, $10 for the first three
+    inbox: |-
+      No mailbox connection. Intuit documents forwarding to an @assist.intuit.com address, and its own community says Solopreneur does not have that option yet
+    scheduleC: |-
+      Yes, by name: transactions are matched to Schedule C lines
+    mileage: |-
+      Automatic GPS, or add a trip by hand
+  - app: "Keeper"
+    site: "https://www.keepertax.com/pricing"
+    price: |-
+      Free tier links a bank only. $20 a month for deductions, $199 a year with filing, $399 a year Premium
+    inbox: |-
+      Nothing documented. Photo or scan, plus a bank feed across up to 10 institutions
+    scheduleC: |-
+      Yes, Keeper prepares a Schedule C from what you report
+    mileage: |-
+      No. Keeper says it does not track mileage
+  - app: "TaxClip"
+    site: "https://taxclip.co/pricing"
+    price: |-
+      Free, 10 receipts a month with no export and no Schedule C report. Pro is $9.99 a month, or $99 a year
+    inbox: |-
+      Forwarding only, sold on Pro, and the address it forwards to is not published. No mailbox connection
+    scheduleC: |-
+      Yes, auto-categorized to Schedule C lines
+    mileage: |-
+      Claimed in their blog; no feature page documents it
+
+exampleHeading: "One receipt email, start to finish"
+exampleIntro: |-
+  A hotel confirmation arrives on a Tuesday in March. You never forward it,
+  because the mailbox is already connected. Here is what happens before you
+  next open the app.
+
+example:
+  - step: "The sender is checked"
+    what: |-
+      Only senders you approved get through, so a stranger cannot file an expense in your account. An unknown sender waits for your approval instead.
+  - step: "The receipt is read"
+    what: |-
+      The amount and the merchant come off the confirmation, and the date comes from the original email, so a booking made in March is filed in March even if you read it in April.
+  - step: "A Schedule C line is picked"
+    what: |-
+      A hotel on a business trip is Travel, line 24a, from the category list every new account starts with. You can change the category before or after saving.
+  - step: "The email becomes the receipt"
+    what: |-
+      The message is stored as the receipt image on the expense, which is the record you want if anyone asks what the charge was for.
+  - step: "It lands in a report"
+    what: |-
+      The expense goes into a report you name, 2026 client work or Q1 travel, and a forwarded copy of the same email will not create a second expense.
+
+mappingHeading: "Where recurring receipt emails land"
+mapping:
+  - email: "Hotel or flight confirmation:"
+    lands: |-
+      Travel, line 24a
+  - email: "Restaurant or client lunch:"
+    lands: |-
+      Meals and entertainment, line 24b, kept separate because only half is deductible
+  - email: "Software subscription invoice:"
+    lands: |-
+      Office expenses, line 18
+  - email: "Contractor or subcontractor invoice:"
+    lands: |-
+      Contract labor, line 11
+  - email: "State filing fee or business license:"
+    lands: |-
+      Taxes and licenses, line 23
+
+mappingNote: |-
+  The app suggests a category from the list it seeded, and you can change it
+  before or after saving, or add your own. The [full category list with a note
+  for each line]({{siteUrl}}/schedule-c-categories) is public.
+
+limitsHeading: "What Expense does not do"
+limits:
+  - |-
+    It does not connect to your bank, so there is no feed to reconcile against. You upload a statement and it matches the charges to what you logged, which is how the missed ones surface.
+  - |-
+    It is not bookkeeping or invoicing. It is the expense side of your return, and it exports for whoever does the rest.
+  - |-
+    There are no approvals or reimbursements. Nobody submits anything to anybody.
+  - |-
+    There is no app to install. It runs in a browser, down to phone size.
+
+sourcesHeading: "Where the claims about other apps came from"
+sourcesNote: |-
+  Each cell above was read off the vendor's own documentation on the date
+  below, never from a review site. Where a vendor does not document a feature,
+  this page says so instead of guessing, and where a vendor's own pages
+  disagree, both are named. Prices change, so check the vendor before quoting
+  one. Expense's own facts are on [the product facts page]({{siteUrl}}/product-facts).
+
+sources:
+  - app: "Expense"
+    checked: "September 17, 2026"
+    urls:
+      - "{{siteUrl}}/product-facts"
+  - app: "QuickBooks Solopreneur"
+    checked: "September 17, 2026"
+    urls:
+      - "https://quickbooks.intuit.com/solopreneur/"
+      - "https://quickbooks.intuit.com/learn-support/en-us/help-article/accounts-payable/email-receipts-bills-quickbooks-online/L7r2LAQ7C_US_en_US"
+      - "https://quickbooks.intuit.com/community/do-more-with-quickbooks-6/email-address-to-send-receipts-to-in-solopreneur-284028"
+  - app: "Keeper"
+    checked: "September 17, 2026"
+    urls:
+      - "https://www.keepertax.com/pricing"
+      - "https://help.keepertax.com/hc/en-us/articles/18341670774039-FAQ"
+  - app: "TaxClip"
+    checked: "September 17, 2026"
+    urls:
+      - "https://taxclip.co/pricing"
+      - "https://taxclip.co/features"

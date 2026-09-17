@@ -341,6 +341,21 @@ export const ALTERNATIVES: Readonly<AlternativesPage> = bundle(
     "tableHeadings",
     "competitors",
     "pricingNote",
+    "inboxHeading",
+    "inboxNote",
+    "inboxTableHeadings",
+    "inboxApps",
+    "exampleHeading",
+    "exampleIntro",
+    "example",
+    "mappingHeading",
+    "mapping",
+    "mappingNote",
+    "limitsHeading",
+    "limits",
+    "sourcesHeading",
+    "sourcesNote",
+    "sources",
     "cta",
     "mirror",
   ],
@@ -566,7 +581,30 @@ export function alternativesMarkdown(): string {
         `- **${row.app}** (${row.site}): ${wrap(row.bestFor)} Pricing: ${wrap(row.pricing)} Tax-filing focus: ${wrap(row.taxFiling)}`,
     )
     .join("\n");
-  return `# ${ALTERNATIVES.mirror.title}\n\n${ALTERNATIVES.summary}\n\n## ${ALTERNATIVES.mirror.heading}\n\n${competitors}\n\n${ALTERNATIVES.pricingNote}\n\n${ALTERNATIVES.mirror.footer}\n\n${createAccountMarkdown()}.\n`;
+  const inboxTable = [
+    `| ${ALTERNATIVES.inboxTableHeadings.join(" | ")} |`,
+    `| ${ALTERNATIVES.inboxTableHeadings.map(() => "---").join(" | ")} |`,
+    ...ALTERNATIVES.inboxApps.map(
+      (app) =>
+        `| ${app.app} | ${wrap(app.price)} | ${wrap(app.inbox)} | ${wrap(app.scheduleC)} | ${wrap(app.mileage)} |`,
+    ),
+  ].join("\n");
+  const example = ALTERNATIVES.example
+    .map((step, index) => `${index + 1}. **${step.step}** — ${wrap(step.what)}`)
+    .join("\n");
+  const mapping = ALTERNATIVES.mapping
+    .map((row) => `- ${row.email} ${wrap(row.lands)}`)
+    .join("\n");
+  const limits = ALTERNATIVES.limits
+    .map((limit) => `- ${wrap(limit)}`)
+    .join("\n");
+  const sources = ALTERNATIVES.sources
+    .map(
+      (source) =>
+        `- **${source.app}**: ${source.urls.join(" ")} (checked ${source.checked})`,
+    )
+    .join("\n");
+  return `# ${ALTERNATIVES.mirror.title}\n\n${ALTERNATIVES.summary}\n\n## ${ALTERNATIVES.mirror.heading}\n\n${competitors}\n\n${wrap(ALTERNATIVES.pricingNote)}\n\n## ${ALTERNATIVES.inboxHeading}\n\n${wrap(ALTERNATIVES.inboxNote)}\n\n${inboxTable}\n\n## ${ALTERNATIVES.exampleHeading}\n\n${wrap(ALTERNATIVES.exampleIntro)}\n\n${example}\n\n## ${ALTERNATIVES.mappingHeading}\n\n${mapping}\n\n${wrap(ALTERNATIVES.mappingNote)}\n\n## ${ALTERNATIVES.limitsHeading}\n\n${limits}\n\n## ${ALTERNATIVES.sourcesHeading}\n\n${wrap(ALTERNATIVES.sourcesNote)}\n\n${sources}\n\n${ALTERNATIVES.mirror.footer}\n\n${createAccountMarkdown()}.\n`;
 }
 
 /** Full markdown for /ai.md; mirrors the /ai page content. */
