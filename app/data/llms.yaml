@@ -23,6 +23,10 @@ corePages:
     url: "{{siteUrl}}/schedule-c-categories.md"
     blurb: |-
       The 23 expense lines from IRS Schedule C, Part II, with a plain-language note for each; every new Expense account starts pre-filled with this list.
+  - title: "Expense product facts"
+    url: "{{siteUrl}}/product-facts.md"
+    blurb: |-
+      The fact sheet a write-up can copy: what Expense is, what it costs (free, the first {{freeSpots}} accounts while it is early), how receipts get in (photo, screenshot, drag and drop, paste, PDF, forwarded email, Gmail and Fastmail inbox import), all {{categoryCount}} IRS Schedule C line items the categories map to, mileage at the IRS rate, bank reconciliation, and PDF or ZIP export.
   - title: "How Expense compares to the other receipt apps"
     url: "{{siteUrl}}/alternatives.md"
     blurb: |-

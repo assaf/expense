@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loader as aboutLoader } from "~/routes/about[.]md";
+import { loader as productFactsLoader } from "~/routes/product-facts[.]md";
 import { loader as scheduleCLoader } from "~/routes/schedule-c-categories[.]md";
 import { loader as mileageRatesLoader } from "~/routes/mileage-rates[.]md";
 import { loader as alternativesLoader } from "~/routes/alternatives[.]md";
@@ -21,6 +22,7 @@ import {
   MCP,
   MILEAGE_PAGE,
   PRIVACY,
+  PRODUCT_FACTS,
   SCHEDULE_C_PAGE,
   SITE,
   SUPPORT,
@@ -32,6 +34,7 @@ import {
   faqMarkdown,
   fillPlaceholders,
   privacyMarkdown,
+  productFactsMarkdown,
   termsMarkdown,
   scheduleCCategoriesMarkdown,
   scheduleCRows,
@@ -82,6 +85,12 @@ const MIRRORS = [
     path: "/connect.md",
     loader: connectLoader,
     content: connectMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/product-facts.md",
+    loader: productFactsLoader,
+    content: productFactsMarkdown,
     type: "text/markdown",
   },
   {
@@ -299,6 +308,28 @@ describe("mirrors lose no content", () => {
       expect(text).toContain(
         `| ${row.period} | $${row.business} | $${row.medical} | $${row.moving} | $${row.charity} |`,
       );
+    }
+  });
+
+  it("carries every fact, capture method, price line and Schedule C line", () => {
+    const text = productFactsMarkdown();
+    const body = plain(text);
+    expect(body).toContain(collapse(PRODUCT_FACTS.summary));
+    expect(body).toContain(collapse(plain(PRODUCT_FACTS.categoriesNote)));
+    expect(body).toContain(collapse(PRODUCT_FACTS.mirror.footer));
+    for (const fact of PRODUCT_FACTS.facts) {
+      expect(body).toContain(collapse(fact.label));
+      expect(body).toContain(collapse(plain(fact.value)));
+    }
+    for (const method of PRODUCT_FACTS.capture) {
+      expect(body).toContain(collapse(method.method));
+      expect(body).toContain(collapse(method.what));
+    }
+    for (const line of PRODUCT_FACTS.pricing) {
+      expect(body).toContain(collapse(line));
+    }
+    for (const row of scheduleCRows()) {
+      expect(text).toContain(`- Line ${row.line} ${row.name}`);
     }
   });
 

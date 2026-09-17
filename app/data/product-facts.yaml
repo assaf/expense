@@ -1,0 +1,119 @@
+# The fact sheet at /product-facts and its markdown mirror
+# /product-facts.md. It carries the per-app block a roundup article copies:
+# what the app is, what it costs, how receipts get in, and which IRS
+# Schedule C lines the categories map to. Category names are not here: they
+# come from app/data/default-categories.csv and the notes from
+# app/data/schedule-c-categories.yaml, paired by index, so this page follows
+# the seeded list rather than repeating it.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
+# {{mileagePeriod}}, {{freeSpots}}, {{categoryCount}}, {{supportEmail}}.
+# See app/lib/content.server.ts.
+
+metaTitle: |-
+  Expense product facts: free, Schedule C categories, receipt capture, mileage
+description: |-
+  A self-employed expense tracker in facts: free with no card and no ads, the first {{freeSpots}} accounts while it is early, all {{categoryCount}} IRS Schedule C Part II categories pre-seeded, receipts in by photo, screenshot, drag and drop, paste, PDF or forwarded email, Gmail and Fastmail inbox import, mileage at the IRS rate, bank reconciliation, and PDF or ZIP export.
+eyebrow: "Facts"
+title: |-
+  Expense product facts
+summary: |-
+  Expense is a free expense tracker for people who file taxes as individuals:
+  freelancers, the self-employed, side hustlers. A receipt comes in from a
+  photo, a screenshot, a PDF or the mailbox itself; every expense lands under
+  an IRS Schedule C category and in a report you name; drives are priced at
+  the IRS rate for the date and type; and the year leaves as a PDF per report
+  or a ZIP with everything. This page is the short version, in the shape a
+  write-up can copy.
+
+factsHeading: "At a glance"
+tableHeadings:
+  - "Fact"
+  - "Expense"
+facts:
+  - label: "Name"
+    value: "Expense"
+  - label: "URL"
+    value: "{{siteUrl}}"
+  - label: "What it is"
+    value: "An expense tracker for individuals filing taxes, and the small teams around them"
+  - label: "Price"
+    value: "Free. No card, no trial clock, no ads, no paid tier to be upgraded into"
+  - label: "Early access"
+    value: "The first {{freeSpots}} accounts"
+  - label: "Built for"
+    value: "Freelancers, self-employed people and side hustlers who file Schedule C"
+  - label: "Platform"
+    value: "A web app; nothing to install, and it works down to a phone-sized screen"
+  - label: "Schedule C categories"
+    value: "All {{categoryCount}} Part II expense lines, lines 8 to 27a, seeded in every new account"
+  - label: "Receipt capture"
+    value: "Photo or file, screenshot, drag and drop, clipboard paste, PDF, forwarded email"
+  - label: "Inbox import"
+    value: "Gmail and Fastmail: connect the mailbox and receipts in it import on their own"
+  - label: "Mileage"
+    value: "Map the route; priced at the [IRS rate]({{siteUrl}}/mileage-rates) for the drive's date and type"
+  - label: "Bank reconciliation"
+    value: "Statement upload (PDF, CSV, QFX/OFX, Excel) matched against the expenses you logged"
+  - label: "Exports"
+    value: "A PDF per report with the receipts attached, or a ZIP with the CSV and every image"
+  - label: "AI assistants"
+    value: "MCP at {{mcpEndpoint}} over Streamable HTTP with OAuth, no API keys; read-only WebMCP tools in Chrome"
+  - label: "Insights"
+    value: "Ask about your spending in plain words; the answer is computed from your own expenses"
+  - label: "Accounts"
+    value: "Multi-user: one account, several people, an invite code"
+  - label: "Data"
+    value: "In your account only. No ads, no resale, export and leave anytime"
+  - label: "Not built for"
+    value: "Corporate expense policies, approvals and reimbursements, or double-entry bookkeeping"
+
+captureHeading: "How a receipt gets in"
+capture:
+  - method: "Photo or file"
+    what: |-
+      Upload an image or a PDF, from a phone or from the desk. HEIC straight off an iPhone is fine.
+  - method: "Screenshot"
+    what: |-
+      A screenshot of an order confirmation counts as a receipt; it goes in like any other image.
+  - method: "Drag and drop"
+    what: |-
+      Drop images or PDFs anywhere on the expense list.
+  - method: "Paste"
+    what: |-
+      Copy a screenshot, press Cmd-V on the page.
+  - method: "Forwarded email"
+    what: |-
+      Forward the receipt email to your account's address. Only senders you approved get through, and the same email cannot be imported twice.
+  - method: "Connected mailbox"
+    what: |-
+      Connect Gmail or Fastmail and the receipts already in the inbox import on their own: merchant, amount and category filled in, nothing to forward. Most expense trackers import from Gmail only; Expense supports Fastmail natively.
+
+categoriesHeading: "IRS Schedule C line items"
+categoriesNote: |-
+  Every new account starts with these {{categoryCount}} categories, in the
+  order the form lists them, so a year's totals line up with your return
+  without re-bucketing. The [reference page]({{siteUrl}}/schedule-c-categories)
+  has a plain-language note for each line, and mileage on line 9 is priced at
+  the [IRS rate]({{siteUrl}}/mileage-rates) for the drive's date and type.
+
+pricingHeading: "What it costs"
+pricing:
+  - |-
+    Free. No card, no trial clock, no ads.
+  - |-
+    Early access is capped at {{freeSpots}} accounts, and the home page shows how many are claimed.
+  - |-
+    OCR, categorizing, mileage, reconciliation, exports and the MCP server are all in the free account. There is no paid tier above it.
+  - |-
+    Your data stays in your account: export it and leave whenever you want.
+
+cta:
+  heading: |-
+    Try it with one receipt.
+  body: |-
+    Free, no card, and a Schedule C category list already waiting.
+
+mirror:
+  title: "Expense product facts"
+  footer: |-
+    Expense ({{siteUrl}}) is a free expense tracker for individuals filing taxes: receipts are read with OCR and categorized with an LLM, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, and a year exports as a PDF per report or a ZIP with everything. The first {{freeSpots}} accounts are free while the app is early. Questions go to {{supportEmail}}.

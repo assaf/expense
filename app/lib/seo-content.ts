@@ -30,6 +30,11 @@ export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 /** The social-card image shared by every marketing page's og:image. */
 export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
 
+/** Early access is capped at this many accounts. The landing page counts how
+ * many are claimed, and /product-facts and its mirror state the cap, so the
+ * number lives here rather than in three places. */
+export const EARLY_ACCESS_SPOTS = 100;
+
 /** The one address the site publishes for itself: the support and policy
  * pages quote it as `{{supportEmail}}`, the User-Agent that identifies the app
  * to the map services carries it, and the sign-in change notice sends account

@@ -18,6 +18,7 @@ import {
   MCP,
   MILEAGE_PAGE,
   PRIVACY,
+  PRODUCT_FACTS,
   SCHEDULE_C_PAGE,
   SITE,
   SUPPORT,
@@ -32,6 +33,7 @@ import * as connect from "~/routes/connect";
 import * as faq from "~/routes/faq";
 import * as mileageRates from "~/routes/mileage-rates";
 import * as privacy from "~/routes/privacy";
+import * as productFacts from "~/routes/product-facts";
 import * as scheduleC from "~/routes/schedule-c-categories";
 import * as support from "~/routes/support";
 import * as terms from "~/routes/terms";
@@ -290,6 +292,28 @@ const PAGES: MarketingPage[] = [
     ],
   },
   {
+    path: "/product-facts",
+    mod: productFacts,
+    data: { ...PRODUCT_FACTS, spotsClaimed: 37, rows: scheduleCRows() },
+    shows: [
+      ...hero(PRODUCT_FACTS),
+      PRODUCT_FACTS.factsHeading,
+      ...PRODUCT_FACTS.tableHeadings,
+      ...PRODUCT_FACTS.facts.flatMap((fact) => [fact.label, fact.value]),
+      PRODUCT_FACTS.categoriesHeading,
+      PRODUCT_FACTS.categoriesNote,
+      ...scheduleCRows().flatMap((row) => [row.line, row.name]),
+      PRODUCT_FACTS.captureHeading,
+      ...PRODUCT_FACTS.capture.flatMap((method) => [
+        method.method,
+        method.what,
+      ]),
+      PRODUCT_FACTS.pricingHeading,
+      ...PRODUCT_FACTS.pricing,
+      "37 of 100 free spots claimed.",
+    ],
+  },
+  {
     path: "/schedule-c-categories",
     mod: scheduleC,
     data: { ...SCHEDULE_C_PAGE, rows: scheduleCRows() },
@@ -377,6 +401,16 @@ describe("the public chrome", () => {
       expect(html, path).not.toContain("Create your account");
     },
   );
+});
+
+describe("the shared footer", () => {
+  // The footer is the site's page inventory, and /product-facts is the fact
+  // sheet a write-up copies: if it drops out of the chrome, the one page
+  // built to be found goes back to being reachable only from the sitemap.
+  it("lists the product facts page", async () => {
+    const html = await renderPage(about, { ...ABOUT, keyFacts: SITE.keyFacts });
+    expect(html).toContain('href="/product-facts"');
+  });
 });
 
 describe("the support page", () => {

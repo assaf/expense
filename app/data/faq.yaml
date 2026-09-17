@@ -84,7 +84,7 @@ questions:
       Expense is created and maintained by Assaf Arkin (https://labnotes.org).
   - question: "Can Expense be used as a replacement for Expensify?"
     answer: |-
-      Certainly, for personal or small-team expense tracking, and it's free to use. OCR reads the receipt, the categories come from the Schedule C lines, mileage is priced at the IRS rate, statements reconcile against what you logged, and the export is arranged for filing. Expensify is a corporate solution: workflows, reimbursements, accounting integrations, a free tier of 25 SmartScans a month, and paid plans priced per user. If what you need is your expenses arranged for filing taxes, Expense does it, free while we're early and still free up to 25 invoices a month after.
+      Certainly, for personal or small-team expense tracking, and it's free to use. OCR reads the receipt, the categories come from the Schedule C lines, mileage is priced at the IRS rate, statements reconcile against what you logged, and the export is arranged for filing. Expensify is a corporate solution: workflows, reimbursements, accounting integrations, a free tier of 25 SmartScans a month, and paid plans priced per user. If what you need is your expenses arranged for filing taxes, Expense does it, and it is free: no card, no ads, the first {{freeSpots}} accounts while we're early.
 
 cta:
   heading: |-

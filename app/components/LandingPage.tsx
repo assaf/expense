@@ -16,7 +16,7 @@ import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
 import { TipsSlider } from "~/components/tips-slider";
-import { SITE_URL } from "~/lib/seo-content";
+import { EARLY_ACCESS_SPOTS, SITE_URL } from "~/lib/seo-content";
 import { JsonLd } from "~/components/JsonLd";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -196,7 +196,7 @@ export default function LandingPage({
           </p>
           {signupCount > 0 ? (
             <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-              {signupCount} of 100 free spots claimed.
+              {signupCount} of {EARLY_ACCESS_SPOTS} free spots claimed.
             </p>
           ) : null}
         </section>

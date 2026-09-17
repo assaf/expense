@@ -179,6 +179,24 @@ export interface ScheduleCPage extends PageMeta {
   mirror: MirrorMeta & { intro: string; footer: string };
 }
 
+/** `product-facts.yaml`: the fact sheet at /product-facts. Category names are
+ * NOT here, for the same reason as the Schedule C page: they come from the
+ * seeded CSV, so the line-item mapping the page publishes follows the list a
+ * new account actually gets. */
+export interface ProductFactsPage extends PageMeta {
+  factsHeading: string;
+  tableHeadings: string[];
+  facts: Array<{ label: string; value: string }>;
+  captureHeading: string;
+  capture: Array<{ method: string; what: string }>;
+  categoriesHeading: string;
+  categoriesNote: string;
+  pricingHeading: string;
+  pricing: string[];
+  cta: CtaContent;
+  mirror: MirrorMeta & { footer: string };
+}
+
 /** `llms.yaml`: the /llms.txt link hub. */
 export interface LlmsContent {
   corePages: Array<{ title: string; url: string; blurb: string }>;

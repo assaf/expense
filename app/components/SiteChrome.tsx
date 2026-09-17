@@ -3,13 +3,15 @@ import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
 import { useSignedIn } from "~/lib/use-signed-in";
 
-/** The footer's link columns: what the site is, how to connect to it, the
- * reference pages, and the policy pages. */
+/** The footer's link columns: what the site is, the assistant, the reference
+ * pages, and the policy pages. Balanced 3/2/3/3, which is also why FAQ (a
+ * help page) sits in the reference column: it keeps the four columns at the
+ * same height instead of leaving one four rows deep. */
 const FOOTER_COLUMNS: SiteNavItem[][] = [
   [
     { label: "About", to: "/about" },
     { label: "Compare", to: "/alternatives" },
-    { label: "FAQ", to: "/faq" },
+    { label: "Facts", to: "/product-facts" },
   ],
   [
     { label: "AI", to: "/ai" },
@@ -18,6 +20,7 @@ const FOOTER_COLUMNS: SiteNavItem[][] = [
   [
     { label: "Mileage", to: "/mileage-rates" },
     { label: "Categories", to: "/schedule-c-categories" },
+    { label: "FAQ", to: "/faq" },
   ],
   [
     { label: "Privacy", to: "/privacy" },

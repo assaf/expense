@@ -10,6 +10,7 @@ import {
   MCP,
   MILEAGE_PAGE,
   PRIVACY,
+  PRODUCT_FACTS,
   SCHEDULE_C_PAGE,
   SITE,
   SUPPORT,
@@ -23,6 +24,7 @@ import {
   llmsTxt,
   mileageRatesMarkdown,
   privacyMarkdown,
+  productFactsMarkdown,
   scheduleCCategoriesMarkdown,
   supportMarkdown,
   termsMarkdown,
@@ -30,6 +32,7 @@ import {
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import {
   currentMileageSummary,
+  EARLY_ACCESS_SPOTS,
   MCP_ENDPOINT,
   mileageRateRows,
   SITE_URL,
@@ -59,6 +62,7 @@ const CONTENT_FILES = [
   "notification-senders.ts",
   "parse-categories.ts",
   "privacy.md",
+  "product-facts.yaml",
   "schedule-c-categories.yaml",
   "site.yaml",
   "support.md",
@@ -76,6 +80,7 @@ const PAGES = [
   ["connect", CONNECT],
   ["mileage-rates", MILEAGE_PAGE],
   ["schedule-c-categories", SCHEDULE_C_PAGE],
+  ["product-facts", PRODUCT_FACTS],
 ] as const;
 
 describe("public content directory", () => {
@@ -113,6 +118,7 @@ describe("public page content", () => {
       CONNECT,
       MILEAGE_PAGE,
       SCHEDULE_C_PAGE,
+      PRODUCT_FACTS,
     ]) {
       expect(page.cta.heading.trim()).not.toBe("");
       expect(page.cta.body.trim()).not.toBe("");
@@ -133,6 +139,7 @@ describe("public page content", () => {
       CONNECT,
       MILEAGE_PAGE,
       SCHEDULE_C_PAGE,
+      PRODUCT_FACTS,
       LLMS,
     ];
     const mirrors = [
@@ -146,6 +153,7 @@ describe("public page content", () => {
       connectMarkdown(),
       mileageRatesMarkdown(),
       scheduleCCategoriesMarkdown(),
+      productFactsMarkdown(),
       llmsTxt(),
       authMarkdown(),
     ];
@@ -171,6 +179,20 @@ describe("public page content", () => {
     expect(SCHEDULE_C_PAGE.description).toContain(
       `The ${DEFAULT_CATEGORIES.length} expense lines`,
     );
+    // The fact sheet quotes the same two computed numbers the landing page
+    // and the Schedule C page do: the early-access cap and the seeded
+    // category count, never a number typed into the file.
+    expect(PRODUCT_FACTS.description).toContain(String(EARLY_ACCESS_SPOTS));
+    expect(
+      PRODUCT_FACTS.facts.some((fact) =>
+        fact.value.includes(String(EARLY_ACCESS_SPOTS)),
+      ),
+    ).toBe(true);
+    expect(
+      PRODUCT_FACTS.facts.some((fact) =>
+        fact.value.includes(String(DEFAULT_CATEGORIES.length)),
+      ),
+    ).toBe(true);
     expect(CONNECT.clients.every((client) => client.steps.length > 0)).toBe(
       true,
     );

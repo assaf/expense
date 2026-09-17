@@ -15,11 +15,12 @@ summary: |-
   How Expense stacks up against the receipt
   apps it is most often listed next to: Expensify, Zoho Expense, SparkReceipt,
   Shoeboxed, and Wave. Expense is built for one job: getting a private person's
-  or small team's expenses ready for tax season. It is free while the app is
-  early (then still free up to 25 invoices a month), reads receipts with OCR,
-  suggests categories, reconciles credit card statements to catch missed
-  deductions, arranges everything in Schedule C format with mileage at the IRS
-  rate, and answers questions about your spending on its own Insights page,
+  or small team's expenses ready for tax season. It is free, the first
+  {{freeSpots}} accounts while the app is early, with no card and no ads. It
+  reads receipts with OCR, suggests categories, reconciles credit card
+  statements to catch missed deductions, arranges everything in Schedule C
+  format with mileage at the IRS rate, and answers questions about your
+  spending on its own Insights page,
   computing the answer from your records instead of guessing at it. The apps it
   gets compared to mostly aim at company expense management or general
   bookkeeping; the table below shows who is best for what.

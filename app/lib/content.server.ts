@@ -16,6 +16,7 @@ import type {
   MileageRatesPage,
   MirrorMeta,
   PageMeta,
+  ProductFactsPage,
   ScheduleCPage,
   SiteContent,
 } from "~/data/content-types";
@@ -25,6 +26,7 @@ import llmsYaml from "~/data/llms.yaml?raw";
 import mcpYaml from "~/data/mcp.yaml?raw";
 import mileageRatesYaml from "~/data/mileage-rates.yaml?raw";
 import privacyMd from "~/data/privacy.md?raw";
+import productFactsYaml from "~/data/product-facts.yaml?raw";
 import scheduleCYaml from "~/data/schedule-c-categories.yaml?raw";
 import siteYaml from "~/data/site.yaml?raw";
 import supportMd from "~/data/support.md?raw";
@@ -37,6 +39,7 @@ import {
 } from "~/lib/markdown";
 import {
   currentMileageSummary,
+  EARLY_ACCESS_SPOTS,
   MCP_ENDPOINT,
   mileageRateRows,
   SITE_URL,
@@ -86,6 +89,7 @@ const FILE = {
   ai: "app/data/ai.yaml",
   connect: "app/data/connect.yaml",
   mileage: "app/data/mileage-rates.yaml",
+  productFacts: "app/data/product-facts.yaml",
   scheduleC: "app/data/schedule-c-categories.yaml",
   llms: "app/data/llms.yaml",
 } as const;
@@ -104,6 +108,7 @@ const CONTENT_VALUES: Record<string, string> = {
   mileageFirstYear: mileageRateRows().at(-1)!.start.slice(0, 4),
   mileageLastYear: mileageRateRows()[0]!.end.slice(0, 4),
   categoryCount: String(DEFAULT_CATEGORIES.length),
+  freeSpots: String(EARLY_ACCESS_SPOTS),
 };
 
 const PLACEHOLDER = /\{\{(\w+)\}\}/g;
@@ -415,6 +420,29 @@ export const SCHEDULE_C_PAGE: Readonly<ScheduleCPage> = bundle(
   ],
 );
 
+export const PRODUCT_FACTS: Readonly<ProductFactsPage> = bundle(
+  FILE.productFacts,
+  productFactsYaml,
+  [
+    "metaTitle",
+    "description",
+    "eyebrow",
+    "title",
+    "summary",
+    "factsHeading",
+    "tableHeadings",
+    "facts",
+    "captureHeading",
+    "capture",
+    "categoriesHeading",
+    "categoriesNote",
+    "pricingHeading",
+    "pricing",
+    "cta",
+    "mirror",
+  ],
+);
+
 export const LLMS: Readonly<LlmsContent> = bundle(FILE.llms, llmsYaml, [
   "corePages",
   "optionalPages",
@@ -608,6 +636,29 @@ export function scheduleCCategoriesMarkdown(): string {
     ),
   ].join("\n");
   return `# ${SCHEDULE_C_PAGE.mirror.title}\n\n> ${wrap(SCHEDULE_C_PAGE.summary)}\n\n${wrap(SCHEDULE_C_PAGE.mirror.intro)}\n\n${table}\n\n${wrap(SCHEDULE_C_PAGE.mirror.footer)}\n`;
+}
+
+/** Full markdown for /product-facts.md. Mirrors the /product-facts page: the
+ * per-app block a roundup article copies, so the fact list, the Schedule C
+ * line items and the pricing lines are all plain text here. */
+export function productFactsMarkdown(): string {
+  const facts = [
+    `| ${PRODUCT_FACTS.tableHeadings.join(" | ")} |`,
+    `| ${PRODUCT_FACTS.tableHeadings.map(() => "---").join(" | ")} |`,
+    ...PRODUCT_FACTS.facts.map(
+      (fact) => `| ${fact.label} | ${wrap(fact.value)} |`,
+    ),
+  ].join("\n");
+  const categories = scheduleCRows()
+    .map((row) => `- Line ${row.line} ${row.name}`)
+    .join("\n");
+  const capture = PRODUCT_FACTS.capture
+    .map((method) => `- **${method.method}** — ${wrap(method.what)}`)
+    .join("\n");
+  const pricing = PRODUCT_FACTS.pricing
+    .map((line) => `- ${wrap(line)}`)
+    .join("\n");
+  return `# ${PRODUCT_FACTS.mirror.title}\n\n> ${wrap(PRODUCT_FACTS.summary)}\n\n## ${PRODUCT_FACTS.factsHeading}\n\n${facts}\n\n## ${PRODUCT_FACTS.categoriesHeading}\n\n${wrap(PRODUCT_FACTS.categoriesNote)}\n\n${categories}\n\n## ${PRODUCT_FACTS.captureHeading}\n\n${capture}\n\n## ${PRODUCT_FACTS.pricingHeading}\n\n${pricing}\n\n${wrap(PRODUCT_FACTS.mirror.footer)}\n\n${createAccountMarkdown()}.\n`;
 }
 
 /** The /llms.txt file: a curated overview for LLM retrieval, per llmstxt.org. */
