@@ -519,7 +519,7 @@ export function aboutMarkdown(): string {
     .map((benefit) => `- **${benefit.title}** — ${wrap(benefit.body)}`)
     .join("\n");
   const facts = SITE.keyFacts.map((fact) => `- ${wrap(fact)}`).join("\n");
-  return `# ${ABOUT.mirror.title}\n\n${SITE.appSummary}\n\n${SITE.appTagline}.\n\n## ${ABOUT.benefitsHeading}\n\n${benefits}\n\n## ${ABOUT.factsHeading}\n\n${facts}\n\n${ABOUT.mirror.footer}\n`;
+  return `# ${ABOUT.mirror.title}\n\n${SITE.appSummary}\n\n${SITE.appTagline}\n\n## ${ABOUT.benefitsHeading}\n\n${benefits}\n\n## ${ABOUT.factsHeading}\n\n${facts}\n\n${ABOUT.mirror.footer}\n`;
 }
 
 /** Full markdown for /faq.md; mirrors the /faq page content. */
