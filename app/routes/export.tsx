@@ -184,6 +184,7 @@ function ReportRow({ report }: { report: ReportSummary }) {
 
         <toggleFetcher.Form method="post" className="contents">
           <input type="hidden" name="intent" value="setReportClosed" />
+          <input type="hidden" name="name" value={report.name} />
           <input
             type="hidden"
             name="closed"

@@ -153,6 +153,44 @@ describe("Closed reports", () => {
     await editor.close();
   });
 
+  it("closes and reopens a report from the reports page", async () => {
+    // The row's Close/Reopen button submits the intent, the report name and
+    // the target state. A missing name field makes the action match no row
+    // and still redirect, so the button looks like it worked while nothing
+    // changes; assert both the row moving between the lists and the column.
+    const name = "Toggle Q3";
+    await testPrisma.report.createMany({
+      data: [{ name, accountId: TEST_ACCOUNT_ID, closed: false }],
+      skipDuplicates: true,
+    });
+
+    const reports = await goto("/export");
+    const section = (heading: string) =>
+      reports.locator("section").filter({
+        has: reports.getByRole("heading", { name: heading }),
+      });
+    const row = (heading: string) =>
+      section(heading).locator("li").filter({ hasText: name });
+
+    await row("Open reports").getByRole("button", { name: "Close" }).click();
+    await expect(row("Closed reports")).toBeVisible();
+    expect(
+      await testPrisma.report.count({
+        where: { accountId: TEST_ACCOUNT_ID, name, closed: true },
+      }),
+    ).toBe(1);
+
+    // Reopen returns it to the open list.
+    await row("Closed reports").getByRole("button", { name: "Reopen" }).click();
+    await expect(row("Open reports")).toBeVisible();
+    expect(
+      await testPrisma.report.count({
+        where: { accountId: TEST_ACCOUNT_ID, name, closed: false },
+      }),
+    ).toBe(1);
+    await reports.close();
+  });
+
   afterAll(async () => {
     await page?.close();
   });
