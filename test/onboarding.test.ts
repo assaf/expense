@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { expect as pwExpect } from "playwright/test";
 import type { Page } from "playwright";
 import { ulid } from "ulid";
@@ -12,43 +12,47 @@ import {
 } from "./helpers/seedTestData";
 import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
 import { createAccount, createUser } from "~/lib/db/accounts";
-import { createEmailConnection } from "~/lib/db/email-connections";
+import {
+  createEmailConnection,
+  listEmailConnections,
+  readEmailConnection,
+} from "~/lib/db/email-connections";
 import { createAccountWithUser } from "~/lib/auth.server";
-import { verifyJmapToken } from "~/lib/jmap.server";
 import {
   completeOnboarding,
-  verifyOnboardingToken,
+  oauthOnboardingState,
 } from "~/lib/onboarding.server";
 import { hashPassword } from "~/lib/passwords";
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
+import type { FmPendingConnection } from "~/lib/fastmail-oauth.server";
 import { action } from "~/routes/onboarding";
 
 /**
- * Fastmail onboarding (/onboarding): the token is the credential, so the
- * JMAP session call is mocked; the store tests cover the real connect
- * path (see email-connections.test.ts). EMAIL_TOKEN_ENCRYPTION_KEY comes
- * from the vitest main-project env (fixed test key).
+ * Fastmail onboarding (/onboarding): the mailbox arrives through the
+ * provider's OAuth flow, so the flow under test is the step-two form plus
+ * the parked credentials the callback leaves on the session. The connect
+ * itself is covered by fastmail-oauth.test.ts. EMAIL_TOKEN_ENCRYPTION_KEY
+ * comes from the vitest main-project env (fixed test key).
  */
-
-vi.mock("~/lib/jmap.server", () => ({
-  verifyJmapToken: vi.fn(),
-}));
-
-const mockedVerify = vi.mocked(verifyJmapToken);
 
 const PASSWORD = "correct horse battery staple";
 
-function mockToken(email: string) {
-  mockedVerify.mockResolvedValue({
-    ok: true,
-    info: {
-      username: email,
-      mailAccountId: "jmap-acct-1",
-      apiUrl: "https://api.fastmail.com/jmap/",
-      uploadUrl: "https://api.fastmail.com/upload/",
-      downloadUrl: "https://api.fastmail.com/download/",
-    },
-  });
+/** The parked credentials the callback hands onboarding: encrypted, mailbox
+ * already verified live there. */
+const PARKED_TOKEN = "fm-access-tok";
+
+function fmPending(
+  overrides: Partial<FmPendingConnection> = {},
+): FmPendingConnection {
+  return {
+    provider: "fastmail",
+    username: "mailbox@example.com",
+    mailAccountId: "jmap-acct-1",
+    tokenEnc: encryptSecret(PARKED_TOKEN),
+    refreshTokenEnc: encryptSecret("fm-refresh-tok"),
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    ...overrides,
+  };
 }
 
 async function seedVerifiedUser(email: string, password = PASSWORD) {
@@ -63,15 +67,10 @@ async function seedVerifiedUser(email: string, password = PASSWORD) {
 }
 
 describe("Fastmail onboarding", () => {
-  beforeEach(() => {
-    mockedVerify.mockReset();
-  });
-
   it("creates a verified account, derives the name, connects the mailbox, and signs in", async () => {
     const email = "alex.jones@example.com";
-    mockToken(email);
     const outcome = await completeOnboarding({
-      token: "fmu1-tok",
+      oauth: fmPending({ username: email }),
       email,
       password: PASSWORD,
     });
@@ -112,10 +111,9 @@ describe("Fastmail onboarding", () => {
   it("attaches the mailbox to an existing verified account with the right password", async () => {
     const email = "sam.parker@example.com";
     const { account } = await seedVerifiedUser(email);
-    mockToken(email);
 
     const outcome = await completeOnboarding({
-      token: "fmu1-tok",
+      oauth: fmPending({ username: email }),
       email,
       password: PASSWORD,
     });
@@ -147,11 +145,10 @@ describe("Fastmail onboarding", () => {
     // real account must connect the mailbox to THAT account.
     const mailbox = "bootstrap.owner@example.com";
     const loginEmail = "real.user@example.com";
-    mockToken(mailbox);
     const { account } = await seedVerifiedUser(loginEmail, PASSWORD);
 
     const outcome = await completeOnboarding({
-      token: "fmu1-tok",
+      oauth: fmPending({ username: mailbox }),
       email: loginEmail,
       password: PASSWORD,
     });
@@ -178,11 +175,10 @@ describe("Fastmail onboarding", () => {
   it("rejects a wrong password on attach and leaves no connection", async () => {
     const email = "wrong.pass@example.com";
     await seedVerifiedUser(email, PASSWORD);
-    mockToken(email);
 
     await expect(
       completeOnboarding({
-        token: "fmu1-tok",
+        oauth: fmPending({ username: email }),
         email,
         password: "definitely-not-it",
       }),
@@ -201,10 +197,9 @@ describe("Fastmail onboarding", () => {
       email,
       password: PASSWORD,
     });
-    mockToken(email);
 
     const outcome = await completeOnboarding({
-      token: "fmu1-tok",
+      oauth: fmPending({ username: email }),
       email,
       password: PASSWORD,
     });
@@ -228,11 +223,10 @@ describe("Fastmail onboarding", () => {
       remoteAccountId: "jmap-other",
       tokenEnc: encryptSecret("other-token"),
     });
-    mockToken(email);
 
     await expect(
       completeOnboarding({
-        token: "fmu1-tok",
+        oauth: fmPending({ username: email }),
         email,
         password: PASSWORD,
       }),
@@ -245,25 +239,24 @@ describe("Fastmail onboarding", () => {
 
   it("rejects an email that fails signup validation", async () => {
     const mailbox = "bad.email@example.com";
-    mockToken(mailbox);
     await expect(
       completeOnboarding({
-        token: "fmu1-tok",
+        oauth: fmPending({ username: mailbox }),
         email: "not-an-email",
         password: PASSWORD,
       }),
     ).rejects.toThrow("Enter a valid email address");
   });
 
-  it("refuses to create an account for an email the token did not verify", async () => {
-    // The token proves control of the mailbox only; an arbitrary typed
-    // email must never get emailVerifiedAt stamped (signup squatting).
+  it("refuses to create an account for an address the connection did not verify", async () => {
+    // The connected mailbox proves control of that address only; an
+    // arbitrary typed email must never get emailVerifiedAt stamped (signup
+    // squatting).
     const mailbox = "token.owner@example.com";
     const otherEmail = "someone.else@example.com";
-    mockToken(mailbox);
     await expect(
       completeOnboarding({
-        token: "fmu1-tok",
+        oauth: fmPending({ username: mailbox }),
         email: otherEmail,
         password: PASSWORD,
       }),
@@ -274,21 +267,19 @@ describe("Fastmail onboarding", () => {
     expect(user).toBeNull();
   });
 
-  it("classifies the token's address as none / verified / unverified", async () => {
+  it("classifies the mailbox address as none / verified / unverified", async () => {
     const fresh = `fresh-${ulid().toLowerCase()}@example.com`;
-    mockToken(fresh);
-    expect(await verifyOnboardingToken("tok")).toEqual({
-      ok: true,
+    expect(await oauthOnboardingState(fresh, "fastmail")).toEqual({
       email: fresh,
+      provider: "fastmail",
       existing: "none",
     });
 
     const verifiedEmail = "classify.verified@example.com";
     await seedVerifiedUser(verifiedEmail);
-    mockToken(verifiedEmail);
-    expect(await verifyOnboardingToken("tok")).toEqual({
-      ok: true,
+    expect(await oauthOnboardingState(verifiedEmail, "fastmail")).toEqual({
       email: verifiedEmail,
+      provider: "fastmail",
       existing: "verified",
     });
 
@@ -298,53 +289,39 @@ describe("Fastmail onboarding", () => {
       email: pendingEmail,
       password: PASSWORD,
     });
-    mockToken(pendingEmail);
-    expect(await verifyOnboardingToken("tok")).toEqual({
-      ok: true,
+    expect(await oauthOnboardingState(pendingEmail, "fastmail")).toEqual({
       email: pendingEmail,
+      provider: "fastmail",
       existing: "unverified",
     });
   });
 
-  it("surfaces Fastmail token errors", async () => {
-    mockedVerify.mockResolvedValue({
-      ok: false,
-      reason: "invalid-token",
-      message: "Fastmail rejected this token — check it and try again.",
-    });
-    expect(await verifyOnboardingToken("bad")).toEqual({
-      ok: false,
-      error: "Fastmail rejected this token — check it and try again.",
-    });
-    await expect(
-      completeOnboarding({
-        token: "bad",
-        email: "nobody@example.com",
-        password: PASSWORD,
-      }),
-    ).rejects.toThrow("Fastmail rejected this token");
-  });
-
-  it("keeps an existing connection when a verified account attaches", async () => {
-    // Regression: attaching must not create a second connection row for
-    // the same mailbox (the global unique index would reject it).
+  it("refreshes the existing connection when a verified account attaches", async () => {
+    // Regression: attaching must not create a second connection row for the
+    // same mailbox (the global unique index would reject it), and the
+    // credentials from this connect replace the ones stored before.
     const email = "keep.connection@example.com";
     const { account } = await seedVerifiedUser(email);
-    await createEmailConnection({
+    const existing = await createEmailConnection({
       accountId: account.id,
       provider: "fastmail",
       emailAddress: email,
       remoteAccountId: "jmap-1",
       tokenEnc: encryptSecret("tok-1"),
     });
-    mockToken(email);
-    await expect(
-      completeOnboarding({
-        token: "fmu1-tok",
-        email,
-        password: PASSWORD,
-      }),
-    ).rejects.toThrow(/already connected/);
+    expect(existing.ok).toBe(true);
+    if (!existing.ok) return;
+
+    const outcome = await completeOnboarding({
+      oauth: fmPending({ username: email }),
+      email,
+      password: PASSWORD,
+    });
+    expect(outcome.connectionId).toBe(existing.connection.id);
+    const rows = await listEmailConnections(account.id);
+    expect(rows).toHaveLength(1);
+    const row = await readEmailConnection(account.id, existing.connection.id);
+    expect(decryptSecret(row!.tokenEnc)).toBe(PARKED_TOKEN);
   });
 });
 
@@ -356,21 +333,18 @@ afterAll(async () => {
 /**
  * Browser-level coverage of the onboarding surface: the login-page entry,
  * the /onboarding first step, and the welcome panel lifecycle. The full
- * token→account flow can't run here (the live server can't reach Fastmail
- * or mock the JMAP call). That logic is covered by the unit tests above.
+ * connect→account flow can't run here (the live server would have to leave
+ * for Fastmail). That logic is covered by the unit tests above and by
+ * fastmail-oauth.test.ts.
  */
 describe("Fastmail onboarding UI", () => {
   afterAll(async () => {
     await closeBrowser();
   });
 
-  async function openPage(): Promise<Page> {
-    return freshPage();
-  }
-
   it("links from the sign-up flow into the Fastmail onboarding", async () => {
     await seedTestData();
-    const page = await openPage();
+    const page = await freshPage();
     await page.goto("/login?mode=create", { waitUntil: "load" });
     await page
       .getByRole("link", { name: /Connect your Fastmail account/ })
@@ -379,7 +353,9 @@ describe("Fastmail onboarding UI", () => {
     await pwExpect(
       page.getByRole("heading", { name: "Connect your email account" }),
     ).toBeVisible();
-    await pwExpect(page.getByLabel("Fastmail API token")).toBeVisible();
+    await pwExpect(
+      page.getByRole("link", { name: "Connect with Fastmail" }),
+    ).toBeVisible();
     await page.close();
   });
 
@@ -395,7 +371,7 @@ describe("Fastmail onboarding UI", () => {
       },
     });
 
-    const page = await openPage();
+    const page = await freshPage();
     await signIn(page, TEST_EMAIL, TEST_PASSWORD);
     await pwExpect(page.getByText("You're all set")).toBeVisible();
 
@@ -415,7 +391,7 @@ describe("Fastmail onboarding UI", () => {
 
   it("never shows the welcome panel to an account that did not onboard", async () => {
     await seedTestData();
-    const page = await openPage();
+    const page = await freshPage();
     await pwExpect(page.getByText("You're all set")).not.toBeVisible();
     await page.close();
   });
@@ -423,21 +399,15 @@ describe("Fastmail onboarding UI", () => {
 
 describe("Fastmail onboarding route throttle", () => {
   it("caps create/attach attempts per IP like the other anonymous surfaces", async () => {
-    // The route action records the attempt before the work (a Fastmail
-    // session call), so five attempts burn the per-IP budget and the sixth
-    // is locked before any outbound call. Mirror of the reset-password cap
-    // test; the route action is called directly with the same mocked
-    // verify the lib tests above use.
-    mockedVerify.mockResolvedValue({
-      ok: false,
-      reason: "invalid-token",
-      message: "Fastmail rejected this token — check it and try again.",
-    });
+    // The route action records the attempt before the work, so five
+    // attempts burn the per-IP budget and the sixth is locked. These
+    // requests carry no parked connection, so each one fails fast with the
+    // expired message and nothing is created. Mirror of the reset-password
+    // cap test, which calls the route action directly the same way.
     const ip = `203.0.113.${Math.floor(Math.random() * 200) + 2}`;
     const attempt = () => {
       const form = new FormData();
       form.set("intent", "create");
-      form.set("token", `fmu1-wrong-${ulid()}`);
       form.set("email", `onboard-${ulid().toLowerCase()}@example.com`);
       form.set("password", PASSWORD);
       return action({
@@ -458,7 +428,7 @@ describe("Fastmail onboarding route throttle", () => {
         init?: ResponseInit;
       };
       expect(res.init?.status ?? 200).toBe(200);
-      expect(res.data?.error).toMatch(/Fastmail rejected/);
+      expect(res.data?.error).toMatch(/expired/);
     }
     await expect(attempt()).rejects.toThrow(/Too many failed attempts/);
   });

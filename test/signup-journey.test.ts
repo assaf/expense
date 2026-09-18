@@ -4,8 +4,9 @@ import { afterAll, describe, it } from "vitest";
 import { ulid } from "ulid";
 import { closeBrowser, freshPage, signIn } from "./helpers/launchBrowser";
 import { signUp, verifyEmail } from "./helpers/signup-flows";
-import { hashPassword } from "~/lib/passwords";
-import { createAccount, createUser } from "~/lib/db/accounts";
+import { sessionStorage } from "~/lib/auth.server";
+import { FM_PENDING_SESSION_KEY } from "~/lib/fastmail-oauth.server";
+import { encryptSecret } from "~/lib/token-crypto.server";
 import { testPrisma } from "./helpers/seedTestData";
 
 /**
@@ -14,14 +15,11 @@ import { testPrisma } from "./helpers/seedTestData";
  *
  * A. Landing page → create account → email verification link → sign in →
  *    upload a receipt and save it.
- * B. Fastmail onboarding → paste an API token (mock JMAP session; the token
- *    is the credential, so the email verifies automatically) → set a
- *    password → land on the review inbox.
- *
- * The connect form on the Email page is covered too: it is the same token
- * verification the onboarding flow uses, but through the settings UI.
- * JMAP session calls resolve against the launchServer mock (see
- * launchServer.ts), so nothing here touches the network.
+ * B. Fastmail onboarding → set a password and land on the review inbox,
+ *    starting from the state the OAuth callback leaves on the session
+ *    (connected mailbox, credentials parked encrypted). The provider round
+ *    trip needs a real consent, so it stays out of the browser suite and is
+ *    covered by fastmail-oauth.test.ts.
  */
 
 describe("Signup journeys", () => {
@@ -29,26 +27,8 @@ describe("Signup journeys", () => {
     await closeBrowser();
   });
 
-  async function openPage(): Promise<Page> {
-    return freshPage();
-  }
-
-  /** Seed a ready verified user directly (signup itself is covered by
-   * journey A); returns the email for sign-in. */
-  async function seedVerifiedUser(): Promise<string> {
-    const email = `journey-seeded-${ulid().toLowerCase()}@example.com`;
-    const account = await createAccount(`Journey seeded ${ulid()}`);
-    await createUser({
-      accountId: account.id,
-      email,
-      passwordHash: await hashPassword("seeded-password"),
-      emailVerifiedAt: new Date().toISOString(),
-    });
-    return email;
-  }
-
   it("lands, signs up, verifies, signs in, and files a receipt", async () => {
-    const page = await openPage();
+    const page = await freshPage();
     const email = `journey-a-${ulid().toLowerCase()}@example.com`;
     try {
       // Landing page is public and carries the signup CTA.
@@ -123,22 +103,43 @@ describe("Signup journeys", () => {
     }
   });
 
-  it("onboards through a Fastmail token: verified account, connection, review inbox", async () => {
-    const page = await openPage();
-    // The mock derives the mailbox address from the token, so the account
-    // is unique per run.
-    const token = `fmu1-onboarding-${ulid()}`;
+  it("onboards from a connected mailbox: verified account, connection, review inbox", async () => {
+    const page = await freshPage();
+    // The mailbox arrives through the provider's OAuth flow, so what the
+    // browser can walk here starts where that callback leaves off: the
+    // encrypted credentials parked on the session, and step two. The
+    // provider round trip itself is covered by fastmail-oauth.test.ts.
+    const address = `journey-${ulid().toLowerCase()}@fastmail.test`;
+    const session = await sessionStorage.getSession();
+    session.set(FM_PENDING_SESSION_KEY, {
+      provider: "fastmail",
+      username: address,
+      mailAccountId: "jmap-journey",
+      tokenEnc: encryptSecret("journey-at"),
+      refreshTokenEnc: encryptSecret("journey-rt"),
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    });
+    // commitSession returns the whole Set-Cookie header; the browser needs
+    // the value alone.
+    const setCookie = await sessionStorage.commitSession(session);
+    await page.context().addCookies([
+      {
+        name: "expense_session",
+        value: setCookie.slice(setCookie.indexOf("=") + 1).split(";")[0]!,
+        url: "http://localhost:5199",
+      },
+    ]);
+
     let cleanupAccountId: string | undefined;
     try {
       await page.goto("/onboarding", { waitUntil: "load", timeout: 15_000 });
-      await page.fill('input[name="token"]', token);
-      await page.getByRole("button", { name: "Verify Fastmail token" }).click();
 
-      // Step 2: the token proved mailbox control, so only a password is
-      // asked for; the email is the mock session's username.
+      // Step 2: the connected mailbox proved control, so only a password is
+      // asked for; the email comes pre-filled from the connection.
       await expect(
         page.getByRole("heading", { name: "Set your password" }),
       ).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByLabel("Account email")).toHaveValue(address);
       await page.fill('input[name="password"]', "onboarding-password");
       await page.getByRole("button", { name: "Create my account" }).click();
 
@@ -150,56 +151,20 @@ describe("Signup journeys", () => {
         page.getByRole("heading", { name: "Review inbox" }),
       ).toBeVisible();
 
-      // The account came out verified with its mailbox connected. The
-      // legacy test client has no include support, so query the sides
-      // separately.
-      const connection = await testPrisma.emailConnection.findFirst({
-        where: { provider: "fastmail" },
-        orderBy: { createdAt: "desc" },
-      });
-      expect(connection).not.toBeNull();
-      cleanupAccountId = connection!.accountId as string;
-      const user = await testPrisma.user.findFirst({
-        where: { accountId: cleanupAccountId },
+      // The account came out verified with its mailbox connected.
+      const user = await testPrisma.user.findUnique({
+        where: { email: address },
       });
       expect(user?.emailVerifiedAt).not.toBeNull();
-      expect(user?.email).toMatch(/^mock-.*@fastmail\.test$/);
+      cleanupAccountId = String(user!.accountId);
+      const connection = await testPrisma.emailConnection.findUniqueOrThrow({
+        where: { emailAddress: address },
+      });
+      expect(connection.accountId).toBe(user!.accountId);
+      expect(connection.provider).toBe("fastmail");
     } finally {
       if (cleanupAccountId)
         await testPrisma.account.delete({ where: { id: cleanupAccountId } });
-      await page.close();
-    }
-  });
-
-  it("connects a Fastmail account from the Email page settings", async () => {
-    const page = await openPage();
-    const email = await seedVerifiedUser();
-    const accountId = (
-      await testPrisma.user.findUniqueOrThrow({
-        where: { email },
-        select: { accountId: true },
-      })
-    ).accountId;
-    try {
-      await signIn(page, email, "seeded-password");
-      await page.goto("/emails", { waitUntil: "load", timeout: 15_000 });
-
-      await page.fill('input[name="token"]', "test-settings-connect-token-1");
-      await page.getByRole("button", { name: "Connect" }).click();
-      await expect(page.getByRole("status")).toContainText(
-        "connected; expenses will import automatically",
-        { timeout: 15_000 },
-      );
-
-      // The connection is stored (token encrypted) against this account.
-      const connection = await testPrisma.emailConnection.findFirst({
-        where: { accountId },
-      });
-      expect(connection).not.toBeNull();
-      expect(connection!.emailAddress).toMatch(/^mock-.*@fastmail\.test$/);
-      expect(connection!.tokenEnc).not.toBe("");
-    } finally {
-      await testPrisma.account.delete({ where: { id: accountId } });
       await page.close();
     }
   });

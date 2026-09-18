@@ -152,9 +152,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     console.info("[gmail-oauth] connected", {
       accountId: user.accountId,
       address: result.connection.emailAddress,
+      reconnected: result.reconnected,
     });
     return finish(
-      `/emails?connected=1&address=${encodeURIComponent(result.connection.emailAddress)}`,
+      `/emails?connected=1&address=${encodeURIComponent(
+        result.connection.emailAddress,
+      )}${result.reconnected ? "&reconnected=1" : ""}`,
     );
   }
 

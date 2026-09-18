@@ -51,6 +51,7 @@ describe("email connections store", () => {
   it("creates a connection and lists it with the token absent", async () => {
     const result = await connect();
     expect(result.ok).toBe(true);
+    if (result.ok) expect(result.reconnected).toBe(false);
     const list = await listEmailConnections(TEST_ACCOUNT_ID);
     expect(list).toHaveLength(1);
     expect(list[0]!.emailAddress).toBe("mailbox@example.com");
@@ -73,11 +74,83 @@ describe("email connections store", () => {
     expect(row!.remoteAccountId).toBe("jmap-acct-1");
   });
 
-  it("rejects connecting the same mailbox twice (same workspace)", async () => {
+  it("saves the newest credentials when the same workspace reconnects", async () => {
+    // Fastmail revokes the refresh token it handed out before, so the set
+    // from the latest connect is the only usable one: reconnect saves it
+    // over the stored row (still one row) and clears needs-attention.
+    const first = await createEmailConnection({
+      accountId: TEST_ACCOUNT_ID,
+      provider: "fastmail",
+      emailAddress: "mailbox@example.com",
+      remoteAccountId: "jmap-acct-1",
+      tokenEnc: encryptSecret("first-access"),
+      refreshTokenEnc: encryptSecret("first-refresh"),
+      tokenExpiresAt: "2030-01-01T00:00:00.000Z",
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await setEmailConnectionStatus(first.connection.id, "error");
+
+    const again = await connect("Mailbox@Example.com"); // case-insensitive
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.reconnected).toBe(true);
+    expect(again.connection.id).toBe(first.connection.id);
+    expect(await listEmailConnections(TEST_ACCOUNT_ID)).toHaveLength(1);
+
+    const row = (await readEmailConnection(
+      TEST_ACCOUNT_ID,
+      first.connection.id,
+    ))!;
+    expect(decryptSecret(row.tokenEnc)).toBe(TOKEN);
+    // A pasted token carries no refresh token, so the OAuth fields go with
+    // the credentials they belonged to.
+    expect(row.refreshTokenEnc).toBeNull();
+    expect(row.tokenExpiresAt).toBeNull();
+    expect(row.status).toBe("active");
+  });
+
+  it("stores the OAuth fields when a reconnect brings a refresh token", async () => {
     await connect();
-    const dup = await connect("Mailbox@Example.com"); // case-insensitive
-    expect(dup.ok).toBe(false);
-    if (!dup.ok) expect(dup.error).toMatch(/already connected/);
+    const again = await createEmailConnection({
+      accountId: TEST_ACCOUNT_ID,
+      provider: "fastmail",
+      emailAddress: "mailbox@example.com",
+      remoteAccountId: "jmap-acct-1",
+      tokenEnc: encryptSecret("fresh-access"),
+      refreshTokenEnc: encryptSecret("fresh-refresh"),
+      tokenExpiresAt: "2030-02-01T00:00:00.000Z",
+    });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    const row = (await readEmailConnection(
+      TEST_ACCOUNT_ID,
+      again.connection.id,
+    ))!;
+    expect(decryptSecret(row.tokenEnc)).toBe("fresh-access");
+    expect(decryptSecret(row.refreshTokenEnc!)).toBe("fresh-refresh");
+    expect(row.tokenExpiresAt).toBe("2030-02-01T00:00:00.000Z");
+  });
+
+  it("reports the connection's stats on a reconnect", async () => {
+    const first = await connect();
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: first.connection.id,
+        emailId: "e1",
+        fromAddress: "apple@id.apple.com",
+        subject: "Your receipt",
+        matched: true,
+        outcome: "created",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const again = await connect();
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.connection.processedLast24h).toBe(1);
   });
 
   it("rejects a mailbox claimed by another workspace", async () => {
@@ -98,9 +171,14 @@ describe("email connections store", () => {
     expect(
       await findEmailConnectionByAddress("mailbox@example.com"),
     ).toBeUndefined();
-    await connect();
+    const connected = await connect();
+    expect(connected.ok).toBe(true);
+    if (!connected.ok) return;
     const owner = await findEmailConnectionByAddress("MAILBOX@example.com");
-    expect(owner).toEqual({ accountId: TEST_ACCOUNT_ID });
+    expect(owner).toEqual({
+      id: connected.connection.id,
+      accountId: TEST_ACCOUNT_ID,
+    });
   });
 
   it("disconnects only within the owning workspace", async () => {

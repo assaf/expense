@@ -8,10 +8,8 @@ import { createEmailConnection } from "~/lib/db/email-connections";
 import { verifyInboundSenderDirect } from "~/lib/db/inbound";
 import { initStore } from "~/lib/db/seed";
 import { readSettings, writeSettings } from "~/lib/db/settings";
-import { verifyJmapToken } from "~/lib/jmap.server";
 import { hashPassword } from "~/lib/passwords";
 import { db } from "~/lib/prisma.server";
-import { encryptSecret } from "~/lib/token-crypto.server";
 import type { FmPendingConnection } from "~/lib/fastmail-oauth.server";
 import type { GooglePendingConnection } from "~/lib/google-oauth.server";
 import { createSessionCookie, login, validateSignup } from "~/lib/auth.server";
@@ -20,11 +18,12 @@ import type { Account } from "~/lib/types";
 
 /**
  * Fastmail onboarding (/onboarding): a first-run flow that skips the
- * emailed verification link entirely. A valid Fastmail API token proves
- * mailbox control (strictly stronger than a click-through link), so:
+ * emailed verification link entirely. The user connects their mailbox
+ * through the provider's OAuth flow, which proves mailbox control
+ * (strictly stronger than a click-through link), so:
  *
- * - the address the token resolves to (JMAP session `username`) becomes the
- *   login identity with `emailVerifiedAt` stamped (no verification email);
+ * - the mailbox address the connection resolves to becomes the login
+ *   identity with `emailVerifiedAt` stamped (no verification email);
  * - the same address is claimed as a VERIFIED receipts-by-email sender, so
  *   forwarding from it works immediately (no link either);
  * - the mailbox is connected for auto-import, and the user lands in the
@@ -36,33 +35,13 @@ import type { Account } from "~/lib/types";
  *
  * Existing accounts: a verified user with the address signs in with their
  * password and the mailbox attaches to that account; an unverified (stale
- * pending signup) row is replaced: the token proves the same control the
- * emailed link would have.
+ * pending signup) row is replaced: the connected mailbox proves the same
+ * control the emailed link would have.
  */
 
-/** Step-1 resolution: what the token's address maps to in the DB, so the
- * UI can offer "set a password" (new) vs "enter your password" (attach). */
-export type TokenResolution =
-  | { ok: true; email: string; existing: "none" | "verified" | "unverified" }
-  | { ok: false; error: string };
-
-export async function verifyOnboardingToken(
-  token: string,
-): Promise<TokenResolution> {
-  const verification = await verifyJmapToken(token);
-  if (!verification.ok) return { ok: false, error: verification.message };
-  const user = await findUserByEmail(verification.info.username);
-  return {
-    ok: true,
-    email: verification.info.username,
-    existing: !user ? "none" : user.emailVerifiedAt ? "verified" : "unverified",
-  };
-}
-
 /**
- * Named shape of the step-two state for the OAuth onboarding path: the
- * callback already verified the mailbox live, so resolving it only
- * decides create vs attach — no second network verification.
+ * What the connected mailbox maps to in the DB, so the UI can offer "set a
+ * password" (new) vs "enter your password" (attach).
  */
 export interface OAuthOnboardingState {
   email: string;
@@ -90,67 +69,52 @@ export interface OnboardingOutcome {
 }
 
 /**
- * Complete onboarding. The step-2 form carries the token (re-verified here;
- * it is the credential) plus the EMAIL + PASSWORD the user signs in
- * with. The mailbox connects to THAT account, not necessarily to the
- * account matching the mailbox address: the token proves mailbox control,
- * the password proves account ownership, and the two are combined (a
- * mailbox address may have a bootstrap/legacy account the user can't
- * authenticate to, and the attach step must not force it).
+ * Complete onboarding. The step-2 form carries the EMAIL + PASSWORD the
+ * user signs in with; the mailbox credentials come from the provider's
+ * OAuth callback, parked on the session and already verified live there.
+ * The mailbox connects to the account the user signs in with, not
+ * necessarily to the account matching the mailbox address: the connected
+ * mailbox proves mailbox control, the password proves account ownership,
+ * and the two are combined (a mailbox address may have a bootstrap/legacy
+ * account the user can't authenticate to, and the attach step must not
+ * force it).
  *
  * - verified account for the entered email → sign in (lockout + rehash
  *   apply), connect the mailbox to it;
- * - unverified account → replaced by deleteUnverifiedUser (the token
- *   proves mailbox control, the same basis the emailed link would use);
+ * - unverified account → replaced by deleteUnverifiedUser (the mailbox
+ *   control the provider proved is the same basis the emailed link would
+ *   use);
  * - no account → created verified, name derived from the email.
  *
  * The receipts-by-email sender is claimed as verified ONLY when the
- * account email equals the mailbox address (the token proves control of
- * the mailbox, not of any other address). Throws Error with a
+ * account email equals the mailbox address (the connection proves control
+ * of the mailbox, not of any other address). Throws Error with a
  * user-facing message; a freshly created account is rolled back if the
  * mailbox can't be connected.
  */
 export async function completeOnboarding(input: {
-  /** Pasted API token; verified live here. */
-  token?: string;
   /**
    * The pending connection exactly as the callback parked it on the
    * session: ciphertext, already live-verified there (no second network
-   * verification) and passed straight into the connection row. Exactly
-   * one of token/oauth is required.
+   * verification) and passed straight into the connection row.
    */
   oauth?: FmPendingConnection | GooglePendingConnection;
   email: string;
   password: string;
 }): Promise<OnboardingOutcome> {
-  if (Boolean(input.token) === Boolean(input.oauth)) {
-    throw new Error(
-      "Provide exactly one of an API token or an OAuth connection.",
-    );
-  }
+  const oauth = input.oauth;
+  if (!oauth) throw new Error("Connect a mailbox before finishing setup.");
   await initStore();
-  let mailboxAddress: string;
-  let remoteAccountId: string;
-  let provider: EmailConnectionProvider;
-  if (input.oauth) {
-    // The callback parked these already encrypted and verified the
-    // mailbox live; the row is created straight from the ciphertext.
-    if (input.oauth.provider === "gmail") {
-      provider = "gmail";
-      mailboxAddress = input.oauth.emailAddress.toLowerCase();
-      remoteAccountId = input.oauth.remoteAccountId;
-    } else {
-      provider = "fastmail";
-      mailboxAddress = input.oauth.username.toLowerCase();
-      remoteAccountId = input.oauth.mailAccountId;
-    }
-  } else {
-    const verification = await verifyJmapToken(input.token ?? "");
-    if (!verification.ok) throw new Error(verification.message);
-    provider = "fastmail";
-    mailboxAddress = verification.info.username;
-    remoteAccountId = verification.info.mailAccountId;
-  }
+  // The callback parked these already encrypted and verified the mailbox
+  // live; the row is created straight from the ciphertext.
+  const provider: EmailConnectionProvider =
+    oauth.provider === "gmail" ? "gmail" : "fastmail";
+  const mailboxAddress =
+    oauth.provider === "gmail"
+      ? oauth.emailAddress.toLowerCase()
+      : oauth.username.toLowerCase();
+  const remoteAccountId =
+    oauth.provider === "gmail" ? oauth.remoteAccountId : oauth.mailAccountId;
   const email = input.email.trim().toLowerCase();
 
   const existing = await findUserByEmail(email);
@@ -179,13 +143,14 @@ export async function completeOnboarding(input: {
     accountId = existing.accountId;
   } else {
     validateSignup(email, input.password);
-    // The token proves control of mailboxAddress ONLY: a new account's
-    // login email must be that address, or emailVerifiedAt would be stamped
-    // for an identity the token never verified (signup squatting / a
-    // verification-gate bypass). Other addresses go through regular signup.
+    // The connected mailbox proves control of mailboxAddress ONLY: a new
+    // account's login email must be that address, or emailVerifiedAt would
+    // be stamped for an identity the provider never verified (signup
+    // squatting / a verification-gate bypass). Other addresses go through
+    // regular signup.
     if (email !== mailboxAddress) {
       throw new Error(
-        `No Expense account exists for ${email}, and the token only verifies ${mailboxAddress}. Use the address from your token, or create an account with email verification instead.`,
+        `No Expense account exists for ${email}, and the connected mailbox only verifies ${mailboxAddress}. Use the address you connected, or create an account with email verification instead.`,
       );
     }
     if (existing) {
@@ -222,16 +187,14 @@ export async function completeOnboarding(input: {
     provider,
     emailAddress: mailboxAddress,
     remoteAccountId,
-    tokenEnc: input.oauth
-      ? input.oauth.tokenEnc
-      : encryptSecret(input.token ?? ""),
-    refreshTokenEnc: input.oauth?.refreshTokenEnc ?? undefined,
-    tokenExpiresAt: input.oauth ? input.oauth.expiresAt : undefined,
+    tokenEnc: oauth.tokenEnc,
+    refreshTokenEnc: oauth.refreshTokenEnc ?? undefined,
+    tokenExpiresAt: oauth.expiresAt,
   });
   if (!created.ok) {
     if (createdFresh) {
-      // The mailbox is claimed elsewhere (or the connection failed), so roll
-      // back the half-onboarded account. It is brand new (one user, no
+      // The mailbox belongs to another workspace, so roll back the
+      // half-onboarded account. It is brand new (one user, no
       // expenses), and the account delete cascades the user, sender rows,
       // and default categories.
       await db.orm.public.Account.where({ id: accountId })

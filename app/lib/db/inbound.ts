@@ -387,8 +387,8 @@ export async function verifyInboundSenderAddress(
 
 /**
  * Claim the account's login email as a VERIFIED receipts-by-email sender
- * without an emailed link; used by Fastmail onboarding, where a valid
- * JMAP API token has already proven mailbox control (the same proof the
+ * without an emailed link; used by Fastmail onboarding, where the connected
+ * mailbox has already proven control of the address (the same proof the
  * link click provides). Creates the sender row when missing, then claims
  * the address exclusively with the same transaction as the link click.
  * `claimedByOther` means the address is already verified for a different

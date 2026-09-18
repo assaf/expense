@@ -200,13 +200,18 @@ from `INBOUND_EMAIL_ADDRESS` (identity-matched, falling back to the
 account's default identity); without `FASTMAIL_TOKEN` send permission, outbound emails are
 skipped with a warning (logged + Sentry-captured), they never silently fail.
 
-`FASTMAIL_OAUTH_CLIENT_ID` (optional) turns on the "Connect with Fastmail"
-OAuth flow (Authorization Code + PKCE; no client secret exists). While
-unset, the OAuth buttons are hidden everywhere and token paste is the only
-connect path; setting it and redeploying switches `/onboarding` and
-Settings → Email accounts over without any other change. Fastmail issues
-client ids manually; the ready-to-send request and the post-reply checklist
-are in `docs/email-connections.md` → Client registration (one-time).
+`FASTMAIL_OAUTH_CLIENT_ID` turns on the "Connect with Fastmail" OAuth flow
+(Authorization Code + PKCE; no client secret exists), which is now the only
+way to connect a mailbox: nothing is pasted by hand. While it is unset the
+connect buttons are hidden everywhere, so mailbox connections are off on
+that deployment (email + password signup still works); setting it and
+redeploying switches `/onboarding` and Settings → Email accounts over
+without any other change. Fastmail registers clients manually; the
+registration notes live in `docs/email-connections.md` → Client
+registration (one-time). A registered loopback URI accepts any port while
+the hostname must be `localhost`, `127.0.0.1`, or `::1`, so a hand-run of
+the flow needs a loopback origin
+(`pnpm exec react-router dev --port 5199`), not `expense.localhost`.
 
 Gmail/Google Workspace connections add five vars: four gate the feature
 together (when any is unset the Gmail connect surfaces stay hidden and

@@ -12,21 +12,26 @@ the first-run Fastmail onboarding (/onboarding).**
 
 ## Connecting via OAuth
 
-The token-paste flow has an OAuth 2.0 alternative ("Connect with
-Fastmail"), gated on `FASTMAIL_OAUTH_CLIENT_ID`: unset (today), the buttons
-are hidden and paste is the only path; set, an Authorization Code + PKCE
-public client flow runs instead (Fastmail registers clients manually, no
-client secret exists). Authorization + token endpoints are Fastmail's
-(`api.fastmail.com/oauth/authorize|refresh`); the code lives in
+Connecting a mailbox runs the provider's OAuth 2.0 flow ("Connect with
+Fastmail", "Connect with Gmail"): an Authorization Code + PKCE public
+client, no client secret (Fastmail registers clients manually). Fastmail's
+authorization and token endpoints are `api.fastmail.com/oauth/authorize`
+and `/oauth/refresh`; the code lives in
 `app/lib/fastmail-oauth.server.ts`, with `/connect-fastmail` (entry) and
-`/fastmail-oauth-callback` (redirect target) routes.
+`/fastmail-oauth-callback` (redirect target) routes. **Nothing is pasted by
+hand any more**: with `FASTMAIL_OAUTH_CLIENT_ID` unset the connect buttons
+are hidden, which turns mailbox connections off on that deployment rather
+than falling back to a token form. Connections created earlier from a
+pasted API token keep working unchanged (see `connectionAccessToken`).
 
-- **Storage**: same `EmailConnection` row as a pasted token, plus
-  `refreshTokenEnc` + `tokenExpiresAt` (null for API-token rows). All
-  consumers go through `connectionAccessToken`, which decrypts and returns
-  the access token for legacy rows unchanged, and for OAuth rows refreshes
-  via the token endpoint 60s before expiry, persisting the ROTATED refresh
-  token (Fastmail revokes stale ones; reuse revokes the whole grant).
+- **Storage**: the `EmailConnection` row carries the encrypted access token
+  plus `refreshTokenEnc` + `tokenExpiresAt` (null for legacy API-token
+  rows). All consumers go through `connectionAccessToken`, which decrypts
+  and returns the access token for legacy rows unchanged, and for OAuth
+  rows refreshes via the token endpoint 60s before expiry, persisting the
+  ROTATED refresh token (Fastmail revokes stale ones; reuse revokes the
+  whole grant). A reconnect for a mailbox the workspace already has saves
+  the newest credentials over the stored ones (see "What exists today").
 - **Requested scopes**: `urn:ietf:params:jmap:core` + `urn:ietf:params:
 jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   sent).
@@ -41,9 +46,35 @@ jmap:mail` only (no `jmap:submission`: confirmations are imported, not
 ### Client registration (one-time)
 
 Fastmail issues OAuth client ids by email to partnerships@fastmailteam.com
-(no self-serve). Until the reply sets `FASTMAIL_OAUTH_CLIENT_ID`, the
-buttons stay hidden; everything above is already coded and tested.
-Ready-to-send request:
+(no self-serve). The id is in place and the flow runs end to end, verified
+2026-09-18 against a real mailbox: consent, code exchange, the
+`jmap/session` check, and a connection row carrying OAuth credentials.
+Fastmail's documentation and live discovery agree with what the code sends:
+
+- No client secret exists for a public PKCE client; the exchange body is
+  `client_id`, `redirect_uri`, `grant_type`, `code`, `code_verifier`.
+- `urn:ietf:params:jmap:core` covers `PushSubscription/set`, so core and
+  mail stay the only scopes (submission is only for sending, which the app
+  does not do).
+- Refresh always returns a NEW refresh token that the client MUST store in
+  place of the old one; reusing a stale token revokes the grant. The
+  strict rotation in `requestFastmailTokenSet` is correct as written.
+- A registered `http://localhost/` URI accepts any port, and `localhost`
+  may be written `127.0.0.1` or `::1`. The hostname must be a loopback
+  one, so the flow cannot complete behind `expense.localhost`: to walk it
+  by hand, run the app on a loopback origin
+  (`pnpm exec react-router dev --port 5199`).
+
+One trap worth naming, since it cost a session: probing `/oauth/refresh`
+with a made-up code answers `invalid_request invalid signing_id`, which
+reads like a client fault and is not one. A bogus code carries no signing
+id, and nothing about that answer changes when you send the exact
+registered client id with no code, a bogus `client_secret`, a bogus
+`signing_id`, or an `Origin` header (the last gets `invalid origin`, which
+never applies here because the exchange runs server-side). A code-free
+probe cannot tell a healthy registration from a broken one; run the flow.
+
+The request that was sent:
 
 > Subject: OAuth client registration for "Expense" (JMAP mail client)
 >
@@ -70,22 +101,6 @@ Ready-to-send request:
 >
 > Thanks,
 > Assaf
-
-When the reply arrives, check it against the assumptions baked into
-`app/lib/fastmail-oauth.server.ts`:
-
-- If the reply requires a client secret: add
-  `FASTMAIL_OAUTH_CLIENT_SECRET` to `app/lib/env.ts` and include
-  `client_secret` in both token POSTs when non-empty.
-- If the reply forces https-only redirect URIs (no localhost port
-  allowance): update the `redirectUri` derivation in
-  `app/routes/connect-fastmail.ts` and re-verify the dev flow.
-- If `PushSubscription/set` needs a scope beyond `jmap:core`: add it to
-  `OAUTH_SCOPES`; no other code changes (users re-consent once).
-- If the token response omits `refresh_token` on refresh (some servers
-  only return it on the code exchange): stop rotating
-  `refreshTokenEnc` when absent instead of persisting null; the current
-  code assumes Fastmail always rotates, per their docs.
 
 ## Gmail / Google Workspace
 
@@ -190,15 +205,15 @@ First-run flow for users who connect their own mailbox instead of signing
 up with email + verification link (entry: "Connect a Fastmail account
 instead" on the sign-up flow, /login?mode=create).
 
-- **Token = mailbox control = email verification.** The step-1 form pastes
-  a Fastmail API token; `verifyJmapToken` proves it live against
-  `jmap/session`, which also reveals the account's address; no typing.
-  Step 2 sets a password (new account) or enters the existing account's
-  password (attach). On success `emailVerifiedAt` is stamped WITHOUT an
-  emailed link: a valid token is strictly stronger proof than a
-  click-through link. Session cookie + redirect into `/email-review` with
-  `?onboarding=1` (the "Finish setup" CTA lands on the expense list, which
-  shows a one-time welcome panel: the flow flags the account via the
+- **Mailbox control = email verification.** Step 1 sends the user to the
+  provider's consent screen; the callback proves the mailbox live against
+  `jmap/session`, which also reveals the account's address, so nothing is
+  typed there. Step 2 sets a password (new account) or enters the existing
+  account's password (attach). On success `emailVerifiedAt` is stamped
+  WITHOUT an emailed link: a connected mailbox is strictly stronger proof
+  than a click-through link. Session cookie + redirect into `/email-review`
+  with `?onboarding=1` (the "Finish setup" CTA lands on the expense list,
+  which shows a one-time welcome panel: the flow flags the account via the
   `welcomePending` setting; other accounts never see it).
 - **Login email claimed as a VERIFIED sender.** The same proof claims the
   address as a verified receipts-by-email sender
@@ -210,23 +225,25 @@ instead" on the sign-up flow, /login?mode=create).
   the EMAIL + PASSWORD the user signs in with, and the mailbox connects to
   THAT account. No account for the entered email → create one (name
   derived from the email local part, numeric suffix on collision,
-  `emailVerifiedAt` stamped; the token proves mailbox control); verified
-  account → sign in (`login()`, so lockout/rehash apply) and attach; stale
-  unverified signup → replaced via `deleteUnverifiedUser`. The token's own
-  address only PRE-FILLS the email field: a mailbox address that happens
-  to own an account the user can't authenticate to (e.g. a bootstrap
-  account) must not block attaching to the user's real account. The
-  receipts-by-email sender is claimed as verified only when the account
-  email equals the mailbox address (the token proves control of the
-  mailbox, not of other addresses). A mailbox already claimed by another
-  workspace refuses with the standard error and any half-created account
-  is rolled back. The step-1 resolution (`verifyOnboardingToken`) reports
-  none/verified/unverified so the UI picks the right copy.
-  Attach can still dead-end when the user doesn't know their account
-  password. The attach step links to `/reset-password?email=…`, so
-  mailbox control (the token) plus the emailed link recovers the account.
-- The user still sets a password: sessions expire after 30 days; the token
-  is stored AES-256-GCM encrypted as usual.
+  `emailVerifiedAt` stamped; the connection proves mailbox control);
+  verified account → sign in (`login()`, so lockout/rehash apply) and
+  attach; stale unverified signup → replaced via `deleteUnverifiedUser`.
+  The connected mailbox's own address only PRE-FILLS the email field: a
+  mailbox address that happens to own an account the user can't
+  authenticate to (e.g. a bootstrap account) must not block attaching to
+  the user's real account. The receipts-by-email sender is claimed as
+  verified only when the account email equals the mailbox address (the
+  connection proves control of the mailbox, not of other addresses). A
+  mailbox already claimed by another workspace refuses with the standard
+  error and any half-created account is rolled back; one this account
+  already has is refreshed in place. The step-2 resolution
+  (`oauthOnboardingState`) reports none/verified/unverified so the UI picks
+  the right copy. Attach can still dead-end when the user doesn't know
+  their account password. The attach step links to
+  `/reset-password?email=…`, so mailbox control (the connected mailbox)
+  plus the emailed link recovers the account.
+- The user still sets a password: sessions expire after 30 days; the
+  credentials are stored AES-256-GCM encrypted as usual.
 
 ## Discovery surfaces (how users hear about connecting)
 
@@ -264,15 +281,17 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   email. `EmailProcessLog`, one row per evaluated email (idempotency key =
   connection + JMAP email id), the audit/health log and the source of the
   "processed in the last 24 hours" stat.
-- **Token handling**: the user generates a Fastmail API token (Settings →
-  Privacy & Security → API tokens), pastes it on the Email page.
-  We verify it live against `https://api.fastmail.com/jmap/session`
-  (`app/lib/jmap.server.ts`, which distinguishes invalid token / no mail scope /
-  network), then store it **AES-256-GCM encrypted**
-  (`app/lib/token-crypto.server.ts`, key = `EMAIL_TOKEN_ENCRYPTION_KEY`, 32 bytes
-  base64). The token is never returned to the client after connect.
-- **Store** (`app/lib/db/email-connections.ts`): create (with exclusivity
-  checks), list (with last-24h stat, never the token), remove, plus the
+- **Token handling**: connecting runs the provider's OAuth flow (above) and
+  both tokens are stored **AES-256-GCM encrypted**
+  (`app/lib/token-crypto.server.ts`, key = `EMAIL_TOKEN_ENCRYPTION_KEY`,
+  32 bytes base64). No token is ever returned to the client. Connections
+  made earlier from a pasted Fastmail API token keep resolving through
+  `connectionAccessToken` unchanged.
+- **Store** (`app/lib/db/email-connections.ts`): create or refresh (a
+  connect for a mailbox this workspace already has saves the newest
+  credentials over the stored ones and clears needs-attention, since the
+  provider revoked the old refresh token; a mailbox another workspace owns
+  is refused), list (with last-24h stat, never the token), remove, plus the
   push-subscription state, lastPushAt stamp, and status flips.
 - **Per-connection push** (`app/lib/email-connection-push.server.ts`): a
   JMAP `PushSubscription` per connection, renewed by the daily cron.

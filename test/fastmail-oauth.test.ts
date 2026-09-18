@@ -408,6 +408,23 @@ describe("fastmail-oauth-callback", () => {
     expect(decryptSecret(String(connection.refreshTokenEnc))).toBe("oauth-rt");
   });
 
+  it("sends a mailbox the provider will not vouch for back with the verify reason", async () => {
+    mockedExchange.mockResolvedValue(tokenSet());
+    mockedVerify.mockResolvedValue({
+      ok: false,
+      reason: "no-mail-account",
+      message: "That token cannot read mail.",
+    });
+    const cookie = await sessionCookieWith([
+      FM_OAUTH_SESSION_KEY,
+      flow({ next: "emails" }),
+    ]);
+    const res = await loader(
+      loaderArgs(callbackRequest("code=one-time&state=flow-state", cookie)),
+    );
+    expect(res.headers.get("location")).toBe("/emails?oauthError=verify");
+  });
+
   it("lands an anonymous callback on the onboarding flow via fmPending", async () => {
     mockedExchange.mockResolvedValue(tokenSet());
     mockedVerify.mockResolvedValue({
@@ -615,7 +632,7 @@ describe("onboarding via fmPending", () => {
     expect(connection.accountId).toBe(account.id);
   });
 
-  it("errors without a form token and without parked credentials", async () => {
+  it("errors without parked credentials", async () => {
     // data() results arrive as { data, init } on a direct action call.
     const res = (await action({
       request: onboardForm("create", "orphan@example.com"),

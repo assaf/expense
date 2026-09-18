@@ -22,17 +22,12 @@ import {
   resendInboundSenderVerification,
 } from "~/lib/db/inbound";
 import {
-  createEmailConnection,
   listEmailConnections,
   readEmailConnection,
   removeEmailConnection,
 } from "~/lib/db/email-connections";
 import { isGmailOAuthConfigured } from "~/lib/google-oauth.server";
-import { verifyJmapToken } from "~/lib/jmap.server";
-import {
-  encryptSecret,
-  isTokenCryptoConfigured,
-} from "~/lib/token-crypto.server";
+import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
   connectionAccessToken,
   isFastmailOAuthConfigured,
@@ -44,8 +39,9 @@ import type { Route } from "./+types/emails";
 /**
  * Email: how receipts get into Expense by email. Two features:
  *
- * 1. Connected email accounts: a user's own mailbox (Fastmail via JMAP) whose
- *    receipts are imported automatically (expense added, email moved to
+ * 1. Connected email accounts: a user's own mailbox (Fastmail via JMAP,
+ *    Gmail over the Gmail API), connected through the provider's OAuth flow,
+ *    whose receipts are imported automatically (expense added, email moved to
  *    Trash, and a reply with an edit link lands in the inbox).
  * 2. Receipts by email: a dedicated forward-to address; forwarding a receipt
  *    email there parses and adds it (only from verified sender addresses).
@@ -89,7 +85,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     ? connected === "1"
       ? {
           ok: true,
-          text: `${params.get("address") ?? "The mailbox"} connected; expenses will import automatically.`,
+          text: `${params.get("address") ?? "The mailbox"} ${
+            params.get("reconnected")
+              ? "reconnected with fresh credentials"
+              : "connected"
+          }; expenses will import automatically.`,
         }
       : { ok: false, text: params.get("reason") ?? "Could not connect." }
     : oauthError && Object.hasOwn(OAUTH_ERROR_TEXT.fastmail, oauthError)
@@ -176,45 +176,6 @@ export async function action({ request }: Route.ActionArgs) {
     case "removeInboundSender": {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;
-    }
-    case "connectEmail": {
-      if (!isTokenCryptoConfigured()) {
-        return Response.json(
-          {
-            ok: false,
-            error:
-              "Email account connections are not configured on this deployment.",
-          },
-          { status: 503 },
-        );
-      }
-      const token = formString(form, "token").trim();
-      if (!token) {
-        return Response.json({
-          ok: false,
-          error: "Paste your API token first.",
-        });
-      }
-      const verification = await verifyJmapToken(token);
-      if (!verification.ok) {
-        return Response.json({ ok: false, error: verification.message });
-      }
-      const result = await createEmailConnection({
-        accountId: user.accountId,
-        provider: "fastmail",
-        emailAddress: verification.info.username,
-        remoteAccountId: verification.info.mailAccountId,
-        tokenEnc: encryptSecret(token),
-      });
-      if (!result.ok) return Response.json(result);
-      console.info("[email-connections] connected", {
-        accountId: user.accountId,
-        address: result.connection.emailAddress,
-      });
-      return Response.json({
-        ok: true,
-        address: result.connection.emailAddress,
-      });
     }
     case "disconnectEmail": {
       const id = formString(form, "id");

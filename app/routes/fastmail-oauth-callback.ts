@@ -24,8 +24,9 @@ import {
  * against the JMAP session endpoint — the same live check the paste flow
  * applies, which also enforces "has a mail account". Then:
  *
- * - signed-in: create the connection on the user's account (mirroring the
- *   connectEmail intent in emails.tsx) and land on /emails;
+ * - signed-in: create the connection on the user's account, or refresh the
+ *   credentials of the one this account already has (see
+ *   createEmailConnection) and land on /emails;
  * - anonymous: park the ENCRYPTED credentials on the session (fmPending)
  *   for the onboarding flow to consume, and land on /onboarding.
  *
@@ -108,9 +109,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     console.info("[fastmail-oauth] connected", {
       accountId: user.accountId,
       address: result.connection.emailAddress,
+      reconnected: result.reconnected,
     });
     return finish(
-      `/emails?connected=1&address=${encodeURIComponent(result.connection.emailAddress)}`,
+      `/emails?connected=1&address=${encodeURIComponent(
+        result.connection.emailAddress,
+      )}${result.reconnected ? "&reconnected=1" : ""}`,
     );
   }
 

@@ -1,12 +1,9 @@
-import { useState } from "react";
 import { ArrowRight, Mail, Plug, PlugZap } from "lucide-react";
-import { useFetcherNotice } from "~/components/settings/use-fetcher-notice";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { OrDivider } from "~/components/ui/OrDivider";
 import { Card } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
-import { Input } from "~/components/ui/Input";
 import { LocalDate } from "~/components/ui/LocalTime";
 import { RemoveButton } from "~/components/ui/RemoveButton";
 import { Section } from "~/components/ui/Section";
@@ -15,17 +12,11 @@ import type { EmailConnectionView } from "~/lib/db/email-connections";
 
 /**
  * Email page → Email accounts: connect a user's own mailbox for automatic
- * expense import. Today Fastmail-only (JMAP): the connect flow walks the
- * user through generating an API token in Fastmail, verifies it live, and
- * stores it encrypted. Each connected mailbox shows its health stats
+ * expense import. Connecting runs the provider's OAuth flow (Fastmail over
+ * JMAP, Gmail over the Gmail API) and the tokens are stored encrypted;
+ * nothing is pasted by hand. Each connected mailbox shows its health stats
  * (received / processed / last-24h / last webhook) and a disconnect button.
  */
-
-interface ConnectResult {
-  ok: boolean;
-  error?: string;
-  address?: string;
-}
 
 export function EmailAccountsSection({
   connections,
@@ -81,7 +72,7 @@ export function EmailAccountsSection({
                 {oauthNotice.text}
               </p>
             ) : null}
-            <ConnectForm
+            <ConnectButtons
               oauthConfigured={oauthConfigured}
               googleConfigured={googleConfigured}
             />
@@ -159,24 +150,18 @@ function ConnectionRow({ connection }: { connection: EmailConnectionView }) {
   );
 }
 
-function ConnectForm({
+/** The connect entry points: one button per configured provider, or a note
+ * when this deployment has no provider OAuth client. Connecting runs the
+ * provider's OAuth flow; nothing is pasted by hand. */
+function ConnectButtons({
   oauthConfigured,
   googleConfigured,
 }: {
   oauthConfigured: boolean;
   googleConfigured: boolean;
 }) {
-  const fetcher = useFetcher<ConnectResult>();
-  const [token, setToken] = useState("");
-  const busy = fetcher.state !== "idle";
-  const { notice, setNotice } = useFetcherNotice(
-    fetcher.data,
-    (address) => `${address} connected; expenses will import automatically.`,
-    () => setToken(""),
-  );
-
   return (
-    <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+    <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
       {googleConfigured ? (
         <>
           <Button asChild size="md" className="w-full">
@@ -185,90 +170,26 @@ function ConnectForm({
               Connect with Gmail
             </a>
           </Button>
-          <div className="my-4">
-            <OrDivider />
-          </div>
+          {oauthConfigured ? (
+            <div className="my-4">
+              <OrDivider />
+            </div>
+          ) : null}
         </>
       ) : null}
-      <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        Connect your Fastmail
-      </h3>
       {oauthConfigured ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Button asChild size="sm">
-            <a href="/connect-fastmail?next=emails">
-              <Plug aria-hidden="true" className="h-4 w-4" />
-              Connect with Fastmail
-            </a>
-          </Button>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            or paste an API token
-          </p>
-        </div>
-      ) : null}
-      <ol className="mb-2 list-decimal space-y-0.5 pl-5 text-xs text-gray-500 dark:text-gray-400">
-        <li>
-          Open{" "}
-          <a
-            href="https://app.fastmail.com/settings/security/tokens/new"
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            Fastmail → Settings → Privacy &amp; Security → API tokens
-            <PlugZap
-              aria-hidden="true"
-              className="ml-0.5 inline h-3 w-3 align-text-bottom"
-            />
-          </a>{" "}
-          (log in first).
-        </li>
-        <li>
-          Create a token named “Expense” with <b>Read mail</b> and{" "}
-          <b>Compose</b> scopes.
-        </li>
-        <li>Copy the token and paste it below.</li>
-      </ol>
-      <fetcher.Form method="post" className="flex items-center gap-2">
-        <input type="hidden" name="intent" value="connectEmail" />
-        <Input
-          type="password"
-          name="token"
-          value={token}
-          onChange={(e) => {
-            setToken(e.target.value);
-            setNotice(null);
-          }}
-          placeholder="Paste your Fastmail API token"
-          autoComplete="off"
-          required
-          aria-invalid={notice && !notice.ok ? true : undefined}
-          invalid={!!notice && !notice.ok}
-          className="min-w-0 flex-1"
-        />
-        <Button
-          type="submit"
-          size="sm"
-          variant="secondary"
-          disabled={busy || !token.trim()}
-        >
-          {busy ? "Verifying…" : "Connect"}
+        <Button asChild size="md" className="w-full">
+          <a href="/connect-fastmail?next=emails">
+            <PlugZap aria-hidden="true" className="h-4 w-4" />
+            Connect with Fastmail
+          </a>
         </Button>
-      </fetcher.Form>
-      {notice ? (
-        <p
-          role="status"
-          className={`mt-1 text-xs ${notice.ok ? "text-green-700 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
-        >
-          {notice.text}
-        </p>
-      ) : (
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          The token is verified with Fastmail and stored encrypted; OAuth
-          connections are stored encrypted too. You can revoke either any time
-          in Gmail or Fastmail, or disconnect it here.
-        </p>
-      )}
+      ) : null}
+      {!oauthConfigured && !googleConfigured ? (
+        <StatusNote>
+          No provider is configured for connecting a mailbox on this deployment.
+        </StatusNote>
+      ) : null}
     </div>
   );
 }

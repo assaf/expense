@@ -85,7 +85,23 @@ export async function listEmailConnections(
     .orderBy((c) => c.createdAt.asc())
     .all();
   if (rows.length === 0) return [];
-  const ids = rows.map((r) => r.id);
+  const stats = await connectionStats(rows.map((r) => r.id));
+  return rows.map((row) => {
+    const stat = stats.get(row.id)!;
+    return toView(row, stat.processedLast24h, stat.pendingReview);
+  });
+}
+
+/** Per-connection stats for the Settings list: expenses created in the last
+ * 24h, and receipts still waiting on the review list. Ids with no log rows
+ * come back as zeros. */
+async function connectionStats(
+  ids: string[],
+): Promise<Map<string, { processedLast24h: number; pendingReview: number }>> {
+  const stats = new Map(
+    ids.map((id) => [id, { processedLast24h: 0, pendingReview: 0 }]),
+  );
+  if (ids.length === 0) return stats;
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const [counts, pending] = await Promise.all([
     db.orm.public.EmailProcessLog.where((l) =>
@@ -103,17 +119,15 @@ export async function listEmailConnections(
       .groupBy("connectionId")
       .aggregate((a) => ({ count: a.count() })),
   ]);
-  const byConnection = new Map(counts.map((c) => [c.connectionId, c.count]));
-  const byConnectionPending = new Map(
-    pending.map((c) => [c.connectionId, c.count]),
-  );
-  return rows.map((row) =>
-    toView(
-      row,
-      byConnection.get(row.id) ?? 0,
-      byConnectionPending.get(row.id) ?? 0,
-    ),
-  );
+  for (const c of counts) {
+    const stat = stats.get(c.connectionId);
+    if (stat) stat.processedLast24h = c.count;
+  }
+  for (const p of pending) {
+    const stat = stats.get(p.connectionId);
+    if (stat) stat.pendingReview = p.count;
+  }
+  return stats;
 }
 
 export type EmailConnectionProvider = "fastmail" | "gmail";
@@ -121,15 +135,15 @@ export type EmailConnectionProvider = "fastmail" | "gmail";
 /**
  * The connection owning a mailbox address, if any. Enforces the global
  * one-workspace-per-mailbox rule at connect time (the DB unique index is
- * the backstop).
+ * the backstop); the id lets a reconnect save over the row in place.
  */
 export async function findEmailConnectionByAddress(
   emailAddress: string,
-): Promise<{ accountId: string } | undefined> {
+): Promise<{ id: string; accountId: string } | undefined> {
   const row = await db.orm.public.EmailConnection.where((c) =>
     c.emailAddress.eq(emailAddress.trim().toLowerCase()),
   )
-    .select("accountId")
+    .select("id", "accountId")
     .first();
   return row ?? undefined;
 }
@@ -202,15 +216,11 @@ export async function listAllEmailConnections(): Promise<
 }
 
 export type CreateEmailConnectionResult =
-  | { ok: true; connection: EmailConnectionView }
+  | { ok: true; connection: EmailConnectionView; reconnected: boolean }
   | { ok: false; error: string };
 
-/**
- * Save a verified connection. The token arrives already verified against
- * the JMAP session endpoint (see jmap.server.ts); it is encrypted here and
- * the plaintext never touches the database.
- */
-export async function createEmailConnection(input: {
+/** The credential set a connect carries, for a new row or a refresh. */
+interface ConnectionCredentials {
   accountId: string;
   provider: EmailConnectionProvider;
   emailAddress: string;
@@ -218,55 +228,100 @@ export async function createEmailConnection(input: {
   tokenEnc: string;
   refreshTokenEnc?: string;
   tokenExpiresAt?: string;
-}): Promise<CreateEmailConnectionResult> {
+}
+
+/**
+ * Connect a mailbox, or save fresh credentials over one this workspace
+ * already has. The token arrives already verified against the JMAP session
+ * endpoint (see jmap.server.ts) and encrypted by the caller; the plaintext
+ * never touches the database.
+ *
+ * Reconnecting saves the newest grant in place: Fastmail revokes the
+ * refresh token it handed out before, so the fresh set is the only usable
+ * one, and a fresh grant means the connection is healthy again (status
+ * back to active). A mailbox another workspace owns is still refused, and
+ * one mailbox feeds exactly one workspace.
+ */
+export async function createEmailConnection(
+  input: ConnectionCredentials,
+): Promise<CreateEmailConnectionResult> {
   const address = input.emailAddress.trim().toLowerCase();
   const existing = await findEmailConnectionByAddress(address);
   if (existing) {
+    if (existing.accountId !== input.accountId) {
+      return {
+        ok: false,
+        error: `${address} is already connected to another workspace.`,
+      };
+    }
+    await saveConnectionCredentials(existing.id, input);
     return {
-      ok: false,
-      error:
-        existing.accountId === input.accountId
-          ? `${address} is already connected.`
-          : `${address} is already connected to another workspace.`,
+      ok: true,
+      connection: await connectionById(existing.id),
+      reconnected: true,
     };
   }
-  const created = await (async () => {
-    try {
+  try {
+    const row = await db.orm.public.EmailConnection.create({
+      id: ulid(),
+      accountId: input.accountId,
+      provider: input.provider,
+      emailAddress: address,
+      remoteAccountId: input.remoteAccountId,
+      tokenEnc: input.tokenEnc,
+      refreshTokenEnc: input.refreshTokenEnc,
+      tokenExpiresAt: input.tokenExpiresAt
+        ? fromIso(input.tokenExpiresAt)
+        : null,
+      status: "active",
+      createdAt: nowWire(),
+    });
+    return { ok: true, connection: toView(row, 0, 0), reconnected: false };
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // The address check raced another connect; the unique index is the real
+    // gate. Refresh in place when the row is ours, refuse when it is not.
+    const raced = await findEmailConnectionByAddress(address);
+    if (!raced) throw err;
+    if (raced.accountId !== input.accountId) {
       return {
-        ok: true as const,
-        row: await db.orm.public.EmailConnection.create({
-          id: ulid(),
-          accountId: input.accountId,
-          provider: input.provider,
-          emailAddress: address,
-          remoteAccountId: input.remoteAccountId,
-          tokenEnc: input.tokenEnc,
-          refreshTokenEnc: input.refreshTokenEnc,
-          tokenExpiresAt: input.tokenExpiresAt
-            ? fromIso(input.tokenExpiresAt)
-            : null,
-          status: "active",
-          createdAt: nowWire(),
-        }),
+        ok: false,
+        error: `${address} is already connected to another workspace.`,
       };
-    } catch (err) {
-      // The address pre-check raced another connection: the unique index is
-      // the real gate, so answer with the same message rather than a raw
-      // Postgres error.
-      if (isUniqueViolation(err)) {
-        return {
-          ok: false as const,
-          error: `${address} is already connected.`,
-        };
-      }
-      throw err;
     }
-  })();
-  if (!created.ok) return { ok: false, error: created.error };
-  return {
-    ok: true,
-    connection: toView(created.row, 0, 0),
-  };
+    await saveConnectionCredentials(raced.id, input);
+    return {
+      ok: true,
+      connection: await connectionById(raced.id),
+      reconnected: true,
+    };
+  }
+}
+
+/** Write the newest credentials over a connection, clearing the OAuth
+ * fields when the caller brought none (a pasted API token replaces them),
+ * and clearing any needs-attention state. */
+async function saveConnectionCredentials(
+  id: string,
+  input: ConnectionCredentials,
+): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id }).update({
+    provider: input.provider,
+    remoteAccountId: input.remoteAccountId,
+    tokenEnc: input.tokenEnc,
+    refreshTokenEnc: input.refreshTokenEnc ?? null,
+    tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
+    status: "active",
+  });
+}
+
+/** One connection's view with its stats, for a reconnect response. */
+async function connectionById(id: string): Promise<EmailConnectionView> {
+  const row = await db.orm.public.EmailConnection.where({ id }).first();
+  if (!row) throw new Error(`Connection ${id} vanished mid-connect`);
+  const stats = await connectionStats([id]);
+  const stat = stats.get(id) ?? { processedLast24h: 0, pendingReview: 0 };
+  return toView(row, stat.processedLast24h, stat.pendingReview);
 }
 
 /**
