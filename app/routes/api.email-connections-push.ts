@@ -3,7 +3,6 @@ import {
   readFastmailPush,
 } from "~/lib/fastmail-push.server";
 import { setConnectionVerificationCode } from "~/lib/email-connection-push.server";
-import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
 import { captureWarning } from "~/lib/errors.server";
 import {
   readEmailConnectionById,
@@ -60,8 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
     const { pushSubscriptionId: subscriptionId, verificationCode: code } =
       pushVerificationOrEmpty(payload);
     try {
-      const token = await connectionAccessToken(connection);
-      await setConnectionVerificationCode(token, subscriptionId, code);
+      await setConnectionVerificationCode(connection, subscriptionId, code);
       if (connection.status === "error") {
         await setEmailConnectionStatus(connection.id, "active");
       }

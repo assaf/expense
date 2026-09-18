@@ -25,15 +25,31 @@ import {
   listEmailConnections,
   readEmailConnection,
   removeEmailConnection,
+  createEmailConnection,
 } from "~/lib/db/email-connections";
 import { isGmailOAuthConfigured } from "~/lib/google-oauth.server";
-import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
-  connectionAccessToken,
-  isFastmailOAuthConfigured,
-} from "~/lib/fastmail-oauth.server";
-import { destroyConnectionPushSubscription } from "~/lib/email-connection-push.server";
-import { formString, unknownIntent } from "~/lib/validation";
+  isTokenCryptoConfigured,
+  encryptSecret,
+} from "~/lib/token-crypto.server";
+import { isFastmailOAuthConfigured } from "~/lib/fastmail-oauth.server";
+import {
+  destroyConnectionPushSubscription,
+  ensureConnectionPushSubscription,
+} from "~/lib/email-connection-push.server";
+import {
+  learnAuthservId,
+  tryMailboxIdByRole,
+} from "~/lib/email-connection-mail.server";
+import {
+  verifyJmapServer,
+  resolveJmapSessionUrl,
+  JmapMethodError,
+  type JmapServer,
+} from "~/lib/jmap.server";
+import { SsrfError } from "~/lib/ssrf.server";
+import { captureWarning } from "~/lib/errors.server";
+import { badRequest, formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/emails";
 
 /**
@@ -186,10 +202,9 @@ export async function action({ request }: Route.ActionArgs) {
         // disconnects. The orphaned subscription dies at expiry and its
         // pushes hit the webhook's unknown-connection path.
         try {
-          const token = await connectionAccessToken(connection);
           if (connection.pushSubscriptionId) {
             await destroyConnectionPushSubscription(
-              token,
+              connection,
               connection.pushSubscriptionId,
             );
           }
@@ -206,6 +221,102 @@ export async function action({ request }: Route.ActionArgs) {
         removed,
       });
       return Response.json({ ok: true });
+    }
+    case "connectJmapServer": {
+      const rawUrl = formString(form, "serverUrl").trim();
+      const authMode = formString(form, "authMode");
+      const username = formString(form, "username").trim();
+      const secret = formString(form, "secret");
+      if (!rawUrl) return badRequest("Enter the server's URL.");
+      if (!secret) return badRequest("Enter the token or app password.");
+      if (authMode === "basic" && !username) {
+        return badRequest("Enter the username for that app password.");
+      }
+      // Normalize to the RFC 8620 session URL and require TLS (§8.1). The
+      // explicit path a user pastes is kept verbatim.
+      let sessionUrl: string;
+      try {
+        sessionUrl = resolveJmapSessionUrl(rawUrl);
+        if (new URL(sessionUrl).protocol !== "https:") {
+          return badRequest("Use the server's https URL.");
+        }
+      } catch {
+        return badRequest("That is not a valid URL.");
+      }
+      const authorization =
+        authMode === "basic"
+          ? `Basic ${Buffer.from(`${username}:${secret}`).toString("base64")}`
+          : `Bearer ${secret}`;
+      const server: JmapServer = { sessionUrl, authorization };
+      const verified = await verifyJmapServer(server);
+      if (!verified.ok) return badRequest(verified.message);
+      // Require a real Inbox before writing anything: without one there is
+      // no mail the drain could read (RFC 8621 §2.5 makes roles optional).
+      try {
+        const inbox = await tryMailboxIdByRole(server, "inbox");
+        if (!inbox) {
+          return badRequest(
+            "This account has no Inbox mailbox, so there is no mail to read.",
+          );
+        }
+      } catch (err) {
+        return badRequest(
+          err instanceof SsrfError
+            ? err.message
+            : "That server could not list its mailboxes; try again.",
+        );
+      }
+      const authservId = await learnAuthservId(
+        server,
+        verified.info.mailAccountId,
+      );
+      // tokenEnc holds the finished Authorization header for a JMAP row
+      // (see email-connection-auth.server.ts), never a bare token.
+      const tokenEnc = encryptSecret(authorization);
+      const result = await createEmailConnection({
+        accountId: user.accountId,
+        provider: "jmap",
+        emailAddress: verified.info.username,
+        remoteAccountId: verified.info.mailAccountId,
+        tokenEnc,
+        sessionUrl,
+        authservId,
+      });
+      if (!result.ok) return badRequest(result.error);
+      // Best-effort push: a server without PushSubscription still works
+      // through the daily drain, so a failure here never fails the connect.
+      try {
+        await ensureConnectionPushSubscription({
+          id: result.connection.id,
+          provider: "jmap",
+          sessionUrl,
+          tokenEnc,
+        });
+      } catch (err) {
+        if (
+          err instanceof JmapMethodError &&
+          (err.type === "unknownMethod" || err.type === "notSupported")
+        ) {
+          console.info(
+            `[email-connections] push unsupported on ${new URL(sessionUrl).host}; the drain covers it`,
+          );
+        } else {
+          captureWarning("[email-connections] push setup failed", {
+            connectionId: result.connection.id,
+            error: err,
+          });
+        }
+      }
+      console.info("[email-connections] connected a JMAP server", {
+        accountId: user.accountId,
+        address: result.connection.emailAddress,
+        reconnected: result.reconnected,
+      });
+      return Response.json({
+        ok: true,
+        address: result.connection.emailAddress,
+        reconnected: result.reconnected,
+      });
     }
     default:
       return unknownIntent();

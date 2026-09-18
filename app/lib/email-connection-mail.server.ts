@@ -3,6 +3,7 @@ import {
   buildRfc822Message,
   type SendEmailInput,
 } from "~/lib/email-mime.server";
+import { authservIdsIn } from "~/lib/email-auth.server";
 import {
   fetchRawRfc822,
   formatAddress,
@@ -11,6 +12,8 @@ import {
   jmapImportEmail,
   jmapSessionForToken,
   jmapUploadBlob,
+  serverLabel,
+  type JmapServer,
   type JmapTokenInfo,
   type RawRfc822Email,
 } from "~/lib/jmap.server";
@@ -35,13 +38,17 @@ interface MailboxList {
 }
 
 /** Resolve a mailbox id by its role ("inbox", "trash"); shared with the
- * rule-inference scan, which reads the Inbox the same way. */
-async function mailboxIdByRole(token: string, role: string): Promise<string> {
-  const responses = await jmapCall(token, [
+ * rule-inference scan, which reads the Inbox the same way. Throws when the
+ * server has no mailbox with that role. */
+export async function mailboxIdByRole(
+  server: JmapServer,
+  role: string,
+): Promise<string> {
+  const responses = await jmapCall(server, [
     [
       "Mailbox/get",
       {
-        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        accountId: (await jmapSessionForToken(server)).mailAccountId,
         ids: null,
         properties: ["id", "role"],
       },
@@ -52,6 +59,84 @@ async function mailboxIdByRole(token: string, role: string): Promise<string> {
   const box = args.list.find((b) => b.role === role);
   if (!box) throw new Error(`No mailbox with role "${role}"`);
   return box.id;
+}
+
+/** Like `mailboxIdByRole`, but undefined instead of a throw when the server
+ * has no such role (RFC 8621 §2.5: no role is required to exist). Used
+ * where a missing role only skips an optional step (the Trash move). */
+export async function tryMailboxIdByRole(
+  server: JmapServer,
+  role: string,
+): Promise<string | undefined> {
+  try {
+    return await mailboxIdByRole(server, role);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith("No mailbox with role ")
+    ) {
+      return undefined;
+    }
+    throw err;
+  }
+}
+
+/** Learn the authserv-id of the mailbox's delivery stamp from the newest
+ * clause-bearing Authentication-Results header of a recent email. Returns
+ * undefined when the mailbox is empty, has no stamped mail yet, or the
+ * server does not expose header properties. */
+export async function learnAuthservId(
+  server: JmapServer,
+  accountId: string,
+): Promise<string | undefined> {
+  try {
+    const inboxId = await tryMailboxIdByRole(server, "inbox");
+    if (!inboxId) return undefined;
+    const query = await jmapCall(server, [
+      [
+        "Email/query",
+        {
+          accountId,
+          filter: { inMailbox: inboxId },
+          sort: [{ property: "receivedAt", isAscending: false }],
+          limit: 5,
+        },
+        "m0",
+      ],
+    ]);
+    const ids = (query[0]![1] as { ids?: string[] }).ids ?? [];
+    if (ids.length === 0) return undefined;
+    const got = await jmapCall(server, [
+      [
+        "Email/get",
+        {
+          accountId,
+          ids,
+          properties: ["header:Authentication-Results:asText"],
+        },
+        "m0",
+      ],
+    ]);
+    const list = (got[0]![1] as { list?: unknown[] }).list ?? [];
+    const records: string[] = [];
+    for (const row of list) {
+      if (!row || typeof row !== "object") continue;
+      const header =
+        "header:Authentication-Results:asText" in row
+          ? row["header:Authentication-Results:asText"]
+          : undefined;
+      if (!Array.isArray(header)) continue;
+      for (const value of header) {
+        if (typeof value === "string") records.push(value);
+      }
+    }
+    return authservIdsIn(records)[0];
+  } catch (err) {
+    console.warn("[email-connection] could not learn the delivery stamp", {
+      err,
+    });
+    return undefined;
+  }
 }
 
 // --- Inbox query --------------------------------------------------------------
@@ -74,7 +159,7 @@ export interface ConnectionEmailSummary {
  * the query.
  */
 export async function mailboxSummaries(opts: {
-  token: string;
+  server: JmapServer;
   role: string;
   /** Lower bound on receivedAt (exclusive): the drain's lookback window. */
   afterIso?: string;
@@ -85,12 +170,12 @@ export async function mailboxSummaries(opts: {
    * input). Off by default: previews cost extra wire bytes. */
   includePreview?: boolean;
 }): Promise<ConnectionEmailSummary[]> {
-  const mailboxId = await mailboxIdByRole(opts.token, opts.role);
-  const query = await jmapCall(opts.token, [
+  const mailboxId = await mailboxIdByRole(opts.server, opts.role);
+  const query = await jmapCall(opts.server, [
     [
       "Email/query",
       {
-        accountId: (await jmapSessionForToken(opts.token)).mailAccountId,
+        accountId: (await jmapSessionForToken(opts.server)).mailAccountId,
         filter: {
           inMailbox: mailboxId,
           ...(opts.afterIso ? { after: opts.afterIso } : {}),
@@ -103,11 +188,11 @@ export async function mailboxSummaries(opts: {
   ]);
   const ids = (query[0]![1] as { ids?: string[] }).ids ?? [];
   if (ids.length === 0) return [];
-  const got = await jmapCall(opts.token, [
+  const got = await jmapCall(opts.server, [
     [
       "Email/get",
       {
-        accountId: (await jmapSessionForToken(opts.token)).mailAccountId,
+        accountId: (await jmapSessionForToken(opts.server)).mailAccountId,
         ids,
         properties: [
           "id",
@@ -183,7 +268,7 @@ export function parseEmailSummaries(
 
 /** Inbox summaries (role = "inbox"). Retained for the default adapter. */
 export function inboxEmailSummaries(opts: {
-  token: string;
+  server: JmapServer;
   afterIso?: string;
   limit: number;
   descending?: boolean;
@@ -198,12 +283,12 @@ export type RawConnectionEmail = RawRfc822Email;
 
 /** The full RFC 5322 source of an email (blob download), plus metadata. */
 export async function rawConnectionEmail(
-  token: string,
+  server: JmapServer,
   id: string,
 ): Promise<RawConnectionEmail> {
-  const s: JmapTokenInfo = await jmapSessionForToken(token);
+  const s: JmapTokenInfo = await jmapSessionForToken(server);
   const email = await getEmailMetadata({
-    token,
+    server,
     accountId: s.mailAccountId,
     id,
   });
@@ -212,7 +297,7 @@ export async function rawConnectionEmail(
     email,
     accountId: s.mailAccountId,
     downloadUrl: s.downloadUrl,
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: server.authorization },
   });
 }
 
@@ -220,18 +305,26 @@ export async function rawConnectionEmail(
 
 /**
  * Move an email to the Trash mailbox (recoverable; the connected-account
- * pipeline never destroys user mail) and mark it read.
+ * pipeline never destroys user mail) and mark it read. When the server has
+ * no Trash role (RFC 8621 §2.5 allows that) the move is skipped and logged:
+ * the expense still stands, so the mail is simply left in place.
  */
 export async function moveConnectionEmailToTrash(
-  token: string,
+  server: JmapServer,
   id: string,
 ): Promise<void> {
-  const trashId = await mailboxIdByRole(token, "trash");
-  await jmapCall(token, [
+  const trashId = await tryMailboxIdByRole(server, "trash");
+  if (!trashId) {
+    console.warn(
+      `[email-connection] no trash role on ${serverLabel(server.sessionUrl)}; leaving ${id} in place`,
+    );
+    return;
+  }
+  await jmapCall(server, [
     [
       "Email/set",
       {
-        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        accountId: (await jmapSessionForToken(server)).mailAccountId,
         update: {
           [id]: { mailboxIds: { [trashId]: true }, "keywords/$seen": true },
         },
@@ -251,12 +344,12 @@ export async function moveConnectionEmailToTrash(
  * succeeded, so a delivery failure is logged and never fatal.
  */
 export async function deliverConnectionEmailToInbox(
-  token: string,
+  server: JmapServer,
   input: SendEmailInput,
   fromAddress: string,
 ): Promise<boolean> {
   try {
-    const inboxId = await mailboxIdByRole(token, "inbox");
+    const inboxId = await mailboxIdByRole(server, "inbox");
     const raw = buildRfc822Message({
       fromName: "",
       fromEmail: fromAddress,
@@ -267,13 +360,14 @@ export async function deliverConnectionEmailToInbox(
       inReplyTo: input.inReplyTo,
       attachments: input.attachments,
     });
+    const s = await jmapSessionForToken(server);
     const blobId = await jmapUploadBlob(
-      (await jmapSessionForToken(token)).uploadUrl,
-      (await jmapSessionForToken(token)).mailAccountId,
-      `Bearer ${token}`,
+      s.uploadUrl,
+      s.mailAccountId,
+      server.authorization,
       raw,
     );
-    await jmapImportEmail(token, { blobId, mailboxId: inboxId });
+    await jmapImportEmail(server, { blobId, mailboxId: inboxId });
     console.info("[email-connections] confirmation delivered to Inbox", {
       to: input.to,
       subject: input.subject,

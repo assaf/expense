@@ -361,8 +361,13 @@ export interface InboundSenderRecord {
 export interface EmailConnectionRecord {
   id: string;
   accountId: string;
-  /** "fastmail" means JMAP. More providers later (Gmail, …). */
+  /** "fastmail" and "gmail" are OAuth providers; "jmap" is any JMAP server
+   * the user pointed at. */
   provider: string;
+  /** The generic JMAP session URL (provider "jmap"); null otherwise. */
+  sessionUrl: string | null;
+  /** The delivery authserv-id learned at connect (provider "jmap"). */
+  authservId: string | null;
   emailAddress: string;
   /** "active" | "error" (renewal failures flag the row for Settings). */
   status: string;

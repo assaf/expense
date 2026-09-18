@@ -1,5 +1,6 @@
 import { looksLikeReceiptEmail } from "~/lib/email-classify";
 import { mailboxSummaries } from "~/lib/email-connection-mail.server";
+import type { JmapServer } from "~/lib/jmap.server";
 import { domainOf } from "~/lib/validation";
 
 /**
@@ -64,7 +65,7 @@ export interface InferResult {
  * classifier without downloading full messages.
  */
 export async function inferRuleCandidates(
-  token: string,
+  server: JmapServer,
   connectionAddress: string,
   options: InferOptions = {},
 ): Promise<InferResult> {
@@ -78,7 +79,7 @@ export async function inferRuleCandidates(
 
   const afterIso = new Date(Date.now() - lookbackMs).toISOString();
   const summaries = await mailboxSummaries({
-    token,
+    server,
     role: "inbox",
     afterIso,
     limit: maxEmails,

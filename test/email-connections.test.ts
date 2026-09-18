@@ -15,6 +15,7 @@ import {
   removeEmailConnection,
   saveEmailConnectionSubscription,
   saveEmailConnectionWatch,
+  setEmailConnectionAuthservId,
   touchEmailConnectionPush,
   setEmailConnectionStatus,
   type EmailConnectionView,
@@ -130,6 +131,60 @@ describe("email connections store", () => {
     expect(decryptSecret(row.tokenEnc)).toBe("fresh-access");
     expect(decryptSecret(row.refreshTokenEnc!)).toBe("fresh-refresh");
     expect(row.tokenExpiresAt).toBe("2030-02-01T00:00:00.000Z");
+  });
+
+  it("round-trips a generic JMAP server URL and its delivery stamp", async () => {
+    const first = await createEmailConnection({
+      accountId: TEST_ACCOUNT_ID,
+      provider: "jmap",
+      emailAddress: "mailbox@example.com",
+      remoteAccountId: "jmap-acct-1",
+      tokenEnc: encryptSecret("Bearer tok-1"),
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: "mail.example.com",
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.connection.provider).toBe("jmap");
+    expect(first.connection.sessionUrl).toBe(
+      "https://mail.example.com/.well-known/jmap",
+    );
+    expect(first.connection.authservId).toBe("mail.example.com");
+    // The list view carries both columns too.
+    const listed = await listEmailConnections(TEST_ACCOUNT_ID);
+    expect(listed[0]!.sessionUrl).toBe(
+      "https://mail.example.com/.well-known/jmap",
+    );
+    expect(listed[0]!.authservId).toBe("mail.example.com");
+
+    // Re-pointing the same mailbox at another server replaces both.
+    const again = await createEmailConnection({
+      accountId: TEST_ACCOUNT_ID,
+      provider: "jmap",
+      emailAddress: "Mailbox@Example.com",
+      remoteAccountId: "jmap-acct-2",
+      tokenEnc: encryptSecret("Bearer tok-2"),
+      sessionUrl: "https://jmap.other.test/jmap/session",
+      authservId: "other.test",
+    });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.reconnected).toBe(true);
+    expect(again.connection.sessionUrl).toBe(
+      "https://jmap.other.test/jmap/session",
+    );
+    expect(again.connection.authservId).toBe("other.test");
+    const row = (await readEmailConnection(
+      TEST_ACCOUNT_ID,
+      again.connection.id,
+    ))!;
+    expect(decryptSecret(row.tokenEnc)).toBe("Bearer tok-2");
+
+    // The drain's re-learn updates the pinned stamp in place.
+    await setEmailConnectionAuthservId(row.id, "learned.test");
+    expect((await readEmailConnectionById(row.id))!.authservId).toBe(
+      "learned.test",
+    );
   });
 
   it("reports the connection's stats on a reconnect", async () => {

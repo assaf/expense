@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { readBodyLimited } from "~/lib/ssrf.server";
+import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
 import { MAX_RECEIPT_BYTES } from "~/lib/upload-limits";
 
 /**
@@ -11,8 +11,64 @@ import { MAX_RECEIPT_BYTES } from "~/lib/upload-limits";
  * vi.resetModules() re-import, which clobbers the fetch stubs the
  * token-crypto tests install.
  */
-const FASTMAIL_SESSION_URL =
+export const FASTMAIL_SESSION_URL =
   process.env.JMAP_SESSION_URL || "https://api.fastmail.com/jmap/session";
+
+/** A JMAP endpoint plus the exact Authorization header to send. The app's
+ * own mailbox and every connected account are described by one of these,
+ * so nothing below the session lookup is provider-specific. */
+export interface JmapServer {
+  sessionUrl: string;
+  /** The finished header value: `Bearer <token>` or `Basic <base64>`. */
+  authorization: string;
+}
+
+/** The injectable session fetch. Tests substitute one so a loopback mock
+ * stays reachable (the SSRF guard blocks loopback by design). */
+export type SessionFetch = (
+  url: string,
+  init: RequestInit,
+) => Promise<Response>;
+
+/** Normalize a user-supplied JMAP endpoint (RFC 8620 §2.2): a bare host —
+ * or a "/" path — becomes the well-known session path, an explicit path is
+ * kept verbatim (an operator may paste an exact session URL), and a
+ * trailing slash is stripped. Throws on an unparseable URL. */
+export function resolveJmapSessionUrl(input: string): string {
+  const url = new URL(input);
+  if (url.pathname === "" || url.pathname === "/") {
+    url.pathname = "/.well-known/jmap";
+  }
+  return url.toString().replace(/\/$/, "");
+}
+
+/** True when the URL is the app's own (operator-controlled) endpoint: it
+ * may be a loopback mock in tests and needs no SSRF guard. */
+function isAppSessionUrl(sessionUrl: string): boolean {
+  return sessionUrl === FASTMAIL_SESSION_URL;
+}
+
+/** A human label for error messages: "Fastmail" for the app's own
+ * endpoint, otherwise the server's host. */
+export function serverLabel(sessionUrl: string): string {
+  if (isAppSessionUrl(sessionUrl)) return "Fastmail";
+  try {
+    return new URL(sessionUrl).host;
+  } catch {
+    return sessionUrl;
+  }
+}
+
+/** The default session fetch: plain fetch for the app's own endpoint (an
+ * operator-controlled, possibly loopback URL), the SSRF-guarded fetch for a
+ * user-supplied server. */
+const defaultSessionFetch: SessionFetch = (url, init) => {
+  if (isAppSessionUrl(url)) return fetch(url, init);
+  return fetchPublicUrl(url, {
+    timeoutMs: REQUEST_TIMEOUT_MS,
+    headers: init.headers as Record<string, string> | undefined,
+  });
+};
 
 /** Shared JMAP request timeout. Both JMAP clients (fastmail.server.ts, the
  * app's own mailbox, and this module's per-token client) abort hung
@@ -60,7 +116,7 @@ export type JmapTokenVerification =
 
 /** The RFC 8621 session document, narrowed to what the app uses. Zod
  * validated at the wire boundary: the URLs from here feed .replace()
- * templates and every later fetch, and the session is cached per token
+ * templates and every later fetch, and the session is cached per server
  * for the instance lifetime, so one wrong shape would poison them all
  * (the same failure class as EXPENSE-S). */
 const sessionResponseSchema = z.object({
@@ -68,63 +124,110 @@ const sessionResponseSchema = z.object({
   uploadUrl: z.string(),
   downloadUrl: z.string(),
   username: z.string(),
-  primaryAccounts: z.record(z.string(), z.string()),
+  primaryAccounts: z.record(z.string(), z.string()).default({}),
+  /** Diagnostic only; not used for routing. */
+  capabilities: z.record(z.string(), z.unknown()).default({}),
+  accounts: z
+    .record(
+      z.string(),
+      z.object({
+        accountCapabilities: z.record(z.string(), z.unknown()).default({}),
+        isReadOnly: z.boolean().default(false),
+      }),
+    )
+    .default({}),
 });
 
-async function loadSession(token: string): Promise<JmapTokenVerification> {
+const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
+
+/** The mail account id to drive every later call: the primary mail account
+ * when the server names one, otherwise the first writable account that
+ * advertises the mail capability (RFC 8621 §2.5 makes Mailboxes optional,
+ * but a mail account must exist for the pipeline to read anything). */
+function selectMailAccountId(
+  j: z.infer<typeof sessionResponseSchema>,
+): string | undefined {
+  const primary = j.primaryAccounts[MAIL_CAPABILITY];
+  if (primary) return primary;
+  for (const [id, account] of Object.entries(j.accounts)) {
+    if (account.isReadOnly) continue;
+    if (account.accountCapabilities[MAIL_CAPABILITY] !== undefined) return id;
+  }
+  return undefined;
+}
+
+/** Hard cap on the session document: it is a small JSON object, and a
+ * hostile or broken server must not be able to stream into the function. */
+const SESSION_MAX_BYTES = 256 * 1024;
+
+async function loadSession(
+  server: JmapServer,
+  fetchImpl: SessionFetch = defaultSessionFetch,
+): Promise<JmapTokenVerification> {
+  const label = serverLabel(server.sessionUrl);
+  const appEndpoint = label === "Fastmail";
   let res: Response;
   try {
-    res = await fetch(FASTMAIL_SESSION_URL, {
-      headers: { Authorization: `Bearer ${token}` },
+    res = await fetchImpl(server.sessionUrl, {
+      headers: { Authorization: server.authorization },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (err) {
+    // The SSRF guard's messages are already user-facing and specific.
+    if (err instanceof SsrfError) {
+      return { ok: false, reason: "network", message: err.message };
+    }
     return {
       ok: false,
       reason: "network",
-      message: `Could not reach Fastmail: ${String(err)}`,
+      message: `Could not reach ${label}: ${String(err)}`,
     };
   }
   if (res.status === 401 || res.status === 403) {
     return {
       ok: false,
       reason: "invalid-token",
-      message: "Fastmail rejected this token — check it and try again.",
+      message: appEndpoint
+        ? "Fastmail rejected this token — check it and try again."
+        : "The server rejected that credential.",
     };
   }
   if (!res.ok) {
     return {
       ok: false,
       reason: "network",
-      message: `Fastmail returned ${res.status} — try again in a moment.`,
+      message: appEndpoint
+        ? `Fastmail returned ${res.status} — try again in a moment.`
+        : `That server answered HTTP ${res.status}.`,
     };
   }
+  const unreadable = appEndpoint
+    ? "Fastmail returned an unreadable session response."
+    : "That URL is not a JMAP session; check the server address.";
   let body: unknown;
   try {
-    body = await res.json();
-  } catch {
-    return {
-      ok: false,
-      reason: "network",
-      message: "Fastmail returned an unreadable session response.",
-    };
+    body = JSON.parse(
+      (await readBodyLimited(res, SESSION_MAX_BYTES)).toString("utf8"),
+    );
+  } catch (err) {
+    if (err instanceof SsrfError) {
+      return { ok: false, reason: "network", message: err.message };
+    }
+    return { ok: false, reason: "network", message: unreadable };
   }
   const parsed = sessionResponseSchema.safeParse(body);
   if (!parsed.success) {
-    return {
-      ok: false,
-      reason: "network",
-      message: "Fastmail returned an unreadable session response.",
-    };
+    return { ok: false, reason: "network", message: unreadable };
   }
   const j = parsed.data;
-  const mailAccountId = j.primaryAccounts["urn:ietf:params:jmap:mail"];
+  const mailAccountId = selectMailAccountId(j);
   if (!mailAccountId) {
     return {
       ok: false,
       reason: "no-mail-account",
-      message:
-        "This token has no mail access — recreate it and enable the mail scopes.",
+      message: appEndpoint
+        ? "This token has no mail access — recreate it and enable the mail scopes."
+        : "This account has no mail access on that server.",
     };
   }
   return {
@@ -140,33 +243,78 @@ async function loadSession(token: string): Promise<JmapTokenVerification> {
 }
 
 /**
+ * Verify a JMAP server by loading its session with the given credential.
+ * The session URL is normalized first (a bare host becomes the well-known
+ * path). `invalid-token` covers 401/403 (bad or revoked credential);
+ * anything else (timeout, 5xx, unreadable session) is `network` so the UI
+ * can suggest retrying.
+ */
+export async function verifyJmapServer(
+  server: JmapServer,
+  fetchImpl?: SessionFetch,
+): Promise<JmapTokenVerification> {
+  const sessionUrl = resolveJmapSessionUrl(server.sessionUrl);
+  return loadSession(
+    sessionUrl === server.sessionUrl ? server : { ...server, sessionUrl },
+    fetchImpl,
+  );
+}
+
+/**
  * Verify a user-supplied Fastmail API token by loading its JMAP session.
- * `invalid-token` covers 401/403 (bad or revoked token); anything else
- * (timeout, 5xx) is `network` so the UI can suggest retrying.
+ * Thin wrapper over `verifyJmapServer` pinning the app's own endpoint.
  */
 export async function verifyJmapToken(
   token: string,
 ): Promise<JmapTokenVerification> {
-  return loadSession(token);
+  return verifyJmapServer({
+    sessionUrl: FASTMAIL_SESSION_URL,
+    authorization: `Bearer ${token}`,
+  });
+}
+
+/** A JMAP method-level error with its RFC 8620 error `type` preserved, so
+ * callers can tolerate a method a server does not implement (push,
+ * Email/import) without matching message text. `message` overrides the
+ * default text where a call site has a more specific, long-standing
+ * message (the per-object /set failures). */
+export class JmapMethodError extends Error {
+  constructor(
+    readonly method: string,
+    readonly type: string,
+    detail: unknown,
+    message?: string,
+  ) {
+    super(message ?? `JMAP ${method} error: ${JSON.stringify(detail)}`);
+    this.name = "JmapMethodError";
+  }
 }
 
 // --- Per-token JMAP calls ----------------------------------------------------
 
 const sessionCache = new Map<string, Promise<JmapTokenInfo>>();
 
-/** The JMAP session for a user token, cached per token (per serverless
- * instance). A failed lookup is evicted so the next call retries. */
+/** A server's cache key: the endpoint plus the credential, so two accounts
+ * on one server never share a session. */
+function serverCacheKey(server: JmapServer): string {
+  return `${server.sessionUrl}\n${server.authorization}`;
+}
+
+/** The JMAP session for a server, cached per server+credential (per
+ * serverless instance). A failed lookup is evicted so the next call
+ * retries. */
 export async function jmapSessionForToken(
-  token: string,
+  server: JmapServer,
 ): Promise<JmapTokenInfo> {
-  let cached = sessionCache.get(token);
+  const key = serverCacheKey(server);
+  let cached = sessionCache.get(key);
   if (!cached) {
-    cached = loadSession(token).then((r) => {
+    cached = loadSession(server).then((r) => {
       if (r.ok) return r.info;
       throw new Error(r.message);
     });
-    sessionCache.set(token, cached);
-    cached.catch(() => sessionCache.delete(token));
+    sessionCache.set(key, cached);
+    cached.catch(() => sessionCache.delete(key));
   }
   return cached;
 }
@@ -219,7 +367,7 @@ export async function jmapBatch(
   }
   for (const [name, args] of j.methodResponses) {
     if (name === "error") {
-      throw new Error(`JMAP ${name} error: ${JSON.stringify(args)}`);
+      throw new JmapMethodError(name, failureType(args) ?? "unknown", args);
     }
     const a = args as {
       notUpdated?: Record<string, unknown>;
@@ -235,15 +383,41 @@ export async function jmapBatch(
         // so skip it; any other notDestroyed reason still throws.
         if (key === "notDestroyed" && opts.tolerateNotFoundDestroy) {
           const hardFailures = Object.values(failures).filter(
-            (f) => (f as { type?: string }).type !== "notFound",
+            (f) => failureType(f) !== "notFound",
           );
           if (hardFailures.length === 0) continue;
         }
-        throw new Error(`JMAP ${name} ${key}: ${JSON.stringify(failures)}`);
+        throw new JmapMethodError(
+          name,
+          firstFailureType(failures) ?? "unknown",
+          failures,
+          `JMAP ${name} ${key}: ${JSON.stringify(failures)}`,
+        );
       }
     }
   }
   return j.methodResponses;
+}
+
+/** The RFC 8620 error `type` of a JMAP failure object, when it carries one
+ * as a string. */
+function failureType(value: unknown): string | undefined {
+  if (value && typeof value === "object" && "type" in value) {
+    const type = value.type;
+    if (typeof type === "string") return type;
+  }
+  return undefined;
+}
+
+/** The error `type` of a /set failure map's first typed entry. */
+function firstFailureType(
+  failures: Record<string, unknown>,
+): string | undefined {
+  for (const failure of Object.values(failures)) {
+    const type = failureType(failure);
+    if (type) return type;
+  }
+  return undefined;
 }
 
 /** Upload a raw RFC 5322 message blob; returns the blobId. Shared by both
@@ -274,21 +448,21 @@ export async function jmapUploadBlob(
 }
 
 /**
- * POST a batch of JMAP method calls with a user token; throws on the first
- * per-call error, including per-object /set failures surfaced via
+ * POST a batch of JMAP method calls with a server credential; throws on the
+ * first per-call error, including per-object /set failures surfaced via
  * notUpdated/notCreated/notDestroyed (the Fastmail gotcha the app's own
  * client, fastmail.server.ts, documents).
  */
 export async function jmapCall(
-  token: string,
+  server: JmapServer,
   methodCalls: unknown[][],
   capabilities: JmapCapability[] = [],
   opts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<[string, unknown, string][]> {
-  const s = await jmapSessionForToken(token);
+  const s = await jmapSessionForToken(server);
   return jmapBatch(
     s.apiUrl,
-    `Bearer ${token}`,
+    server.authorization,
     methodCalls,
     capabilities,
     opts,
@@ -322,9 +496,11 @@ interface ImportArgs {
 
 /** List the account's push subscriptions (PushSubscription/get). */
 export async function jmapPushList(
-  token: string,
+  server: JmapServer,
 ): Promise<PushSubscriptionInfo[]> {
-  const responses = await jmapCall(token, [["PushSubscription/get", {}, "m0"]]);
+  const responses = await jmapCall(server, [
+    ["PushSubscription/get", {}, "m0"],
+  ]);
   // JMAP methodResponses arrive as untyped wire tuples; assert the args
   // shape once per call and read typed fields from the named const.
   const args = responses[0]![1] as PushListArgs;
@@ -334,7 +510,7 @@ export async function jmapPushList(
 /** Create a push subscription (PushSubscription/set); returns the new id.
  * Throws when Fastmail rejects the create. */
 export async function jmapPushCreate(
-  token: string,
+  server: JmapServer,
   opts: {
     url: string;
     deviceClientId: string;
@@ -345,7 +521,7 @@ export async function jmapPushCreate(
   jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<string> {
   const responses = await jmapCall(
-    token,
+    server,
     [
       [
         "PushSubscription/set",
@@ -372,15 +548,15 @@ export async function jmapPushCreate(
   return id;
 }
 
-/** Echo Fastmail's PushVerification code back (completes the handshake). */
+/** Echo the server's PushVerification code back (completes the handshake). */
 export async function jmapPushVerify(
-  token: string,
+  server: JmapServer,
   subscriptionId: string,
   code: string,
   jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<void> {
   await jmapCall(
-    token,
+    server,
     [
       [
         "PushSubscription/set",
@@ -395,12 +571,12 @@ export async function jmapPushVerify(
 
 /** Destroy a push subscription (PushSubscription/set destroy). */
 export async function jmapPushDestroy(
-  token: string,
+  server: JmapServer,
   subscriptionId: string,
   jmapOpts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<void> {
   await jmapCall(
-    token,
+    server,
     [["PushSubscription/set", { destroy: [subscriptionId] }, "m0"]],
     [],
     jmapOpts,
@@ -411,14 +587,14 @@ export async function jmapPushDestroy(
  * email id. Shared by the receipts pipeline's Sent-box write and the
  * connected accounts' Inbox write. */
 export async function jmapImportEmail(
-  token: string,
+  server: JmapServer,
   opts: { blobId: string; mailboxId: string },
 ): Promise<string> {
-  const responses = await jmapCall(token, [
+  const responses = await jmapCall(server, [
     [
       "Email/import",
       {
-        accountId: (await jmapSessionForToken(token)).mailAccountId,
+        accountId: (await jmapSessionForToken(server)).mailAccountId,
         emails: {
           e1: {
             blobId: opts.blobId,
@@ -466,11 +642,11 @@ export type EmailMetadata = z.infer<typeof jmapEmailMetadataSchema>;
  * not found"); a response that doesn't match the schema throws, so the
  * next wire-format surprise is loud instead of a swallowed warning. */
 export async function getEmailMetadata(opts: {
-  token: string;
+  server: JmapServer;
   accountId: string;
   id: string;
 }): Promise<EmailMetadata | undefined> {
-  const responses = await jmapCall(opts.token, [
+  const responses = await jmapCall(opts.server, [
     [
       "Email/get",
       {

@@ -12,8 +12,6 @@ import {
 } from "~/lib/email-confirmation.server";
 import {
   createMimeInboundCache,
-  FASTMAIL_AUTHSERV,
-  GMAIL_AUTHSERV,
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
 import { evaluateAuthChain } from "~/lib/email-auth.server";
@@ -34,7 +32,12 @@ import {
   gmailMailAdapter,
   gmailSendConnectionEmailToOwner,
 } from "~/lib/gmail.server";
-import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
+import {
+  connectionAuthservIds,
+  connectionCredential,
+  type ConnectionCredential,
+} from "~/lib/email-connection-auth.server";
+import type { JmapServer } from "~/lib/jmap.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import { writeEmailLogRow } from "~/lib/db/email-log";
@@ -133,9 +136,9 @@ export function realExtractionDeps(): ConnectionDeps {
 /** Build the InboundDeps fetch collaborators over the connection mailbox. */
 export function connectionInboundDeps(
   connectionId: string,
-  /** The provider whose delivery stamp is trusted for this mailbox: the
-   * authentication chain only counts records from its authserv-id. */
-  provider: string,
+  /** The authserv-ids whose delivery stamp is trusted for this mailbox: the
+   * authentication chain only counts records from one of them. */
+  authservIds: string[],
   adapter: ConnectionMailAdapter,
   extractionDeps: ConnectionDeps,
 ): InboundDeps {
@@ -145,8 +148,7 @@ export function connectionInboundDeps(
       // every connected account in the process.
       cacheKey: (emailId) => `${connectionId}:${emailId}`,
       foreignAttachmentSuffix: "not produced by the connection adapter",
-      authservIds:
-        provider === "gmail" ? [GMAIL_AUTHSERV] : [FASTMAIL_AUTHSERV],
+      authservIds,
     }),
     ...extractionDeps,
     sendReply: async () => {
@@ -685,21 +687,23 @@ export interface DrainResult {
 
 /**
  * The default mail adapter for a connected account: inbox summaries, raw
- * email reads, and Trash moves, all with the account's token. Callers with
- * their own needs override a method (the review scan swaps in a no-op
- * Trash; the drain script swaps in a role-picked mailbox).
+ * email reads, and Trash moves, all against the connection's JMAP server.
+ * Callers with their own needs override a method (the review scan swaps in
+ * a no-op Trash; the drain script swaps in a role-picked mailbox).
  */
-export function connectionMailAdapter(token: string): ConnectionMailAdapter {
+export function connectionMailAdapter(
+  server: JmapServer,
+): ConnectionMailAdapter {
   return {
-    inboxEmailSummaries: (opts) => inboxEmailSummaries({ token, ...opts }),
-    rawEmail: (id) => rawConnectionEmail(token, id),
-    moveToTrash: (id) => moveConnectionEmailToTrash(token, id),
+    inboxEmailSummaries: (opts) => inboxEmailSummaries({ server, ...opts }),
+    rawEmail: (id) => rawConnectionEmail(server, id),
+    moveToTrash: (id) => moveConnectionEmailToTrash(server, id),
   };
 }
 
 /** Adapter + owner-notification transport for one connection. The one
- * branch point between the JMAP (Fastmail) and Gmail paths: everything
- * downstream (drain, review) is provider-agnostic. */
+ * branch point between the JMAP and Gmail paths: everything downstream
+ * (drain, review) is provider-agnostic. */
 export interface ConnectionMailClient {
   adapter: ConnectionMailAdapter;
   sendToOwner(email: OwnerEmail): Promise<void>;
@@ -707,9 +711,10 @@ export interface ConnectionMailClient {
 
 export function mailClientFor(
   connection: EmailConnectionWithSecret,
-  token: string,
+  credential: ConnectionCredential,
 ): ConnectionMailClient {
-  if (connection.provider === "gmail") {
+  if (credential.kind === "gmail") {
+    const token = credential.token;
     return {
       adapter: gmailMailAdapter(token),
       sendToOwner: (email) =>
@@ -717,9 +722,9 @@ export function mailClientFor(
     };
   }
   return {
-    adapter: connectionMailAdapter(token),
+    adapter: connectionMailAdapter(credential.server),
     sendToOwner: (email) =>
-      sendConnectionEmailToOwner(connection, token, email),
+      sendConnectionEmailToOwner(connection, credential.server, email),
   };
 }
 
@@ -742,13 +747,23 @@ export async function drainEmailConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
-  const token = await connectionAccessToken(connection);
-  const client = mailClientFor(connection, token);
+  const credential = await connectionCredential(connection);
+  const client = mailClientFor(connection, credential);
   const adapter = options.adapter ?? client.adapter;
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
+  // Fail closed: an unpinned generic JMAP connection with no learnable
+  // delivery stamp must not run, because evaluateAuthChain([]) answers ok
+  // ("legacy transport") and would open the sender-authentication gate.
+  const authservIds = await connectionAuthservIds(connection, credential);
+  if (authservIds === null) {
+    console.warn(
+      `[email-connections] no delivery authentication stamp yet for ${connection.emailAddress}`,
+    );
+    return { evaluated: 0, created: 0, partial: 0, ignored: 0, failed: 0 };
+  }
   const deps = connectionInboundDeps(
     connection.id,
-    connection.provider,
+    authservIds,
     adapter,
     extractionDeps,
   );
@@ -855,11 +870,11 @@ export async function drainEmailConnection(
  * the Gmail branch routes to the gmail importer in mailClientFor. */
 async function sendConnectionEmailToOwner(
   connection: EmailConnectionWithSecret,
-  token: string,
+  server: JmapServer,
   email: OwnerEmail,
 ): Promise<void> {
   const ok = await deliverConnectionEmailToInbox(
-    token,
+    server,
     {
       to: connection.emailAddress,
       subject: email.subject,

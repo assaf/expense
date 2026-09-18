@@ -19,11 +19,34 @@ export const TINY_PNG = Buffer.from(
   "base64",
 );
 
-export function connection() {
+/** A connection row as the pipeline consumes it (the fields the drain and
+ * scan read, plus the encrypted credential they decrypt). */
+export interface TestConnection {
+  id: string;
+  accountId: string;
+  provider: string;
+  sessionUrl: string | null;
+  authservId: string | null;
+  emailAddress: string;
+  status: string;
+  receivedCount: number;
+  processedCount: number;
+  lastPushAt: string | null;
+  pushSubscriptionId: string | null;
+  pushExpiresAt: string | null;
+  reviewScannedAt: string | null;
+  createdAt: string;
+  tokenEnc: string;
+  remoteAccountId: string;
+}
+
+function baseConnection(): TestConnection {
   return {
     id: `conn-${Math.random().toString(36).slice(2)}`,
     accountId: TEST_ACCOUNT_ID,
     provider: "fastmail",
+    sessionUrl: null,
+    authservId: null,
     emailAddress: "mailbox@example.com",
     status: "active",
     receivedCount: 0,
@@ -36,6 +59,14 @@ export function connection() {
     tokenEnc: encryptSecret("fmu1-conn-tok"),
     remoteAccountId: "jmap-1",
   };
+}
+
+/** A connection row for the pipeline tests. `overrides` lets a test pose as
+ * another provider (e.g. a generic JMAP server with a pinned stamp). */
+export function connection(
+  overrides: Partial<TestConnection> = {},
+): TestConnection {
+  return { ...baseConnection(), ...overrides };
 }
 
 export function summary(
@@ -86,6 +117,9 @@ export type FakeEmail = {
   body: string;
   /** The email's arrival; defaults to the suite-wide instant. */
   receivedAt?: string;
+  /** The `Authentication-Results` header the server stamped on delivery,
+   * consumed by the connection pipeline's sender-authentication gate. */
+  authResults?: string;
 };
 
 /** A fake mailbox adapter over an in-memory set of raw RFC 822 emails.
@@ -132,6 +166,9 @@ export function fakeAdapter(emails: Map<string, FakeEmail>) {
           `Subject: ${e.subject}`,
           "Date: Tue, 01 Jul 2026 10:00:00 +0000",
           "Message-ID: <msg@example.com>",
+          ...(e.authResults
+            ? [`Authentication-Results: ${e.authResults}`]
+            : []),
           "Content-Type: text/plain; charset=utf-8",
           "",
           e.body,

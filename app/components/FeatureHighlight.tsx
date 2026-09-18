@@ -16,6 +16,7 @@ import {
   Plug,
   ReceiptText,
   Search,
+  Server,
   Tags,
   Trash2,
   Users,
@@ -43,6 +44,7 @@ export type HighlightId =
   | "checkup"
   | "command-palette"
   | "connect-email"
+  | "connect-jmap"
   | "email"
   | "mcp"
   | "mileage-location"
@@ -171,6 +173,19 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
       </>
     ),
     cta: { label: "Connect your email account", to: "/emails" },
+  },
+  "connect-jmap": {
+    icon: Server,
+    title: "Bring your own mail server",
+    body: () => (
+      <>
+        Expense can read receipts straight from a mail server you run yourself,
+        not just the big providers. Point it at the server on the Email page and
+        paste a token or app password; receipts in that mailbox are imported
+        automatically.
+      </>
+    ),
+    cta: { label: "Connect a server", to: "/emails" },
   },
   email: {
     icon: Mail,
@@ -371,6 +386,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "checkup",
     "command-palette",
     "shortcut-hints",
+    "connect-jmap",
     "webmcp",
     "mileage-location",
     "reconcile",

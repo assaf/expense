@@ -35,6 +35,7 @@ describe("feature highlights", () => {
       "close-account",
       "command-palette",
       "connect-email",
+      "connect-jmap",
       "email-preferences",
       "insights",
       "mileage-location",

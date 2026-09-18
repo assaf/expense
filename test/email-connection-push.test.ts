@@ -66,6 +66,9 @@ const jmap = vi.hoisted(() => {
 });
 
 vi.mock("~/lib/jmap.server", () => ({
+  // fastmail.server (pulled in through fastmail-push.server) builds the
+  // app's own JmapServer at import time.
+  FASTMAIL_SESSION_URL: "https://api.fastmail.com/jmap/session",
   jmapPushList: jmap.jmapPushList,
   jmapPushCreate: jmap.jmapPushCreate,
   jmapPushVerify: jmap.jmapPushVerify,
@@ -78,7 +81,12 @@ import { encryptSecret } from "~/lib/token-crypto.server";
 const TOKEN = "fmu1-conn-tok";
 
 function connection() {
-  return { id: "conn1", tokenEnc: encryptSecret(TOKEN) };
+  return {
+    id: "conn1",
+    provider: "fastmail",
+    sessionUrl: null,
+    tokenEnc: encryptSecret(TOKEN),
+  };
 }
 
 function daysFromNow(days: number): string {

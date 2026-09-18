@@ -63,6 +63,7 @@ vi.mock("~/lib/errors.server", () => ({
 }));
 
 import { loader } from "~/routes/api.email-connections-cron";
+import { JmapMethodError } from "~/lib/jmap.server";
 
 function args(request: Request): Parameters<typeof loader>[0] {
   return {
@@ -317,5 +318,56 @@ describe("api.email-connections-cron", () => {
     const body = (await res.json()) as { total: number; failed: number };
     expect(body.failed).toBe(1);
     expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("g1", "error");
+  });
+
+  it("keeps a JMAP connection active when the server has no push support", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "a", provider: "jmap" }),
+    ]);
+    mocks.ensureConnectionPushSubscription.mockRejectedValue(
+      new JmapMethodError("PushSubscription/set", "unknownMethod", {
+        type: "unknownMethod",
+      }),
+    );
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { total: number; failed: number };
+    // A push-less server is usable through the drain: no needs-attention.
+    expect(mocks.setEmailConnectionStatus).not.toHaveBeenCalledWith(
+      "a",
+      "error",
+    );
+    expect(body.failed).toBe(0);
+    // The catch-up drain still ran for that connection.
+    expect(mocks.drainEmailConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a" }),
+    );
+  });
+
+  it("still flags a genuine push failure on a JMAP connection", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "a", provider: "jmap" }),
+    ]);
+    mocks.ensureConnectionPushSubscription.mockRejectedValue(
+      new Error("PushSubscription/set failed: 500"),
+    );
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { total: number; failed: number };
+    expect(body.failed).toBe(1);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("a", "error");
+    expect(mocks.drainEmailConnection).not.toHaveBeenCalled();
   });
 });

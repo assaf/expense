@@ -29,6 +29,8 @@ const CONNECTION_FIELDS = [
   "id",
   "accountId",
   "provider",
+  "sessionUrl",
+  "authservId",
   "emailAddress",
   "status",
   "receivedCount",
@@ -50,6 +52,8 @@ function connectionBase(row: ConnectionRow) {
     id: row.id,
     accountId: row.accountId,
     provider: row.provider,
+    sessionUrl: row.sessionUrl,
+    authservId: row.authservId,
     emailAddress: row.emailAddress,
     status: row.status,
     receivedCount: row.receivedCount,
@@ -130,7 +134,7 @@ async function connectionStats(
   return stats;
 }
 
-export type EmailConnectionProvider = "fastmail" | "gmail";
+export type EmailConnectionProvider = "fastmail" | "gmail" | "jmap";
 
 /**
  * The connection owning a mailbox address, if any. Enforces the global
@@ -228,6 +232,10 @@ interface ConnectionCredentials {
   tokenEnc: string;
   refreshTokenEnc?: string;
   tokenExpiresAt?: string;
+  /** The generic JMAP session URL (provider "jmap"). */
+  sessionUrl?: string;
+  /** The delivery authserv-id learned at connect (provider "jmap"). */
+  authservId?: string;
 }
 
 /**
@@ -266,6 +274,8 @@ export async function createEmailConnection(
       id: ulid(),
       accountId: input.accountId,
       provider: input.provider,
+      sessionUrl: input.sessionUrl ?? null,
+      authservId: input.authservId ?? null,
       emailAddress: address,
       remoteAccountId: input.remoteAccountId,
       tokenEnc: input.tokenEnc,
@@ -307,6 +317,8 @@ async function saveConnectionCredentials(
 ): Promise<void> {
   await db.orm.public.EmailConnection.where({ id }).update({
     provider: input.provider,
+    sessionUrl: input.sessionUrl ?? null,
+    authservId: input.authservId ?? null,
     remoteAccountId: input.remoteAccountId,
     tokenEnc: input.tokenEnc,
     refreshTokenEnc: input.refreshTokenEnc ?? null,
@@ -353,6 +365,16 @@ export async function saveEmailConnectionSubscription(
     pushSubscriptionId: subscriptionId,
     pushExpiresAt: fromIso(expiresAt),
   });
+}
+
+/** Record the delivery authserv-id learned for a generic JMAP connection
+ * (see connectionAuthservIds), so the sender-authentication gate is pinned
+ * from then on. */
+export async function setEmailConnectionAuthservId(
+  id: string,
+  authservId: string,
+): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id }).update({ authservId });
 }
 
 /** Record a Gmail watch expiration: Gmail has no subscription id, only an

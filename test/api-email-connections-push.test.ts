@@ -145,7 +145,7 @@ describe("api.email-connections-push", () => {
     );
   });
 
-  it("echoes a PushVerification with the connection's decrypted token", async () => {
+  it("echoes a PushVerification with the connection's credential", async () => {
     const res = await action(
       args(
         post(
@@ -159,7 +159,7 @@ describe("api.email-connections-push", () => {
     );
     expect(res.status).toBe(200);
     expect(mocks.setConnectionVerificationCode).toHaveBeenCalledWith(
-      "fmu1-conn-tok",
+      expect.objectContaining({ emailAddress: "mailbox@example.com" }),
       "sub-1",
       "code-123",
     );

@@ -35,6 +35,7 @@ export default defineConfig({
       "test/duplicates.test.ts",
       "test/within-window.test.ts",
       "test/jmap-email-schema.test.ts",
+      "test/jmap-server.test.ts",
       "test/llms-txt.test.ts",
       "test/expense-search.test.ts",
       "test/shortcut-anchors.test.ts",

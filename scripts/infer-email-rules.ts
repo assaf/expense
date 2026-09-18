@@ -17,7 +17,7 @@
 import { inferRuleCandidates } from "../app/lib/email-connection-infer.server";
 import { readEmailConnectionById } from "../app/lib/db/email-connections";
 import { addEmailRule, listGeneralEmailRules } from "../app/lib/db/email-rules";
-import { decryptSecret } from "../app/lib/token-crypto.server";
+import { connectionJmapServer } from "../app/lib/email-connection-auth.server";
 import { db } from "../app/lib/prisma.server";
 import { arg } from "./lib/args";
 
@@ -36,11 +36,11 @@ async function main(): Promise<void> {
     console.error(`No email connection with id ${connectionId}`);
     process.exit(1);
   }
-  const token = decryptSecret(connection.tokenEnc);
+  const server = await connectionJmapServer(connection);
 
   console.info(`Scanning ${connection.emailAddress}'s Inbox (last 90 days)…`);
   const { scanned, candidates } = await inferRuleCandidates(
-    token,
+    server,
     connection.emailAddress,
   );
   const existing = new Set(

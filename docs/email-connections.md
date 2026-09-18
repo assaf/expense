@@ -8,7 +8,8 @@ address); both coexist.
 **Status: all four phases shipped (connect/verify/disconnect, per-connection
 push webhook + renewal cron, rules + processing pipeline, rule inference
 from an existing inbox), plus the inbox review flow (/email-review), plus
-the first-run Fastmail onboarding (/onboarding).**
+the first-run Fastmail onboarding (/onboarding), plus connecting any JMAP
+server by URL from Settings.**
 
 ## Connecting via OAuth
 
@@ -19,9 +20,10 @@ authorization and token endpoints are `api.fastmail.com/oauth/authorize`
 and `/oauth/refresh`; the code lives in
 `app/lib/fastmail-oauth.server.ts`, with `/connect-fastmail` (entry) and
 `/fastmail-oauth-callback` (redirect target) routes. **Nothing is pasted by
-hand any more**: with `FASTMAIL_OAUTH_CLIENT_ID` unset the connect buttons
-are hidden, which turns mailbox connections off on that deployment rather
-than falling back to a token form. Connections created earlier from a
+hand any more**: with `FASTMAIL_OAUTH_CLIENT_ID` unset the OAuth connect
+buttons are hidden, which turns OAuth mailbox connections off on that
+deployment rather than falling back to a token form (the separate generic
+JMAP connect below is always available). Connections created earlier from a
 pasted API token keep working unchanged (see `connectionAccessToken`).
 
 - **Storage**: the `EmailConnection` row carries the encrypted access token
@@ -198,6 +200,50 @@ limitations of the quiet launch, documented rather than worked around.
 - Connect a real Google account, send a receipt email to the mailbox,
   confirm the push → drain → expense flow, and check `/api/smoke` stays
   green.
+
+## Any JMAP server (generic connect)
+
+Settings → Email accounts → "Connect another JMAP server" links any server
+that speaks JMAP (a hosted provider, a self-hosted one), with no OAuth
+client and no provider-specific code. The entry point is the
+`connectJmapServer` intent on `app/routes/emails.tsx`; the form lives in
+`app/components/settings/email-accounts.tsx`.
+
+- **Discovery**: the user enters the server's address; a bare host (or a
+  `/` path) becomes `https://<host>/.well-known/jmap` (RFC 8620 §2.2), and
+  an explicit path is kept verbatim. Only `https:` is accepted (§8.1).
+- **Credential**: `authMode` picks `Bearer <token>` or
+  `Basic base64(user:appPassword)` (§8.2 calls Basic NOT RECOMMENDED, hence
+  the "app password" label). The finished Authorization header is what gets
+  stored, encrypted, in `EmailConnection.tokenEnc`; `refreshTokenEnc` and
+  `tokenExpiresAt` stay null, so there is no refresh and a dead credential
+  surfaces as 401 → the existing "Needs attention" + reconnect remedy.
+- **Row**: `provider = "jmap"`, plus `sessionUrl` (the resolved endpoint)
+  and `authservId` (the delivery stamp, below). Reconnecting the same
+  address replaces both.
+- **Guard**: a user-supplied URL goes through `fetchPublicUrl`
+  (`app/lib/ssrf.server.ts`), which refuses private/unresolvable hosts and
+  refuses to carry the Authorization header across a redirect that leaves
+  the origin the user named (RFC 8620 §8.3). The app's own FastMail endpoint
+  is not guarded (operator-controlled, and a loopback mock in tests); tests
+  inject a session fetch to reach a loopback server.
+- **Delivery stamp**: `learnAuthservId` reads the newest clause-bearing
+  `Authentication-Results` header from the mailbox and pins its authserv-id,
+  because `evaluateAuthChain([])` answers ok ("legacy transport") and would
+  otherwise turn the sender-authentication gate into a silent no-op. A
+  connection with neither a pinned nor a learnable stamp skips the tick
+  (drain and review scan alike); the daily cron and the review page's scan
+  retry.
+- **Mailbox roles**: an Inbox is required at connect (otherwise there is
+  nothing to read); a missing `trash` role only skips the Trash move for that
+  connection (RFC 8621 §2.5 requires neither role to exist).
+- **Push is optional**: a `PushSubscription/set` answering `unknownMethod`
+  or `notSupported` is logged and leaves the connection healthy; the daily
+  `/api/email-connections-cron` drain is the catch-up net.
+- **Resolver**: `app/lib/email-connection-auth.server.ts` is the one place a
+  row becomes callable (`connectionCredential`, `connectionJmapServer`,
+  `connectionAuthservIds`). Everything below the session lookup takes a
+  `JmapServer`, so no other module branches on the provider.
 
 ## Fastmail onboarding (/onboarding)
 

@@ -5,7 +5,10 @@ import {
   notificationChargeAmount,
 } from "~/lib/email-classify";
 import { FREE_MAIL_DOMAINS } from "~/lib/email-connection-infer.server";
-import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
+import {
+  connectionAuthservIds,
+  connectionCredential,
+} from "~/lib/email-connection-auth.server";
 import {
   addEmailRule,
   matchEmailRule,
@@ -544,19 +547,35 @@ export async function scanConnectionInbox(
   connection: EmailConnectionWithSecret,
   options: ScanOptions = {},
 ): Promise<ScanResult> {
-  const token = await connectionAccessToken(connection);
+  const credential = await connectionCredential(connection);
   // The scan only reads: nothing moves to Trash until the owner acts on
   // the review list.
   const adapter: ConnectionMailAdapter = options.adapter ?? {
-    ...mailClientFor(connection, token).adapter,
+    ...mailClientFor(connection, credential).adapter,
     // The scan only reads: nothing moves to Trash until the owner acts on
     // the review list.
     moveToTrash: () => Promise.resolve(),
   };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
+  // Fail closed: no delivery stamp to trust yet (see connectionAuthservIds)
+  // means nothing may be listed, or an empty chain would open the gate.
+  const authservIds = await connectionAuthservIds(connection, credential);
+  if (authservIds === null) {
+    console.warn(
+      `[email-review] no delivery authentication stamp yet for ${connection.emailAddress}`,
+    );
+    return {
+      scanned: 0,
+      added: 0,
+      superseded: 0,
+      pending: await countPendingReview(connection.id),
+      finished: true,
+      atCap: false,
+    };
+  }
   const deps = connectionInboundDeps(
     connection.id,
-    connection.provider,
+    authservIds,
     adapter,
     extractionDeps,
   );
@@ -962,9 +981,17 @@ export async function processReviewItem(input: {
     return { ok: false, error: "This email is not on the review list." };
   }
 
-  const token = await connectionAccessToken(connection);
-  const client = mailClientFor(connection, token);
+  const credential = await connectionCredential(connection);
+  const client = mailClientFor(connection, credential);
   const adapter = input.adapter ?? client.adapter;
+  const authservIds = await connectionAuthservIds(connection, credential);
+  if (authservIds === null) {
+    return {
+      ok: false,
+      error:
+        "No delivery authentication stamp has been seen for this mailbox yet; try again after new mail arrives.",
+    };
+  }
   const summary: ConnectionEmailSummary = {
     id: emailId,
     receivedAt:
@@ -980,7 +1007,7 @@ export async function processReviewItem(input: {
     summary,
     connectionInboundDeps(
       connection.id,
-      connection.provider,
+      authservIds,
       adapter,
       input.extractionDeps ?? realExtractionDeps(),
     ),

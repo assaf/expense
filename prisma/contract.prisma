@@ -156,6 +156,11 @@ model EmailConnection {
   id                 String            @id(map: "email_connections_pkey")
   accountId          String
   provider           String
+  // The generic JMAP session URL (provider = "jmap"); null for OAuth rows.
+  sessionUrl         String?
+  // The delivery authserv-id learned at connect (provider = "jmap"); the
+  // sender-authentication gate pins this stamp.
+  authservId         String?
   emailAddress       String
   remoteAccountId   String
   tokenEnc           String

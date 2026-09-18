@@ -38,6 +38,9 @@ import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
  */
 
 vi.mock("~/lib/jmap.server", () => ({
+  // fastmail.server (through reply.server) builds the app's own JmapServer
+  // at import time.
+  FASTMAIL_SESSION_URL: "https://api.fastmail.com/jmap/session",
   verifyJmapToken: vi.fn(),
 }));
 

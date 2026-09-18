@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getEmailMetadata } from "~/lib/jmap.server";
+import { FASTMAIL_SESSION_URL, getEmailMetadata } from "~/lib/jmap.server";
 
 /**
  * The Email/get wire boundary (app/lib/jmap.server.ts). Fastmail's real
@@ -40,7 +40,10 @@ function stubEmailGet(body: unknown): void {
 
 function getMetadata(id: string): Promise<unknown> {
   return getEmailMetadata({
-    token: `tok-${id}`,
+    server: {
+      sessionUrl: FASTMAIL_SESSION_URL,
+      authorization: `Bearer tok-${id}`,
+    },
     accountId: "mailAcc1",
     id,
   });

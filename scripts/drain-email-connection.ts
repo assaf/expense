@@ -20,7 +20,7 @@ import {
 } from "../app/lib/email-connection-process.server";
 import { extractReceipt } from "../app/lib/receipt-ai.server";
 import { readEmailConnectionById } from "../app/lib/db/email-connections";
-import { decryptSecret } from "../app/lib/token-crypto.server";
+import { connectionJmapServer } from "../app/lib/email-connection-auth.server";
 import { db } from "../app/lib/prisma.server";
 import { arg } from "./lib/args";
 
@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     console.error(`No email connection with id ${connectionId}`);
     process.exit(1);
   }
-  const token = decryptSecret(connection.tokenEnc);
+  const server = await connectionJmapServer(connection);
 
   // Stub the renderers (a 1x1 PNG); the real ones use Vite's ?inline font
   // asset, which tsx can't resolve. Extraction, trash, and the confirmation
@@ -64,9 +64,9 @@ async function main(): Promise<void> {
   };
 
   const adapter: ConnectionMailAdapter = {
-    ...connectionMailAdapter(token),
+    ...connectionMailAdapter(server),
     // The dev drain can target any mailbox role, not just the Inbox.
-    inboxEmailSummaries: (opts) => mailboxSummaries({ token, role, ...opts }),
+    inboxEmailSummaries: (opts) => mailboxSummaries({ server, role, ...opts }),
   };
 
   console.info(

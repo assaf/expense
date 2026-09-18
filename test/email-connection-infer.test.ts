@@ -22,7 +22,7 @@ const mail = vi.hoisted(() => {
   return {
     state,
     mailboxSummaries: vi.fn(
-      async (opts: { token: string; role: string; includePreview?: boolean }) =>
+      async (opts: { role: string; includePreview?: boolean }) =>
         state.entries.map((e, i) => ({
           id: `e${i}`,
           receivedAt: new Date().toISOString(),
@@ -39,6 +39,12 @@ vi.mock("~/lib/email-connection-mail.server", () => ({
 }));
 
 const OWNER = "owner@example.com";
+
+/** The JMAP endpoint the (faked) mailbox client is addressed with. */
+const SERVER = {
+  sessionUrl: "https://mail.example.com/jmap/session",
+  authorization: "Bearer tok",
+};
 
 function entry(from: string, subject: string, preview: string) {
   return { from, subject, preview };
@@ -63,7 +69,7 @@ describe("inferRuleCandidates", () => {
       // Single receipt-like email, below minReceiptLike.
       entry("orders@shop.example", "Order confirmation", "Total: $9.99"),
     ];
-    const { scanned, candidates } = await inferRuleCandidates("tok", OWNER);
+    const { scanned, candidates } = await inferRuleCandidates(SERVER, OWNER);
     expect(scanned).toBe(8);
     expect(candidates.map((c) => c.sender)).toEqual([
       "email.apple.com",
@@ -80,7 +86,7 @@ describe("inferRuleCandidates", () => {
       entry("me@example.com", "Your order", "Total: $1.00"),
       entry("me@example.com", "Your receipt", "Total: $2.00"),
     ];
-    const { candidates } = await inferRuleCandidates("tok", OWNER);
+    const { candidates } = await inferRuleCandidates(SERVER, OWNER);
     expect(candidates).toEqual([]);
   });
 
@@ -88,10 +94,10 @@ describe("inferRuleCandidates", () => {
     mail.state.entries = [
       entry("a@shop.example", "Your order", "Total: $1.00"),
     ];
-    await inferRuleCandidates("tok", OWNER);
+    await inferRuleCandidates(SERVER, OWNER);
     expect(mail.mailboxSummaries).toHaveBeenCalledWith(
       expect.objectContaining({
-        token: "tok",
+        server: SERVER,
         role: "inbox",
         descending: true,
         includePreview: true,
@@ -100,7 +106,7 @@ describe("inferRuleCandidates", () => {
   });
 
   it("returns nothing on an empty inbox", async () => {
-    const result = await inferRuleCandidates("tok", OWNER);
+    const result = await inferRuleCandidates(SERVER, OWNER);
     expect(result).toEqual({ scanned: 0, candidates: [] });
   });
 
@@ -109,7 +115,7 @@ describe("inferRuleCandidates", () => {
       entry("billing@saas.example", "Your subscription", "Order total: $49.00"),
       entry("billing@saas.example", "Your subscription", "Order total: $49.00"),
     ];
-    const { candidates } = await inferRuleCandidates("tok", OWNER);
+    const { candidates } = await inferRuleCandidates(SERVER, OWNER);
     expect(candidates.map((c) => c.sender)).toEqual(["saas.example"]);
   });
 });

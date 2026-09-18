@@ -49,6 +49,23 @@ describe("Email", () => {
     ).toBeVisible();
   });
 
+  it("connects another JMAP server by URL and surfaces a refused host", async () => {
+    const section = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Email accounts" }),
+    });
+    await section.getByText("Connect another JMAP server").click();
+    await section
+      .locator('input[name="serverUrl"]')
+      .fill("https://127.0.0.1/jmap");
+    await section.locator('input[name="secret"]').fill("tok-123");
+    await section.getByRole("button", { name: "Connect server" }).click();
+    // The SSRF guard refuses a literal loopback host before any request goes
+    // out; the action returns that message and the form shows it.
+    await expect(
+      section.getByText("Blocked: private or unresolvable host"),
+    ).toBeVisible();
+  });
+
   it("shows the sign-in email as a pending receipts-by-email sender", async () => {
     // The login email is auto-added as the account's default sender on
     // sign-in, pending until its verification link is clicked.

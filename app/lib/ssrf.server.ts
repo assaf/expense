@@ -177,6 +177,11 @@ export interface PublicFetchOptions {
   timeoutMs?: number;
   /** Max redirects followed, each re-checked (default 3). */
   redirects?: number;
+  /** Headers sent on the first hop and on every redirect that stays on the
+   * FIRST URL's origin. A redirect off that origin while these are set is
+   * refused: a credential must never follow a redirect to a host the user
+   * did not name (RFC 8620 §8.3). Callers passing no headers see no change. */
+  headers?: Record<string, string>;
 }
 
 /** Fetch a user-supplied URL with SSRF guards, following redirects manually
@@ -196,9 +201,16 @@ export async function fetchPublicUrl(
   } catch {
     throw new SsrfError("Invalid URL");
   }
+  // The origin the caller named: headers travel only while a hop stays on it.
+  const origin = current.origin;
   for (let hops = 0; hops <= redirects; hops += 1) {
     if (await isPrivateUrl(current, lookupFn)) {
       throw new SsrfError("Blocked: private or unresolvable host");
+    }
+    if (options.headers && current.origin !== origin) {
+      throw new SsrfError(
+        `Refusing to follow a redirect off ${origin} with credentials`,
+      );
     }
     // Note: built-in fetch re-resolves the hostname, so a hostile DNS could
     // in theory answer public here and private during the fetch (rebinding
@@ -211,6 +223,7 @@ export async function fetchPublicUrl(
     try {
       res = await fetch(current, {
         redirect: "manual",
+        headers: options.headers,
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {

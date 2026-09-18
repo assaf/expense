@@ -9,7 +9,10 @@ import {
   jmapPushList,
   jmapPushVerify,
 } from "~/lib/jmap.server";
-import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
+import {
+  connectionJmapServer,
+  type ConnectionCredentialSource,
+} from "~/lib/email-connection-auth.server";
 import { saveEmailConnectionSubscription } from "~/lib/db/email-connections";
 
 /**
@@ -22,9 +25,9 @@ import { saveEmailConnectionSubscription } from "~/lib/db/email-connections";
  * URL (carries the connection id) and the deviceClientId, so the daily cron
  * only ever touches its own subscription on the user's account.
  *
- * Every call authenticates as the user (their API token), unlike the
- * receipts pipeline which uses the app's global FASTMAIL_TOKEN. The JMAP
- * wire ops themselves live in jmap.server.ts; this module owns the
+ * Every call authenticates as the connection (see email-connection-auth),
+ * unlike the receipts pipeline which uses the app's global FASTMAIL_TOKEN.
+ * The JMAP wire ops themselves live in jmap.server.ts; this module owns the
  * connection-specific plumbing (push URL, device id, persistence).
  */
 
@@ -38,20 +41,27 @@ function connectionDeviceClientId(connectionId: string): string {
   return `expense-conn-${connectionId}`;
 }
 
-/** Echo Fastmail's PushVerification code back (completes the handshake). */
+/** Echo the server's PushVerification code back (completes the handshake). */
 export async function setConnectionVerificationCode(
-  token: string,
+  connection: ConnectionCredentialSource,
   subscriptionId: string,
   code: string,
 ): Promise<void> {
-  return jmapPushVerify(token, subscriptionId, code);
+  return jmapPushVerify(
+    await connectionJmapServer(connection),
+    subscriptionId,
+    code,
+  );
 }
 
 export async function destroyConnectionPushSubscription(
-  token: string,
+  connection: ConnectionCredentialSource,
   subscriptionId: string,
 ): Promise<void> {
-  return jmapPushDestroy(token, subscriptionId);
+  return jmapPushDestroy(
+    await connectionJmapServer(connection),
+    subscriptionId,
+  );
 }
 
 export interface EnsureSubscriptionResult {
@@ -65,26 +75,25 @@ export interface EnsureSubscriptionResult {
  * expired (or expire within the renew window), keep a live one, otherwise
  * create a fresh subscription. The new subscription triggers a
  * PushVerification push against our webhook, which completes the handshake
- * with the connection's own token.
+ * with the connection's own credential.
  *
  * Persists the resulting id/expiry on the connection row so Settings and
  * the next cron tick can see the state.
  */
-export async function ensureConnectionPushSubscription(connection: {
-  id: string;
-  tokenEnc: string;
-}): Promise<EnsureSubscriptionResult> {
+export async function ensureConnectionPushSubscription(
+  connection: ConnectionCredentialSource,
+): Promise<EnsureSubscriptionResult> {
   if (!PUBLIC_URL) {
     throw new Error("PUBLIC_URL is required for Fastmail push");
   }
-  const token = await connectionAccessToken(connection);
+  const server = await connectionJmapServer(connection);
   const result = await ensurePushSubscription({
     url: connectionPushUrl(connection.id),
     deviceClientId: connectionDeviceClientId(connection.id),
-    list: () => jmapPushList(token),
-    destroy: (id) => jmapPushDestroy(token, id),
+    list: () => jmapPushList(server),
+    destroy: (id) => jmapPushDestroy(server, id),
     create: (opts) =>
-      jmapPushCreate(token, {
+      jmapPushCreate(server, {
         ...opts,
         p256dh: p256dhFromPrivate(PUSH_PRIVATE_KEY),
         auth: PUSH_AUTH,

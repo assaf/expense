@@ -143,6 +143,21 @@ export function passingAuthDomains(
   return [];
 }
 
+/** authserv-ids of the clause-bearing Authentication-Results records, in
+ * chain order (newest first). Used to learn the delivery stamp of a
+ * connected mailbox (`learnAuthservId`). Records with no clauses (an
+ * account-internal stamp) carry no authserv-id worth pinning. */
+export function authservIdsIn(records: string[]): string[] {
+  const out: string[] = [];
+  for (const record of records) {
+    if (record == null || record === "") continue;
+    const parsed = parseRecord(record);
+    if (!parsed || parsed.clauses.length === 0) continue;
+    out.push(parsed.host);
+  }
+  return out;
+}
+
 /**
  * Evaluate the message's Authentication-Results chain, newest stamp first
  * (see authResultsChain). Empty stamps — the host stamped the delivery but

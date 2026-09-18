@@ -9,6 +9,7 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import {
+  FASTMAIL_SESSION_URL,
   fetchRawRfc822,
   getEmailMetadata,
   jmapCall,
@@ -20,6 +21,7 @@ import {
   jmapSessionForToken,
   jmapUploadBlob,
   type JmapCapability,
+  type JmapServer,
   type JmapTokenInfo,
   type PushSubscriptionInfo,
   type RawRfc822Email,
@@ -46,9 +48,15 @@ function bearer(): Record<string, string> {
   return { Authorization: `Bearer ${FASTMAIL_TOKEN}` };
 }
 
+/** The app's own mailbox as a JMAP server (jmap.server's per-server API). */
+const APP_SERVER: JmapServer = {
+  sessionUrl: FASTMAIL_SESSION_URL,
+  authorization: `Bearer ${FASTMAIL_TOKEN}`,
+};
+
 /** The app mailbox's JMAP session; jmap.server caches it per instance. */
 function jmapSession(): Promise<JmapTokenInfo> {
-  return jmapSessionForToken(FASTMAIL_TOKEN);
+  return jmapSessionForToken(APP_SERVER);
 }
 
 /** Unwrap the args of the first method response. */
@@ -66,7 +74,7 @@ async function call<Args, Result>(
   // tolerateNotFoundDestroy: destroying an already-removed object is the
   // desired end state for this client's idempotent deletes.
   return firstArgs(
-    await jmapCall(FASTMAIL_TOKEN, [[name, args, "m0"]], capabilities, {
+    await jmapCall(APP_SERVER, [[name, args, "m0"]], capabilities, {
       tolerateNotFoundDestroy: true,
     }),
   ) as Result;
@@ -120,7 +128,7 @@ export type RawEmail = RawRfc822Email;
 export async function rawEmail(id: string): Promise<RawEmail> {
   const s = await jmapSession();
   const email = await getEmailMetadata({
-    token: FASTMAIL_TOKEN,
+    server: APP_SERVER,
     accountId: s.mailAccountId,
     id,
   });
@@ -241,7 +249,7 @@ export async function destroyEmail(id: string): Promise<void> {
 // --- Push subscriptions ------------------------------------------------------
 
 export async function listSubscriptions(): Promise<PushSubscriptionInfo[]> {
-  return jmapPushList(FASTMAIL_TOKEN);
+  return jmapPushList(APP_SERVER);
 }
 
 export async function createSubscription(opts: {
@@ -251,7 +259,7 @@ export async function createSubscription(opts: {
   deviceClientId: string;
   expires: string;
 }): Promise<string> {
-  return jmapPushCreate(FASTMAIL_TOKEN, opts, {
+  return jmapPushCreate(APP_SERVER, opts, {
     tolerateNotFoundDestroy: true,
   });
 }
@@ -260,13 +268,13 @@ export async function setVerificationCode(
   id: string,
   code: string,
 ): Promise<void> {
-  return jmapPushVerify(FASTMAIL_TOKEN, id, code, {
+  return jmapPushVerify(APP_SERVER, id, code, {
     tolerateNotFoundDestroy: true,
   });
 }
 
 export async function destroySubscription(id: string): Promise<void> {
-  return jmapPushDestroy(FASTMAIL_TOKEN, id, {
+  return jmapPushDestroy(APP_SERVER, id, {
     tolerateNotFoundDestroy: true,
   });
 }
@@ -335,7 +343,7 @@ async function uploadBlob(raw: Buffer): Promise<string> {
   return jmapUploadBlob(
     s.uploadUrl,
     s.mailAccountId,
-    `Bearer ${FASTMAIL_TOKEN}`,
+    APP_SERVER.authorization,
     raw,
   );
 }
@@ -373,7 +381,7 @@ const realJmapSendDeps: JmapSendDeps = {
   listIdentities,
   uploadBlob,
   importEmail: (blobId: string, mailboxId: string) =>
-    jmapImportEmail(FASTMAIL_TOKEN, { blobId, mailboxId }),
+    jmapImportEmail(APP_SERVER, { blobId, mailboxId }),
   submitEmail,
 };
 

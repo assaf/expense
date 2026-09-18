@@ -7,6 +7,8 @@ import {
   type ConnectionMailAdapter,
   type OwnerEmail,
 } from "~/lib/email-connection-process.server";
+import { FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
+import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
 import { addEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import { testPrisma } from "./helpers/seedTestData";
@@ -34,10 +36,18 @@ const gmailMocks = vi.hoisted(() => ({
 
 vi.mock("~/lib/gmail.server", () => gmailMocks);
 
+const mailMocks = vi.hoisted(() => ({
+  // Owner notifications are written back over JMAP; the drain tests are
+  // offline, so the delivery is stubbed (its own module has its own
+  // coverage). learnAuthservId is scripted per test.
+  deliverConnectionEmailToInbox: vi.fn(async () => true),
+  learnAuthservId: vi.fn(async () => undefined as string | undefined),
+}));
+
 vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("~/lib/email-connection-mail.server")
-  >()),
+  ...(await importOriginal<typeof EmailConnectionMailModule>()),
+  deliverConnectionEmailToInbox: mailMocks.deliverConnectionEmailToInbox,
+  learnAuthservId: mailMocks.learnAuthservId,
 }));
 
 const mocks = vi.hoisted(() => ({
@@ -58,11 +68,11 @@ const FIXTURE_LOOKBACK_MS =
 function depsFor(
   adapter: ConnectionMailAdapter,
   connectionId: string,
-  provider = "fastmail",
+  authservIds: string[] = [FASTMAIL_AUTHSERV],
 ) {
   return connectionInboundDeps(
     connectionId,
-    provider,
+    authservIds,
     adapter,
     fakeExtractionDeps(),
   );
@@ -774,7 +784,7 @@ describe("drainEmailConnection", () => {
     const deps = {
       ...connectionInboundDeps(
         conn.id,
-        conn.provider,
+        [FASTMAIL_AUTHSERV],
         adapter,
         fakeExtractionDeps(),
       ),
@@ -949,6 +959,161 @@ describe("drainEmailConnection", () => {
     });
     expect(row?.receivedCount).toBe(1);
     expect(row?.processedCount).toBe(1);
+  });
+
+  it("drains a generic JMAP connection through the same pipeline", async () => {
+    // A JMAP connection whose pinned delivery stamp carries a passing clause
+    // aligned with the From domain: the receipt imports and the mail is
+    // trashed, exactly like the Fastmail path.
+    const jmapConn = {
+      ...conn,
+      provider: "jmap",
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: "mail.example.com" as string | null,
+    };
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "jm1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt",
+            body: "MERCHANT: Apple\nTOTAL: 3.50\nCATEGORY: office supplies",
+            authResults: "mail.example.com; dkim=pass header.d=email.apple.com",
+          },
+        ],
+      ]),
+    );
+    const result = await drainEmailConnection(jmapConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    expect(result.created + result.partial).toBe(1);
+    expect(trashed).toEqual(["jm1"]);
+  });
+
+  it("learns and pins the delivery stamp on the first drain of an unpinned JMAP connection", async () => {
+    const jmapConn = {
+      ...conn,
+      provider: "jmap",
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: null as string | null,
+    };
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    mailMocks.learnAuthservId.mockResolvedValue("mail.example.com");
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "jm2",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt",
+            body: "MERCHANT: Apple\nTOTAL: 4.25\nCATEGORY: office supplies",
+            authResults: "mail.example.com; dkim=pass header.d=email.apple.com",
+          },
+        ],
+      ]),
+    );
+    const result = await drainEmailConnection(jmapConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    // The learned stamp is trusted for this same tick.
+    expect(result.created + result.partial).toBe(1);
+    expect(trashed).toEqual(["jm2"]);
+    expect(mailMocks.learnAuthservId).toHaveBeenCalledWith(
+      {
+        sessionUrl: "https://mail.example.com/.well-known/jmap",
+        authorization: "fmu1-conn-tok",
+      },
+      "jmap-1",
+    );
+    const row = await testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+    });
+    expect(row?.authservId).toBe("mail.example.com");
+    mailMocks.learnAuthservId.mockReset();
+  });
+
+  it("skips the drain when no delivery stamp can be learned", async () => {
+    // Fail closed: with no stamp to trust, evaluating an empty chain would
+    // read as "legacy transport" and open the sender-authentication gate.
+    const jmapConn = {
+      ...conn,
+      provider: "jmap",
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: null as string | null,
+    };
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    mailMocks.learnAuthservId.mockResolvedValue(undefined);
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "jm3",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt",
+            body: "MERCHANT: Apple\nTOTAL: 5.00\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const result = await drainEmailConnection(jmapConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    expect(result).toEqual({
+      evaluated: 0,
+      created: 0,
+      partial: 0,
+      ignored: 0,
+      failed: 0,
+    });
+    expect(trashed).toEqual([]);
+    const row = await testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+    });
+    expect(row?.authservId).toBeNull();
+    mailMocks.learnAuthservId.mockReset();
+  });
+
+  it("ignores mail whose passing stamp does not align with the sender", async () => {
+    const jmapConn = {
+      ...conn,
+      provider: "jmap",
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: "mail.example.com" as string | null,
+    };
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "jm4",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt",
+            body: "MERCHANT: Apple\nTOTAL: 6.00\nCATEGORY: office supplies",
+            authResults: "mail.example.com; dkim=pass header.d=attacker.test",
+          },
+        ],
+      ]),
+    );
+    const result = await drainEmailConnection(jmapConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    expect(result.created + result.partial).toBe(0);
+    expect(result.ignored).toBe(1);
+    expect(trashed).toEqual([]);
+    expect(await logRow(conn.id, "jm4")).toMatchObject({
+      outcome: "ignored",
+      reason: "failed authentication",
+    });
   });
 });
 

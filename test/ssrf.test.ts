@@ -164,6 +164,131 @@ describe("fetchPublicUrl", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  /** Stub fetch with a scripted response per URL and record every request. */
+  function stubFetch(respond: (url: string) => Response): {
+    calls: Array<{ url: string; init: RequestInit }>;
+    restore: () => void;
+  } {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    globalThis.fetch = (async (
+      input: Parameters<typeof fetch>[0],
+      init?: RequestInit,
+    ) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      calls.push({ url, init: init ?? {} });
+      return respond(url);
+    }) as typeof fetch;
+    return {
+      calls,
+      restore: () => {
+        globalThis.fetch = originalFetch;
+      },
+    };
+  }
+
+  const resolvePublic = async () => [{ address: "93.184.216.34", family: 4 }];
+
+  it("sends caller headers on the first hop", async () => {
+    const stub = stubFetch(() => new Response("ok"));
+    try {
+      await fetchPublicUrl(
+        "https://mail.example.com/.well-known/jmap",
+        { headers: { Authorization: "Bearer sekret" } },
+        resolvePublic as never,
+      );
+      expect(stub.calls).toHaveLength(1);
+      expect(stub.calls[0]!.init.headers).toEqual({
+        Authorization: "Bearer sekret",
+      });
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("refuses a redirect off the origin once credentials are attached", async () => {
+    const stub = stubFetch(
+      () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://elsewhere.test/jmap/session" },
+        }),
+    );
+    try {
+      await expect(
+        fetchPublicUrl(
+          "https://mail.example.com/.well-known/jmap",
+          { headers: { Authorization: "Bearer sekret" } },
+          resolvePublic as never,
+        ),
+      ).rejects.toThrow(
+        "Refusing to follow a redirect off https://mail.example.com with credentials",
+      );
+      // The credential never reached the attacker host.
+      expect(stub.calls.some((r) => r.url.includes("elsewhere.test"))).toBe(
+        false,
+      );
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("re-sends the headers on a same-origin redirect", async () => {
+    const stub = stubFetch((url) =>
+      url.endsWith("/.well-known/jmap")
+        ? new Response(null, {
+            status: 307,
+            headers: { location: "https://mail.example.com/jmap/session" },
+          })
+        : new Response("ok"),
+    );
+    try {
+      const res = await fetchPublicUrl(
+        "https://mail.example.com/.well-known/jmap",
+        { headers: { Authorization: "Bearer sekret" } },
+        resolvePublic as never,
+      );
+      expect(await res.text()).toBe("ok");
+      expect(stub.calls).toHaveLength(2);
+      for (const request of stub.calls) {
+        expect(request.init.headers).toEqual({
+          Authorization: "Bearer sekret",
+        });
+      }
+    } finally {
+      stub.restore();
+    }
+  });
+
+  it("follows a cross-origin redirect when no credentials are attached", async () => {
+    const stub = stubFetch((url) =>
+      url.includes("mail.example.com")
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "https://elsewhere.test/jmap/session" },
+          })
+        : new Response("ok"),
+    );
+    try {
+      const res = await fetchPublicUrl(
+        "https://mail.example.com/.well-known/jmap",
+        {},
+        resolvePublic as never,
+      );
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ok");
+      expect(stub.calls).toHaveLength(2);
+      expect(stub.calls[1]!.init.headers).toBeUndefined();
+    } finally {
+      stub.restore();
+    }
+  });
 });
 
 describe("readBodyLimited", () => {
