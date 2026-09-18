@@ -16,6 +16,15 @@
     "expense": {
       "type": "http",
       "url": "https://expense.localhost/mcp"
+    },
+    "ghost-mcp": {
+      "command": "pnpx",
+      "args": ["-y", "@fanyangmeng/ghost-mcp"],
+      "env": {
+        "GHOST_API_URL": "https://labnotes.org",
+        "GHOST_ADMIN_API_KEY": "6547da8143f4111d84b57dbc:e53b8b2c7c1e0a06fc5442cb2a87ee6505db86ae0c3d42077b8ab8037470a521",
+        "GHOST_API_VERSION": "v5.0"
+      }
     }
   }
 }
