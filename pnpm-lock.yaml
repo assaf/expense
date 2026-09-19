@@ -254,8 +254,8 @@ importers:
         specifier: ^10.6.0
         version: 10.6.0
       dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
+        specifier: ^18.0.0
+        version: 18.0.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -272,8 +272,8 @@ importers:
         specifier: ^1.9.4
         version: 1.9.4
       lucide-react:
-        specifier: ^1.46.0
-        version: 1.46.0(react@19.3.0)
+        specifier: ^1.47.0
+        version: 1.47.0(react@19.3.0)
       pdfjs-dist:
         specifier: ^6.3.289
         version: 6.3.289
@@ -470,8 +470,8 @@ packages:
     resolution: {integrity: sha512-uylIQSUWpfLuH2LovxEEfwzJGM/SabLOfLMg6YXu/E8jJEKUdpdILCVCQCdFvHyu/7dLJOHPMfrSwduxO56NkQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-providers@3.1133.0':
-    resolution: {integrity: sha512-DB7iEombCBTYRNDWTn8l0HqfKoKMI9nPdjr4njM2flOZ6j0omlI81lBPNNbrCQPrw4iv90tHFZoglUq5MC99kQ==}
+  '@aws-sdk/credential-providers@3.1135.0':
+    resolution: {integrity: sha512-HHX5m78NMJVadf9iiqbu7c89Oz5AkP1anIn/misOpcheFu6OnqFw4PYWtobjobVwlOJO9iY/8xgn93BUtSnWHQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/nested-clients@3.997.45':
@@ -645,8 +645,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@5.20260916.1':
-    resolution: {integrity: sha512-BR2oaseRZZ5q8uToQpAA/6hYNc1+jcKB5OIfK+PkZPkbS7OICVKvRS+WpKgbyTQ7yl6colb3pIHwQRgszfFd5g==}
+  '@cloudflare/workers-types@5.20260917.1':
+    resolution: {integrity: sha512-fXMYFJw6HmcDiVZ8umPsUB7fR6HjFDms2Xr9iSovYgs1J7ytIfW3s7Rc9RptBH1JZfvdoJMx3Uo729pm/DJuoA==}
 
   '@distilled.cloud/aws@1.0.0-rc.6':
     resolution: {integrity: sha512-WI0KK4mCdIvclKH7kbK/geY9iIRiSN6v067OdvuLUOEHA19GdQj88lUBSbtwdmIG0sm61zm2JKHwXO+RKseuIg==}
@@ -3484,8 +3484,8 @@ packages:
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
-  baseline-browser-mapping@2.11.24:
-    resolution: {integrity: sha512-hYrgxie335U08WqICoGqKRzV1HFXv6zdxwJE4ekCb80CM9a0SVVsN4QPwT67RraRo+9h8IATk6uxHJw7QSkdOg==}
+  baseline-browser-mapping@2.11.25:
+    resolution: {integrity: sha512-gMmEShwwq7FJqMwvfRwvCl00v4kN+KOfJqXn+f4nrufak5gNHJOksd/60Dvjuz7sI8Y5WiSFBa8FEYr+zoyqCw==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -3713,8 +3713,8 @@ packages:
     resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
     engines: {node: '>=18'}
 
-  content-type@3.1.0:
-    resolution: {integrity: sha512-z26wZR7iXahgpSK7XgnB4IbRVmUNSODvsX9qC9TAru7AcWGiqn5YKy+OH3PLRrwyAnewykKhCqnD+VV3a8uT8Q==}
+  content-type@3.1.1:
+    resolution: {integrity: sha512-GW4qUsfFo59d0HbUibDlWv5wPz+vAAcaTWbKIuKCf0JkC7wWkSyf8f13IpXn5JkeMlB2P8iTSSIjwXljorg2vA==}
     engines: {node: '>=22'}
 
   convert-source-map@2.0.0:
@@ -3846,6 +3846,11 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  dotenv@18.0.0:
+    resolution: {integrity: sha512-16YSUvsKtKbwrTbESvtTSZzzJUug6jdFdqiBFg9Q6Bk1JY9r0hAtrtTiWxdI9YrsgOTmkjZRdgU0n3LnwGpECw==}
+    engines: {node: '>=12'}
+    hasBin: true
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -4094,8 +4099,8 @@ packages:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
 
-  get-east-asian-width@1.6.0:
-    resolution: {integrity: sha512-QRbvDIbx6YklUe6RxeTeleMR0yv3cYH6PsPZHcnVn7xv7zO1BHN8r0XETu8n6Ye3Q+ahtSarc3WgtNWmehIBfA==}
+  get-east-asian-width@1.7.0:
+    resolution: {integrity: sha512-XjH1AECxf0giL2V1aU8vKyRR2ppRUb5c0EvT7zuJTokQ74bNo52zOtghqdWIqrhUD79fo3x0WfKZdOqxF6LG1Q==}
     engines: {node: '>=18'}
 
   get-intrinsic@1.3.0:
@@ -4573,8 +4578,8 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-react@1.46.0:
-    resolution: {integrity: sha512-Bv+FZXgZPrxc/NCl1e7JJVQFLdiCxYgxNVhqoV7X0p6I8ADJo8DxBnK1auH0fZz4AmqOJ3jgneL4f1i8LJQRAA==}
+  lucide-react@1.47.0:
+    resolution: {integrity: sha512-o8C23aXpNQypRY73W7fW02EyvWJinEMXgKeGjFoKym0zj3Q73hD97A1IQps1g8C14HTGsOpZL0Am+xjfgFZAbg==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -4707,8 +4712,8 @@ packages:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
 
-  node-releases@2.0.55:
-    resolution: {integrity: sha512-mIrE/Cw9y+9Au6dS5vDKDhQza9YvG6w+ZrS6X+ZzA7yFW/soAeaups4Qzn1bL6g5FVy8WtP79+0j82oPIbqRjQ==}
+  node-releases@2.0.56:
+    resolution: {integrity: sha512-x0InOIyzgdk+eyaWaRJFH5snEtiImgBgblZ2CyPrLmqqcuMQkEvcDPHbzqbD8eDsSeJbVOjn+crzyzHaM4D+/A==}
     engines: {node: '>=18'}
 
   nopt@8.1.0:
@@ -5019,8 +5024,8 @@ packages:
     resolution: {integrity: sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A==}
     engines: {node: '>=20'}
 
-  prettier@3.9.7:
-    resolution: {integrity: sha512-T3mF5P7HFzZVLDQuCUNtJj6WK1pcpLMweMNUVwGb01bLNkH9AkKxtZvmInw8K6bnn2O3d6/5RHl6zSHiBAD0Og==}
+  prettier@3.9.8:
+    resolution: {integrity: sha512-WRFq3Wn3WId7LLROfMLdH7xaFr2jR62wU8nLO6rQUOLOxNZUviyJQs1M0iIhLexSFy+L+w0ch66wtoO2jRjG0A==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -5311,8 +5316,8 @@ packages:
   spdx-expression-parse@3.0.1:
     resolution: {integrity: sha512-cbqHunsQWnJNE6KhVSMsMeH5H/L9EpymbzqTQ3uLwNCLZ1Q481oWaofqH7nO6V07xlXwY6PhQdQ2IedWx/ZK4Q==}
 
-  spdx-license-ids@3.0.23:
-    resolution: {integrity: sha512-CWLcCCH7VLu13TgOH+r8p1O/Znwhqv/dbb6lqWy67G+pT1kHmeD/+V36AVb/vq8QMIQwVShJ6Ssl5FPh0fuSdw==}
+  spdx-license-ids@3.0.24:
+    resolution: {integrity: sha512-cLS9TtWkIQFyLkJ3/5aFQAOHOSKTlOs/7WDut/XPSdjom1fJhUdkepeJAKXa9Y05+FabHd0sti+Et559vDtkpQ==}
 
   split2@4.2.0:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
@@ -5504,8 +5509,8 @@ packages:
     resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
     engines: {node: '>=16'}
 
-  type-fest@5.9.0:
-    resolution: {integrity: sha512-yANm3Jr3GiJ1qgJlxGAVxTOIcEOk1rhQHamlXtnrCK7EHP4HeM9OGxtMg/W7HFdrVzw/ZWJKGVIJusVH85sLtw==}
+  type-fest@5.10.0:
+    resolution: {integrity: sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==}
     engines: {node: '>=20'}
 
   type-is@2.1.0:
@@ -6008,7 +6013,7 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
-  '@aws-sdk/credential-providers@3.1133.0':
+  '@aws-sdk/credential-providers@3.1135.0':
     dependencies:
       '@aws-sdk/core': 3.978.0
       '@aws-sdk/credential-provider-cognito-identity': 3.972.70
@@ -6236,13 +6241,13 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260704.1':
     optional: true
 
-  '@cloudflare/workers-types@5.20260916.1': {}
+  '@cloudflare/workers-types@5.20260917.1': {}
 
   '@distilled.cloud/aws@1.0.0-rc.6(effect@4.0.0-rc.112)':
     dependencies:
       '@aws-crypto/crc32': 5.2.0
       '@aws-crypto/util': 5.2.0
-      '@aws-sdk/credential-providers': 3.1133.0
+      '@aws-sdk/credential-providers': 3.1135.0
       '@aws-sdk/types': 3.974.5
       '@distilled.cloud/core': 1.0.0-rc.6(effect@4.0.0-rc.112)
       '@smithy/shared-ini-file-loader': 4.7.2
@@ -6288,12 +6293,12 @@ snapshots:
 
   '@effect/sql-d1@4.0.0-rc.112(effect@4.0.0-rc.112)':
     dependencies:
-      '@cloudflare/workers-types': 5.20260916.1
+      '@cloudflare/workers-types': 5.20260917.1
       effect: 4.0.0-rc.112
 
   '@effect/sql-d1@4.0.0-rc.115(effect@4.0.0-rc.112)':
     dependencies:
-      '@cloudflare/workers-types': 5.20260916.1
+      '@cloudflare/workers-types': 5.20260917.1
       effect: 4.0.0-rc.112
 
   '@effect/sql-sqlite-do@4.0.0-rc.112(effect@4.0.0-rc.112)':
@@ -6829,7 +6834,7 @@ snapshots:
       '@octokit/endpoint': 11.0.5
       '@octokit/request-error': 7.1.2
       '@octokit/types': 18.0.0
-      content-type: 3.1.0
+      content-type: 3.1.1
       json-with-bigint: 3.5.12
       universal-user-agent: 7.0.3
 
@@ -7392,7 +7397,7 @@ snapshots:
       jsonc-parser: 3.3.1
       package-manager-detector: 1.8.0
       pathe: 2.0.3
-      prettier: 3.9.7
+      prettier: 3.9.8
       string-width: 8.2.2
       strip-ansi: 7.2.0
       vscode-languageserver: 10.1.0
@@ -7420,7 +7425,7 @@ snapshots:
       jsonc-parser: 3.3.1
       package-manager-detector: 1.8.0
       pathe: 2.0.3
-      prettier: 3.9.7
+      prettier: 3.9.8
       string-width: 8.2.2
       strip-ansi: 7.2.0
       vscode-languageserver: 10.1.0
@@ -8534,7 +8539,7 @@ snapshots:
       '@alchemy.run/cloudflare-runtime': 2.0.0-beta.74(@distilled.cloud/cloudflare@1.0.0-rc.6(effect@4.0.0-rc.112))(@types/node@26.6.1)(@voidzero-dev/vite-plus-core@0.3.2(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(typescript@7.0.2)(yaml@2.9.1))(effect@4.0.0-rc.112)(rolldown@1.1.5)(typescript@7.0.2)
       '@alchemy.run/floci': 2.0.0-beta.74(effect@4.0.0-rc.112)
       '@alchemy.run/node-utils': 2.0.0-beta.74
-      '@aws-sdk/credential-providers': 3.1133.0
+      '@aws-sdk/credential-providers': 3.1135.0
       '@clack/prompts': 1.8.1
       '@distilled.cloud/aws': 1.0.0-rc.6(effect@4.0.0-rc.112)
       '@distilled.cloud/axiom': 1.0.0-rc.6(effect@4.0.0-rc.112)
@@ -8674,7 +8679,7 @@ snapshots:
 
   base64-js@1.5.1: {}
 
-  baseline-browser-mapping@2.11.24: {}
+  baseline-browser-mapping@2.11.25: {}
 
   basic-auth@2.0.1:
     dependencies:
@@ -8728,10 +8733,10 @@ snapshots:
 
   browserslist@4.29.0:
     dependencies:
-      baseline-browser-mapping: 2.11.24
+      baseline-browser-mapping: 2.11.25
       caniuse-lite: 1.0.30001810
       electron-to-chromium: 1.5.430
-      node-releases: 2.0.55
+      node-releases: 2.0.56
       update-browserslist-db: 1.3.3(browserslist@4.29.0)
 
   buffer-crc32@1.0.0: {}
@@ -8909,7 +8914,7 @@ snapshots:
 
   content-type@2.1.0: {}
 
-  content-type@3.1.0: {}
+  content-type@3.1.1: {}
 
   convert-source-map@2.0.0: {}
 
@@ -9007,6 +9012,8 @@ snapshots:
       domhandler: 5.0.3
 
   dotenv@17.4.2: {}
+
+  dotenv@18.0.0: {}
 
   dunder-proto@1.0.1:
     dependencies:
@@ -9301,7 +9308,7 @@ snapshots:
 
   get-caller-file@2.0.5: {}
 
-  get-east-asian-width@1.6.0: {}
+  get-east-asian-width@1.7.0: {}
 
   get-intrinsic@1.3.0:
     dependencies:
@@ -9450,7 +9457,7 @@ snapshots:
       stack-utils: 2.0.6
       string-width: 8.2.2
       terminal-size: 4.0.1
-      type-fest: 5.9.0
+      type-fest: 5.10.0
       widest-line: 6.0.0
       wrap-ansi: 9.0.2
       ws: 8.21.3
@@ -9471,7 +9478,7 @@ snapshots:
 
   is-fullwidth-code-point@5.1.0:
     dependencies:
-      get-east-asian-width: 1.6.0
+      get-east-asian-width: 1.7.0
 
   is-glob@4.0.3:
     dependencies:
@@ -9737,7 +9744,7 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react@1.46.0(react@19.3.0):
+  lucide-react@1.47.0(react@19.3.0):
     dependencies:
       react: 19.3.0
 
@@ -9853,7 +9860,7 @@ snapshots:
 
   node-gyp-build@4.8.4: {}
 
-  node-releases@2.0.55: {}
+  node-releases@2.0.56: {}
 
   nopt@8.1.0:
     dependencies:
@@ -10201,7 +10208,7 @@ snapshots:
 
   powershell-utils@0.2.1: {}
 
-  prettier@3.9.7: {}
+  prettier@3.9.8: {}
 
   pretty-format@27.5.1:
     dependencies:
@@ -10358,7 +10365,7 @@ snapshots:
       '@types/normalize-package-data': 2.4.4
       normalize-package-data: 8.0.0
       parse-json: 8.3.0
-      type-fest: 5.9.0
+      type-fest: 5.10.0
       unicorn-magic: 0.4.0
 
   readable-stream@2.3.8:
@@ -10602,16 +10609,16 @@ snapshots:
   spdx-correct@3.2.0:
     dependencies:
       spdx-expression-parse: 3.0.1
-      spdx-license-ids: 3.0.23
+      spdx-license-ids: 3.0.24
 
   spdx-exceptions@2.5.0: {}
 
   spdx-expression-parse@3.0.1:
     dependencies:
       spdx-exceptions: 2.5.0
-      spdx-license-ids: 3.0.23
+      spdx-license-ids: 3.0.24
 
-  spdx-license-ids@3.0.23: {}
+  spdx-license-ids@3.0.24: {}
 
   split2@4.2.0: {}
 
@@ -10645,12 +10652,12 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
-      get-east-asian-width: 1.6.0
+      get-east-asian-width: 1.7.0
       strip-ansi: 7.2.0
 
   string-width@8.2.2:
     dependencies:
-      get-east-asian-width: 1.6.0
+      get-east-asian-width: 1.7.0
       strip-ansi: 7.2.0
 
   string_decoder@1.1.1:
@@ -10818,7 +10825,7 @@ snapshots:
 
   type-fest@4.41.0: {}
 
-  type-fest@5.9.0:
+  type-fest@5.10.0:
     dependencies:
       tagged-tag: 1.0.0
 
