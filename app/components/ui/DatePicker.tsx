@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "cn";
 import { todayDate } from "~/lib/format";
@@ -123,14 +123,15 @@ export function DatePicker({
 
   // Close when a mousedown lands outside the control (the popover is
   // non-modal; the editor's own shortcuts are guarded in onPopoverKeyDown).
+  const onOutsideDown = useEffectEvent(() => close());
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) close();
+      if (!wrapRef.current?.contains(e.target as Node)) onOutsideDown();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  });
+  }, [open]);
 
   /** Move the focused day by a number of days, following month boundaries. */
   const moveDay = (delta: number) => {

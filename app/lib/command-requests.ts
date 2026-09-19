@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 /**
  * One-shot cross-page trigger bus for the Cmd+K palette.
  *
@@ -62,18 +62,15 @@ function onCommandRequest(listener: Listener): () => void {
 /** React hook: subscribe to the command bus for one mounted page,
  * draining a request that arrived before mount (the palette navigates,
  * so the target page mounts after the request fired). The handler is
- * read fresh every render, so resubscribing is never needed. */
+ * an effect event, so the subscription is stable across renders. */
 export function useCommandRequest(
   handle: (request: CommandRequest) => void,
 ): void {
-  const handleRef = useRef(handle);
-  handleRef.current = handle;
+  const handleEvent = useEffectEvent(handle);
   useEffect(() => {
     const pending = consumeCommandRequest();
-    if (pending) handleRef.current(pending);
-    const unsubscribe = onCommandRequest((request) =>
-      handleRef.current(request),
-    );
+    if (pending) handleEvent(pending);
+    const unsubscribe = onCommandRequest((request) => handleEvent(request));
     return unsubscribe;
   }, []);
 }

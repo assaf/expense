@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -714,38 +714,40 @@ export function useFormKeys(opts: {
   blocked: boolean;
 }) {
   const { onSave, onCancel, disabled, blocked } = opts;
+  // An effect event, so callers passing fresh arrows don't churn the
+  // document listener (the handler still sees the latest values).
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (blocked) return;
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    // The inline new-report form (input + buttons) handles Enter/Escape
+    // itself; the editor shortcuts must not hijack it (Escape would
+    // cancel the whole editor).
+    if (target?.closest?.("[data-report-create]")) return;
+    // Inputs with a <datalist> (e.g. merchant autocomplete): Enter picks the
+    // suggestion, so let the browser handle it and don't submit.
+    const hasList = !!target?.getAttribute?.("list");
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Cmd/Ctrl+Enter always submits, even in textareas / autocomplete / dropdowns.
+      e.preventDefault();
+      if (!disabled) onSave();
+    } else if (
+      e.key === "Enter" &&
+      tag !== "TEXTAREA" &&
+      tag !== "BUTTON" &&
+      !hasList
+    ) {
+      e.preventDefault();
+      if (!disabled) onSave();
+    }
+  });
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (blocked) return;
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      // The inline new-report form (input + buttons) handles Enter/Escape
-      // itself; the editor shortcuts must not hijack it (Escape would
-      // cancel the whole editor).
-      if (target?.closest?.("[data-report-create]")) return;
-      // Inputs with a <datalist> (e.g. merchant autocomplete): Enter picks the
-      // suggestion, so let the browser handle it and don't submit.
-      const hasList = !!target?.getAttribute?.("list");
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        // Cmd/Ctrl+Enter always submits, even in textareas / autocomplete / dropdowns.
-        e.preventDefault();
-        if (!disabled) onSave();
-      } else if (
-        e.key === "Enter" &&
-        tag !== "TEXTAREA" &&
-        tag !== "BUTTON" &&
-        !hasList
-      ) {
-        e.preventDefault();
-        if (!disabled) onSave();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onSave, onCancel, disabled, blocked]);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 }
 
 /** Brief visual feedback while a save/cancel navigation is in flight. */

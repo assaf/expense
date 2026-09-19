@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { Markdown } from "~/components/Markdown";
 import { revealTo } from "~/lib/insights";
@@ -24,8 +24,7 @@ export function RevealText({
       ? 0
       : text.length,
   );
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
+  const onDoneEvent = useEffectEvent(onDone);
   useEffect(() => {
     if (!reveal) return;
     let pos = 0;
@@ -37,7 +36,7 @@ export function RevealText({
       setPos(pos);
       if (pos >= text.length) {
         window.clearInterval(timer);
-        onDoneRef.current();
+        onDoneEvent();
       }
     };
     const timer = window.setInterval(tick, REVEAL_TICK_MS);

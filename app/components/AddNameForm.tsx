@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -23,9 +23,9 @@ export function useNameAdd({ intent, onAdded }: UseNameAddOptions) {
   const fetcher = useFetcher<NameAddResult>();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // Kept in a ref so an inline callback doesn't retrigger the effect.
-  const onAddedRef = useRef(onAdded);
-  onAddedRef.current = onAdded;
+  // An effect event, so the latest callback is called without the inline
+  // arrow a caller passes retriggering the effect.
+  const onAddedEvent = useEffectEvent((name: string) => onAdded?.(name));
 
   useEffect(() => {
     const { data } = fetcher;
@@ -33,7 +33,7 @@ export function useNameAdd({ intent, onAdded }: UseNameAddOptions) {
     if (data.ok && data.name) {
       setDraft("");
       setError(null);
-      onAddedRef.current?.(data.name);
+      onAddedEvent(data.name);
     } else if (data.error) {
       setError(data.error);
     }
