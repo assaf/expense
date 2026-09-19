@@ -1,4 +1,5 @@
-import "dotenv/config";
+import { existsSync } from "node:fs";
+import "node:process";
 import { definePrismaConfig } from "@prisma/cli-engine";
 import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
 
@@ -9,6 +10,12 @@ import { defineConfig as ormConfig } from "@prisma/orm-postgres/config";
 // docs/operations.md). The `connection` here serves CLI commands
 // (db update / db sign / db migrate) — DDL flows use
 // DATABASE_URL_UNPOOLED (session pooler) per docs/operations.md.
+// Load the local .env for CLI commands (existing vars win, dotenv-style).
+// Vercel and CI inject env vars directly and ship no .env file; skip when
+// absent, since loadEnvFile throws if the file is missing. Mirrors
+// app/lib/env.ts, so the CLI and the app read the same file the same way.
+if (existsSync(".env")) process.loadEnvFile(".env");
+
 export default definePrismaConfig({
   orm: ormConfig({
     contract: "./prisma/contract.prisma",

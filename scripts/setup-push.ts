@@ -15,18 +15,8 @@ import { resolve } from "node:path";
 
 function loadEnv(path: string): void {
   try {
-    const raw = readFileSync(path, "utf8");
-    for (const line of raw.split("\n")) {
-      const t = line.trim();
-      if (!t || t.startsWith("#") || !t.includes("=")) continue;
-      const i = t.indexOf("=");
-      const key = t.slice(0, i).trim();
-      const value = t
-        .slice(i + 1)
-        .trim()
-        .replace(/^["']|["']$/g, "");
-      if (!(key in process.env)) process.env[key] = value;
-    }
+    // Values already in the environment win, so a shell override sticks.
+    process.loadEnvFile(path);
   } catch {
     // no .env file, which is fine: env vars may come from the shell
   }

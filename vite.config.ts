@@ -1,4 +1,5 @@
 import { sentryReactRouter } from "@sentry/react-router";
+import { prismaVitePlugin } from "@prisma/orm-postgres/vite-plugin-contract-emit";
 import { resolve } from "node:path";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -57,6 +58,10 @@ export default defineConfig((config) => {
     plugins: [
       tailwindcss(),
       reactRouter(),
+      // Re-emit prisma/contract.json + contract.d.ts when the contract
+      // changes in dev, so a save doesn't leave the dev server running on
+      // stale artifacts. Dev only: production emits through prebuild.
+      prismaVitePlugin("prisma.config.ts"),
       sentryReactRouter(
         {
           org: "labnotes",
