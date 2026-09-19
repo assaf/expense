@@ -86,7 +86,7 @@
     "@types/pg": "8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "knip": "^6.36.0",
+    "knip": "^6.37.0",
     "looks-same": "^10.0.1",
     "playwright": "^1.63.0",
     "prisma": "8.0.0-rc.15",
