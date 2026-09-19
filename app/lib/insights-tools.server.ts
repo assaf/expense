@@ -21,11 +21,16 @@ export const MAX_TOOL_ROWS = 50;
  * hundred bytes; the cap bounds hostile provider output. */
 export const MAX_TOOL_ARGUMENTS = 4_096;
 
+/** Issues reported back to the model before they are cut off: five is more
+ * than a retry needs and keeps the message short. */
+const MAX_REPORTED_ISSUES = 5;
+
 /** The prelude every tool call runs before its own schema: bound the
  * argument string, parse it, validate it, and hand back the model-facing
  * error when any step fails. `label` names the tool's own contract
  * ("invalid trip") so the model can tell which call it got wrong, and the
- * issue list is capped because it lands in the prompt. */
+ * issues are prettified (each with its field path) and capped because they
+ * land in the prompt. */
 export function parseToolArguments<T>(
   schema: z.ZodType<T>,
   call: { function: { arguments: string } },
@@ -52,7 +57,12 @@ export function parseToolArguments<T>(
       ok: false,
       error: JSON.stringify({
         error: label,
-        issues: parsed.error.issues.map((i) => i.message).slice(0, 5),
+        // Prettified rather than just the messages: each issue comes with
+        // the field it belongs to, so the model's retry is aimed instead of
+        // a guess at what it got wrong.
+        issues: z.prettifyError(
+          new z.ZodError(parsed.error.issues.slice(0, MAX_REPORTED_ISSUES)),
+        ),
       }),
     };
   }
@@ -89,9 +99,14 @@ export interface FilterableExpense {
   description?: string;
 }
 
+/** An optional ISO (YYYY-MM-DD) date field, shared by the two range bounds.
+ * Not a bare string: the bounds are compared as text against the stored
+ * dates, so a malformed one would quietly filter the wrong range. */
+const isoDateField = z.iso.date().optional();
+
 const queryExpensesInput = z.object({
-  dateFrom: z.string().optional().describe("Inclusive start date YYYY-MM-DD."),
-  dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
+  dateFrom: isoDateField.describe("Inclusive start date YYYY-MM-DD."),
+  dateTo: isoDateField.describe("Inclusive end date YYYY-MM-DD."),
   categories: z
     .array(z.string().max(200))
     .max(32)
