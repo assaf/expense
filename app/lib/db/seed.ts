@@ -261,11 +261,10 @@ async function bootstrapUser(): Promise<User> {
   };
 }
 
-/** Seed a new account with the IRS Schedule C default categories. */
-export async function seedDefaultCategories(
-  tx: Tx,
-  accountId: string,
-): Promise<void> {
+/** Seed a new account with the IRS Schedule C default categories: the
+ * bootstrap path, which already holds a transaction. createAccount seeds
+ * through a nested create instead. */
+async function seedDefaultCategories(tx: Tx, accountId: string): Promise<void> {
   await tx.orm.public.Category.createAll(
     DEFAULT_CATEGORIES.map((name) => ({ name, accountId })),
   );

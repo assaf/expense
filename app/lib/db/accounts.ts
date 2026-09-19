@@ -26,7 +26,8 @@ import {
   VERIFICATION_TTL_MS,
   withinWindow,
 } from "~/lib/db/shared";
-import { initStore, seedDefaultCategories } from "~/lib/db/seed";
+import { initStore } from "~/lib/db/seed";
+import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { extractEmailAddress } from "~/lib/validation";
 import type { Account, User } from "~/lib/types";
 
@@ -110,14 +111,15 @@ export async function createAccount(name: string): Promise<Account> {
     createdAt: new Date().toISOString(),
   };
   // The account is created with the IRS Schedule C default categories so
-  // receipts can be categorized immediately.
+  // receipts can be categorized immediately. One nested create: the ORM
+  // runs a relation callback in its own mutation scope, so the account and
+  // its categories commit together without a hand-rolled transaction.
   try {
-    await db.transaction(async (tx) => {
-      await tx.orm.public.Account.create({
-        ...account,
-        createdAt: fromIso(account.createdAt),
-      });
-      await seedDefaultCategories(tx, account.id);
+    await db.orm.public.Account.create({
+      ...account,
+      createdAt: fromIso(account.createdAt),
+      categories: (categories) =>
+        categories.create(DEFAULT_CATEGORIES.map((name) => ({ name }))),
     });
   } catch (err) {
     // The name pre-check raced another signup: the unique index is the real
