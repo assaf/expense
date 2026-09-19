@@ -21,12 +21,14 @@ import {
   type ConnectionDeps,
   type ConnectionMailAdapter,
   type OwnerEmail,
+  bumpProcessedCount,
   connectionInboundDeps,
   mailClientFor,
   processConnectionEmail,
   realExtractionDeps,
 } from "~/lib/email-connection-process.server";
 import type { ConnectionEmailSummary } from "~/lib/email-connection-mail.server";
+import * as Sentry from "@sentry/react-router";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
@@ -1002,35 +1004,33 @@ export async function processReviewItem(input: {
     from: row.fromDisplay ?? row.fromAddress,
   };
 
-  const outcome = await processConnectionEmail(
-    connection,
-    summary,
-    connectionInboundDeps(
-      connection.id,
-      authservIds,
-      adapter,
-      input.extractionDeps ?? realExtractionDeps(),
-    ),
-    {
-      moveToTrash: (id) => adapter.moveToTrash(id),
-      sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
-    },
-    { review: true },
-  );
+  // Same isolation scope as the drain: the captures inside the pipeline
+  // carry the connection as a tag rather than an extra of their own.
+  const outcome = await Sentry.withIsolationScope((scope) => {
+    scope.setTag("connection", connection.id);
+    scope.setTag("account", connection.accountId);
+    return processConnectionEmail(
+      connection,
+      summary,
+      connectionInboundDeps(
+        connection.id,
+        authservIds,
+        adapter,
+        input.extractionDeps ?? realExtractionDeps(),
+      ),
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
+      },
+      { review: true },
+    );
+  });
 
   switch (outcome.status) {
     case "created":
     case "partial": {
-      // Prisma 8 has no atomic increment in the ORM lane; read then bump.
-      // A lost update only undercounts a stat, never loses data.
-      const current = await db.orm.public.EmailConnection.where({
-        id: connection.id,
-      })
-        .select("processedCount")
-        .first();
-      await db.orm.public.EmailConnection.where({ id: connection.id }).update({
-        processedCount: (current?.processedCount ?? 0) + 1,
-      });
+      // Same atomic bump as the drain's (see bumpProcessedCount).
+      await bumpProcessedCount(connection.id);
       if (acceptSender) {
         const fromAddress = extractEmailAddress(
           row.fromDisplay ?? row.fromAddress,

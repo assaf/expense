@@ -78,10 +78,14 @@ describe("parseEmailSummaries", () => {
       { includePreview: false },
     );
     expect(summaries.map((s) => s.id)).toEqual(["Md-good"]);
-    expect(warn).toHaveBeenCalledWith(
-      "[email-connections] skipping malformed Email/get row:",
-      "id",
-    );
+    // Reported, not silent: the pipeline routes this through captureWarning,
+    // whose call shape (message, extra) is the helper's to choose. Assert on
+    // the rendered line rather than pinning that signature.
+    expect(
+      warn.mock.calls.some((call) =>
+        String(call[0]).includes("skipping malformed Email/get row"),
+      ),
+    ).toBe(true);
   });
 
   it("throws loudly when the response is not an Email/get shape at all", () => {

@@ -4,6 +4,7 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import { authservIdsIn } from "~/lib/email-auth.server";
+import { captureWarning } from "~/lib/errors.server";
 import {
   fetchRawRfc822,
   formatAddress,
@@ -249,10 +250,9 @@ export function parseEmailSummaries(
   for (const row of parsed.data.list ?? []) {
     const email = connectionEmailRowSchema.safeParse(row);
     if (!email.success) {
-      console.warn(
-        "[email-connections] skipping malformed Email/get row:",
-        email.error.issues[0]?.path.join(".") || "(root)",
-      );
+      captureWarning("[email-connections] skipping malformed Email/get row", {
+        path: email.error.issues[0]?.path.join(".") || "(root)",
+      });
       continue;
     }
     summaries.push({

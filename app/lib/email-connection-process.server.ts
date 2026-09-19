@@ -46,6 +46,7 @@ import {
   hasOwnConfirmationHeader,
 } from "~/lib/email-classify";
 import { htmlToText } from "~/lib/html-text";
+import * as Sentry from "@sentry/react-router";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire } from "~/lib/db/wire";
@@ -256,25 +257,43 @@ async function seenEmail(
   return row !== null;
 }
 
-/** Prisma 8 has no atomic increment in the ORM lane; read then bump. A
- * lost update only undercounts a stat, never loses data. */
+/** Bump one counter in a single atomic UPDATE: Postgres evaluates `col + 1`
+ * against the stored value, so two drains that interleave can't lose an
+ * increment the way the old read-then-write could. The ORM lane takes
+ * literals only, so this is the SQL builder with a raw expression per
+ * column (pg/int4@1, the codec id prisma/contract.json gives both
+ * counters). */
 async function bumpCounter(
   connectionId: string,
   field: "receivedCount" | "processedCount",
 ): Promise<void> {
-  const row = await db.orm.public.EmailConnection.where({ id: connectionId })
-    .select(field)
-    .first();
-  await db.orm.public.EmailConnection.where({ id: connectionId }).update({
-    [field]: (row?.[field] ?? 0) + 1,
-  } as { receivedCount?: number; processedCount?: number });
+  await db.runtime().execute(
+    db.sql.public.email_connections
+      .update((f, fns) =>
+        field === "receivedCount"
+          ? {
+              receivedCount: fns.raw`${f.receivedCount} + 1`.returns(
+                "pg/int4@1",
+              ),
+            }
+          : {
+              processedCount: fns.raw`${f.processedCount} + 1`.returns(
+                "pg/int4@1",
+              ),
+            },
+      )
+      .where((f, fns) => fns.eq(f.id, connectionId))
+      .build(),
+  );
 }
 
-async function bumpReceived(connectionId: string): Promise<void> {
+/** Count one email the drain evaluated. */
+async function bumpReceivedCount(connectionId: string): Promise<void> {
   await bumpCounter(connectionId, "receivedCount");
 }
 
-async function bumpProcessed(connectionId: string): Promise<void> {
+/** Count one email that became an expense (auto drain or inbox review). */
+export async function bumpProcessedCount(connectionId: string): Promise<void> {
   await bumpCounter(connectionId, "processedCount");
 }
 
@@ -367,7 +386,7 @@ export async function processConnectionEmail(
   ) {
     return { status: "ignored", reason: "already processed" };
   }
-  await bumpReceived(connection.id);
+  await bumpReceivedCount(connection.id);
 
   // Our own notification emails (sent to self) must never be processed.
   // Skipped in review mode: the user chose a specific email, and a receipt
@@ -428,7 +447,6 @@ export async function processConnectionEmail(
         captureWarning(
           "[email-connections] message failed authentication; not importing",
           {
-            connectionId: connection.id,
             emailId: summary.id,
             from: summary.from,
             reason: auth.reason,
@@ -512,7 +530,6 @@ export async function processConnectionEmail(
         captureWarning(
           "[email-connections] duplicate receipt skipped — same receipt imported recently",
           {
-            connectionId: connection.id,
             emailId: summary.id,
             matchedExpenseId: duplicate.id,
           },
@@ -548,7 +565,6 @@ export async function processConnectionEmail(
       captureWarning(
         "[email-connections] duplicate receipt skipped — same image already imported",
         {
-          connectionId: connection.id,
           emailId: summary.id,
           matchedExpenseId: saved.duplicateOf,
         },
@@ -599,7 +615,6 @@ export async function processConnectionEmail(
       captureWarning(
         "[email-connections] duplicate confirmation suppressed — same receipt imported recently",
         {
-          connectionId: connection.id,
           emailId: summary.id,
           matchedExpenseId: saved.recentMatch.id,
         },
@@ -742,8 +757,26 @@ export function mailClientFor(
  * by the cron.
  * Counters: receivedCount bumps per newly-evaluated email, processedCount
  * per created/partial.
+ *
+ * Everything runs in one isolation scope per connection, so the captures
+ * along the way carry the connection and account as tags instead of each
+ * one copying those ids into `extra`. The cron path already had a scope
+ * (withMonitor forks one); the push and script paths did not.
  */
 export async function drainEmailConnection(
+  connection: EmailConnectionWithSecret,
+  options: DrainOptions = {},
+): Promise<DrainResult> {
+  return Sentry.withIsolationScope((scope) => {
+    scope.setTag("connection", connection.id);
+    scope.setTag("account", connection.accountId);
+    return drainConnection(connection, options);
+  });
+}
+
+/** The drain itself; drainEmailConnection owns the isolation scope it runs
+ * in. */
+async function drainConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
@@ -756,8 +789,9 @@ export async function drainEmailConnection(
   // ("legacy transport") and would open the sender-authentication gate.
   const authservIds = await connectionAuthservIds(connection, credential);
   if (authservIds === null) {
-    console.warn(
+    captureWarning(
       `[email-connections] no delivery authentication stamp yet for ${connection.emailAddress}`,
+      { emailAddress: connection.emailAddress },
     );
     return { evaluated: 0, created: 0, partial: 0, ignored: 0, failed: 0 };
   }
@@ -819,8 +853,8 @@ export async function drainEmailConnection(
 
     for (const summary of fresh) {
       if (Date.now() - started > budgetMs) {
-        console.warn("[email-connections] drain time budget reached", {
-          connectionId: connection.id,
+        captureWarning("[email-connections] drain time budget reached", {
+          evaluated: result.evaluated,
         });
         return result;
       }
@@ -834,11 +868,11 @@ export async function drainEmailConnection(
       switch (outcome.status) {
         case "created":
           result.created++;
-          await bumpProcessed(connection.id);
+          await bumpProcessedCount(connection.id);
           break;
         case "partial":
           result.partial++;
-          await bumpProcessed(connection.id);
+          await bumpProcessedCount(connection.id);
           break;
         case "error":
           result.failed++;
@@ -887,7 +921,7 @@ async function sendConnectionEmailToOwner(
   if (!ok) {
     captureError(
       "[email-connections] confirmation email failed (expense is saved)",
-      { connectionId: connection.id, to: connection.emailAddress },
+      { to: connection.emailAddress },
     );
   }
 }
