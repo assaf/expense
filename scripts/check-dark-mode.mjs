@@ -22,8 +22,7 @@
  *
  * Runs on every `.tsx` under `app` (components + routes).
  */
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { globSync, readFileSync } from "node:fs";
 
 const APP_DIR = process.env.APP_DIR ?? "app";
 
@@ -82,14 +81,6 @@ function bare(token) {
   return token.slice(token.lastIndexOf(":") + 1);
 }
 
-function* tsxFiles(dir) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) yield* tsxFiles(full);
-    else if (entry.name.endsWith(".tsx")) yield full;
-  }
-}
-
 /** Extract className string literals (single/double quotes and template
  * literals without `${}` interpolation). */
 function classNames(src) {
@@ -101,7 +92,7 @@ function classNames(src) {
 
 const problems = [];
 
-for (const file of tsxFiles(APP_DIR)) {
+for (const file of globSync(`${APP_DIR}/**/*.tsx`)) {
   const src = readFileSync(file, "utf8");
   for (const cls of classNames(src)) {
     if (!cls.trim()) continue;

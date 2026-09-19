@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import {
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
@@ -90,9 +90,7 @@ export function buildGmailAuthorizeUrl(input: {
   verifier: string;
   redirectUri: string;
 }): string {
-  const challenge = createHash("sha256")
-    .update(input.verifier)
-    .digest("base64url");
+  const challenge = hash("sha256", input.verifier, "base64url");
   const params = new URLSearchParams({
     client_id: GOOGLE_OAUTH_CLIENT_ID,
     redirect_uri: input.redirectUri,

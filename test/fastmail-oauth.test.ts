@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import { ulid } from "ulid";
 import { createAccount, createUser } from "~/lib/db/accounts";
 import {
@@ -144,9 +144,7 @@ describe("PKCE pair", () => {
   it("produces an S256 challenge over the verifier", () => {
     const { verifier, challenge } = generatePkcePair();
     expect(verifier).toMatch(/^[A-Za-z0-9_-]{43,128}$/);
-    expect(challenge).toBe(
-      createHash("sha256").update(verifier).digest("base64url"),
-    );
+    expect(challenge).toBe(hash("sha256", verifier, "base64url"));
   });
 
   it("is unique per call", () => {
@@ -521,7 +519,7 @@ describe("connect-fastmail entry", () => {
     expect(parked.next).toBe("emails");
     expect(parked.verifier.length).toBeGreaterThanOrEqual(43);
     expect(url.searchParams.get("code_challenge")).toBe(
-      createHash("sha256").update(parked.verifier).digest("base64url"),
+      hash("sha256", parked.verifier, "base64url"),
     );
   });
 

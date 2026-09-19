@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { hash, randomBytes } from "node:crypto";
 import { FASTMAIL_OAUTH_CLIENT_ID } from "~/lib/env";
 import {
   requestTokenSet,
@@ -94,7 +94,7 @@ export interface OAuthTokenSet {
  * challenge = BASE64URL(SHA256(verifier)). */
 export function generatePkcePair(): { verifier: string; challenge: string } {
   const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const challenge = hash("sha256", verifier, "base64url");
   return { verifier, challenge };
 }
 

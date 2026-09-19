@@ -5,8 +5,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { existsSync, statSync } from "node:fs";
-import { readdirSync } from "node:fs";
+import { existsSync, globSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -153,16 +152,12 @@ async function ensureBuild(): Promise<void> {
 
 function newestMtime(paths: string[]): number {
   let newest = 0;
-  const visit = (p: string) => {
-    if (!existsSync(p)) return;
+  // A symlinked source is still a build input, so follow links like statSync.
+  const patterns = paths.flatMap((p) => [p, `${p}/**/*`]);
+  for (const p of globSync(patterns, { followSymlinks: true })) {
     const st = statSync(p);
-    if (st.isDirectory()) {
-      for (const child of readdirSync(p)) visit(resolve(p, child));
-    } else {
-      newest = Math.max(newest, st.mtimeMs);
-    }
-  };
-  for (const p of paths) visit(resolve(p));
+    if (st.isFile()) newest = Math.max(newest, st.mtimeMs);
+  }
   return newest;
 }
 

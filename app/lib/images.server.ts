@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { hash, randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
@@ -254,7 +254,7 @@ export async function saveImage(
     quality: 80,
   }).catch(() => null as Buffer | null);
 
-  const sha256 = createHash("sha256").update(storedBuffer).digest("hex");
+  const sha256 = hash("sha256", storedBuffer, "hex");
   const base = `${ulid()}${ext}`;
   let name = await uniqueName(accountId, base, (key) =>
     pgExists(accountId, key),

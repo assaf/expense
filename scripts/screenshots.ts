@@ -15,11 +15,11 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import {
   existsSync,
+  globSync,
   readFileSync,
-  readdirSync,
   renameSync,
   statSync,
   unlinkSync,
@@ -41,7 +41,7 @@ const repoRoot = resolve(import.meta.dirname, "..");
 
 function hashFile(path: string): string | null {
   if (!existsSync(path)) return null;
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  return hash("sha256", readFileSync(path), "hex");
 }
 
 function gitShow(relPath: string, destPath: string): boolean {
@@ -59,16 +59,9 @@ function gitShow(relPath: string, destPath: string): boolean {
 }
 
 function findNewScreenshots(): string[] {
-  const results: string[] = [];
-  function scan(dir: string) {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) scan(path);
-      else if (entry.name.endsWith(".new.png")) results.push(path);
-    }
-  }
-  if (existsSync(screenshotsDir)) scan(screenshotsDir);
-  return results;
+  return globSync("**/*.new.png", { cwd: screenshotsDir }).map((p) =>
+    join(screenshotsDir, p),
+  );
 }
 
 const newScreenshots = findNewScreenshots();
@@ -79,46 +72,39 @@ const modifiedPaths = new Set(
   newScreenshots.map((p) => p.replace(/\.new\.png$/, ".png")),
 );
 const modifiedItems: Item[] = [];
-if (existsSync(screenshotsDir)) {
-  function scanModified(dir: string) {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        scanModified(path);
-      } else if (
-        entry.name.endsWith(".png") &&
-        !entry.name.endsWith(".new.png") &&
-        !entry.name.endsWith(".diff.png") &&
-        !entry.name.endsWith(".git.png")
-      ) {
-        // Skip if there's already a .new.png for this file
-        if (modifiedPaths.has(path)) continue;
-        const relPath = relative(screenshotsDir, path);
-        const gitRelPath = join("screenshots", relPath);
-        const gitAbsolutePath = join(
-          screenshotsDir,
-          relPath.replace(/\.png$/, ".git.png"),
-        );
-        const gotGit = gitShow(gitRelPath, gitAbsolutePath);
-        if (!gotGit) continue;
-        const currentHash = hashFile(path);
-        const gitHash = hashFile(gitAbsolutePath);
-        if (currentHash === gitHash) {
-          unlinkSync(gitAbsolutePath);
-          continue;
-        }
-        gitTempFiles.push(gitAbsolutePath);
-        modifiedItems.push({
-          name: relPath.replace(/\.png$/, ""),
-          newPath: "/" + relPath,
-          oldPath: "/" + relPath.replace(/\.png$/, ".git.png"),
-          mode: "modified" as const,
-          keepPath: "/" + relPath,
-        });
-      }
-    }
+for (const rel of globSync("**/*.png", { cwd: screenshotsDir })) {
+  if (
+    rel.endsWith(".new.png") ||
+    rel.endsWith(".diff.png") ||
+    rel.endsWith(".git.png")
+  ) {
+    continue;
   }
-  scanModified(screenshotsDir);
+  const path = join(screenshotsDir, rel);
+  // Skip if there's already a .new.png for this file
+  if (modifiedPaths.has(path)) continue;
+  const relPath = relative(screenshotsDir, path);
+  const gitRelPath = join("screenshots", relPath);
+  const gitAbsolutePath = join(
+    screenshotsDir,
+    relPath.replace(/\.png$/, ".git.png"),
+  );
+  const gotGit = gitShow(gitRelPath, gitAbsolutePath);
+  if (!gotGit) continue;
+  const currentHash = hashFile(path);
+  const gitHash = hashFile(gitAbsolutePath);
+  if (currentHash === gitHash) {
+    unlinkSync(gitAbsolutePath);
+    continue;
+  }
+  gitTempFiles.push(gitAbsolutePath);
+  modifiedItems.push({
+    name: relPath.replace(/\.png$/, ""),
+    newPath: "/" + relPath,
+    oldPath: "/" + relPath.replace(/\.png$/, ".git.png"),
+    mode: "modified" as const,
+    keepPath: "/" + relPath,
+  });
 }
 
 if (newScreenshots.length === 0 && modifiedItems.length === 0) {

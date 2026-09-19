@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
+import { hash } from "node:crypto";
 import { ulid } from "ulid";
 import { createAccount, createUser } from "~/lib/db/accounts";
 import {
@@ -186,7 +186,7 @@ describe("buildGmailAuthorizeUrl", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     // challenge = BASE64URL(SHA256(verifier))
     expect(url.searchParams.get("code_challenge")).toBe(
-      createHash("sha256").update(verifier).digest("base64url"),
+      hash("sha256", verifier, "base64url"),
     );
   });
 });
@@ -214,7 +214,7 @@ describe("connect-gmail entry", () => {
     expect(parked.next).toBe("emails");
     // The URL's challenge must hash from the parked verifier (RFC 7636).
     expect(location.searchParams.get("code_challenge")).toBe(
-      createHash("sha256").update(parked.verifier).digest("base64url"),
+      hash("sha256", parked.verifier, "base64url"),
     );
   });
 

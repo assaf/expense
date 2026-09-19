@@ -8,7 +8,7 @@
  * `pnpm screenshots:review`. Skipped in CI.
  */
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { readdirSync, unlinkSync } from "node:fs";
+import { globSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import looksSame from "looks-same";
 import sharp from "sharp";
@@ -160,22 +160,12 @@ async function saveDiffImage(
 /** Delete stale .new/.diff/.git artifacts (recursively) before a run, so
  * a pass leaves no review leftovers from earlier failures. */
 export async function removeDiffImages(): Promise<void> {
-  function scan(dir: string): void {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) scan(full);
-      else if (
-        entry.name.endsWith(".new.png") ||
-        entry.name.endsWith(".diff.png") ||
-        entry.name.endsWith(".git.png")
-      ) {
-        unlinkSync(full);
-      }
-    }
-  }
+  const artifacts = ["**/*.new.png", "**/*.diff.png", "**/*.git.png"];
   try {
-    scan(SCREENSHOTS_DIR);
+    for (const rel of globSync(artifacts, { cwd: SCREENSHOTS_DIR })) {
+      unlinkSync(path.join(SCREENSHOTS_DIR, rel));
+    }
   } catch {
-    // No screenshots dir yet — nothing to clean.
+    // No screenshots dir yet, or a file vanished mid-scan: nothing to clean.
   }
 }

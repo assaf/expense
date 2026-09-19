@@ -1,5 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { globSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ACTION_SHORTCUTS } from "~/components/command-palette";
 import { NAV_ITEMS } from "~/components/nav-items";
@@ -16,15 +15,9 @@ import { NAV_ITEMS } from "~/components/nav-items";
 /** Every .tsx file under app/, as "path -> source". */
 function appSources(): Map<string, string> {
   const sources = new Map<string, string>();
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else if (entry.name.endsWith(".tsx"))
-        sources.set(path, readFileSync(path, "utf8"));
-    }
-  };
-  walk("app");
+  for (const path of globSync("app/**/*.tsx")) {
+    sources.set(path, readFileSync(path, "utf8"));
+  }
   return sources;
 }
 
