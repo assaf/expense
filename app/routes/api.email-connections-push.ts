@@ -84,10 +84,14 @@ export async function action({ request }: Route.ActionArgs) {
         const result = await drainEmailConnection(connection);
         console.info("[email-connections-push] drained", result);
       } catch (err) {
-        captureWarning("[email-connections-push] drain failed:", {
-          connectionId,
-          error: err,
-        });
+        // Warn on the transition only, as the cron does: a connection
+        // nobody reconnects must not re-open the same issue on every push.
+        if (connection.status !== "error") {
+          captureWarning("[email-connections-push] drain failed:", {
+            connectionId,
+            error: err,
+          });
+        }
         await setEmailConnectionStatus(connection.id, "error").catch(() => {});
       }
     } catch (err) {

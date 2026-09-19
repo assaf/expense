@@ -249,10 +249,14 @@ export async function action({ request }: Route.ActionArgs) {
       await setEmailConnectionStatus(connection.id, "active").catch(() => {});
     }
   } catch (err) {
-    captureWarning("[gmail-push] drain failed:", {
-      connectionId: connection.id,
-      error: err,
-    });
+    // Warn on the transition only, as the cron does: a connection nobody
+    // reconnects must not re-open the same issue on every push.
+    if (connection.status !== "error") {
+      captureWarning("[gmail-push] drain failed:", {
+        connectionId: connection.id,
+        error: err,
+      });
+    }
     await setEmailConnectionStatus(connection.id, "error").catch(() => {});
   }
   return Response.json({ ok: true, drained: true });
