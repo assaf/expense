@@ -1,6 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { expect as pwExpect } from "playwright/test";
-import type { Page } from "playwright";
 import { ulid } from "ulid";
 import {
   OTHER_ACCOUNT_ID,

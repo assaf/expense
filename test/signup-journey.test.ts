@@ -1,5 +1,4 @@
 import { expect } from "playwright/test";
-import type { Page } from "playwright";
 import { afterAll, describe, it } from "vitest";
 import { ulid } from "ulid";
 import { closeBrowser, freshPage, signIn } from "./helpers/launchBrowser";
