@@ -67,7 +67,10 @@ describe("filtersToQuery", () => {
 describe("expenseFilterJsonSchema", () => {
   it("derives every shared filter field with its zod description", () => {
     const schema = expenseFilterJsonSchema() as {
-      properties: Record<string, { type: string; description?: string }>;
+      properties: Record<
+        string,
+        { type: string; format?: string; description?: string }
+      >;
     };
     expect(Object.keys(schema.properties).sort()).toEqual(
       [
@@ -85,6 +88,14 @@ describe("expenseFilterJsonSchema", () => {
       enum: ["receipt", "mileage"],
     });
     expect(schema.properties.unreported).toMatchObject({ type: "boolean" });
+    // The date bounds are ISO dates, not free text: the JSON schema says so,
+    // and the .describe() text still documents it for the model.
+    expect(schema.properties.dateFrom).toMatchObject({
+      type: "string",
+      format: "date",
+      description: "Inclusive start date YYYY-MM-DD.",
+    });
+    expect(schema.properties.dateTo).toMatchObject({ format: "date" });
     expect(schema.properties.merchant.description).toContain("Substring");
     expect(schema.properties.limit).toBeUndefined();
   });

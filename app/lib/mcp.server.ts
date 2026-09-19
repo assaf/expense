@@ -7,8 +7,11 @@ import {
   readExpensesPage,
 } from "~/lib/expense-read.server";
 import {
-  listExpensesInputSchema,
   expenseFilterSchema,
+  expenseSummaryOutputSchema,
+  listExpensesInputSchema,
+  listExpensesOutputSchema,
+  listReportsOutputSchema,
   READ_TOOLS,
 } from "~/lib/expense-read-tools";
 import {
@@ -254,6 +257,186 @@ function jsonError(
 
 // --- Server + tools --------------------------------------------------------
 
+/** Cross-cutting rules, served as the server's `instructions`: a 2025-era
+ * client reads them from `initialize`, a 2026-07-28 one from
+ * `server/discover`. They used to be repeated in each tool's own text, so
+ * a tool description now only carries what is specific to that tool. */
+const SERVER_INSTRUCTIONS = [
+  'Amounts are decimal strings, e.g. "42.50".',
+  "A report named in a tool call must already exist and be open; list_reports shows them.",
+  "Where a tool takes an optional date (YYYY-MM-DD), omitting it dates the entry today in UTC, the server's clock: the response carries serverUtcNow, so compute the user's local date from it (a PST evening is already tomorrow in UTC) and pass an explicit date when the two differ.",
+].join(" ");
+
+/** An optional ISO (YYYY-MM-DD) date field on the write tools. Not a bare
+ * string: a malformed date would otherwise be stored as typed and compared
+ * as text against every other date. */
+const isoDateField = z.iso.date().optional();
+
+// --- Tool response schemas -------------------------------------------------
+//
+// The response contract of every tool: registered as `outputSchema` and
+// returned as `structuredContent` by ok() in mcp-write.server.ts. The SDK
+// validates a result against the schema on every success and refuses a tool
+// that declares one without returning it, so the two have to move together.
+// A non-object root (the list tools' arrays) is fine: a 2025-era client gets
+// the SEP-2106 `{ result: … }` wrap, in its tools/list schema and in the
+// result alike, from the SDK.
+
+/** What the extraction pipeline read off a receipt, as captureReceipt
+ * reports it: the fields that function copies out of ExtractionResult. Null
+ * in a capture result means extraction failed and the image was filed
+ * without it. */
+const extractionSchema = z.object({
+  isReceipt: z.boolean(),
+  merchant: z.string(),
+  amount: z.string(),
+  currency: z.string(),
+  category: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  notes: z.string(),
+});
+
+/** capture_receipt: the filed receipt, or the duplicate report when those
+ * image bytes were already an expense. */
+const captureReceiptOutputSchema = z.object({
+  captured: z.boolean().describe("False when the image was already filed."),
+  serverUtcNow: z.string().describe("The server clock, ISO instant."),
+  expenseId: z.string().optional(),
+  duplicate: z.boolean().optional(),
+  duplicateOf: z.string().nullable().optional(),
+  extracted: extractionSchema.nullable().optional(),
+  resolved: z
+    .object({
+      merchant: z.string(),
+      amount: z.string(),
+      category: z.string(),
+      date: z.string(),
+      report: z.string(),
+    })
+    .optional(),
+  fx: z
+    .object({
+      currency: z.string(),
+      originalAmount: z.string(),
+      amount: z.string(),
+      fxRate: z.string(),
+      rateDate: z.string(),
+    })
+    .optional(),
+  warning: z.string().optional(),
+});
+
+/** log_mileage: the trip as filed, priced at the rate for its date and type. */
+const logMileageOutputSchema = z.object({
+  logged: z.boolean(),
+  expenseId: z.string(),
+  stops: z.array(z.string()),
+  distanceMiles: z.string(),
+  amount: z.string(),
+  type: z.enum(["business", "charity", "medical", "moving"]),
+  rate: z.string().nullable().describe("IRS rate used, null if none."),
+  approximate: z.boolean().describe("Distance is straight-line, not routed."),
+  roundTrip: z.boolean(),
+  note: z.string().optional(),
+});
+
+const createReportOutputSchema = z.object({ name: z.string() });
+
+const closeReportOutputSchema = z.object({
+  name: z.string(),
+  closed: z.boolean(),
+});
+
+const addToReportOutputSchema = z.object({
+  expenseId: z.string(),
+  report: z.string(),
+});
+
+/** export_report: the rendered PDF, base64 in the text block. */
+const exportReportOutputSchema = z.object({
+  filename: z.string(),
+  mime: z.string(),
+  sizeBytes: z.number(),
+  base64: z.string(),
+  note: z.string(),
+});
+
+/** list_categories and list_merchants: a flat list of names. */
+const listNamesOutputSchema = z.array(z.string());
+
+/** get_settings: the home address, the named places, and the IRS rate table. */
+const getSettingsOutputSchema = z.object({
+  mileageRates: z.array(
+    z.object({
+      type: z.enum(["business", "charity", "medical", "moving"]),
+      startDate: z.string(),
+      endDate: z.string(),
+      rate: z.string(),
+    }),
+  ),
+  homeAddress: z.string(),
+  locations: z.array(z.object({ name: z.string(), address: z.string() })),
+});
+
+/** reconcile: the lines that matched, the ones to review, and the receipts
+ * no line claimed. Read-only, nothing is written or dismissed. */
+const reconcileOutputSchema = z.object({
+  statementLines: z.number(),
+  matched: z.number(),
+  matchedPairs: z.array(
+    z.object({
+      line: z.number(),
+      date: z.string(),
+      description: z.string(),
+      statementAmount: z.string(),
+      expenseId: z.string(),
+      merchant: z.string(),
+      expenseAmount: z.string(),
+      confidence: z.literal("high"),
+    }),
+  ),
+  needsReview: z.array(
+    z.object({
+      line: z.number(),
+      date: z.string(),
+      description: z.string(),
+      statementAmount: z.string(),
+      reasons: z.array(z.string()),
+      candidates: z.array(
+        z.object({
+          expenseId: z.string(),
+          merchant: z.string(),
+          expenseAmount: z.string(),
+        }),
+      ),
+    }),
+  ),
+  unmatchedLines: z.array(
+    z.object({
+      line: z.number(),
+      date: z.string(),
+      description: z.string(),
+      amount: z.string(),
+    }),
+  ),
+  unmatchedExpenses: z.array(
+    z.object({
+      id: z.string(),
+      date: z.string(),
+      merchant: z.string(),
+      amount: z.string(),
+    }),
+  ),
+  skippedLines: z.array(
+    z.object({
+      line: z.number(),
+      raw: z.string(),
+      reason: z.string(),
+    }),
+  ),
+  note: z.string(),
+});
+
 /** The tools a healthy server must expose; the deployed-bundle check. */
 const SMOKE_TOOL_NAMES = [
   "add_to_report",
@@ -356,7 +539,9 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
       return names;
     };
 
-    /** tools/call get_settings must answer with a non-error result. */
+    /** tools/call get_settings must answer with a non-error result, in both
+     * halves: the text block, and the structuredContent its outputSchema
+     * describes (the SDK validated it, so this checks the data landed). */
     const callSettings = async (
       body: Record<string, unknown>,
       label: string,
@@ -372,6 +557,17 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
         const content = (result as { content?: { text?: string }[] }).content;
         throw new Error(
           `${label} get_settings errored: ${content?.[0]?.text ?? "no content"}`,
+        );
+      }
+      const structured = result.structuredContent;
+      const hasRates =
+        structured !== null &&
+        typeof structured === "object" &&
+        "mileageRates" in structured &&
+        Array.isArray(structured.mileageRates);
+      if (!hasRates) {
+        throw new Error(
+          `${label} get_settings returned no structured settings`,
         );
       }
     };
@@ -468,13 +664,21 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   // results stay out of Sentry on purpose: a receipt arrives as base64 image
   // bytes and a statement as the customer's own bank rows.
   const server = Sentry.wrapMcpServerWithSentry(
-    new McpServer({
-      name: MCP_SERVER_NAME,
-      title: MCP_SERVER_TITLE,
-      version: MCP_SERVER_VERSION,
-      description: MCP_SERVER_DESCRIPTION,
-      websiteUrl: MCP_SERVER_WEBSITE_URL,
-    }),
+    // Two arguments, not one: serverInfo (the identity the Server Card
+    // publishes) and the options, which is where `instructions` lives. Passing
+    // them in a single object drops the type check that keeps the two apart and
+    // buries the instructions inside serverInfo, where a client does not read
+    // them.
+    new McpServer(
+      {
+        name: MCP_SERVER_NAME,
+        title: MCP_SERVER_TITLE,
+        version: MCP_SERVER_VERSION,
+        description: MCP_SERVER_DESCRIPTION,
+        websiteUrl: MCP_SERVER_WEBSITE_URL,
+      },
+      { instructions: SERVER_INSTRUCTIONS },
+    ),
     { recordInputs: false, recordOutputs: false },
   );
 
@@ -483,6 +687,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "capture_receipt",
     {
+      annotations: { destructiveHint: false },
       description:
         "Capture a receipt from a base64 image/PDF or a URL: extract the merchant, amount and category (reusing the merchant's previous category when known), store the image, and create the expense. A non-USD amount is converted to USD at the ECB reference rate for the expense date. Returns the extracted fields and the new expense id.",
       inputSchema: z.object({
@@ -530,20 +735,13 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
           .describe(
             "Category override (otherwise resolved from the merchant's history, then the extraction suggestion).",
           ),
-        date: z
-          .string()
-          .optional()
-          .describe(
-            "Expense date YYYY-MM-DD. When omitted the expense is dated today in UTC (the server's clock). Compute the user's local date from serverUtcNow in the response — e.g. a PST evening is already tomorrow in UTC — and pass an explicit date when it differs.",
-          ),
-        report: z
-          .string()
-          .optional()
-          .describe(
-            "Report name to file under; must already exist and be open.",
-          ),
+        date: isoDateField.describe(
+          "Expense date YYYY-MM-DD. Omitted dates the expense today in UTC, per the server instructions.",
+        ),
+        report: z.string().optional().describe("Report name to file under."),
         description: z.string().optional().describe("Description or memo."),
       }),
+      outputSchema: captureReceiptOutputSchema,
     },
     async (args) => {
       return captureReceipt(accountId, args);
@@ -555,6 +753,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "log_mileage",
     {
+      annotations: { destructiveHint: false },
       description:
         "Log a driving trip: geocode the stops, compute the route distance and the amount at the IRS rate for the trip's date and type, and create the mileage expense. The trip runs one way, from the first stop to the last; pass roundTrip true when the drive returns to its first stop.",
       inputSchema: z.object({
@@ -580,24 +779,16 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
           .describe(
             "Ordered trip stops: start, intermediate stops, end. Each is an address string or a pre-geocoded { address, lat, lng }.",
           ),
-        date: z
-          .string()
-          .optional()
-          .describe(
-            "Trip date YYYY-MM-DD. When omitted the trip is dated today in UTC (the server's clock). Compute the user's local date from serverUtcNow in the response — e.g. a PST evening is already tomorrow in UTC — and pass an explicit date when it differs.",
-          ),
+        date: isoDateField.describe(
+          "Trip date YYYY-MM-DD. Omitted dates the trip today in UTC, per the server instructions.",
+        ),
         type: z
           .enum(["business", "charity", "medical", "moving"])
           .optional()
           .describe(
             "IRS trip type — picks the rate for the trip's date (defaults to business).",
           ),
-        report: z
-          .string()
-          .optional()
-          .describe(
-            "Report name to file under; must already exist and be open.",
-          ),
+        report: z.string().optional().describe("Report name to file under."),
         category: z.string().optional().describe("Category name."),
         description: z.string().optional().describe("Description or memo."),
         roundTrip: z
@@ -607,6 +798,7 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
             "One way by default: the trip starts at the first stop and ends at the last. Pass true when the drive returns to the first stop (a closed loop), which roughly doubles the distance for a there-and-back pair.",
           ),
       }),
+      outputSchema: logMileageOutputSchema,
     },
     async (args) => {
       return logMileage(accountId, args);
@@ -622,8 +814,10 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     LIST_EXPENSES_SPEC.name,
     {
+      annotations: { readOnlyHint: true },
       description: LIST_EXPENSES_SPEC.description,
       inputSchema: listExpensesInputSchema,
+      outputSchema: listExpensesOutputSchema,
     },
     async ({ limit, ...filters }) => {
       return ok(await readExpensesPage(accountId, filters, limit));
@@ -633,8 +827,10 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     EXPENSE_SUMMARY_SPEC.name,
     {
+      annotations: { readOnlyHint: true },
       description: EXPENSE_SUMMARY_SPEC.description,
       inputSchema: expenseFilterSchema,
+      outputSchema: expenseSummaryOutputSchema,
     },
     async (args) => {
       return ok(await readExpenseSummary(accountId, args));
@@ -644,8 +840,10 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     LIST_REPORTS_SPEC.name,
     {
+      annotations: { readOnlyHint: true },
       description: LIST_REPORTS_SPEC.description,
       inputSchema: z.object({}),
+      outputSchema: listReportsOutputSchema,
     },
     async () => {
       return ok(await readReportSummaries(accountId));
@@ -657,11 +855,13 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "create_report",
     {
+      annotations: { destructiveHint: false },
       description:
         'Create a report (e.g. "Q3 2026") to group expenses. Fails if the name already exists.',
       inputSchema: z.object({
         name: z.string().min(1).describe("Report name."),
       }),
+      outputSchema: createReportOutputSchema,
     },
     async ({ name }) => {
       const result = await addReport(accountId, name);
@@ -672,12 +872,14 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "close_report",
     {
+      annotations: { destructiveHint: false, idempotentHint: true },
       description:
         "Close (or reopen) a report. Closed reports refuse new expenses.",
       inputSchema: z.object({
         name: z.string().min(1),
         closed: z.boolean().optional().describe("Default true."),
       }),
+      outputSchema: closeReportOutputSchema,
     },
     async ({ name, closed }) => {
       await setReportClosed(accountId, name, closed ?? true);
@@ -688,12 +890,14 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "add_to_report",
     {
+      annotations: { idempotentHint: true },
       description:
-        "Move an expense into a report (must exist and be open). Also renames the stored receipt image to the dated convention name when the expense has a date and original filename.",
+        "Move an expense into a report. Also renames the stored receipt image to the dated convention name when the expense has a date and original filename.",
       inputSchema: z.object({
         expenseId: z.string().min(1),
-        report: z.string().min(1).describe("Existing, open report name."),
+        report: z.string().min(1).describe("Report name."),
       }),
+      outputSchema: addToReportOutputSchema,
     },
     async ({ expenseId, report }) => {
       const expense = await readExpense(expenseId, accountId);
@@ -730,11 +934,13 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "export_report",
     {
+      annotations: { readOnlyHint: true },
       description:
         "Render a report as a PDF (the same layout as the web export: grouped by category, mileage rows with type/rate/distance, and a 'Receipts & routes' appendix — receipt images plus a real route map per mileage trip with its date, mileage, and amount listed beside it) and return it base64-encoded. Decode and save as a .pdf file.",
       inputSchema: z.object({
         name: z.string().min(1).describe("Report name."),
       }),
+      outputSchema: exportReportOutputSchema,
     },
     async ({ name }) => {
       if (!(await reportExists(accountId, name))) {
@@ -761,9 +967,11 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "list_categories",
     {
+      annotations: { readOnlyHint: true },
       description:
         "The account's category names (alphabetical) — use these when categorizing expenses.",
       inputSchema: z.object({}),
+      outputSchema: listNamesOutputSchema,
     },
     async () => {
       const categories = await readCategories(accountId);
@@ -774,8 +982,10 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "list_merchants",
     {
+      annotations: { readOnlyHint: true },
       description: "Merchant names previously used, most recent first.",
       inputSchema: z.object({}),
+      outputSchema: listNamesOutputSchema,
     },
     async () => ok(await readPriorMerchants(accountId)),
   );
@@ -783,9 +993,11 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "get_settings",
     {
+      annotations: { readOnlyHint: true },
       description:
         "Account settings: the home address (start and end of every trip), the account's named locations, and the IRS mileage-rate master table (period + type).",
       inputSchema: z.object({}),
+      outputSchema: getSettingsOutputSchema,
     },
     async () => {
       const [settings, locations, rates] = await Promise.all([
@@ -806,9 +1018,11 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
   server.registerTool(
     "reconcile",
     {
+      annotations: { readOnlyHint: true },
       description:
         "Match a bank statement against logged expenses. Pass the statement as CSV or QFX/OFX text (CSV: header row optional, date/description/amount columns, signed amounts or Debit/Credit split; QFX/OFX: FITID honored). Returns matched pairs (high confidence), statement lines needing review (amount+date match but merchant differs, or ambiguous), statement lines with no matching receipt, and logged receipts with no statement line. Refund/credit lines and already-reconciled receipts are never auto-matched.",
       inputSchema: z.object({ statementCsv: z.string().min(1) }),
+      outputSchema: reconcileOutputSchema,
     },
     async ({ statementCsv }) => {
       const expenses = await readExpenses(accountId);

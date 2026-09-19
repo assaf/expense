@@ -1,10 +1,12 @@
 /**
  * The read-tool contract shared by the MCP server and the WebMCP in-page
  * tools: which read tools exist, their names, descriptions, filter
- * schemas, and wire shapes. The zod schemas below are the single source:
- * the MCP server validates with them directly, and the WebMCP client gets
- * its JSON schemas via z.toJSONSchema, so a field added here updates every
- * surface at once.
+ * schemas, and wire shapes (the response schemas too: mcp.server.ts
+ * registers them as the MCP tools' `outputSchema`, so a client can read a
+ * result as data instead of parsing the text block). The zod schemas below
+ * are the single source: the MCP server validates with them directly, and
+ * the WebMCP client gets its JSON schemas via z.toJSONSchema, so a field
+ * added here updates every surface at once.
  *
  * Isomorphic by design: imported by the browser bundle (webmcp.ts), so no
  * server-side imports here. New read tools still need a handler in
@@ -14,11 +16,17 @@
 
 import { z } from "zod";
 
+/** An optional ISO (YYYY-MM-DD) date field. Not a bare string: the range
+ * bounds are compared as text against the stored dates, so a malformed value
+ * would quietly match the wrong range instead of failing (filterExpenses in
+ * expense-read.server.ts). */
+const isoDateField = z.iso.date().optional();
+
 /** Filters shared by list_expenses and expense_summary. Each field's
  * description doubles as the tool-schema documentation for both surfaces. */
 export const expenseFilterSchema = z.object({
-  dateFrom: z.string().optional().describe("Inclusive start date YYYY-MM-DD."),
-  dateTo: z.string().optional().describe("Inclusive end date YYYY-MM-DD."),
+  dateFrom: isoDateField.describe("Inclusive start date YYYY-MM-DD."),
+  dateTo: isoDateField.describe("Inclusive end date YYYY-MM-DD."),
   category: z
     .string()
     .optional()
@@ -50,10 +58,84 @@ export const listExpensesInputSchema = expenseFilterSchema.extend({
     .describe("Max rows (default 100)."),
 });
 
+/** The serialized expense wire shape (serializeExpense in
+ * expense-read.server.ts), as the tools' response contract: the shared
+ * fields, then the receipt- or mileage-only ones. */
+const receiptExpenseSchema = z.object({
+  id: z.string(),
+  type: z.literal("receipt"),
+  date: z.string().nullable(),
+  report: z.string().nullable(),
+  category: z.string().nullable(),
+  description: z.string(),
+  amount: z.string().nullable().describe("USD, decimal string."),
+  merchant: z.string().nullable(),
+  currency: z.string(),
+  originalAmount: z
+    .string()
+    .nullable()
+    .describe("Printed amount in `currency`, null for a USD receipt."),
+  fxRate: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const mileageExpenseSchema = z.object({
+  id: z.string(),
+  type: z.literal("mileage"),
+  date: z.string().nullable(),
+  report: z.string().nullable(),
+  category: z.string().nullable(),
+  description: z.string(),
+  amount: z.string().nullable().describe("USD, decimal string."),
+  mileageType: z.enum(["business", "charity", "medical", "moving"]),
+  distanceMiles: z.string().nullable(),
+  stops: z.array(z.string()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+/** list_expenses' response: the page, plus the totals over every match. */
+export const listExpensesOutputSchema = z.object({
+  count: z.number().describe("Matches before the limit."),
+  returned: z.number().describe("Rows in `expenses`."),
+  expenses: z.array(
+    z.discriminatedUnion("type", [receiptExpenseSchema, mileageExpenseSchema]),
+  ),
+});
+
+/** expense_summary's response. */
+export const expenseSummaryOutputSchema = z.object({
+  count: z.number(),
+  total: z.string().describe("Exact USD total, 2 decimals."),
+  byCategory: z.array(
+    z.object({
+      category: z.string(),
+      count: z.number(),
+      total: z.string(),
+    }),
+  ),
+});
+
+/** list_reports' response: every report, with its count and exact total. */
+export const listReportsOutputSchema = z.array(
+  z.object({
+    name: z.string(),
+    closed: z.boolean(),
+    count: z.number(),
+    total: z.string(),
+  }),
+);
+
 /** Parse the shared filters from a URL query (the /api/webmcp transport).
  * Every value arrives as a string, so the decoding is explicit: unknown
  * and empty params are ignored, booleans pass only as bare "true", and
- * the enum is an allowlist. Same semantics on both agent surfaces. */
+ * the enum is an allowlist. Same semantics on both agent surfaces.
+ *
+ * Deliberately not validated against the zod schemas: this is the
+ * in-browser transport, and a hand-typed query string gets an answer from
+ * whatever it can parse instead of a 400. The MCP tool surface, which takes
+ * JSON arguments, is where the schemas validate. */
 export function parseExpenseFilters(params: URLSearchParams): ExpenseFilters {
   const filters: ExpenseFilters = {};
   const raw = (key: string): string | undefined => {

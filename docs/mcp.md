@@ -127,6 +127,22 @@ because `app/lib/mcp.server.ts` is their only home and a copy would drift.
 Write tools return `isError` with a clear message when a report is closed
 or doesn't exist.
 
+Every tool declares a response schema and answers with both halves: a text
+block (what a person reads, and what older clients parse) and the same value
+as `structuredContent`, which the schema describes. On the 2025 wire the SDK
+projects the three array-returning list tools down to `{ result: [ … ] }`,
+because that shape has to be an object there; a 2026-07-28 client gets the
+array as-is.
+
+The rules every tool shares are served as the server's `instructions` (from
+the `initialize` handshake, or `server/discover` on the 2026-07-28 era)
+instead of being repeated in each description: amounts are decimal strings, a
+report named in a call must already exist and be open, and an omitted date
+means today in UTC, with `serverUtcNow` in the response telling the client
+how to correct for the user's own timezone. Date arguments are ISO
+`YYYY-MM-DD` and are validated as such; a malformed one is refused rather
+than silently filtering the wrong range.
+
 ## Reconciling a statement
 
 `reconcile` accepts CSV or QFX/OFX text. CSV: header row
@@ -269,10 +285,12 @@ same-origin. Writes stay MCP-only while this is experimental.
 - Registration: `app/lib/webmcp.ts` (no-op where the API is absent); wired
   in `app/root.tsx` for signed-in users.
 - Shared code: the tool contract (names, descriptions, filter fields,
-  schemas) lives in `app/lib/expense-read-tools.ts` and the implementations
-  (filter, serialize, summarize, limit) in `app/lib/expense-read.server.ts`.
-  The MCP handlers and the WebMCP registration are both thin adapters over
-  them, so the two surfaces can't drift apart.
+  schemas, and the response schemas the MCP handlers register as their
+  `outputSchema`) lives in `app/lib/expense-read-tools.ts` and the
+  implementations (filter, serialize, summarize, limit) in
+  `app/lib/expense-read.server.ts`. The MCP handlers and the WebMCP
+  registration are both thin adapters over them, so the two surfaces can't
+  drift apart.
 - Data: `app/routes/api.webmcp.$resource.ts`, a session-authenticated JSON
   mirror of the three read tools.
 - Trying it: join the [origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241)

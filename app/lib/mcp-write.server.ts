@@ -49,17 +49,25 @@ import {
 
 export type ToolResult = {
   content: { type: "text"; text: string }[];
+  /** The payload again, machine-readable. Every tool declares an
+   * outputSchema, and the SDK refuses a success result that leaves this
+   * undefined ("has an output schema but no structured content"). */
+  structuredContent?: unknown;
   isError?: boolean;
 };
 
-/** Success payload, JSON-encoded so agents get structured data. */
+/** Success payload: the JSON text a human (and older clients) read, plus the
+ * same value as structuredContent for the schema-checked channel. */
 export function ok(payload: unknown): ToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
   };
 }
 
-/** Error payload with isError set so clients surface it to the agent. */
+/** Error payload with isError set so clients surface it to the agent. No
+ * structuredContent: the SDK skips output validation for an error result, so
+ * a `{ error }` object here would just fail the success schema. */
 export function fail(message: string): ToolResult {
   return {
     content: [

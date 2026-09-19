@@ -86,7 +86,8 @@ describe("MCP endpoint", () => {
   }
 
   /** 2025-era handshake, served statelessly (no session id is issued). Its
-   * result carries the identity the Server Card publishes. */
+   * result carries the identity the Server Card publishes, plus the
+   * cross-cutting instructions an agent reads before it calls anything. */
   async function initialize(token: string): Promise<void> {
     const init = await mcpPost(token, {
       jsonrpc: "2.0",
@@ -99,22 +100,41 @@ describe("MCP endpoint", () => {
       },
     });
     expect(init.status).toBe(200);
-    const initBody = init.json as { result?: { serverInfo?: unknown } };
+    const initBody = init.json as {
+      result?: { serverInfo?: unknown; instructions?: string };
+    };
     expect(initBody.result?.serverInfo).toMatchObject({
       name: MCP_SERVER_NAME,
       title: MCP_SERVER_TITLE,
       version: MCP_SERVER_VERSION,
     });
+    // The rules that used to be repeated in each tool's own text live here
+    // now, so a client that reads them once knows them for every call. They
+    // are a top-level field of the result: the server passes them as the
+    // McpServer's options, not as part of the identity, and putting them in the
+    // identity instead would leave this empty.
+    const instructions = initBody.result?.instructions ?? "";
+    expect(instructions).toContain("UTC");
+    expect(instructions).toContain("already exist and be open");
+  }
+
+  /** A parsed tools/call result: the text block, the structured half, and
+   * whether the tool reported an error. */
+  interface ToolCallResult {
+    isError: boolean;
+    payload: Record<string, unknown>;
+    structured: unknown;
   }
 
   /** Parse the content from a MCP tools/call response into { isError, payload }. */
-  function parseResult(json: unknown): {
-    isError: boolean;
-    payload: Record<string, unknown>;
-  } {
+  function parseResult(json: unknown): ToolCallResult {
     const result = (
       json as {
-        result: { content: { text: string }[]; isError?: boolean };
+        result: {
+          content: { text: string }[];
+          structuredContent?: unknown;
+          isError?: boolean;
+        };
       }
     ).result;
     const text = result.content?.[0]?.text ?? "";
@@ -128,15 +148,33 @@ describe("MCP endpoint", () => {
     return {
       isError: Boolean(result.isError),
       payload,
+      structured: result.structuredContent,
     };
   }
 
-  /** Call a tool (2025-era) and parse the result. */
+  /** Every tool declares an outputSchema, so a success result must carry the
+   * structured half as well, holding the same value as the text block (the
+   * SDK fails a call that returns only one of them). On this 2025-era wire
+   * the SDK projects the array-rooted tools to `{ result: … }` (SEP-2106:
+   * the 2025 shape requires an object), so unwrap before comparing. */
+  function expectStructured(result: ToolCallResult): void {
+    if (result.isError) return;
+    const { structured } = result;
+    const value =
+      structured !== null &&
+      typeof structured === "object" &&
+      "result" in structured
+        ? structured.result
+        : structured;
+    expect(value).toEqual(result.payload);
+  }
+
+  /** Call a tool (2025-era), parse the result, and check both halves. */
   async function callTool(
     token: string,
     name: string,
     args: Record<string, unknown>,
-  ): Promise<{ isError: boolean; payload: Record<string, unknown> }> {
+  ): Promise<ToolCallResult> {
     const res = await mcpPost(token, {
       jsonrpc: "2.0",
       id: 2,
@@ -144,7 +182,9 @@ describe("MCP endpoint", () => {
       params: { name, arguments: args },
     });
     expect(res.status).toBe(200);
-    return parseResult(res.json);
+    const parsed = parseResult(res.json);
+    expectStructured(parsed);
+    return parsed;
   }
 
   /** The 2026-07-28 per-request `_meta` envelope. */
@@ -162,7 +202,7 @@ describe("MCP endpoint", () => {
     token: string,
     name: string,
     args: Record<string, unknown>,
-  ): Promise<{ isError: boolean; payload: Record<string, unknown> }> {
+  ): Promise<ToolCallResult> {
     const res = await mcpPost(
       token,
       {
@@ -174,7 +214,9 @@ describe("MCP endpoint", () => {
       { "Mcp-Method": "tools/call", "Mcp-Name": name },
     );
     expect(res.status).toBe(200);
-    return parseResult(res.json);
+    const parsed = parseResult(res.json);
+    expectStructured(parsed);
+    return parsed;
   }
 
   // --- Tests ---
@@ -214,8 +256,17 @@ describe("MCP endpoint", () => {
       params: {},
     });
     expect(res.status).toBe(200);
-    const tools = (res.json as { result: { tools: { name: string }[] } }).result
-      .tools;
+    const tools = (
+      res.json as {
+        result: {
+          tools: {
+            name: string;
+            annotations?: { readOnlyHint?: boolean };
+            outputSchema?: { type?: string };
+          }[];
+        };
+      }
+    ).result.tools;
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
@@ -234,6 +285,45 @@ describe("MCP endpoint", () => {
         "reconcile",
       ].sort(),
     );
+    // `readOnlyHint` is what lets a host auto-approve a call without asking
+    // the user, so the read tools must declare it and no write tool may: a
+    // write tool claiming it would run unconfirmed. The WebMCP surface
+    // declares the same for the three tools both surfaces share (see
+    // test/webmcp.test.ts), so the two agree on what is safe to auto-run.
+    const readOnly = tools
+      .filter((t) => t.annotations?.readOnlyHint === true)
+      .map((t) => t.name)
+      .sort();
+    expect(readOnly).toEqual(
+      [
+        "expense_summary",
+        "export_report",
+        "get_settings",
+        "list_categories",
+        "list_expenses",
+        "list_merchants",
+        "list_reports",
+        "reconcile",
+      ].sort(),
+    );
+    // Every tool declares a response schema, which is what makes the
+    // structured half of a result required (and checked) rather than
+    // optional. On this wire the root must be an object, so the SDK projects
+    // the array-returning list tools down to `{ result: … }`.
+    for (const tool of tools) {
+      expect(tool.outputSchema?.type, tool.name).toBe("object");
+    }
+  });
+
+  it("refuses a malformed date instead of filtering on it", async () => {
+    await initialize(accessToken);
+    // A bound that is not YYYY-MM-DD used to be compared as text against the
+    // stored dates, which answers with the wrong range instead of an error.
+    const result = await callTool(accessToken, "list_expenses", {
+      dateFrom: "2026-1-1",
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("dateFrom");
   });
 
   it("serves 2026-07-28 stateless clients (discover + _meta envelope)", async () => {
@@ -255,6 +345,7 @@ describe("MCP endpoint", () => {
     const discoverBody = discover.json as {
       result?: {
         supportedVersions?: string[];
+        instructions?: string;
         _meta?: Record<string, unknown>;
       };
     };
@@ -268,6 +359,10 @@ describe("MCP endpoint", () => {
       title: MCP_SERVER_TITLE,
       version: MCP_SERVER_VERSION,
     });
+    // The same cross-cutting rules reach a 2026-era client, at the top level of
+    // the discover result: a client that never sends `initialize` still reads
+    // them before it picks a tool.
+    expect(discoverResult?.instructions ?? "").toContain("UTC");
     // Every revision the endpoint reports is one the card advertises.
     for (const version of discoverResult?.supportedVersions ?? []) {
       expect(MCP_PROTOCOL_VERSIONS).toContain(version);
