@@ -9,7 +9,7 @@ vi.mock("@sentry/react-router", () => ({
   captureException: vi.fn(),
 }));
 
-import { captureErrorOnce } from "~/lib/errors.server";
+import { captureErrorOnce, isRouterNoise } from "~/lib/errors.server";
 
 describe("captureErrorOnce", () => {
   it("reports each error object once no matter how many paths surface it", () => {
@@ -28,5 +28,48 @@ describe("captureErrorOnce", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("isRouterNoise", () => {
+  it("drops what React Router throws at bots and scanners", () => {
+    // Verbatim from production (EXPENSE-19): a scanner POSTed to "/", which
+    // React Router routes to the root layout because an index route's action
+    // is only targeted through the `index` search param, so it answered 405.
+    expect(
+      isRouterNoise({
+        type: "Error",
+        value:
+          'You made a POST request to "/" but did not provide an `action` for route "root", so there is no way to handle the request.',
+      }),
+    ).toBe(true);
+    expect(
+      isRouterNoise({
+        type: "Error",
+        value:
+          'You made a GET request to "/wp-login.php" but did not provide a `loader` for route "routes/wp-login", so there is no way to handle the request.',
+      }),
+    ).toBe(true);
+    expect(
+      isRouterNoise({ type: "Error", value: 'No route matches URL "/.env"' }),
+    ).toBe(true);
+    expect(
+      isRouterNoise({ type: "NotFoundException", value: "Not Found" }),
+    ).toBe(true);
+  });
+
+  it("keeps real failures", () => {
+    expect(
+      isRouterNoise({
+        type: "Error",
+        value: "connect ECONNREFUSED 127.0.0.1:5432",
+      }),
+    ).toBe(false);
+    expect(
+      isRouterNoise({
+        type: "TypeError",
+        value: "Cannot read properties of undefined (reading 'accountId')",
+      }),
+    ).toBe(false);
   });
 });

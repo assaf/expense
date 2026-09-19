@@ -35,6 +35,29 @@ export function captureWarning(
   }
 }
 
+/**
+ * True for the errors React Router itself throws at bots and curious
+ * humans: an unmatched URL, a missing loader, or a mutation aimed at a
+ * route with no action. They are normal web traffic (a 404 or 405 answer),
+ * not app failures, so the Sentry filter in app/entry.server.tsx drops
+ * them. The action case is a bare POST to an index route's path: React
+ * Router targets an index route's handler only through the `index` search
+ * param, and the app's own fetchers always send it.
+ */
+export function isRouterNoise(error: {
+  type?: unknown;
+  value?: unknown;
+}): boolean {
+  const value = typeof error.value === "string" ? error.value : "";
+  if (error.type === "NotFoundException" || value.includes("404")) return true;
+  if (error.type !== "Error") return false;
+  return (
+    value.includes("No route matches URL") ||
+    value.includes("did not provide a `loader`") ||
+    value.includes("did not provide an `action`")
+  );
+}
+
 // Errors that are fatal during the initial SSR render surface twice: the
 // render stream's onError fires, then renderToReadableStream rejects with
 // the same error object and React Router forwards that rejection to
