@@ -17,7 +17,11 @@ import {
 import "~/global.css";
 import { CommandMenu } from "~/components/command-palette";
 import { ShortcutHints } from "~/components/shortcut-hints";
-import { isAuthenticated, requireUser } from "~/lib/auth.server";
+import {
+  loginRedirect,
+  resolveSessionUser,
+  userContext,
+} from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
 import { discoveryLinks, securityHeaders } from "~/lib/seo-content";
 import { umamiConfig } from "~/lib/umami.server";
@@ -114,18 +118,89 @@ function prefersMarkdown(accept: string | null): boolean {
   );
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const url = new URL(request.url);
-  // The home page (landing for anonymous visitors), the login route, the
-  // sender-verification page, and the public marketing pages are open;
-  // everything else requires a session (the verify link carries its own
-  // credential, the single-use emailed token).
-  let path = url.pathname;
+/** The path the gate judges a request by. React Router appends `.data` to
+ * loader fetches during client-side navigation (e.g. /about.data for a Link
+ * click on /about) and the marketing pages publish `.md` mirrors, so both
+ * suffixes come off and the page path is what decides. The root `_index`
+ * layout index route is served from `/_` for its data URL (`/_.data`), so
+ * that maps to `/` too. */
+function gatePath(pathname: string): string {
+  let path = pathname;
   if (path.endsWith(".md")) path = path.slice(0, -3);
-  // React Router appends .data to loader fetches during client-side
-  // navigation (e.g. /about.data for a Link click on /about). Match the
-  // page path, not the fetch path, so public pages stay public.
   if (path.endsWith(".data")) path = path.slice(0, -5);
+  return path === "/_" ? "/" : path;
+}
+
+/** Resource routes that authenticate themselves, so they have to stay
+ * reachable without a session: the cron and webhook secrets, the MCP bearer,
+ * the PKCE OAuth endpoints and the discovery documents. A resource route used
+ * to be exempt from the gate by accident, because React Router does not run an
+ * ancestor loader for one. Now that the gate is middleware it runs for them
+ * too, so each exemption is declared here; a self-gating route missing from
+ * this list gets bounced to /login, which for the OAuth endpoints would break
+ * the flow (a token request carries no cookie). */
+const SELF_GATED_PATHS = new Set([
+  "/mcp",
+  "/mcp/server-card",
+  "/sign-out",
+  "/api/smoke",
+  "/api/inbound-cron",
+  "/api/email-connections-cron",
+  "/api/email-connections-push",
+  "/api/email-connections-gmail-push",
+  "/api/inbound-push",
+  "/api/dev-email-drain",
+]);
+const SELF_GATED_PREFIXES = ["/oauth/", "/.well-known/"];
+
+/** Paths reachable without a session: the landing page, the auth flows (the
+ * emailed verify links carry their own credential), the public marketing
+ * pages, and the routes that gate themselves. */
+function isGateExempt(path: string): boolean {
+  return (
+    path === "/" ||
+    path.startsWith("/login") ||
+    path.startsWith("/onboarding") ||
+    path.startsWith("/reset-password") ||
+    path.startsWith("/unsubscribe") ||
+    path.startsWith("/receipts-email-verify") ||
+    path.startsWith("/verify-email") ||
+    // The OAuth redirect targets must be reachable signed-out (the provider
+    // bounces the user's browser there mid-flow) and the connect entry routes
+    // serve the anonymous onboarding path; all self-gate (AUTH-FLOW-1: new
+    // OAuth routes must be added here).
+    path === "/connect-fastmail" ||
+    path === "/fastmail-oauth-callback" ||
+    path === "/connect-gmail" ||
+    path === "/gmail-oauth-callback" ||
+    PUBLIC_PAGES.has(path) ||
+    SELF_GATED_PATHS.has(path) ||
+    SELF_GATED_PREFIXES.some((prefix) => path.startsWith(prefix))
+  );
+}
+
+/** The session gate, as route middleware rather than loader code. Middleware
+ * runs for every matched route, including the resource routes that never run
+ * an ancestor loader, so the gate sees them all, and the user it resolves
+ * travels to the route on `context` instead of being resolved again. It runs
+ * before the loader, so an anonymous request to a private path is redirected
+ * without any route work. */
+const authGate: Route.MiddlewareFunction = async (
+  { request, context },
+  next,
+) => {
+  const user = await resolveSessionUser(context, request);
+  if (!user && !isGateExempt(gatePath(new URL(request.url).pathname))) {
+    throw loginRedirect(request);
+  }
+  await next();
+};
+
+export const middleware: Route.MiddlewareFunction[] = [authGate];
+
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const path = gatePath(url.pathname);
   // Markdown for agents: a client that asks for markdown over HTML gets the
   // page's published mirror instead of the app shell. The mirrors themselves
   // (resource routes) and React Router's own .data fetches never negotiate,
@@ -140,36 +215,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       throw redirect(mirror, { headers: { Vary: "Accept" } });
     }
   }
-  // React Router maps `_index` layout index routes to `/_` for their
-  // `.data` URLs (e.g. `/_.data` for the root `_index`). Treat `/_`
-  // as `/` so client-side navigations back to the home page don't get
-  // caught by `requireUser` and redirected to `/login`.
-  const isPublic =
-    path === "/" ||
-    path === "/_" ||
-    path.startsWith("/login") ||
-    path.startsWith("/onboarding") ||
-    path.startsWith("/reset-password") ||
-    path.startsWith("/unsubscribe") ||
-    path.startsWith("/receipts-email-verify") ||
-    path.startsWith("/verify-email") ||
-    // The OAuth redirect targets must be reachable signed-out (the
-    // provider bounces the user's browser there mid-flow) and the connect
-    // entry routes serve the anonymous onboarding path; all self-gate
-    // (AUTH-FLOW-1: new OAuth routes must be added here).
-    path === "/connect-fastmail" ||
-    path === "/fastmail-oauth-callback" ||
-    path === "/connect-gmail" ||
-    path === "/gmail-oauth-callback" ||
-    PUBLIC_PAGES.has(path);
-  let user = null;
-  if (isPublic) {
-    // Anonymous visitors stay anonymous; signed-in users still get
-    // identified (e.g. landing page views from a session).
-    if (await isAuthenticated(request)) user = await requireUser(request);
-  } else {
-    user = await requireUser(request);
-  }
+  // The gate above already resolved the session, so this loader only reads
+  // it: anonymous visitors to a public page stay anonymous, signed-in ones
+  // are identified (e.g. landing page views from a session).
+  const user = context.get(userContext);
   // Report names feed the palette's export submenu (same 5-min cache the
   // export page uses; acceptable per-navigation cost).
   const reportNames = user

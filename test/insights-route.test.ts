@@ -15,6 +15,7 @@ import {
   type ToolCall,
 } from "~/lib/receipt-ai.server";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import { contextForRequest } from "./helpers/authContext";
 import { readExpenses } from "~/lib/db/expenses";
 import { clearAuthFailures, recordAuthFailure } from "~/lib/db/auth-attempts";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
@@ -98,14 +99,14 @@ async function callRoute(
     return loader({
       request,
       params: {},
-      context: {},
-    } as InsightsRoute.LoaderArgs);
+      context: await contextForRequest(request),
+    } as unknown as InsightsRoute.LoaderArgs);
   }
   return action({
     request,
     params: {},
-    context: {},
-  } as InsightsRoute.ActionArgs);
+    context: await contextForRequest(request),
+  } as unknown as InsightsRoute.ActionArgs);
 }
 
 describe("insights route", () => {
@@ -155,8 +156,11 @@ describe("insights route", () => {
     const res = (await action({
       request,
       params: {},
-      context: {},
-    } as InsightsRoute.ActionArgs)) as { ok: boolean; error: string };
+      context: await contextForRequest(request),
+    } as unknown as InsightsRoute.ActionArgs)) as {
+      ok: boolean;
+      error: string;
+    };
 
     // Pressing Stop aborts the browser's fetch, which aborts this request:
     // the answer has no reader, so the transcript must not gain an exchange
@@ -1012,18 +1016,19 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     // "That's already done").
     const remove = new FormData();
     remove.set("intent", "delete");
+    const deleteRequest = new Request(
+      `https://expense.test/expense/${confirmed.logged.expenseId}`,
+      {
+        method: "POST",
+        body: remove,
+        headers: { cookie: await sessionCookie() },
+      },
+    );
     await expenseAction({
-      request: new Request(
-        `https://expense.test/expense/${confirmed.logged.expenseId}`,
-        {
-          method: "POST",
-          body: remove,
-          headers: { cookie: await sessionCookie() },
-        },
-      ),
+      request: deleteRequest,
       params: { id: confirmed.logged.expenseId },
-      context: {},
-    } as ExpenseRoute.ActionArgs);
+      context: await contextForRequest(deleteRequest),
+    } as unknown as ExpenseRoute.ActionArgs);
     expect(
       (await readExpenses(TEST_ACCOUNT_ID)).some(
         (e) => e.id === confirmed.logged.expenseId,

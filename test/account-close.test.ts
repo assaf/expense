@@ -13,6 +13,7 @@ import {
 } from "./helpers/seedTestData";
 import { freshPage, signIn, waitForHydration } from "./helpers/launchBrowser";
 import type { Route as SettingsRoute } from "+types/app/routes/+types/settings";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * Closing your own account from Settings: the password re-check, the
@@ -44,15 +45,16 @@ async function closeAccount(
   const form = new FormData();
   form.set("intent", "closeAccount");
   form.set("password", password);
+  const request = new Request("https://expense.test/settings", {
+    method: "POST",
+    body: form,
+    headers: { cookie },
+  });
   return action({
-    request: new Request("https://expense.test/settings", {
-      method: "POST",
-      body: form,
-      headers: { cookie },
-    }),
+    request,
     params: {},
-    context: {},
-  } as SettingsRoute.ActionArgs);
+    context: await contextForRequest(request),
+  } as unknown as SettingsRoute.ActionArgs);
 }
 
 /** A GET against the running test server with a session cookie, without

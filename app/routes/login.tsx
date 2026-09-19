@@ -11,11 +11,11 @@ import {
   createAccountWithUser,
   EmailNotVerifiedError,
   guardAnonymousAttempt,
-  isAuthenticated,
   joinAccountWithInviteCode,
   login,
   rejectCrossSitePost,
   resendAccountVerification,
+  userContext,
 } from "~/lib/auth.server";
 import { pageMeta } from "~/lib/seo-content";
 import { formEmail, formString, MAX_PASSWORD_LENGTH } from "~/lib/validation";
@@ -53,8 +53,8 @@ export function meta(): Route.MetaDescriptors {
   );
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  if (await isAuthenticated(request)) {
+export async function loader({ request, context }: Route.LoaderArgs) {
+  if (context.get(userContext)) {
     const url = new URL(request.url);
     throw redirect(safeNext(url.searchParams.get("next")));
   }

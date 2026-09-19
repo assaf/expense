@@ -5,6 +5,7 @@ import { readLocations, removeLocation } from "~/lib/db/locations";
 import { geocode } from "~/lib/maps.server";
 import { TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import type { Route as SettingsRoute } from "+types/app/routes/+types/settings";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * The Settings page's named-location writes, driven through the route action
@@ -25,15 +26,16 @@ async function post(form: FormData): Promise<Response> {
   const session = await sessionStorage.getSession();
   session.set(SESSION_USER_KEY, "user_test1");
   const cookie = await sessionStorage.commitSession(session);
+  const request = new Request("https://expense.test/settings", {
+    method: "POST",
+    body: form,
+    headers: { cookie },
+  });
   return action({
-    request: new Request("https://expense.test/settings", {
-      method: "POST",
-      body: form,
-      headers: { cookie },
-    }),
+    request,
     params: {},
-    context: {},
-  } as SettingsRoute.ActionArgs);
+    context: await contextForRequest(request),
+  } as unknown as SettingsRoute.ActionArgs);
 }
 
 function addForm(name: string, address: string): FormData {

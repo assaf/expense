@@ -18,6 +18,7 @@ import {
 } from "~/lib/mcp-discovery.server";
 import { loader as authLoader } from "~/routes/auth[.]md";
 import { headers, loader as rootLoader } from "~/root";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * What an agent fetches before it connects, as the agent sees it: the two
@@ -77,8 +78,8 @@ async function thrownResponse(
   const thrown = await rootLoader({
     request,
     params: {},
-    context: {},
-  } as Parameters<typeof rootLoader>[0]).then(
+    context: await contextForRequest(request),
+  } as unknown as Parameters<typeof rootLoader>[0]).then(
     () => null,
     (error: unknown) => error,
   );

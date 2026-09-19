@@ -10,7 +10,7 @@ import { Card } from "~/components/ui/Card";
 import { FieldLabel } from "~/components/ui/FieldLabel";
 import { Section } from "~/components/ui/Section";
 import { StatusNote } from "~/components/ui/StatusNote";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import { sendVerificationEmail } from "~/lib/sender-verification.server";
@@ -86,8 +86,8 @@ const OAUTH_ERROR_TEXT = {
   },
 } as const;
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const [inboundSenders, emailConnections] = await Promise.all([
     listInboundSenders(user.accountId),
     listEmailConnections(user.accountId),
@@ -140,8 +140,8 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Email — Expense" }];
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   // Both send paths share the same email: the verification link for a
   // pending sender address, addressed with the account's display name.

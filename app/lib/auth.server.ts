@@ -1,4 +1,9 @@
-import { createCookieSessionStorage, redirect } from "react-router";
+import {
+  createContext,
+  createCookieSessionStorage,
+  redirect,
+  type RouterContextProvider,
+} from "react-router";
 import { SESSION_SECRET } from "./env";
 import {
   generateOpaqueToken,
@@ -93,7 +98,7 @@ export const sessionStorage = createCookieSessionStorage({
  * a closed account's cookie is refused immediately rather than when the
  * process-local user cache expires. Exported
  * for the OAuth callbacks, which resolve the parked session's user without
- * requireUser (they must not redirect). */
+ * requireContextUser (they must not redirect). */
 export async function sessionUser(request: Request): Promise<User | undefined> {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
@@ -110,29 +115,55 @@ export async function sessionUser(request: Request): Promise<User | undefined> {
   return epoch === (await readCredentialsEpoch(userId)) ? user : undefined;
 }
 
-/** Require an authenticated request. Returns the user or redirects to /login. */
-export async function requireUser(request: Request): Promise<User> {
+/** The /login redirect an anonymous request to a private path gets, at the
+ * page path rather than its `.data` fetch path so the post-login bounce
+ * (safeNext) lands on the route, not the data endpoint. The gate throws it,
+ * and requireContextUser throws it for a route the gate somehow let through. */
+export function loginRedirect(request: Request): Response {
+  const url = new URL(request.url);
+  const pathname = url.pathname.endsWith(".data")
+    ? url.pathname.slice(0, -5)
+    : url.pathname;
+  const next =
+    pathname === "/"
+      ? ""
+      : `?next=${encodeURIComponent(pathname + url.search)}`;
+  return redirect(`/login${next}`);
+}
+
+/** Per-request value the root middleware stores the resolved session user in:
+ * the user, or null for an anonymous request. Routes read it instead of
+ * resolving the session a second time, which is what used to happen: the root
+ * loader resolved it for the gate, then each route loader resolved it again. */
+export const userContext = createContext<User | null>(null);
+
+/** Resolve the session for one request and publish it on `context`. The root
+ * middleware calls this once per request; an anonymous request stores null
+ * rather than leaving the key unset, so a route can tell "no user" apart from
+ * "the middleware never ran". */
+export async function resolveSessionUser(
+  context: Readonly<RouterContextProvider>,
+  request: Request,
+): Promise<User | undefined> {
   await initStore();
   const user = await sessionUser(request);
-  if (!user) {
-    const url = new URL(request.url);
-    // Loader fetches arrive as /path.data; redirect back to the real page
-    // so the post-login bounce (safeNext) lands on the route, not its data.
-    const pathname = url.pathname.endsWith(".data")
-      ? url.pathname.slice(0, -5)
-      : url.pathname;
-    const next =
-      pathname === "/"
-        ? ""
-        : `?next=${encodeURIComponent(pathname + url.search)}`;
-    throw redirect(`/login${next}`);
-  }
+  context.set(userContext, user ?? null);
   return user;
 }
 
-/** True when the request already has a valid session. */
-export async function isAuthenticated(request: Request): Promise<boolean> {
-  return (await sessionUser(request)) !== undefined;
+/** The session user the root middleware resolved, or the /login redirect when
+ * there is none. Routes call this instead of resolving the session: the cookie
+ * verification, the user lookup and the credentials-epoch read all already
+ * happened. The check stays because the gate's public-path list and a route's
+ * own idea of whether it is private must never disagree: a disagreement has to
+ * fail closed, not hand the route a null user. */
+export function requireContextUser(
+  context: Readonly<RouterContextProvider>,
+  request: Request,
+): User {
+  const user = context.get(userContext);
+  if (!user) throw loginRedirect(request);
+  return user;
 }
 
 /** The Set-Cookie value for the given user's session, stamped with the

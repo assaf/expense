@@ -1,4 +1,4 @@
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { readExpenses } from "~/lib/db/expenses";
 import { reportExists } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
@@ -6,8 +6,8 @@ import { buildReportPdf } from "~/lib/report-pdf.server";
 import { sanitizeFilenamePart } from "~/lib/validation";
 import type { Route } from "./+types/export.report.$reportName[.]pdf";
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const reportName = params.reportName;
   const [expenses, rates] = await Promise.all([
     readExpenses(user.accountId),

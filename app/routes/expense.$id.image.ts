@@ -8,7 +8,7 @@ import { imageVersion } from "~/lib/image-version";
 import { unknownIntent } from "~/lib/validation";
 import { notFound } from "~/lib/validation";
 import { requireIntent } from "~/lib/route-helpers.server";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import type { Route } from "./+types/expense.$id.image";
 
 /**
@@ -19,8 +19,8 @@ import type { Route } from "./+types/expense.$id.image";
  * fly.
  */
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const url = new URL(request.url);
   const width = Number(url.searchParams.get("w"));
   const wantsTile = Number.isInteger(width) && width >= 16 && width <= 160;
@@ -89,8 +89,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 /** Clear the stored receipt image (the editor's remove button). Image
  * replacements are drafts attached on Save (see saveExpenseFromForm). */
-export async function action({ request, params }: Route.ActionArgs) {
-  const { user, intent } = await requireIntent(request);
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const { user, intent } = await requireIntent(request, context);
   const expense = await readExpense(params.id, user.accountId);
   if (!expense || expense.type !== "receipt") return notFound();
 

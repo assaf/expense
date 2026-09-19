@@ -7,6 +7,7 @@ import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { testPrisma } from "./helpers/seedTestData";
 import { freshPage, signIn, waitForHydration } from "./helpers/launchBrowser";
 import type { Route as SettingsRoute } from "+types/app/routes/+types/settings";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * Changing the sign-in email from Settings: the password gate, the address
@@ -92,15 +93,16 @@ async function changeEmail(
   form.set("intent", "changeEmail");
   form.set("email", to);
   form.set("password", password);
+  const request = new Request("https://expense.test/settings", {
+    method: "POST",
+    body: form,
+    headers: { cookie },
+  });
   return action({
-    request: new Request("https://expense.test/settings", {
-      method: "POST",
-      body: form,
-      headers: { cookie },
-    }),
+    request,
     params: {},
-    context: {},
-  } as SettingsRoute.ActionArgs);
+    context: await contextForRequest(request),
+  } as unknown as SettingsRoute.ActionArgs);
 }
 
 /** Every email the app sent during this test, oldest first. */

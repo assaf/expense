@@ -60,7 +60,7 @@ import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
 import { ABOUT } from "~/lib/content.server";
 import { requireIntent } from "~/lib/route-helpers.server";
-import { isAuthenticated, requireUser } from "~/lib/auth.server";
+import { userContext } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
 import {
   MILEAGE_TYPE_LABELS,
@@ -87,9 +87,10 @@ import type { DuplicateReason } from "~/lib/duplicates";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/_index";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = context.get(userContext);
   // Anonymous visitors see the landing page; signed-in users see the app.
-  if (!(await isAuthenticated(request))) {
+  if (!user) {
     // The landing page shows how many of the 100 free spots are claimed.
     const signupCount = await countAccounts();
     return data({
@@ -98,7 +99,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       benefits: ABOUT.benefits,
     });
   }
-  const user = await requireUser(request);
   const [
     expenses,
     dismissed,
@@ -201,8 +201,8 @@ export function headers({ loaderHeaders }: Route.HeadersArgs) {
 /** List-level actions: dismiss a duplicate warning or delete a row.
  * Deleting from the list still goes through the confirm dialog; deletion
  * has no undo, so it always asks first. */
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   if (intent === "dismiss-duplicate") {
     const id = formString(form, "id");

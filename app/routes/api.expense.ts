@@ -3,7 +3,7 @@ import {
   imageResponseHeaders,
   readImage,
 } from "~/lib/images.server";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { captureWarning } from "~/lib/errors.server";
 import {
   extractUploadedReceiptFields,
@@ -24,8 +24,8 @@ export const config = { maxDuration: 15 };
  * fetches this URL to show the rasterized preview of a PDF upload (an <img>
  * can't render a PDF blob). Scoped to the caller's account like every read.
  */
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const url = new URL(request.url);
   const key = url.searchParams.get("draftKey");
   if (!key) return notFound();
@@ -48,8 +48,8 @@ export async function loader({ request }: Route.LoaderArgs) {
  * expense row; the editor's Save action attaches the draft to the new
  * expense, and Cancel deletes it.
  */
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   if (intent === "draft-upload") {
     // The draft is saved immediately; OCR never blocks the upload, so a

@@ -21,7 +21,7 @@ import {
   changePassword,
   confirmPassword,
   logout,
-  requireUser,
+  requireContextUser,
 } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { geocode } from "~/lib/maps.server";
@@ -67,8 +67,8 @@ import {
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/settings";
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const account = await readAccount(user.accountId);
   const [
     categories,
@@ -165,8 +165,8 @@ function closeAccountSummary(footprint: AccountFootprint): string {
     .join(" ");
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   switch (intent) {
     case "regenerateCode":

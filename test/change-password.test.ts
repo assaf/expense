@@ -16,6 +16,7 @@ import {
 import { testPrisma } from "./helpers/seedTestData";
 import { freshPage, signIn, waitForHydration } from "./helpers/launchBrowser";
 import type { Route as SettingsRoute } from "+types/app/routes/+types/settings";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * Changing your own password from Settings, and the well-known URL that
@@ -83,15 +84,16 @@ async function changePassword(
   form.set("currentPassword", fields.current ?? OLD_PASSWORD);
   form.set("newPassword", fields.next ?? NEW_PASSWORD);
   form.set("confirmPassword", fields.confirm ?? fields.next ?? NEW_PASSWORD);
+  const request = new Request("https://expense.test/settings", {
+    method: "POST",
+    body: form,
+    headers: { cookie },
+  });
   return action({
-    request: new Request("https://expense.test/settings", {
-      method: "POST",
-      body: form,
-      headers: { cookie },
-    }),
+    request,
     params: {},
-    context: {},
-  } as SettingsRoute.ActionArgs);
+    context: await contextForRequest(request),
+  } as unknown as SettingsRoute.ActionArgs);
 }
 
 /** A GET against the running test server with a session cookie, without

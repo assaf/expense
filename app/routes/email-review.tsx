@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { PageShell } from "~/components/PageShell";
 import { ReviewInbox } from "~/components/email-review";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { readEmailConnection } from "~/lib/db/email-connections";
 import {
@@ -30,8 +30,8 @@ import type { Route } from "./+types/email-review";
 
 export const config = { maxDuration: 60 };
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const url = new URL(request.url);
   const onboarding = url.searchParams.get("onboarding") === "1";
   const connectionId = url.searchParams.get("connection") ?? "";
@@ -85,8 +85,8 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Review inbox — Expense" }];
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
   const connectionId = formString(form, "connectionId");
 
   // Every action is scoped to a connection the user owns.

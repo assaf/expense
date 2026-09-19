@@ -12,7 +12,7 @@ import { RemoveButton } from "~/components/ui/RemoveButton";
 import { Section } from "~/components/ui/Section";
 import { StatusNote } from "~/components/ui/StatusNote";
 import { cardSurface } from "~/components/ui/Card";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { countLabel, formatAmount } from "~/lib/format";
 import {
@@ -26,8 +26,8 @@ import type { ReportSummary } from "~/lib/db/reports";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/export";
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const reports = await readReportSummaries(user.accountId);
   return { reports };
 }
@@ -36,8 +36,8 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Reports — Expense" }];
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   switch (intent) {
     case "addReport":

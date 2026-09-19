@@ -2,7 +2,7 @@ import { AuthCard, AuthHeader } from "~/components/auth/AuthCard";
 import { Button } from "~/components/ui/Button";
 import { ShieldCheck } from "lucide-react";
 import { Form, redirect } from "react-router";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { escapeHtml } from "~/lib/escape";
 import {
   findOAuthClient,
@@ -28,12 +28,12 @@ import type { Route } from "./+types/oauth.authorize";
  * page is also framed-out (X-Frame-Options + CSP frame-ancestors) so
  * clickjacking can't fake that click.
  */
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const parsed = parseAuthorizeParams(url);
   // Sign in first: requireUser redirects to /login?next=<this URL>, and the
   // login action bounces back here, where consent resumes.
-  const user = await requireUser(request);
+  const user = requireContextUser(context, request);
   if (!parsed.ok) return errorPage(parsed.error);
 
   const resolved = await resolveAuthorizeClient(
@@ -53,8 +53,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const user = await requireUser(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const user = requireContextUser(context, request);
   const form = await request.formData();
   const decision = formString(form, "decision");
   const params = {

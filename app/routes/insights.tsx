@@ -17,7 +17,7 @@ import { Button } from "~/components/ui/Button";
 import { Textarea } from "~/components/ui/Textarea";
 import { InsightChart } from "~/components/InsightChart";
 import { MoneyCheckup } from "~/components/MoneyCheckup";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { readAccount, readAccountUsers } from "~/lib/db/accounts";
 import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
@@ -135,8 +135,8 @@ async function overWriteBudget(userId: string): Promise<boolean> {
   return false;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const [conversation, expenses, dismissed] = await Promise.all([
     readLatestConversation(user.id),
     readExpenses(user.accountId),
@@ -163,8 +163,8 @@ export async function loader({ request }: Route.LoaderArgs) {
  * expenses, and the model phrases the answer from those numbers — it
  * never invents figures. Chart questions carry their own chart in the
  * transcript. */
-export async function action({ request }: Route.LoaderArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.LoaderArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
   if (intent === "new") {
     // Start a fresh conversation; the previous one stays in the database
     // as a record. No LLM call, so no plan gate needed here.

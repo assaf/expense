@@ -3,7 +3,7 @@ import {
   HIGHLIGHT_IDS,
   type HighlightData,
 } from "~/components/FeatureHighlight";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import type { Route } from "./+types/[_]highlights";
 
 /** Sample data chosen to render every card: the mailbox is shown as
@@ -25,8 +25,8 @@ export function meta(): Route.MetaDescriptors {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  requireContextUser(context, request);
   return null;
 }
 

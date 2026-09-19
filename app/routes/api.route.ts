@@ -1,5 +1,5 @@
 import { MAX_TRIP_STOPS, recomputeMileage } from "~/lib/maps.server";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { badRequest } from "~/lib/validation";
 import { MAX_ADDRESS_LENGTH, parseLocations } from "~/lib/types";
 import type { Route } from "./+types/api.route";
@@ -10,8 +10,8 @@ interface RouteRequestBody {
   roundTrip?: unknown;
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  await requireUser(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  requireContextUser(context, request);
   let body: RouteRequestBody;
   try {
     body = (await request.json()) as RouteRequestBody;

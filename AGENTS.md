@@ -47,18 +47,25 @@ flowchart LR
   `meta`, `headers`, `ErrorBoundary`. A route with `loader`/`action` but **no**
   `default` export is a **resource route** and returns `Response` directly
   (`api.*`, `oauth.*`, `.well-known.*`, `export.*[.]pdf|zip`, `mcp.ts`).
-- **Auth gate is centralized** in the root loader (`app/root.tsx:65`): a
-  hard-coded public set plus `PUBLIC_PAGES` (`/about`, `/ai`, `/connect`,
-  `/faq`, `/mileage-rates`, `/schedule-c-categories`, `/alternatives`,
-  `/privacy`, `/terms`, `/support`, `/llms.txt`). Everything else calls
-  `requireUser(request)` and redirects to
-  `/login?next=...`. The list is pinned by `test/public-paths.test.ts`; it strips
-  `.data` and `.md` before matching, because client loader fetches append
-  `.data`.
-- **Resource routes bypass the root loader** and must self-gate: `requireUser`
-  (`expense.$id.image.ts`, `api.webmcp.$resource.ts`), `assertCronSecret`
-  (cron and dev routes), `SMOKE_TEST_SECRET` (`api.smoke.ts`), OAuth bearer
-  inside `handleMcpRequest` (`/mcp`), and PKCE in `oauth.token.ts`.
+- **Auth gate is route middleware** on the root route (`middleware` in
+  `app/root.tsx`): a hard-coded public set plus `PUBLIC_PAGES` (`/about`, `/ai`,
+  `/connect`, `/faq`, `/mileage-rates`, `/schedule-c-categories`,
+  `/alternatives`, `/privacy`, `/terms`, `/support`, `/llms.txt`) and the
+  resource routes that gate themselves. It resolves the session once and
+  publishes the user on `context` (`userContext`), and a route reads it with
+  `requireContextUser(context, request)`, which redirects to `/login?next=...`
+  when the gate let the request through without a user. The lists are pinned by
+  `test/public-paths.test.ts`; the gate strips `.data` and `.md` before
+  matching, because client loader fetches append `.data`.
+- **Middleware runs for resource routes too**, which is why the gate moved
+  there: React Router runs no ancestor loader for one, so they used to have to
+  authenticate themselves and nothing caught one that forgot. A self-gating
+  route must be listed in `SELF_GATED_PATHS`/`SELF_GATED_PREFIXES` or the gate
+  bounces it to `/login` (fatal for `/oauth/token`, which carries no cookie).
+  Where the credential is not a session they still self-gate:
+  `assertCronSecret` (cron and dev routes), `SMOKE_TEST_SECRET`
+  (`api.smoke.ts`), OAuth bearer inside `handleMcpRequest` (`/mcp`), and PKCE
+  in `oauth.token.ts`.
 - **All persistence goes through `app/lib/db/<domain>.ts`**, never from a route,
   over the Prisma 8 client exported as `db` from `app/lib/prisma.server.ts`.
   Three lanes: `db.orm.public.<Model>` (typed ORM), `db.sql.public.<table>`
@@ -264,31 +271,31 @@ out of both.
 
 ## Important Files
 
-| Path                                  | Role                                                                       |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| `app/routes.ts`                       | `flatRoutes()` manifest; the route tree is the filesystem                  |
-| `app/root.tsx`                        | Root route: auth gate, theme script, `ErrorBoundary`, security headers     |
-| `app/lib/prisma.server.ts`            | Prisma 8 client (`db`) over a `pg.Pool` with `max: 2`                      |
-| `app/lib/db/expenses.ts`              | Representative data module: CRUD, image join, duplicate and neighbor reads |
-| `app/lib/db/shared.ts`                | Row mappers, `cachedRead`/`bust`, test-mode helpers                        |
-| `app/lib/auth.server.ts`              | `requireUser`, session cookie storage, login/signup, throttles             |
-| `app/lib/route-helpers.server.ts`     | `requireIntent`, `parseIntent`, `assertCronSecret`                         |
-| `app/lib/validation.ts`               | Form validators plus the `badRequest`/`notFound`/`unknownIntent` envelopes |
-| `app/lib/errors.server.ts`            | `captureError` and friends (console + Sentry)                              |
-| `app/lib/env.ts`                      | Env constants; server-only (reads `.env` via `process.loadEnvFile`)        |
-| `app/lib/cron.server.ts`              | `cronTick`, the only supported cron wrapper                                |
-| `app/lib/mcp.server.ts`               | MCP tool registry and OAuth `authenticateRequest`                          |
-| `app/data/`                           | The public copy: one markdown/YAML content file per page                   |
-| `app/lib/content.server.ts`           | Parses `app/data/`, exports the parsed bundles and the `.md` mirrors       |
-| `app/lib/seo-content.ts`              | Site config, shared meta helpers, and the computed mileage helpers         |
-| `app/lib/images.server.ts`            | BYTEA image storage and `images/{accountId}/...` keys                      |
-| `app/global.css`                      | Tailwind v4 entry: `@theme` tokens and the `.dark` variant                 |
-| `prisma/contract.prisma`              | Schema source of truth; `prisma.config.ts` points the CLI here             |
-| `vite.config.ts`                      | Build config plus the `fmt`/`lint` rules and the vitest project split      |
-| `scripts/check`, `scripts/deploy`     | The gate and the production deploy path                                    |
-| `test/helpers/globalSetup.ts`         | Once per run: recreate `expense_test`, seed, spawn the test server         |
-| `test/helpers/launchBrowser.ts`       | Playwright browser plus signed-in context, hydration wait                  |
-| `docs/files.md`, `docs/operations.md` | File map; env, pooler, Sentry, and incident history                        |
+| Path                                  | Role                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `app/routes.ts`                       | `flatRoutes()` manifest; the route tree is the filesystem                      |
+| `app/root.tsx`                        | Root route: auth gate, theme script, `ErrorBoundary`, security headers         |
+| `app/lib/prisma.server.ts`            | Prisma 8 client (`db`) over a `pg.Pool` with `max: 2`                          |
+| `app/lib/db/expenses.ts`              | Representative data module: CRUD, image join, duplicate and neighbor reads     |
+| `app/lib/db/shared.ts`                | Row mappers, `cachedRead`/`bust`, test-mode helpers                            |
+| `app/lib/auth.server.ts`              | Session cookie storage, the middleware's user context, login/signup, throttles |
+| `app/lib/route-helpers.server.ts`     | `requireIntent`, `parseIntent`, `assertCronSecret`                             |
+| `app/lib/validation.ts`               | Form validators plus the `badRequest`/`notFound`/`unknownIntent` envelopes     |
+| `app/lib/errors.server.ts`            | `captureError` and friends (console + Sentry)                                  |
+| `app/lib/env.ts`                      | Env constants; server-only (reads `.env` via `process.loadEnvFile`)            |
+| `app/lib/cron.server.ts`              | `cronTick`, the only supported cron wrapper                                    |
+| `app/lib/mcp.server.ts`               | MCP tool registry and OAuth `authenticateRequest`                              |
+| `app/data/`                           | The public copy: one markdown/YAML content file per page                       |
+| `app/lib/content.server.ts`           | Parses `app/data/`, exports the parsed bundles and the `.md` mirrors           |
+| `app/lib/seo-content.ts`              | Site config, shared meta helpers, and the computed mileage helpers             |
+| `app/lib/images.server.ts`            | BYTEA image storage and `images/{accountId}/...` keys                          |
+| `app/global.css`                      | Tailwind v4 entry: `@theme` tokens and the `.dark` variant                     |
+| `prisma/contract.prisma`              | Schema source of truth; `prisma.config.ts` points the CLI here                 |
+| `vite.config.ts`                      | Build config plus the `fmt`/`lint` rules and the vitest project split          |
+| `scripts/check`, `scripts/deploy`     | The gate and the production deploy path                                        |
+| `test/helpers/globalSetup.ts`         | Once per run: recreate `expense_test`, seed, spawn the test server             |
+| `test/helpers/launchBrowser.ts`       | Playwright browser plus signed-in context, hydration wait                      |
+| `docs/files.md`, `docs/operations.md` | File map; env, pooler, Sentry, and incident history                            |
 
 ## Runtime/Tooling Preferences
 

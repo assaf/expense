@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 import { ulid } from "ulid";
 import { Landing } from "~/components/reconcile/reconcile-landing";
 import { RunPage } from "~/components/reconcile/reconcile-run";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import {
   matchStatementRows,
@@ -28,8 +28,8 @@ import type { Route } from "./+types/reconcile";
 /** Statements are text files; a generous cap against paste bombs. */
 const MAX_STATEMENT_BYTES = 5 * 1024 * 1024;
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const url = new URL(request.url);
   const runId = url.searchParams.get("run");
   const [runs, reports, categories] = await Promise.all([
@@ -71,8 +71,8 @@ export function meta(): Route.MetaDescriptors {
  *    statement receipt), everything undecided is discarded. Nothing
  *    existing is ever deleted.
  */
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
 
   if (intent === "upload") {
     const file = form.get("file");

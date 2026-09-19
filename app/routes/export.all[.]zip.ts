@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from "fflate";
 import { stringify } from "csv-stringify/sync";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { bareName, readImages } from "~/lib/images.server";
 import { readExpenses } from "~/lib/db/expenses";
 import { readMileageRates } from "~/lib/db/seed";
@@ -15,8 +15,8 @@ function csvSafe(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const [expenses, rates] = await Promise.all([
     readExpenses(user.accountId),
     readMileageRates(),

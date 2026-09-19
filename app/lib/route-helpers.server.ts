@@ -1,19 +1,23 @@
+import type { RouterContextProvider } from "react-router";
 import type { User } from "~/lib/types";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { CRON_SECRET } from "~/lib/env";
 import { safeEqual } from "~/lib/passwords";
 import { formString } from "~/lib/validation";
 
 /**
- * Authenticated action preamble shared by every form route:
- * requireUser -> parse FormData -> read the "intent" field.
+ * Authenticated action preamble shared by every form route: the user the root
+ * middleware resolved -> parse FormData -> read the "intent" field.
  */
-export async function requireIntent(request: Request): Promise<{
+export async function requireIntent(
+  request: Request,
+  context: Readonly<RouterContextProvider>,
+): Promise<{
   user: User;
   form: FormData;
   intent: string;
 }> {
-  const user = await requireUser(request);
+  const user = requireContextUser(context, request);
   const { form, intent } = await parseIntent(request);
   return { user, form, intent };
 }

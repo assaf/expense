@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import { Editor } from "./expense.$id";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import {
   addReportAction,
@@ -18,8 +18,8 @@ import type { Route } from "./+types/expense.new";
  * today's date) and only becomes a row when the user clicks Save. Uploaded
  * receipt images are held as drafts (see /api/expense) and attached on Save.
  */
-export async function loader({ request }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const url = new URL(request.url);
   const type =
     url.searchParams.get("type") === "mileage" ? "mileage" : "receipt";
@@ -29,20 +29,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   // editor initializes an empty date from the browser's local timezone
   // (receipt/mileage editors fall back to local today on create).
   // Existing expenses feed the live duplicate warning in the create editor.
-  const [context, existing] = await Promise.all([
+  const [editor, existing] = await Promise.all([
     loadEditorContext(user.accountId, expense),
     readDuplicateCandidates(user.accountId),
   ]);
   // New mileage expenses default to the Travel category when the account has
   // one (the IRS Schedule C bucket every new account is seeded with).
-  if (expense.type === "mileage" && context.categories.includes("Travel")) {
+  if (expense.type === "mileage" && editor.categories.includes("Travel")) {
     expense.category = "Travel";
   }
-  return { mode: "create" as const, ...context, existing, nav: null };
+  return { mode: "create" as const, ...editor, existing, nav: null };
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
   if (intent === "addReport") return addReportAction(form, user.accountId);
 
   if (intent !== "save") {

@@ -1,5 +1,5 @@
 import type { Route } from "./+types/api.webmcp.$resource";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { readReportSummaries } from "~/lib/db/reports";
 import {
   readExpenseSummary,
@@ -19,8 +19,8 @@ import { parseExpenseFilters } from "~/lib/expense-read-tools";
  * GET only, no writes: the experiment surface is deliberately inert.
  */
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const query = new URL(request.url).searchParams;
   switch (params.resource) {
     case "expenses": {

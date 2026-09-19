@@ -3,7 +3,7 @@ import type { EditorData } from "~/components/editor/editor-shared";
 import { MileageEditor } from "~/components/editor/mileage-editor";
 import { ReceiptEditor } from "~/components/editor/receipt-editor";
 import { captureError } from "~/lib/errors.server";
-import { requireUser } from "~/lib/auth.server";
+import { requireContextUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import {
   addReportAction,
@@ -17,19 +17,19 @@ import { badRequest, notFound, unknownIntent } from "~/lib/validation";
 import { requireIntent } from "~/lib/route-helpers.server";
 import type { Route } from "./+types/expense.$id";
 
-export async function loader({ request, params }: Route.LoaderArgs) {
-  const user = await requireUser(request);
+export async function loader({ request, params, context }: Route.LoaderArgs) {
+  const user = requireContextUser(context, request);
   const expense = await readExpense(params.id, user.accountId);
   if (!expense) throw notFound();
   // Editor context (reports, categories, merchants, home, rate) and the
   // prev/next neighbours for the ← → arrows, in parallel. readNeighborIds
   // scans the account's open expenses so navigation sees the exact list
   // order the home page renders.
-  const [nav, context] = await Promise.all([
+  const [nav, editor] = await Promise.all([
     readNeighborIds(user.accountId, expense),
     loadEditorContext(user.accountId, expense),
   ]);
-  return { mode: "edit" as const, ...context, nav, existing: [] };
+  return { mode: "edit" as const, ...editor, nav, existing: [] };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -45,8 +45,8 @@ export function meta({ loaderData }: Route.MetaArgs) {
   return [{ title: `${label}${dist} — Expense` }];
 }
 
-export async function action({ request, params }: Route.ActionArgs) {
-  const { user, form, intent } = await requireIntent(request);
+export async function action({ request, params, context }: Route.ActionArgs) {
+  const { user, form, intent } = await requireIntent(request, context);
   const existing = await readExpense(params.id, user.accountId);
   if (!existing) throw notFound();
 

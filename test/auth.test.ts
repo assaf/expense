@@ -165,7 +165,7 @@ describe("Access control", () => {
   });
 
   it("keeps the four OAuth connect/callback routes reachable signed-out (AUTH-FLOW-1)", async () => {
-    // AUTH-FLOW-1: the root requireUser gate dead-ends any OAuth route
+    // AUTH-FLOW-1: the root gate dead-ends any OAuth route
     // missing from the public allowlist (the provider bounces the user's
     // browser there mid-flow; the routes self-gate). Pin all four —
     // Fastmail and Gmail, entry + callback — so a new provider can't

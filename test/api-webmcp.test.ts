@@ -10,13 +10,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const mocks = vi.hoisted(() => ({
-  requireUser: vi.fn(),
+  requireContextUser: vi.fn(),
   readExpenses: vi.fn(async () => [] as Array<Record<string, unknown>>),
   readReportSummaries: vi.fn(async () => [] as Array<Record<string, unknown>>),
 }));
 
 vi.mock("~/lib/auth.server", () => ({
-  requireUser: mocks.requireUser,
+  requireContextUser: mocks.requireContextUser,
 }));
 
 vi.mock("~/lib/db/expenses", () => ({
@@ -67,7 +67,7 @@ function receipt(overrides: Record<string, unknown> = {}) {
 
 describe("api.webmcp.$resource", () => {
   beforeEach(() => {
-    mocks.requireUser.mockResolvedValue(USER);
+    mocks.requireContextUser.mockReturnValue(USER);
     mocks.readExpenses.mockResolvedValue([]);
     mocks.readReportSummaries.mockResolvedValue([]);
   });

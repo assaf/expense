@@ -10,8 +10,8 @@ import {
   createSessionCookie,
   login,
   requestPasswordReset,
-  requireUser,
   resetPasswordWithToken,
+  sessionUser,
 } from "~/lib/auth.server";
 import { issueTokenPair, verifyAccessToken } from "~/lib/oauth.server";
 import { registerOAuthClient } from "~/lib/db/oauth";
@@ -167,7 +167,7 @@ describe("password reset", () => {
     // Warm this process's user cache, then bump the epoch the way a reset
     // on another instance would: nothing here busts that cache, so only a
     // fresh read of the epoch can reject the cookie.
-    await expect(requireUser(request())).resolves.toMatchObject({
+    await expect(sessionUser(request())).resolves.toMatchObject({
       id: user.id,
     });
     await testPrisma.user.updateMany({
@@ -175,9 +175,9 @@ describe("password reset", () => {
       data: { credentialsChangedAt: new Date() },
     });
 
-    const after = await requireUser(request()).catch((err: unknown) => err);
-    expect(after).toBeInstanceOf(Response);
-    expect((after as Response).headers.get("location")).toContain("/login");
+    // sessionUser is where the epoch is enforced; the route middleware is
+    // what turns a refused cookie into the /login redirect.
+    await expect(sessionUser(request())).resolves.toBeUndefined();
   });
 
   it("revokes sessions and OAuth tokens minted before the reset (L2)", async () => {
@@ -198,9 +198,9 @@ describe("password reset", () => {
     const issued = await issueTokenPair(user.id, client.id);
 
     const pair = cookie.split(";")[0]!;
-    const before = await requireUser(
+    const before = await sessionUser(
       new Request("http://localhost/", { headers: { cookie: pair } }),
-    ).catch((err: unknown) => err);
+    );
     expect(before).toMatchObject({ id: user.id });
     await expect(verifyAccessToken(issued.accessToken)).resolves.toMatchObject({
       userId: user.id,
@@ -209,13 +209,13 @@ describe("password reset", () => {
     await resetPasswordWithToken(token, NEW_PASSWORD);
 
     // The cookie is signed and cannot be recalled, so the credentials epoch
-    // checked in requireUser is what ends its access; the tokens are revoked
+    // checked in sessionUser is what ends its access; the tokens are revoked
     // outright. Both must hold, or a reset leaves a stolen credential live.
-    const after = await requireUser(
-      new Request("http://localhost/", { headers: { cookie: pair } }),
-    ).catch((err: unknown) => err);
-    expect(after).toBeInstanceOf(Response);
-    expect((after as Response).headers.get("location")).toContain("/login");
+    await expect(
+      sessionUser(
+        new Request("http://localhost/", { headers: { cookie: pair } }),
+      ),
+    ).resolves.toBeUndefined();
     await expect(
       verifyAccessToken(issued.accessToken),
     ).resolves.toBeUndefined();

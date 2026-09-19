@@ -99,8 +99,10 @@ reads and writes are scoped; see `app/lib/db/`).
   Single-user era rows are adopted into that account automatically. This
   is app-side data seeding (`initStore` in `app/lib/db/seed.ts`, memoized per
   process); the SCHEMA itself is managed by Prisma (no runtime DDL).
-- Every loader/action calls `requireUser(request)` and passes
-  `user.accountId` to the store; the root loader guards all routes.
+- The root route's `middleware` gate resolves the session once and publishes
+  the user on `context`; every loader/action reads it with
+  `requireContextUser(context, request)` and passes `user.accountId` to the
+  store.
 - Tests seed two accounts + three users; `launchBrowser.ts` signs in as
   `testuser`; `test/auth.test.ts` covers login, signup, invite-code join,
   sign-out, and cross-account isolation.

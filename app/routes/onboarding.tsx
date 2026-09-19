@@ -12,8 +12,8 @@ import {
   guardAnonymousAttempt,
   rejectCrossSitePost,
   sessionStorage,
+  userContext,
 } from "~/lib/auth.server";
-import { isAuthenticated } from "~/lib/auth.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import {
   FM_PENDING_SESSION_KEY,
@@ -66,8 +66,9 @@ interface LoaderData {
 }
 export async function loader({
   request,
+  context,
 }: Route.LoaderArgs): Promise<LoaderData> {
-  if (await isAuthenticated(request)) throw redirect("/emails");
+  if (context.get(userContext)) throw redirect("/emails");
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie"),
   );
