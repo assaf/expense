@@ -9,6 +9,7 @@ import { ulid } from "ulid";
 import { legacyClient, makeTestClient } from "./legacyClient";
 import { TEST_DB_URL } from "./seedTestDataUrls";
 import { hashPassword } from "~/lib/passwords";
+import { GENERAL_EMAIL_RULES } from "~/data/email-rules";
 
 /**
  * Test-only v7-shaped client pinned to expense_test; never inherits the
@@ -39,6 +40,36 @@ export async function seedTestData() {
   // suppress this run's first mints.
   await testPrisma.inboundEmailCooldown.deleteMany({});
   await testPrisma.account.deleteMany({});
+
+  // The general email rules (accountId = "") are ambient state: the app's
+  // boot seed (initStore → syncGeneralEmailRules) installs them from
+  // app/data/email-rules.csv, add-only, once per process. A test file that
+  // wipes the rules table (email-rules.test.ts's beforeEach does) would
+  // otherwise poison every later file that shares its fork: the Email
+  // page's pre-selected senders are gone and only the next process boot
+  // brings them back, which is how the Test job failed once. Re-install the
+  // seed rows the same way the app does, leaving any inferred general rule
+  // alone. Removals are per-workspace rows with no account FK either, so
+  // the account wipe cannot reach them; a run that failed mid-toggle would
+  // otherwise flip that sender for every later test.
+  await testPrisma.emailRuleRemoval.deleteMany({});
+  const general = await testPrisma.emailRule.findMany({
+    where: { accountId: "" },
+    select: { sender: true },
+  });
+  const known = new Set(general.map((r) => r.sender));
+  const missing = GENERAL_EMAIL_RULES.filter((r) => !known.has(r.sender));
+  if (missing.length > 0) {
+    await testPrisma.emailRule.createMany({
+      data: missing.map((rule) => ({
+        id: ulid(),
+        accountId: "",
+        sender: rule.sender,
+        source: "seed",
+        createdAt: now,
+      })),
+    });
+  }
 
   // --- Accounts & users ----------------------------------------------------
   await testPrisma.account.createMany({
