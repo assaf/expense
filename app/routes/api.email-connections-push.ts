@@ -10,6 +10,7 @@ import {
   touchEmailConnectionPush,
 } from "~/lib/db/email-connections";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
+import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
 import { badRequest } from "~/lib/validation";
 import type { Route } from "./+types/api.email-connections-push";
 
@@ -93,6 +94,7 @@ export async function action({ request }: Route.ActionArgs) {
           });
         }
         await setEmailConnectionStatus(connection.id, "error").catch(() => {});
+        await reportConnectionFailure({ connection, error: err });
       }
     } catch (err) {
       captureWarning("[email-connections-push] touch failed:", {

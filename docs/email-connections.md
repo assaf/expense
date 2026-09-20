@@ -338,7 +338,9 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   credentials over the stored ones and clears needs-attention, since the
   provider revoked the old refresh token; a mailbox another workspace owns
   is refused), list (with last-24h stat, never the token), remove, plus the
-  push-subscription state, lastPushAt stamp, and status flips.
+  push-subscription state, lastPushAt stamp, and status flips. A flip to
+  `active` (and a reconnect) also clears `errorNotifiedAt`, re-arming the
+  reconnect notice below.
 - **Per-connection push** (`app/lib/email-connection-push.server.ts`): a
   JMAP `PushSubscription` per connection, renewed by the daily cron.
   Reuses the app's RFC 8291 push keys (`PUSH_PRIVATE_KEY`/`PUSH_AUTH`;
@@ -358,6 +360,21 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   PushVerification). A failure (revoked token, Fastmail error) flags the
   connection `status=error` → "Needs attention" on the Email page; a successful
   renewal clears it.
+- **Reconnect notice** (`app/lib/email-connection-notice.server.ts`): a
+  connection that fails because the provider refused the stored grant
+  (`OAuthRefreshError` in `app/lib/oauth-token-refresh.server.ts`, raised
+  only for a 400 `invalid_grant`) also emails every verified user of the
+  account, from the app's own mailbox, naming the mailbox and linking to
+  `/connect-fastmail` or `/connect-gmail`. The connection's own token is
+  dead, so the connection-owned senders cannot deliver it.
+  `EmailConnection.errorNotifiedAt` stamps the episode, so a cron tick and a
+  concurrent review scan that both fail send exactly one notice; the next
+  successful status write (a renewal, a drain, a push verification) or a
+  reconnect clears it, so a later failure tells them again. Transient
+  failures (timeouts, 5xx) and app misconfiguration (401) flag nothing and
+  send nothing. The review scan (`app/lib/email-review.server.ts`) flags the
+  connection on the same condition; before this it wrote no status at all,
+  which is why a scan failure never showed on the Email page.
 - **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step

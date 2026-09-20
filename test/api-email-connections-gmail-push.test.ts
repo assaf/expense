@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   readEmailConnectionByAddressSecret: vi.fn(),
   touchEmailConnectionPush: vi.fn(async () => {}),
   setEmailConnectionStatus: vi.fn(async () => {}),
+  reportConnectionFailure: vi.fn(async () => {}),
 }));
 
 vi.mock("~/lib/db/email-connections", () => ({
@@ -22,6 +23,11 @@ vi.mock("~/lib/db/email-connections", () => ({
   readEmailConnectionByAddressSecret: mocks.readEmailConnectionByAddressSecret,
   touchEmailConnectionPush: mocks.touchEmailConnectionPush,
   setEmailConnectionStatus: mocks.setEmailConnectionStatus,
+}));
+
+// The notice itself (who gets told, once per episode) has its own suite.
+vi.mock("~/lib/email-connection-notice.server", () => ({
+  reportConnectionFailure: mocks.reportConnectionFailure,
 }));
 
 const drainMock = vi.hoisted(() => ({ drainEmailConnection: vi.fn() }));
@@ -200,13 +206,20 @@ describe("api.email-connections-gmail-push", () => {
   });
 
   it("flags the connection error on drain failure but still answers 200", async () => {
-    drainMock.drainEmailConnection.mockRejectedValue(new Error("token dead"));
+    const failure = new Error("token dead");
+    drainMock.drainEmailConnection.mockRejectedValue(failure);
     const res = await action(args(request(envelope("user@gmail.com"))));
     expect(res.status).toBe(200);
     expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith(
       "conn-1",
       "error",
     );
+    // The account is told the mailbox stopped importing (the notifier decides
+    // whether this failure is the user's to fix).
+    expect(mocks.reportConnectionFailure).toHaveBeenCalledWith({
+      connection: expect.objectContaining({ id: "conn-1" }),
+      error: failure,
+    });
   });
 
   it("answers 503 when the connection lookup itself fails", async () => {

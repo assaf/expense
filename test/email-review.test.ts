@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   scanConnectionInbox,
+  scanInboxForReview,
   listReviewItems,
   listSupersededItems,
   listUncoveredCharges,
@@ -8,9 +9,14 @@ import {
   processReviewItem,
   reviewSenderRulePattern,
 } from "~/lib/email-review.server";
+import { encryptSecret } from "~/lib/token-crypto.server";
 import { addEmailRule, matchEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
-import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import {
+  testPrisma,
+  TEST_ACCOUNT_ID,
+  TEST_EMAIL,
+} from "./helpers/seedTestData";
 import {
   fakeAdapter,
   fakeExtractionDeps,
@@ -28,16 +34,21 @@ import {
 
 const mocks = vi.hoisted(() => ({
   deliverConnectionEmailToInbox: vi.fn(async () => true),
+  sendEmail: vi.fn(async (_input: { to: string; subject: string }) => true),
 }));
 
 // The review flow's owner confirmation goes through the JMAP mailbox; in
-// tests that must not hit Fastmail, so the delivery is faked.
+// tests that must not hit Fastmail, so the delivery is faked. The reconnect
+// notice (a dead grant on the scan) sends through the app's own mailbox,
+// which is faked for the same reason.
 vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("~/lib/email-connection-mail.server")
   >()),
   deliverConnectionEmailToInbox: mocks.deliverConnectionEmailToInbox,
 }));
+
+vi.mock("~/lib/reply.server", () => ({ sendEmail: mocks.sendEmail }));
 
 /**
  * Pins the scan window: fixture arrival dates (2026-07-01 and friends)
@@ -1394,5 +1405,98 @@ describe("ignoreReviewItem", () => {
     expect(await listReviewItems(conn.id)).toEqual([]);
     // Already decided: a second ignore is a no-op.
     expect(await ignoreReviewItem(conn.id, "e1")).toBe(false);
+  });
+});
+
+/**
+ * The scan wrapper's failure handling. A provider that refuses the stored
+ * grant is the user's to fix, so it flags the connection the Email page
+ * badges and tells the account once. Every other failure stays exactly what
+ * it was: captured, rethrown, nothing flagged, nobody emailed.
+ */
+describe("scanInboxForReview", () => {
+  let conn: ReturnType<typeof connection>;
+
+  beforeEach(async () => {
+    await cleanupConnection();
+    mocks.sendEmail.mockClear();
+    mocks.sendEmail.mockResolvedValue(true);
+    conn = connection();
+    await testPrisma.emailConnection.create({
+      data: {
+        id: conn.id,
+        accountId: conn.accountId,
+        provider: conn.provider,
+        emailAddress: conn.emailAddress,
+        remoteAccountId: conn.remoteAccountId,
+        tokenEnc: conn.tokenEnc,
+        // Expired access token plus the refresh token the provider will
+        // refuse: the scan's first move is resolving the credential, which
+        // is exactly what dies in production when a grant is revoked.
+        refreshTokenEnc: encryptSecret("rt-refused"),
+        tokenExpiresAt: "2026-06-01T00:00:00.000Z",
+        createdAt: conn.createdAt,
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function connectionRow() {
+    return testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+      select: { status: true, errorNotifiedAt: true },
+    });
+  }
+
+  /** The connection the scan resolves: the fixture row plus the expired
+   * credential, which the DB row already carries. The resolver checks the
+   * in-memory copy for a refresh token before it reads the row, so both
+   * sides need it. */
+  function scanTarget() {
+    return {
+      ...conn,
+      refreshTokenEnc: encryptSecret("rt-refused"),
+      tokenExpiresAt: "2026-06-01T00:00:00.000Z",
+    };
+  }
+
+  it("flags the connection and tells the account when the grant is refused", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "invalid_grant" }, { status: 400 }),
+      ),
+    );
+
+    // Still the route's 502: the scan genuinely cannot proceed.
+    await expect(scanInboxForReview(scanTarget())).rejects.toThrow(/HTTP 400/);
+
+    const row = await connectionRow();
+    expect(row?.status).toBe("error");
+    expect(row?.errorNotifiedAt).not.toBeNull();
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.sendEmail.mock.calls[0]![0]).toMatchObject({
+      to: TEST_EMAIL,
+      subject: "mailbox@example.com needs reconnecting on Expense",
+    });
+  });
+
+  it("keeps a transient failure off the connection and out of the mail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "server_error" }, { status: 500 }),
+      ),
+    );
+
+    await expect(scanInboxForReview(scanTarget())).rejects.toThrow(/HTTP 500/);
+
+    const row = await connectionRow();
+    expect(row?.status).toBe("active");
+    expect(row?.errorNotifiedAt).toBeNull();
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 });

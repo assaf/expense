@@ -3,6 +3,7 @@ import { cronTick } from "~/lib/cron.server";
 import { isTokenCryptoConfigured } from "~/lib/token-crypto.server";
 import { ensureConnectionPushSubscription } from "~/lib/email-connection-push.server";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
+import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
 import { captureWarning } from "~/lib/errors.server";
 import { JmapMethodError } from "~/lib/jmap.server";
 import { connectionAccessToken } from "~/lib/fastmail-oauth.server";
@@ -118,6 +119,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           await setEmailConnectionStatus(connection.id, "error").catch(
             () => {},
           );
+          await reportConnectionFailure({ connection, error: err });
           results.push({ id: connection.id, error: String(err) });
           continue;
         }
@@ -145,6 +147,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           await setEmailConnectionStatus(connection.id, "error").catch(
             () => {},
           );
+          await reportConnectionFailure({ connection, error: err });
           results[results.length - 1]!.error = String(err);
         }
       }

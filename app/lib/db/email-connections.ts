@@ -160,6 +160,9 @@ export interface EmailConnectionWithSecret extends EmailConnectionRecord {
   /** OAuth only; null/absent for legacy API-token connections. */
   refreshTokenEnc?: string | null;
   tokenExpiresAt?: string | null;
+  /** When the reconnect notice went out for the current failure; null
+   * while healthy (see setEmailConnectionErrorNotified). */
+  errorNotifiedAt?: string | null;
 }
 
 function rowWithSecret(
@@ -168,6 +171,7 @@ function rowWithSecret(
     remoteAccountId: string;
     refreshTokenEnc: string | null;
     tokenExpiresAt: string | null;
+    errorNotifiedAt: string | null;
   },
 ): EmailConnectionWithSecret {
   return {
@@ -176,6 +180,7 @@ function rowWithSecret(
     remoteAccountId: row.remoteAccountId,
     refreshTokenEnc: row.refreshTokenEnc,
     tokenExpiresAt: toIsoOrNull(row.tokenExpiresAt),
+    errorNotifiedAt: toIsoOrNull(row.errorNotifiedAt),
   };
 }
 
@@ -310,7 +315,8 @@ export async function createEmailConnection(
 
 /** Write the newest credentials over a connection, clearing the OAuth
  * fields when the caller brought none (a pasted API token replaces them),
- * and clearing any needs-attention state. */
+ * and clearing any needs-attention state. A fresh grant is a recovery too,
+ * so it re-arms the reconnect notice as a healthy status write does. */
 async function saveConnectionCredentials(
   id: string,
   input: ConnectionCredentials,
@@ -324,6 +330,7 @@ async function saveConnectionCredentials(
     refreshTokenEnc: input.refreshTokenEnc ?? null,
     tokenExpiresAt: input.tokenExpiresAt ? fromIso(input.tokenExpiresAt) : null,
     status: "active",
+    errorNotifiedAt: null,
   });
 }
 
@@ -395,12 +402,28 @@ export async function touchEmailConnectionPush(id: string): Promise<void> {
   });
 }
 
-/** Set/clear the needs-attention state shown on the Email page. */
+/** Set/clear the needs-attention state shown on the Email page. Writing
+ * "active" also re-arms the reconnect notice: every recovery path (a
+ * renewal, a drain, a push verification) lands here, so the next failure
+ * notifies the account again. */
 export async function setEmailConnectionStatus(
   id: string,
   status: "active" | "error",
 ): Promise<void> {
-  await db.orm.public.EmailConnection.where({ id }).update({ status });
+  await db.orm.public.EmailConnection.where({ id }).update(
+    status === "active" ? { status, errorNotifiedAt: null } : { status },
+  );
+}
+
+/** Stamp the reconnect notice for the current failure episode; the next
+ * successful status write clears it (setEmailConnectionStatus). */
+export async function setEmailConnectionErrorNotified(
+  id: string,
+  at: string,
+): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id }).update({
+    errorNotifiedAt: fromIso(at),
+  });
 }
 
 /**

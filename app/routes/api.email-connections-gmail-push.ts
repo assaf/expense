@@ -8,6 +8,7 @@ import {
   touchEmailConnectionPush,
 } from "~/lib/db/email-connections";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
+import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
 import { gmailPushAudience } from "~/lib/google-oauth.server";
 import type { Route } from "./+types/api.email-connections-gmail-push";
 
@@ -258,6 +259,7 @@ export async function action({ request }: Route.ActionArgs) {
       });
     }
     await setEmailConnectionStatus(connection.id, "error").catch(() => {});
+    await reportConnectionFailure({ connection, error: err });
   }
   return Response.json({ ok: true, drained: true });
 }

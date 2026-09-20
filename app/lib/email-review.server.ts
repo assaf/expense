@@ -33,7 +33,12 @@ import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { captureError } from "~/lib/errors.server";
-import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
+import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
+import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import {
+  type EmailConnectionWithSecret,
+  setEmailConnectionStatus,
+} from "~/lib/db/email-connections";
 
 /**
  * Inbox review (/email-review): after connecting a mailbox, the user scans
@@ -1070,7 +1075,13 @@ export async function processReviewItem(input: {
 }
 
 /** Scan wrapper that surfaces scan failures to Sentry (the scan is
- * user-driven; a failure should stay visible rather than vanish). */
+ * user-driven; a failure should stay visible rather than vanish).
+ *
+ * A grant the provider refused is also a needs-attention condition: this
+ * scan is the only place the failure surfaces when the user asks for it, so
+ * it flags the connection (the Email page badge) and tells the account,
+ * exactly as the cron and the push drains do. Every other failure (a
+ * timeout, a provider hiccup) stays what it was: captured and rethrown. */
 export async function scanInboxForReview(
   connection: EmailConnectionWithSecret,
 ): Promise<ScanResult> {
@@ -1081,6 +1092,12 @@ export async function scanInboxForReview(
       connectionId: connection.id,
       err: err instanceof Error ? err.message : String(err),
     });
+    if (err instanceof OAuthRefreshError) {
+      // Best-effort: the route's 502 must report the scan failure itself,
+      // not a failed write or a notice that could not go out.
+      await setEmailConnectionStatus(connection.id, "error").catch(() => {});
+      await reportConnectionFailure({ connection, error: err });
+    }
     throw err;
   }
 }

@@ -12,6 +12,16 @@ import {
  * endpoint's expiry lands in its own token set).
  */
 
+/**
+ * The provider refused the stored grant. That is the user's to fix (they
+ * re-authorize the mailbox), unlike a timeout, a 5xx or a 401 on the token
+ * endpoint, and callers use the distinction to flag the connection and tell
+ * the account. A `client_id` mismatch comes back as `invalid_grant` too and
+ * reconnecting does fix it (the fresh grant is issued to the current
+ * client), so it stays in this class.
+ */
+export class OAuthRefreshError extends Error {}
+
 /** Token endpoints answer quickly; a hung one must not pin a request. */
 const TOKEN_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -50,9 +60,13 @@ export async function requestTokenSet(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(
-      `${providerLabel} token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`,
-    );
+    const message = `${providerLabel} token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`;
+    // A rejected grant is the one failure the user can act on; the rest are
+    // transient or app-side and must not flag a connection or email anyone.
+    if (res.status === 400 && /invalid_grant/.test(text)) {
+      throw new OAuthRefreshError(message);
+    }
+    throw new Error(message);
   }
   const body = JSON.parse(text) as {
     access_token?: unknown;

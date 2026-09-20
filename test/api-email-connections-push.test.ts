@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   readEmailConnectionById: vi.fn(),
   touchEmailConnectionPush: vi.fn(async () => {}),
   setEmailConnectionStatus: vi.fn(async () => {}),
+  reportConnectionFailure: vi.fn(async () => {}),
 }));
 
 /** The connected-mailbox row the push tests decrypt; tokenEnc is forged per
@@ -84,6 +85,12 @@ vi.mock("~/lib/db/email-connections", () => ({
   setEmailConnectionStatus: mocks.setEmailConnectionStatus,
 }));
 
+// The notice itself (who gets told, once per episode) has its own suite; the
+// env here carries no database, so it is faked and asserted as a call.
+vi.mock("~/lib/email-connection-notice.server", () => ({
+  reportConnectionFailure: mocks.reportConnectionFailure,
+}));
+
 import { action } from "~/routes/api.email-connections-push";
 import { PUSH_AUTH, PUSH_PRIVATE_KEY } from "~/lib/env";
 import { p256dhFromPrivate } from "~/lib/fastmail-push.server";
@@ -128,6 +135,7 @@ describe("api.email-connections-push", () => {
       mocks.setConnectionVerificationCode,
       mocks.touchEmailConnectionPush,
       mocks.setEmailConnectionStatus,
+      mocks.reportConnectionFailure,
     ])
       m.mockClear();
     drainMock.drainEmailConnection.mockClear();
@@ -206,9 +214,8 @@ describe("api.email-connections-push", () => {
   });
 
   it("flags the connection when a drain fails", async () => {
-    drainMock.drainEmailConnection.mockRejectedValueOnce(
-      new Error("token revoked"),
-    );
+    const failure = new Error("token revoked");
+    drainMock.drainEmailConnection.mockRejectedValueOnce(failure);
     const res = await action(
       args(
         post(
@@ -224,6 +231,12 @@ describe("api.email-connections-push", () => {
       "conn1",
       "error",
     );
+    // The account is told the mailbox stopped importing (the notifier decides
+    // whether this failure is the user's to fix).
+    expect(mocks.reportConnectionFailure).toHaveBeenCalledWith({
+      connection: expect.objectContaining({ id: "conn1" }),
+      error: failure,
+    });
   });
 
   it("404s pushes for an unknown connection", async () => {

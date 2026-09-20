@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
     async () => [] as Array<Record<string, unknown>>,
   ),
   setEmailConnectionStatus: vi.fn(async () => {}),
+  readEmailConnectionById: vi.fn(async (_id: string) => undefined as unknown),
+  setEmailConnectionErrorNotified: vi.fn(async () => {}),
+  readAccountUsers: vi.fn(async () => [] as Array<Record<string, unknown>>),
+  sendEmail: vi.fn(async (_input: { to: string; subject: string }) => true),
+  captureError: vi.fn(),
   ensureGmailWatch: vi.fn(async () => {}),
   connectionAccessToken: vi.fn(async () => "test-token"),
   drainEmailConnection: vi.fn(async (_connection: { id: string }) => ({
@@ -40,7 +45,16 @@ vi.mock("~/lib/env", async (importOriginal) => ({
 vi.mock("~/lib/db/email-connections", () => ({
   listAllEmailConnections: mocks.listAllEmailConnections,
   setEmailConnectionStatus: mocks.setEmailConnectionStatus,
+  readEmailConnectionById: mocks.readEmailConnectionById,
+  setEmailConnectionErrorNotified: mocks.setEmailConnectionErrorNotified,
+  updateEmailConnectionTokens: vi.fn(async () => {}),
 }));
+
+vi.mock("~/lib/db/accounts", () => ({
+  readAccountUsers: mocks.readAccountUsers,
+}));
+
+vi.mock("~/lib/reply.server", () => ({ sendEmail: mocks.sendEmail }));
 
 vi.mock("~/lib/email-connection-push.server", () => ({
   ensureConnectionPushSubscription: mocks.ensureConnectionPushSubscription,
@@ -60,10 +74,12 @@ vi.mock("~/lib/email-connection-process.server", () => ({
 
 vi.mock("~/lib/errors.server", () => ({
   captureWarning: mocks.captureWarning,
+  captureError: mocks.captureError,
 }));
 
 import { loader } from "~/routes/api.email-connections-cron";
 import { JmapMethodError } from "~/lib/jmap.server";
+import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
 
 function args(request: Request): Parameters<typeof loader>[0] {
   return {
@@ -108,6 +124,22 @@ describe("api.email-connections-cron", () => {
       failed: 0,
     }));
     mocks.captureWarning.mockClear();
+    mocks.captureError.mockClear();
+    // The notice re-reads the row it was handed and addresses the account's
+    // verified users; one verified member keeps the fan-out at one send.
+    mocks.readEmailConnectionById.mockImplementation(async (id: string) =>
+      connection({ id }),
+    );
+    mocks.readAccountUsers.mockImplementation(async () => [
+      {
+        email: "owner@example.com",
+        emailVerifiedAt: "2026-06-15T00:00:00.000Z",
+        createdAt: "2026-06-15T00:00:00.000Z",
+      },
+    ]);
+    mocks.sendEmail.mockClear();
+    mocks.sendEmail.mockResolvedValue(true);
+    mocks.setEmailConnectionErrorNotified.mockClear();
     mocks.ensureGmailWatch.mockResolvedValue(undefined);
     mocks.ensureConnectionPushSubscription.mockImplementation(async () => ({
       subscriptionId: "sub-1",
@@ -206,6 +238,56 @@ describe("api.email-connections-cron", () => {
     expect(mocks.drainEmailConnection).toHaveBeenCalledWith(
       expect.objectContaining({ id: "a" }),
     );
+  });
+
+  it("tells the account when the drain hits a grant only the user can renew", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "b" }),
+    ]);
+    mocks.drainEmailConnection.mockRejectedValue(
+      new OAuthRefreshError(
+        'Fastmail token endpoint returned HTTP 400: {"error":"invalid_grant"}',
+      ),
+    );
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("b", "error");
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
+    expect(mocks.sendEmail.mock.calls[0]![0]).toMatchObject({
+      to: "owner@example.com",
+      subject: "mailbox@example.com needs reconnecting on Expense",
+    });
+    expect(mocks.setEmailConnectionErrorNotified).toHaveBeenCalledWith(
+      "b",
+      expect.any(String),
+    );
+  });
+
+  it("says nothing for a drain failure the user cannot act on", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      connection({ id: "b" }),
+    ]);
+    mocks.drainEmailConnection.mockRejectedValue(
+      new Error("Fastmail token endpoint returned HTTP 500: gateway"),
+    );
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    // Still flagged for Settings, exactly as before this notice existed.
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("b", "error");
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+    expect(mocks.setEmailConnectionErrorNotified).not.toHaveBeenCalled();
   });
 
   it("reports a connection that is already flagged only once", async () => {
