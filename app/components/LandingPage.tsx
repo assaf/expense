@@ -110,25 +110,41 @@ const INSIGHTS_EXCHANGE = {
     "You spent $18,240.55 across 312 expenses. Q3 Travel is your biggest report at $4,180.20, and 6 expenses still have no report.",
 };
 
-/** The browser-window mock framing both marketing screenshots: the
- * traffic-light dot header over a full-width screenshot. */
+/** The frame the marketing images sit in: rounded card, drop shadow, and the
+ * traffic-light header that makes a screenshot read as a browser window. The
+ * annotated receipt is artwork rather than app UI, so it drops the chrome.
+ * `srcPortrait` is for artwork whose print stops being legible once the
+ * viewport narrows to one column. */
 function BrowserFrame({
   src,
+  srcPortrait,
   alt,
+  chrome = true,
   children,
 }: {
   src: string;
+  srcPortrait?: string;
   alt: string;
+  chrome?: boolean;
   children?: ReactNode;
 }) {
   return (
     <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
-      <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
-        <span className="h-3 w-3 rounded-full bg-red-400" />
-        <span className="h-3 w-3 rounded-full bg-amber-400" />
-        <span className="h-3 w-3 rounded-full bg-green-400" />
-      </div>
-      <img src={src} alt={alt} className="w-full" />
+      {chrome ? (
+        <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+          <span className="h-3 w-3 rounded-full bg-red-400" />
+          <span className="h-3 w-3 rounded-full bg-amber-400" />
+          <span className="h-3 w-3 rounded-full bg-green-400" />
+        </div>
+      ) : null}
+      {srcPortrait ? (
+        <picture className="block">
+          <source media="(max-width: 639px)" srcSet={srcPortrait} />
+          <img src={src} alt={alt} className="w-full" />
+        </picture>
+      ) : (
+        <img src={src} alt={alt} className="w-full" />
+      )}
       {children}
     </figure>
   );
@@ -301,44 +317,47 @@ export default function LandingPage({
           id="how-it-works"
           className="mx-auto max-w-6xl px-4 py-20 sm:px-6"
         >
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight text-ink">
-                From receipt to export
-              </h2>
-              <p className="mt-3 max-w-md text-gray-600 dark:text-gray-300">
-                Just three fast moves, no data input required.
-              </p>
-              <ol className="mt-8 flex flex-col gap-6">
-                {STEPS.map((step, i) => (
-                  <li key={step.title} className="flex gap-4">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600 dark:bg-blue-900/60 dark:text-blue-400">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <h3 className="font-semibold text-ink">{step.title}</h3>
-                      <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-                        {step.body}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-            <BrowserFrame
-              src="/screenshot-expense.png"
-              alt="The receipt editor: OCR and AI filled in merchant, amount, and category"
-            >
-              <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
-                <Sparkles
-                  aria-hidden="true"
-                  className="h-4 w-4 text-blue-600 dark:text-blue-400"
-                />
-                The receipt editor: OCR and AI filled in merchant, amount, and
-                category.
-              </figcaption>
-            </BrowserFrame>
-          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-ink">
+            From receipt to export
+          </h2>
+          <p className="mt-3 max-w-md text-gray-600 dark:text-gray-300">
+            Just three fast moves, no data input required.
+          </p>
+          <ol className="mt-10 grid gap-8 sm:grid-cols-3">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="flex gap-4">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600 dark:bg-blue-900/60 dark:text-blue-400">
+                  {i + 1}
+                </span>
+                <div>
+                  <h3 className="font-semibold text-ink">{step.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                    {step.body}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {/*
+           * The annotated receipt rather than a screenshot of the editor: it
+           * reads at a glance what the three steps do. Its artwork is 1200px
+           * wide with 17px receipt text, so it takes the full column instead
+           * of a grid half, where that text would land around 8px.
+           */}
+          <BrowserFrame
+            chrome={false}
+            src="/figure-receipt.png"
+            srcPortrait="/figure-receipt-portrait.png"
+            alt="A receipt with hand-drawn notes: the merchant and the total called out, and the expense filed under the Meals and entertainment category"
+          >
+            <figcaption className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+              <Sparkles
+                aria-hidden="true"
+                className="h-4 w-4 text-blue-600 dark:text-blue-400"
+              />
+              OCR and AI filled in merchant, amount, and category.
+            </figcaption>
+          </BrowserFrame>
         </section>
 
         {/* AI assistants */}

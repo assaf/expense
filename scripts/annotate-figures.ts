@@ -1,7 +1,8 @@
 /**
- * Renders the README figures: the annotated receipt, in the app's own hand
- * (the vendored neat-annotations sheet and Shantell Sans) on the app's own
- * paper (the OCR fixture). Run after changing any of those:
+ * Renders the figures: the annotated receipt, in the app's own hand (the
+ * vendored neat-annotations sheet and Shantell Sans) on the app's own paper
+ * (the OCR fixture), wide for the README and portrait for the landing page's
+ * phone width. Run after changing any of those:
  *
  *   pnpm figures
  *
@@ -48,9 +49,36 @@ const PADDING_Y = 48;
 /** JetBrains Mono advances 0.6em per character, so a receipt is as wide as its
  * longest line. */
 const CHAR_WIDTH = FONT_SIZE * 0.6;
-/** The note under the paper lands 37px below it (neat-annotations'
- * `.ann-n::after`) and wraps to two lines, so the canvas leaves it that room. */
-const NOTE_ROOM = 70;
+
+/**
+ * Canvas around the paper: the margins of the crop that read best by hand, not
+ * a centring. The "total" note hangs off the paper's left and the "filed as
+ * ..." note sits below it, so left and bottom carry more room than the other
+ * two sides. The paper is rotated, so its bounding box runs a few px wider than
+ * the box these margins measure: the values place the crop, and the render's
+ * own margin assertions catch a receipt whose longest line ever grows past
+ * them.
+ */
+const MARGIN = { left: 106.4, right: 140.4, top: 56.2, bottom: 121.2 };
+
+/**
+ * The portrait figure's paper: the same receipt at the size a phone can read.
+ * The landing page shows the figure 358px wide, so the mono has to survive the
+ * scale down: this canvas is 384px, the phone scales it by 0.93, and the 13px
+ * receipt reads at 12px.
+ */
+const PORTRAIT_FONT_SIZE = 13;
+const PORTRAIT_LINE_HEIGHT = 1.75;
+const PORTRAIT_PADDING_X = 20;
+const PORTRAIT_PADDING_Y = 72;
+
+/**
+ * Canvas around the portrait's paper. The paper takes up nearly the whole
+ * width, so the notes stack above and below it rather than hanging off its
+ * sides: the top padding holds the merchant's note and its arrow, the bottom
+ * holds the total's, and the bottom margin holds the paper's own note.
+ */
+const PORTRAIT_MARGIN = { left: 30.6, right: 30.6, top: 32, bottom: 100 };
 
 interface Figure {
   out: string;
@@ -172,14 +200,29 @@ ${annotationsCss}
 }
 
 /** The paper's own CSS: the app's light palette, JetBrains Mono at the size
- * the email renderer uses, and the geometry that leaves the notes their room. */
+ * the email renderer uses, and the geometry that leaves the notes their room.
+ * A figure that needs a different paper passes its own sizes; the README
+ * figure omits them and keeps the app's. */
 function receiptCss(paper: {
   columns: number;
   width: number;
   height: number;
   left: number;
   top: number;
+  font?: {
+    size: number;
+    lineHeight: number;
+    paddingX: number;
+    paddingY: number;
+  };
 }): string {
+  const font = paper.font ?? {
+    size: FONT_SIZE,
+    lineHeight: LINE_HEIGHT,
+    paddingX: PADDING_X,
+    paddingY: PADDING_Y,
+  };
+  const advance = font.size * 0.6;
   return `
 html, body { margin: 0; }
 body {
@@ -198,21 +241,21 @@ body {
   position: absolute;
   left: ${paper.left}px;
   top: ${paper.top}px;
-  width: ${paper.columns * CHAR_WIDTH}px;
-  padding: ${PADDING_Y}px ${PADDING_X}px;
+  width: ${paper.columns * advance}px;
+  padding: ${font.paddingY}px ${font.paddingX}px;
   background: ${PAPER};
   border: 1px solid ${HAIRLINE};
   border-radius: 4px;
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
-  font-size: ${FONT_SIZE}px;
-  line-height: ${LINE_HEIGHT};
+  font-size: ${font.size}px;
+  line-height: ${font.lineHeight};
   white-space: pre;
   transform: rotate(-1.2deg);
 }
 /* The annotation sheet makes its elements inline-blocks with a tight line
    height; the receipt's rows are full-width blocks, so a note pointing at a
    row draws its arrow in the margin beside the paper rather than on it. */
-.paper .line { display: block; line-height: ${LINE_HEIGHT}; }
+.paper .line { display: block; line-height: ${font.lineHeight}; }
 .paper .total { font-weight: 700; }
 `;
 }
@@ -221,8 +264,6 @@ body {
  * merchant and the total called out from the margins, the paper itself filed
  * as the seeded Meals category. */
 function receiptFigure(receipt: Receipt, category: string): Figure {
-  const width = 1200;
-  const height = 760;
   const lines = receipt.text.replace(/\n+$/, "").split("\n");
   const merchantRow = Math.max(
     lines.findIndex((line) => line.trim() === receipt.merchant),
@@ -237,8 +278,12 @@ function receiptFigure(receipt: Receipt, category: string): Figure {
   const paperWidth = columns * CHAR_WIDTH + PADDING_X * 2 + 2;
   const paperHeight =
     lines.length * FONT_SIZE * LINE_HEIGHT + PADDING_Y * 2 + 2;
-  const left = Math.round((width - paperWidth) / 2);
-  const top = Math.round((height - (paperHeight + NOTE_ROOM)) / 2);
+  const left = MARGIN.left;
+  const top = MARGIN.top;
+  // Playwright wants integer viewport sizes; the paper keeps its exact
+  // fractional offsets, so only the canvas trims a sub-pixel.
+  const width = Math.round(left + paperWidth + MARGIN.right);
+  const height = Math.round(top + paperHeight + MARGIN.bottom);
 
   /** The rows that carry a note. A note draws its arrow and its label ~50px to
    * the side of what it points at, so each row is annotated on the side where
@@ -261,6 +306,72 @@ function receiptFigure(receipt: Receipt, category: string): Figure {
   const note = `filed as ${escapeHtml(category)}`;
   return {
     out: "public/figure-receipt.png",
+    width,
+    height,
+    html:
+      `<style>${paper}</style><div class="figure">` +
+      `<div class="paper ann ann-n ann-green ann-no-mark" data-note="${note}">` +
+      `${rows.join("")}</div></div>`,
+  };
+}
+
+/** The portrait figure: the same receipt, the same three notes, at a size a
+ * phone can read. The paper is nearly as wide as the canvas, so there is no
+ * margin left or right to hang a note in and the notes stack instead: the
+ * merchant's above its row, the total's below its row (above it would land on
+ * the printed lines), and the paper's own below the paper. */
+function receiptPortraitFigure(receipt: Receipt, category: string): Figure {
+  const lines = receipt.text.replace(/\n+$/, "").split("\n");
+  const merchantRow = Math.max(
+    lines.findIndex((line) => line.trim() === receipt.merchant),
+    0,
+  );
+  const totalRow = lines.findIndex((line) =>
+    line.trimStart().startsWith("TOTAL"),
+  );
+  if (totalRow < 0) throw new Error(`no TOTAL line in ${RECEIPT}`);
+
+  const columns = Math.max(...lines.map((line) => line.length));
+  const advance = PORTRAIT_FONT_SIZE * 0.6;
+  const paperWidth = columns * advance + PORTRAIT_PADDING_X * 2 + 2;
+  const paperHeight =
+    lines.length * PORTRAIT_FONT_SIZE * PORTRAIT_LINE_HEIGHT +
+    PORTRAIT_PADDING_Y * 2 +
+    2;
+  const left = PORTRAIT_MARGIN.left;
+  const top = PORTRAIT_MARGIN.top;
+  const width = Math.round(left + paperWidth + PORTRAIT_MARGIN.right);
+  const height = Math.round(top + paperHeight + PORTRAIT_MARGIN.bottom);
+
+  /** The rows that carry a note, each annotated on the side where its arrow and
+   * label have room: the merchant's above the row, the total's below it. */
+  const notes = new Map([
+    [merchantRow, { classes: "ann ann-s ann-blue", note: "merchant" }],
+    [totalRow, { classes: "total ann ann-n ann-blue", note: "total" }],
+  ]);
+  const rows = lines.map((line, index) => {
+    const annotation = notes.get(index);
+    const classes = annotation ? `line ${annotation.classes}` : "line";
+    const dataNote = annotation ? ` data-note="${annotation.note}"` : "";
+    return `<div class="${classes}"${dataNote}>${escapeHtml(line)}</div>`;
+  });
+
+  const paper = receiptCss({
+    columns,
+    width,
+    height,
+    left,
+    top,
+    font: {
+      size: PORTRAIT_FONT_SIZE,
+      lineHeight: PORTRAIT_LINE_HEIGHT,
+      paddingX: PORTRAIT_PADDING_X,
+      paddingY: PORTRAIT_PADDING_Y,
+    },
+  });
+  const note = `filed as ${escapeHtml(category)}`;
+  return {
+    out: "public/figure-receipt-portrait.png",
     width,
     height,
     html:
@@ -482,7 +593,10 @@ const receiptFont = await readFile(RECEIPT_FONT);
 const receipt = parseYaml(await readFile(RECEIPT, "utf8")) as Receipt;
 const category = mealsCategory(await readFile(CATEGORIES, "utf8"));
 
-const FIGURES: Figure[] = [receiptFigure(receipt, category)];
+const FIGURES: Figure[] = [
+  receiptFigure(receipt, category),
+  receiptPortraitFigure(receipt, category),
+];
 
 const browser = await chromium.launch();
 const context = await browser.newContext({ deviceScaleFactor: SCALE });
