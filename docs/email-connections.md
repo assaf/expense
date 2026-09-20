@@ -364,7 +364,10 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   7 days of the 30-day expiry; recreation triggers a fresh
   PushVerification). A failure (revoked token, Fastmail error) flags the
   connection `status=error` → "Needs attention" on the Email page; a successful
-  renewal clears it.
+  renewal clears it. Both of the tick's failure paths (a renewal that cannot
+  resolve the credential, and the catch-up drain) warn on the Sentry
+  transition only, so a mailbox nobody reconnects does not re-open the same
+  issue every day.
 - **Reconnect notice** (`app/lib/email-connection-notice.server.ts`): a
   connection that fails because the provider refused the stored grant
   (`OAuthRefreshError` in `app/lib/oauth-token-refresh.server.ts`, raised

@@ -240,6 +240,28 @@ describe("api.email-connections-cron", () => {
     );
   });
 
+  it("reports a failed renewal once, not on every tick", async () => {
+    mocks.listAllEmailConnections.mockImplementation(async () => [
+      // Already flagged: the user has the badge and the notice, and has not
+      // reconnected. A dead grant fails the renewal before the drain, so
+      // without the transition gate this would page daily, forever.
+      connection({ id: "a", status: "error" }),
+    ]);
+    mocks.ensureConnectionPushSubscription.mockRejectedValue(
+      new Error("token revoked"),
+    );
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("a", "error");
+    expect(mocks.captureWarning).not.toHaveBeenCalled();
+  });
+
   it("tells the account when the drain hits a grant only the user can renew", async () => {
     mocks.listAllEmailConnections.mockImplementation(async () => [
       connection({ id: "b" }),

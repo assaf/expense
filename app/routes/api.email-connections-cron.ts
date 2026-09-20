@@ -109,11 +109,17 @@ export async function loader({ request }: Route.LoaderArgs) {
           }
         } catch (err) {
           failed++;
-          captureWarning("[email-connections-cron] renewal failed", {
-            connectionId: connection.id,
-            address: connection.emailAddress,
-            error: err,
-          });
+          // Warn on the transition only, exactly as the drain below does: a
+          // connection nobody reconnects must not re-open the same issue
+          // every day. The renewal resolves the credential, so a dead grant
+          // fails here first, before that connection gets a drain.
+          if (connection.status !== "error") {
+            captureWarning("[email-connections-cron] renewal failed", {
+              connectionId: connection.id,
+              address: connection.emailAddress,
+              error: err,
+            });
+          }
           // Best-effort: a failed status write must not abort the tick (the
           // remaining connections still get their renewal and drain).
           await setEmailConnectionStatus(connection.id, "error").catch(
