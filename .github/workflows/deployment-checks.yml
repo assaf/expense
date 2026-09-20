@@ -286,10 +286,12 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_TEAM: assafs-projects-a315fe37
-      # Project identity for a non-interactive link (Vercel's documented CI
-      # env vars); these are the repo→project values in .vercel/repo.json,
-      # not credentials.
+      # Project identity for a non-interactive link. These are the
+      # repo→project values in .vercel/repo.json, not credentials — and they
+      # are what puts the deploy on the right team: passing `--scope` here
+      # instead makes the CLI resolve the token's user first (getUser), which
+      # this token cannot do (404 "User not found", run 35544142703), because
+      # it has no personal identity.
       VERCEL_ORG_ID: team_bjyg9pgn8TQQVP2NLMPnSYSN
       VERCEL_PROJECT_ID: prj_7VcQaMHQ0xtjXnNktAlSmqlVpAai
     steps:
@@ -310,7 +312,7 @@ jobs:
             echo "VERCEL_TOKEN is not configured — main no longer deploys from Git, so there is nothing else to ship this commit." >&2
             exit 1
           fi
-          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" --scope "$VERCEL_TEAM" | tee /tmp/deploy.log
+          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" | tee /tmp/deploy.log
           URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' /tmp/deploy.log | tail -1 || true)
           if [ -z "$URL" ]; then
             echo "Could not read the deployment URL out of the CLI output." >&2
@@ -338,8 +340,11 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
       VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
-      # Team scope for the Vercel API + CLI (matches the vercel env output).
-      VERCEL_TEAM: assafs-projects-a315fe37
+      # The rollback below is a CLI call, so it needs the same project
+      # identity and the same "no --scope" rule as the deploy job: `--scope`
+      # makes the CLI resolve the token's user, which 404s for this token.
+      VERCEL_ORG_ID: team_bjyg9pgn8TQQVP2NLMPnSYSN
+      VERCEL_PROJECT_ID: prj_7VcQaMHQ0xtjXnNktAlSmqlVpAai
     steps:
       - uses: actions/checkout@v7
 
@@ -369,6 +374,6 @@ jobs:
             echo "Smoke passed — deployment stays live."
           else
             echo "Smoke FAILED on $URL — rolling back to the previous deployment." >&2
-            npx vercel@latest rollback "$URL" --yes --scope "$VERCEL_TEAM" || echo "Rollback failed — check the Vercel dashboard." >&2
+            npx vercel@latest rollback "$URL" --yes || echo "Rollback failed — check the Vercel dashboard." >&2
             exit 1
           fi
