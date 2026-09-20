@@ -60,8 +60,13 @@ export default defineConfig((config) => {
       reactRouter(),
       // Re-emit prisma/contract.json + contract.d.ts when the contract
       // changes in dev, so a save doesn't leave the dev server running on
-      // stale artifacts. Dev only: production emits through prebuild.
-      prismaVitePlugin("prisma.config.ts"),
+      // stale artifacts. Dev only: production emits through prebuild, and a
+      // test run emits through `pnpm test`'s build (and `pnpm check`). Skipping
+      // it under vitest also avoids the config's module graph being loaded by
+      // the test runner: that graph reaches `pg`, a CJS package the runner
+      // evaluates without a `require`, so every run logged a failed config
+      // graph root before emitting anyway.
+      ...(process.env.VITEST ? [] : [prismaVitePlugin("prisma.config.ts")]),
       sentryReactRouter(
         {
           org: "labnotes",
