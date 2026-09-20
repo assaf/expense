@@ -1,5 +1,6 @@
 import { hash, randomBytes } from "node:crypto";
 import { FASTMAIL_OAUTH_CLIENT_ID } from "~/lib/env";
+import { gmailAccessToken } from "~/lib/google-oauth.server";
 import {
   requestTokenSet,
   resolveConnectionAccessToken,
@@ -182,11 +183,12 @@ export interface ConnectionCredentials {
 export async function connectionAccessToken(
   connection: ConnectionCredentials,
 ): Promise<string> {
-  // Gmail rows resolve through the Google refresh flow. Dynamic import
-  // keeps the module graph acyclic (google-oauth reuses this module's
-  // PKCE + staleness helpers).
+  // Gmail rows resolve through the Google refresh flow. This import is
+  // static on purpose: google-oauth's only edge back here is a type import
+  // (erased by verbatimModuleSyntax), so there is no cycle to break, and a
+  // dynamic import of a module five routes import statically cannot split
+  // the chunk anyway.
   if (connection.provider === "gmail") {
-    const { gmailAccessToken } = await import("~/lib/google-oauth.server");
     return gmailAccessToken(connection);
   }
   return resolveConnectionAccessToken({

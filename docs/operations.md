@@ -298,7 +298,42 @@ tracer can't follow (alias requires, binary assets), add a tiny
 `vendor/<name>/index.cjs` that `require`s the exact exported subpaths. As a
 node_modules `file:` dependency it ships un-bundled, so its requires stay
 literal and the tracer follows them with require conditions. Import it
-alongside the lazy dependency (see `vendor/pdfkit-standard-fonts`). Both vars must be set in Vercel;
+alongside the lazy dependency (see `vendor/pdfkit-standard-fonts`).
+
+Expected build warning: the build prints one
+`INEFFECTIVE_DYNAMIC_IMPORT` per app module that some callers reach through
+`import()` while another module imports it statically. It is a chunk-assignment
+notice, not a shipping problem: the contract above is about the heavy PACKAGES,
+which load dynamically inside their own module either way. One is expected
+today:
+
+- `receipt-ocr.server.ts` — dynamic in `realExtractionDeps()`
+  (`email-connection-process.server.ts`, the seam tests replace with
+  `fakeExtractionDeps()`) and in the connected flow's local-only PDF branch
+  (`inbound-email.server.ts`); static in `inbound-fastmail.server.ts`,
+  `reconcile.server.ts`, `mcp-write.server.ts`, `api.expense.ts`, `api.smoke.ts`.
+  Five real callers need it eagerly, so the dynamic sites only defer module
+  evaluation. Leave them.
+
+`email-render.server.ts` used to warn as well; it no longer does. Its only
+static importer was `fastmailInboundDeps` (`inbound-fastmail.server.ts`), which
+now wires `renderEmailImage`/`renderTextEmail` as `import()` thunks, the shape
+`realExtractionDeps()` already used. That gives the module its own chunk
+(`build/server/assets/email-render.server-*.js`, carrying the inlined Inter
+font), referenced literally from `build/server/index.js` so the tracer follows
+it — confirmed in an nft trace of the built server, and the post-deploy smoke
+renders an email image, so a missing chunk fails the deploy. The deferral saves
+real work: the module decodes that font at import time, and the receipts inbox
+only needs a browser render when the email body IS the receipt.
+
+Do not "fix" a warning by making a dynamic caller static: that is a load change
+local tests cannot validate (they run against full node_modules), which is the
+whole reason the smoke exists. Check the contract instead — in
+`build/server/index.js`, `from "tesseract.js"` must appear 0 times while
+`import("tesseract.js")` appears once, and likewise for every package in the
+lazy list above.
+
+Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
 `SENTRY_AUTH_TOKEN` is now SET (organization token, Vercel production env;
 create at Sentry → org settings → Auth Tokens). It lets the vite plugin

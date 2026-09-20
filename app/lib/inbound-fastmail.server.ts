@@ -29,7 +29,6 @@ import {
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { extractEmailAddress } from "~/lib/validation";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
-import { renderEmailImage, renderTextEmail } from "~/lib/email-render.server";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
@@ -109,8 +108,18 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
     extractReceipt,
     extractFromImage,
     renderReceiptImage,
-    renderEmailImage,
-    renderTextEmail,
+    // Deferred, as in email-connection-process's realExtractionDeps: the
+    // browser stack (puppeteer + sparticuz chromium) and email-render's
+    // inlined font decode only matter for an email whose body IS the
+    // receipt, and this module sits on the receipts-inbox boot path.
+    renderEmailImage: (html, opts) =>
+      import("~/lib/email-render.server").then((m) =>
+        m.renderEmailImage(html, opts),
+      ),
+    renderTextEmail: (text, opts) =>
+      import("~/lib/email-render.server").then((m) =>
+        m.renderTextEmail(text, opts),
+      ),
     sendReply: async (input) => {
       await sendEmail(input);
     },
