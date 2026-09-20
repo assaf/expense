@@ -30,6 +30,11 @@ function ruleTransitionName(sender: string): string {
  * that transition is what moves the row to its new group. The confirm gate
  * sits in front of the same submit either way.
  *
+ * `preventScrollReset` is what keeps the page where it was; `replace` is not
+ * needed, because the action redirects back to /emails and the router
+ * already replaces a redirect whose target is the current location (the
+ * test's history check holds that up).
+ *
  * The dialog is portaled to the body because the row carries a
  * view-transition-name, and that is a stacking context: a dialog rendered
  * inside the row paints under the rows that follow it, which then swallow
@@ -46,7 +51,6 @@ function RemoveRuleButton({ sender }: { sender: string }) {
       <Form
         ref={formRef}
         method="post"
-        replace
         preventScrollReset
         viewTransition
         className="contents"
@@ -137,7 +141,6 @@ function TurnedOffRow({ sender }: { sender: string }) {
         <div className="flex shrink-0 items-center gap-2">
           <Form
             method="post"
-            replace
             preventScrollReset
             viewTransition
             className="contents"

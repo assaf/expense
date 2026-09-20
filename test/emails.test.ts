@@ -116,11 +116,24 @@ describe("Email", () => {
     const row = section.locator("li").filter({ hasText: "apple.com" });
     await expect(row.getByText("Pre-selected")).toBeVisible();
     await row.getByRole("button", { name: "Remove apple.com" }).click();
+    // Both controls submit a real navigation (that is what lets the row
+    // morph to its new group), so the page's place has to survive it: a
+    // scroll reset or one history entry per toggle would be felt
+    // immediately on a list this long.
+    const before = await page.evaluate(() => ({
+      scrollY: window.scrollY,
+      history: history.length,
+    }));
     await page.getByRole("button", { name: "Delete" }).click();
     // Off: the sender moves to the turned-off group and its mail goes back
     // to waiting on the review list.
     const off = section.locator("li").filter({ hasText: "apple.com" });
     await expect(off.getByText("Turned off")).toBeVisible();
+    const afterRemove = await page.evaluate(() => ({
+      scrollY: window.scrollY,
+      history: history.length,
+    }));
+    expect(afterRemove).toEqual(before);
     await off.getByRole("button", { name: "Restore apple.com" }).click();
     await expect(
       section
@@ -128,6 +141,10 @@ describe("Email", () => {
         .filter({ hasText: "apple.com" })
         .getByText("Pre-selected"),
     ).toBeVisible();
+    // History only for this one: the restore control sits in the group at
+    // the page's foot, so clicking it scrolls there, which is not the page
+    // losing its place.
+    expect(await page.evaluate(() => history.length)).toBe(before.history);
     await page.close();
   });
 
