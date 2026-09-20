@@ -203,10 +203,21 @@ export default function LandingPage({
 
         {/* App screenshot */}
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
-          <BrowserFrame
-            src="/screenshot-hero.png"
-            alt="The Expense home page: report totals, receipts with thumbnails, and a mileage entry"
-          />
+          {/*
+           * The note is decoration: it lives in a pseudo-element, so it adds
+           * nothing to the accessibility tree, and it never points inside the
+           * screenshot, which the screenshot script regenerates. The section's
+           * own pb-20 is the room it sits in.
+           */}
+          <span
+            className="ann ann-n ann-blue ann-no-mark ann-block ann-wide"
+            data-note="nothing here was typed"
+          >
+            <BrowserFrame
+              src="/screenshot-hero.png"
+              alt="The Expense home page: report totals, receipts with thumbnails, and a mileage entry"
+            />
+          </span>
         </section>
 
         {/* Features */}

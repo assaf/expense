@@ -646,7 +646,7 @@ function ExpenseList({
 
       {expenses.length === 0 ? (
         <span
-          className="ann ann-n ann-amber ann-no-mark ann-block mb-20 [--ann-label-max-width:240px]"
+          className="ann ann-n ann-amber ann-no-mark ann-block ann-wide mb-20"
           data-note="or drag a receipt in"
         >
           {/*

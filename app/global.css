@@ -21,6 +21,13 @@
   line-height: inherit;
 }
 
+/* A note that needs a longer line than the library's 150px default. It has to
+ * live here for the same reason: setting the property from a utility class
+ * loses to the unlayered .ann rule. */
+.ann-wide {
+  --ann-label-max-width: 240px;
+}
+
 @custom-variant dark (&:is(.dark *));
 @plugin "@tailwindcss/forms";
 
