@@ -2,10 +2,8 @@ import { Mail } from "lucide-react";
 import { redirect } from "react-router";
 import { PageShell } from "~/components/PageShell";
 import { EmailAccountsSection } from "~/components/settings/email-accounts";
-import {
-  AddSenderForm,
-  SenderRow,
-} from "~/components/settings/receipts-by-email";
+import { AcceptedSenders } from "~/components/settings/accepted-senders";
+import { AddSenderForm } from "~/components/settings/receipts-by-email";
 import { Card } from "~/components/ui/Card";
 import { FieldLabel } from "~/components/ui/FieldLabel";
 import { Section } from "~/components/ui/Section";
@@ -27,6 +25,11 @@ import {
   removeEmailConnection,
   createEmailConnection,
 } from "~/lib/db/email-connections";
+import {
+  listAcceptedSenders,
+  removeEmailRule,
+  restoreEmailRule,
+} from "~/lib/db/email-rules";
 import { isGmailOAuthConfigured } from "~/lib/google-oauth.server";
 import {
   isTokenCryptoConfigured,
@@ -88,10 +91,13 @@ const OAUTH_ERROR_TEXT = {
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const user = requireContextUser(context, request);
-  const [inboundSenders, emailConnections] = await Promise.all([
-    listInboundSenders(user.accountId),
-    listEmailConnections(user.accountId),
-  ]);
+  const [inboundSenders, emailConnections, acceptedSenders] = await Promise.all(
+    [
+      listInboundSenders(user.accountId),
+      listEmailConnections(user.accountId),
+      listAcceptedSenders(user.accountId),
+    ],
+  );
   // Post-OAuth-redirect landing params (set by fastmail-oauth-callback).
   const params = new URL(request.url).searchParams;
   const connected = params.get("connected");
@@ -128,6 +134,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     userEmail: user.email,
     inboundAddress: INBOUND_EMAIL_ADDRESS,
     inboundSenders,
+    acceptedSenders,
     emailConnections,
     emailAccountsConfigured: isTokenCryptoConfigured(),
     oauthConfigured: isFastmailOAuthConfigured(),
@@ -193,6 +200,20 @@ export async function action({ request, context }: Route.ActionArgs) {
       await removeInboundSender(user.accountId, formString(form, "address"));
       break;
     }
+    case "removeAcceptedSender": {
+      const result = await removeEmailRule({
+        accountId: user.accountId,
+        sender: formString(form, "sender"),
+      });
+      if (!result.ok) return badRequest(result.error);
+      break;
+    }
+    case "restoreAcceptedSender":
+      await restoreEmailRule({
+        accountId: user.accountId,
+        sender: formString(form, "sender"),
+      });
+      break;
     case "disconnectEmail": {
       const id = formString(form, "id");
       const connection = await readEmailConnection(user.accountId, id);
@@ -332,6 +353,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
     userEmail,
     inboundAddress,
     inboundSenders,
+    acceptedSenders,
     emailConnections,
     emailAccountsConfigured,
   } = loaderData;
@@ -388,22 +410,21 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
               is clicked, the address is locked to your account (no one else can
               claim it) and receipts start importing.
             </StatusNote>
-            <ul className="flex flex-col gap-1">
-              {inboundSenders.length === 0 ? (
-                <StatusNote as="li">None yet.</StatusNote>
-              ) : (
-                inboundSenders.map((sender) => (
-                  <SenderRow
-                    key={sender.address}
-                    sender={sender}
-                    isDefault={sender.address === userEmail}
-                  />
-                ))
-              )}
-            </ul>
           </div>
           <AddSenderForm />
         </Card>
+      </Section>
+
+      <Section id="accepted-senders" title="Accepted senders">
+        <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+          Addresses and senders whose receipts are filed without asking you
+          first.
+        </p>
+        <AcceptedSenders
+          rows={acceptedSenders}
+          inboundSenders={inboundSenders}
+          userEmail={userEmail}
+        />
       </Section>
     </PageShell>
   );

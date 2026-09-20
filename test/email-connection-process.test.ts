@@ -9,7 +9,7 @@ import {
 } from "~/lib/email-connection-process.server";
 import { FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
 import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
-import { addEmailRule } from "~/lib/db/email-rules";
+import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import { testPrisma } from "./helpers/seedTestData";
 import {
@@ -280,7 +280,7 @@ describe("processConnectionEmail", () => {
       summary("e2", "newsletter@random.com", "Weekly digest"),
       depsFor(adapter, conn.id),
       {
-        moveToTrash: (id: string) => adapter.moveToTrash(id),
+        moveToTrash: (id) => adapter.moveToTrash(id),
         sendToOwner: async () => {},
       },
     );
@@ -293,6 +293,47 @@ describe("processConnectionEmail", () => {
         (e) => e.type === "receipt" && e.merchant === "Digest",
       ),
     ).toBeUndefined();
+  });
+
+  it("ignores mail from a sender the workspace turned off, recoverable in review", async () => {
+    // apple.com is a pre-selected sender; turning it off has to stop the
+    // drain filing its mail, and the row it leaves must stay recoverable so
+    // the Inbox review scan offers the sender again.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    await removeEmailRule({
+      accountId: conn.accountId,
+      sender: "apple.com",
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 1.23\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: async (email) => {
+          await mocks.notifyOwner(email);
+        },
+      },
+    );
+    expect(result).toEqual({ status: "ignored", reason: "no rule" });
+    expect(trashed).toEqual([]);
+    expect(await readExpenses(conn.accountId)).toHaveLength(0);
+    expect(mocks.notifyOwner).not.toHaveBeenCalled();
+    const row = await logRow(conn.id, "e1");
+    expect(row?.outcome).toBe("ignored");
+    expect(row?.reason).toBeNull();
   });
 
   it("ignores the owner's own email (self guard)", async () => {

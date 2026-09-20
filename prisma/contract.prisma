@@ -229,6 +229,18 @@ model EmailRule {
   @@map("email_rules")
 }
 
+// A pre-selected sender one workspace turned off. The general rule
+// (accountId = "") is shared and re-added by the boot seed, so turning it off
+// is its own row, keyed by the same sender pattern. Restoring deletes it.
+model EmailRuleRemoval {
+  accountId String
+  sender    String
+  createdAt TimestampString(3)
+
+  @@id([accountId, sender], map: "email_rule_removals_pkey")
+  @@map("email_rule_removals")
+}
+
 model ImageBlob {
   key       String
   mime      String

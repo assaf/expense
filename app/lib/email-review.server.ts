@@ -11,6 +11,7 @@ import {
 } from "~/lib/email-connection-auth.server";
 import {
   addEmailRule,
+  listRemovedSenders,
   matchEmailRule,
   ruleSenderMatches,
 } from "~/lib/db/email-rules";
@@ -111,16 +112,18 @@ export function reviewSenderRulePattern(address: string): string {
 }
 
 /** All rules that apply to an account (general + user), for sender-state
- * enrichment of the review list. */
+ * enrichment of the review list. A pattern the account turned off is not
+ * here, so a sender it turned off still reads as new. */
 export async function rulesForReview(
   accountId: string,
 ): Promise<Array<{ sender: string }>> {
+  const removed = new Set(await listRemovedSenders(accountId));
   const rows = await db.orm.public.EmailRule.where((r) =>
     or(r.accountId.eq(""), r.accountId.eq(accountId)),
   )
     .select("sender")
     .all();
-  return rows;
+  return rows.filter((r) => !removed.has(r.sender));
 }
 
 /** Does any rule (general or user) already cover this From address? */

@@ -18,17 +18,21 @@ describe("Email", () => {
     await page.close();
   });
 
+  /** The page's sections, by their heading. */
+  function sectionOf(target: Page, title: string) {
+    return target.locator("section").filter({
+      has: target.getByRole("heading", { name: title }),
+    });
+  }
+
   it("shows the email page", async () => {
     await expect(page.locator("h1")).toContainText("Email");
   });
 
-  it("shows both email sections", async () => {
-    await expect(
-      page.getByRole("heading", { name: "Email accounts" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Receipts by email" }),
-    ).toBeVisible();
+  it("shows the email sections", async () => {
+    await expect(sectionOf(page, "Email accounts")).toBeVisible();
+    await expect(sectionOf(page, "Receipts by email")).toBeVisible();
+    await expect(sectionOf(page, "Accepted senders")).toBeVisible();
   });
 
   it("shows the connect buttons with no accounts connected", async () => {
@@ -66,36 +70,61 @@ describe("Email", () => {
     ).toBeVisible();
   });
 
-  it("shows the sign-in email as a pending receipts-by-email sender", async () => {
+  it("shows the sign-in email as a pending accepted sender", async () => {
     // The login email is auto-added as the account's default sender on
-    // sign-in, pending until its verification link is clicked.
-    const section = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Receipts by email" }),
+    // sign-in, pending until its verification link is clicked. It sits in
+    // the accepted list's approved group.
+    const section = sectionOf(page, "Accepted senders");
+    await expect(section.getByText("Senders you approved")).toBeVisible();
+    const row = section.locator("li").filter({
+      hasText: "testuser@example.com",
     });
-    await expect(section.getByText("testuser@example.com")).toBeVisible();
-    await expect(section.getByText("Your sign-in email")).toBeVisible();
-    await expect(section.getByText("Awaiting verification")).toBeVisible();
+    await expect(row.getByText("Your sign-in email")).toBeVisible();
+    await expect(row.getByText("Awaiting verification")).toBeVisible();
     // The default sender row can't be removed.
     await expect(
-      section.getByRole("button", { name: /Remove testuser@example.com/ }),
+      row.getByRole("button", { name: /Remove testuser@example.com/ }),
     ).toHaveCount(0);
   });
 
   it("adds a sender as pending and reports the verification email", async () => {
     const page = await goto("/emails");
-    const section = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Receipts by email" }),
-    });
-    await section
+    const receipts = sectionOf(page, "Receipts by email");
+    await receipts
       .locator('input[type="email"][name="address"]')
       .fill("extra@example.com");
-    await section.getByRole("button", { name: "Add address" }).click();
+    await receipts.getByRole("button", { name: "Add address" }).click();
     await expect(
-      section.getByText("extra@example.com", { exact: true }),
+      receipts.getByText(/Verification email sent to extra@example.com/),
     ).toBeVisible();
-    await expect(section.getByText("Awaiting verification")).toHaveCount(2);
+    // The new address lands in the accepted list, still awaiting its link.
+    const row = sectionOf(page, "Accepted senders")
+      .locator("li")
+      .filter({ hasText: "extra@example.com" });
+    await expect(row.getByText("Awaiting verification")).toBeVisible();
+    await page.close();
+  });
+
+  it("lists pre-selected senders and turns one off, then restores it", async () => {
+    const page = await goto("/emails");
+    const section = sectionOf(page, "Accepted senders");
+    await expect(section.getByText("Pre-selected by Expense")).toBeVisible();
+    // The pre-selected senders come from the shared rule list every
+    // workspace starts with, not from anything this account did.
+    const row = section.locator("li").filter({ hasText: "apple.com" });
+    await expect(row.getByText("Pre-selected")).toBeVisible();
+    await row.getByRole("button", { name: "Remove apple.com" }).click();
+    await page.getByRole("button", { name: "Delete" }).click();
+    // Off: the sender moves to the turned-off group and its mail goes back
+    // to waiting on the review list.
+    const off = section.locator("li").filter({ hasText: "apple.com" });
+    await expect(off.getByText("Turned off")).toBeVisible();
+    await off.getByRole("button", { name: "Restore apple.com" }).click();
     await expect(
-      section.getByText(/Verification email sent to extra@example.com/),
+      section
+        .locator("li")
+        .filter({ hasText: "apple.com" })
+        .getByText("Pre-selected"),
     ).toBeVisible();
     await page.close();
   });

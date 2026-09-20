@@ -357,6 +357,17 @@ export interface InboundSenderRecord {
   createdAt: string;
 }
 
+/** One sender on the Email page's accepted list: a rule pattern (an address,
+ * or a domain matching its subdomains) and what the account did with it. */
+export interface AcceptedSenderRow {
+  sender: string;
+  /** "learned": one of the account's own rules. "preset": a general rule
+   * that applies to every workspace. */
+  origin: "learned" | "preset";
+  /** True when the account turned this pattern off. */
+  turnedOff: boolean;
+}
+
 /** A connected email account (auto-import). Never carries the API token. */
 export interface EmailConnectionRecord {
   id: string;

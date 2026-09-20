@@ -8,10 +8,16 @@ import {
   ignoreReviewItem,
   processReviewItem,
   reviewSenderRulePattern,
+  rulesForReview,
+  senderHasRule,
 } from "~/lib/email-review.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { setEmailConnectionStatus } from "~/lib/db/email-connections";
-import { addEmailRule, matchEmailRule } from "~/lib/db/email-rules";
+import {
+  addEmailRule,
+  matchEmailRule,
+  removeEmailRule,
+} from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import {
   testPrisma,
@@ -101,6 +107,36 @@ describe("reviewSenderRulePattern", () => {
 
   it("uses the exact address for freemail providers", () => {
     expect(reviewSenderRulePattern("bob@gmail.com")).toBe("bob@gmail.com");
+  });
+});
+
+/** The review list's sender state has to agree with the drain's rule gate: a
+ * pattern the workspace turned off reads as new, so the row offers to
+ * remember it. */
+describe("rulesForReview", () => {
+  beforeEach(async () => {
+    await cleanupConnection();
+  });
+
+  it("omits a pattern the workspace turned off", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    await addEmailRule({
+      accountId: TEST_ACCOUNT_ID,
+      sender: "amazon.com",
+      source: "forward",
+    });
+    expect(
+      senderHasRule(
+        await rulesForReview(TEST_ACCOUNT_ID),
+        "no_reply@email.apple.com",
+      ),
+    ).toBe(true);
+    await removeEmailRule({ accountId: TEST_ACCOUNT_ID, sender: "apple.com" });
+    const rules = await rulesForReview(TEST_ACCOUNT_ID);
+    expect(senderHasRule(rules, "no_reply@email.apple.com")).toBe(false);
+    // Only that pattern: everything else the workspace accepts still reads
+    // as accepted.
+    expect(senderHasRule(rules, "receipts@amazon.com")).toBe(true);
   });
 });
 

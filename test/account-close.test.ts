@@ -223,6 +223,13 @@ describe("closing your own account", () => {
         createdAt: NOW,
       },
     });
+    await testPrisma.emailRuleRemoval.create({
+      data: {
+        accountId: TEST_ACCOUNT_ID,
+        sender: "receipts@example.com",
+        createdAt: NOW,
+      },
+    });
     await db.orm.public.InsightConversation.create({
       id: "conv_close",
       userId: "user_test1",
@@ -292,6 +299,12 @@ describe("closing your own account", () => {
       [
         "email rules",
         await testPrisma.emailRule.count({
+          where: { accountId: TEST_ACCOUNT_ID },
+        }),
+      ],
+      [
+        "email rule removals",
+        await testPrisma.emailRuleRemoval.count({
           where: { accountId: TEST_ACCOUNT_ID },
         }),
       ],

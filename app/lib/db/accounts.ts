@@ -496,13 +496,17 @@ export async function closeUserAccount(user: {
     // Other members are still on the account: only the login left.
     if (count > 0) return "user";
     // Last member: delete what the Account cascade cannot reach (email_rules
-    // has no relation), then the account itself, which cascades categories,
-    // locations, reconciliation runs, expenses, duplicate dismissals, email
-    // connections (and their process log), image blobs (the receipt bytes),
-    // inbound emails, senders, sender verifications, receipt extractions,
-    // reports, settings and users. The user's own conversations, tokens and
-    // consents went above; there is nobody else left to own any.
+    // and their removal rows have no relation), then the account itself,
+    // which cascades categories, locations, reconciliation runs, expenses,
+    // duplicate dismissals, email connections (and their process log), image
+    // blobs (the receipt bytes), inbound emails, senders, sender
+    // verifications, receipt extractions, reports, settings and users. The
+    // user's own conversations, tokens and consents went above; there is
+    // nobody else left to own any.
     await tx.orm.public.EmailRule.where((r) =>
+      r.accountId.eq(user.accountId),
+    ).deleteAll();
+    await tx.orm.public.EmailRuleRemoval.where((r) =>
       r.accountId.eq(user.accountId),
     ).deleteAll();
     await tx.orm.public.Account.where({ id: user.accountId }).delete();

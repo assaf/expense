@@ -194,8 +194,9 @@ export function fakeAdapter(emails: Map<string, FakeEmail>) {
 }
 
 /** Delete the mailbox@example.com connection, its process log, and the
- * review/forward rules the fixture flows create. The emailAddress is
- * globally unique, so clear by address, not id. */
+ * review/forward rules the fixture flows create, plus any sender those flows
+ * turned off (a per-workspace row that would outlive its own test). The
+ * emailAddress is globally unique, so clear by address, not id. */
 export async function cleanupConnection(): Promise<void> {
   const rows = await testPrisma.emailConnection.findMany({
     where: { emailAddress: "mailbox@example.com" },
@@ -212,6 +213,9 @@ export async function cleanupConnection(): Promise<void> {
       accountId: TEST_ACCOUNT_ID,
       source: { in: ["review", "forward"] },
     },
+  });
+  await testPrisma.emailRuleRemoval.deleteMany({
+    where: { accountId: TEST_ACCOUNT_ID },
   });
 }
 

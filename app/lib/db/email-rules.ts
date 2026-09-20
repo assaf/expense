@@ -3,6 +3,7 @@ import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { nowWire } from "~/lib/db/wire";
 import { extractEmailAddress, normalizeRuleSender } from "~/lib/validation";
+import type { AcceptedSenderRow } from "~/lib/types";
 
 /**
  * Email rules: which senders a connected account auto-imports. General
@@ -13,6 +14,11 @@ import { extractEmailAddress, normalizeRuleSender } from "~/lib/validation";
  * match) or a bare domain ("apple.com", which matches the domain and any
  * subdomain). `normalizeRuleSender` owns that shape, so the store and the
  * seed parser can't disagree about what counts.
+ *
+ * A workspace can turn a sender off. Its own rule is deleted; a general rule
+ * of the same pattern is left alone (it serves every other workspace) and
+ * vetoed by an email_rule_removals row instead, so the boot seed re-adding
+ * the row cannot undo the choice.
  */
 
 export interface EmailRuleRecord {
@@ -43,11 +49,25 @@ export async function matchEmailRule(
   const fromAddress = extractEmailAddress(from);
   if (!fromAddress.includes("@")) return undefined;
   // General rules first, then the workspace's own, so a user rule can't be
-  // shadowed, but the order only matters for reporting anyway.
+  // shadowed, but the order only matters for reporting anyway. A pattern the
+  // workspace turned off never matches, whichever scope carries the rule.
+  const removed = new Set(await listRemovedSenders(accountId));
   const rules = await db.orm.public.EmailRule.where((r) =>
     or(r.accountId.eq(""), r.accountId.eq(accountId)),
   ).all();
-  return rules.find((r) => ruleSenderMatches(r.sender, fromAddress));
+  return rules.find(
+    (r) => !removed.has(r.sender) && ruleSenderMatches(r.sender, fromAddress),
+  );
+}
+
+/** The sender patterns this workspace turned off, ascending. */
+export async function listRemovedSenders(accountId: string): Promise<string[]> {
+  const rows = await db.orm.public.EmailRuleRemoval.where((r) =>
+    r.accountId.eq(accountId),
+  )
+    .orderBy((r) => r.sender.asc())
+    .all();
+  return rows.map((r) => r.sender);
 }
 
 /** The general rules (accountId = ""): the seed + anything inferred. */
@@ -75,6 +95,11 @@ export async function addEmailRule(input: {
       error: `"${input.sender.trim().toLowerCase()}" is not an address or domain.`,
     };
   }
+  // Remembering a sender the workspace had turned off has to lift the veto:
+  // otherwise the rule is written and stays dead.
+  await db.orm.public.EmailRuleRemoval.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).deleteAll();
   const existing = await db.orm.public.EmailRule.where((r) =>
     and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
   ).first();
@@ -99,4 +124,97 @@ export async function addEmailRule(input: {
     ok: true,
     rule: { accountId: input.accountId, sender, source: input.source },
   };
+}
+
+/** Turn a sender off for one workspace: delete its own rule for that exact
+ * pattern, and veto the general rule of the same pattern (the shared row
+ * cannot be deleted for everyone). Only the exact pattern is affected, so
+ * turning off "apple.com" leaves a learned "email.apple.com" rule matching
+ * its own mail. */
+export async function removeEmailRule(input: {
+  accountId: string;
+  sender: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const sender = normalizeRuleSender(input.sender);
+  if (sender === null) {
+    return {
+      ok: false,
+      error: `"${input.sender.trim().toLowerCase()}" is not an address or domain.`,
+    };
+  }
+  await db.orm.public.EmailRule.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).deleteAll();
+  const general = await db.orm.public.EmailRule.where((r) =>
+    and(r.accountId.eq(""), r.sender.eq(sender)),
+  ).first();
+  if (!general) return { ok: true };
+  const vetoed = await db.orm.public.EmailRuleRemoval.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).first();
+  if (vetoed) return { ok: true };
+  await db.orm.public.EmailRuleRemoval.create({
+    accountId: input.accountId,
+    sender,
+    createdAt: nowWire(),
+  });
+  return { ok: true };
+}
+
+/** Lift the veto on a pre-selected sender: the general rule applies again.
+ * Nothing is re-learned, so a removed rule the workspace had learned itself
+ * does not come back. */
+export async function restoreEmailRule(input: {
+  accountId: string;
+  sender: string;
+}): Promise<void> {
+  const sender = normalizeRuleSender(input.sender);
+  if (sender === null) return;
+  await db.orm.public.EmailRuleRemoval.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).deleteAll();
+}
+
+/** Every pattern on the workspace's accepted list: its own learned rules,
+ * the pre-selected (general) rules, and the pre-selected ones it turned off.
+ * One row per pattern, ascending; a pattern carried by both rule scopes is
+ * one learned row. */
+export async function listAcceptedSenders(
+  accountId: string,
+): Promise<AcceptedSenderRow[]> {
+  const learned = await db.orm.public.EmailRule.where((r) =>
+    r.accountId.eq(accountId),
+  )
+    .orderBy((r) => r.sender.asc())
+    .all();
+  const general = await db.orm.public.EmailRule.where((r) => r.accountId.eq(""))
+    .orderBy((r) => r.sender.asc())
+    .all();
+  const removed = await db.orm.public.EmailRuleRemoval.where((r) =>
+    r.accountId.eq(accountId),
+  )
+    .orderBy((r) => r.sender.asc())
+    .all();
+  const byPattern = new Map<string, AcceptedSenderRow>();
+  const put = (row: AcceptedSenderRow) => {
+    byPattern.set(row.sender, row);
+  };
+  for (const rule of learned) {
+    put({ sender: rule.sender, origin: "learned", turnedOff: false });
+  }
+  for (const rule of general) {
+    if (!byPattern.has(rule.sender)) {
+      put({ sender: rule.sender, origin: "preset", turnedOff: false });
+    }
+  }
+  for (const row of removed) {
+    put({
+      sender: row.sender,
+      origin: byPattern.get(row.sender)?.origin ?? "preset",
+      turnedOff: true,
+    });
+  }
+  return [...byPattern.values()].sort((a, b) =>
+    a.sender < b.sender ? -1 : a.sender > b.sender ? 1 : 0,
+  );
 }

@@ -418,7 +418,13 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   `initStore`; user rules learned automatically when a receipt forward
   imports successfully (`learnRuleFromForward` in the inbound pipeline:
   the ORIGINAL sender from the forwarded content becomes the rule). A rule
-  is an exact address or a domain (matches subdomains).
+  is an exact address or a domain (matches subdomains). A workspace can
+  turn a sender off from the Email page's Accepted senders list: its own
+  rule is deleted, and a general rule of the same pattern (shared, and
+  re-added by the boot seed) is vetoed by an account-scoped
+  `email_rule_removals` row instead. The gate skips vetoed patterns, so
+  that sender's mail goes back to waiting on the review list; remembering
+  the sender again, or restoring it from the list, lifts the veto.
 - **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
   on each push (and daily via the cron) the Inbox is drained (3-day
   lookback, cursor-scanned over receivedAt; an all-seen batch slides the
@@ -637,7 +643,9 @@ Implementation (`app/lib/email-review.server.ts`, route
   offers a checkbox (default on) that adds a user rule
   (`source = "review"`): the sender's domain, or their exact address
   for freemail providers (`reviewSenderRulePattern`, same policy as rule
-  inference). Skipped when any rule already covers the sender.
+  inference). Skipped when any rule already covers the sender, except a
+  pattern the workspace turned off: that one no longer applies, so the
+  sender reads as new and the rule written here lifts the veto.
 - **Ignore** (`ignoreReviewItem`): flips the row to
   `outcome = "review-ignored"` ("user ignored"). The email stays in the
   Inbox untouched; the row keeps both the auto-pipeline and future scans

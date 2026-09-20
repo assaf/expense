@@ -92,6 +92,7 @@ const MODEL_NAMES: Record<string, string> = {
   emailConnection: "EmailConnection",
   emailProcessLog: "EmailProcessLog",
   emailRule: "EmailRule",
+  emailRuleRemoval: "EmailRuleRemoval",
   expense: "Expense",
   imageBlob: "ImageBlob",
   inboundEmail: "InboundEmail",
