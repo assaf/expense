@@ -291,6 +291,32 @@ describe("connectionAccessToken", () => {
     expect(decryptSecret(row!.refreshTokenEnc!)).toBe("rt-expired");
   });
 
+  it("takes the token a concurrent instance rotated instead of failing", async () => {
+    const id = await seedExpiredConnection("Race");
+    const stored = await readEmailConnectionById(id);
+    // Our exchange is a replay: another instance already spent the stored
+    // refresh token, so the provider ratchets and rejects ours. Its winning
+    // pair is on the row by the time ours fails.
+    const fetchMock = vi.fn(async () => {
+      await updateEmailConnectionTokens({
+        id,
+        tokenEnc: encryptSecret("at-winner"),
+        refreshTokenEnc: encryptSecret("rt-winner"),
+        tokenExpiresAt: new Date(Date.now() + 3600_000).toISOString(),
+      });
+      return Response.json({ error: "invalid_grant" }, { status: 400 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(connectionAccessToken(stored!)).resolves.toBe("at-winner");
+    // One exchange, no retry, and the winner's credentials stand: a loser
+    // must never overwrite the pair that is actually working.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const after = await readEmailConnectionById(id);
+    expect(decryptSecret(after!.tokenEnc)).toBe("at-winner");
+    expect(decryptSecret(after!.refreshTokenEnc!)).toBe("rt-winner");
+  });
+
   it("dedupes concurrent refreshes into one endpoint call", async () => {
     const id = await seedExpiredConnection("Dedup");
     let release!: (res: Response) => void;

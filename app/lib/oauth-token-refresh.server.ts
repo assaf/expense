@@ -199,7 +199,28 @@ async function refreshRotated<T extends RefreshedTokens>({
     return decryptSecret(row.tokenEnc);
   }
   const storedRefreshToken = decryptSecret(row.refreshTokenEnc);
-  const refreshed = await refresh(storedRefreshToken);
+  let refreshed: T;
+  try {
+    refreshed = await refresh(storedRefreshToken);
+  } catch (err) {
+    // Another instance may have rotated the pair while this exchange was in
+    // flight: the in-process dedupe above cannot cover a second lambda, and
+    // the provider ratchets, so replaying a spent refresh token fails on a
+    // connection that is perfectly healthy. A row that now carries a usable
+    // access token IS that case, so take it — failing here would flag a
+    // working mailbox and tell its owner to reconnect for nothing.
+    const recheck = await readEmailConnectionById(connection.id);
+    const rotatedAt = recheck?.tokenExpiresAt
+      ? Date.parse(recheck.tokenExpiresAt)
+      : 0;
+    if (recheck && rotatedAt - REFRESH_SKEW_MS > Date.now()) {
+      console.info("[oauth] refresh lost a race to another instance", {
+        connectionId: connection.id,
+      });
+      return decryptSecret(recheck.tokenEnc);
+    }
+    throw err;
+  }
   await updateEmailConnectionTokens({
     id: connection.id,
     tokenEnc: encryptSecret(refreshed.accessToken),

@@ -34,6 +34,11 @@ pasted API token keep working unchanged (see `connectionAccessToken`).
   ROTATED refresh token (Fastmail revokes stale ones; reuse revokes the
   whole grant). A reconnect for a mailbox the workspace already has saves
   the newest credentials over the stored ones (see "What exists today").
+  A refresh also survives a race between two app instances: the in-process
+  dedupe covers one process only, so an exchange the provider rejects after
+  another instance already rotated the pair is not an error —
+  `refreshRotated` re-reads the row and returns the winner's access token
+  instead of failing (and flagging, and notifying about) a healthy mailbox.
 - **Requested scopes**: `urn:ietf:params:jmap:core` + `urn:ietf:params:
 jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   sent).
@@ -374,7 +379,11 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   failures (timeouts, 5xx) and app misconfiguration (401) flag nothing and
   send nothing. The review scan (`app/lib/email-review.server.ts`) flags the
   connection on the same condition; before this it wrote no status at all,
-  which is why a scan failure never showed on the Email page.
+  which is why a scan failure never showed on the Email page. Like the cron
+  and the push drains, the scan reports a refused grant as a warning and only
+  on the transition (the connection was not already flagged), so a mailbox
+  nobody reconnects does not page on every scan: the badge and this notice are
+  the reporting. Anything else stays an error-level capture, unflagged.
 - **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step

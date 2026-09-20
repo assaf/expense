@@ -10,6 +10,7 @@ import {
   reviewSenderRulePattern,
 } from "~/lib/email-review.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
+import { setEmailConnectionStatus } from "~/lib/db/email-connections";
 import { addEmailRule, matchEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import {
@@ -35,6 +36,8 @@ import {
 const mocks = vi.hoisted(() => ({
   deliverConnectionEmailToInbox: vi.fn(async () => true),
   sendEmail: vi.fn(async (_input: { to: string; subject: string }) => true),
+  captureError: vi.fn(),
+  captureWarning: vi.fn(),
 }));
 
 // The review flow's owner confirmation goes through the JMAP mailbox; in
@@ -49,6 +52,15 @@ vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
 }));
 
 vi.mock("~/lib/reply.server", () => ({ sendEmail: mocks.sendEmail }));
+
+// The scan's failure reporting: an expected dead credential warns on the
+// transition, anything else is an error. Both are captured here so the tests
+// can tell them apart.
+vi.mock("~/lib/errors.server", () => ({
+  captureError: mocks.captureError,
+  captureWarning: mocks.captureWarning,
+  captureErrorOnce: vi.fn(),
+}));
 
 /**
  * Pins the scan window: fixture arrival dates (2026-07-01 and friends)
@@ -1421,6 +1433,8 @@ describe("scanInboxForReview", () => {
     await cleanupConnection();
     mocks.sendEmail.mockClear();
     mocks.sendEmail.mockResolvedValue(true);
+    mocks.captureError.mockClear();
+    mocks.captureWarning.mockClear();
     conn = connection();
     await testPrisma.emailConnection.create({
       data: {
@@ -1482,6 +1496,32 @@ describe("scanInboxForReview", () => {
       to: TEST_EMAIL,
       subject: "mailbox@example.com needs reconnecting on Expense",
     });
+    // Warned, not errored: the badge and the notice are the reporting, and a
+    // handled condition must not open an error issue.
+    expect(mocks.captureWarning).toHaveBeenCalledTimes(1);
+    expect(mocks.captureError).not.toHaveBeenCalled();
+  });
+
+  it("does not re-report a connection that is already flagged", async () => {
+    // The user has been told (badge, notice) and has not reconnected. Another
+    // scan must flag nothing new and page nobody.
+    const target = scanTarget();
+    await setEmailConnectionStatus(conn.id, "error");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "invalid_grant" }, { status: 400 }),
+      ),
+    );
+
+    await expect(
+      scanInboxForReview({ ...target, status: "error" }),
+    ).rejects.toThrow(/HTTP 400/);
+
+    expect(mocks.captureWarning).not.toHaveBeenCalled();
+    expect(mocks.captureError).not.toHaveBeenCalled();
+    // The notice is gated by its own marker, not by the status.
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a transient failure off the connection and out of the mail", async () => {
@@ -1498,5 +1538,8 @@ describe("scanInboxForReview", () => {
     expect(row?.status).toBe("active");
     expect(row?.errorNotifiedAt).toBeNull();
     expect(mocks.sendEmail).not.toHaveBeenCalled();
+    // A provider hiccup stays an error: it is not something the user can fix.
+    expect(mocks.captureError).toHaveBeenCalledTimes(1);
+    expect(mocks.captureWarning).not.toHaveBeenCalled();
   });
 });

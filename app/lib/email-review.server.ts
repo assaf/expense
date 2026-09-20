@@ -32,7 +32,7 @@ import * as Sentry from "@sentry/react-router";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
-import { captureError } from "~/lib/errors.server";
+import { captureError, captureWarning } from "~/lib/errors.server";
 import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
 import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
 import {
@@ -1077,26 +1077,35 @@ export async function processReviewItem(input: {
 /** Scan wrapper that surfaces scan failures to Sentry (the scan is
  * user-driven; a failure should stay visible rather than vanish).
  *
- * A grant the provider refused is also a needs-attention condition: this
- * scan is the only place the failure surfaces when the user asks for it, so
- * it flags the connection (the Email page badge) and tells the account,
- * exactly as the cron and the push drains do. Every other failure (a
- * timeout, a provider hiccup) stays what it was: captured and rethrown. */
+ * A grant the provider refused is a needs-attention condition this app now
+ * reports on its own: the Email page badge and the reconnect notice go out
+ * below. It only warns, and only on the transition, exactly as the cron and
+ * the push drains do, so a mailbox nobody reconnects does not page on every
+ * scan. Every other failure (a timeout, a provider hiccup) keeps the old
+ * behavior: captured as an error and rethrown, nothing flagged, nobody
+ * emailed. */
 export async function scanInboxForReview(
   connection: EmailConnectionWithSecret,
 ): Promise<ScanResult> {
   try {
     return await scanConnectionInbox(connection);
   } catch (err) {
-    captureError("[email-review] inbox scan failed", {
-      connectionId: connection.id,
-      err: err instanceof Error ? err.message : String(err),
-    });
     if (err instanceof OAuthRefreshError) {
+      if (connection.status !== "error") {
+        captureWarning("[email-review] inbox scan hit a dead credential", {
+          connectionId: connection.id,
+          error: err,
+        });
+      }
       // Best-effort: the route's 502 must report the scan failure itself,
       // not a failed write or a notice that could not go out.
       await setEmailConnectionStatus(connection.id, "error").catch(() => {});
       await reportConnectionFailure({ connection, error: err });
+    } else {
+      captureError("[email-review] inbox scan failed", {
+        connectionId: connection.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
     }
     throw err;
   }
