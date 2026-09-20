@@ -259,6 +259,20 @@ body {
   }
 }
 
+/* Removing or restoring an accepted sender (Email page) moves that row to
+ * another group. Each rule row carries its own view-transition-name and the
+ * form opts into react-router's `viewTransition`, so the browser morphs the
+ * row across instead of cross-fading the page; the default timing is the
+ * right one. Only reduced motion needs a rule, because the block above
+ * matches elements and cannot reach the transition's pseudo-elements. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
 /* Visible keyboard focus for links (buttons use their own ring utility). */
 a:focus-visible {
   outline: 2px solid #245f73;

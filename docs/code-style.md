@@ -32,6 +32,7 @@ Deep version of the style rules summarized in `AGENTS.md`; read when writing or 
 - Named exports for shared components (`export function Button`); route modules `export default` the page.
 - Component naming: PascalCase; files in `app/components/` (`ui/` for primitives).
 - No `dangerouslySetInnerHTML`; escape untrusted text with `escapeHtml` (`app/lib/escape.ts`).
+- View transitions (`viewTransition` on `<Form>`/`<Link>`): react-router only starts one for a real navigation, never for a fetcher submission, and the element that should morph needs its own `view-transition-name`. That name is a **stacking context**: a `fixed` dialog rendered inside the named element paints under the elements that follow it and they swallow its clicks (scroll-dependent, so it fails only sometimes) — portal such a dialog to the body, as `app/components/settings/accepted-senders.tsx` does. Guard reduced motion for the `::view-transition-*` pseudo-elements explicitly; the global `*` rule cannot reach them.
 
 ## Accessibility
 
