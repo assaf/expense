@@ -1,6 +1,26 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* Hand-drawn annotations (github.com/syabro/neat-annotations, MIT), vendored
+ * verbatim and then formatted by the repo's own checker, which rewrites this
+ * file on every run: updating it means dropping in the new upstream file and
+ * letting `pnpm check` reformat. One class on an inline element plus a
+ * `data-note` attribute draws an arrow and a handwritten label around it;
+ * `ann-no-mark` keeps the target's own fill and omitting `data-note` leaves a
+ * bare highlight. Its colours are `light-dark()` pairs, so they need the
+ * `color-scheme` declared with the theme rules below, and the labels want the
+ * self-hosted Shantell Sans. */
+@import "./neat-annotations.css";
+
+/* An annotated block-level target (a code snippet, the empty-state card): the
+ * library's .ann is inline-block with a tight line-height, and it is unlayered,
+ * so its rules beat Tailwind's display and leading utilities. This is the one
+ * override the app needs; the arrow and label placement is untouched. */
+.ann-block {
+  display: block;
+  line-height: inherit;
+}
+
 @custom-variant dark (&:is(.dark *));
 @plugin "@tailwindcss/forms";
 
@@ -122,6 +142,25 @@
   font-display: swap;
 }
 
+/* Self-hosted Shantell Sans (SIL OFL, github.com/arrowtype/shantell-sans):
+ * the handwriting the annotation labels are drawn in. One variable file covers
+ * the whole weight axis, latin subset. Labels fall back to `cursive` when it
+ * has not loaded, which is what the library does by default. */
+@font-face {
+  font-family: "Shantell Sans";
+  src: url("/fonts/shantell-sans/ShantellSans-Variable.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* `color-scheme` feeds the `light-dark()` colours in neat-annotations.css and
+ * the browser's own widgets. The app has exactly one theme source, the OS
+ * preference (THEME_SCRIPT), so binding it to the class keeps both in step. */
+:root {
+  color-scheme: light;
+}
+
 html,
 body {
   height: 100%;
@@ -140,6 +179,7 @@ body {
 }
 
 .dark {
+  color-scheme: dark;
   --color-ink: #f2f4ef;
   --color-paper: #181d1b;
   --color-canvas: #101312;

@@ -645,18 +645,29 @@ function ExpenseList({
       </div>
 
       {expenses.length === 0 ? (
-        <EmptyState>
-          <p>
-            Nothing here yet. Add your first receipt or log a drive; it takes
-            under a minute.
-          </p>
-          {!hasEmailConnection ? (
-            <p className="mt-2 text-sm">
-              Or connect your Gmail or Fastmail account and receipts from your
-              inbox are added automatically, no forwarding.
+        <span
+          className="ann ann-n ann-amber ann-no-mark ann-block mb-20 [--ann-label-max-width:240px]"
+          data-note="or drag a receipt in"
+        >
+          {/*
+           * A first-run nudge at the one thing the list cannot show for
+           * itself: the whole page takes a dropped image, which the <main>
+           * aria-label already states for assistive tech. The note is a
+           * pseudo-element, so it adds nothing to the accessibility tree.
+           */}
+          <EmptyState>
+            <p>
+              Nothing here yet. Add your first receipt or log a drive; it takes
+              under a minute.
             </p>
-          ) : null}
-        </EmptyState>
+            {!hasEmailConnection ? (
+              <p className="mt-2 text-sm">
+                Or connect your Gmail or Fastmail account and receipts from your
+                inbox are added automatically, no forwarding.
+              </p>
+            ) : null}
+          </EmptyState>
+        </span>
       ) : filtered.length === 0 ? (
         <EmptyState className="p-10">
           No expenses match these filters.

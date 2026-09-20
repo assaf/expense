@@ -66,18 +66,25 @@ export default function AiPage({ loaderData }: Route.ComponentProps) {
             </li>
           ))}
         </ol>
-        <div
-          className="mt-6 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700
-        bg-gray-50 dark:bg-gray-900"
+        {/* Decoration only (the note is a pseudo-element): the connectNote
+            paragraph below already says there are no headers or keys. */}
+        <span
+          className="ann ann-n ann-blue ann-no-mark ann-block mb-20"
+          data-note="no API keys"
         >
-          <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
-            <Link2 aria-hidden="true" className="h-3.5 w-3.5" />{" "}
-            {loaderData.mcpConfigHeading}
+          <div
+            className="mt-6 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700
+        bg-gray-50 dark:bg-gray-900"
+          >
+            <div className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+              <Link2 aria-hidden="true" className="h-3.5 w-3.5" />{" "}
+              {loaderData.mcpConfigHeading}
+            </div>
+            <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+              {loaderData.mcpConfigJson}
+            </pre>
           </div>
-          <pre className="overflow-x-auto px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
-            {loaderData.mcpConfigJson}
-          </pre>
-        </div>
+        </span>
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
           <InlineMarkdown text={loaderData.connectNote} />
         </p>

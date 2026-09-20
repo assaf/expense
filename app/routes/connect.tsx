@@ -163,11 +163,19 @@ export default function ConnectPage({ loaderData }: Route.ComponentProps) {
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
           {loaderData.baseAddressLabel}
         </p>
-        <CodeBlock
-          label="Server URL"
-          body={MCP_ENDPOINT}
-          copyLabel="Copy server URL"
-        />
+        {/* The note is decoration: the paragraph above already says which
+            string to copy, and the label lives in a pseudo-element, so nothing
+            here reaches the accessibility tree. */}
+        <span
+          className="ann ann-n ann-blue ann-no-mark ann-block mb-20"
+          data-note="start here"
+        >
+          <CodeBlock
+            label="Server URL"
+            body={MCP_ENDPOINT}
+            copyLabel="Copy server URL"
+          />
+        </span>
         <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
           {loaderData.oauthNote}
         </p>

@@ -11,6 +11,8 @@
 
 ![Receipt editor with the receipt image](public/screenshot-expense.png)
 
+![Receipt with hand-drawn notes: the merchant and the total called out, and the receipt filed as Meals and entertainment](public/figure-receipt.png)
+
 What it does:
 
 - Log receipt expenses (upload/scan the image, specify the date, report,
