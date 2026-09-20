@@ -3,6 +3,11 @@
   "framework": "react-router",
   "buildCommand": "pnpm build",
   "regions": ["sfo1"],
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  },
   "crons": [
     {
       "path": "/api/inbound-cron",

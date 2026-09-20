@@ -1,30 +1,38 @@
 name: deployment-checks
 
-# CI + DB migration for every push to main. All jobs live in ONE
-# workflow on purpose:
+# CI + DB migration + production deploy for every push to main. All jobs
+# live in ONE workflow on purpose:
 #
 #   - Ordering: GitHub has no cross-workflow dependencies. Here
 #     `secretlint` runs FIRST and gates the whole pipeline (a committed
 #     secret must never reach prod), then `check` and `test` run in
-#     PARALLEL, and `migrate-db` needs both.
+#     PARALLEL, then `migrate-db` needs both, then `deploy` needs the
+#     migration, then `pdf-ocr-smoke` needs the deploy. That is the same
+#     order scripts/deploy uses, and it is why main is NOT deployed by
+#     Vercel's own Git integration (`vercel.json` sets
+#     `git.deploymentEnabled.main = false`): auto-deploy put the new code
+#     live while the DDL was still pending, so a red test run shipped code
+#     whose table did not exist yet (EXPENSE-18, 2026-09-20). PR previews
+#     are untouched and still deploy from Git.
 #   - DB migrations run ONLY after the test suite passes, never before.
 #     Migrating prod for code whose tests haven't passed would leave the
 #     schema ahead of the deployed bundle. So the contract is:
-#         secretlint → check & test → migrate prod DB
+#         secretlint → check & test → migrate prod DB → deploy → smoke
 #   - Time budget: there is no workflow-level timeout in GitHub Actions,
 #     so the whole run is bounded by the job timeouts on the critical
-#     path: secretlint 2m + max(check 2m, test 4m) + migrate 2m = an
-#     ~8m ceiling (typical runs finish in ~4m; PR-only runs are just
-#     secretlint + check + test, ~3m). These are fail-fast guards, not
-#     targets: a hung job dies here instead of running for the default 6h.
+#     path: secretlint 2m + max(check 2m, test 4m) + migrate 2m + deploy 5m
+#     + smoke 15m = an ~28m ceiling (typical runs finish in ~9m; PR-only
+#     runs are just secretlint + check + test, ~3m). These are fail-fast
+#     guards, not targets: a hung job dies here instead of running for the
+#     default 6h.
 #   - Emails: GitHub sends one notification email per failed workflow run.
 #     Two workflows meant up to two emails per push; one workflow means at
 #     most one.
 #
 # The post-deploy PDF/OCR/MCP smoke check runs after every production
 # deploy: from scripts/deploy (CLI deploys, with rollback on failure) and
-# from the pdf-ocr-smoke job below (auto-deploys on push to main, also with
-# rollback). Both share scripts/smoke-check against /api/smoke.
+# from the pdf-ocr-smoke job below (the push path, also with rollback).
+# Both share scripts/smoke-check against /api/smoke.
 #
 # The migrate-db job passes the prod DDL URL directly via the
 # DATABASE_URL_UNPOOLED GitHub secret (the same session-pooler URL
@@ -33,7 +41,8 @@ name: deployment-checks
 # (the linux CLI build ships without TLS; scripts/deploy runs on
 # darwin where the CLI connects directly). The CI VERCEL_TOKEN can't
 # read project settings (403 PROJECT_UNAUTHORIZED) so `vercel env
-# pull` doesn't work here.
+# pull` doesn't work here; the deploy job below needs only project
+# identity, which comes from .vercel/repo.json (committed values below).
 #
 # NOTE: the job names are stable; keep them that way.
 
@@ -259,19 +268,68 @@ jobs:
           done
           pnpm prisma db update --no-interactive --confirm "$DB_NAME"
 
-  # Post-deploy PDF/OCR/MCP smoke + auto-rollback for Vercel auto-deploys.
-  # Pushes to main deploy to production without scripts/deploy, so this job
-  # waits for the new production deployment (matched by the pushed commit
-  # SHA), runs the same smoke scripts/deploy uses, and rolls the deployment
-  # back if it fails. Broken code is live for minutes, not until the next
-  # deploy. Skips (with a missing-secret message in the logs) until the
-  # SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS GitHub secrets exist;
-  # VERCEL_TOKEN is already used by other jobs.
+  # Production deploy, AFTER the schema sync: the same order scripts/deploy
+  # uses (its steps 1-3 are the check, test and migrate-db jobs above).
+  # Vercel's own Git integration is off for main (vercel.json), because it
+  # put the new code live while the DDL was still pending: a red test run
+  # shipped code whose table did not exist yet (EXPENSE-18, 2026-09-20).
+  # With auto-deploy off, a missing token is a failure, not a skip: nothing
+  # else would reach prod.
+  deploy:
+    name: Deploy prod
+    runs-on: ubuntu-latest
+    # Production builds take ~2m; 5m bounds a hung CLI.
+    timeout-minutes: 5
+    needs: [migrate-db]
+    if: success() && github.ref == 'refs/heads/main'
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_TEAM: assafs-projects-a315fe37
+      # Project identity for a non-interactive link (Vercel's documented CI
+      # env vars); these are the repo→project values in .vercel/repo.json,
+      # not credentials.
+      VERCEL_ORG_ID: team_bjyg9pgn8TQQVP2NLMPnSYSN
+      VERCEL_PROJECT_ID: prj_7VcQaMHQ0xtjXnNktAlSmqlVpAai
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The same CLI call scripts/deploy makes, with the same URL scrape
+      # from its output. The smoke job below takes the URL from this job's
+      # output, so no step here has to match deployments by commit SHA.
+      - name: Deploy to production
+        id: deploy
+        run: |
+          set -o pipefail
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "VERCEL_TOKEN is not configured — main no longer deploys from Git, so there is nothing else to ship this commit." >&2
+            exit 1
+          fi
+          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" --scope "$VERCEL_TEAM" | tee /tmp/deploy.log
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.vercel\.app' /tmp/deploy.log | tail -1 || true)
+          if [ -z "$URL" ]; then
+            echo "Could not read the deployment URL out of the CLI output." >&2
+            exit 1
+          fi
+          echo "Deployed: $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+  # Post-deploy PDF/OCR/MCP smoke + auto-rollback for the deploy job above.
+  # Runs the same smoke scripts/deploy uses against the deployment that job
+  # just made, and rolls it back if it fails. Skips (with a missing-secret
+  # message in the logs) until the SMOKE_TEST_SECRET and
+  # VERCEL_PROTECTION_BYPASS GitHub secrets exist; CLI deploys still gate via
+  # scripts/deploy.
   pdf-ocr-smoke:
     name: Smoke prod + rollback
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [migrate-db]
+    needs: [deploy]
     # No secrets in this condition: the secrets context is rejected in
     # job-level `if` (workflow file error). Missing secrets are handled
     # inside the step below, which skips the gate with a notice.
@@ -289,32 +347,24 @@ jobs:
         with:
           node-version: 24
 
-      # Wait for the production deployment of this commit (Vercel auto-
-      # deploys ~1-2 min after push), smoke it, and roll it back on
-      # failure. One step on purpose: the wait/rollback flow must not
+      # Smoke the deployment the deploy job just made, and roll it back on
+      # failure. One step on purpose: the smoke/rollback flow must not
       # depend on cross-step state. Skipped with a notice when the smoke
       # secrets aren't configured (CLI deploys still gate via
       # scripts/deploy).
       - name: Smoke production deployment + rollback on failure
         run: |
           if [ -z "$SMOKE_TEST_SECRET" ] || [ -z "$VERCEL_PROTECTION_BYPASS" ] || [ -z "$VERCEL_TOKEN" ]; then
-            echo "Smoke secrets not configured as GitHub secrets — skipping the auto-deploy smoke gate."
+            echo "Smoke secrets not configured as GitHub secrets — skipping the smoke gate."
             echo "Add SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS to enable it."
             exit 0
           fi
-          URL=""
-          for i in $(seq 1 60); do
-            URL=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?teamId=$VERCEL_TEAM&target=production&limit=1" \
-              | node -e 'let b="";process.stdin.on("data",c=>b+=c);process.stdin.on("end",()=>{const j=JSON.parse(b);const d=j.deployments&&j.deployments[0];if(d&&d.state==="READY"&&d.meta&&d.meta.githubCommitSha==="'$GITHUB_SHA'"&&d.url){console.log("https://"+d.url)}else{process.exit(1)}})') \
-              && break
-            sleep 5
-          done
+          URL="${{ needs.deploy.outputs.url }}"
           if [ -z "$URL" ]; then
-            echo "No production deployment for $GITHUB_SHA after 5 minutes" >&2
+            echo "The deploy job reported no URL — nothing to smoke." >&2
             exit 1
           fi
-          echo "Deployment ready: $URL"
+          echo "Deployment: $URL"
           if ./scripts/smoke-check "$URL"; then
             echo "Smoke passed — deployment stays live."
           else
