@@ -308,7 +308,9 @@ describe("connectionAccessToken", () => {
       connectionAccessToken(stored!),
       connectionAccessToken(stored!),
     ]);
-    expect(fetchMock).toHaveBeenCalledOnce();
+    // The exchange starts behind a read of the row, so wait for it rather
+    // than assume it started synchronously.
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     release(
       Response.json({
         access_token: "at-rotated",
@@ -318,6 +320,7 @@ describe("connectionAccessToken", () => {
       }),
     );
     expect(await both).toEqual(["at-rotated", "at-rotated"]);
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
   it("rejects a malformed 200 token response loudly, storing nothing", async () => {
     const id = await seedExpiredConnection("Malformed");

@@ -1,5 +1,8 @@
 import { decryptSecret, encryptSecret } from "~/lib/token-crypto.server";
-import { updateEmailConnectionTokens } from "~/lib/db/email-connections";
+import {
+  readEmailConnectionById,
+  updateEmailConnectionTokens,
+} from "~/lib/db/email-connections";
 
 /**
  * The token plumbing the Fastmail and Google OAuth modules share: the POST
@@ -127,36 +130,69 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
   const expiresAt = connection.tokenExpiresAt
     ? Date.parse(connection.tokenExpiresAt)
     : 0;
-  const accessToken = decryptSecret(connection.tokenEnc);
   if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
-    return accessToken;
+    return decryptSecret(connection.tokenEnc);
   }
   let pending = inflightRefreshes.get(connection.id);
   if (!pending) {
-    const storedRefreshToken = decryptSecret(connection.refreshTokenEnc);
-    pending = refresh(storedRefreshToken)
-      .then(async (refreshed) => {
-        await updateEmailConnectionTokens({
-          id: connection.id,
-          tokenEnc: encryptSecret(refreshed.accessToken),
-          refreshTokenEnc: encryptSecret(
-            persistRefreshToken(refreshed, storedRefreshToken),
-          ),
-          tokenExpiresAt: refreshed.expiresAt,
-        });
-        return refreshed.accessToken;
-      })
-      .then(
-        (token) => {
-          inflightRefreshes.delete(connection.id);
-          return token;
-        },
-        (err) => {
-          inflightRefreshes.delete(connection.id);
-          throw err;
-        },
-      );
+    pending = refreshRotated({
+      connection,
+      refresh,
+      persistRefreshToken,
+    }).then(
+      (token) => {
+        inflightRefreshes.delete(connection.id);
+        return token;
+      },
+      (err) => {
+        inflightRefreshes.delete(connection.id);
+        throw err;
+      },
+    );
     inflightRefreshes.set(connection.id, pending);
   }
   return pending;
+}
+
+/**
+ * One exchange, against the row as it stands now rather than against the
+ * caller's copy of it. A cron tick resolves the same connection twice (the
+ * push-subscription renewal, then the catch-up drain) from one row it read
+ * at the top of the tick, so by the time the second resolution asks, the
+ * first has already rotated the pair: Fastmail revokes a refresh token the
+ * moment it hands out the next one, and replaying the caller's copy fails
+ * as invalid_grant on a connection that is perfectly healthy. The same
+ * staleness reaches across lambdas, which the in-process `inflightRefreshes`
+ * map above cannot cover. So read the row again here, and spend an exchange
+ * only if its access token is still expired.
+ */
+async function refreshRotated<T extends RefreshedTokens>({
+  connection,
+  refresh,
+  persistRefreshToken,
+}: {
+  connection: TokenConnection;
+  refresh: (refreshToken: string) => Promise<T>;
+  persistRefreshToken: (refreshed: T, storedRefreshToken: string) => string;
+}): Promise<string> {
+  const current = await readEmailConnectionById(connection.id);
+  const row = current ?? connection;
+  const expiresAt = row.tokenExpiresAt ? Date.parse(row.tokenExpiresAt) : 0;
+  if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
+    return decryptSecret(row.tokenEnc);
+  }
+  if (!row.refreshTokenEnc) {
+    return decryptSecret(row.tokenEnc);
+  }
+  const storedRefreshToken = decryptSecret(row.refreshTokenEnc);
+  const refreshed = await refresh(storedRefreshToken);
+  await updateEmailConnectionTokens({
+    id: connection.id,
+    tokenEnc: encryptSecret(refreshed.accessToken),
+    refreshTokenEnc: encryptSecret(
+      persistRefreshToken(refreshed, storedRefreshToken),
+    ),
+    tokenExpiresAt: refreshed.expiresAt,
+  });
+  return refreshed.accessToken;
 }
