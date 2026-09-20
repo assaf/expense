@@ -419,7 +419,7 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   imports successfully (`learnRuleFromForward` in the inbound pipeline:
   the ORIGINAL sender from the forwarded content becomes the rule). A rule
   is an exact address or a domain (matches subdomains). A workspace can
-  turn a sender off from the Email page's Accepted senders list: its own
+  turn a sender off from the Email page's Auto-imported senders list: its own
   rule is deleted, and a general rule of the same pattern (shared, and
   re-added by the boot seed) is vetoed by an account-scoped
   `email_rule_removals` row instead. The gate skips vetoed patterns, so

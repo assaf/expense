@@ -2,15 +2,14 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Trash2 } from "lucide-react";
 import { Form, useNavigation } from "react-router";
-import { SenderRow } from "~/components/settings/receipts-by-email";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { FieldLabel } from "~/components/ui/FieldLabel";
 import { StatusNote } from "~/components/ui/StatusNote";
-import type { AcceptedSenderRow, InboundSenderRecord } from "~/lib/types";
+import type { AcceptedSenderRow } from "~/lib/types";
 
-/** One list row's shell: the same surface SenderRow uses. */
+/** One list row's shell: the same surface the Email page's other rows use. */
 const ROW_CLASS =
   "flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-900";
 
@@ -90,9 +89,9 @@ function RemoveRuleButton({ sender }: { sender: string }) {
   );
 }
 
-/** One rule pattern the account accepts: the pattern, what taught it, and
- * the trash button that stops it filing mail. */
-function AcceptedRow({
+/** One sender the app imports from: the pattern, what taught it, and the
+ * trash button that stops it filing mail. */
+function RuleRow({
   sender,
   badge,
   tone,
@@ -160,47 +159,19 @@ function TurnedOffRow({ sender }: { sender: string }) {
 }
 
 /**
- * The accepted senders on the Email page: the forwarding addresses this
- * account verified, the senders it taught the app by forwarding or by
- * accepting one in review, and the pre-selected senders that apply to every
- * workspace. Turning one off stops it filing automatically and puts its mail
- * back on the review list; restoring a pre-selected one is what undo means
- * here, since a rule the account learned itself is gone once removed.
+ * The senders the app imports from automatically: the ones this workspace
+ * taught it (a forwarded receipt, or accepting one in review) and the
+ * pre-selected ones that apply to every workspace. Turning one off stops it
+ * filing automatically and puts its mail back on the review list; restoring
+ * a pre-selected one is what undo means here, since a rule the workspace
+ * learned itself is gone once removed.
  */
-export function AcceptedSenders({
-  rows,
-  inboundSenders,
-  userEmail,
-}: {
-  rows: AcceptedSenderRow[];
-  inboundSenders: InboundSenderRecord[];
-  userEmail: string;
-}) {
+export function AutoImportedSenders({ rows }: { rows: AcceptedSenderRow[] }) {
   const learned = rows.filter((r) => !r.turnedOff && r.origin === "learned");
   const presets = rows.filter((r) => !r.turnedOff && r.origin === "preset");
   const turnedOff = rows.filter((r) => r.turnedOff);
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <FieldLabel as="div" className="mb-1">
-          Senders you approved
-        </FieldLabel>
-        <Card className="p-4">
-          <ul className="flex flex-col gap-1">
-            {inboundSenders.length === 0 ? (
-              <StatusNote as="li">None yet.</StatusNote>
-            ) : (
-              inboundSenders.map((sender) => (
-                <SenderRow
-                  key={sender.address}
-                  sender={sender}
-                  isDefault={sender.address === userEmail}
-                />
-              ))
-            )}
-          </ul>
-        </Card>
-      </div>
       <div>
         <FieldLabel as="div" className="mb-1">
           Learned from your receipts
@@ -211,7 +182,7 @@ export function AcceptedSenders({
               <StatusNote as="li">None yet.</StatusNote>
             ) : (
               learned.map((row) => (
-                <AcceptedRow
+                <RuleRow
                   key={row.sender}
                   sender={row.sender}
                   badge="Learned"
@@ -232,7 +203,7 @@ export function AcceptedSenders({
               <StatusNote as="li">None yet.</StatusNote>
             ) : (
               presets.map((row) => (
-                <AcceptedRow
+                <RuleRow
                   key={row.sender}
                   sender={row.sender}
                   badge="Pre-selected"

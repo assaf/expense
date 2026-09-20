@@ -1,9 +1,12 @@
 import { Mail } from "lucide-react";
 import { redirect } from "react-router";
 import { PageShell } from "~/components/PageShell";
+import { AutoImportedSenders } from "~/components/settings/auto-imported-senders";
 import { EmailAccountsSection } from "~/components/settings/email-accounts";
-import { AcceptedSenders } from "~/components/settings/accepted-senders";
-import { AddSenderForm } from "~/components/settings/receipts-by-email";
+import {
+  AddSenderForm,
+  SenderRow,
+} from "~/components/settings/receipts-by-email";
 import { Card } from "~/components/ui/Card";
 import { FieldLabel } from "~/components/ui/FieldLabel";
 import { Section } from "~/components/ui/Section";
@@ -402,7 +405,7 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
           )}
           <div className="mb-3">
             <FieldLabel as="div" className="mb-1">
-              Sender addresses
+              Senders you approved
             </FieldLabel>
             <StatusNote className="mb-2 text-xs">
               Receipts are imported only from <b>verified</b> addresses. Adding
@@ -410,21 +413,31 @@ export default function EmailsPage({ loaderData }: Route.ComponentProps) {
               is clicked, the address is locked to your account (no one else can
               claim it) and receipts start importing.
             </StatusNote>
+            <ul className="flex flex-col gap-1">
+              {inboundSenders.length === 0 ? (
+                <StatusNote as="li">None yet.</StatusNote>
+              ) : (
+                inboundSenders.map((sender) => (
+                  <SenderRow
+                    key={sender.address}
+                    sender={sender}
+                    isDefault={sender.address === userEmail}
+                  />
+                ))
+              )}
+            </ul>
           </div>
           <AddSenderForm />
         </Card>
       </Section>
 
-      <Section id="accepted-senders" title="Accepted senders">
+      <Section id="auto-imported-senders" title="Auto-imported senders">
         <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
-          Addresses and senders whose receipts are filed without asking you
-          first.
+          Senders whose receipts are imported from your connected mailbox
+          without asking you first. Turn one off and its mail waits on the
+          review list instead.
         </p>
-        <AcceptedSenders
-          rows={acceptedSenders}
-          inboundSenders={inboundSenders}
-          userEmail={userEmail}
-        />
+        <AutoImportedSenders rows={acceptedSenders} />
       </Section>
     </PageShell>
   );

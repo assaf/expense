@@ -32,7 +32,7 @@ describe("Email", () => {
   it("shows the email sections", async () => {
     await expect(sectionOf(page, "Email accounts")).toBeVisible();
     await expect(sectionOf(page, "Receipts by email")).toBeVisible();
-    await expect(sectionOf(page, "Accepted senders")).toBeVisible();
+    await expect(sectionOf(page, "Auto-imported senders")).toBeVisible();
   });
 
   it("shows the connect buttons with no accounts connected", async () => {
@@ -70,11 +70,11 @@ describe("Email", () => {
     ).toBeVisible();
   });
 
-  it("shows the sign-in email as a pending accepted sender", async () => {
+  it("shows the sign-in email as a pending approved sender", async () => {
     // The login email is auto-added as the account's default sender on
-    // sign-in, pending until its verification link is clicked. It sits in
-    // the accepted list's approved group.
-    const section = sectionOf(page, "Accepted senders");
+    // sign-in, pending until its verification link is clicked. It belongs
+    // with the forward-to address, not with the rules.
+    const section = sectionOf(page, "Receipts by email");
     await expect(section.getByText("Senders you approved")).toBeVisible();
     const row = section.locator("li").filter({
       hasText: "testuser@example.com",
@@ -97,17 +97,19 @@ describe("Email", () => {
     await expect(
       receipts.getByText(/Verification email sent to extra@example.com/),
     ).toBeVisible();
-    // The new address lands in the accepted list, still awaiting its link.
-    const row = sectionOf(page, "Accepted senders")
-      .locator("li")
-      .filter({ hasText: "extra@example.com" });
-    await expect(row.getByText("Awaiting verification")).toBeVisible();
+    // The new address lands in the approved list, still awaiting its link.
+    await expect(
+      receipts
+        .locator("li")
+        .filter({ hasText: "extra@example.com" })
+        .getByText("Awaiting verification"),
+    ).toBeVisible();
     await page.close();
   });
 
   it("lists pre-selected senders and turns one off, then restores it", async () => {
     const page = await goto("/emails");
-    const section = sectionOf(page, "Accepted senders");
+    const section = sectionOf(page, "Auto-imported senders");
     await expect(section.getByText("Pre-selected by Expense")).toBeVisible();
     // The pre-selected senders come from the shared rule list every
     // workspace starts with, not from anything this account did.
