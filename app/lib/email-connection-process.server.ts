@@ -215,34 +215,55 @@ async function logEmailDecision(input: {
   });
 }
 
-/** Atomically claim an email for processing by inserting its log row
- * with outcome "processing" BEFORE any work runs. Returns true if this
- * caller won the claim (inserted), false if another concurrent drain
- * already claimed it (unique-violation P2002). Closes the check-then-act
- * race where two drains both read "fresh" and both process the same
- * email -> duplicate expense. The row is updated to the final outcome by
- * logEmailDecision after processing. */
+/** How long a claim may sit on `processing` before another drain may take it
+ * over. No live request can hold one that long (the drain's own budget is
+ * 45s and the route's limit is 60s), so a row past this age belongs to a
+ * worker that died mid-flight. Without the takeover the email is stranded:
+ * the drain reads any existing row as a finished email and the review scan
+ * leaves `processing` alone, so nothing would ever look at it again. */
+const STALE_CLAIM_MS = 10 * 60 * 1000;
+
+/** Atomically claim an email for processing by writing its log row with
+ * outcome "processing" BEFORE any work runs. Returns true if this caller
+ * won the claim, false if a live claim for the email is already there
+ * (another concurrent drain: the unique-violation P2002 path). Closes the
+ * check-then-act race where two drains both read "fresh" and both process
+ * the same email -> duplicate expense. The row is updated to the final
+ * outcome by logEmailDecision after processing. */
 async function claimEmailForProcessing(
   connectionId: string,
   emailId: string,
   fromAddress: string,
   subject: string,
 ): Promise<boolean> {
-  // Insert-only: any row already there is another drain's claim.
+  // A stale claim is taken over in place (the email may still be in the
+  // Inbox after a crash, and re-running is what a fresh claim would do);
+  // anything younger is another drain's claim and stays its business.
+  const claim = {
+    fromAddress,
+    subject: subject.slice(0, 500),
+    matched: false,
+    outcome: "processing",
+    error: null,
+    createdAt: nowWire(),
+  };
   const claimed = await writeEmailLogRow({
     connectionId,
     emailId,
-    create: {
-      fromAddress,
-      subject: subject.slice(0, 500),
-      matched: false,
-      outcome: "processing",
-      error: null,
-      createdAt: nowWire(),
+    update: {
+      patch: claim,
+      updatable: (l) =>
+        and(
+          l.outcome.eq("processing"),
+          l.createdAt.lt(
+            fromIso(new Date(Date.now() - STALE_CLAIM_MS).toISOString()),
+          ),
+        ),
     },
+    create: claim,
     onUniqueViolation: "race",
   });
-  return claimed === "created";
+  return claimed === "created" || claimed === "updated";
 }
 
 async function seenEmail(
@@ -386,33 +407,42 @@ export async function processConnectionEmail(
   ) {
     return { status: "ignored", reason: "already processed" };
   }
-  await bumpReceivedCount(connection.id);
-
-  // Our own notification emails (sent to self) must never be processed.
-  // Skipped in review mode: the user chose a specific email, and a receipt
-  // they forwarded to themselves is legitimate; the loop guard below still
-  // catches the app's own confirmations by header.
-  if (!review && fromAddress === connection.emailAddress) {
-    await log("ignored", false, { reason: "self" });
-    return { status: "ignored", reason: "self" };
-  }
-
-  // Bounces/autoreplies: never import, never answer.
-  if (looksLikeBounce({ subject: summary.subject, from: summary.from ?? "" })) {
-    await log("ignored", false, { reason: "bounce" });
-    return { status: "ignored", reason: "bounce" };
-  }
-
-  // Rules decide what's even worth looking at, except in review mode,
-  // where the user's explicit choice replaces the rule gate. A matched
-  // rule still names a first-time merchant and sets the `matched` flag.
-  const rule = await matchEmailRule(connection.accountId, summary.from ?? "");
-  if (!review && !rule) {
-    await log("ignored", false);
-    return { status: "ignored", reason: "no rule" };
-  }
-
+  // Everything past the claim runs inside the pipeline's try, so the row
+  // always reaches a final outcome. A throw between the claim and the old
+  // try (the rule gate is a DB read, and a missing table proved it can
+  // fail) left the row on `processing` forever: the drain reads any row as
+  // "already processed" and the review list leaves `processing` alone, so
+  // that email was invisible to both. Caught here it becomes an `error`
+  // row, which the review scan offers, or `pending-review` for a click.
   try {
+    await bumpReceivedCount(connection.id);
+
+    // Our own notification emails (sent to self) must never be processed.
+    // Skipped in review mode: the user chose a specific email, and a receipt
+    // they forwarded to themselves is legitimate; the loop guard below still
+    // catches the app's own confirmations by header.
+    if (!review && fromAddress === connection.emailAddress) {
+      await log("ignored", false, { reason: "self" });
+      return { status: "ignored", reason: "self" };
+    }
+
+    // Bounces/autoreplies: never import, never answer.
+    if (
+      looksLikeBounce({ subject: summary.subject, from: summary.from ?? "" })
+    ) {
+      await log("ignored", false, { reason: "bounce" });
+      return { status: "ignored", reason: "bounce" };
+    }
+
+    // Rules decide what's even worth looking at, except in review mode,
+    // where the user's explicit choice replaces the rule gate. A matched
+    // rule still names a first-time merchant and sets the `matched` flag.
+    const rule = await matchEmailRule(connection.accountId, summary.from ?? "");
+    if (!review && !rule) {
+      await log("ignored", false);
+      return { status: "ignored", reason: "no rule" };
+    }
+
     const email = await deps.fetchReceivedEmail(summary.id);
     if (isDeliveryNotification(email.headers)) {
       await log("ignored", true, { reason: "bounce" });

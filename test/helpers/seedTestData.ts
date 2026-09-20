@@ -41,35 +41,29 @@ export async function seedTestData() {
   await testPrisma.inboundEmailCooldown.deleteMany({});
   await testPrisma.account.deleteMany({});
 
-  // The general email rules (accountId = "") are ambient state: the app's
-  // boot seed (initStore → syncGeneralEmailRules) installs them from
-  // app/data/email-rules.csv, add-only, once per process. A test file that
-  // wipes the rules table (email-rules.test.ts's beforeEach does) would
-  // otherwise poison every later file that shares its fork: the Email
-  // page's pre-selected senders are gone and only the next process boot
-  // brings them back, which is how the Test job failed once. Re-install the
-  // seed rows the same way the app does, leaving any inferred general rule
-  // alone. Removals are per-workspace rows with no account FK either, so
-  // the account wipe cannot reach them; a run that failed mid-toggle would
-  // otherwise flip that sender for every later test.
+  // The seeded general email rules (accountId = "", from
+  // app/data/email-rules.csv, the app's boot seed) are the workspace's whole
+  // starting list, and a file must start with exactly those: the Email
+  // page's pre-selected senders are this list, so a leftover from an
+  // earlier file both leaks into the next file's assertions and shifts that
+  // page's screenshot. Tests add general rules for their own senders and
+  // account-scoped rules as they go, and rule rows have no account FK, so
+  // the account wipe above cannot reach them. Reset both scopes to the seed
+  // set, and drop the per-workspace removals with them (a run that failed
+  // mid-toggle would otherwise leave that sender flipped for every later
+  // test).
+  const seeded = GENERAL_EMAIL_RULES.map((rule) => rule.sender);
+  await testPrisma.emailRule.deleteMany({});
   await testPrisma.emailRuleRemoval.deleteMany({});
-  const general = await testPrisma.emailRule.findMany({
-    where: { accountId: "" },
-    select: { sender: true },
+  await testPrisma.emailRule.createMany({
+    data: seeded.map((sender) => ({
+      id: ulid(),
+      accountId: "",
+      sender,
+      source: "seed",
+      createdAt: now,
+    })),
   });
-  const known = new Set(general.map((r) => r.sender));
-  const missing = GENERAL_EMAIL_RULES.filter((r) => !known.has(r.sender));
-  if (missing.length > 0) {
-    await testPrisma.emailRule.createMany({
-      data: missing.map((rule) => ({
-        id: ulid(),
-        accountId: "",
-        sender: rule.sender,
-        source: "seed",
-        createdAt: now,
-      })),
-    });
-  }
 
   // --- Accounts & users ----------------------------------------------------
   await testPrisma.account.createMany({

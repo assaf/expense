@@ -9,6 +9,7 @@ import {
 } from "~/lib/email-connection-process.server";
 import { FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
 import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
+import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import { testPrisma } from "./helpers/seedTestData";
@@ -49,6 +50,27 @@ vi.mock("~/lib/email-connection-mail.server", async (importOriginal) => ({
   deliverConnectionEmailToInbox: mailMocks.deliverConnectionEmailToInbox,
   learnAuthservId: mailMocks.learnAuthservId,
 }));
+
+const rulesMocks = vi.hoisted(() => ({ failMatch: false }));
+
+// The rule gate is a DB read, and it can fail: a missing table made it
+// throw in production, between the claim and the pipeline's own try. The
+// tests below drive that failure on demand; everything else in the file
+// uses the real store.
+vi.mock("~/lib/db/email-rules", async (importOriginal) => {
+  const actual = await importOriginal<typeof EmailRulesModule>();
+  return {
+    ...actual,
+    matchEmailRule: async (
+      ...args: Parameters<typeof actual.matchEmailRule>
+    ) => {
+      if (rulesMocks.failMatch) {
+        throw new Error('relation "public.email_rule_removals" does not exist');
+      }
+      return actual.matchEmailRule(...args);
+    },
+  };
+});
 
 const mocks = vi.hoisted(() => ({
   // The tests inject this as sendToOwner (the `adapters` arg to
@@ -103,6 +125,8 @@ describe("processConnectionEmail", () => {
     await testPrisma.emailRule.deleteMany({
       where: { accountId: conn.accountId, source: "forward" },
     });
+    // The rule-gate failure spy is per-test; reset it for every one.
+    rulesMocks.failMatch = false;
     mocks.notifyOwner.mockClear();
   });
 
@@ -723,6 +747,102 @@ describe("processConnectionEmail", () => {
     });
     expect(connectionRow?.receivedCount).toBe(1);
   });
+
+  it("resolves the claim when the rule gate throws, instead of stranding it", async () => {
+    // The production incident: a missing table made matchEmailRule throw
+    // between the claim and the pipeline's own try. The row stayed on
+    // `processing` forever, which the drain reads as a finished email and
+    // the review list never offers. Inside the try it lands on `error`,
+    // which review does offer.
+    rulesMocks.failMatch = true;
+    const { adapter, trashed } = fakeAdapter(new Map());
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("error");
+    const row = await logRow(conn.id, "e1");
+    expect(row?.outcome).toBe("error");
+    expect(String(row?.error)).toContain("email_rule_removals");
+    // Nothing imported, nothing trashed: the mail stays in the Inbox.
+    expect(trashed).toEqual([]);
+    expect(await readExpenses(conn.accountId)).toHaveLength(0);
+  });
+
+  it("reclaims a claim a dead worker left behind", async () => {
+    // A killed function or a crash leaves the row claimed with nobody
+    // working on it. The drain has to pick the email up again instead of
+    // reading the claim as "done".
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "e1",
+        fromAddress: "no_reply@email.apple.com",
+        subject: "Your receipt",
+        matched: false,
+        outcome: "processing",
+        createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      },
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "e1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 1.23\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result.status).toBe("partial");
+    expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
+    expect(trashed).toEqual(["e1"]);
+  });
+
+  it("leaves a live claim alone", async () => {
+    // The other side of that cutoff: a claim written moments ago belongs
+    // to a request that is still working, so no second drain may take it.
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "e1",
+        fromAddress: "no_reply@email.apple.com",
+        subject: "Your receipt",
+        matched: false,
+        outcome: "processing",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const { adapter } = fakeAdapter(new Map());
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      {
+        moveToTrash: async () => {},
+        sendToOwner: async () => {},
+      },
+    );
+    expect(result).toEqual({ status: "ignored", reason: "already processed" });
+    expect((await logRow(conn.id, "e1"))?.outcome).toBe("processing");
+  });
 });
 
 describe("drainEmailConnection", () => {
@@ -748,6 +868,8 @@ describe("drainEmailConnection", () => {
     await testPrisma.emailRule.deleteMany({
       where: { accountId: conn.accountId, source: "forward" },
     });
+    // The rule-gate failure spy is per-test; reset it for every one.
+    rulesMocks.failMatch = false;
     mocks.notifyOwner.mockClear();
   });
 
