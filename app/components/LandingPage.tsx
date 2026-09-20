@@ -15,7 +15,6 @@ import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
-import { TipsSlider } from "~/components/tips-slider";
 import { EARLY_ACCESS_SPOTS, SITE_URL } from "~/lib/seo-content";
 import { JsonLd } from "~/components/JsonLd";
 
@@ -159,7 +158,7 @@ export default function LandingPage({
     });
 
   return (
-    <SitePage padBottom>
+    <SitePage>
       <JsonLd data={SOFTWARE_SCHEMA} />
 
       <main>
@@ -405,7 +404,6 @@ export default function LandingPage({
             secondaryClassName="bg-transparent"
           />
         </section>
-        <TipsSlider />
       </main>
     </SitePage>
   );
