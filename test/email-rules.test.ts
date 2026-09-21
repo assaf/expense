@@ -59,6 +59,54 @@ describe("email rules store", () => {
     ).toBeDefined();
   });
 
+  it("survives writers racing for the same rule", async () => {
+    // Two writers for one (account, sender) are routine: the review accept
+    // and a drain that learns the same sender from a forward land together,
+    // and a multi-instance cron runs the drain twice. The unique index is
+    // the gate; the loser used to escape as a raw 23505, which is a 500 on
+    // the user's click and an aborted email in the drain. Enough callers at
+    // once that the reads cannot all beat the first insert.
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        addEmailRule({
+          accountId: TEST_ACCOUNT_ID,
+          sender: "race.example.com",
+          source: i % 2 === 0 ? "review" : "forward",
+        }),
+      ),
+    );
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(
+      await testPrisma.emailRule.count({
+        where: { accountId: TEST_ACCOUNT_ID, sender: "race.example.com" },
+      }),
+    ).toBe(1);
+  });
+
+  it("survives two turn-offs racing for the same veto", async () => {
+    await addEmailRule({
+      accountId: "",
+      sender: "race.example.com",
+      source: "seed",
+    });
+    const results = await Promise.all([
+      removeEmailRule({
+        accountId: TEST_ACCOUNT_ID,
+        sender: "race.example.com",
+      }),
+      removeEmailRule({
+        accountId: TEST_ACCOUNT_ID,
+        sender: "race.example.com",
+      }),
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(
+      await testPrisma.emailRuleRemoval.count({
+        where: { accountId: TEST_ACCOUNT_ID, sender: "race.example.com" },
+      }),
+    ).toBe(1);
+  });
+
   it("matches user rules scoped to the workspace", async () => {
     await addEmailRule({
       accountId: TEST_ACCOUNT_ID,

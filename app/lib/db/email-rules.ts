@@ -1,6 +1,7 @@
 import { ulid } from "ulid";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { nowWire } from "~/lib/db/wire";
 import { extractEmailAddress, normalizeRuleSender } from "~/lib/validation";
 import type { AcceptedSenderRow } from "~/lib/types";
@@ -95,34 +96,43 @@ export async function addEmailRule(input: {
       error: `"${input.sender.trim().toLowerCase()}" is not an address or domain.`,
     };
   }
-  // Remembering a sender the workspace had turned off has to lift the veto:
-  // otherwise the rule is written and stays dead.
-  await db.orm.public.EmailRuleRemoval.where((r) =>
-    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
-  ).deleteAll();
   const existing = await db.orm.public.EmailRule.where((r) =>
     and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
   ).first();
-  if (existing) {
-    return {
-      ok: true,
-      rule: {
-        accountId: existing.accountId,
-        sender: existing.sender,
-        source: existing.source,
-      },
-    };
+  let source = existing?.source ?? input.source;
+  if (!existing) {
+    try {
+      await db.orm.public.EmailRule.create({
+        id: ulid(),
+        accountId: input.accountId,
+        sender,
+        source: input.source,
+        createdAt: nowWire(),
+      });
+    } catch (err) {
+      // Two writers for one (account, sender) are routine: the review accept
+      // and the drain learning the same sender from a forward can land
+      // together, and a multi-instance cron runs the drain twice. The unique
+      // index is the gate, and the row that won is the rule both callers
+      // asked for, so read it back rather than failing the user's click.
+      if (!isUniqueViolation(err)) throw err;
+      const row = await db.orm.public.EmailRule.where((r) =>
+        and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+      ).first();
+      source = row?.source ?? input.source;
+    }
   }
-  await db.orm.public.EmailRule.create({
-    id: ulid(),
-    accountId: input.accountId,
-    sender,
-    source: input.source,
-    createdAt: nowWire(),
-  });
+  // Remembering a sender the workspace had turned off has to lift the veto,
+  // or the rule is written and stays dead. It happens only once the rule is
+  // really there: deleting the veto first meant a failed write (a timeout, a
+  // dropped connection) switched a sender the user had turned off back on
+  // while the action reported failure and left nothing to show for it.
+  await db.orm.public.EmailRuleRemoval.where((r) =>
+    and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
+  ).deleteAll();
   return {
     ok: true,
-    rule: { accountId: input.accountId, sender, source: input.source },
+    rule: { accountId: input.accountId, sender, source },
   };
 }
 
@@ -153,11 +163,17 @@ export async function removeEmailRule(input: {
     and(r.accountId.eq(input.accountId), r.sender.eq(sender)),
   ).first();
   if (vetoed) return { ok: true };
-  await db.orm.public.EmailRuleRemoval.create({
-    accountId: input.accountId,
-    sender,
-    createdAt: nowWire(),
-  });
+  try {
+    await db.orm.public.EmailRuleRemoval.create({
+      accountId: input.accountId,
+      sender,
+      createdAt: nowWire(),
+    });
+  } catch (err) {
+    // The veto is keyed by (accountId, sender), so losing this insert means
+    // the same veto is already there: the sender is off either way.
+    if (!isUniqueViolation(err)) throw err;
+  }
   return { ok: true };
 }
 

@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { asJson, fromIso } from "~/lib/db/wire";
+import { asJson, fromIso, nowWire } from "~/lib/db/wire";
 import {
   DEFAULT_CHART_SHAPE,
   isChartShape,
@@ -226,8 +226,8 @@ export async function appendExchange(
         userId,
         accountId,
         messages: asJson([exchange]),
-        createdAt: fromIso(new Date().toISOString()),
-        updatedAt: fromIso(new Date().toISOString()),
+        createdAt: nowWire(),
+        updatedAt: nowWire(),
       });
       await pruneConversations(userId);
       await bustConversationCache(userId);
@@ -326,7 +326,7 @@ export async function startNewConversation(
   accountId: string,
 ): Promise<string> {
   const id = ulid();
-  const now = fromIso(new Date().toISOString());
+  const now = nowWire();
   await db.orm.public.InsightConversation.create({
     id,
     userId,

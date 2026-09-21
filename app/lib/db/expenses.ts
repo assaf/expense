@@ -422,14 +422,21 @@ export async function deleteExpense(
   )
     .select("_type", "imageFile")
     .first();
+  // The row goes first: a failed delete (a dropped connection, a statement
+  // timeout) then leaves an unreferenced blob row, which costs storage and
+  // nothing else, instead of a surviving row whose receipt image is already
+  // gone and that no retry can bring back. Same order the save path uses for
+  // a replaced blob. (Nothing sweeps unreferenced blobs yet — see the
+  // DRAFT-ORPHAN-1 backlog entry — which is exactly why the cheap failure has
+  // to be the orphan and not the broken row.)
+  await db.orm.public.Expense.where((e) =>
+    and(e.id.eq(id), e.accountId.eq(accountId)),
+  ).deleteAll();
   if (target) {
     await deleteReceiptImages(accountId, [
       { type: target._type, imageFile: target.imageFile },
     ]);
   }
-  await db.orm.public.Expense.where((e) =>
-    and(e.id.eq(id), e.accountId.eq(accountId)),
-  ).deleteAll();
 }
 
 /** Distinct merchant names previously used, most-recent first. */

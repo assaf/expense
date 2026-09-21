@@ -6,6 +6,7 @@ import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import { all } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { asNumericOf, fromIso } from "~/lib/db/wire";
 import { isEmail } from "~/lib/validation";
 import { cachedRead, createCache, userFromRow } from "~/lib/db/shared";
@@ -110,15 +111,44 @@ async function syncGeneralEmailRules(): Promise<void> {
   const missing = GENERAL_EMAIL_RULES.filter((r) => !known.has(r.sender));
   if (missing.length === 0) return;
   const now = new Date().toISOString();
-  await db.orm.public.EmailRule.createAll(
-    missing.map((r) => ({
-      id: ulid(),
-      accountId: "",
-      sender: r.sender,
-      source: "seed",
-      createdAt: fromIso(now),
-    })),
-  );
+  try {
+    await db.orm.public.EmailRule.createAll(
+      missing.map((r) => ({
+        id: ulid(),
+        accountId: "",
+        sender: r.sender,
+        source: "seed",
+        createdAt: fromIso(now),
+      })),
+    );
+  } catch (err) {
+    // Two serverless instances cold-starting together both diff the same
+    // pre-seed state and insert the same rows; the (accountId, sender)
+    // unique index means the loser's statement aborts. Its rows are the
+    // winner's, so the boot seed did its job — but ONE colliding row (an
+    // operator script inserting a general rule, a third instance with a
+    // different diff) aborts the whole statement, so the rows that did not
+    // collide still have to land. Insert them one at a time; a row that
+    // lost its race is the row that is already there.
+    if (!isUniqueViolation(err)) throw err;
+    console.warn(
+      "[initStore] General email rules raced another writer; seeding row by row",
+    );
+    for (const rule of missing) {
+      try {
+        await db.orm.public.EmailRule.create({
+          id: ulid(),
+          accountId: "",
+          sender: rule.sender,
+          source: "seed",
+          createdAt: fromIso(now),
+        });
+      } catch (rowErr) {
+        if (!isUniqueViolation(rowErr)) throw rowErr;
+      }
+    }
+    return;
+  }
   console.warn(
     "[initStore] Synced general email rules: +%d (was %d)",
     missing.length,

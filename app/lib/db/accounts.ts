@@ -474,7 +474,15 @@ export async function closeUserAccount(user: {
     // leave a userless account behind. Account has no updatedAt, so writing
     // the name back is a pure row lock. A 0-row update means another close
     // already deleted the account, which needs no serializing.
-    const account = await readAccount(user.accountId);
+    //
+    // The read rides the transaction's own connection (`tx`, not
+    // `readAccount`): reading through the store opens a second pool
+    // connection from inside the transaction, which with a pool of two
+    // starves a concurrent request and reads outside this transaction's
+    // snapshot — and the cached name it returns can be a rename old.
+    const account = await tx.orm.public.Account.first({
+      id: user.accountId,
+    });
     if (account) {
       await tx.orm.public.Account.where({ id: user.accountId }).update({
         name: account.name,

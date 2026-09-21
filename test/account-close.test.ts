@@ -171,6 +171,52 @@ describe("closing your own account", () => {
     expect(survivor.status).toBe(200);
   });
 
+  it("closes an account while the pool's other connection is busy", async () => {
+    const email = "pool@example.com";
+    await testPrisma.user.create({
+      data: {
+        id: "user_pool",
+        accountId: TEST_ACCOUNT_ID,
+        email,
+        passwordHash: await hashPassword("pool-password"),
+        emailVerifiedAt: NOW,
+        createdAt: NOW,
+      },
+    });
+    // Hold one of the pool's two connections for the length of the close,
+    // the way a concurrent request does. The closing transaction takes the
+    // other; it must do its whole job on that one. A read through the store
+    // instead (readAccount, which the row lock used to make) asks the pool
+    // for a third, waits out connectionTimeoutMillis and fails.
+    let acquired!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holder = db.transaction(async (tx) => {
+      await tx.orm.public.Account.first({ id: TEST_ACCOUNT_ID });
+      acquired();
+      await gate;
+    });
+    await ready;
+    try {
+      const res = await closeAccount(
+        await sessionCookie("user_pool"),
+        "pool-password",
+      );
+      expect(await res.json()).toEqual({ ok: true, deleted: "user" });
+      expect(await testPrisma.user.count({ where: { id: "user_pool" } })).toBe(
+        0,
+      );
+    } finally {
+      release();
+      await holder;
+    }
+  });
+
   it("refuses a closed login's cookie immediately", async () => {
     await testPrisma.user.create({
       data: {
