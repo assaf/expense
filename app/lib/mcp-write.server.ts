@@ -8,6 +8,10 @@ import { normalizeAmount } from "~/lib/format";
 import { exceedsMaxMoney } from "~/lib/money";
 import { validateExpenseInputs } from "~/lib/expense-save.server";
 import {
+  MAX_RECEIPT_ENCODED_CHARS,
+  exceedsBase64Budget,
+} from "~/lib/upload-limits";
+import {
   MAX_UPLOAD_BYTES,
   deleteImage,
   mimeForFile,
@@ -130,6 +134,14 @@ export async function captureReceipt(
   let originalName: string;
 
   if (args.imageData) {
+    // Bound the argument BEFORE decoding it: the encoded length decides
+    // whether the image can fit, and the buffer is only allocated once it
+    // does (whitespace and a data: prefix are ignored, so a MIME-wrapped
+    // argument is judged on its content). The url branch below streams
+    // through readBodyLimited for the same reason.
+    if (exceedsBase64Budget(args.imageData, MAX_RECEIPT_ENCODED_CHARS)) {
+      return fail(uploadErrorMessage("too-large"));
+    }
     buffer = Buffer.from(args.imageData, "base64");
     mime = args.mime?.trim() || mimeForFile(args.filename ?? "") || "image/png";
     originalName = args.filename?.trim() || "receipt.png";

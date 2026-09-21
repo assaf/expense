@@ -84,6 +84,38 @@ describe("resolveJmapSessionUrl", () => {
 });
 
 describe("verifyJmapServer", () => {
+  it("refuses a session whose mail endpoints are on another host", async () => {
+    // The document is authoritative for apiUrl/uploadUrl/downloadUrl, and
+    // every later call fetches them with this connection's credential and
+    // reads the answer as mail. A server that points them at loopback, a
+    // private range or a metadata address would therefore turn the app into
+    // an authenticated client of that address; the SSRF guard only covers
+    // the session fetch itself, so the origin is checked here.
+    const { fetch: fetchImpl } = jsonFetch(
+      session({ apiUrl: "http://169.254.169.254/latest/meta-data/" }),
+    );
+    const result = await verifyJmapServer(
+      server("https://example.com"),
+      fetchImpl,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("network");
+      expect(result.message).toContain("another host");
+    }
+  });
+
+  it("refuses endpoints on another port of the same host", async () => {
+    const { fetch: fetchImpl } = jsonFetch(
+      session({ uploadUrl: "http://example.com:8080/upload" }),
+    );
+    const result = await verifyJmapServer(
+      server("https://example.com"),
+      fetchImpl,
+    );
+    expect(result.ok).toBe(false);
+  });
+
   it("fetches the well-known session path with the credential", async () => {
     const { fetch: fetchImpl, calls } = jsonFetch(session());
     const result = await verifyJmapServer(

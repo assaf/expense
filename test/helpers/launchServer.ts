@@ -29,13 +29,18 @@ async function startMockJmap(): Promise<string> {
           .slice(7)
           .replace(/[^a-zA-Z0-9]/g, "")
           .slice(-8) || "default";
+      // Same-origin endpoints, like a real server: the session document is
+      // authoritative for these URLs and a cross-host one is refused (the
+      // mock answered with a placeholder port 9 before, which no longer
+      // reads as a JMAP session).
+      const host = req.headers.host ?? "127.0.0.1";
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
           username: `mock-${suffix}@fastmail.test`,
-          apiUrl: "http://127.0.0.1:9/jmap/api",
-          uploadUrl: "http://127.0.0.1:9/jmap/upload",
-          downloadUrl: "http://127.0.0.1:9/jmap/download",
+          apiUrl: `http://${host}/jmap/api`,
+          uploadUrl: `http://${host}/jmap/upload`,
+          downloadUrl: `http://${host}/jmap/download`,
           primaryAccounts: { "urn:ietf:params:jmap:mail": "mock-mail-acct" },
         }),
       );

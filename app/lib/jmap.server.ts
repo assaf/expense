@@ -48,6 +48,16 @@ function isAppSessionUrl(sessionUrl: string): boolean {
   return sessionUrl === FASTMAIL_SESSION_URL;
 }
 
+/** scheme://host:port of a URL, or undefined when it isn't a URL. */
+function urlOrigin(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A human label for error messages: "Fastmail" for the app's own
  * endpoint, otherwise the server's host. */
 export function serverLabel(sessionUrl: string): string {
@@ -220,6 +230,25 @@ async function loadSession(
     return { ok: false, reason: "network", message: unreadable };
   }
   const j = parsed.data;
+  // RFC 8620 makes the session document authoritative for those three
+  // endpoint URLs, and every later call fetches them with this connection's
+  // credential and treats the answer as mail (jmapBatch, jmapUploadBlob,
+  // fetchRawRfc822). Only the app's own endpoint may name another host (it
+  // fronts the provider): a session that points them at loopback or
+  // link-local would turn each of those calls into an authenticated request
+  // to that address and read its body back as a receipt, which the session
+  // guard cannot see because it only covers the session URL itself.
+  if (!appEndpoint) {
+    const origin = urlOrigin(server.sessionUrl);
+    const endpoints = [j.apiUrl, j.uploadUrl, j.downloadUrl];
+    if (!origin || endpoints.some((url) => urlOrigin(url) !== origin)) {
+      return {
+        ok: false,
+        reason: "network",
+        message: `${label} points its mail endpoints at another host, so this session is not used.`,
+      };
+    }
+  }
   const mailAccountId = selectMailAccountId(j);
   if (!mailAccountId) {
     return {

@@ -315,6 +315,17 @@ describe("MCP endpoint", () => {
     }
   });
 
+  it("refuses a statement larger than the tool accepts", async () => {
+    await initialize(accessToken);
+    // The model names this string, so the schema caps it before the parser
+    // walks it. Without the cap the whole argument is parsed and reconciled.
+    const result = await callTool(accessToken, "reconcile", {
+      statementCsv: `date,description,amount\n${"x".repeat(2_000_001)}`,
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("statementCsv");
+  });
+
   it("refuses a malformed date instead of filtering on it", async () => {
     await initialize(accessToken);
     // A bound that is not YYYY-MM-DD used to be compared as text against the

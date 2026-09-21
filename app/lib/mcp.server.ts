@@ -230,6 +230,12 @@ async function authenticateRequest(
 const MISSING_TOKEN_MESSAGE =
   "Missing bearer token — connect by signing in: point your MCP client at this endpoint and approve the connection.";
 
+/** Cap on the reconcile tool's statement text, in characters. The model
+ * names this string, so it is untrusted input: the cap refuses an oversized
+ * argument before the parser walks it. A year of a busy account is a few
+ * hundred KB. */
+const MAX_STATEMENT_CHARS = 2_000_000;
+
 /**
  * A 401 with the OAuth protected-resource metadata hint (RFC 9728), so
  * clients that perform discovery can find the authorization server.
@@ -1021,7 +1027,11 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
       annotations: { readOnlyHint: true },
       description:
         "Match a bank statement against logged expenses. Pass the statement as CSV or QFX/OFX text (CSV: header row optional, date/description/amount columns, signed amounts or Debit/Credit split; QFX/OFX: FITID honored). Returns matched pairs (high confidence), statement lines needing review (amount+date match but merchant differs, or ambiguous), statement lines with no matching receipt, and logged receipts with no statement line. Refund/credit lines and already-reconciled receipts are never auto-matched.",
-      inputSchema: z.object({ statementCsv: z.string().min(1) }),
+      // The model names this string, so the schema caps it (see
+      // MAX_STATEMENT_CHARS) before the parser walks it.
+      inputSchema: z.object({
+        statementCsv: z.string().min(1).max(MAX_STATEMENT_CHARS),
+      }),
       outputSchema: reconcileOutputSchema,
     },
     async ({ statementCsv }) => {
