@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { ulid } from "ulid";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import {
   addInboundSender,
@@ -8,6 +9,7 @@ import {
   removeInboundSender,
   resendInboundSenderVerification,
   verifyInboundSenderAddress,
+  verifyInboundSenderDirect,
 } from "~/lib/db/inbound";
 import {
   OTHER_ACCOUNT_ID,
@@ -433,5 +435,88 @@ describe("removeInboundSender", () => {
 
     expect(await findVerifiedSenderAccount("bye@example.com")).toBeUndefined();
     expect(await findPendingSenderRow("bye@example.com")).toBeUndefined();
+  });
+});
+
+describe("addInboundSender mint cooldown (INB-BOMB-1)", () => {
+  // Unique base addresses: the cooldown row is global and survives the
+  // per-test cleanup, so shared literals would make a second run suppressed
+  // before the race even starts.
+  function freshAddress(): string {
+    return `burst-${ulid().toLowerCase()}@example.com`;
+  }
+
+  it("mints exactly one token when two accounts race on one address", async () => {
+    const address = freshAddress();
+    const [a, b] = await Promise.all([
+      addInboundSender(TEST_ACCOUNT_ID, address),
+      addInboundSender(OTHER_ACCOUNT_ID, address),
+    ]);
+    await track(TEST_ACCOUNT_ID, address);
+    await track(OTHER_ACCOUNT_ID, address);
+
+    const outcomes = [a, b];
+    expect(outcomes.filter((r) => r.ok && r.token)).toHaveLength(1);
+    expect(outcomes.find((r) => r.ok && !r.token)).toMatchObject({
+      ok: true,
+      token: null,
+      recent: true,
+    });
+  });
+
+  it("folds plus-aliases onto one cooldown key", async () => {
+    const base = freshAddress();
+    const alias = base.replace("@", "+tag@");
+    const [a, b] = await Promise.all([
+      addInboundSender(TEST_ACCOUNT_ID, alias),
+      addInboundSender(OTHER_ACCOUNT_ID, base),
+    ]);
+    await track(TEST_ACCOUNT_ID, alias);
+    await track(OTHER_ACCOUNT_ID, base);
+
+    const outcomes = [a, b];
+    expect(outcomes.filter((r) => r.ok && r.token)).toHaveLength(1);
+    expect(outcomes.find((r) => r.ok && !r.token)).toMatchObject({
+      ok: true,
+      token: null,
+      recent: true,
+    });
+  });
+});
+
+describe("verifyInboundSenderDirect", () => {
+  it("claims the address exclusively and reaches the verified end state", async () => {
+    const address = `direct-${ulid().toLowerCase()}@example.com`;
+    // A rival account has a pending row for the same address.
+    await addInboundSender(OTHER_ACCOUNT_ID, address);
+    await track(OTHER_ACCOUNT_ID, address);
+    await track(TEST_ACCOUNT_ID, address);
+
+    const result = await verifyInboundSenderDirect(TEST_ACCOUNT_ID, address);
+    expect(result).toEqual({ verified: true, claimedByOther: false });
+
+    const verified = await findVerifiedSenderAccount(address);
+    expect(verified?.account.id).toBe(TEST_ACCOUNT_ID);
+    // The rival's row is gone: the address is now exclusive.
+    expect(
+      await testPrisma.inboundSender.findUnique({
+        where: {
+          accountId_address: { accountId: OTHER_ACCOUNT_ID, address },
+        },
+      }),
+    ).toBeNull();
+    const row = await testPrisma.inboundSender.findUnique({
+      where: {
+        accountId_address: { accountId: TEST_ACCOUNT_ID, address },
+      },
+    });
+    expect(row?.verificationTokenHash).toBeNull();
+    expect(row?.verificationSentAt).toBeNull();
+
+    // A second account cannot claim an address already verified elsewhere.
+    expect(await verifyInboundSenderDirect(OTHER_ACCOUNT_ID, address)).toEqual({
+      verified: false,
+      claimedByOther: true,
+    });
   });
 });

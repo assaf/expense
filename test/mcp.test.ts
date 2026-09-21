@@ -337,6 +337,48 @@ describe("MCP endpoint", () => {
     expect(String(result.payload.error)).toContain("dateFrom");
   });
 
+  it("refuses a wrong JSON type for capture_receipt.imageData", async () => {
+    await initialize(accessToken);
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    // An object where a base64 string is declared: the schema refuses it
+    // before any decode or write.
+    const result = await callTool(accessToken, "capture_receipt", {
+      imageData: { nested: 1 },
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("imageData");
+    expect(
+      await testPrisma.expense.count({ where: { accountId: TEST_ACCOUNT_ID } }),
+    ).toBe(before);
+  });
+
+  it("refuses a wrong JSON type for log_mileage.locations", async () => {
+    await initialize(accessToken);
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: "42 Main St",
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("locations");
+    expect(
+      await testPrisma.expense.count({ where: { accountId: TEST_ACCOUNT_ID } }),
+    ).toBe(before);
+  });
+
+  it("refuses a wrong JSON type for list_expenses.dateFrom", async () => {
+    await initialize(accessToken);
+    // A number where an ISO date string is declared.
+    const result = await callTool(accessToken, "list_expenses", {
+      dateFrom: 20260101,
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("dateFrom");
+  });
+
   it("serves 2026-07-28 stateless clients (discover + _meta envelope)", async () => {
     // No initialize, no session: every request carries its own envelope and
     // the standard headers. The probe answers with the server's identity.

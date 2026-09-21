@@ -887,6 +887,40 @@ describe("reconciliation store", () => {
     expect(matches[0]!.status).not.toBe("matched");
   });
 
+  it("admits exactly one of two concurrent completions", async () => {
+    const run = await draftRun();
+    await updateReconciliationDecision(TEST_ACCOUNT_ID, run.id, 2, {
+      kind: "new",
+      draft: {
+        date: "2026-07-01",
+        merchant: "Concurrent Coffee",
+        amount: "9.99",
+        report: "2026 Test",
+        category: "Testing",
+        description: "",
+      },
+    });
+    // Both callers read the draft run before either transaction commits, so
+    // the early status guard passes for both and the atomic claim decides.
+    const [a, b] = await Promise.all([
+      completeReconciliationRun(TEST_ACCOUNT_ID, run.id),
+      completeReconciliationRun(TEST_ACCOUNT_ID, run.id),
+    ]);
+    const winners = [a, b].filter((r) => r.error === null);
+    expect(winners).toHaveLength(1);
+    expect([a, b].find((r) => r.error !== null)!.error).toMatch(
+      /already finished/,
+    );
+
+    // The loser rolled back: the new expense exists exactly once.
+    expect(winners[0]!.result!.created).toBe(1);
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, merchant: "Concurrent Coffee" },
+      }),
+    ).toBe(1);
+  });
+
   it("rejects completing a run that isn't the account's", async () => {
     const run = await draftRun(CSV, OTHER_ACCOUNT_ID);
     expect(

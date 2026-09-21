@@ -60,6 +60,10 @@ export default defineConfig({
       "test/markdown.test.ts",
       "test/public-content.test.ts",
       "test/agent-discovery.test.ts",
+      "test/dark-mode-gate.test.ts",
+      "test/test-projects.test.ts",
+      "test/ci-workflow.test.ts",
+      "test/upload-limits.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

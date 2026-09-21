@@ -1362,6 +1362,143 @@ describe("drainEmailConnection", () => {
       reason: "failed authentication",
     });
   });
+
+  it("stops before evaluating anything when the time budget is already spent", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "b1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 1.00\nCATEGORY: office supplies",
+          },
+        ],
+        [
+          "b2",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 2",
+            body: "MERCHANT: Apple\nTOTAL: 2.00\nCATEGORY: office supplies",
+          },
+        ],
+        [
+          "b3",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 3",
+            body: "MERCHANT: Apple\nTOTAL: 3.00\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+      // Already spent: the loop must stop before the first email, so nothing
+      // is half-processed (the inner budget check would only stop mid-batch).
+      timeBudgetMs: -1,
+    });
+
+    expect(result).toEqual({
+      evaluated: 0,
+      created: 0,
+      partial: 0,
+      ignored: 0,
+      failed: 0,
+    });
+    expect(trashed).toEqual([]);
+    expect(
+      await testPrisma.emailProcessLog.count({
+        where: { connectionId: conn.id },
+      }),
+    ).toBe(0);
+  });
+
+  it("files the expense but reports failure when the Trash move fails", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "t1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 7.25\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    // A Trash move that fails after the expense is saved keeps the mail in
+    // the Inbox; the row prevents a duplicate on the next drain.
+    adapter.moveToTrash = async () => {
+      throw new Error("trash exploded");
+    };
+    mailMocks.deliverConnectionEmailToInbox.mockClear();
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    expect(
+      await testPrisma.expense.count({ where: { accountId: conn.accountId } }),
+    ).toBe(1);
+    expect(trashed).toEqual([]);
+    expect(mailMocks.deliverConnectionEmailToInbox).not.toHaveBeenCalled();
+    expect(result.failed).toBe(1);
+    expect(result.created + result.partial).toBe(0);
+  });
+
+  it.fails("KNOWN GAP S2-2: an A-R chain empty after the authserv-id filter still imports", async () => {
+    // A pinned JMAP connection trusts only its own delivery stamp. A message
+    // whose ONLY Authentication-Results header carries an untrusted
+    // authserv-id is filtered out, leaving an empty chain the gate reads as
+    // a legacy transport and allows — so the message imports. This asserts
+    // the safe outcome (no expense): it.fails keeps the suite green while
+    // the gap is open, and turns red once the gate fails closed.
+    const jmapConn = {
+      ...conn,
+      provider: "jmap",
+      sessionUrl: "https://mail.example.com/.well-known/jmap",
+      authservId: "mail.example.com" as string | null,
+    };
+    await addEmailRule({
+      accountId: "",
+      sender: "apple.com",
+      source: "seed",
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "s2",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt",
+            body: "MERCHANT: Apple\nTOTAL: 8.00\nCATEGORY: office supplies",
+            authResults:
+              "mx.untrusted.example; dkim=pass header.d=email.apple.com",
+          },
+        ],
+      ]),
+    );
+
+    await drainEmailConnection(jmapConn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: conn.accountId },
+      }),
+    ).toBe(0);
+  });
 });
 
 // PostalMime sanity: the fake adapter's raw emails parse as expected.

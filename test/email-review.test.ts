@@ -13,6 +13,12 @@ import {
 } from "~/lib/email-review.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { setEmailConnectionStatus } from "~/lib/db/email-connections";
+import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
+import { drainEmailConnection } from "~/lib/email-connection-process.server";
+import {
+  loader as reviewLoader,
+  action as reviewAction,
+} from "~/routes/email-review";
 import {
   addEmailRule,
   matchEmailRule,
@@ -23,6 +29,7 @@ import {
   testPrisma,
   TEST_ACCOUNT_ID,
   TEST_EMAIL,
+  OTHER_ACCOUNT_ID,
 } from "./helpers/seedTestData";
 import {
   fakeAdapter,
@@ -31,6 +38,7 @@ import {
   cleanupConnection,
   connection,
 } from "./helpers/email-test-fixtures";
+import { contextForRequest } from "./helpers/authContext";
 
 /**
  * The inbox review flow: scan a connected inbox for receipt-like emails,
@@ -73,6 +81,12 @@ vi.mock("~/lib/errors.server", () => ({
  * must stay inside the 90-day lookback whenever the suite runs.
  */
 const SCAN_NOW = Date.parse("2026-07-15T00:00:00.000Z");
+
+/** The drain's Inbox query floors at started - lookbackMs against the real
+ * clock; the fixture arrivals are pinned to 2026-07-01, so widen it to reach
+ * them (same value the connected-mailbox suite uses). */
+const FIXTURE_LOOKBACK_MS =
+  Date.now() - Date.parse("2026-07-01T10:00:00.000Z") + 60_000;
 
 async function createPendingItem(
   connectionId: string,
@@ -1577,5 +1591,238 @@ describe("scanInboxForReview", () => {
     // A provider hiccup stays an error: it is not something the user can fix.
     expect(mocks.captureError).toHaveBeenCalledTimes(1);
     expect(mocks.captureWarning).not.toHaveBeenCalled();
+  });
+});
+
+describe("email-review route isolation", () => {
+  /** The signed-in session cookie the route tests post with. */
+  async function sessionCookie(): Promise<string> {
+    const session = await sessionStorage.getSession();
+    session.set(SESSION_USER_KEY, "user_test1");
+    return sessionStorage.commitSession(session);
+  }
+
+  it("refuses a connection the signed-in user does not own", async () => {
+    // connA belongs to the signed-in user; connB to the other account. The
+    // route must scope every read to the user's own account, or a guessed id
+    // would expose another workspace's mail.
+    const connA = connection();
+    await cleanupConnection();
+    await testPrisma.emailConnection.create({
+      data: {
+        id: connA.id,
+        accountId: connA.accountId,
+        provider: connA.provider,
+        emailAddress: connA.emailAddress,
+        remoteAccountId: connA.remoteAccountId,
+        tokenEnc: connA.tokenEnc,
+        createdAt: connA.createdAt,
+      },
+    });
+    await createPendingItem(connA.id, "own1");
+
+    const connBId = `conn-other-${Math.random().toString(36).slice(2)}`;
+    await testPrisma.emailConnection.create({
+      data: {
+        id: connBId,
+        accountId: OTHER_ACCOUNT_ID,
+        provider: "fastmail",
+        emailAddress: "other@example.com",
+        remoteAccountId: "jmap-other",
+        tokenEnc: encryptSecret("fmu1-other-tok"),
+        createdAt: new Date().toISOString(),
+      },
+    });
+    await createPendingItem(connBId, "foreign1");
+
+    try {
+      const cookie = await sessionCookie();
+
+      const loaderRequest = new Request(
+        `https://expense.test/email-review?connection=${connBId}`,
+        { headers: { cookie } },
+      );
+      const loaderResult = (await reviewLoader({
+        request: loaderRequest,
+        params: {},
+        context: await contextForRequest(loaderRequest),
+      } as unknown as Parameters<typeof reviewLoader>[0])) as {
+        connection: unknown;
+        items: unknown[];
+      };
+      expect(loaderResult.connection).toBeNull();
+      expect(loaderResult.items).toEqual([]);
+
+      const form = new FormData();
+      form.set("intent", "scan");
+      form.set("connectionId", connBId);
+      const actionRequest = new Request("https://expense.test/email-review", {
+        method: "POST",
+        body: form,
+        headers: { cookie },
+      });
+      const actionResult = (await reviewAction({
+        request: actionRequest,
+        params: {},
+        context: await contextForRequest(actionRequest),
+      } as unknown as Parameters<typeof reviewAction>[0])) as Response;
+      expect(actionResult).toBeInstanceOf(Response);
+      expect(await actionResult.json()).toEqual({
+        ok: false,
+        error: "Connection not found.",
+      });
+
+      // The scoped lists never leak the foreign account's rows.
+      expect(await listReviewItems(connA.id)).toEqual([
+        expect.objectContaining({ emailId: "own1" }),
+      ]);
+      expect(await listReviewItems(connBId)).toEqual([
+        expect.objectContaining({ emailId: "foreign1" }),
+      ]);
+    } finally {
+      await testPrisma.emailProcessLog.deleteMany({
+        where: { connectionId: connBId },
+      });
+      await testPrisma.emailConnection.deleteMany({ where: { id: connBId } });
+    }
+  });
+});
+
+describe("drain-filed receipt supersedes its notification", () => {
+  it("drops the notification once the drain imports the covering receipt", async () => {
+    // The producer (the drain) and the consumer (listUncoveredCharges) run
+    // together: every other pairing test seeds the covering expense row by
+    // hand, so nothing proved the real import writes the arrival stamp the
+    // pairing reads.
+    const conn = connection();
+    await cleanupConnection();
+    await testPrisma.expense.deleteMany({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    await testPrisma.emailConnection.create({
+      data: {
+        id: conn.id,
+        accountId: conn.accountId,
+        provider: conn.provider,
+        emailAddress: conn.emailAddress,
+        remoteAccountId: conn.remoteAccountId,
+        tokenEnc: conn.tokenEnc,
+        createdAt: conn.createdAt,
+      },
+    });
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+
+    // The bank notification is filed by the review scan: a charge with no
+    // expense yet.
+    const { adapter: notificationAdapter } = fakeAdapter(
+      new Map([
+        [
+          "n1",
+          {
+            from: "Capital One <capitalone@service.capitalone.com>",
+            subject: "A new transaction was charged to your account",
+            body: "Amount: $9.99",
+            receivedAt: "2026-07-01T09:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    const scan = await scanConnectionInbox(conn, {
+      adapter: notificationAdapter,
+      extractionDeps: fakeExtractionDeps(),
+      budgetMs: 5000,
+      now: SCAN_NOW,
+    });
+    expect(scan.pending).toBe(1);
+    expect((await listUncoveredCharges(conn)).map((c) => c.emailId)).toEqual([
+      "n1",
+    ]);
+
+    // The same-amount receipt arrives an hour later and the drain imports it.
+    const { adapter: receiptAdapter } = fakeAdapter(
+      new Map([
+        [
+          "r1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 9.99\nCATEGORY: office supplies",
+            receivedAt: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+      ]),
+    );
+    const drained = await drainEmailConnection(conn, {
+      adapter: receiptAdapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+    expect(drained.created + drained.partial).toBe(1);
+
+    // The notification drops off the feed and is recorded against the
+    // drain's expense.
+    expect(await listUncoveredCharges(conn)).toEqual([]);
+    expect((await logRow(conn.id, "n1"))?.reason).toBe("superseded");
+    const superseded = await listSupersededItems(conn.id);
+    expect(superseded.map((s) => s.emailId)).toEqual(["n1"]);
+    const expense = await testPrisma.expense.findFirst({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Apple" },
+    });
+    expect(String(expense?.amount)).toContain("9.99");
+    expect(superseded[0]?.expenseId).toBe(expense?.id);
+  });
+});
+
+describe("scanConnectionInbox budget", () => {
+  it("reports unfinished and scans nothing when the budget is already spent", async () => {
+    const conn = connection();
+    await cleanupConnection();
+    await testPrisma.emailConnection.create({
+      data: {
+        id: conn.id,
+        accountId: conn.accountId,
+        provider: conn.provider,
+        emailAddress: conn.emailAddress,
+        remoteAccountId: conn.remoteAccountId,
+        tokenEnc: conn.tokenEnc,
+        createdAt: conn.createdAt,
+      },
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "c1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 1.00\nCATEGORY: office supplies",
+            receivedAt: "2026-07-01T10:00:00.000Z",
+          },
+        ],
+        [
+          "c2",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 2.00\nCATEGORY: office supplies",
+            receivedAt: "2026-07-01T10:01:00.000Z",
+          },
+        ],
+      ]),
+    );
+
+    const result = await scanConnectionInbox(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      // Already spent: the loop breaks before scanning any candidate.
+      budgetMs: -1,
+      now: SCAN_NOW,
+    });
+
+    expect(result.finished).toBe(false);
+    expect(result.scanned).toBe(0);
+    expect(result.scanned).toBeLessThan(2);
+    expect(result.added).toBe(0);
   });
 });

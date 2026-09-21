@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  FASTMAIL_SESSION_URL,
+  jmapBatch,
   resolveJmapSessionUrl,
   verifyJmapServer,
   type SessionFetch,
@@ -232,5 +234,59 @@ describe("verifyJmapServer", () => {
     expect(result.ok).toBe(false);
     if (!result.ok)
       expect(result.message).toBe("That server answered HTTP 503.");
+  });
+});
+
+describe("verifyJmapServer Fastmail session shape", () => {
+  it("accepts a Fastmail-shaped session whose endpoints live on other fastmail hosts", async () => {
+    // Fastmail really does split hosts: the session lives on api.fastmail.com
+    // while upload/download are on www.fastmail.com. The app's own endpoint is
+    // exempt from the same-host check (it fronts the provider), so a future
+    // "tighten the origin check" edit must fail here instead of in production.
+    const { fetch: fetchImpl, calls } = jsonFetch({
+      apiUrl: "https://api.fastmail.com/jmap/",
+      uploadUrl: "https://www.fastmail.com/upload/{accountId}",
+      downloadUrl:
+        "https://www.fastmail.com/download/{accountId}/{blobId}/{name}",
+      username: "You@Example.com",
+      primaryAccounts: { [MAIL_CAPABILITY]: "mail-acct-1" },
+    });
+    const result = await verifyJmapServer(
+      { sessionUrl: FASTMAIL_SESSION_URL, authorization: "Bearer tok-1" },
+      fetchImpl,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.info.mailAccountId).toBe("mail-acct-1");
+      expect(result.info.apiUrl).toBe("https://api.fastmail.com/jmap/");
+    }
+    expect(calls[0]?.url).toBe(FASTMAIL_SESSION_URL);
+  });
+});
+
+describe("jmapBatch", () => {
+  it("rejects a 200 batch response with no method responses", async () => {
+    // A malformed 200 body must fail as a provider error, not as
+    // `undefined is not iterable` in the caller or a bad `[0]` deref upstream.
+    // jmapBatch POSTs with the global fetch, so there is no injection seam.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    try {
+      await expect(
+        jmapBatch("https://example.com/jmap/api", "Bearer tok-1", [
+          ["Email/get", {}, "m0"],
+        ]),
+      ).rejects.toThrow(/JMAP returned no method responses/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

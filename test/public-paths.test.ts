@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { RouterContextProvider } from "react-router";
 import { middleware } from "~/root";
@@ -132,4 +133,61 @@ describe("root middleware gate (GATE-REGR-1)", () => {
       `/login?next=${encodeURIComponent("/settings?tab=account")}`,
     );
   });
+});
+
+/** The route modules that authenticate themselves instead of relying on the
+ * session gate: the cron runner, the push-webhook decryptors, the MCP bearer,
+ * and the smoke route. The markers are their real entry points, so a new
+ * `api.<name>-cron.ts` (the documented way to add a cron) is caught the moment
+ * it calls `cronTick` — the exact case that used to bounce to /login at
+ * runtime with nothing failing in CI. */
+const SELF_GATING_MARKERS = [
+  "assertCronSecret(",
+  "cronTick(",
+  "SMOKE_TEST_SECRET",
+  "handleMcpRequest(",
+  "verifyAccessToken(",
+  "readFastmailPush(",
+  "pushVerificationOrEmpty(",
+  "verifyPushJwt(",
+];
+
+/** flatRoutes maps the filename to the URL: `api.smoke.ts` -> /api/smoke and
+ * `[.]well-known.x.ts` -> /.well-known/x (`[.]` is a literal dot). Exemption
+ * matching is by exact path or prefix, so the segments line up. */
+function derivePath(file: string): string {
+  const base = file.replace(/\.[jt]sx?$/, "");
+  return `/${base
+    .split(".")
+    .map((segment) => segment.replace("[.]", "."))
+    .join("/")}`;
+}
+
+const selfGatingRoutes = readdirSync("app/routes")
+  .filter((name) => /\.[jt]sx?$/.test(name))
+  .map((name) => ({
+    name,
+    path: derivePath(name),
+    src: readFileSync(`app/routes/${name}`, "utf8"),
+  }))
+  .filter((route) =>
+    SELF_GATING_MARKERS.some((marker) => route.src.includes(marker)),
+  );
+
+describe("self-gating route exemption (GATE-REGR-1)", () => {
+  it("recognises the routes that authenticate themselves", () => {
+    expect(selfGatingRoutes.map((route) => route.name)).toContain(
+      "api.smoke.ts",
+    );
+    expect(selfGatingRoutes.map((route) => route.name)).toContain(
+      "api.inbound-cron.ts",
+    );
+  });
+
+  it.each(selfGatingRoutes.map((route) => [route.name, route.path]))(
+    "keeps %s reachable signed out",
+    async (_name, path) => {
+      await expect(gate(path)).resolves.toBe("passed");
+    },
+  );
 });
