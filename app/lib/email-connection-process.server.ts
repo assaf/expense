@@ -49,7 +49,7 @@ import { htmlToText } from "~/lib/html-text";
 import * as Sentry from "@sentry/react-router";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { fromIso, nowWire } from "~/lib/db/wire";
+import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -235,6 +235,10 @@ async function claimEmailForProcessing(
   emailId: string,
   fromAddress: string,
   subject: string,
+  /** The EMAIL's arrival, not the processing time: inbox review matches
+   * bank-notification bursts against arrival, so a receipt the drain filed
+   * must carry it or the charge it covers looks unpaid. */
+  receivedAt: string,
 ): Promise<boolean> {
   // A stale claim is taken over in place (the email may still be in the
   // Inbox after a crash, and re-running is what a fresh claim would do);
@@ -245,6 +249,7 @@ async function claimEmailForProcessing(
     matched: false,
     outcome: "processing",
     error: null,
+    receivedAt: fromIso(receivedAt),
     createdAt: nowWire(),
   };
   const claimed = await writeEmailLogRow({
@@ -266,6 +271,12 @@ async function claimEmailForProcessing(
   return claimed === "created" || claimed === "updated";
 }
 
+/** Has this email already been settled? A row in any state answers yes,
+ * except a claim that outlived the worker holding it: `claimEmailForProcess-
+ * ing` takes those over, so the drain has to offer the email again or that
+ * takeover is unreachable (a drain killed mid-flight would leave the email
+ * sitting in the Inbox forever, invisible to the drain and to /email-review
+ * alike, and the receipt would never be filed). */
 async function seenEmail(
   connectionId: string,
   emailId: string,
@@ -273,9 +284,11 @@ async function seenEmail(
   const row = await db.orm.public.EmailProcessLog.where((l) =>
     and(l.connectionId.eq(connectionId), l.emailId.eq(emailId)),
   )
-    .select("outcome")
+    .select("outcome", "createdAt")
     .first();
-  return row !== null;
+  if (row === null) return false;
+  if (row.outcome !== "processing") return true;
+  return Date.parse(toIso(row.createdAt)) >= Date.now() - STALE_CLAIM_MS;
 }
 
 /** Bump one counter in a single atomic UPDATE: Postgres evaluates `col + 1`
@@ -403,6 +416,7 @@ export async function processConnectionEmail(
       summary.id,
       fromAddress,
       summary.subject,
+      summary.receivedAt,
     ))
   ) {
     return { status: "ignored", reason: "already processed" };

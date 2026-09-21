@@ -12,6 +12,8 @@ import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.ser
 import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
+import { db } from "~/lib/prisma.server";
+import { toIso } from "~/lib/db/wire";
 import { testPrisma } from "./helpers/seedTestData";
 import {
   fakeAdapter,
@@ -927,6 +929,88 @@ describe("drainEmailConnection", () => {
     });
     expect(after?.receivedCount).toBe(2);
     expect(after?.processedCount).toBe(1);
+  });
+
+  it("re-offers an email whose claim went stale while it sat in the Inbox", async () => {
+    // A drain that died mid-flight leaves its row on `processing` with the
+    // mail still in the Inbox. The fresh filter used to read ANY row as a
+    // finished email, which made processConnectionEmail's claim takeover
+    // unreachable from the only caller that runs it: the receipt was never
+    // filed and nothing ever looked at the email again.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "s1",
+        fromAddress: "no_reply@email.apple.com",
+        subject: "Receipt 1",
+        matched: false,
+        outcome: "processing",
+        createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      },
+    });
+    const { adapter, trashed } = fakeAdapter(
+      new Map([
+        [
+          "s1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 3.50\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    expect(result.evaluated).toBe(1);
+    expect(trashed).toEqual(["s1"]);
+    const row = await logRow(conn.id, "s1");
+    expect(row?.outcome === "created" || row?.outcome === "partial").toBe(true);
+  });
+
+  it("stamps the email's arrival on the row it files", async () => {
+    // Inbox review pairs a bank notification's charge with a receipt by the
+    // RECEIPT's arrival (alerts land within a minute of the charge). A
+    // receipt the drain filed has to carry that stamp, or the pairing never
+    // sees it and the notification for an already-filed charge stays on the
+    // review list.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "r1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 3.50\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+
+    await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    // Read through the app's own client (the test shim parses this column in
+    // local time): the pairing compares one DB read against another, and the
+    // timestamp codec is wire text, so decode it the way the app does.
+    const row = await db.orm.public.EmailProcessLog.where({
+      connectionId: conn.id,
+      emailId: "r1",
+    })
+      .select("receivedAt")
+      .first();
+    expect(row?.receivedAt).toBeTruthy();
+    expect(toIso(row?.receivedAt ?? "")).toBe("2026-07-01T10:00:00.000Z");
   });
 
   it("keeps a failed email in the Inbox but never re-creates the expense", async () => {
