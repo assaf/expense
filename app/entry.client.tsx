@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/react-router";
-import { browserTracingIntegration } from "@sentry/react";
 import { StrictMode, startTransition } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
@@ -13,7 +12,11 @@ if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
     // Same release the build uploaded sourcemaps for (injected at build
     // time by vite.config from VERCEL_GIT_COMMIT_SHA).
     release: (import.meta.env.VITE_SENTRY_RELEASE as string) || undefined,
-    integrations: [browserTracingIntegration()],
+    // The SDK's own integration for this framework: it wraps
+    // browserTracingIntegration and instruments the hydrated router, which
+    // plain browserTracingIntegration does not (the SDK warns on every page
+    // load when handed the latter).
+    integrations: [Sentry.reactRouterTracingIntegration()],
     tracesSampleRate: 0.2,
     // Browser errors are mostly ours; don't blow up the quota with noise.
     ignoreErrors: [
