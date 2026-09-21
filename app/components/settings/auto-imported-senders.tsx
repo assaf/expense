@@ -65,7 +65,7 @@ function RemoveRuleButton({ sender }: { sender: string }) {
         <button
           type="submit"
           disabled={navigation.state !== "idle"}
-          className="text-gray-500 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:text-red-400"
+          className="text-gray-500 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:text-red-400"
           aria-label={`Remove ${sender}`}
         >
           <Trash2 aria-hidden="true" className="h-4 w-4" />

@@ -745,7 +745,7 @@ function ExpenseRow({
       <div
         className={`overflow-hidden rounded-xl border transition-colors ${
           isNew
-            ? "border-blue-400 bg-blue-100 dark:bg-blue-900/40 ring-2 ring-blue-400 dark:ring-blue-500"
+            ? "border-blue-400 dark:border-blue-500 bg-blue-100 dark:bg-blue-900/40 ring-2 ring-blue-400 dark:ring-blue-500"
             : expense.complete
               ? cardSurface
               : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950"

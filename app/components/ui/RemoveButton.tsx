@@ -59,7 +59,7 @@ export function RemoveButton({
           type="submit"
           disabled={disabled}
           className={cn(
-            "text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400 disabled:opacity-50",
+            "text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50",
             className,
           )}
           aria-label={label}

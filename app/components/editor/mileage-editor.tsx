@@ -703,7 +703,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
               {i >= 2 && !reportClosed ? (
                 <button
                   type="button"
-                  className="mt-2 rounded p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:text-red-400"
+                  className="mt-2 rounded p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                   onClick={() => removeLocation(i)}
                   aria-label="Remove stop"
                 >
