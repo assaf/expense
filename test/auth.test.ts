@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
-import { afterAll, describe, it } from "vitest";
+import { afterAll, describe, it } from "vite-plus/test";
 import { ulid } from "ulid";
 import {
   freshPage,

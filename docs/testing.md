@@ -63,7 +63,7 @@
 - Every `pnpm test` run captures the app's important screens and the emails
   it sends (`test/screenshot.test.ts`, "suite screenshots" block) and
   compares each against the committed baseline in `screenshots/` via
-  `toMatchScreenshot` (`test/helpers/toMatchScreenshot.ts`, looks-same,
+  `toMatchBaseline` (`test/helpers/toMatchScreenshot.ts`, looks-same,
   ΔE tolerance 2.3). Any drift fails the run and leaves
   `screenshots/<name>.new.png` (the new capture) and
   `screenshots/<name>.diff.png` next to the baseline; all drifted screens

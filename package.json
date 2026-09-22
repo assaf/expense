@@ -12,8 +12,8 @@
     "screenshot": "SCREENSHOT=1 vp test run test/screenshot.test.ts",
     "start": "NODE_ENV=production react-router-serve ./build/server/index.js",
     "test": "react-router build --force && vp test run",
-    "test:changed": "vitest run --changed ${1:-HEAD}",
-    "test:related": "vitest related --run",
+    "test:changed": "vp test run --changed ${1:-HEAD}",
+    "test:related": "vp test related --run",
     "prepare": "vp config",
     "build:prisma": "prisma contract emit",
     "setup:push": "tsx scripts/setup-push.ts",
@@ -93,8 +93,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "catalog:",
-    "vite-plus": "catalog:",
-    "vitest": "^5.0.1"
+    "vite-plus": "catalog:"
   },
   "engines": {
     "node": ">=24"

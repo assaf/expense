@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeEach, afterAll } from "vite-plus/test";
 import { ulid } from "ulid";
 import {
   testPrisma,

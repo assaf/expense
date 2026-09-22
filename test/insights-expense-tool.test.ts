@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { MAX_TOOL_ARGUMENTS } from "~/lib/insights-tools.server";
 import type { ResolvedExpense, resolveExpense } from "~/lib/mcp-write.server";
 import {

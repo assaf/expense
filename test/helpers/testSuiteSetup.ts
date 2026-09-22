@@ -2,7 +2,7 @@
  * Per-suite setup: runs before each test file.
  * Re-seeds the test database for isolation.
  */
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll } from "vite-plus/test";
 import { closeBrowser } from "./launchBrowser";
 import { seedTestData } from "./seedTestData";
 import { installPinnedClock } from "./pinned-time";

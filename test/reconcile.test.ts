@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import Decimal from "decimal.js";
 import { parseCsv } from "~/lib/csv";
 import { strToU8, zipSync } from "fflate";

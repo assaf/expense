@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vite-plus/test";
 import { recomputeMileage, geocode } from "~/lib/maps.server";
 
 describe("geocode canonicalization", () => {

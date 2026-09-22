@@ -1,5 +1,12 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { createWorker } from "tesseract.js";
 
 // The real OCR flow runs against a stubbed tesseract engine: ocrImage (real)

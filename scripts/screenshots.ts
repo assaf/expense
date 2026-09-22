@@ -4,7 +4,7 @@
  * Review screenshot drift against the committed baselines in screenshots/
  * (adapted from rentail/scripts/screenshots.ts).
  *
- * - A .png with a matching .new.png (a failed toMatchScreenshot): compare
+ * - A .png with a matching .new.png (a failed toMatchBaseline): compare
  *   .new.png vs .png, Accept or Skip.
  * - A committed .png modified locally but with no .new.png (edited by hand
  *   or accepted outside a test run): compare vs the Git HEAD version,

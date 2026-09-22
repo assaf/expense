@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach } from "vite-plus/test";
 import { ulid } from "ulid";
 import { generateOpaqueToken, hashToken } from "~/lib/passwords";
 import {

@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync } from "node:crypto";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { hashPassword, needsRehash, verifyPassword } from "~/lib/passwords";
 
 describe("password hashing (scrypt)", () => {

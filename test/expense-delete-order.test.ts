@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { ulid } from "ulid";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vite-plus/test";
 
 /**
  * `deleteExpense` deletes the row before the blob on purpose: a failure in the

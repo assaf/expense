@@ -1,6 +1,6 @@
 import { createECDH } from "node:crypto";
 import { encrypt } from "http_ece";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   b64url,
   decryptPushBody,

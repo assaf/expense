@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 /**
  * parseEmailSummaries (app/lib/email-connection-mail.server.ts): the

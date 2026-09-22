@@ -1,5 +1,5 @@
 import { expect } from "playwright/test";
-import { afterAll, describe, it } from "vitest";
+import { afterAll, describe, it } from "vite-plus/test";
 import { ulid } from "ulid";
 import { closeBrowser, freshPage, signIn } from "./helpers/launchBrowser";
 import { signUp, verifyEmail } from "./helpers/signup-flows";

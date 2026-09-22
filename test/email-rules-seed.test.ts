@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { GENERAL_EMAIL_RULES, parseEmailRuleCsv } from "~/data/email-rules";
 
 /** The general email-rule seed is hand-edited CSV, so these are about the

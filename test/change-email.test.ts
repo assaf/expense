@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vite-plus/test";
 import { expect as pwExpect } from "playwright/test";
 import { hashPassword } from "~/lib/passwords";
 import { action } from "~/routes/settings";

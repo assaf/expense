@@ -1,6 +1,6 @@
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, it } from "vite-plus/test";
 import { goto } from "./helpers/launchBrowser";
 
 // The Email page (/emails) holds both email features: connected email

@@ -1,5 +1,5 @@
 import { createSign, generateKeyPairSync } from "node:crypto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 /**
  * /api/email-connections-gmail-push: the Pub/Sub push webhook. A signed

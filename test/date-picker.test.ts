@@ -1,5 +1,5 @@
 import { expect } from "playwright/test";
-import { it, describe } from "vitest";
+import { it, describe } from "vite-plus/test";
 import { goto } from "./helpers/launchBrowser";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 

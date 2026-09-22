@@ -1,10 +1,10 @@
 /**
- * Visual-regression matcher for the suite screenshots (adapted from
- * rentail/test/helpers/toMatchScreenshot.ts): the first run writes the
- * baseline into screenshots/ (committed); later runs compare against it
- * with looks-same and fail on drift, leaving screenshots/<name>.new.png
- * (the new capture) and screenshots/<name>.diff.png (highlighted diff)
- * next to the baseline for review. Review/accept them with
+ * Visual-regression matcher (`toMatchBaseline`) for the suite screenshots
+ * (adapted from rentail/test/helpers/toMatchScreenshot.ts): the first run
+ * writes the baseline into screenshots/ (committed); later runs compare
+ * against it with looks-same and fail on drift, leaving
+ * screenshots/<name>.new.png (the new capture) and screenshots/<name>.diff.png
+ * (highlighted diff) next to the baseline for review. Review/accept them with
  * `pnpm screenshots:review`. Skipped in CI.
  */
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -13,7 +13,7 @@ import path from "node:path";
 import looksSame from "looks-same";
 import sharp from "sharp";
 import type { Page } from "playwright";
-import { expect } from "vitest";
+import { expect } from "vite-plus/test";
 
 const SCREENSHOTS_DIR = path.resolve("screenshots");
 
@@ -27,14 +27,18 @@ interface ScreenshotOptions {
   fullPage?: boolean;
 }
 
-declare module "vitest" {
+// Augments the entry point the tests import from (vite-plus/test re-exports
+// vitest's Assertion). Named toMatchBaseline, not toMatchScreenshot: vitest 5
+// declares its own toMatchScreenshot (the browser-mode comparator matcher) on
+// Assertion, and redeclaring that member fails the interface's extends check.
+declare module "vite-plus/test" {
   interface Assertion<R extends void | Promise<void> = void, T = unknown> {
-    toMatchScreenshot(options?: ScreenshotOptions): Promise<void>;
+    toMatchBaseline(options?: ScreenshotOptions): Promise<void>;
   }
 }
 
 expect.extend({
-  async toMatchScreenshot(
+  async toMatchBaseline(
     page: Page,
     options: ScreenshotOptions,
   ): Promise<{ message: () => string; pass: boolean }> {

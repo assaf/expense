@@ -112,8 +112,8 @@ flowchart LR
 | `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
 | `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; rewrites files via `--fix`          |
 | `pnpm test`                                       | `react-router build --force && vp test run`                      | **Gate.** Build then the full suite                            |
-| `pnpm test:changed [ref]`                         | `vitest run --changed ${1:-HEAD}`                                | Fast lane over the static import graph                         |
-| `pnpm test:related <file>`                        | `vitest related --run`                                           | Fast lane for tests importing the named files                  |
+| `pnpm test:changed [ref]`                         | `vp test run --changed ${1:-HEAD}`                               | Fast lane over the static import graph                         |
+| `pnpm test:related <file>`                        | `vp test related --run`                                          | Fast lane for tests importing the named files                  |
 | `pnpm test:ocr`                                   | `RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts ...`          | Real OCR round trip (script still says `vpr`; use `vp`)        |
 | `pnpm test:db:push`                               | `bash scripts/reset-test-db`                                     | Drops and recreates `expense_test`                             |
 | `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
@@ -301,14 +301,18 @@ out of both.
 
 ## Runtime/Tooling Preferences
 
-- **Node >= 24** (`engines`), **pnpm 12.3.4** (`packageManager`, authoritative;
+- **Node >= 24** (`engines`), **pnpm 12.5.1** (`packageManager`, authoritative;
   CI reads it and installs the matching version). Bun is not used anywhere in
   this repo.
 - **One toolchain: vite-plus.** `pnpm-workspace.yaml` catalogs `vite-plus`
-  (binaries `vp`, `vpr`, `oxfmt`, `oxlint`) and aliases `vite` to
-  `@voidzero-dev/vite-plus-core`. There is **no** eslint, prettier, tailwind,
-  or postcss config file: the `fmt` and `lint` blocks in `vite.config.ts` are
-  the config, with `printWidth: 80`, `singleQuote: false`, and semicolons.
+  (binary `vp`; `vpr` is the `vp run` shorthand) and aliases `vite` to
+  `@voidzero-dev/vite-plus-core`, plus `vitest` to the exact version vite-plus
+  bundles, with matching `overrides` so one runner copy exists. The standalone
+  `oxfmt`/`oxlint` wrappers are gone in 1.0: reach them through `vp fmt` and
+  `vp lint` (editors want `vp lint --lsp` / `vp fmt --lsp`). There is **no**
+  eslint, prettier, tailwind, or postcss config file: the `fmt` and `lint`
+  blocks in `vite.config.ts` are the config, with `printWidth: 80`,
+  `singleQuote: false`, and semicolons.
 - **TypeScript** is a single root `tsconfig.json`: `strict`, `noEmit`,
   `moduleResolution: bundler`, `jsx: react-jsx`, `target: ES2022`, with the
   aliases above re-declared as Vite `resolve.alias`.
@@ -336,7 +340,10 @@ out of both.
 
 ## Testing & QA
 
-- **vitest v5** through `vp`, split into two projects from `vite.config.ts`:
+- **vitest v5** through `vp`, split into two projects from `vite.config.ts`.
+  Tests import their runner API from `vite-plus/test` (the entry point Vite+
+  re-exports vitest through); the `vitest` package itself is not a dependency,
+  and its version is pinned by the catalog so the runner has one copy:
   - `main` (`vitest.main.config.ts`): `test/**/*.test.ts(x)` minus an explicit
     exclude list. Real Postgres, a spawned app server, Playwright, and the email
     pipeline. `pool: "forks"`, one worker, `testTimeout: 30s`.

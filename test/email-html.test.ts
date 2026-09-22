@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { parse as parseYaml } from "yaml";
 import { htmlToText } from "~/lib/html-text";
 

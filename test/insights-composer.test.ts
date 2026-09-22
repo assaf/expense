@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 import { expect as pwExpect } from "playwright/test";
 import type { Page } from "playwright";
 import { appendExchange, startNewConversation } from "~/lib/db/insights-chat";

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { detectImageMime, isPdf, isImage } from "~/lib/file-types";
 
 describe("isPdf", () => {

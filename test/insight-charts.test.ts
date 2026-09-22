@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { CHART_SHAPES, isChartShape, planChart } from "~/lib/insight-charts";
 import type { InsightExpense, MonthBucket } from "~/lib/insights";
 

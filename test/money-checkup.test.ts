@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { duplicatePairKey } from "~/lib/duplicates";
 import type { InsightExpense } from "~/lib/insights";
 import {

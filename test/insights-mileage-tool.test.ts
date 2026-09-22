@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { MAX_TOOL_ARGUMENTS } from "~/lib/insights-tools.server";
 import { MAX_TRIP_STOPS } from "~/lib/maps.server";
 import type { ResolvedTrip, resolveMileage } from "~/lib/mcp-write.server";

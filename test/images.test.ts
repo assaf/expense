@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vite-plus/test";
 import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import {

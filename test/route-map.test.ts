@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { renderRouteMap } from "~/lib/route-map.server";
 import sharp from "sharp";
 import type { MileageExpense } from "~/lib/types";

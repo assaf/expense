@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite-plus";
 
 /**
  * Minimal vitest config for ad-hoc local runs that must NOT force-reset the

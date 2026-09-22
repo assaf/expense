@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { loader as aboutLoader } from "~/routes/about[.]md";
 import { loader as productFactsLoader } from "~/routes/product-facts[.]md";
 import { loader as scheduleCLoader } from "~/routes/schedule-c-categories[.]md";

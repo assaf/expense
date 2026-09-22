@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from "vite-plus/test";
 
 // errors.server imports @sentry/react-router, which drags in
 // @opentelemetry/api, broken under vite-node's ESM resolution. Mock the

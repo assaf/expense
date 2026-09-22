@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { action } from "~/routes/settings";
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import { readLocations, removeLocation } from "~/lib/db/locations";

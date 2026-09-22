@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { strToU8, zipSync } from "fflate";
 import { parseXlsxSheets } from "~/lib/excel.server";
 import { parseStatementUpload } from "~/lib/reconcile.server";

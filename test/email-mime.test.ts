@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import PostalMime from "postal-mime";
 import { buildRfc822Message, encodeHeader } from "~/lib/email-mime.server";
 import { emailShell } from "~/lib/email-layout.server";

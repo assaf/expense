@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { expect as pwExpect } from "playwright/test";
 import { hashPassword } from "~/lib/passwords";
 import { db } from "~/lib/prisma.server";

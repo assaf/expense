@@ -22,7 +22,7 @@ import { spawn } from "node:child_process";
  */
 import sharp from "sharp";
 import { ulid } from "ulid";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vite-plus/test";
 import { hashPassword } from "~/lib/passwords";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import {
@@ -522,7 +522,7 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
 /**
  * Suite screenshot regression: on every `pnpm test` run, capture the app's
  * important screens and the emails it sends, comparing each against the
- * committed baseline in screenshots/ (see toMatchScreenshot). Uses whatever
+ * committed baseline in screenshots/ (see toMatchBaseline). Uses whatever
  * state the suite has left in expense_test, so the shots reflect the same
  * data the tests verified. Fails loudly: a screen that throws, never
  * hydrates, or drifts from its baseline is a broken screen, not a missing
@@ -563,7 +563,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
     try {
-      await expect(page).toMatchScreenshot({ name, fullPage: true });
+      await expect(page).toMatchBaseline({ name, fullPage: true });
     } catch (error) {
       drift.push(`${name}: ${(error as Error).message.split("\n")[0]}`);
     }
@@ -720,7 +720,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       for (const [name, html] of emails) {
         await page.setContent(html, { waitUntil: "load" });
         try {
-          await expect(page).toMatchScreenshot({
+          await expect(page).toMatchBaseline({
             name: `emails/${name}`,
             fullPage: true,
           });

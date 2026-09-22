@@ -1,6 +1,6 @@
 import { createECDH, randomBytes } from "node:crypto";
 import { encrypt } from "http_ece";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   setVerificationCode: vi.fn(async () => {}),

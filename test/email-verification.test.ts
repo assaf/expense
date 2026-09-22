@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { ulid } from "ulid";
 import { hashToken } from "~/lib/passwords";
 import {

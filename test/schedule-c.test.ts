@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { pairRows, SCHEDULE_C_PAGE, scheduleCRows } from "~/lib/content.server";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 

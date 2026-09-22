@@ -1,6 +1,6 @@
 import type { LLMError as LlmError } from "~/lib/receipt-ai.server";
 import type { SendEmailInput } from "~/lib/email-mime.server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 // The alert is fire-and-forget inside receipt-ai; mock the transport and
 // the owner address to test the gating logic in isolation.

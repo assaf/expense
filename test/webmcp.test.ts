@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 /**
  * app/lib/webmcp.ts: the in-page registration. No document.modelContext

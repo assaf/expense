@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 /**
  * /api/webmcp/:resource: the read-only JSON mirror the in-page WebMCP tools

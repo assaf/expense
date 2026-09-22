@@ -1,6 +1,6 @@
 import { hash } from "node:crypto";
 import { ulid } from "ulid";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 // Route-level contract for the upload intent's duplicate-bytes paths. The
 // DB-level behavior lives in reconcile.test.ts; here the action is invoked

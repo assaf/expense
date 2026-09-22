@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { VERIFICATION_RESEND_MS, withinWindow } from "~/lib/db/shared";
 import { toIso } from "~/lib/db/wire";
 

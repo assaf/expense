@@ -7,7 +7,7 @@ import {
   createStaticRouter,
   type StaticHandlerContext,
 } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { DocumentPage } from "~/data/content-types";
 import {
   ABOUT,

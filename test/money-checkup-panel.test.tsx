@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { MoneyCheckup } from "~/components/MoneyCheckup";
 import type { InsightExpense } from "~/lib/insights";
 import { NOTHING_OUTSTANDING, moneyCheckup } from "~/lib/money-checkup";

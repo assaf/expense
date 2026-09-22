@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { testPrisma, TEST_ACCOUNT_ID } from "./helpers/seedTestData";
 import { inferRuleCandidates } from "~/lib/email-connection-infer.server";
 import { addEmailRule, listGeneralEmailRules } from "~/lib/db/email-rules";

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterAll } from "vitest";
+import { describe, expect, it, vi, afterAll } from "vite-plus/test";
 import type { JmapTokenInfo } from "~/lib/jmap.server";
 
 /**

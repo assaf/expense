@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import { expect as pwExpect } from "playwright/test";
 import { chromium, type Browser, type Page } from "playwright";
 import { ulid } from "ulid";

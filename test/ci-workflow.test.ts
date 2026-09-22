@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import mainConfig from "../vitest.main.config";
 
 /**
