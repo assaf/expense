@@ -147,7 +147,7 @@ export async function signIn(
   await page.fill('input[name="email"]', email);
   await page.fill('input[name="password"]', password);
   await page.click('button[type="submit"]');
-  await page.waitForURL((url) => url.pathname === "/", {
+  await page.waitForURL((url) => url.pathname === "/expenses", {
     timeout: 15_000,
   });
 }

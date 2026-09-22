@@ -51,8 +51,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   const result = await saveExpenseFromForm(form, user.accountId, null);
   if (result.error) return badRequest(result.error);
-  // Carry the new expense's id home so the list can highlight it briefly.
-  return redirect(`/?new=${result.id}`);
+  // Carry the new expense's id to the list so it can highlight it briefly.
+  return redirect(`/expenses?new=${result.id}`);
 }
 
 export default function NewExpensePage({ loaderData }: Route.ComponentProps) {

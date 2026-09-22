@@ -59,7 +59,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     await markFiledExpenseDeleted(user.id, params.id).catch((err: unknown) => {
       captureError(err, { where: "insights-delete-marker" });
     });
-    return redirect("/");
+    return redirect("/expenses");
   }
 
   if (intent === "addReport") return addReportAction(form, user.accountId);
@@ -76,7 +76,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
     }
     const result = await saveExpenseFromForm(form, user.accountId, existing);
     if (result.error) return badRequest(result.error);
-    return redirect("/");
+    return redirect("/expenses");
   }
 
   return unknownIntent();

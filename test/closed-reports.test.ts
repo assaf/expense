@@ -63,7 +63,7 @@ describe("Closed reports", () => {
         },
       ],
     });
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("hides closed reports and their expenses from the home page", async () => {

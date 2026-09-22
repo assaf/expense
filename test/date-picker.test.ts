@@ -77,7 +77,7 @@ describe("Date picker", () => {
   });
 
   it("saves a future date chosen from the calendar", async () => {
-    const page = await goto("/");
+    const page = await goto("/expenses");
     await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
 
@@ -92,7 +92,7 @@ describe("Date picker", () => {
     await page.getByRole("button", { name: longLabel(iso) }).click();
     await page.getByText("Save").click();
 
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/expenses$/);
     const row = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Calendar Shop" },
     });

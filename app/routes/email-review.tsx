@@ -174,7 +174,7 @@ export default function EmailReviewPage({ loaderData }: Route.ComponentProps) {
       headerRight={
         onboarding ? (
           <Button asChild size="sm">
-            <Link to="/">
+            <Link to="/expenses">
               Finish setup <ArrowRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </Button>

@@ -280,6 +280,6 @@ describe("changing your own password", () => {
     // And the new password is the one that signs in.
     const fresh = await freshPage();
     await signIn(fresh, user.email, NEW_PASSWORD);
-    expect(new URL(fresh.url()).pathname).toBe("/");
+    expect(new URL(fresh.url()).pathname).toBe("/expenses");
   });
 });

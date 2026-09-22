@@ -46,8 +46,10 @@ export interface MirrorMeta {
 interface CtaContent {
   heading: string;
   body: string;
-  /** Defaults to "Create your account" in `MarketingCta`, which a visitor
-   * with a session never sees (they get "Dashboard"). */
+  /** Defaults to "Create your account" in `MarketingCta`. Every visitor sees
+   * it: the marketing pages are shared-cached, so the panel cannot vary by
+   * session. A signed-in visitor who follows it lands on the expense list,
+   * because /login redirects them there. */
   primaryLabel?: string;
   /** Rendered only when the route also passes `secondaryHref`. */
   secondaryLabel?: string;

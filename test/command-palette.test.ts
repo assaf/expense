@@ -39,7 +39,7 @@ describe("Command palette", () => {
   let page: Page;
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("opens with Cmd/Ctrl+K and navigates to the mileage editor", async () => {
@@ -59,7 +59,7 @@ describe("Command palette", () => {
   it("searches expenses from the palette with a typed query", async () => {
     // goto() waits for React Router hydration: Cmd+K before the palette
     // mounts is a no-op, which intermittently fails the palette-open wait.
-    page = await goto("/");
+    page = await goto("/expenses");
     await page.keyboard.press("ControlOrMeta+k");
     const search = page.getByPlaceholder("Type a command or search…");
     await expect(search).toBeVisible();
@@ -83,7 +83,7 @@ describe("Command palette", () => {
   });
 
   it("adds a category from the palette", async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
     await page.keyboard.press("ControlOrMeta+k");
     const search = page.getByPlaceholder("Type a command or search…");
     await expect(search).toBeVisible();
@@ -110,7 +110,7 @@ describe("Command palette", () => {
   });
 
   it("navigates with g-prefixed keyboard shortcuts", async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
     // Shortcuts fire only when focus is outside form fields.
     await blurFocus(page);
     // kbar's chained shortcuts (["g", "r"] etc.) complete silently (the
@@ -178,7 +178,7 @@ describe("Command palette", () => {
     await navVia("**/emails", "l");
     await navVia("**/reconcile", "x");
     await navVia("**/settings", "s");
-    await navVia("**/", "e");
+    await navVia("**/expenses", "e");
     // Worst case is 5 chords x 4 attempts x 2500ms = 50s; the 90s budget
     // keeps a slow CI runner (3x local test time) from dying mid-retry
     // before the chord that never fires is named (run 33770839904 died on
@@ -186,19 +186,19 @@ describe("Command palette", () => {
   }, 90_000);
 
   it("uses single-key shortcuts for editors, search, and uploads", async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
     await blurFocus(page);
     await page.keyboard.press("a");
     await page.waitForURL("**/expense/new");
 
     // Editors autofocus their first field and shortcuts only fire outside
     // form fields, so return to a neutral page before each next key.
-    page = await goto("/");
+    page = await goto("/expenses");
     await blurFocus(page);
     await page.keyboard.press("m");
     await page.waitForURL("**/expense/new?type=mileage");
 
-    page = await goto("/");
+    page = await goto("/expenses");
     await blurFocus(page);
     await page.keyboard.press("Slash"); // "/"
     const homeSearch = page.getByLabel("Search expenses");
@@ -220,7 +220,7 @@ describe("Command palette", () => {
   });
 
   it("pins shortcut hint badges next to their elements on Shift+?", async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
     await showHints(page);
     // Home carries nine anchors: the five nav buttons, the three
     // create/upload buttons, and the search box.
@@ -267,7 +267,7 @@ describe("Command palette", () => {
   });
 
   it("ignores shortcut keys typed inside inputs", async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
     const box = page.getByLabel("Search expenses");
     await box.click();
     await box.pressSequentially("amefgs?/");
@@ -286,7 +286,7 @@ describe("Command palette", () => {
     // a missed chooser can't be re-pressed; retry the whole sequence.
     let chooser: FileChooser | null = null;
     for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
-      page = await goto("/");
+      page = await goto("/expenses");
       await page.keyboard.press("ControlOrMeta+k");
       const search = page.getByPlaceholder("Type a command or search…");
       await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
@@ -325,7 +325,7 @@ describe("Command palette", () => {
     // sequence (the request is consumed on fire).
     let chooser: FileChooser | null = null;
     for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
-      page = await goto("/");
+      page = await goto("/expenses");
       await page.keyboard.press("ControlOrMeta+k");
       const search = page.getByPlaceholder("Type a command or search…");
       await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});

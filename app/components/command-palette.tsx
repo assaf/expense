@@ -134,7 +134,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         section: "Navigate",
         keywords: "receipts list home",
         icon: <Home aria-hidden="true" className="h-4 w-4" />,
-        perform: () => void navigate("/"),
+        perform: () => void navigate("/expenses"),
       },
       // The header's destinations, in the header's own order: one list feeds
       // both the nav row and this section.
@@ -174,7 +174,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
         icon: <Upload aria-hidden="true" className="h-4 w-4" />,
         perform: () => {
           requestCommand({ kind: "upload-expense" });
-          void navigate("/");
+          void navigate("/expenses");
         },
       },
       {
@@ -218,7 +218,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
               // kbar's close-time focus restore.
               perform: () => {
                 setPendingSearch(searchQuery.trim());
-                void navigate("/");
+                void navigate("/expenses");
               },
             },
           ]
@@ -232,7 +232,7 @@ function Palette({ reportNames }: { reportNames: string[] }) {
               icon: <Search aria-hidden="true" className="h-4 w-4" />,
               perform: () => {
                 setPendingSearch(searchQuery.trim());
-                void navigate("/");
+                void navigate("/expenses");
               },
             },
           ]),

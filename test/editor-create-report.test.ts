@@ -24,7 +24,7 @@ describe("Editor: create report", () => {
     testPrisma.report.count({ where: { accountId: TEST_ACCOUNT_ID } });
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("offers + New report… but selecting it creates nothing", async () => {
@@ -133,7 +133,7 @@ describe("Editor: create report", () => {
     await editor.getByRole("button", { name: "Create" }).click();
     await expect(select).toHaveValue("Save Target Report");
     await editor.getByRole("button", { name: "Save" }).click();
-    await editor.waitForURL((url) => url.pathname === "/", {
+    await editor.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 10_000,
     });
     const row = await testPrisma.expense.findFirst({

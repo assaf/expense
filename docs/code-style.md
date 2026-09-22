@@ -69,7 +69,7 @@ The a11y smoke tests (`test/a11y.test.ts`) enforce the contract (skip-link, page
 - scrypt for password hashing (`app/lib/passwords.ts`); never store plaintext.
 - Escape untrusted text before embedding in HTML/SVG/email (`escapeHtml`).
 - Sanitize free-text filenames (`sanitizeFilenamePart`).
-- Authenticated responses must not be shared-cacheable. Receipt images use `Cache-Control: private`; never flip to `public`. Every HTML document denies framing (`X-Frame-Options: DENY` + `CSP: frame-ancestors 'none'` in the root loader headers). HSTS comes from Vercel.
+- Authenticated responses must not be shared-cacheable. Receipt images use `Cache-Control: private`; never flip to `public`. Public marketing documents are the reverse case: the root loader omits session data on public paths, so `marketingPageHeaders` marks them `public, s-maxage` and a CDN serves them. Every HTML document denies framing (`X-Frame-Options: DENY` + `CSP: frame-ancestors 'none'` in the root loader headers). HSTS comes from Vercel.
 - Server-side fetches of untrusted URLs go through `fetchPublicUrl` (`app/lib/ssrf.server.ts`): literal + DNS-resolved private-address checks, re-checked on every redirect hop. Never raw-fetch an attacker-controlled URL.
 
 ## Git commits

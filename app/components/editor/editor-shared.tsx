@@ -213,7 +213,7 @@ export function useEditorFlow() {
   };
   const doCancel = () => {
     setTransition("cancel");
-    void navigate("/");
+    void navigate("/expenses");
   };
 
   useEffect(() => {

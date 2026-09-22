@@ -297,6 +297,6 @@ describe("changing your sign-in email", () => {
     // And the new address is the one that signs in.
     const fresh = await freshPage();
     await signIn(fresh, moved, PASSWORD);
-    expect(new URL(fresh.url()).pathname).toBe("/");
+    expect(new URL(fresh.url()).pathname).toBe("/expenses");
   });
 });

@@ -25,6 +25,7 @@ import {
 import { readReports } from "~/lib/db/reports";
 import { discoveryLinks, securityHeaders } from "~/lib/seo-content";
 import { umamiConfig } from "~/lib/umami.server";
+import { useSession } from "~/lib/use-session";
 import type { Route } from "./+types/root";
 
 /** Inline script that runs before first paint; applies the `dark` class
@@ -46,24 +47,24 @@ export const THEME_SCRIPT = `
 `;
 
 /** Public marketing/SEO pages (plus their markdown mirrors like /faq.md). */
-const PUBLIC_PAGES = new Set([
-  "/about",
-  "/ai",
-  "/connect",
-  "/faq",
-  "/mileage-rates",
-  "/schedule-c-categories",
-  "/product-facts",
-  "/alternatives",
-  "/privacy",
-  "/terms",
-  "/support",
+const PUBLIC_PAGES: Record<string, true> = {
+  "/about": true,
+  "/ai": true,
+  "/connect": true,
+  "/faq": true,
+  "/mileage-rates": true,
+  "/schedule-c-categories": true,
+  "/product-facts": true,
+  "/alternatives": true,
+  "/privacy": true,
+  "/terms": true,
+  "/support": true,
   // /auth.md describes agent authentication (the Auth.md convention). The
   // gate strips the .md suffix, so this entry is what opens it; /auth itself
   // has no route and falls through to the 404 page.
-  "/auth",
-  "/llms.txt",
-]);
+  "/auth": true,
+  "/llms.txt": true,
+};
 
 /** Marketing pages that publish a markdown mirror, page path -> mirror. Each
  * mirror is a resource route beside the page (app/routes/<page>[.]md.ts).
@@ -128,18 +129,19 @@ function gatePath(pathname: string): string {
  * too, so each exemption is declared here; a self-gating route missing from
  * this list gets bounced to /login, which for the OAuth endpoints would break
  * the flow (a token request carries no cookie). */
-const SELF_GATED_PATHS = new Set([
-  "/mcp",
-  "/mcp/server-card",
-  "/sign-out",
-  "/api/smoke",
-  "/api/inbound-cron",
-  "/api/email-connections-cron",
-  "/api/email-connections-push",
-  "/api/email-connections-gmail-push",
-  "/api/inbound-push",
-  "/api/dev-email-drain",
-]);
+const SELF_GATED_PATHS: Record<string, true> = {
+  "/mcp": true,
+  "/mcp/server-card": true,
+  "/sign-out": true,
+  "/api/session": true,
+  "/api/smoke": true,
+  "/api/inbound-cron": true,
+  "/api/email-connections-cron": true,
+  "/api/email-connections-push": true,
+  "/api/email-connections-gmail-push": true,
+  "/api/inbound-push": true,
+  "/api/dev-email-drain": true,
+};
 const SELF_GATED_PREFIXES = ["/oauth/", "/.well-known/"];
 
 /** Paths reachable without a session: the landing page, the auth flows (the
@@ -162,8 +164,8 @@ function isGateExempt(path: string): boolean {
     path === "/fastmail-oauth-callback" ||
     path === "/connect-gmail" ||
     path === "/gmail-oauth-callback" ||
-    PUBLIC_PAGES.has(path) ||
-    SELF_GATED_PATHS.has(path) ||
+    PUBLIC_PAGES[path] === true ||
+    SELF_GATED_PATHS[path] === true ||
     SELF_GATED_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
@@ -178,6 +180,17 @@ const authGate: Route.MiddlewareFunction = async (
   { request, context },
   next,
 ) => {
+  // Diagnostic: one line per request naming the caller. The platform's log
+  // stream records the path and status but no user agent and no client IP, so
+  // an automated client polling a public path is otherwise unattributable.
+  // Off unless REQUEST_TRACE is set, so production pays nothing for it.
+  if (process.env.REQUEST_TRACE) {
+    const agent = request.headers.get("user-agent") ?? "";
+    const ip = request.headers.get("x-forwarded-for") ?? "";
+    console.info(
+      `[trace] ${request.method} ${new URL(request.url).pathname} ua="${agent}" ip="${ip}"`,
+    );
+  }
   const user = await resolveSessionUser(context, request);
   if (!user && !isGateExempt(gatePath(new URL(request.url).pathname))) {
     throw loginRedirect(request);
@@ -204,10 +217,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       throw redirect(mirror, { headers: { Vary: "Accept" } });
     }
   }
-  // The gate above already resolved the session, so this loader only reads
-  // it: anonymous visitors to a public page stay anonymous, signed-in ones
-  // are identified (e.g. landing page views from a session).
-  const user = context.get(userContext);
+  // Public paths get neither the user nor the palette's report names, because
+  // those pages are shared-cached (marketingPageHeaders) and their document
+  // must be identical for every visitor. `deferredSession` tells the client
+  // shell to resolve them from /api/session after hydration instead, so a
+  // signed-in visitor still gets the palette and the "Dashboard" chrome.
+  const deferredSession = isGateExempt(path);
+  const user = deferredSession ? undefined : context.get(userContext);
   // Report names feed the palette's export submenu (same 5-min cache the
   // export page uses; acceptable per-navigation cost).
   const reportNames = user
@@ -216,6 +232,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   return {
     user: user ? { id: user.id } : null,
     reportNames,
+    deferredSession,
     // Public values (the tag is public HTML), resolved server-side so the
     // client bundle never imports env.ts (it touches node:fs).
     umami: umamiConfig,
@@ -315,8 +332,11 @@ export function DevBadge() {
 
 export default function App() {
   const navigation = useNavigation();
-  const { user, reportNames, umami } =
-    useRouteLoaderData<typeof loader>("root") ?? {};
+  const { umami } = useRouteLoaderData<typeof loader>("root") ?? {};
+  // The session comes with the root loader on app pages and from
+  // /api/session after hydration on the shared-cached public ones (see
+  // useSession), so the shell needs no special case for either.
+  const { user, reportNames } = useSession();
   useEffect(() => {
     if (!user) return;
     // Link this session's pageviews/events to the signed-in user. Safe even
@@ -380,7 +400,7 @@ export default function App() {
         </a>
         <DevBadge />
         <Outlet />
-        {user ? <CommandMenu reportNames={reportNames ?? []} /> : null}
+        {user ? <CommandMenu reportNames={reportNames} /> : null}
         {user ? <ShortcutHints /> : null}
         <ScrollRestoration />
         {/* Emailed links carry single-use tokens in ?token= (reset,
@@ -442,7 +462,7 @@ export function ErrorBoundary() {
           </h1>
           <p className="text-gray-500 dark:text-gray-400">{String(message)}</p>
           <a
-            href="/"
+            href="/expenses"
             className="mt-4 text-blue-600 underline dark:text-blue-400"
           >
             Back to expenses

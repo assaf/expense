@@ -4,14 +4,18 @@
  *
  * `icon`: just the icon mark (footer, favicon-like spots). Still uses
  *   alt text for copy behavior there.
- * `link`: wraps in a clickable link to "/".
+ * `link`: wraps in a clickable link, to `href` (the marketing home by
+ *   default; the app passes /expenses, its own home).
  */
 export function Logo({
   icon = false,
   link = false,
+  href = "/",
 }: {
   icon?: boolean;
   link?: boolean;
+  /** Where a linked mark points. */
+  href?: string;
 }) {
   if (icon) {
     const img = (
@@ -24,7 +28,7 @@ export function Logo({
     );
     if (!link) return img;
     return (
-      <a href="/" className="inline-flex rounded-lg">
+      <a href={href} className="inline-flex rounded-lg">
         {img}
       </a>
     );
@@ -53,7 +57,7 @@ export function Logo({
     );
   return (
     <a
-      href="/"
+      href={href}
       className="inline-flex items-center gap-2 sm:gap-2.5 rounded-lg"
     >
       {content}

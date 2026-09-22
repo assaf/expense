@@ -77,21 +77,23 @@ export function discoveryLinks(mirror?: string): Record<string, string> {
 }
 
 /**
- * Cache-Control header shared by the marketing/SEO pages. These SSR
- * documents embed session-dependent loader data for signed-in visitors
- * (the root loader feeds the global command palette the account's report
- * names), so shared caches must never store them: the first signed-in hit
- * would otherwise pin personalized HTML for every visitor (MKT-CACHE-1).
- * Browsers revalidate on every request. `Vary: Accept` is here because these
- * pages have two representations: the HTML page and its `.md` mirror, whose
- * location `mirror` advertises as `rel="alternate"`.
+ * Cache-Control header shared by the marketing/SEO pages. These documents are
+ * identical for every visitor, signed-in ones included: the root loader omits
+ * session data on public paths, so nothing here varies by account. (MKT-CACHE-1
+ * was the reverse case, back when the root payload carried the signed-in
+ * account's report names.) Letting a shared cache serve them is the point:
+ * crawlers and uptime monitors then cost no function invocations. A page whose
+ * body embeds the visitor's own data must not use this helper - see
+ * /unsubscribe/:token, which sets its own headers. `Vary: Accept` is here
+ * because these pages have two representations: the HTML page and its `.md`
+ * mirror, whose location `mirror` advertises as `rel="alternate"`.
  */
 export function marketingPageHeaders(mirror?: string): Record<string, string> {
   return {
     ...securityHeaders(),
     ...discoveryLinks(mirror),
     Vary: "Accept",
-    "Cache-Control": "private, max-age=0, must-revalidate",
+    "Cache-Control": "public, s-maxage=600, stale-while-revalidate=86400",
   };
 }
 

@@ -43,29 +43,31 @@ import * as terms from "~/routes/terms";
 // tests prove the .md bodies carry them, and the screenshot suite skips its
 // comparisons in CI (test/helpers/toMatchScreenshot.ts) and covers two pages.
 // These contracts close that: a page points its canonical URL at its own path,
-// it shows the strings its content file supplies, and its chrome offers the
-// dashboard instead of the signup once the visitor has a session. Copying a
+// it shows the strings its content file supplies, and its chrome is
+// byte-identical whether or not the visitor has a session (the pages are
+// shared-cached, so nothing in the document may vary by account). Copying a
 // route and forgetting its path, dropping a section from a page's JSX, or
-// asking a signed-in visitor to sign in again, fails here.
+// letting the session into a served document, fails here.
 
 /** Route prop types differ per page (each loader returns its own shape, and
  * ComponentProps wants the whole route context); rendering needs loaderData.
  *
- * The page renders as a child of a root route carrying the session, because
- * the public chrome reads it to choose between "Sign in" and "Dashboard" (a
- * `useRouteLoaderData` call, which throws outside a data router). `signedIn`
- * is the only thing that root loader contributes. */
+ * The root route stands in for the real one with the shape it serves on a
+ * public path: no user, no report names, and `deferredSession` set, which is
+ * what tells the client shell to resolve both from /api/session after
+ * hydration. That is the point of these renders - the served document must
+ * not carry the session, or a shared cache would pin one account's page for
+ * everyone. */
 async function renderPage(
   mod: { default: unknown },
   loaderData: unknown,
-  { signedIn = false }: { signedIn?: boolean } = {},
 ): Promise<string> {
   const Page = mod.default as (props: { loaderData: unknown }) => ReactElement;
   const handler = createStaticHandler([
     {
       id: "root",
       path: "/",
-      loader: () => ({ user: signedIn ? { id: "user-1" } : null }),
+      loader: () => ({ user: null, reportNames: [], deferredSession: true }),
       element: <Outlet />,
       children: [{ index: true, element: <Page loaderData={loaderData} /> }],
     },
@@ -395,31 +397,19 @@ describe("public marketing pages", () => {
   );
 });
 
-// The chrome is where a signed-in visitor used to be asked to sign in again,
-// on every public page: the header button and the closing CTA panel. Both read
-// the session from the root loader, so both flip together.
+// The served document is the anonymous chrome for everyone: the public pages
+// are shared-cached, so the signed-in variant ("Dashboard" in the header and
+// the CTA panel) is applied by the client from /api/session after hydration,
+// never in the HTML. test/auth.test.ts covers the hydrated result in a
+// browser, and the byte-equality of the served document over HTTP.
 describe("the public chrome", () => {
   it.each(PAGES)(
-    "$path invites an anonymous visitor to sign in",
+    "$path offers the sign-in door and no dashboard",
     async ({ data, mod, path }) => {
       const html = await renderPage(mod, data);
       expect(header(html), path).toContain("Sign in");
       expect(header(html), path).toContain('href="/login"');
-      expect(header(html), path).not.toContain("Dashboard");
-    },
-  );
-
-  it.each(PAGES)(
-    "$path sends a signed-in visitor to the dashboard",
-    async ({ data, mod, path }) => {
-      const html = await renderPage(mod, data, { signedIn: true });
-      expect(header(html), path).toContain("Dashboard");
-      expect(header(html), path).toContain('href="/"');
-      expect(header(html), path).not.toContain("Sign in");
-      // No signup invitation survives anywhere on the page: the CTA panel
-      // offers the dashboard too.
-      expect(html, path).not.toContain("/login?mode=create");
-      expect(html, path).not.toContain("Create your account");
+      expect(html, path).not.toContain(">Dashboard<");
     },
   );
 });

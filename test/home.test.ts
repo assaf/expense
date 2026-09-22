@@ -7,7 +7,7 @@ describe("Home page", () => {
   let page: Page;
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("shows the title", async () => {

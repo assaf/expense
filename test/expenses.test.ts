@@ -77,7 +77,7 @@ describe("Expense CRUD", () => {
   let page: Page;
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("opens the new receipt editor without writing a row", async () => {
@@ -119,7 +119,7 @@ describe("Expense CRUD", () => {
     // Submit. Only now is the row written.
     await page.getByText("Save").click();
     // Should redirect to home page (with ?new=<id> to highlight the row)
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 10_000,
     });
     // The new expense should appear in the list
@@ -142,7 +142,7 @@ describe("Expense CRUD", () => {
   });
 
   it("shows the new expense in the list and opens it", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await expect(page.getByText("Test Merchant")).toBeVisible();
     // Click on it to open the editor
     await page.getByText("Test Merchant").click();
@@ -155,7 +155,7 @@ describe("Expense CRUD", () => {
 
   it("edits an existing receipt and saves the changes", async () => {
     // Create a receipt to edit.
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await page.locator("input[list='merchants']").fill("Edit Target");
@@ -164,7 +164,9 @@ describe("Expense CRUD", () => {
     const selects = page.locator("select");
     await selects.nth(1).selectOption("Testing");
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 10_000 });
+    await page.waitForURL((url) => url.pathname === "/expenses", {
+      timeout: 10_000,
+    });
 
     // Reopen it and change every field.
     await page.getByText("Edit Target").click();
@@ -176,7 +178,9 @@ describe("Expense CRUD", () => {
     const editSelects = page.locator("select");
     await editSelects.nth(1).selectOption("Development");
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 10_000 });
+    await page.waitForURL((url) => url.pathname === "/expenses", {
+      timeout: 10_000,
+    });
 
     // The updated values appear in the list; the old ones are gone.
     await expect(page.getByText("Edited Merchant")).toBeVisible();
@@ -201,7 +205,7 @@ describe("Expense CRUD", () => {
       where: { accountId: TEST_ACCOUNT_ID },
     });
     // Navigate to the expense we created
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByText("Test Merchant").click();
     await page.waitForURL(/\/expense\//, { timeout: 10_000 });
     // Click delete
@@ -209,7 +213,7 @@ describe("Expense CRUD", () => {
     // Confirm dialog
     await page.getByText("Delete").last().click();
     // Should redirect to home
-    await page.waitForURL("/", { timeout: 10_000 });
+    await page.waitForURL("/expenses", { timeout: 10_000 });
     // The expense should no longer be in the list
     await expect(page.getByText("Test Merchant")).not.toBeVisible();
     expect(
@@ -220,7 +224,7 @@ describe("Expense CRUD", () => {
   });
 
   it("uploads a draft receipt image and attaches it on save", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await waitForEditorSettle(page);
@@ -260,7 +264,7 @@ describe("Expense CRUD", () => {
 
     // Save creates the row with the draft image attached.
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
     const created = await testPrisma.expense.findFirst({
@@ -280,7 +284,7 @@ describe("Expense CRUD", () => {
   });
 
   it("uploads a PDF draft, rasterizes it to a stored PNG/JPEG, and saves", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     await waitForEditorSettle(page);
@@ -371,7 +375,7 @@ describe("Expense CRUD", () => {
 
     // Save attaches the draft and the row appears.
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
     const created = await testPrisma.expense.findFirst({
@@ -473,7 +477,7 @@ describe("Expense CRUD", () => {
       ).toBe(true);
 
       await page.getByText("Save").click();
-      await page.waitForURL((url) => url.pathname === "/", {
+      await page.waitForURL((url) => url.pathname === "/expenses", {
         timeout: 15_000,
       });
       const saved = await testPrisma.expense.findFirst({
@@ -558,7 +562,7 @@ describe("Expense CRUD", () => {
       await expect(img).toHaveAttribute("src", /^blob:/, { timeout: 15_000 });
       // Escape cancels the editor: the draft is dropped, nothing persists.
       await page.keyboard.press("Escape");
-      await page.waitForURL((url) => url.pathname === "/", {
+      await page.waitForURL((url) => url.pathname === "/expenses", {
         timeout: 15_000,
       });
       const row = await testPrisma.expense.findFirst({
@@ -852,7 +856,7 @@ describe("Expense CRUD", () => {
   });
 
   it("saves with a future date (invoice dated ahead of payment)", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Receipt" }).click();
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
 
@@ -862,7 +866,7 @@ describe("Expense CRUD", () => {
     await page.getByText("Save").click();
 
     // Future dates are allowed: the save succeeds and returns to the list.
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/expenses$/);
     const row = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, merchant: "Future Shop" },
     });
@@ -876,7 +880,7 @@ describe("Expense CRUD", () => {
   });
 
   it("drags a file onto the home page to create a receipt draft", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
 
     // Dropping an unsupported file does nothing (no navigation).
     await page.locator("main").dispatchEvent("drop", {
@@ -886,7 +890,7 @@ describe("Expense CRUD", () => {
         body: "hello",
       }),
     });
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/expenses");
 
     const blobsBefore = await testPrisma.imageBlob.count({
       where: { accountId: TEST_ACCOUNT_ID },

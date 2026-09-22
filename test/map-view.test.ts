@@ -14,7 +14,7 @@ describe("Mileage map rendering", () => {
   let page: Page;
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   /** Mock the route API so geocoding is deterministic and offline. */
@@ -107,7 +107,7 @@ describe("Mileage map rendering", () => {
 
     // Redrawing (a second geocode) replaces the layers, so the counts must
     // not grow (regression: stop markers used to accumulate).
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     const { inputs } = await openEditorWithRoute();
     await inputs.first().blur();
     await expect.poll(() => page.locator(".map-stop-bubble").count()).toBe(2);
@@ -170,7 +170,7 @@ describe("Mileage map rendering", () => {
       });
     });
 
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("link", { name: /22\.40/ }).click();
     await page.waitForURL(/\/expense\//, { timeout: 10_000 });
     await expect(page.getByText("Mileage expense")).toBeVisible();
@@ -195,7 +195,7 @@ describe("Mileage map rendering", () => {
   });
 
   it("shows a generic route image for mileage rows, not the actual route", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     // The mileage thumbnail is the generic A → B → back SVG (identical for
     // every row) and the list renders no Leaflet maps at all.
     await expect(

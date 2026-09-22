@@ -9,7 +9,7 @@ describe("Expense search", () => {
 
   beforeAll(async () => {
     await seedTestData();
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   afterAll(async () => {

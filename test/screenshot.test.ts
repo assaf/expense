@@ -439,7 +439,7 @@ async function ensureServer(): Promise<boolean> {
 }
 
 async function captureHome(page: Page): Promise<void> {
-  await page.goto("/", { waitUntil: "load" });
+  await page.goto("/expenses", { waitUntil: "load" });
   await waitForSettled(page);
   // Give map tiles (OSM) and webfonts a moment to arrive.
   await page.waitForTimeout(3_000);
@@ -588,11 +588,11 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       await fresh.close();
 
       // Signed-in surfaces on the shared (test-credential) session.
-      const page = await goto("/");
+      const page = await goto("/expenses");
       page.on("pageerror", (error) =>
         pageErrors.push(`${currentName}: ${String(error)}`),
       );
-      await capture(page, "/", "home");
+      await capture(page, "/expenses", "home");
       await capture(page, "/expense/new", "expense-new");
       await capture(page, "/insights", "insights");
 

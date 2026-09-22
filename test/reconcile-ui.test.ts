@@ -71,7 +71,7 @@ describe("Reconcile flow", () => {
   });
 
   it("shows reconciled badges on the home page", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     // Reconcile entry point in the header nav.
     await expect(
       page.getByRole("link", { name: "Reconcile", exact: true }),

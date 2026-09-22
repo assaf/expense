@@ -79,7 +79,7 @@ describe("Duplicate detection", () => {
         },
       ],
     });
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   /** Navigate and wait for React Router to hydrate (goto signs in fresh). */
@@ -147,7 +147,7 @@ describe("Duplicate detection", () => {
       .first()
       .click();
     await page.waitForURL(/\/expense\/dup-b[12]$/);
-    await nav("/");
+    await nav("/expenses");
   });
 
   it("'Remove' asks for confirmation before deleting", async () => {
@@ -241,7 +241,7 @@ describe("Duplicate detection", () => {
     // Confirm deletes it and returns home.
     await page.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("button", { name: "Delete" }).last().click();
-    await page.waitForURL("/");
+    await page.waitForURL("/expenses");
     await expect(
       testPrisma.expense.findUnique({ where: { id: MILEAGE_DEL } }),
     ).resolves.toBeNull();

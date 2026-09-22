@@ -20,7 +20,7 @@ import {
 export function PageShell({
   icon,
   title,
-  backTo = "/",
+  backTo = "/expenses",
   backLabel = "Back to expenses",
   onBack,
   headerRight,
@@ -61,7 +61,7 @@ export function PageShell({
 }) {
   // The Shift+? hint layer pins "G E" on the control that goes home; the
   // email-review back link goes to /emails, so it must not claim the chord.
-  const homeShortcut = backTo === "/" ? "nav-expenses" : undefined;
+  const homeShortcut = backTo === "/expenses" ? "nav-expenses" : undefined;
   const containerClass = [
     className,
     "mx-auto",

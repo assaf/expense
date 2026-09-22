@@ -314,7 +314,7 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   (`HighlightData.hasEmailConnection`), and `pickHighlight(data, boost)`
   triples its odds until connected (the loader boosts it), so unconnected
   accounts see the nudge within a few visits while the rotation still varies.
-- **Empty state** (`_index.tsx`): new accounts with no expenses and no
+- **Empty state** (`expenses.tsx`): new accounts with no expenses and no
   connection get the connect suggestion under the "Nothing here yet" copy.
 - **Signup success screen** ("Check your email", `login.tsx`): mentions
   connecting Fastmail once signed in.

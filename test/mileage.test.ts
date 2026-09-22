@@ -36,7 +36,7 @@ describe("Mileage expense", () => {
   let page: Page;
 
   beforeAll(async () => {
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   it("opens the mileage editor without writing a row", async () => {
@@ -60,7 +60,7 @@ describe("Mileage expense", () => {
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },
     });
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -68,7 +68,7 @@ describe("Mileage expense", () => {
     // A new mileage expense starts with today's date too.
     await expect(page.getByLabel("Date")).toHaveValue(todayDate());
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
     expect(
@@ -80,7 +80,7 @@ describe("Mileage expense", () => {
 
   it("opens and views the seeded mileage expense", async () => {
     // Navigate to the seeded mileage (amount 22.40)
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("link", { name: /22\.40/ }).click();
     await page.waitForURL(/\/expense\//, { timeout: 10_000 });
     await expect(page.getByText("Mileage expense")).toBeVisible();
@@ -89,12 +89,12 @@ describe("Mileage expense", () => {
   });
 
   it("shows the mileage in the list", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await expect(page.getByRole("link", { name: /22\.40/ })).toBeVisible();
   });
 
   it("recomputes the amount when the type or date changes the rate", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -166,7 +166,7 @@ describe("Mileage expense", () => {
   });
 
   it("only geocodes and updates the map when an address field loses focus", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -223,7 +223,7 @@ describe("Mileage expense", () => {
       data: { name: "Travel", accountId: TEST_ACCOUNT_ID },
     });
     try {
-      await page.goto("/", { waitUntil: "load" });
+      await page.goto("/expenses", { waitUntil: "load" });
       await page.getByRole("button", { name: "Mileage" }).click();
       await page.waitForURL(/\/expense\/new\?type=mileage$/, {
         timeout: 10_000,
@@ -239,7 +239,7 @@ describe("Mileage expense", () => {
 
   it("leaves the category unset when no Travel category exists", async () => {
     // The seeded categories have no Travel, so the editor starts unset.
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -248,7 +248,7 @@ describe("Mileage expense", () => {
   });
 
   it("always keeps a start and a first stop; extra stops can be removed", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -284,7 +284,7 @@ describe("Mileage expense", () => {
     const before = await testPrisma.expense.count({
       where: { accountId: TEST_ACCOUNT_ID },
     });
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -354,7 +354,7 @@ describe("Mileage expense", () => {
   });
 
   it("measures one way by default, and a round trip when the box is ticked", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -417,7 +417,9 @@ describe("Mileage expense", () => {
 
     // The shape is stored with the trip.
     await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
+    await page.waitForURL((url) => url.pathname === "/expenses", {
+      timeout: 20_000,
+    });
     const saved = await testPrisma.expense.findFirst({
       where: { accountId: TEST_ACCOUNT_ID, type: "mileage", roundTrip: true },
       orderBy: { createdAt: "desc" },
@@ -428,7 +430,7 @@ describe("Mileage expense", () => {
   });
 
   it("updates the field to the geocoded address on blur, or shows an error", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -483,7 +485,7 @@ describe("Mileage expense", () => {
   });
 
   it("shows a geocoding indicator while the address is being geocoded", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -542,7 +544,7 @@ describe("Mileage expense", () => {
   });
 
   it("drops empty addresses when saving", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -554,7 +556,7 @@ describe("Mileage expense", () => {
     await inputs.nth(1).fill("");
 
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
 
@@ -570,7 +572,7 @@ describe("Mileage expense", () => {
   });
 
   it("recomputes the route without a location when its field is emptied", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -621,7 +623,7 @@ describe("Mileage expense", () => {
   });
 
   it("shows the stop address (street, city) in the map tooltip", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -686,7 +688,7 @@ describe("Mileage expense", () => {
     // Typing addresses and hitting Save without blurring the fields must
     // still geocode the trip, so the saved expense keeps its route,
     // distance, and amount.
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -725,7 +727,7 @@ describe("Mileage expense", () => {
     });
 
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
     expect(calls).toBeGreaterThan(0);
@@ -767,7 +769,7 @@ describe("Mileage expense", () => {
   });
 
   it("shows a route error when the API returns 500 and still allows saving", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -796,7 +798,7 @@ describe("Mileage expense", () => {
 
     // Saving still works; the expense is saved without a route or amount.
     await page.getByText("Save").click();
-    await page.waitForURL((url) => url.pathname === "/", {
+    await page.waitForURL((url) => url.pathname === "/expenses", {
       timeout: 15_000,
     });
     const saved = await testPrisma.expense.findFirst({
@@ -811,7 +813,7 @@ describe("Mileage expense", () => {
   });
 
   it("keeps the typed addresses and shows an error when geocoding fails to match", async () => {
-    await page.goto("/", { waitUntil: "load" });
+    await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
@@ -866,7 +868,7 @@ describe("Mileage expense", () => {
       await removeLocation(TEST_ACCOUNT_ID, place.id);
     }
     try {
-      await page.goto("/", { waitUntil: "load" });
+      await page.goto("/expenses", { waitUntil: "load" });
       await page.getByRole("button", { name: "Mileage" }).click();
       await page.waitForURL(/\/expense\/new\?type=mileage$/, {
         timeout: 10_000,

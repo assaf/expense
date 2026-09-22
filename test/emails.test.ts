@@ -149,7 +149,7 @@ describe("Email", () => {
   });
 
   it("shows Email in the header nav after Insights", async () => {
-    const page = await goto("/");
+    const page = await goto("/expenses");
     const labels = await page.locator("header nav a").allTextContents();
     expect(labels.map((s) => s.trim())).toEqual([
       "Insights",

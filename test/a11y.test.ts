@@ -15,7 +15,7 @@ describe("Accessibility", () => {
 
   beforeAll(async () => {
     await seedTestData();
-    page = await goto("/");
+    page = await goto("/expenses");
   });
 
   afterAll(async () => {
@@ -33,7 +33,7 @@ describe("Accessibility", () => {
   // --- Page title -----------------------------------------------------------
 
   it("has a meaningful page title", async () => {
-    await expect(page).toHaveTitle("Expense");
+    await expect(page).toHaveTitle("Expenses — Expense");
   });
 
   it("sets the document title for a receipt editor", async () => {
@@ -49,7 +49,7 @@ describe("Accessibility", () => {
   it("sets a descriptive title for an existing receipt", async () => {
     // Navigate to the Test Store expense (seeded at $42.50).
     // We find it by going home and clicking through.
-    const home = await goto("/");
+    const home = await goto("/expenses");
     const row = home.locator("li").filter({ hasText: "Test Store" }).first();
     const href = await row
       .locator("a[href^='/expense/']")
@@ -70,7 +70,7 @@ describe("Accessibility", () => {
       editor = await goto("/expense/new");
       await editor.locator("input[type='number']").fill("50.00");
       await editor.keyboard.press("Escape");
-      await editor.waitForURL((url) => url.pathname === "/", {
+      await editor.waitForURL((url) => url.pathname === "/expenses", {
         timeout: 10_000,
       });
       await editor.close();
@@ -82,7 +82,7 @@ describe("Accessibility", () => {
       await editor.locator("input[type='number']").fill("25.00");
       await editor.getByLabel("Date").fill("2026-07-01");
       await editor.keyboard.press("Enter");
-      await editor.waitForURL((url) => url.pathname === "/", {
+      await editor.waitForURL((url) => url.pathname === "/expenses", {
         timeout: 10_000,
       });
       // The new expense should appear on the home page.
@@ -122,7 +122,7 @@ describe("Accessibility", () => {
     it("traps focus inside the delete confirm dialog", async () => {
       // Navigate to the seeded Test Store expense (has an id, is edit mode,
       // so the Delete button is visible).
-      const home = await goto("/");
+      const home = await goto("/expenses");
       const row = home.locator("li").filter({ hasText: "Test Store" }).first();
       const href = await row
         .locator("a[href^='/expense/']")
@@ -179,7 +179,7 @@ describe("Accessibility", () => {
     });
 
     it("has properly labelled expense rows", async () => {
-      const home = await goto("/");
+      const home = await goto("/expenses");
       // Find the Test Store row specifically (seeded merchant).
       const link = home
         .locator("li")
@@ -240,13 +240,13 @@ describe("Accessibility", () => {
 
   describe("Landmarks and roles", () => {
     it("has a main landmark", async () => {
-      const home = await goto("/");
+      const home = await goto("/expenses");
       await expect(home.locator("main#main-content")).toHaveCount(1);
       await home.close();
     });
 
     it("announces filter results with a live region", async () => {
-      const home = await goto("/");
+      const home = await goto("/expenses");
       // Type a search query.
       await home.getByLabel("Search expenses").fill("OfficeMax");
       await home.waitForTimeout(400);
@@ -261,7 +261,7 @@ describe("Accessibility", () => {
     });
 
     it('announces empty states with role="status"', async () => {
-      const home = await goto("/");
+      const home = await goto("/expenses");
       // Search for something that won't match.
       await home.getByLabel("Search expenses").fill("zzzzznothinghere");
       await home.waitForTimeout(400);
@@ -274,7 +274,7 @@ describe("Accessibility", () => {
     });
 
     it("has an accessible drag-over announcement", async () => {
-      const home = await goto("/");
+      const home = await goto("/expenses");
       // The sr-only live region exists and is polite.
       const announcer = home.locator(
         '.sr-only[role="status"][aria-live="polite"]',

@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { SitePage } from "~/components/SitePage";
 import { Button } from "~/components/ui/Button";
 import { cn } from "cn";
-import { useSignedIn } from "~/lib/use-signed-in";
+import { useSession } from "~/lib/use-session";
 
 /**
  * Shared layout for the public marketing/SEO subpages (/about, /ai, /faq,
@@ -96,7 +96,7 @@ export function MarketingCta({
    * transparent instead of blue). */
   secondaryClassName?: string;
 }) {
-  const signedIn = useSignedIn();
+  const { user } = useSession();
   return (
     <section
       className={cn(
@@ -130,8 +130,10 @@ export function MarketingCta({
           size="lg"
           className="w-full bg-white dark:bg-gray-700 text-ink hover:bg-gray-100 dark:hover:bg-gray-800 sm:w-auto"
         >
-          {signedIn ? (
-            <Link to="/">Dashboard</Link>
+          {/* Same document for everyone (shared-cached); the session lands
+              after hydration, so a signed-in visitor's CTA becomes the app. */}
+          {user ? (
+            <Link to="/expenses">Dashboard</Link>
           ) : (
             <Link to="/login?mode=create">{primaryLabel}</Link>
           )}

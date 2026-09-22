@@ -77,7 +77,7 @@ describe("Signup journeys", () => {
       ]);
       expect(resp.ok()).toBeTruthy();
       await page.getByText("Save").click();
-      await page.waitForURL((url) => url.pathname === "/", {
+      await page.waitForURL((url) => url.pathname === "/expenses", {
         timeout: 15_000,
       });
 

@@ -5,7 +5,7 @@ import { AuthCard, AuthHeader, AuthTile } from "~/components/auth/AuthCard";
 import { marketingUnsubscribeUserId } from "~/lib/unsubscribe.server";
 import { findUserById, unsubscribeMarketingEmail } from "~/lib/db/accounts";
 import { rejectCrossSitePost } from "~/lib/auth.server";
-import { marketingPageHeaders, pageMeta } from "~/lib/seo-content";
+import { discoveryLinks, pageMeta, securityHeaders } from "~/lib/seo-content";
 import type { Route } from "./+types/unsubscribe.$token";
 
 /**
@@ -28,10 +28,15 @@ export function meta(): Route.MetaDescriptors {
   );
 }
 
-/** Personalized public page: the confirm view shows the user's email,
- * so never let it be cached anywhere. */
-export function headers() {
-  return marketingPageHeaders();
+/** Personalized public page: the confirm view shows the user's email, so it
+ * must never share a cache with anyone, which is why it does not use
+ * marketingPageHeaders (those pages are shared-cached now). */
+export function headers(): HeadersInit {
+  return {
+    ...securityHeaders(),
+    ...discoveryLinks(),
+    "Cache-Control": "private, max-age=0, must-revalidate",
+  };
 }
 
 export async function loader({ params }: Route.LoaderArgs) {

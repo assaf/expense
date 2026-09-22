@@ -78,6 +78,7 @@ const SELF_GATED_PATHS = [
   "/mcp",
   "/mcp/server-card",
   "/sign-out",
+  "/api/session",
   "/oauth/authorize",
   "/oauth/token",
   "/oauth/revoke",

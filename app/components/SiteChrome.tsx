@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
-import { useSignedIn } from "~/lib/use-signed-in";
+import { useSession } from "~/lib/use-session";
 
 /** The footer's link columns: what the site is, the assistant, the reference
  * pages, and the policy pages. Balanced 3/2/3/3, which is also why FAQ (a
@@ -57,17 +57,18 @@ function SiteNavLink({ item }: { item: SiteNavItem }) {
 }
 
 export function SiteHeader() {
-  const signedIn = useSignedIn();
+  const { user } = useSession();
   return (
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
       <Logo link />
       <nav className="flex items-center gap-4 text-sm">
         <Button asChild variant="ghost" size="sm" className="ml-2">
-          {signedIn ? (
-            // The expenses list is "/" for a signed-in visitor (the landing
-            // page is its anonymous face), which is also where the nav to
-            // Settings and sign-out lives.
-            <Link to="/">Dashboard</Link>
+          {/* The document is the same for every visitor (these pages are
+              shared-cached), so the session arrives from /api/session after
+              hydration: the link paints as "Sign in" and flips to the app's
+              own home for a visitor who has one. */}
+          {user ? (
+            <Link to="/expenses">Dashboard</Link>
           ) : (
             <Link to="/login">Sign in</Link>
           )}

@@ -3,7 +3,12 @@ import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, describe, it } from "vitest";
 import { ulid } from "ulid";
-import { freshPage, closeBrowser, signIn } from "./helpers/launchBrowser";
+import {
+  freshPage,
+  closeBrowser,
+  signIn,
+  waitForHydration,
+} from "./helpers/launchBrowser";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
@@ -112,14 +117,16 @@ describe("Access control", () => {
     await page.close();
   });
 
-  it("marks marketing pages private so shared caches can't pin personalized HTML", async () => {
-    // MKT-CACHE-1: the root loader embeds the signed-in visitor's report
-    // names in the SSR document (global command palette), so any
-    // public/s-maxage header would let a shared cache serve one user's
-    // page to everyone. Pin the exact header so a caching "optimization"
-    // can't reintroduce it.
-    const page = await openPage();
-    for (const path of [
+  it("shared-caches the marketing pages and never the account's own", async () => {
+    // The marketing documents carry no session data - the root loader omits
+    // it on public paths - so a shared cache may serve them, which is the
+    // point: a crawler or uptime monitor then costs no function invocation
+    // at all. What must never change is the inverse: a document that carries
+    // account data stays private, and the marketing body is identical with
+    // and without a session (MKT-CACHE-1 was the case where it was not).
+    const anon = await openPage();
+    const paths = [
+      "/",
       "/about",
       "/ai",
       "/faq",
@@ -127,13 +134,52 @@ describe("Access control", () => {
       "/connect",
       "/mileage-rates",
       "/schedule-c-categories",
-    ]) {
-      const res = await page.request.get(`http://localhost:5199${path}`);
-      expect(res.headers()["cache-control"]).toBe(
-        "private, max-age=0, must-revalidate",
+    ];
+    for (const path of paths) {
+      const res = await anon.request.get(`http://localhost:5199${path}`);
+      expect(res.headers()["cache-control"], path).toBe(
+        "public, s-maxage=600, stale-while-revalidate=86400",
       );
     }
-    await page.close();
+
+    const authed = await signedInPage();
+    for (const path of ["/", "/faq"]) {
+      const without = await anon.request.get(`http://localhost:5199${path}`);
+      const with_ = await authed.request.get(`http://localhost:5199${path}`);
+      expect(await with_.text(), path).toBe(await without.text());
+      expect(with_.headers()["cache-control"], path).toBe(
+        without.headers()["cache-control"],
+      );
+    }
+
+    // The expense list is the account's own page: never shareable.
+    const list = await authed.request.get("http://localhost:5199/expenses");
+    expect(list.headers()["cache-control"]).toBe(
+      "private, no-cache, no-store, must-revalidate",
+    );
+    await anon.close();
+    await authed.close();
+  });
+
+  it("resolves the session client-side on a shared-cached page", async () => {
+    // The marketing documents carry no session (they are shared-cached and
+    // identical for every visitor), so the chrome and the palette ask
+    // /api/session once after hydration. A visitor with a session must still
+    // come out with the app's own door, and an anonymous one must not.
+    const anon = await openPage();
+    await anon.goto("/about", { waitUntil: "load" });
+    await waitForHydration(anon);
+    await expect(anon.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(anon.getByRole("link", { name: "Dashboard" })).toHaveCount(0);
+
+    const authed = await signedInPage();
+    await authed.goto("/about", { waitUntil: "load" });
+    await expect(
+      authed.getByRole("link", { name: "Dashboard" }).first(),
+    ).toBeVisible();
+
+    await anon.close();
+    await authed.close();
   });
 
   it("keeps the highlight preview page behind the session", async () => {
@@ -159,7 +205,7 @@ describe("Access control", () => {
         { maxRedirects: 0 },
       );
       expect(res.status(), raw).toBe(302);
-      expect(res.headers()["location"], raw).toBe("/");
+      expect(res.headers()["location"], raw).toBe("/expenses");
     }
     await page.close();
   });

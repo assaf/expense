@@ -31,17 +31,18 @@ type ActionData =
   | { ok: true; email: string }
   | { error: string; unverifiedEmail?: string };
 
-/** Only allow same-origin relative paths for the post-login destination. */
+/** Only allow same-origin relative paths for the post-login destination.
+ * The fallback is the expense list: /expenses, not / (the marketing page). */
 function safeNext(raw: string | null): string {
-  if (!raw) return "/";
+  if (!raw) return "/expenses";
   // Browsers strip tabs and newlines before resolving a URL, and treat a
   // backslash as a path separator, so `/<tab>/evil.com` and `/\evil.com`
   // both resolve to another origin. Normalize first, then require a path.
   const clean = raw.replace(/[\t\n\r]/g, "");
-  if (!clean.startsWith("/") || clean.startsWith("//")) return "/";
-  if (clean.includes("\\")) return "/";
+  if (!clean.startsWith("/") || clean.startsWith("//")) return "/expenses";
+  if (clean.includes("\\")) return "/expenses";
   // Never bounce back to the login page or to internal `.data` URLs.
-  if (clean.startsWith("/login") || clean.includes(".data")) return "/";
+  if (clean.startsWith("/login") || clean.includes(".data")) return "/expenses";
   return clean;
 }
 

@@ -40,7 +40,9 @@ flowchart LR
 
 - **Framework**: React Router v8 framework mode, SSR. `app/routes.ts` is just
   `flatRoutes()`, so the URL tree comes from filenames in `app/routes/`:
-  `_index.tsx` -> `/`, `expense.$id.tsx` -> `/expense/:id`, `[_]highlights.tsx`
+  `_index.tsx` -> `/` (the marketing landing page), `expenses.tsx` ->
+  `/expenses` (the signed-in home), `expense.$id.tsx` -> `/expense/:id`,
+  `[_]highlights.tsx`
   -> `/highlights`, and `[.]` is a literal dot (`mileage-rates[.]md.ts` ->
   `/mileage-rates.md`).
 - **Route contract**: a route exports `loader`, `action`, `default` (component),
