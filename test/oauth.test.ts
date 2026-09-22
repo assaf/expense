@@ -535,6 +535,10 @@ describe("MCP OAuth", () => {
     expect(meta.authorization_endpoint).toBe(
       "https://expense.localhost/oauth/authorize",
     );
+    // Metadata is shared-cacheable: an MCP client or a directory validator
+    // probes these on every connect, and an uncached fetch costs a function
+    // invocation (the token endpoint, by contrast, must never be stored).
+    expect(metaRes.headers.get("cache-control")).toBe("public, max-age=3600");
 
     const resourceRes = await fetch(
       `${baseURL}/.well-known/oauth-protected-resource`,
@@ -550,6 +554,9 @@ describe("MCP OAuth", () => {
       "https://expense.localhost",
     ]);
     expect(resource.bearer_methods_supported).toEqual(["header"]);
+    expect(resourceRes.headers.get("cache-control")).toBe(
+      "public, max-age=3600",
+    );
 
     // The path-aware location (RFC 9728 §3.1) carries the same document: it
     // is what MCP SDK clients probe before the origin-level one.

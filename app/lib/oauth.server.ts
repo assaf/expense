@@ -126,7 +126,12 @@ export function publicOrigin(request: Request): string {
 
 export function oauthMetadataResponse(request: Request): Response {
   return Response.json(buildOAuthMetadata(publicOrigin(request)), {
-    headers: { "Cache-Control": "no-store" },
+    // Static for a given origin and free of user data, so a shared cache may
+    // serve it: MCP clients and directory validators fetch this on every
+    // connect, and each uncached fetch costs a function invocation. The
+    // documents in mcp-discovery.server.ts are cached the same way; the
+    // OAuth protocol endpoints (token, register, revoke) stay no-store.
+    headers: { "Cache-Control": "public, max-age=3600" },
   });
 }
 
@@ -155,7 +160,7 @@ export function protectedResourceMetadataResponse(request: Request): Response {
       scopes_supported: [],
       bearer_methods_supported: ["header"],
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: { "Cache-Control": "public, max-age=3600" } },
   );
 }
 
