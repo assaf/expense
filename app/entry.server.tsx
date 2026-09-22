@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/react-router";
-import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import type { EntryContext } from "react-router";
 import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
@@ -34,9 +33,17 @@ if (process.env.VERCEL_ENV === "production") {
       // Enable logs to be sent to Sentry
       enableLogs: true,
 
-      integrations: [nodeProfilingIntegration()],
-      tracesSampleRate: 1.0, // Capture 100% of the transactions
-      profilesSampleRate: 1.0, // profile every transaction
+      // Errors are always captured; the sample rate only governs performance
+      // data. Tracing every request roughly doubled the CPU each invocation
+      // cost (measured against a production build), and Vercel bills Fluid
+      // Active CPU, so this samples instead.
+      tracesSampleRate: 0.1,
+
+      // No profiling integration on purpose. @sentry/profiling-node starts a
+      // native V8 CPU profiler that runs for the whole transaction, on every
+      // request, and loading it costs ~115ms of CPU per cold start. For a
+      // single-account app with no on-call rotation that is pure overhead,
+      // and it is a cost paid by every single invocation.
 
       // Drop React Router's own bot-facing errors (unmatched URLs, missing
       // loaders, a mutation with no action): normal web traffic, not app
