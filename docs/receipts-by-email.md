@@ -86,7 +86,17 @@ rendered image: a body-text receipt is quoted verbatim below the details
 at 4000 chars); an image/PDF attachment source is attached as the
 original file under its original filename with a byte-sniffed content
 type (`replyAttachmentContentType`; the declared `application/octet-stream`
-for screenshots is corrected from the bytes). The self-reply guard
+for screenshots is corrected from the bytes). An image the client can
+render (`INLINE_IMAGE_TYPES`: JPEG, PNG, GIF, WebP) is **also shown
+inline, above the details**, referenced by a Content-ID derived from the
+expense id; `confirmationEmail` returns the matching MIME part in
+`attachments`, so the reference and the part cannot drift. The mail no
+longer spends an attachment row on the receipt, and the reader can tell
+what was imported at a glance. A PDF or an unrecognized format stays a
+plain attachment, since an `<img>` pointing at bytes the client cannot
+decode renders as a broken image. The connected-account pipeline's
+confirmation (delivered into the owner's Inbox) shows the **stored**
+image the same way: the original email is already there. The self-reply guard
 compares the incoming
 From against the outbound address, so forwarded replies can't loop.
 **Bounces and autoresponders are dropped silently** (never imported,

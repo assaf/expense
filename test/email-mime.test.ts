@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import PostalMime from "postal-mime";
 import { buildRfc822Message, encodeHeader } from "~/lib/email-mime.server";
 import { emailShell } from "~/lib/email-layout.server";
 
@@ -145,6 +146,82 @@ describe("buildRfc822Message", () => {
     });
     const text = raw.toString("utf8");
     expect(text).toMatch(/Content-Type: image\/png; name="photo\.png"/);
+  });
+
+  it("shows a part with a contentId inline, in the HTML's own related", async () => {
+    const raw = buildRfc822Message({
+      fromName: "Expense",
+      fromEmail: "receipts@labnotes.org",
+      to: "assaf@arkin.me",
+      subject: "Receipt",
+      html: '<p>hi</p><img src="cid:receipt-1@expense.local">',
+      attachments: [
+        {
+          content: Buffer.from("jpeg-bytes").toString("base64"),
+          filename: "receipt.jpg",
+          contentType: "image/jpeg",
+          contentId: "receipt-1@expense.local",
+        },
+      ],
+    });
+    const text = raw.toString("utf8");
+    // The HTML and the image it references share one multipart/related
+    // (RFC 2387: type names the root, here the HTML), nested inside the
+    // alternative. An inline image in a sibling multipart/mixed part is
+    // listed as an attachment instead of rendered where the HTML puts it.
+    expect(text).toMatch(/^Content-Type: multipart\/alternative;/m);
+    expect(text).toMatch(
+      /Content-Type: multipart\/related; type="text\/html"; boundary="/,
+    );
+    expect(text).not.toMatch(/multipart\/mixed/);
+
+    const parsed = await PostalMime.parse(raw);
+    expect(parsed.html).toContain('src="cid:receipt-1@expense.local"');
+    expect(
+      parsed.attachments.map((a) => [
+        a.filename,
+        a.mimeType,
+        a.disposition,
+        a.contentId,
+      ]),
+    ).toEqual([
+      ["receipt.jpg", "image/jpeg", "inline", "<receipt-1@expense.local>"],
+    ]);
+  });
+
+  it("keeps a file to open outside the inline image's related part", async () => {
+    const raw = buildRfc822Message({
+      fromName: "Expense",
+      fromEmail: "receipts@labnotes.org",
+      to: "assaf@arkin.me",
+      subject: "Receipt",
+      html: '<img src="cid:receipt-1@expense.local">',
+      attachments: [
+        {
+          content: Buffer.from("jpeg-bytes").toString("base64"),
+          filename: "receipt.jpg",
+          contentType: "image/jpeg",
+          contentId: "receipt-1@expense.local",
+        },
+        {
+          content: Buffer.from("pdf-bytes").toString("base64"),
+          filename: "scan.pdf",
+          contentType: "application/pdf",
+        },
+      ],
+    });
+    // A message that has both: multipart/mixed wraps the alternative (whose
+    // HTML half is the related), and the PDF is its peer.
+    const text = raw.toString("utf8");
+    expect(text).toMatch(/^Content-Type: multipart\/mixed;/m);
+
+    const parsed = await PostalMime.parse(raw);
+    expect(
+      parsed.attachments.map((a) => [a.filename, a.disposition, a.contentId]),
+    ).toEqual([
+      ["receipt.jpg", "inline", "<receipt-1@expense.local>"],
+      ["scan.pdf", "attachment", undefined],
+    ]);
   });
 
   it("strips CR/LF from To and In-Reply-To (header injection guard)", () => {

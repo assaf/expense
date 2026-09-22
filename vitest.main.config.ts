@@ -32,6 +32,7 @@ export default defineConfig({
       "test/file-types.test.ts",
       "test/validation.test.ts",
       "test/email-classify.test.ts",
+      "test/email-confirmation.test.ts",
       "test/email-corpus.test.ts",
       "test/llm-alert.test.ts",
       "test/email-mime.test.ts",

@@ -34,6 +34,8 @@ import { escapeHtml } from "~/lib/escape";
 import {
   confirmationEmail,
   confirmationNotes,
+  type ConfirmationMessage,
+  type ConfirmationReceipt,
 } from "~/lib/email-confirmation.server";
 import { domainOf, extractEmailAddress } from "~/lib/validation";
 import type { SendEmailOptions } from "~/lib/reply.server";
@@ -459,17 +461,19 @@ function replyAttachmentContentType(buffer: Buffer, declared: string): string {
 
 /** The stored receipt image as a base64 attachment (the connected
  * pipeline's owner-inbox confirmation). undefined when the import produced
- * no stored image. */
+ * no stored image. The stored mime rides along: it is what decides whether
+ * the confirmation can show the receipt inline. */
 async function receiptImageAttachment(
   accountId: string,
   imageFile: string,
-): Promise<{ content: string; filename: string } | undefined> {
+): Promise<ConfirmationReceipt | undefined> {
   if (!imageFile) return undefined;
   const stored = await readImage(accountId, imageFile);
   if (!stored) return undefined;
   return {
     content: stored.buffer.toString("base64"),
     filename: stored.mime === "image/jpeg" ? "receipt.jpg" : "receipt.png",
+    contentType: stored.mime,
   };
 }
 
@@ -1010,17 +1014,13 @@ interface SavedExpense {
   /** The original receipt file (image/PDF attachment source) to attach to
    * the sender's confirmation reply; it is the sender's file, not the rendered
    * image. */
-  originalAttachment?: {
-    content: string;
-    filename: string;
-    contentType?: string;
-  };
+  originalAttachment?: ConfirmationReceipt;
   /** The original email body text (body source) to quote in the sender's
    * confirmation reply. */
   quotedOriginal?: string;
-  /** The stored receipt image as an attachment (connected pipeline's
-   * owner-inbox confirmation only). */
-  receiptAttachment?: { content: string; filename: string };
+  /** The stored receipt image, for the connected pipeline's owner-inbox
+   * confirmation only (where the original email is already in the Inbox). */
+  receiptAttachment?: ConfirmationReceipt;
   /** A matching receipt was imported within the recent window (the other
    * pipeline), so suppress this confirmation to avoid duplicate responses. */
   recentMatch?: { id: string; createdAt: string };
@@ -1206,14 +1206,7 @@ export async function saveExpenseFromExtraction(opts: {
 async function sendConfirmationOrSuppress(opts: {
   deps: InboundDeps;
   data: EmailReceivedData;
-  confirmation: { subject: string; html: string; text: string };
-  /** The original receipt file (image/PDF source), attached instead of
-   * the stored rendered image. */
-  originalAttachment?: {
-    content: string;
-    filename: string;
-    contentType?: string;
-  };
+  confirmation: ConfirmationMessage;
   recentMatch?: { id: string; createdAt: string };
 }): Promise<void> {
   if (opts.recentMatch) {
@@ -1243,9 +1236,7 @@ async function sendConfirmationOrSuppress(opts: {
     subject: opts.confirmation.subject,
     html: opts.confirmation.html,
     text: opts.confirmation.text,
-    attachments: opts.originalAttachment
-      ? [opts.originalAttachment]
-      : undefined,
+    attachments: opts.confirmation.attachments,
   });
 }
 
@@ -1499,12 +1490,12 @@ export async function processInboundEvent(
         missing: missingFields,
         reportStats,
         quotedOriginal: saved.quotedOriginal,
+        receipt: saved.originalAttachment,
       });
       await sendConfirmationOrSuppress({
         deps,
         data,
         confirmation,
-        originalAttachment: saved.originalAttachment,
         recentMatch: saved.recentMatch,
       });
       await learnRuleFromForward(account.id, email, attachments, deps);

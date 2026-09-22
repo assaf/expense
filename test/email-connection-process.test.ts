@@ -8,6 +8,8 @@ import {
   type OwnerEmail,
 } from "~/lib/email-connection-process.server";
 import { FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
+import { buildRfc822Message } from "~/lib/email-mime.server";
+import { readImage } from "~/lib/images.server";
 import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
 import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
@@ -178,6 +180,71 @@ describe("processConnectionEmail", () => {
     expect(sent.subject).toContain("Receipt accepted");
     // Logged as partial (category unknown under local extraction).
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("partial");
+  });
+
+  it("shows the stored receipt image inline in the owner's confirmation", async () => {
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "e1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt",
+            body: "MERCHANT: Apple\nTOTAL: 1.23\nCATEGORY: office supplies",
+          },
+        ],
+      ]),
+    );
+    const result = await processConnectionEmail(
+      conn,
+      summary("e1", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      depsFor(adapter, conn.id),
+      {
+        moveToTrash: (id) => adapter.moveToTrash(id),
+        sendToOwner: async (email) => {
+          await mocks.notifyOwner(email);
+        },
+      },
+    );
+    expect(result.status).toBe("partial");
+    const expenseId = "expenseId" in result ? result.expenseId : "";
+    const sent = mocks.notifyOwner.mock.calls[0]![0] as OwnerEmail;
+
+    // The owner's confirmation carries their STORED image (the original
+    // email already sits in their Inbox), and the HTML references it by
+    // Content-ID: the client renders the receipt in place of listing a file
+    // to open, which is what makes the mail scannable at a glance.
+    const raw = buildRfc822Message({
+      fromName: "",
+      fromEmail: conn.emailAddress,
+      to: conn.emailAddress,
+      subject: sent.subject,
+      html: sent.html,
+      text: sent.text,
+      attachments: sent.attachments,
+    });
+    const parsed = await PostalMime.parse(raw);
+    const image = parsed.attachments[0]!;
+    expect(image.mimeType).toMatch(/^image\//);
+    expect(image.disposition).toBe("inline");
+    const cid = parsed.html?.match(/src="cid:([^"]+)"/)?.[1];
+    expect(cid).toBeTruthy();
+    expect(image.contentId).toBe(`<${cid}>`);
+
+    // And the part carries the expense's own image, not a placeholder.
+    const created = (await readExpenses(conn.accountId)).find(
+      (e) => e.id === expenseId,
+    );
+    const stored = await readImage(
+      conn.accountId,
+      created?.type === "receipt" ? created.imageFile : "",
+    );
+    const bytes =
+      typeof image.content === "string"
+        ? Buffer.from(image.content, "base64")
+        : Buffer.from(new Uint8Array(image.content));
+    expect(stored && bytes.equals(stored.buffer)).toBe(true);
   });
 
   it("refuses to import when the delivered message fails authentication (S2-2)", async () => {

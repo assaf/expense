@@ -13,6 +13,7 @@ import { escapeHtml } from "~/lib/escape";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
 import { emailShell, SIMPLE_FOOTER } from "~/lib/email-layout.server";
 import { PUBLIC_URL } from "~/lib/env";
+import type { SendEmailInput } from "~/lib/email-mime.server";
 import type { FxConversion } from "~/lib/fx.server";
 
 /** The fields extracted for a receipt, with a dash for any blank value. */
@@ -92,6 +93,36 @@ function reportChangeLine(opts: {
   return `<p style="margin-top:20px;font-size:14px;font-weight:600;color:#1f2937">FYI: ${escapeHtml(opts.report)} ${verb} from ${countLabel(before.count)} / ${formatAmount(before.total)} to ${countLabel(after.count)} / ${formatAmount(after.total)}</p>`;
 }
 
+/** Image types mail clients render inline. Any other receipt (a PDF, a HEIC
+ * photo, an unrecognized blob) stays a plain attachment: an <img> pointing
+ * at bytes the client can't decode renders as a broken image. */
+const INLINE_IMAGE_TYPES: Record<string, true> = {
+  "image/jpeg": true,
+  "image/png": true,
+  "image/gif": true,
+  "image/webp": true,
+};
+
+/** The receipt file a confirmation carries: base64 content plus the name and
+ * media type its MIME part is built from. */
+export interface ConfirmationReceipt {
+  content: string;
+  filename: string;
+  contentType?: string;
+}
+
+/** The Content-ID a confirmation's inline receipt image is referenced by, or
+ * undefined when the receipt can't be shown inline. Derived from the expense
+ * id so the HTML's `cid:` URL and the MIME part's Content-ID cannot drift. */
+function inlineReceiptCid(opts: {
+  expenseId: string;
+  receipt?: ConfirmationReceipt;
+}): string | undefined {
+  const type = opts.receipt?.contentType?.toLowerCase();
+  if (!opts.receipt || !type || !INLINE_IMAGE_TYPES[type]) return undefined;
+  return `receipt-${opts.expenseId}@expense.local`;
+}
+
 /** Options for the confirmation email (shared by both email pipelines). */
 export interface ConfirmationEmailOptions {
   expenseId: string;
@@ -114,12 +145,19 @@ export interface ConfirmationEmailOptions {
    * details. The connected pipeline doesn't pass it, since the original email
    * already sits in the owner's Inbox. */
   quotedOriginal?: string;
+  /** The receipt file this message carries. An image the client can render
+   * is ALSO shown inline above the details, so the reader can tell what was
+   * imported without opening an attachment; any other file stays a plain
+   * attachment. Send the bytes from the returned `attachments`, which carry
+   * the Content-ID that the inline image is referenced by. */
+  receipt?: ConfirmationReceipt;
 }
 
 /** Build the confirmation email for a receipt import (partial or complete). */
 function confirmationHtml(
   opts: ConfirmationEmailOptions,
   subject: string,
+  inlineCid?: string,
 ): string {
   const editUrl = PUBLIC_URL ? `${PUBLIC_URL}/expense/${opts.expenseId}` : "";
   const rows = confirmationFields(opts)
@@ -130,8 +168,17 @@ function confirmationHtml(
     `<p style="margin:8px 0">${escapeHtml(
       opts.intro ?? "Thanks for forwarding your receipt. Here's what we found:",
     )}</p>`,
-    `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
   ];
+  if (inlineCid) {
+    // The receipt itself, above the fields: a glance tells the reader
+    // whether the import is right, without opening an attachment.
+    blocks.push(
+      `<img src="cid:${escapeHtml(inlineCid)}" alt="Receipt" style="display:block;margin:12px 0;max-width:100%;height:auto;border:1px solid #e5e7eb;border-radius:8px">`,
+    );
+  }
+  blocks.push(
+    `<table cellpadding="0" cellspacing="0" style="margin:12px 0">${rows}</table>`,
+  );
 
   if (opts.missing.length > 0) {
     blocks.push(
@@ -168,15 +215,23 @@ function confirmationHtml(
 /** The plain-text alternative for a confirmation: the same fields as the
  * HTML, then the original receipt quoted with ">" prefixes (the email
  * convention for quoted text). */
-function confirmationText(opts: ConfirmationEmailOptions): string {
+function confirmationText(
+  opts: ConfirmationEmailOptions,
+  inlineCid?: string,
+): string {
   const rows = confirmationFields(opts)
     .map(([label, value]) => `${label}: ${value || "\u2014"}`)
     .join("\n");
 
   const parts = [
     opts.intro ?? "Thanks for forwarding your receipt. Here's what we found:",
-    rows,
   ];
+  // The image itself renders in the HTML; a text-only reader gets the name
+  // of the part they can open.
+  if (inlineCid && opts.receipt) {
+    parts.push(`Receipt image attached: ${opts.receipt.filename}`);
+  }
+  parts.push(rows);
   if (opts.missing.length > 0) {
     parts.push(
       `These fields couldn't be determined: ${opts.missing.join(", ")}.`,
@@ -195,26 +250,42 @@ function confirmationText(opts: ConfirmationEmailOptions): string {
   return parts.join("\n\n");
 }
 
-/** The subject, HTML, and plain-text alternative for a confirmation reply,
- * so the subject line and the in-body heading always match. The plain text
- * mirrors the HTML for clients that don't render it, and carries the quoted
- * original receipt with ">" prefixes. Exported for the connected-account
- * pipeline, which sends the same confirmation to the mailbox owner. */
-export function confirmationEmail(opts: ConfirmationEmailOptions): {
+/** A built confirmation, ready to send: the subject/HTML/text plus the
+ * receipt parts that go with them. */
+export interface ConfirmationMessage {
   subject: string;
   html: string;
   text: string;
-} {
+  /** The receipt to carry, when the caller supplied one: an inline part
+   * (Content-ID plus base64) or a plain attachment. Pass to the sender
+   * unchanged. */
+  attachments?: SendEmailInput["attachments"];
+}
+
+/** The subject, HTML, plain-text alternative, and attachments for a
+ * confirmation reply, so the subject line and the in-body heading always
+ * match, and the inline image's Content-ID cannot drift from the MIME part
+ * that carries it. The plain text mirrors the HTML for clients that don't
+ * render it, and carries the quoted original receipt with ">" prefixes.
+ * Exported for the connected-account pipeline, which sends the same
+ * confirmation to the mailbox owner. */
+export function confirmationEmail(
+  opts: ConfirmationEmailOptions,
+): ConfirmationMessage {
   const subject = confirmationSubject({
     amount: opts.amount,
     category: opts.category,
     report: opts.report,
     missing: opts.missing,
   });
+  const inlineCid = inlineReceiptCid(opts);
   return {
     subject,
-    html: confirmationHtml(opts, subject),
-    text: confirmationText(opts),
+    html: confirmationHtml(opts, subject, inlineCid),
+    text: confirmationText(opts, inlineCid),
+    attachments: opts.receipt
+      ? [inlineCid ? { ...opts.receipt, contentId: inlineCid } : opts.receipt]
+      : undefined,
   };
 }
 /** The free-text notes under a confirmation's summary: the extraction's own

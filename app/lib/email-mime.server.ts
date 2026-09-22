@@ -4,9 +4,12 @@
  * Fastmail JMAP sender.
  *
  * Structure: multipart/mixed when there are attachments, else
- * multipart/alternative (text + html). All text parts are UTF-8 base64.
- * Header values are RFC 2047-encoded when they contain non-ASCII (emoji
- * subjects like the receipt replies). CRLF line endings throughout.
+ * multipart/alternative (text + html). An attachment with a `contentId` is
+ * shown inline instead: it goes into a multipart/related with the HTML that
+ * references it (RFC 2387), nested inside the alternative. All text parts
+ * are UTF-8 base64. Header values are RFC 2047-encoded when they contain
+ * non-ASCII (emoji subjects like the receipt replies). CRLF line endings
+ * throughout.
  */
 
 /** The transport-level input both senders accept (Fastmail JMAP + Resend).
@@ -20,8 +23,17 @@ export interface SendEmailInput {
   /** Original message's id; sets In-Reply-To + References (threading). */
   inReplyTo?: string;
   /** File attachments; `content` is base64. `contentType` overrides the
-   * default `application/octet-stream` (images/PDFs get their real type). */
-  attachments?: { content: string; filename: string; contentType?: string }[];
+   * default `application/octet-stream` (images/PDFs get their real type).
+   * `contentId` makes the part INLINE: the HTML references it as
+   * `cid:<contentId>` (the angle brackets of RFC 2392 are added here) and
+   * the client shows it in place of listing it. Only give an id to bytes
+   * the HTML actually points at, or the part renders nowhere. */
+  attachments?: {
+    content: string;
+    filename: string;
+    contentType?: string;
+    contentId?: string;
+  }[];
   /** Extra RFC 5322 headers (List-Unsubscribe for marketing email).
    * Names must be printable-ASCII tokens without a colon; values have
    * CR/LF stripped, so neither can inject headers. */
@@ -65,10 +77,41 @@ function header(kind: string, value: string): string {
   return `${kind}: ${value}`;
 }
 
+/** An attachment on an outbound message. */
+type OutboundAttachment = NonNullable<SendEmailInput["attachments"]>[number];
+
+/** One MIME part for an attachment. A `contentId` makes it an INLINE part: it
+ * carries the Content-ID that the HTML's `cid:` URL resolves against (RFC
+ * 2392) and clients leave it out of the attachment list. Without one it is a
+ * plain attachment. */
+function attachmentPart(att: OutboundAttachment): string[] {
+  // Declared types arrive from inbound parsers; pin the grammar so a
+  // future caller can't smuggle CRLF or parameters into the header.
+  const contentType = /^([\w.+-]+\/[\w.+-]+)$/.test(att.contentType ?? "")
+    ? att.contentType!
+    : "application/octet-stream";
+  const parts = [
+    header(
+      "Content-Type",
+      `${contentType}; name=${JSON.stringify(att.filename)}`,
+    ),
+    header(
+      "Content-Disposition",
+      `${att.contentId ? "inline" : "attachment"}; filename=${JSON.stringify(att.filename)}`,
+    ),
+  ];
+  if (att.contentId) {
+    parts.push(header("Content-ID", `<${safeHeaderValue(att.contentId)}>`));
+  }
+  parts.push("Content-Transfer-Encoding: base64", "", wrapBase64(att.content));
+  return parts;
+}
+
 /** Build the full RFC 5322 message bytes. */
 export function buildRfc822Message(input: OutboundMessageInput): Buffer {
   const boundary = randomBoundary();
   const altBoundary = randomBoundary();
+  const relatedBoundary = randomBoundary();
   const messageId = `<exp-${Date.now().toString(36)}-${Math.random()
     .toString(36)
     .slice(2)}@fastmail.labnotes.org>`;
@@ -106,6 +149,42 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     headers.push(header("References", inReplyTo));
   }
 
+  // Attachments split by how they are presented: an inline part is part of
+  // the HTML (referenced by Content-ID), the rest belong to multipart/mixed.
+  const attachments = input.attachments ?? [];
+  const inline = attachments.filter((att) => att.contentId);
+  const files = attachments.filter((att) => !att.contentId);
+
+  // The HTML half of the alternative. Inline images must sit in the SAME
+  // multipart/related as the HTML that references them (RFC 2387/2557), with
+  // the HTML as the root the `type` names; nesting that inside the
+  // alternative is the shape mail clients actually render inline (an image
+  // in a sibling mixed part is shown as an attachment instead).
+  const htmlPart = inline.length
+    ? [
+        header(
+          "Content-Type",
+          `multipart/related; type="text/html"; boundary=${JSON.stringify(relatedBoundary)}`,
+        ),
+        "",
+        "--" + relatedBoundary,
+        "Content-Type: text/html; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
+        "",
+        base64Part([input.html]),
+        ...inline.flatMap((att) => [
+          "--" + relatedBoundary,
+          ...attachmentPart(att),
+        ]),
+        "--" + relatedBoundary + "--",
+      ]
+    : [
+        "Content-Type: text/html; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
+        "",
+        base64Part([input.html]),
+      ];
+
   const alternative = [
     "--" + altBoundary,
     "Content-Type: text/plain; charset=utf-8",
@@ -113,15 +192,12 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     "",
     base64Part([input.text ?? ""]),
     "--" + altBoundary,
-    "Content-Type: text/html; charset=utf-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    base64Part([input.html]),
+    ...htmlPart,
     "--" + altBoundary + "--",
   ];
 
   const body: string[] = [];
-  if (input.attachments?.length) {
+  if (files.length) {
     headers.push(
       header("Content-Type", `multipart/mixed; boundary="${boundary}"`),
     );
@@ -132,28 +208,9 @@ export function buildRfc822Message(input: OutboundMessageInput): Buffer {
     );
     body.push("");
     body.push(...alternative);
-    for (const att of input.attachments) {
+    for (const att of files) {
       body.push("--" + boundary);
-      // Declared types arrive from inbound parsers; pin the grammar so a
-      // future caller can't smuggle CRLF or parameters into the header.
-      const contentType = /^([\w.+-]+\/[\w.+-]+)$/.test(att.contentType ?? "")
-        ? att.contentType!
-        : "application/octet-stream";
-      body.push(
-        header(
-          "Content-Type",
-          `${contentType}; name=${JSON.stringify(att.filename)}`,
-        ),
-      );
-      body.push(
-        header(
-          "Content-Disposition",
-          `attachment; filename=${JSON.stringify(att.filename)}`,
-        ),
-      );
-      body.push("Content-Transfer-Encoding: base64");
-      body.push("");
-      body.push(wrapBase64(att.content));
+      body.push(...attachmentPart(att));
     }
     body.push("--" + boundary + "--");
   } else {

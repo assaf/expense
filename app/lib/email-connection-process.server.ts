@@ -10,6 +10,7 @@ import {
   confirmationEmail,
   confirmationNotes,
 } from "~/lib/email-confirmation.server";
+import type { SendEmailInput } from "~/lib/email-mime.server";
 import {
   createMimeInboundCache,
   mimeFetchDeps,
@@ -337,7 +338,7 @@ export interface OwnerEmail {
   subject: string;
   html: string;
   text?: string;
-  attachments?: { content: string; filename: string }[];
+  attachments?: SendEmailInput["attachments"];
 }
 
 export type ConnectionEmailResult =
@@ -641,6 +642,7 @@ export async function processConnectionEmail(
         : "This email was imported automatically as an expense. Here's what we found:",
       missing: saved.missing,
       reportStats: saved.reportStats,
+      receipt: saved.receiptAttachment,
     });
     if (saved.recentMatch) {
       // The same receipt was already imported within the recent window by
@@ -668,9 +670,7 @@ export async function processConnectionEmail(
         subject: confirmation.subject,
         html: confirmation.html,
         text: confirmation.text,
-        attachments: saved.receiptAttachment
-          ? [saved.receiptAttachment]
-          : undefined,
+        attachments: confirmation.attachments,
       });
     }
 

@@ -14,6 +14,7 @@ import {
   fetchRemoteImageImpl,
 } from "~/lib/inbound-email.server";
 import { isPrivateHost } from "~/lib/ssrf.server";
+import type { SendEmailInput } from "~/lib/email-mime.server";
 import { matchCategory } from "~/lib/receipt-ai.server";
 import type {
   InboundDeps,
@@ -118,32 +119,21 @@ function attachment(overrides: Partial<AttachmentMeta> = {}): AttachmentMeta {
   };
 }
 
+/** One outbound reply the fake sendReply captured. */
+interface SentReply {
+  subject: string;
+  html: string;
+  text?: string;
+  to: string;
+  attachments?: SendEmailInput["attachments"];
+}
+
 /** Build fake deps: real renderReceiptImage (resvg + bundled font), everything else faked. */
 function fakeDeps(): InboundDeps & {
-  sent: {
-    subject: string;
-    html: string;
-    text?: string;
-    to: string;
-    attachments?: {
-      content: string;
-      filename: string;
-      contentType?: string;
-    }[];
-  }[];
+  sent: SentReply[];
   downloads: AttachmentMeta[];
 } {
-  const sent: {
-    subject: string;
-    html: string;
-    text?: string;
-    to: string;
-    attachments?: {
-      content: string;
-      filename: string;
-      contentType?: string;
-    }[];
-  }[] = [];
+  const sent: SentReply[] = [];
   const downloads: AttachmentMeta[] = [];
   const deps: InboundDeps = {
     fetchReceivedEmail: async (id) => receivedEmail({ id }),
@@ -1975,6 +1965,10 @@ describe("processInboundEvent (attachments)", () => {
     expect(att.filename).toBe("photo.jpg");
     expect(att.contentType).toBe("image/png");
     expect(att.content).toBe(TINY_PNG.toString("base64"));
+    // Shown inline in the confirmation: the HTML points at the part's
+    // Content-ID, so the reader sees the receipt without opening a file.
+    expect(att.contentId).toBeTruthy();
+    expect(confirmation.html).toContain(`cid:${att.contentId}`);
     expect(confirmation.html).not.toContain("Original receipt");
   });
 
@@ -2006,6 +2000,8 @@ describe("processInboundEvent (attachments)", () => {
     expect(att.filename).toBe("receipt.png");
     expect(att.contentType).toBe("image/png");
     expect(att.content).toBe(TINY_PNG.toString("base64"));
+    expect(att.contentId).toBeTruthy();
+    expect(confirmation.html).toContain(`cid:${att.contentId}`);
     expect(confirmation.html).not.toContain("Original receipt");
   });
 });
