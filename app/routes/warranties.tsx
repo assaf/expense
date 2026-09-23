@@ -41,9 +41,9 @@ export function meta(): Route.MetaDescriptors {
  * server-side "today" is tomorrow for a PST user after 4pm. */
 const GROUPS: Array<{ key: WarrantyExpiryGroup; title: string }> = [
   { key: "soon", title: `Expiring within ${EXPIRING_SOON_DAYS} days` },
-  { key: "later", title: "Later" },
-  { key: "none", title: "No expiry" },
-  { key: "expired", title: "Expired" },
+  { key: "later", title: "Expiring later" },
+  { key: "none", title: "No expiration date" },
+  { key: "expired", title: "Already expired" },
 ];
 
 function documentCountLabel(count: number): string {

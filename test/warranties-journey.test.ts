@@ -72,8 +72,10 @@ describe("warranties journey", () => {
       timeout: 15_000,
     });
 
-    // Well past the 90-day window, so it lands under "Later".
-    await expect(page.getByRole("heading", { name: "Later" })).toBeVisible();
+    // Well past the 90-day window, so it lands under "Expiring later".
+    await expect(
+      page.getByRole("heading", { name: "Expiring later" }),
+    ).toBeVisible();
     await expect(page.getByText("Espresso machine")).toBeVisible();
     await expect(page.getByText("2 documents")).toBeVisible();
     await expect(page.getByText("Expires 2027-03-15")).toBeVisible();
@@ -158,8 +160,9 @@ describe("warranties journey", () => {
       timeout: 15_000,
     });
     await expect(
-      page.getByRole("heading", { name: "No expiry" }),
+      page.getByRole("heading", { name: "No expiration date" }),
     ).toBeVisible();
+    // The row's badge keeps the label's own wording ("No expiry").
     const row = page.getByRole("link", { name: /Coffee grinder/ });
     await expect(row).toContainText("No expiry");
     await expect(row).toContainText("1 document");
