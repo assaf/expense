@@ -114,6 +114,35 @@ describe("Accessibility", () => {
       await expect(textarea).toHaveValue("line one\n");
       await editor.close();
     });
+
+    // The warranty editor runs the same container as the expense editors, so
+    // the same shortcuts have to work there. Control (not Meta) so the
+    // assertion holds on every platform; the shortcut accepts both.
+    it("Ctrl+Enter saves a warranty", async () => {
+      editor = await goto("/warranty/new");
+      await editor
+        .getByLabel("Product", { exact: true })
+        .fill("Keyboard Warranty");
+      await editor.keyboard.press("Control+Enter");
+      await editor.waitForURL((url) => url.pathname === "/warranties", {
+        timeout: 10_000,
+      });
+      await expect(editor.getByText("Keyboard Warranty")).toBeVisible();
+      await editor.close();
+    });
+
+    it("Escape cancels the warranty editor", async () => {
+      editor = await goto("/warranty/new");
+      await editor
+        .getByLabel("Product", { exact: true })
+        .fill("Abandoned warranty");
+      await editor.keyboard.press("Escape");
+      await editor.waitForURL((url) => url.pathname === "/warranties", {
+        timeout: 10_000,
+      });
+      await expect(editor.getByText("Abandoned warranty")).toHaveCount(0);
+      await editor.close();
+    });
   });
 
   // --- Focus trapping -------------------------------------------------------

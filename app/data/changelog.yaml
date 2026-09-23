@@ -47,6 +47,8 @@ typeLabels:
 releases:
   - date: "2026-09-23"
     changes:
+      - type: improvement
+        text: "The warranty editor saves with Cmd+Enter and leaves with Escape, like the expense editors, and its Delete button asks first in the same dialog."
       - type: feature
         text: "The home page plays a short demo of the app filing a receipt: the drop, the fields read from the PDF, and the expense on the list."
       - type: feature

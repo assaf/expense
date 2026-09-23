@@ -52,6 +52,13 @@ describe("warranties journey", () => {
     // past that keeps the fills on the instance that survives.
     await page.waitForTimeout(200);
 
+    // A rejected save leaves a usable form: the error shows and the
+    // transition overlay is gone (the shared flow clears it), so the user can
+    // fix the field and submit again.
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByRole("alert")).toContainText("needs a product");
+    await expect(page.getByText("Saving…")).toHaveCount(0);
+
     await page.getByLabel("Product", { exact: true }).fill("Espresso machine");
     await page.getByLabel("Merchant", { exact: true }).fill("Williams Sonoma");
     await page.getByLabel("Value", { exact: true }).fill("1299");
@@ -99,8 +106,10 @@ describe("warranties journey", () => {
     const removed = await page.request.get(`${href}/document/1`);
     expect(removed.status()).toBe(404);
 
-    // Delete the record: back to the empty state.
+    // Delete the record: back to the empty state. The prompt is the shared
+    // confirm dialog, so it has to name what is being deleted.
     await page.getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText("Delete this warranty?")).toBeVisible();
     await page.getByRole("button", { name: "Delete" }).last().click();
     await page.waitForURL((url) => url.pathname === "/warranties", {
       timeout: 15_000,

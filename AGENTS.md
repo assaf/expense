@@ -232,6 +232,18 @@ webhooks with `assertCronSecret`. Never hand-roll a cron route.
 `app/lib/expense-read.server.ts` and the write helpers rather than querying
 directly.
 
+**Record editors share one container.** The receipt, mileage and warranty
+editors all render `Shell` and drive their save/cancel/delete through
+`useEditorFlow` + `useFormKeys` + `EditorActions` + `DeleteConfirmDialog` +
+`TransitionOverlay` (`app/components/editor/editor-shared.tsx`). That is what
+makes Cmd/Ctrl+Enter save, Escape leave, the Delete button ask first, and the
+buttons behave the same everywhere; a new record editor joins them rather than
+hand-rolling a `PageShell` form. The only things an editor supplies are its
+fields, its submit (the warranty editor submits the form element itself, so the
+browser does the multipart encoding for picked files) and `cancelTo`. Anything
+a shared piece cannot express (e.g. the noun in the delete prompt) becomes a
+prop with the expense wording as the default.
+
 **Feature highlights.** Every new user-facing feature or page ships with a "Did
 you know?" card in `app/components/FeatureHighlight.tsx`, picked per request on
 the home page; gate data-dependent ones in `availableHighlights` and pin the

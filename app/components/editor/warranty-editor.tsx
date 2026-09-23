@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Paperclip, Trash2, Upload } from "lucide-react";
-import { useFetcher, useNavigate } from "react-router";
-import { PageShell } from "~/components/PageShell";
 import { Button } from "~/components/ui/Button";
-import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { DatePicker } from "~/components/ui/DatePicker";
 import { Field } from "~/components/ui/Field";
 import { FieldLabel } from "~/components/ui/FieldLabel";
@@ -11,16 +8,21 @@ import { Input } from "~/components/ui/Input";
 import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Select } from "~/components/ui/Select";
 import { Textarea } from "~/components/ui/Textarea";
-import { Alert } from "~/components/ui/Alert";
 import { isReceiptFile } from "~/lib/file-types";
 import { formatAmount, formatDate, normalizeAmount } from "~/lib/format";
 import { useDropTarget } from "~/lib/use-drop-target";
 import type { Warranty, WarrantyExpenseOption } from "~/lib/types";
 import { termsForMerchant } from "~/lib/warranty-policies";
 import {
+  DeleteConfirmDialog,
   EditorActions,
+  ErrorBanner,
+  Shell,
   TransitionOverlay,
   fetcherError,
+  submitDelete,
+  useEditorFlow,
+  useFormKeys,
 } from "./editor-shared";
 
 /** Data shape shared by /warranty/new and /warranty/:id. */
@@ -51,8 +53,11 @@ function documentCountLabel(count: number): string {
 export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   const warranty = data.warranty;
   const isNew = data.mode === "create";
-  const navigate = useNavigate();
-  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  // The same container the expense editors use: one save/cancel/delete flow,
+  // one keyboard contract, one confirm dialog. Only the destination differs.
+  const { fetcher, transition, doSave, doDelete, doCancel } = useEditorFlow({
+    cancelTo: "/warranties",
+  });
 
   const [product, setProduct] = useState(warranty.product);
   const [merchant, setMerchant] = useState(warranty.merchant);
@@ -63,7 +68,6 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   const [expenseId, setExpenseId] = useState(warranty.expenseId);
   const [picks, setPicks] = useState<PendingDocument[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [transition, setTransition] = useState<null | "save" | "delete">(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -104,26 +108,22 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
     input.files = transfer.files;
   }, [picks]);
 
-  // A submission that lands without navigating is a validation error: clear
-  // the overlay so the message and the form are usable again. (A save that
-  // sticks navigates to the list, so the picks go with the component.)
-  useEffect(() => {
-    if (fetcher.state !== "idle" || !fetcher.data) return;
-    setTransition(null);
-  }, [fetcher.state, fetcher.data]);
-
-  function cancel() {
-    void navigate("/warranties");
-  }
-
   /** Save through the form itself: a JS-built FormData would be encoded as
    * url-encoded, which drops the picked files (they become filenames), so
    * the browser has to do the multipart encoding. */
   function save() {
     if (!formRef.current) return;
-    setTransition("save");
     formRef.current.requestSubmit();
   }
+
+  // Same keyboard contract as the expense editors: Cmd/Ctrl+Enter saves
+  // (plain Enter too, outside textareas, lists and buttons), Escape leaves.
+  useFormKeys({
+    onSave: () => doSave(save),
+    onCancel: doCancel,
+    disabled: saving,
+    blocked: confirmDelete,
+  });
 
   function removeDocument(key: string) {
     const form = new FormData();
@@ -133,9 +133,9 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   }
 
   return (
-    <PageShell
+    <Shell
       title={product || (isNew ? "New warranty" : "Warranty")}
-      onBack={cancel}
+      onBack={doCancel}
       dimmed={!!transition}
       drop={drop}
     >
@@ -145,7 +145,7 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
           filename. The browser does the multipart encoding here. */}
       <fetcher.Form ref={formRef} method="post" encType="multipart/form-data">
         <input type="hidden" name="intent" value="save" />
-        {error ? <Alert className="mb-4">{error}</Alert> : null}
+        <ErrorBanner error={error} />
 
         <Field label="Product">
           <Input
@@ -370,27 +370,23 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
         <EditorActions
           complete
           saving={saving}
-          onCancel={cancel}
-          onSave={save}
+          onCancel={doCancel}
+          onSave={() => doSave(save)}
           onDelete={isNew ? undefined : () => setConfirmDelete(true)}
         />
       </fetcher.Form>
 
-      {confirmDelete ? (
-        <ConfirmDialog
-          message="Delete this warranty? This cannot be undone."
-          onConfirm={() => {
-            setConfirmDelete(false);
-            setTransition("delete");
-            const form = new FormData();
-            form.set("intent", "delete");
-            void fetcher.submit(form, { method: "post" });
-          }}
-          onCancel={() => setConfirmDelete(false)}
-          deleting={saving}
-        />
-      ) : null}
+      <DeleteConfirmDialog
+        open={confirmDelete}
+        message="Delete this warranty? This cannot be undone."
+        onConfirm={() => {
+          setConfirmDelete(false);
+          doDelete(() => submitDelete(fetcher));
+        }}
+        onCancel={() => setConfirmDelete(false)}
+        busy={saving}
+      />
       {transition ? <TransitionOverlay kind={transition} /> : null}
-    </PageShell>
+    </Shell>
   );
 }

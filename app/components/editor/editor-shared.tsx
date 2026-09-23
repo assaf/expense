@@ -202,9 +202,12 @@ export function SelectField({
  * Shared editor flow: the save/cancel/delete transition state and the
  * fetcher, plus clearing the transition overlay when a submission finishes
  * without navigating (validation error). `doSave`/`doDelete` set the overlay
- * and then run the caller's submit; `doCancel` navigates home.
+ * and then run the caller's submit; `doCancel` navigates to the list the
+ * editor belongs to.
  */
-export function useEditorFlow() {
+export function useEditorFlow({
+  cancelTo = "/expenses",
+}: { cancelTo?: string } = {}) {
   const fetcher = useFetcher<{ error?: string }>();
   const navigate = useNavigate();
   const [transition, setTransition] = useState<
@@ -221,7 +224,7 @@ export function useEditorFlow() {
   };
   const doCancel = () => {
     setTransition("cancel");
-    void navigate("/expenses");
+    void navigate(cancelTo);
   };
 
   useEffect(() => {
@@ -663,23 +666,26 @@ export function ClosedReportBanner() {
   );
 }
 
-/** The confirm-delete dialog both editors render after the Delete button
- * asks first. Renders nothing until `open`. */
+/** The confirm-delete dialog the editors render after the Delete button asks
+ * first. Renders nothing until `open`. The copy names what is being deleted,
+ * so a shared dialog never tells a warranty it is an expense. */
 export function DeleteConfirmDialog({
   open,
   onConfirm,
   onCancel,
   busy,
+  message = "Delete this expense? This cannot be undone.",
 }: {
   open: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   busy: boolean;
+  message?: string;
 }) {
   if (!open) return null;
   return (
     <ConfirmDialog
-      message="Delete this expense? This cannot be undone."
+      message={message}
       onConfirm={onConfirm}
       onCancel={onCancel}
       deleting={busy}
