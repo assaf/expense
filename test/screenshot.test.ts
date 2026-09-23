@@ -24,6 +24,14 @@ import sharp from "sharp";
 import { ulid } from "ulid";
 import { afterAll, describe, expect, it } from "vite-plus/test";
 import { hashPassword } from "~/lib/passwords";
+import {
+  extractionCacheKey,
+  readCachedExtraction,
+  writeCachedExtraction,
+} from "~/lib/db/extraction-cache";
+import { extractPdfText } from "~/lib/receipt-ocr.server";
+import { createDemoRecorder } from "./helpers/demoRecord";
+import { fileTransfer } from "./helpers/dropFile";
 import { closeServer, launchServer } from "./helpers/launchServer";
 import {
   freshPage,
@@ -519,6 +527,222 @@ describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
   }, 180_000);
 });
 
+// ---------------------------------------------------------------------------
+// Landing demo
+// ---------------------------------------------------------------------------
+
+/** The receipt the demo drops, and the fields it says: a PDF with a text
+ * layer, so the app reads it the way it reads a downloaded receipt
+ * (extractPdfText, then the model). */
+const DEMO_RECEIPT = {
+  merchant: "Blue Bottle Coffee",
+  amount: "24.75",
+  category: "Meals & Entertainment",
+  date: "2026-07-15",
+  items: [
+    ["Iced latte x2", "13.50"],
+    ["Avocado toast", "11.25"],
+  ] as [string, string][],
+};
+
+/** Draw the demo receipt as a PDF. The layout is the receipt's own: the text
+ * layer is what the extraction reads, and the rasterized page is what the
+ * editor shows in the video. */
+async function demoReceiptPdf(): Promise<Buffer> {
+  const { default: PDFDocument } = await import("pdfkit");
+  const doc = new PDFDocument({ size: [420, 600], margin: 36 });
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+  const written = new Promise<void>((resolve) => doc.on("end", resolve));
+
+  doc.font("Helvetica-Bold").fontSize(19).fillColor("#111827");
+  doc.text("BLUE BOTTLE COFFEE", { characterSpacing: 0.5 });
+  doc.moveDown(0.4);
+  doc.font("Helvetica").fontSize(9.5).fillColor("#4b5563");
+  doc.text("300 Webster St, Oakland CA");
+  doc.text("510-653-3394  ·  bluebottlecoffee.com");
+  doc.moveDown(0.8);
+  doc.moveTo(36, doc.y).lineTo(384, doc.y).strokeColor("#9ca3af").stroke();
+  doc.moveDown(0.8);
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#111827");
+  doc.text(`Receipt ${DEMO_RECEIPT.date}`);
+  doc.font("Helvetica").fontSize(9.5).fillColor("#4b5563");
+  doc.text("Order 4821  ·  Register 2  ·  Barista: Sam");
+  doc.moveDown(1.1);
+  for (const [name, price] of DEMO_RECEIPT.items) {
+    const y = doc.y;
+    doc.font("Helvetica").fontSize(11).fillColor("#111827");
+    doc.text(name, 36, y);
+    doc.text(`$${price}`, 284, y, { width: 100, align: "right" });
+    doc.moveDown(0.7);
+  }
+  doc.moveDown(0.4);
+  doc.moveTo(36, doc.y).lineTo(384, doc.y).strokeColor("#9ca3af").stroke();
+  doc.moveDown(0.9);
+  const totalY = doc.y;
+  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111827");
+  doc.text("TOTAL", 36, totalY);
+  doc.text(`$${DEMO_RECEIPT.amount}`, 284, totalY, {
+    width: 100,
+    align: "right",
+  });
+  doc.moveDown(1.6);
+  doc.font("Helvetica").fontSize(9.5).fillColor("#4b5563");
+  doc.text("VISA ****4821  ·  Approved  ·  Thank you");
+  doc.end();
+  await written;
+  return Buffer.concat(chunks);
+}
+
+/** Warm the extraction cache with the answer that belongs to this exact file.
+ *
+ * The model call is the one step the demo cannot make: the suite forbids
+ * outbound network (app/lib/env.ts), and a live call would make the video
+ * depend on a provider. A cache row is what the app reads on a re-upload
+ * anyway, so the demo shows the app's own fill path with the model's answer
+ * already in place. A drifted key would leave the fields empty, so this
+ * proves the read back rather than trusting the write. */
+async function warmDemoExtraction(pdf: Buffer): Promise<void> {
+  const text = await extractPdfText(pdf);
+  const key = extractionCacheKey({ text });
+  if (!key)
+    throw new Error("demo: the receipt PDF has no text layer to key on");
+  await writeCachedExtraction(ACCOUNT, key, {
+    isReceipt: true,
+    merchant: DEMO_RECEIPT.merchant,
+    description: "",
+    amount: DEMO_RECEIPT.amount,
+    currency: "USD",
+    category: DEMO_RECEIPT.category,
+    report: "",
+    confidence: "high",
+    notes: "",
+  });
+  const cached = await readCachedExtraction(ACCOUNT, key);
+  expect(cached).toMatchObject({
+    merchant: DEMO_RECEIPT.merchant,
+    amount: DEMO_RECEIPT.amount,
+  });
+}
+
+/**
+ * Landing hero demo: the receipt a visitor drops on the list, from the drop to
+ * the filed expense. Skipped unless DEMO=1 (`pnpm demo`), because it encodes a
+ * video and needs ffmpeg; the artifact is committed, so the suite never builds
+ * it. The recording is a sequence of frames with explicit holds (see
+ * helpers/demoRecord) so the cut is the same on every run.
+ */
+describe.skipIf(!process.env.DEMO)("landing demo", () => {
+  it("records the drop-a-receipt demo", async () => {
+    await seedScreenshotData();
+    const pdf = await demoReceiptPdf();
+    await warmDemoExtraction(pdf);
+
+    const launched = await ensureServer();
+
+    try {
+      const page = await freshPage({
+        viewport: { width: 1440, height: 940 },
+        deviceScaleFactor: 2,
+      });
+      const recorder = await createDemoRecorder(page);
+      const pageErrors: string[] = [];
+      page.on("pageerror", (err) => pageErrors.push(String(err)));
+      await signIn(page, TEST_EMAIL, TEST_PASSWORD);
+
+      // Scene 1: the expense list, as a user finds it.
+      await page.goto("/expenses", { waitUntil: "load" });
+      await waitForSettled(page);
+      await page.waitForTimeout(3_000);
+      // The demo's claim is that this list gains a row by the end, so both
+      // ends of that are asserted rather than left to the eye.
+      await expect
+        .poll(() => page.locator("main li").count(), { timeout: 10_000 })
+        .toBe(11);
+      await recorder.place(1080, 720);
+      await recorder.shot(2_200);
+
+      // Scene 2: a receipt file arrives over the page. The drop target is the
+      // list's own <main> (the handlers live there), so the outline and the
+      // "drop to upload" note are the app's, not the recorder's. The poll is
+      // what makes this frame the highlight rather than a guess at it.
+      const dropZone = page.locator("#main-content");
+      const hovering = await fileTransfer(page, {
+        name: "blue-bottle-receipt.pdf",
+        type: "application/pdf",
+        body: [...pdf],
+      });
+      await dropZone.dispatchEvent("dragenter", { dataTransfer: hovering });
+      await dropZone.dispatchEvent("dragover", { dataTransfer: hovering });
+      await expect
+        .poll(() => dropZone.getAttribute("class"), { timeout: 10_000 })
+        .toContain("outline-dashed");
+      // Carry the pointer into the page with the outline up: the drag reads as
+      // motion rather than a highlight that appears over a still cursor.
+      await recorder.glideTo(760, 470);
+      await recorder.shot(1_400);
+
+      // Scene 3: the drop opens the new-expense editor on the file as its
+      // draft, which rasterizes the PDF and reads its fields.
+      const dropping = await fileTransfer(page, {
+        name: "blue-bottle-receipt.pdf",
+        type: "application/pdf",
+        body: [...pdf],
+      });
+      await dropZone.dispatchEvent("drop", { dataTransfer: dropping });
+      await page.waitForURL(/\/expense\/new/, { timeout: 15_000 });
+      await waitForSettled(page);
+      await recorder.shot(1_000);
+      await expect
+        .poll(() => page.getByLabel("Merchant").inputValue(), {
+          timeout: 20_000,
+        })
+        .toBe(DEMO_RECEIPT.merchant);
+      await expect
+        .poll(() => page.getByLabel("Amount").inputValue(), { timeout: 20_000 })
+        .toBe(DEMO_RECEIPT.amount);
+      await recorder.shot(1_800);
+
+      // Scene 4: file it. Pick the report and describe it, then save.
+      await recorder.click(page.getByLabel("Report"));
+      await recorder.shot(600);
+      await page.getByLabel("Report").selectOption("July 2026");
+      await recorder.shot(900);
+      await recorder.typeInto(
+        page.getByLabel("Description"),
+        "Client coffee with Sam",
+      );
+      await recorder.shot(700);
+
+      // Scene 5: the save returns to the list with the new expense on it.
+      await recorder.click(page.getByRole("button", { name: /^Save/ }));
+      await page.waitForURL(/\/expenses\?new=/, { timeout: 20_000 });
+      await waitForSettled(page);
+      await recorder.shot(1_400);
+      await recorder.shot(1_800);
+      expect(await page.getByText(DEMO_RECEIPT.merchant).count()).toBe(1);
+      await expect
+        .poll(() => page.locator("main li").count(), { timeout: 10_000 })
+        .toBe(12);
+
+      const result = await recorder.finish({
+        width: 1440,
+        height: 940,
+        poster: "public/demo-receipt-poster.webp",
+        mp4: "public/demo-receipt.mp4",
+        webm: "public/demo-receipt.webm",
+      });
+      console.info(
+        `wrote public/demo-receipt.{mp4,webm} (${result.frames} frames, ${result.seconds.toFixed(1)}s)`,
+      );
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await closeBrowser();
+      if (launched) await closeServer();
+    }
+  }, 600_000);
+});
+
 /**
  * Suite screenshot regression: on every `pnpm test` run, capture the app's
  * important screens and the emails it sends, comparing each against the
@@ -556,8 +780,16 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
     page: Page,
     path: string,
     name: string,
+    opts: { reducedMotion?: boolean } = {},
   ): Promise<void> {
     currentName = name;
+    // The landing page plays a video, and a playing video is never the same
+    // twice. Capturing it with reduced motion compares the still the page
+    // shows instead, which keeps the baseline stable and keeps that path
+    // covered by the suite.
+    await page.emulateMedia({
+      reducedMotion: opts.reducedMotion ? "reduce" : "no-preference",
+    });
     await page.goto(path, { waitUntil: "load", timeout: 15_000 });
     await waitForSettled(page);
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
@@ -582,7 +814,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       fresh.on("pageerror", (error) =>
         pageErrors.push(`${currentName}: ${String(error)}`),
       );
-      await capture(fresh, "/", "landing");
+      await capture(fresh, "/", "landing", { reducedMotion: true });
       await capture(fresh, "/login", "login");
       await capture(fresh, "/onboarding", "onboarding");
       await fresh.close();

@@ -11,7 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
@@ -116,20 +116,64 @@ const INSIGHTS_EXCHANGE = {
  * traffic-light header that makes a screenshot read as a browser window. The
  * annotated receipt is artwork rather than app UI, so it drops the chrome.
  * `srcPortrait` is for artwork whose print stops being legible once the
- * viewport narrows to one column. */
+ * viewport narrows to one column. `demo` plays a recording of the app inside
+ * the same frame, with `src` as the still it paints first. */
 function BrowserFrame({
   src,
   srcPortrait,
   alt,
   chrome = true,
+  demo,
   children,
 }: {
   src: string;
   srcPortrait?: string;
   alt: string;
   chrome?: boolean;
+  /** The demo's sources; `src` is its poster and its reduced-motion still. */
+  demo?: { mp4: string; webm: string };
   children?: ReactNode;
 }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(true);
+
+  // The video must not load for a visitor who will not see it: hidden is not
+  // enough, a display:none autoplaying video still downloads in full. So the
+  // element ships with no autoplay and preload="none", and playback starts
+  // here, only when reduced motion is off. A refused play() (a data-saving
+  // browser) leaves the control saying "Play demo", which is what it does.
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    const sync = () => setPlaying(!el.paused);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      if (reduce.matches) {
+        el.pause();
+        setPlaying(false);
+      } else {
+        el.muted = true;
+        void el.play().catch(() => setPlaying(false));
+      }
+    };
+    apply();
+    el.addEventListener("play", sync);
+    el.addEventListener("pause", sync);
+    reduce.addEventListener("change", apply);
+    return () => {
+      el.removeEventListener("play", sync);
+      el.removeEventListener("pause", sync);
+      reduce.removeEventListener("change", apply);
+    };
+  }, []);
+
+  function toggleDemo() {
+    const el = video.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  }
+
   return (
     <figure className="overflow-hidden rounded-xl bg-white shadow-2xl shadow-gray-900/10 ring-1 ring-gray-900/5 dark:bg-gray-800 dark:shadow-black/30 dark:ring-white/5">
       {chrome ? (
@@ -137,9 +181,50 @@ function BrowserFrame({
           <span className="h-3 w-3 rounded-full bg-red-400" />
           <span className="h-3 w-3 rounded-full bg-amber-400" />
           <span className="h-3 w-3 rounded-full bg-green-400" />
+          {demo ? (
+            // A loop that starts on its own needs a way to stop it, so the
+            // control lives in the frame's own chrome (and goes with the
+            // video when a reduced-motion visitor gets the still instead).
+            <button
+              type="button"
+              onClick={toggleDemo}
+              className="ml-auto rounded px-2 py-0.5 text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-900 motion-reduce:hidden dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+            >
+              {playing ? "Pause demo" : "Play demo"}
+            </button>
+          ) : null}
         </div>
       ) : null}
-      {srcPortrait ? (
+      {demo ? (
+        // The recording is the app itself: no controls of its own, nothing to
+        // hear, and the still underneath. The box is sized up front so the
+        // page does not reflow when the first frame lands.
+        <div
+          role="img"
+          aria-label={alt}
+          className="relative aspect-[1440/940] w-full"
+        >
+          <video
+            ref={video}
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover object-top motion-reduce:hidden"
+            muted
+            loop
+            playsInline
+            preload="none"
+            poster={src}
+          >
+            <source src={demo.webm} type="video/webm" />
+            <source src={demo.mp4} type="video/mp4" />
+          </video>
+          <img
+            src={src}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 hidden h-full w-full object-cover object-top motion-reduce:block"
+          />
+        </div>
+      ) : srcPortrait ? (
         <picture className="block">
           <source media="(max-width: 639px)" srcSet={srcPortrait} />
           <img src={src} alt={alt} className="w-full" />
@@ -218,21 +303,22 @@ export default function LandingPage({
           ) : null}
         </section>
 
-        {/* App screenshot */}
+        {/* App demo */}
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
           {/*
            * The note is decoration: it lives in a pseudo-element, so it adds
            * nothing to the accessibility tree, and it never points inside the
-           * screenshot, which the screenshot script regenerates. The section's
-           * own pb-20 is the room it sits in.
+           * frame, which the demo script regenerates. The section's own pb-20
+           * is the room it sits in.
            */}
           <span
             className="ann ann-n ann-blue ann-no-mark ann-block ann-wide"
-            data-note="nothing here was typed"
+            data-note="the real app, recorded"
           >
             <BrowserFrame
-              src="/screenshot-hero.png"
-              alt="The Expense home page: report totals, receipts with thumbnails, and a mileage entry"
+              src="/demo-receipt-poster.webp"
+              alt="A receipt PDF dropped on the expense list becomes a filed expense: the merchant, amount and category are read from it, and saving the expense puts it on the list"
+              demo={{ mp4: "/demo-receipt.mp4", webm: "/demo-receipt.webm" }}
             />
           </span>
         </section>

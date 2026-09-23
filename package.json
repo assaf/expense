@@ -10,6 +10,7 @@
     "cloc": "cloc --exclude-dir=node_modules,dist,build,coverage .",
     "dev": "tsx scripts/build-warranty-policies.ts && portless run -- react-router dev",
     "screenshot": "SCREENSHOT=1 vp test run test/screenshot.test.ts",
+    "demo": "react-router build --force && DEMO=1 vp test run test/screenshot.test.ts -t \"drop-a-receipt\"",
     "start": "NODE_ENV=production react-router-serve ./build/server/index.js",
     "test": "react-router build --force && vp test run",
     "test:changed": "vp test run --changed ${1:-HEAD}",

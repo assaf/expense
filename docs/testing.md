@@ -58,6 +58,40 @@
   editor's `useEffect` upload fires from mount #1 and `draftUploadsInFlight`
   dedupes the remount).
 
+## Landing demo (`pnpm demo`)
+
+- The home-page hero is a video of the app filing a receipt:
+  `public/demo-receipt.mp4`, `public/demo-receipt.webm`, and
+  `public/demo-receipt-poster.webp` (the still the page paints first and shows
+  instead when a visitor asks for reduced motion), all committed.
+  `pnpm demo` rebuilds them: it seeds the stills' dataset, drives the real
+  flow in Chromium, and encodes with ffmpeg, so ffmpeg has to be on `PATH`.
+- The capture is a frame sequence with explicit holds rather than a screen
+  recording (`test/helpers/demoRecord.ts`): each state gets the frames it
+  deserves and ffmpeg joins them from a concat list, which is what makes the
+  cut reproducible. Every `shot()` waits two animation frames first, because
+  a state React has committed is not necessarily painted: an earlier cut was
+  missing the drop highlight entirely, its one held frame having beaten the
+  paint.
+- The demo asserts what it shows rather than trusting the eye: 11 list rows
+  before the drop and 12 after, the outline class up while the file hovers,
+  and the merchant and amount the extraction filled. The page it records is
+  the same seeded dataset the stills use (`seedScreenshotData`).
+- The receipt is a generated PDF with a text layer and its extraction is a
+  warmed cache row (`warmDemoExtraction`). The model call is the one step the
+  suite cannot make (no outbound network, see `app/lib/env.ts`), and the
+  cache is what the app reads on a re-upload anyway. The key comes from the
+  app's own reader, `sha256("txt:" + extractPdfText(pdf))`, so a drifted key
+  would leave the demo's fields empty; the warm reads back before recording.
+- The landing baseline in `screenshots/landing.png` is captured with
+  `reducedMotion: "reduce"`: a playing video is never the same twice, so the
+  suite compares the still the page falls back to, which keeps that path
+  covered as well.
+- The demo's duration is the sum of its holds, so tune the storyboard in
+  `test/screenshot.test.ts`, not the encoder. Both formats are kept because
+  Safari still prefers the mp4; the poster is a WebP of the video's first
+  frame, so the still and frame one are the same image.
+
 ## Screenshot regression (suite screenshots)
 
 - Every `pnpm test` run captures the app's important screens and the emails
