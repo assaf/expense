@@ -59,6 +59,7 @@ const PUBLIC_PAGES: Record<string, true> = {
   "/privacy": true,
   "/terms": true,
   "/support": true,
+  "/changelog": true,
   // /auth.md describes agent authentication (the Auth.md convention). The
   // gate strips the .md suffix, so this entry is what opens it; /auth itself
   // has no route and falls through to the 404 page.
@@ -74,6 +75,7 @@ const MARKDOWN_MIRRORS: Record<string, string> = {
   "/about": "/about.md",
   "/ai": "/ai.md",
   "/alternatives": "/alternatives.md",
+  "/changelog": "/changelog.md",
   "/connect": "/connect.md",
   "/faq": "/faq.md",
   "/mileage-rates": "/mileage-rates.md",

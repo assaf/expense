@@ -225,6 +225,38 @@ export interface ProductFactsPage extends PageMeta {
   mirror: MirrorMeta & { footer: string };
 }
 
+/** What one changelog entry did to the product. */
+export type ChangeType = "feature" | "improvement" | "fix";
+
+/** One dated release in the changelog: the changes that shipped that day. */
+export interface ChangelogRelease {
+  /** The day the change shipped, "YYYY-MM-DD". */
+  date: string;
+  changes: Array<{ type: ChangeType; text: string }>;
+}
+
+/** `changelog.yaml`: the product changelog at /changelog. Entries are grouped
+ * by the day they shipped rather than by version number: every push to main
+ * deploys, so the date is the release.
+ *
+ * The entries are hand-written, and the file is append-mostly: a new note goes
+ * under today's date, or under an existing date if the change shipped then.
+ * `changelogReleases()` sorts them newest first, so the file's own order is
+ * free, and validates what the page depends on (real dates, known types,
+ * labels for each). */
+export interface ChangelogPage extends PageMeta {
+  /** The lead-in above the release list. */
+  intro: string;
+  /** The badge label per change type ("New", "Improved", "Fixed"). */
+  typeLabels: Record<ChangeType, string>;
+  releases: ChangelogRelease[];
+  /** The signup panel that closes the page, on the marketing pages. */
+  cta: CtaContent;
+  /** `intro` is the mirror's own lead-in: the page shows the same words as
+   * its hero summary, so the mirror carries them under the H1. */
+  mirror: MirrorMeta & { intro: string; footer: string };
+}
+
 /** `llms.yaml`: the /llms.txt link hub. */
 export interface LlmsContent {
   corePages: Array<{ title: string; url: string; blurb: string }>;

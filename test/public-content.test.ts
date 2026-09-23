@@ -4,6 +4,7 @@ import {
   ABOUT,
   AI,
   ALTERNATIVES,
+  CHANGELOG,
   CONNECT,
   FAQ,
   LLMS,
@@ -19,6 +20,7 @@ import {
   aiMarkdown,
   alternativesMarkdown,
   authMarkdown,
+  changelogMarkdown,
   connectMarkdown,
   faqMarkdown,
   llmsTxt,
@@ -49,6 +51,7 @@ const CONTENT_FILES = [
   "ai.yaml",
   "alternatives.yaml",
   "auth.md",
+  "changelog.yaml",
   "connect.yaml",
   "content-types.ts",
   "default-categories.csv",
@@ -84,6 +87,7 @@ const PAGES = [
   ["mileage-rates", MILEAGE_PAGE],
   ["schedule-c-categories", SCHEDULE_C_PAGE],
   ["product-facts", PRODUCT_FACTS],
+  ["changelog", CHANGELOG],
 ] as const;
 
 describe("public content directory", () => {
@@ -122,6 +126,7 @@ describe("public page content", () => {
       MILEAGE_PAGE,
       SCHEDULE_C_PAGE,
       PRODUCT_FACTS,
+      CHANGELOG,
     ]) {
       expect(page.cta.heading.trim()).not.toBe("");
       expect(page.cta.body.trim()).not.toBe("");
@@ -143,6 +148,7 @@ describe("public page content", () => {
       MILEAGE_PAGE,
       SCHEDULE_C_PAGE,
       PRODUCT_FACTS,
+      CHANGELOG,
       LLMS,
     ];
     const mirrors = [
@@ -157,6 +163,7 @@ describe("public page content", () => {
       mileageRatesMarkdown(),
       scheduleCCategoriesMarkdown(),
       productFactsMarkdown(),
+      changelogMarkdown(),
       llmsTxt(),
       authMarkdown(),
     ];

@@ -4,14 +4,15 @@ import { Logo } from "~/components/Logo";
 import { useSession } from "~/lib/use-session";
 
 /** The footer's link columns: what the site is, the assistant, the reference
- * pages, and the policy pages. Balanced 3/2/3/3, which is also why FAQ (a
- * help page) sits in the reference column: it keeps the four columns at the
- * same height instead of leaving one four rows deep. */
+ * pages, and the policy pages. 4/2/3/3, because Changelog belongs with the
+ * product pages rather than the reference ones: it describes the app, not a
+ * lookup table. */
 const FOOTER_COLUMNS: SiteNavItem[][] = [
   [
     { label: "About", to: "/about" },
     { label: "Compare", to: "/alternatives" },
     { label: "Facts", to: "/product-facts" },
+    { label: "Changelog", to: "/changelog" },
   ],
   [
     { label: "AI", to: "/ai" },

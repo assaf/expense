@@ -13,6 +13,7 @@ import {
   ABOUT,
   AI,
   ALTERNATIVES,
+  CHANGELOG,
   CONNECT,
   FAQ,
   MCP,
@@ -23,12 +24,14 @@ import {
   SITE,
   SUPPORT,
   TERMS,
+  changelogReleases,
   scheduleCRows,
 } from "~/lib/content.server";
 import { mileageRateRows, SITE_URL } from "~/lib/seo-content";
 import * as about from "~/routes/about";
 import * as ai from "~/routes/ai";
 import * as alternatives from "~/routes/alternatives";
+import * as changelog from "~/routes/changelog";
 import * as connect from "~/routes/connect";
 import * as faq from "~/routes/faq";
 import * as mileageRates from "~/routes/mileage-rates";
@@ -38,7 +41,7 @@ import * as scheduleC from "~/routes/schedule-c-categories";
 import * as support from "~/routes/support";
 import * as terms from "~/routes/terms";
 
-// The ten public pages are the AI-search and app-review surface, and nothing
+// The twelve public pages are the AI-search and app-review surface, and nothing
 // used to render one: the content tests prove the files parse, the mirror
 // tests prove the .md bodies carry them, and the screenshot suite skips its
 // comparisons in CI (test/helpers/toMatchScreenshot.ts) and covers two pages.
@@ -161,6 +164,22 @@ const MCP_SECURITY = [MCP.securityHeading, MCP.security];
 
 /** /connect opens on its first client; the rest are behind the switcher. */
 const OPEN_CLIENT = CONNECT.clients[0]!;
+
+/** The changelog page's own copy: the lead-in, then the newest release's date
+ * and every entry under it with the label its badge carries. The page renders
+ * all the groups, but the newest is what a broken sort or a dropped list
+ * takes away first. */
+function changelogShows(): string[] {
+  const [newest] = changelogReleases();
+  if (!newest) return [];
+  return [
+    newest.date,
+    ...newest.changes.flatMap((change) => [
+      CHANGELOG.typeLabels[change.type],
+      change.text,
+    ]),
+  ];
+}
 
 interface MarketingPage {
   path: string;
@@ -347,6 +366,12 @@ const PAGES: MarketingPage[] = [
       SCHEDULE_C_PAGE.sourceNote,
     ],
   },
+  {
+    path: "/changelog",
+    mod: changelog,
+    data: { ...CHANGELOG, releases: changelogReleases() },
+    shows: [...hero(CHANGELOG), CHANGELOG.intro, ...changelogShows()],
+  },
 ];
 
 describe("public marketing pages", () => {
@@ -421,6 +446,13 @@ describe("the shared footer", () => {
   it("lists the product facts page", async () => {
     const html = await renderPage(about, { ...ABOUT, keyFacts: SITE.keyFacts });
     expect(html).toContain('href="/product-facts"');
+  });
+
+  // The changelog has the same problem from the other side: nothing links to
+  // it from a page body, so the footer is the only route a reader has to it.
+  it("lists the changelog", async () => {
+    const html = await renderPage(about, { ...ABOUT, keyFacts: SITE.keyFacts });
+    expect(html).toContain('href="/changelog"');
   });
 });
 

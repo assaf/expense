@@ -27,6 +27,10 @@ corePages:
     url: "{{siteUrl}}/product-facts.md"
     blurb: |-
       The fact sheet a write-up can copy: what Expense is, what it costs (free, the first {{freeSpots}} accounts while it is early), how receipts get in (photo, screenshot, drag and drop, paste, PDF, forwarded email, Gmail and Fastmail inbox import), all {{categoryCount}} IRS Schedule C line items the categories map to, mileage at the IRS rate, bank reconciliation, and PDF or ZIP export.
+  - title: "Expense changelog"
+    url: "{{siteUrl}}/changelog.md"
+    blurb: |-
+      Every change to the app, newest first, grouped by date, and typed: New for a capability that did not exist, Improved for a change to something that worked, Fixed for a defect. The dated history behind every feature listed elsewhere on this site.
   - title: "How Expense compares to the other receipt apps"
     url: "{{siteUrl}}/alternatives.md"
     blurb: |-

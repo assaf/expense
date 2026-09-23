@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { loader as aboutLoader } from "~/routes/about[.]md";
+import { loader as changelogLoader } from "~/routes/changelog[.]md";
 import { loader as productFactsLoader } from "~/routes/product-facts[.]md";
 import { loader as scheduleCLoader } from "~/routes/schedule-c-categories[.]md";
 import { loader as mileageRatesLoader } from "~/routes/mileage-rates[.]md";
@@ -16,6 +17,7 @@ import {
   ABOUT,
   AI,
   ALTERNATIVES,
+  CHANGELOG,
   CONNECT,
   FAQ,
   LLMS,
@@ -30,6 +32,8 @@ import {
   aboutMarkdown,
   aiMarkdown,
   alternativesMarkdown,
+  changelogMarkdown,
+  changelogReleases,
   connectMarkdown,
   faqMarkdown,
   fillPlaceholders,
@@ -91,6 +95,12 @@ const MIRRORS = [
     path: "/product-facts.md",
     loader: productFactsLoader,
     content: productFactsMarkdown,
+    type: "text/markdown",
+  },
+  {
+    path: "/changelog.md",
+    loader: changelogLoader,
+    content: changelogMarkdown,
     type: "text/markdown",
   },
   {
@@ -361,6 +371,21 @@ describe("mirrors lose no content", () => {
     }
     for (const row of scheduleCRows()) {
       expect(text).toContain(`- Line ${row.line} ${row.name}`);
+    }
+  });
+
+  it("carries every dated release with its typed changes", () => {
+    const text = changelogMarkdown();
+    // The mirror is the surface a model reads to date a capability, so a
+    // group that lost its heading, or an entry that lost its type, is the
+    // drift worth failing on.
+    for (const release of changelogReleases()) {
+      expect(text).toContain(`## ${release.date}`);
+      for (const change of release.changes) {
+        expect(text).toContain(
+          `- **${CHANGELOG.typeLabels[change.type]}:** ${collapse(change.text)}`,
+        );
+      }
     }
   });
 

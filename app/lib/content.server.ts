@@ -3,10 +3,13 @@ import aboutYaml from "~/data/about.yaml?raw";
 import aiYaml from "~/data/ai.yaml?raw";
 import alternativesYaml from "~/data/alternatives.yaml?raw";
 import authMd from "~/data/auth.md?raw";
+import changelogYaml from "~/data/changelog.yaml?raw";
 import type {
   AboutPage,
   AiPage,
   AlternativesPage,
+  ChangelogPage,
+  ChangelogRelease,
   ConnectPage,
   DocumentBlock,
   DocumentPage,
@@ -50,7 +53,7 @@ import {
  * The site's public copy: parsed from the markdown documents and YAML bundles
  * under `app/data/`, and exported as one frozen bundle per page. This is the
  * only module that reads the raw files, and everything else consumes what it
- * builds: the ten marketing routes render these objects, and the eleven
+ * builds: the twelve marketing routes render these objects, and the twelve
  * `.md` / `.txt` mirrors assemble their bodies from the same fields, so a
  * page and its mirror cannot drift apart.
  *
@@ -91,6 +94,7 @@ const FILE = {
   mileage: "app/data/mileage-rates.yaml",
   productFacts: "app/data/product-facts.yaml",
   scheduleC: "app/data/schedule-c-categories.yaml",
+  changelog: "app/data/changelog.yaml",
   llms: "app/data/llms.yaml",
 } as const;
 
@@ -458,6 +462,23 @@ export const PRODUCT_FACTS: Readonly<ProductFactsPage> = bundle(
   ],
 );
 
+export const CHANGELOG: Readonly<ChangelogPage> = bundle(
+  FILE.changelog,
+  changelogYaml,
+  [
+    "metaTitle",
+    "description",
+    "eyebrow",
+    "title",
+    "summary",
+    "intro",
+    "typeLabels",
+    "releases",
+    "cta",
+    "mirror",
+  ],
+);
+
 export const LLMS: Readonly<LlmsContent> = bundle(FILE.llms, llmsYaml, [
   "corePages",
   "optionalPages",
@@ -487,6 +508,38 @@ export function pairRows(
 /** The Schedule C table, in the order the categories are seeded. */
 export function scheduleCRows(): ScheduleCRow[] {
   return pairRows(DEFAULT_CATEGORIES, SCHEDULE_C_PAGE.notes);
+}
+
+/** The changelog's releases, newest first, checked for the three things the
+ * page and the mirror depend on: a real calendar date, one group per date (it
+ * is the page's anchor id), and a badge label for every change type. The
+ * file's own order is free, so a note added later under an older date still
+ * lands in its place instead of at the top. */
+export function changelogReleases(): ChangelogRelease[] {
+  const seen = new Set<string>();
+  const releases = CHANGELOG.releases.map((release) => {
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(release.date) ||
+      Number.isNaN(Date.parse(release.date))
+    ) {
+      throw new Error(
+        `${FILE.changelog}: "${release.date}" is not a YYYY-MM-DD date`,
+      );
+    }
+    if (seen.has(release.date)) {
+      throw new Error(`${FILE.changelog}: two groups for ${release.date}`);
+    }
+    seen.add(release.date);
+    for (const change of release.changes) {
+      if (CHANGELOG.typeLabels[change.type] === undefined) {
+        throw new Error(
+          `${FILE.changelog}: no label for change type "${change.type}"`,
+        );
+      }
+    }
+    return release;
+  });
+  return releases.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // --- The markdown mirrors ---------------------------------------------------
@@ -697,6 +750,25 @@ export function productFactsMarkdown(): string {
     .map((line) => `- ${wrap(line)}`)
     .join("\n");
   return `# ${PRODUCT_FACTS.mirror.title}\n\n> ${wrap(PRODUCT_FACTS.summary)}\n\n## ${PRODUCT_FACTS.factsHeading}\n\n${facts}\n\n## ${PRODUCT_FACTS.categoriesHeading}\n\n${wrap(PRODUCT_FACTS.categoriesNote)}\n\n${categories}\n\n## ${PRODUCT_FACTS.captureHeading}\n\n${capture}\n\n## ${PRODUCT_FACTS.pricingHeading}\n\n${pricing}\n\n${wrap(PRODUCT_FACTS.mirror.footer)}\n\n${createAccountMarkdown()}.\n`;
+}
+
+/** Full markdown for /changelog.md; mirrors the /changelog page. One `## `
+ * per release date, newest first, with each change as a typed bullet: the
+ * point of the mirror is that a model reading it can tell a new capability
+ * from a fix, and when each one shipped. */
+export function changelogMarkdown(): string {
+  const releases = changelogReleases()
+    .map(
+      (release) =>
+        `## ${release.date}\n\n${release.changes
+          .map(
+            (change) =>
+              `- **${CHANGELOG.typeLabels[change.type]}:** ${wrap(change.text)}`,
+          )
+          .join("\n")}`,
+    )
+    .join("\n\n");
+  return `# ${CHANGELOG.mirror.title}\n\n${wrap(CHANGELOG.summary)}\n\n${wrap(CHANGELOG.mirror.intro)}\n\n${releases}\n\n${wrap(CHANGELOG.mirror.footer)}\n\n${createAccountMarkdown()}.\n`;
 }
 
 /** The /llms.txt file: a curated overview for LLM retrieval, per llmstxt.org. */
