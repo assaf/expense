@@ -448,7 +448,7 @@ function ExpenseList({
       <LiveStatus>{drop.message}</LiveStatus>
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1>
-          <Logo link href="/expenses" />
+          <Logo link href="/expenses" shortcut="nav-expenses" />
         </h1>
         <nav className="flex items-center gap-0.5 sm:gap-2">
           {NAV_ITEMS.map((item) => (

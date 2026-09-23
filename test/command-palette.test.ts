@@ -222,10 +222,30 @@ describe("Command palette", () => {
   it("pins shortcut hint badges next to their elements on Shift+?", async () => {
     page = await goto("/expenses");
     await showHints(page);
-    // Home carries ten anchors: the six nav buttons, the three
-    // create/upload buttons, and the search box.
+    // Home carries eleven anchors: the logo (G E, the control that goes
+    // home), the six nav buttons, the three create/upload buttons, and the
+    // search box.
     const badges = page.locator("[data-shortcut-hint]");
-    await expect(badges).toHaveCount(10);
+    await expect(badges).toHaveCount(11);
+    // The G E keycap sits above the logo, which is where the chord takes you.
+    const logo = await page
+      .locator('a[data-shortcut="nav-expenses"]')
+      .boundingBox();
+    const goHome = await page
+      .locator('[data-shortcut-hint="nav-expenses"]')
+      .boundingBox();
+    const homeCenter = goHome!.x + goHome!.width / 2;
+    expect(homeCenter).toBeGreaterThanOrEqual(logo!.x);
+    expect(homeCenter).toBeLessThanOrEqual(logo!.x + logo!.width);
+    expect(goHome!.y + goHome!.height).toBeLessThanOrEqual(logo!.y);
+    // The logo is the topmost control on the page, so its badge is the one
+    // that can fall off the top of the viewport.
+    expect(goHome!.y).toBeGreaterThanOrEqual(0);
+    // …and it spells the chord out: G then E (the keycaps are uppercased in
+    // CSS, so match either case).
+    await expect(
+      page.locator('[data-shortcut-hint="nav-expenses"] kbd'),
+    ).toHaveText([/^g$/i, /^e$/i]);
     // The search badge sits centered above the search box, just clear of
     // it: the placement that keeps every badge off the neighboring
     // controls in the app's tight button rows.
@@ -241,7 +261,7 @@ describe("Command palette", () => {
     await page.keyboard.press("Shift+Slash");
     await expect(badges).toHaveCount(0);
     await page.keyboard.press("Shift+Slash");
-    await expect(badges).toHaveCount(10);
+    await expect(badges).toHaveCount(11);
     await page.keyboard.press("Escape");
     await expect(badges).toHaveCount(0);
   });

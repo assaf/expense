@@ -48,6 +48,8 @@ releases:
   - date: "2026-09-23"
     changes:
       - type: fix
+        text: "Pressing ? now shows the G E keycap above the logo, the control that goes back to the expenses page."
+      - type: fix
         text: "A file can be dropped anywhere on the page, not only over the content area: dropping in the margins used to hand it to the browser instead."
       - type: improvement
         text: "The warranty editor saves with Cmd+Enter and leaves with Escape, like the expense editors, and its Delete button asks first in the same dialog."

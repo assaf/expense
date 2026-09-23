@@ -21,17 +21,18 @@ function appSources(): Map<string, string> {
   return sources;
 }
 
-/** Ids referenced by data-shortcut attributes and the expressions that
- * compute them (lines mentioning data-shortcut or the PageShell's
- * homeShortcut), pulled from string literals on those lines, plus the nav
- * ids the home header renders from NAV_ITEMS (`data-shortcut={item.id}` is
- * not a literal on a data-shortcut line). */
+/** Ids referenced by data-shortcut attributes, the `shortcut` prop that
+ * renders one (Logo), and the expressions that compute them (lines
+ * mentioning data-shortcut or the PageShell's homeShortcut), pulled from
+ * string literals on those lines, plus the nav ids the home header renders
+ * from NAV_ITEMS (`data-shortcut={item.id}` is not a literal on a
+ * data-shortcut line). */
 function anchorIds(): Set<string> {
   const ids = new Set<string>();
   for (const item of NAV_ITEMS) ids.add(item.id);
   for (const source of appSources().values()) {
     for (const line of source.split("\n")) {
-      if (!/data-shortcut|homeShortcut/.test(line)) continue;
+      if (!/data-shortcut|homeShortcut|shortcut="/.test(line)) continue;
       for (const m of line.matchAll(/"([a-z-]{2,})"/g)) ids.add(m[1]);
     }
   }

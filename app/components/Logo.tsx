@@ -6,16 +6,22 @@
  *   alt text for copy behavior there.
  * `link`: wraps in a clickable link, to `href` (the marketing home by
  *   default; the app passes /expenses, its own home).
+ * `shortcut`: the kbar action id this link stands for, when it is the
+ *   control the app's keyboard chord drives (the home logo and G E). The
+ *   Shift+? hint layer positions that action's keycap on the anchor.
  */
 export function Logo({
   icon = false,
   link = false,
   href = "/",
+  shortcut,
 }: {
   icon?: boolean;
   link?: boolean;
   /** Where a linked mark points. */
   href?: string;
+  /** `data-shortcut` anchor for the Shift+? hint layer. */
+  shortcut?: string;
 }) {
   if (icon) {
     const img = (
@@ -28,7 +34,11 @@ export function Logo({
     );
     if (!link) return img;
     return (
-      <a href={href} className="inline-flex rounded-lg">
+      <a
+        href={href}
+        data-shortcut={shortcut}
+        className="inline-flex rounded-lg"
+      >
         {img}
       </a>
     );
@@ -58,6 +68,7 @@ export function Logo({
   return (
     <a
       href={href}
+      data-shortcut={shortcut}
       className="inline-flex items-center gap-2 sm:gap-2.5 rounded-lg"
     >
       {content}
