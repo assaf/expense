@@ -11,6 +11,7 @@ import {
 } from "~/lib/expense-save.server";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
 import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
+import { readWarrantiesForExpense } from "~/lib/db/warranties";
 import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { badRequest, notFound, unknownIntent } from "~/lib/validation";
@@ -25,11 +26,12 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
   // prev/next neighbours for the ← → arrows, in parallel. readNeighborIds
   // scans the account's open expenses so navigation sees the exact list
   // order the home page renders.
-  const [nav, editor] = await Promise.all([
+  const [nav, editor, warranties] = await Promise.all([
     readNeighborIds(user.accountId, expense),
     loadEditorContext(user.accountId, expense),
+    readWarrantiesForExpense(user.accountId, expense.id),
   ]);
-  return { mode: "edit" as const, ...editor, nav, existing: [] };
+  return { mode: "edit" as const, ...editor, nav, existing: [], warranties };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {

@@ -17,6 +17,7 @@ import {
   ReceiptText,
   Search,
   Server,
+  ShieldCheck,
   Tags,
   Trash2,
   Users,
@@ -59,6 +60,7 @@ export type HighlightId =
   | "change-email"
   | "change-password"
   | "close-account"
+  | "warranties"
   | "webmcp";
 
 /** The data a highlight may interpolate. Fields the app doesn't have are
@@ -371,6 +373,19 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Close account", to: "/settings#close-account" },
   },
+  warranties: {
+    icon: ShieldCheck,
+    title: "Keep the proof with the thing it covers",
+    body: () => (
+      <>
+        A warranty records the merchant, the product, the value, and when the
+        cover ends, with the receipt, the terms, or a card statement attached.
+        Start one from the expense it came with, or drop a receipt or terms PDF
+        on the Warranties page and the details are read from it.
+      </>
+    ),
+    cta: { label: "Add a warranty", to: "/warranties" },
+  },
 };
 /** Every highlight id, for the /_highlights preview page. */
 export const HIGHLIGHT_IDS = Object.keys(HIGHLIGHTS) as HighlightId[];
@@ -396,6 +411,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "change-email",
     "change-password",
     "close-account",
+    "warranties",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.
   if (!data.hasEmailConnection) pool.push("connect-email");

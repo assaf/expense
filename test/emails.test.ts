@@ -156,6 +156,7 @@ describe("Email", () => {
       "Email",
       "Reconcile",
       "Reports",
+      "Warranties",
       "Settings",
     ]);
     await page.close();

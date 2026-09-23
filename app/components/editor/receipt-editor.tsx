@@ -25,6 +25,7 @@ import {
   EditorActions,
   ErrorBanner,
   Lightbox,
+  LinkedWarranties,
   ReportCategoryFields,
   useEditorFlow,
   useFormKeys,
@@ -95,7 +96,10 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
   const drop = useDropTarget({
     enabled: !reportClosed,
     accepts: isReceiptFile,
-    onFile: (file) => void replaceImage(file),
+    // One receipt image per record: the first accepted file wins.
+    onFiles: ([file]) => {
+      if (file) void replaceImage(file);
+    },
     message: "Receipt file detected — drop to replace",
   });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -671,6 +675,8 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
         onChange={setDescription}
         disabled={reportClosed}
       />
+
+      <LinkedWarranties expenseId={expense.id} warranties={data.warranties} />
 
       <EditorActions
         complete={isNew ? true : complete}

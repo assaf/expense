@@ -527,3 +527,94 @@ export interface ReconciliationRunRecord {
   createdAt: string;
   completedAt: string | null;
 }
+
+// --- Warranties ------------------------------------------------------------
+
+/** One document attached to a warranty (a receipt, the terms, a card
+ * statement). */
+export interface WarrantyDocument {
+  /** ImageBlob key as stored: `images/{accountId}/{name}`. */
+  key: string;
+  /** The uploaded file's original name. */
+  name: string;
+  /** Short human label ("Receipt", "Terms", "Card statement"). */
+  label: string;
+}
+
+/**
+ * A warrantied purchase: what it covers, for how long, and the documents
+ * that prove it. A separate collection from the expense, so a warranty on a
+ * non-deductible purchase (a toothbrush) or one that outlives the tax year
+ * never reaches a tax-facing surface.
+ */
+export interface Warranty {
+  id: string;
+  merchant: string;
+  product: string;
+  /** Value in dollars, decimal string "1299.00"; "" when unset. */
+  value: string;
+  /** Date-only "YYYY-MM-DD"; "" when unset. */
+  purchasedAt: string;
+  /** "YYYY-MM-DD", or "" when the warranty has no end date. */
+  expiresAt: string;
+  terms: string;
+  documents: WarrantyDocument[];
+  /** The expense this warranty came from; "" when unlinked. */
+  expenseId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A receipt the warranty editor's linked-expense picker offers: the thin
+ * projection the loader sends, never the whole expense row. */
+export interface WarrantyExpenseOption {
+  id: string;
+  merchant: string;
+  date: string;
+  amount: string;
+}
+
+/** Tolerant parse of the stored jsonb array, same contract as
+ * parseLocations: malformed entries and a missing column yield []. Entries
+ * without a key are dropped (an entry with no blob is not a document). */
+export function parseWarrantyDocuments(raw: unknown): WarrantyDocument[] {
+  const parse = (value: unknown): WarrantyDocument[] => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (v): v is { key: string; name?: unknown; label?: unknown } =>
+          Boolean(v) && typeof v === "object" && "key" in v,
+      )
+      .map((v) => ({
+        key: typeof v.key === "string" ? v.key : "",
+        name: typeof v.name === "string" ? v.name : "",
+        label: typeof v.label === "string" ? v.label : "",
+      }))
+      .filter((d) => d.key !== "");
+  };
+  if (Array.isArray(raw)) return parse(raw);
+  try {
+    return parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+  } catch {
+    return [];
+  }
+}
+
+/** A new warranty shell with defaults: id from ulid(), every string "",
+ * documents []. */
+export function newWarrantyShell(): Warranty {
+  const now = new Date().toISOString();
+  return {
+    id: ulid(),
+    merchant: "",
+    product: "",
+    value: "",
+    purchasedAt: "",
+    expiresAt: "",
+    terms: "",
+    documents: [],
+    expenseId: "",
+    createdAt: now,
+    updatedAt: now,
+  };
+}

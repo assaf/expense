@@ -1,15 +1,17 @@
 import { readCategories } from "~/lib/db/categories";
-import { readPriorMerchants } from "~/lib/db/expenses";
+import { readExpenses, readPriorMerchants } from "~/lib/db/expenses";
 import { readLocations } from "~/lib/db/locations";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import { readSettings } from "~/lib/db/settings";
+import { sortExpenses } from "~/lib/format";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import {
   homeLocation,
   type Expense,
   type Location,
   type NamedLocation,
+  type WarrantyExpenseOption,
 } from "~/lib/types";
 
 /**
@@ -54,5 +56,36 @@ export async function loadEditorContext(
     locations,
     rates,
     reportClosed: closed.has(expense.report),
+  };
+}
+
+/** How many recent receipts the warranty editor's linked-expense picker
+ * offers. A fixed cap: the select is a convenience (the warranty's own
+ * fields are the record), not a search surface. */
+const MAX_WARRANTY_RECEIPTS = 100;
+
+/**
+ * Warranty editor context shared by /warranty/new and /warranty/:id: the
+ * merchant autocomplete source and the recent receipts the linked-expense
+ * picker lists (newest first, capped).
+ */
+export async function loadWarrantyEditorOptions(accountId: string): Promise<{
+  merchants: string[];
+  receipts: WarrantyExpenseOption[];
+}> {
+  const [merchants, expenses] = await Promise.all([
+    readPriorMerchants(accountId),
+    readExpenses(accountId, { type: "receipt" }),
+  ]);
+  return {
+    merchants,
+    receipts: sortExpenses(expenses)
+      .slice(0, MAX_WARRANTY_RECEIPTS)
+      .map((e) => ({
+        id: e.id,
+        merchant: e.type === "receipt" ? e.merchant : "",
+        date: e.date,
+        amount: e.amount,
+      })),
   };
 }

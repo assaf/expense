@@ -294,7 +294,10 @@ function ExpenseList({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const drop = useDropTarget({
     accepts: isReceiptFile,
-    onFile: uploadImage,
+    // One new receipt per drop: the first accepted file wins.
+    onFiles: ([file]) => {
+      if (file) uploadImage(file);
+    },
     message: "Receipt file detected — drop to upload",
   });
   // "Today" in the browser's own timezone; the server runs UTC and must

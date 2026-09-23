@@ -222,10 +222,10 @@ describe("Command palette", () => {
   it("pins shortcut hint badges next to their elements on Shift+?", async () => {
     page = await goto("/expenses");
     await showHints(page);
-    // Home carries nine anchors: the five nav buttons, the three
+    // Home carries ten anchors: the six nav buttons, the three
     // create/upload buttons, and the search box.
     const badges = page.locator("[data-shortcut-hint]");
-    await expect(badges).toHaveCount(9);
+    await expect(badges).toHaveCount(10);
     // The search badge sits centered above the search box, just clear of
     // it: the placement that keeps every badge off the neighboring
     // controls in the app's tight button rows.
@@ -241,7 +241,7 @@ describe("Command palette", () => {
     await page.keyboard.press("Shift+Slash");
     await expect(badges).toHaveCount(0);
     await page.keyboard.press("Shift+Slash");
-    await expect(badges).toHaveCount(9);
+    await expect(badges).toHaveCount(10);
     await page.keyboard.press("Escape");
     await expect(badges).toHaveCount(0);
   });

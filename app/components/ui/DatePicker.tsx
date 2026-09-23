@@ -72,6 +72,7 @@ export function DatePicker({
   onChange,
   disabled,
   invalid,
+  name,
   className,
 }: {
   /** YYYY-MM-DD ("" when unset). */
@@ -79,6 +80,8 @@ export function DatePicker({
   onChange: (v: string) => void;
   disabled?: boolean;
   invalid?: boolean;
+  /** Form field name, so a native form submission carries the date. */
+  name?: string;
   className?: string;
 }) {
   const today = todayDate();
@@ -243,6 +246,7 @@ export function DatePicker({
       <input
         ref={inputRef}
         type="text"
+        name={name}
         autoComplete="off"
         spellCheck={false}
         placeholder="YYYY-MM-DD"

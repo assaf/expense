@@ -106,6 +106,7 @@ const MODEL_NAMES: Record<string, string> = {
   report: "Report",
   settings: "Settings",
   user: "User",
+  warranty: "Warranty",
 };
 
 /** v7 field names → v8 contract field names (PSL reserved words). */

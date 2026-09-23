@@ -172,7 +172,30 @@ export async function readUploadedFile(
   form: FormData,
 ): Promise<UploadedFileResult> {
   const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) {
+  if (!(file instanceof File)) return { ok: false, error: "missing" };
+  return uploadResult(file);
+}
+
+/** Every file in one form field (a multi-file picker). Same rules as
+ * readUploadedFile: empty picks are skipped, over-cap files report
+ * "too-large"; [] when the field holds no files. */
+export async function readUploadedFiles(
+  form: FormData,
+  field: string,
+): Promise<UploadedFileResult[]> {
+  const results: UploadedFileResult[] = [];
+  for (const entry of form.getAll(field)) {
+    if (!(entry instanceof File)) continue;
+    const result = await uploadResult(entry);
+    if (!result.ok && result.error === "missing") continue;
+    results.push(result);
+  }
+  return results;
+}
+
+/** Read one file, resolving its mime the same way saveImage does. */
+async function uploadResult(file: File): Promise<UploadedFileResult> {
+  if (file.size === 0) {
     return { ok: false, error: "missing" };
   }
   if (file.size > MAX_UPLOAD_BYTES) {

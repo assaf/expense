@@ -4,6 +4,7 @@ import {
   ListChecks,
   Mail,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -21,6 +22,7 @@ export interface NavItem {
     | "nav-insights"
     | "nav-emails"
     | "nav-reconcile"
+    | "nav-warranties"
     | "nav-reports"
     | "nav-settings";
   path: string;
@@ -60,6 +62,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Reports",
     keywords: "export pdf download",
     icon: <Download aria-hidden="true" className="h-4 w-4" />,
+  },
+  {
+    id: "nav-warranties",
+    path: "/warranties",
+    label: "Warranties",
+    keywords: "warranty receipts keeps coverage expiry product",
+    icon: <ShieldCheck aria-hidden="true" className="h-4 w-4" />,
   },
   {
     id: "nav-settings",

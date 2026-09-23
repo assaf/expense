@@ -93,8 +93,11 @@ async function normalizeImage(buffer: Buffer): Promise<Buffer> {
  * Declared mimes that aren't image types (e.g. application/octet-stream from
  * a phone attachment) are sniffed from the bytes first, so the stored receipt
  * serves with a displayable mime and the vision data-URL is valid.
+ *
+ * Exported for the warranty document path, which needs the same
+ * vision-ready bytes for a dropped image (see readUploadedDocument).
  */
-async function toBrowserImage(
+export async function toBrowserImage(
   buffer: Buffer,
   mime: string,
 ): Promise<{ buffer: Buffer; mime: string }> {
@@ -313,8 +316,48 @@ export async function extractPdfLines(buffer: Buffer): Promise<string[]> {
 }
 
 /**
- * Rasterize a PDF to a single stacked PNG (up to 3 pages, scale 2).
- * Used both as the stored receipt image and as the OCR input for scanned PDFs.
+ * Rasterizing a PDF stacks its pages into one canvas, so the cost scales
+ * with the total page area. A crafted MediaBox can declare a huge page (e.g.
+ * 20000x20000 pt) without needing huge input bytes, and the input byte cap
+ * doesn't bound the decoded geometry, so these caps bound the allocation
+ * (mirroring sharp's limitInputPixels).
+ */
+const MAX_PDF_RENDER_PX = 4000;
+const MAX_PDF_RENDER_PIXELS = 8_000_000;
+/** The scale a page renders at when it fits the caps: 2x, so text survives
+ * OCR. A page that doesn't fit renders smaller. */
+const PDF_RENDER_SCALE = 2;
+/** Below this the page is not a document anyone scanned, so it is refused
+ * rather than rendered. */
+const MIN_PDF_RENDER_SCALE = 0.5;
+
+/**
+ * The scale every page rasterizes at, so the stacked canvas stays within the
+ * caps: the full scale when the pages fit, less for a tall page (a long
+ * e-receipt, a terms document) or several of them, or null when even the
+ * floor exceeds the caps (the crafted-page guard).
+ *
+ * Shrinking beats refusing: a page's text is still legible for OCR and
+ * vision at a lower scale, while a refused page loses its extraction
+ * entirely (which is what a long receipt PDF used to do).
+ */
+function pdfRenderScale(
+  pages: readonly { width: number; height: number }[],
+): number | null {
+  const maxEdge = Math.max(...pages.map((p) => Math.max(p.width, p.height)));
+  const totalArea = pages.reduce((sum, p) => sum + p.width * p.height, 0);
+  if (!(maxEdge > 0) || !(totalArea > 0)) return null;
+  const scale = Math.min(
+    PDF_RENDER_SCALE,
+    MAX_PDF_RENDER_PX / maxEdge,
+    Math.sqrt(MAX_PDF_RENDER_PIXELS / totalArea),
+  );
+  return scale >= MIN_PDF_RENDER_SCALE ? scale : null;
+}
+
+/**
+ * Rasterize a PDF to a single stacked PNG (up to 3 pages). Used both as the
+ * stored receipt image and as the OCR input for scanned PDFs.
  */
 export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
   const [{ getDocument }, { createCanvas }] = await Promise.all([
@@ -327,41 +370,49 @@ export async function renderPdfToPng(buffer: Buffer): Promise<Buffer> {
   });
   const doc = await task.promise;
   try {
-    const pages = Math.min(doc.numPages, 3);
+    const pageCount = Math.min(doc.numPages, 3);
+    if (pageCount === 0) throw new Error("PDF has no renderable pages");
+    // Pass 1: every page's unscaled geometry. The scale is chosen from all
+    // of them, because they stack into one canvas.
+    const geometry: Array<{
+      page: PDFPageProxy;
+      width: number;
+      height: number;
+    }> = [];
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await doc.getPage(i);
+      const base = page.getViewport({ scale: 1 });
+      geometry.push({ page, width: base.width, height: base.height });
+    }
+    const scale = pdfRenderScale(geometry);
+    if (scale === null) {
+      const largest = geometry.reduce((a, b) =>
+        b.width * b.height > a.width * a.height ? b : a,
+      );
+      throw new Error(
+        `PDF page is too large to render (${Math.round(largest.width)}x${Math.round(largest.height)}pt)`,
+      );
+    }
+
     const rendered: { canvas: Canvas }[] = [];
     let width = 0;
     let height = 0;
-    for (let i = 1; i <= pages; i++) {
-      const page = await doc.getPage(i);
-      const viewport = page.getViewport({ scale: 2 });
-      // A crafted MediaBox can declare a huge page (e.g. 20000x20000 pt →
-      // a multi-GB canvas allocation). The input byte cap doesn't bound the
-      // decoded geometry, so clamp it here (mirroring sharp's
-      // limitInputPixels) before createCanvas eagerly allocates.
-      const MAX_PDF_RENDER_PX = 4000;
-      const MAX_PDF_RENDER_PIXELS = 8_000_000;
-      if (
-        viewport.width > MAX_PDF_RENDER_PX ||
-        viewport.height > MAX_PDF_RENDER_PX ||
-        viewport.width * viewport.height > MAX_PDF_RENDER_PIXELS
-      ) {
-        throw new Error(
-          `PDF page is too large to render (${Math.round(viewport.width)}x${Math.round(viewport.height)}px)`,
-        );
-      }
-      const canvas = createCanvas(viewport.width, viewport.height);
+    for (const { page } of geometry) {
+      const viewport = page.getViewport({ scale });
+      const pageWidth = Math.ceil(viewport.width);
+      const pageHeight = Math.ceil(viewport.height);
+      const canvas = createCanvas(pageWidth, pageHeight);
       const ctx = canvas.getContext("2d");
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, viewport.width, viewport.height);
+      ctx.fillRect(0, 0, pageWidth, pageHeight);
       await page.render({
         canvasContext: ctx,
         viewport,
       } as unknown as Parameters<typeof page.render>[0]).promise;
       rendered.push({ canvas });
-      width = Math.max(width, viewport.width);
-      height += viewport.height;
+      width = Math.max(width, pageWidth);
+      height += pageHeight;
     }
-    if (rendered.length === 0) throw new Error("PDF has no renderable pages");
     if (rendered.length === 1) {
       return rendered[0]!.canvas.toBuffer("image/png");
     }

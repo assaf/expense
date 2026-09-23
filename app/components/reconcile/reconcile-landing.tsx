@@ -63,7 +63,10 @@ export function Landing({ runs }: { runs: ReconciliationRunRecord[] }) {
 
   const drop = useDropTarget({
     accepts: isStatementFile,
-    onFile: selectFile,
+    // One statement per run: the first accepted file wins.
+    onFiles: ([file]) => {
+      if (file) selectFile(file);
+    },
     message: "Statement file detected — drop to upload",
   });
 

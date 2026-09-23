@@ -38,7 +38,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   if (expense.type === "mileage" && editor.categories.includes("Travel")) {
     expense.category = "Travel";
   }
-  return { mode: "create" as const, ...editor, existing, nav: null };
+  return {
+    mode: "create" as const,
+    ...editor,
+    existing,
+    nav: null,
+    warranties: [],
+  };
 }
 
 export async function action({ request, context }: Route.ActionArgs) {

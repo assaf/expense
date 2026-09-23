@@ -56,6 +56,7 @@ export const ACTION_SHORTCUTS = {
   "nav-emails": ["g", "l"],
   "nav-insights": ["g", "i"],
   "nav-reconcile": ["g", "x"],
+  "nav-warranties": ["g", "w"],
   "nav-settings": ["g", "s"],
   "new-receipt": ["a"],
   "new-mileage": ["m"],

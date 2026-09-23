@@ -43,6 +43,7 @@ describe("feature highlights", () => {
       "reports",
       "search-operators",
       "shortcut-hints",
+      "warranties",
       "webmcp",
     ]);
   });

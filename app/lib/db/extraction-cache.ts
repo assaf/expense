@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ulid } from "ulid";
 
+import type { JsonValue } from "@prisma/orm-postgres/target/codec-types";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { asJson, fromIso } from "~/lib/db/wire";
 import { withinWindow } from "~/lib/db/shared";
 import type { ExtractionResult } from "~/lib/receipt-ai.server";
+import type { WarrantyExtraction } from "~/lib/warranty-ai.server";
 
 /**
  * Cache of DeepSeek extraction results keyed by sha256 of the input: the
@@ -62,18 +64,8 @@ export async function readCachedExtraction(
   accountId: string,
   hash: string,
 ): Promise<ExtractionResult | null> {
-  const row = await db.orm.public.ReceiptExtraction.where((r) =>
-    and(r.accountId.eq(accountId), r.hash.eq(hash)),
-  ).first();
+  const row = await readCacheRow(accountId, hash);
   if (!row) return null;
-  if (!withinWindow(row.createdAt, TTL_MS)) {
-    await db.orm.public.ReceiptExtraction.where((r) =>
-      and(r.accountId.eq(accountId), r.hash.eq(hash)),
-    )
-      .delete()
-      .catch(() => {});
-    return null;
-  }
   const parsed = extractionResultSchema.safeParse(row.result);
   if (!parsed.success) {
     // A row from an older build (or a hand-edited one) reads as a miss: the
@@ -91,7 +83,79 @@ export async function writeCachedExtraction(
   hash: string,
   result: ExtractionResult,
 ): Promise<void> {
-  const json = asJson(result);
+  await writeCacheRow(accountId, hash, asJson(result));
+}
+
+/** A warranty extraction's stored shape, checked on the way out for the
+ * same reason as the receipt one above. */
+const warrantyExtractionSchema: z.ZodType<WarrantyExtraction> = z.object({
+  merchant: z.string(),
+  product: z.string(),
+  value: z.string(),
+  purchasedAt: z.string(),
+  expiresAt: z.string(),
+  terms: z.string(),
+  confidence: z.enum(["high", "medium", "low"]),
+  notes: z.string(),
+});
+
+/** The cache key for a warranty extraction over the document's own bytes.
+ * Namespaced ("warr:") so a document cached for a receipt extraction and
+ * the same bytes cached for a warranty one can't collide in the shared
+ * table. */
+export function warrantyExtractionCacheKey(buffer: Buffer): string {
+  return `warr:${createHash("sha256").update(buffer).digest("hex")}`;
+}
+
+/** The stored warranty extraction for (accountId, hash) when fresh, else
+ * null. Re-dropping the same document then skips the model call. */
+export async function readCachedWarranty(
+  accountId: string,
+  hash: string,
+): Promise<WarrantyExtraction | null> {
+  const row = await readCacheRow(accountId, hash);
+  if (!row) return null;
+  const parsed = warrantyExtractionSchema.safeParse(row.result);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Store (or refresh) a warranty extraction. Best-effort, like its receipt
+ * counterpart. */
+export async function writeCachedWarranty(
+  accountId: string,
+  hash: string,
+  result: WarrantyExtraction,
+): Promise<void> {
+  await writeCacheRow(accountId, hash, asJson(result));
+}
+
+/** One fresh cache row for (accountId, hash), sweeping an expired row it
+ * finds instead of returning it. */
+async function readCacheRow(
+  accountId: string,
+  hash: string,
+): Promise<{ result: unknown } | null> {
+  const row = await db.orm.public.ReceiptExtraction.where((r) =>
+    and(r.accountId.eq(accountId), r.hash.eq(hash)),
+  ).first();
+  if (!row) return null;
+  if (!withinWindow(row.createdAt, TTL_MS)) {
+    await db.orm.public.ReceiptExtraction.where((r) =>
+      and(r.accountId.eq(accountId), r.hash.eq(hash)),
+    )
+      .delete()
+      .catch(() => {});
+    return null;
+  }
+  return { result: row.result };
+}
+
+/** Write (or refresh) one cache row and sweep the account's expired ones. */
+async function writeCacheRow(
+  accountId: string,
+  hash: string,
+  json: JsonValue,
+): Promise<void> {
   const now = new Date().toISOString();
   await db.transaction(async (tx) => {
     await tx.orm.public.ReceiptExtraction.where((r) =>

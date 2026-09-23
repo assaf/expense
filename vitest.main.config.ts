@@ -65,6 +65,7 @@ export default defineConfig({
       "test/test-projects.test.ts",
       "test/ci-workflow.test.ts",
       "test/upload-limits.test.ts",
+      "test/warranty-expiry.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

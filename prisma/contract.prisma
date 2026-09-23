@@ -23,6 +23,7 @@ model Account {
   reports                    Report[]
   settings                   Settings[]
   users                      User[]
+  warranties                 Warranty[]
 
   @@index([inviteCode], map: "accounts_inviteCode_key", unique: true)
   @@index([name], map: "accounts_name_key", unique: true)
@@ -126,6 +127,7 @@ model Expense {
   dismissedAsB                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseBId_fkey")
   account                                Account              @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "expenses_accountId_fkey", index: false)
   reconciliationRun                      ReconciliationRun?   @relation(fields: [reconciledInRunId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "expenses_reconciledInRunId_fkey", index: false)
+  warranties                             Warranty[]
 
   /// Every account-scoped read (the home list, insights, exports) filters
   /// on these two; without the index that filter is a full table scan.
@@ -458,4 +460,35 @@ model User {
 
   @@index([email], map: "users_email_key", unique: true)
   @@map("users")
+}
+
+/// A warrantied purchase: the merchant, the product it covers, a value, an
+/// optional expiry, the terms, and a labelled set of documents. It lives in
+/// its own collection rather than as fields on the expense: a warranty can
+/// outlive the tax year (or cover a non-deductible purchase), so it must not
+/// reach readExpenses() and the tax surfaces built on it.
+model Warranty {
+  id          String                @id(map: "warranties_pkey")
+  accountId   String
+  merchant    String
+  product     String
+  value       Numeric(10, 2)?
+  /// Date-only "YYYY-MM-DD" strings, the shape Expense.date uses; "" is the
+  /// domain's no-value sentinel. For expiresAt, "" is a first-class state
+  /// (many warranties have no end date), not a missing value.
+  purchasedAt String
+  expiresAt   String
+  terms       String
+  /// Array of {key,name,label}: the stored image keys and their labels, the
+  /// Expense.locations jsonb pattern.
+  documents   Jsonb
+  expenseId   String?
+  createdAt   TimestampString(3)
+  updatedAt   TimestampString(3)
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "warranties_accountId_fkey", index: false)
+  expense     Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "warranties_expenseId_fkey", index: false)
+
+  /// The list reads by account and groups by expiry.
+  @@index([accountId, expiresAt], map: "warranties_accountId_expiresAt_idx")
+  @@map("warranties")
 }

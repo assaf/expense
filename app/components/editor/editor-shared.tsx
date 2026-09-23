@@ -15,8 +15,10 @@ import { PageShell } from "~/components/PageShell";
 import type { DropTarget } from "~/lib/use-drop-target";
 import { Alert } from "~/components/ui/Alert";
 import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
 import { Field } from "~/components/ui/Field";
+import { FieldLabel } from "~/components/ui/FieldLabel";
 import { DatePicker } from "~/components/ui/DatePicker";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
@@ -29,11 +31,14 @@ import {
   MILEAGE_TYPES,
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
+import { useToday } from "~/lib/use-today";
+import { warrantyExpiryBadge } from "~/lib/warranty-expiry";
 import type {
   Expense,
   Location,
   MileageType,
   NamedLocation,
+  Warranty,
 } from "~/lib/types";
 
 /**
@@ -59,6 +64,9 @@ export type EditorData = {
   nav?: { prevId: string | null; nextId: string | null } | null;
   /** True when the expense's report is closed; all fields become read-only. */
   reportClosed: boolean;
+  /** Warranties linked to this expense, shown as cards on a receipt
+   * (mileage expenses never carry one). */
+  warranties: Warranty[];
 };
 
 /** Why a matching expense looks like the same entry, in plain words. */
@@ -522,6 +530,57 @@ export function DescriptionField({
         onChange={(e) => onChange(e.target.value)}
       />
     </Field>
+  );
+}
+
+/** The warranties linked to a receipt: one card per warranty, plus the link
+ * that starts a new one from this expense. Rendered by the receipt editor
+ * only; a mileage trip never carries a warranty. */
+export function LinkedWarranties({
+  expenseId,
+  warranties,
+}: {
+  expenseId: string;
+  warranties: Warranty[];
+}) {
+  // The expiry badge is judged against the browser's local today; before
+  // mount it names the date instead (see warrantyExpiryBadge).
+  const today = useToday();
+  return (
+    <div className="mt-6">
+      <div className="mb-1 flex items-center justify-between">
+        <FieldLabel>Warranties</FieldLabel>
+        <Link
+          to={`/warranty/new?expenseId=${encodeURIComponent(expenseId)}`}
+          className="text-sm text-blue-700 hover:underline dark:text-blue-400"
+        >
+          Add warranty
+        </Link>
+      </div>
+      {warranties.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">None yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {warranties.map((w) => (
+            <li key={w.id}>
+              <Card>
+                <Link
+                  to={`/warranty/${w.id}`}
+                  className="flex items-center justify-between gap-2 p-3 hover:bg-black/5 dark:hover:bg-white/5"
+                >
+                  <span className="truncate font-medium">
+                    {w.product || "Warranty"}
+                  </span>
+                  <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+                    {warrantyExpiryBadge(w.expiresAt, today).label}
+                  </span>
+                </Link>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

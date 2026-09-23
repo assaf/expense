@@ -3,8 +3,9 @@ import { useCallback, useRef, useState, type DragEvent } from "react";
 /**
  * Everything a drop zone needs: the hook that tracks the drag state, the
  * handlers a container spreads, and the outline class it shows while a file
- * is over it. The home list, the receipt editor, and the reconcile landing
- * all read from here, so no two of them can highlight differently.
+ * is over it. The home list, the receipt editor, the warranty editor, and
+ * the reconcile landing all read from here, so no two of them can highlight
+ * differently.
  */
 
 /** A drop target's state and handlers, as a page's container spreads them. */
@@ -42,15 +43,17 @@ export function dropHandlers(drop?: DropTarget): Partial<DropTarget> {
 export function useDropTarget({
   enabled = true,
   accepts,
-  onFile,
+  onFiles,
   message,
 }: {
   /** When false, no highlight and drops fall through to the browser. */
   enabled?: boolean;
   /** Predicate deciding whether a dropped file is accepted. */
   accepts: (file: File) => boolean;
-  /** Called with the first dropped file when it passes `accepts`. */
-  onFile: (file: File) => void;
+  /** Called with every dropped file that passed `accepts`, in drop order.
+   * Zones that hold one file (the receipt editor, a statement) take the
+   * first; a multi-file zone (warranty documents) keeps them all. */
+  onFiles: (files: File[]) => void;
   /** Live-region text shown while a file hovers (consumer-specific verb). */
   message: string;
 }): DropTarget & {
@@ -99,10 +102,10 @@ export function useDropTarget({
       e.preventDefault();
       depth.current = 0;
       setOver(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file && accepts(file)) onFile(file);
+      const files = [...(e.dataTransfer.files ?? [])].filter(accepts);
+      if (files.length > 0) onFiles(files);
     },
-    [accepts, enabled, onFile],
+    [accepts, enabled, onFiles],
   );
 
   return {
