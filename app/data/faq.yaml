@@ -7,7 +7,7 @@
 metaTitle: |-
   Expense FAQ: expense tracking for tax season with receipt OCR, AI categories, and mileage
 description: |-
-  Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage, and how it helps at tax time.
+  Plain answers to common questions about Expense: what it's for, how receipt OCR and AI categories work, whether it tracks mileage or warranties, and how it helps at tax time.
 eyebrow: "FAQ"
 title: |-
   Frequently Asked Questions
@@ -58,6 +58,9 @@ questions:
   - question: "Can I reconcile my expenses against a credit card statement?"
     answer: |-
       Yes. Upload a credit card or bank statement in PDF, CSV, QuickBooks (QFX/OFX), or Excel format, and Expense matches every charge against what you logged. Any charge without a matching receipt is flagged, so a deduction you missed stands out. Reconcile as many statements as you like, across cards or months, and a card you use for both personal and business spending is fine. Nothing is written until you confirm which matches to keep and which charges to add as new expenses.
+  - question: "Can I track warranties in Expense?"
+    answer: |-
+      Yes, and it starts the same way a receipt does. Upload the warranty document to the Warranties page (a photo, a PDF, or the terms the retailer sent) and Expense reads the merchant, the product, the purchase date and the expiry from it, then keeps the document attached to the record. Where the merchant is one we have researched, the record starts with their return and coverage terms, and everything stays editable. Records are grouped into what is still in force, what expires within 90 days, what has already expired, and what has no end date, and a warranty can be linked to the expense it came from. Warranties are tracked separately from your expenses, so a warranty for a purchase you never deducted stays out of your tax totals.
   - question: "Can I share Expense with my spouse or accountant?"
     answer: |-
       Yes. Share the invitation code and everyone you invite sees the same expenses. Your other accounts stay completely separate.

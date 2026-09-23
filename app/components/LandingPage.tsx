@@ -5,6 +5,7 @@ import {
   MapPinned,
   Plug,
   ReceiptText,
+  ShieldCheck,
   Sparkles,
   Tags,
   type LucideIcon,
@@ -51,6 +52,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   "PDF reports to show your accountant": FolderOpen,
   "Log drives without Excel": MapPinned,
   "Reconcile against your monthly statement": CreditCard,
+  "Track the warranty, not just the purchase": ShieldCheck,
 };
 
 const STEPS = [

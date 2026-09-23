@@ -12,7 +12,7 @@
 metaTitle: |-
   Expense product facts: free, Schedule C categories, receipt capture, mileage
 description: |-
-  A self-employed expense tracker in facts: free with no card and no ads, the first {{freeSpots}} accounts while it is early, all {{categoryCount}} IRS Schedule C Part II categories pre-seeded, receipts in by photo, screenshot, drag and drop, paste, PDF or forwarded email, Gmail and Fastmail inbox import, mileage at the IRS rate, bank reconciliation, and PDF or ZIP export.
+  A self-employed expense tracker in facts: free with no card and no ads, the first {{freeSpots}} accounts while it is early, all {{categoryCount}} IRS Schedule C Part II categories pre-seeded, receipts in by photo, screenshot, drag and drop, paste, PDF or forwarded email, Gmail and Fastmail inbox import, mileage at the IRS rate, bank reconciliation, warranty records that group by what is still covered, and PDF or ZIP export.
 eyebrow: "Facts"
 title: |-
   Expense product facts
@@ -22,8 +22,10 @@ summary: |-
   photo, a screenshot, a PDF or the mailbox itself; every expense lands under
   an IRS Schedule C category and in a report you name; drives are priced at
   the IRS rate for the date and type; and the year leaves as a PDF per report
-  or a ZIP with everything. This page is the short version, in the shape a
-  write-up can copy.
+  or a ZIP with everything. A warranty document goes in the same way, and the
+  record it makes (merchant, product, purchase date, expiry, and the document
+  itself) groups by what is still covered. This page is the short version, in
+  the shape a write-up can copy.
 
 factsHeading: "At a glance"
 tableHeadings:
@@ -54,6 +56,8 @@ facts:
     value: "Map the route; priced at the [IRS rate]({{siteUrl}}/mileage-rates) for the drive's date and type"
   - label: "Bank reconciliation"
     value: "Statement upload (PDF, CSV, QFX/OFX, Excel) matched against the expenses you logged"
+  - label: "Warranties"
+    value: "Drop in a warranty document: the merchant, product, purchase date and expiry are read from it, the file stays attached, and records group by still in force, expiring within 90 days, already expired, or no end date"
   - label: "Exports"
     value: "A PDF per report with the receipts attached, or a ZIP with the CSV and every image"
   - label: "AI assistants"
@@ -116,4 +120,4 @@ cta:
 mirror:
   title: "Expense product facts"
   footer: |-
-    Expense ({{siteUrl}}) is a free expense tracker for individuals filing taxes: receipts are read with OCR and categorized with an LLM, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, and a year exports as a PDF per report or a ZIP with everything. The first {{freeSpots}} accounts are free while the app is early. Questions go to {{supportEmail}}.
+    Expense ({{siteUrl}}) is a free expense tracker for individuals filing taxes: receipts are read with OCR and categorized with an LLM, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, and a year exports as a PDF per report or a ZIP with everything. A warranty document becomes a record of the merchant, the product, the purchase date, the expiry and the document itself, grouped by what is still covered. The first {{freeSpots}} accounts are free while the app is early. Questions go to {{supportEmail}}.

@@ -16,9 +16,12 @@ appSummary: |-
   a question in plain words on the Insights page ("how much have I spent this
   year?", "where does my money go?") and it answers from your own records, with a
   chart when the question spans several months. Connect your Gmail or Fastmail
-  account and the receipts in your inbox get pulled in on their own. At tax time
-  you export a PDF per report, or a ZIP with everything your accountant needs.
-  Ad-free.
+  account and the receipts in your inbox get pulled in on their own. Warranties
+  are kept the same way: upload a warranty document and the merchant, product,
+  purchase date and expiry are read off it, the file stays attached, and the
+  record groups into what is still in force, what expires within 90 days, and
+  what has already expired. At tax time you export a PDF per report, or a ZIP
+  with everything your accountant needs. Ad-free.
 appTagline: |-
   Free expense tracking for tax season: receipts, mileage, and exports.
 
@@ -45,6 +48,8 @@ keyFacts:
     Mileage: map-based drives at the IRS mileage rate for the drive date/type
   - |-
     AI assistant access: connect any MCP client (Claude, OpenAI, etc) by signing in with your account (OAuth), no API keys. The assistant can capture receipts, log mileage, answer questions about your spending, and build and export reports. In Chrome, the app also registers read-only in-page tools for browser agents (WebMCP), no setup
+  - |-
+    Warranties: drop in a warranty document and the merchant, product, purchase date and expiry are read off it, the file stays attached, the retailer's coverage terms are filled in where we have researched them, and records group by still in force, expiring within 90 days, already expired, or no end date
   - |-
     Insights: the app's own question page, with no assistant to connect. Ask "where does my money go?" or "what still needs a report?" and the answer is computed from your expenses, with a chart when the question spans months
   - |-

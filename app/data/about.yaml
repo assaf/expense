@@ -45,6 +45,9 @@ benefits:
   - title: "Reconcile against your monthly statement"
     body: |-
       Upload a credit card or bank statement (PDF, CSV, QuickBooks, or Excel) and Expense matches the charges against what you logged. Anything you never logged stands out, and you can reconcile as many statements as you like, personal and business spending on one card included.
+  - title: "Track the warranty, not just the purchase"
+    body: |-
+      A receipt gets you a deduction; the warranty is what you need when the thing breaks, usually years later, when the paperwork is long gone. Drop a warranty document on the Warranties page and Expense reads the merchant, the product, the purchase date and the expiry off it, keeps the document attached, and starts the record with the retailer's own return and coverage terms where we have researched them. Records are grouped by what is still in force, what expires within 90 days, what has already expired, and what has no end date, so you can tell whether something is still covered without digging through a drawer.
   - title: "Share with your family or accountant"
     body: |-
       Invite someone with a code and you all see the same expenses. Your other accounts stay private.
