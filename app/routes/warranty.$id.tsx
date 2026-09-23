@@ -39,8 +39,9 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (intent === "save") {
     const result = await saveWarrantyFromForm(form, user.accountId, existing);
     if (result.error) return badRequest(result.error);
-    // Stay on the page: the fetcher's revalidation refreshes the documents.
-    return { ok: true };
+    // Back to the list, like the expense editors: the save is the whole
+    // interaction, so staying on the form would just be a page to leave.
+    return redirect("/warranties");
   }
 
   if (intent === "delete") {

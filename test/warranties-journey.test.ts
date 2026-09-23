@@ -176,6 +176,20 @@ describe("warranties journey", () => {
     await expect(page.getByLabel("Product", { exact: true })).toHaveValue(
       "Coffee grinder",
     );
+
+    // Saving an edit goes back to the list, with the change in it.
+    await page.getByLabel("Product", { exact: true }).fill("Coffee grinder XL");
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.waitForURL((url) => url.pathname === "/warranties", {
+      timeout: 15_000,
+    });
+    const renamed = page.getByRole("link", { name: /Coffee grinder XL/ });
+    await expect(renamed).toBeVisible();
+    await expect(renamed).toContainText("Coffee grinder XL");
+    // The old spelling is gone: the list shows the saved row, not a stale one.
+    await expect(
+      page.getByRole("link", { name: /Coffee grinder,/ }),
+    ).toHaveCount(0);
   });
 
   it("files a dropped document as a warranty of its own", async () => {

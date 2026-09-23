@@ -65,10 +65,6 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   const [transition, setTransition] = useState<null | "save" | "delete">(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  // Whether the in-flight submission is a save: only then do the picked
-  // files become stored documents (a document removal's `ok` must not throw
-  // away picks the user just made).
-  const savedOnSuccess = useRef(false);
 
   const saving = fetcher.state !== "idle";
   const error = fetcherError(fetcher.data);
@@ -107,16 +103,12 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
     input.files = transfer.files;
   }, [picks]);
 
-  // Clear the overlay when a submission lands without navigating (a
-  // validation error) and drop the picked files once a save stuck: the
-  // revalidated loader data now carries them as stored documents.
+  // A submission that lands without navigating is a validation error: clear
+  // the overlay so the message and the form are usable again. (A save that
+  // sticks navigates to the list, so the picks go with the component.)
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     setTransition(null);
-    if (savedOnSuccess.current && "ok" in fetcher.data) {
-      savedOnSuccess.current = false;
-      setPicks([]);
-    }
   }, [fetcher.state, fetcher.data]);
 
   function cancel() {
@@ -128,13 +120,11 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
    * the browser has to do the multipart encoding. */
   function save() {
     if (!formRef.current) return;
-    savedOnSuccess.current = true;
     setTransition("save");
     formRef.current.requestSubmit();
   }
 
   function removeDocument(key: string) {
-    savedOnSuccess.current = false;
     const form = new FormData();
     form.set("intent", "removeDocument");
     form.set("key", key);
