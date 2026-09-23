@@ -15,6 +15,10 @@
 #
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{freeSpots}},
 # {{supportEmail}}. See app/lib/content.server.ts.
+#
+# The oldest group is a summary, not a day: the pre-launch stretch (the app
+# being built, 2026-07-30 .. 2026-08-08) is folded into one line per capability
+# the app had by then. Keep it that way; a new note goes under its own date.
 
 metaTitle: |-
   Expense changelog: what changed in the app, by date
@@ -32,8 +36,8 @@ summary: |-
 
 intro: |-
   Newest first. The entries are the changes a person using the app can see,
-  not the plumbing behind them. The list starts with the first commit on
-  2026-07-30, so the earliest dates are the app being built.
+  not the plumbing behind them. The last group is a summary: the nine days of
+  building that followed the first commit on 2026-07-30.
 
 typeLabels:
   feature: "New"
@@ -47,8 +51,6 @@ releases:
         text: "The new Warranties page tracks expiry dates, reads warranty terms from uploaded receipts and PDFs, and reminds you before coverage ends."
       - type: feature
         text: "Warranty terms prefill from a curated merchant policy when the merchant matches, and the prefilled terms stay editable."
-      - type: feature
-        text: "This changelog lists what changed and when, as a page and as markdown for assistants at /changelog.md."
       - type: fix
         text: "Merchant warranty and return policy details were corrected, including the Costco return windows and Mattress Firm claims."
   - date: "2026-09-22"
@@ -62,13 +64,11 @@ releases:
       - type: feature
         text: "You are emailed when a connected mailbox needs reconnecting because its login stopped working."
       - type: fix
-        text: "Saving an email rule no longer fails when another save is running."
-      - type: fix
         text: "Emails stranded by a crashed import are retried instead of being left behind."
   - date: "2026-09-18"
     changes:
       - type: feature
-        text: "You can connect any JMAP mail server as a receipt source with its URL and a bearer token or app password."
+        text: "You can connect any JMAP mail server as a receipt source, not only Gmail and FastMail."
   - date: "2026-09-17"
     changes:
       - type: feature
@@ -79,26 +79,18 @@ releases:
         text: "A new product facts page covers capture methods, Schedule C lines and pricing."
       - type: fix
         text: "Closing or reopening a report from the Reports page now updates the report you clicked."
-  - date: "2026-09-16"
-    changes:
-      - type: improvement
-        text: "Public pages now point signed-in visitors to their dashboard instead of the signup form."
   - date: "2026-09-15"
     changes:
       - type: feature
-        text: "There is a new support page at /support that links an address you can email."
+        text: "A support page at /support gives you one address to write to, and what to include."
   - date: "2026-09-14"
     changes:
       - type: feature
         text: "Insights questions can be stopped mid-answer with a Stop button, and the ask box grows to fit questions of up to five lines."
       - type: feature
         text: "Settings lets you change your sign-in email, change your password and close your account."
-      - type: feature
-        text: "A terms of service page covers accounts, data, and what the app does not promise."
   - date: "2026-09-13"
     changes:
-      - type: feature
-        text: "A privacy policy page sets out what is stored, where it lives, and which providers see what."
       - type: fix
         text: "Email connections whose receipt catch-up fails are now flagged in Settings as needing attention."
   - date: "2026-09-12"
@@ -117,8 +109,6 @@ releases:
         text: "Mileage trips now default to one way with a round trip option, and you can save named places in Settings to reuse as trip stops."
       - type: fix
         text: "Changing your password now signs out your other sessions and revokes access for connected apps."
-      - type: fix
-        text: "A name, email, place or mailbox address that is already in use says so instead of failing quietly."
   - date: "2026-09-10"
     changes:
       - type: feature
@@ -137,8 +127,6 @@ releases:
     changes:
       - type: feature
         text: "The Insights ask box is now a conversation: each question joins a transcript and is answered from your own totals."
-      - type: improvement
-        text: "Amount filters in expense search now accept a space after the symbol, so > 200 matches the same rows as >200."
       - type: fix
         text: "Asking Insights about AI spending no longer pulls in hosting and other infrastructure."
   - date: "2026-09-07"
@@ -180,8 +168,6 @@ releases:
       - type: feature
         text: "A /connect page walks you through connecting an MCP client, with per-client steps and copy buttons."
       - type: feature
-        text: "Press Shift+? anywhere to pin keyboard shortcut badges next to the buttons they trigger."
-      - type: feature
         text: "You can rotate a receipt left or right in the editor, and the rotation is saved."
       - type: fix
         text: "The previous/next buttons in the expense editor now follow the same order as the main expense list."
@@ -191,12 +177,10 @@ releases:
         text: "In-page browser agents can read expenses, expense summaries, and reports from the app."
       - type: fix
         text: "Report PDF exports no longer fail when the report name contains non-ASCII characters."
-      - type: fix
-        text: "Emails from senders with no display name load again from FastMail."
   - date: "2026-08-30"
     changes:
       - type: feature
-        text: "FastMail can be connected with an OAuth sign-in instead of pasting an API token."
+        text: "Connecting FastMail no longer means pasting an API token: you sign in with FastMail instead."
       - type: fix
         text: "Receipt confirmation emails are sent again for FastMail accounts."
   - date: "2026-08-29"
@@ -221,26 +205,16 @@ releases:
     changes:
       - type: feature
         text: "Bank charge alerts that an imported receipt already covers are skipped on the email review page and listed for reference."
-      - type: improvement
-        text: "Pages that don't process images start faster."
-      - type: improvement
-        text: "The app uses a new typeface with tabular figures, so money columns line up."
       - type: fix
         text: "Exporting a report as PDF no longer fails."
   - date: "2026-08-24"
     changes:
       - type: feature
         text: "Confirmation emails include the original receipt: the body text quoted, or the image or PDF under its original filename."
-      - type: fix
-        text: "Confirmation emails include a plain-text body, so clients that don't render HTML show the full message."
   - date: "2026-08-23"
     changes:
-      - type: improvement
-        text: "Dark mode now covers the marketing, alternatives, and reconcile pages."
       - type: fix
-        text: "Receipts that arrive by email keep the sender's local date instead of rolling over to the next UTC day."
-      - type: fix
-        text: "Receipt attachments sent as generic binary files are recognized as images and imported."
+        text: "Receipts that arrive by email keep the sender's local date instead of moving to the next day."
   - date: "2026-08-22"
     changes:
       - type: feature
@@ -253,8 +227,6 @@ releases:
         text: "A new email review page lists receipt-like emails from a connected mailbox, so each one can be turned into an expense or ignored."
       - type: improvement
         text: "Apple receipts now name the app or subscription plan in the expense."
-      - type: improvement
-        text: "Inbox review scans the 50 most recent emails instead of a 90-day window, and says when the cap is reached."
   - date: "2026-08-20"
     changes:
       - type: feature
@@ -262,7 +234,7 @@ releases:
       - type: improvement
         text: "Recurring billers such as Shopify, Conservice, Spectrum, and Verizon are recognized as receipts out of the box."
       - type: fix
-        text: "Date defaults and the future-date check now use your local day instead of the server's UTC date."
+        text: "Date defaults and the future-date check now use your local day."
       - type: fix
         text: "Inbox scanning no longer stops at a batch of already-seen emails, so newer bills behind them are imported."
   - date: "2026-08-19"
@@ -273,8 +245,6 @@ releases:
         text: "Expense descriptions from email receipts now include the receipt number, so you can tell which email it came from."
       - type: improvement
         text: "Expenses imported from a connected mailbox are parsed locally, without sending your mail to an LLM."
-      - type: fix
-        text: "Receipt image uploads are capped at 15MB."
   - date: "2026-08-17"
     changes:
       - type: feature
@@ -324,89 +294,23 @@ releases:
   - date: "2026-08-08"
     changes:
       - type: feature
-        text: "The app now works better with a keyboard or a screen reader: page landmarks, labeled sections, dialogs that hold focus, announced messages."
+        text: "Receipts arrive as a photo, a dragged file or a PDF, with the merchant, amount and category read from the image."
+      - type: feature
+        text: "Forward a receipt email to your own address and it becomes an expense, once the sender confirms a verification link."
+      - type: feature
+        text: "Accounts with signup, invite-code joining and isolated data; signing in requires confirming your email first."
+      - type: feature
+        text: "Mileage trips are mapped stop to stop, priced at the IRS rate for the drive's date and type, and drawn on a map in the report PDF."
+      - type: feature
+        text: "Reports hold the year's expenses and export as a PDF with the receipts attached or a ZIP with the images and CSV."
+      - type: feature
+        text: "Reconcile matches an uploaded card statement (CSV, Excel, QuickBooks, OFX/QFX, PDF) against the expenses you logged."
+      - type: feature
+        text: "Assistants connect over MCP to capture receipts, log mileage, read expenses and build reports."
+      - type: feature
+        text: "The expense list searches by merchant, description, category, amount or mileage address, and flags possible duplicates."
       - type: improvement
-        text: "List, settings and editor pages open faster."
-      - type: fix
-        text: "Signed-in users no longer see a cached marketing page, or get sent to the login screen, when they open the app."
-  - date: "2026-08-07"
-    changes:
-      - type: feature
-        text: "The new Reconcile page matches an uploaded card statement against your logged expenses and flags close matches for review."
-      - type: feature
-        text: "Statement reconciliation accepts .xlsx exports and QuickBooks .qbo files, alongside CSV, OFX/QFX and PDF."
-      - type: feature
-        text: "You can create a new report from the expense editor without leaving the page."
-      - type: fix
-        text: "Amex, Capital One, Chase and Apple Card statements now parse correctly, including yearless dates and multi-date rows."
-  - date: "2026-08-06"
-    changes:
-      - type: feature
-        text: "Signing in now requires confirming your email address first, and the login page offers to resend the link."
-      - type: fix
-        text: "The mileage editor shows a 'Route unavailable' error when the routing service fails."
-  - date: "2026-08-04"
-    changes:
-      - type: feature
-        text: "Forwarded receipts are imported only after the sender confirms a verification link."
-      - type: feature
-        text: "Report PDFs show each mileage trip's type, rate and distance, plus a real street map in the receipts appendix."
-      - type: feature
-        text: "The mileage editor prices a trip at the IRS rate for its date and type and updates the amount."
-      - type: fix
-        text: "Report PDFs list uncategorized expenses under a 'No category' heading instead of dropping them."
-  - date: "2026-08-03"
-    changes:
-      - type: feature
-        text: "Assistants connect over MCP to capture receipts, log mileage, read expenses and build reports, and Settings shows each connected app."
-      - type: feature
-        text: "Mileage trips show a route map with numbered stops, a dashed return leg and the saved driving distance."
-      - type: feature
-        text: "The expense list has a search box that filters by merchant, description, category, amount or mileage address."
-      - type: feature
-        text: "Public /about, /faq and /alternatives pages explain the product, with markdown versions for AI readers."
-      - type: feature
-        text: "Receipts also arrive by dragging files onto the expense list, or as a PDF with one image per page."
-      - type: feature
-        text: "Duplicate receipts and mileage trips are flagged, and the warning can be dismissed."
-      - type: improvement
-        text: "A new receipt starts from the category you used for that merchant, and reading a receipt leaves fields you already filled alone."
-  - date: "2026-08-02"
-    changes:
-      - type: improvement
-        text: "New expenses are created only when you press Save, so an uploaded receipt image stays a draft until then."
-      - type: fix
-        text: "Totals are added up exactly, so they no longer drift by a cent."
-      - type: fix
-        text: "Uploaded receipt PDFs no longer render as blank pages."
-  - date: "2026-08-01"
-    changes:
-      - type: feature
-        text: "Anonymous visitors see a public landing page with features, how it works and signup, instead of being sent to login."
-      - type: feature
-        text: "Uploading a receipt image pre-fills the merchant, amount and category from the receipt."
-      - type: feature
-        text: "Reports can be closed and reopened in Settings, with expense counts shown for each report and category."
-      - type: feature
-        text: "New accounts start with the IRS Schedule C categories already seeded."
-  - date: "2026-07-31"
-    changes:
-      - type: feature
-        text: "Forward a receipt email to your inbound address and the app extracts the merchant, amount and category."
-      - type: feature
-        text: "Accounts with signup, sign-in and invite-code joining, where each account's data is isolated."
-      - type: fix
-        text: "Emailed receipts saved as blank white images instead of the receipt itself."
-  - date: "2026-07-30"
-    changes:
-      - type: feature
-        text: "The expense tracker launched with receipt capture, mileage trips, and per-report PDF and ZIP exports."
-      - type: feature
-        text: "The home page shows a per-report amount summary, and clicking one filters the expense list to that report."
-      - type: feature
-        text: "The expense editor saves with Return or Cmd/Ctrl+Enter, cancels with Esc, and moves between expenses with prev/next arrows."
-      - type: fix
-        text: "An expense with a zero amount was marked incomplete; zero amounts are now valid."
+        text: "The app works with a keyboard or a screen reader: landmarks, labeled sections, focus held in dialogs, announced messages."
 
 cta:
   heading: |-
@@ -418,6 +322,6 @@ cta:
 mirror:
   title: "Expense changelog"
   intro: |-
-    Entries are typed: New for a capability that did not exist, Improved for a change to something that already worked, Fixed for a defect that was corrected. The list starts with the first commit on 2026-07-30, so the earliest dates are the app being built.
+    Entries are typed: New for a capability that did not exist, Improved for a change to something that already worked, Fixed for a defect that was corrected. The oldest group is a summary of the nine days of building that followed the first commit on 2026-07-30.
   footer: |-
     Expense ({{siteUrl}}) is an expense tracker for individuals filing taxes: receipts arrive by photo, screenshot, pasted image, PDF or forwarded email and are read with OCR, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, a bank statement reconciles against what was logged, a year exports as a PDF per report or a ZIP with everything, warranty documents become records grouped by what is still covered, and an assistant connects over MCP at {{mcpEndpoint}}. This file lists what changed in the app, with the date of each release. Questions go to {{supportEmail}}.
