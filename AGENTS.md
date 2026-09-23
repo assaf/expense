@@ -237,6 +237,18 @@ you know?" card in `app/components/FeatureHighlight.tsx`, picked per request on
 the home page; gate data-dependent ones in `availableHighlights` and pin the
 gating in `test/highlights.test.ts`.
 
+**Changelog.** Every user-facing feature, bug fix or improvement gets a line in
+`app/data/changelog.yaml` as part of the same change, before the work is called
+done. It renders as `/changelog` and the `/changelog.md` mirror that assistants
+read; the file's header comment and the `expense-public-content-pages` skill
+carry the details. Write the line for someone using the app, not for someone
+reading the commit: what they can do now, what got better, what stopped being
+wrong. Under the date it shipped, with a type (`feature` / `improvement` /
+`fix`) and one sentence. Two to four lines per date, and one line when a day's
+work is one story. Plumbing, refactors, protocol detail and polish on a single
+control stay out; the file is validated at build time by `changelogReleases()`.
+The oldest group is a summary of the pre-launch build, not a day.
+
 **Domain rules that bite.** `amount` is always the USD number every consumer
 uses; `currency`, `originalAmount`, and `fxRate` on a receipt are provenance
 only. Foreign receipts convert at the ECB reference rate for the expense date
