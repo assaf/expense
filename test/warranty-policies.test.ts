@@ -99,10 +99,14 @@ describe("merchant coverage policies", () => {
 
   it("files the summary with its provenance", () => {
     const text = termsForMerchant("Costco");
+    // The facts a Costco record needs, read from the retailer's own policy
+    // documents rather than paraphrased from a summary of them.
+    expect(text).toContain("Risk-Free 100% Satisfaction Guarantee");
     expect(text).toContain("90 days");
-    expect(text).toContain("second year");
+    expect(text).toContain("up to 2 years");
+    expect(text).toContain("at Costco's choosing");
     // Where it came from and when it was checked travel with it.
-    expect(text).toContain("customerservice.costco.com");
+    expect(text).toContain("/app/answers/detail/a_id/1191");
     expect(text).toContain("checked 2026-09");
     expect(text).toBe(policyTermsText(merchantPolicy("Costco")!));
     // A merchant with no curated policy files no terms of its own.
