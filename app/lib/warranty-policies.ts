@@ -44,7 +44,7 @@ export interface MerchantPolicy {
 const COSTCO: MerchantPolicy = {
   merchant: "Costco",
   terms:
-    "Costco's own coverage: a Risk-Free 100% Satisfaction Guarantee, so merchandise can be returned for the purchase price, with exceptions, and the membership fee is refundable at any time. Electronics and major appliances must be returned within 90 days: TVs, projectors, computers, tablets, wearables, cameras, drones, camcorders, MP3 players, phones, and appliances over 10 cu. ft. Costco Technical & Warranty Services extends the manufacturer's warranty for up to 2 years on TVs, projectors, computers, and major appliances (touchscreen tablets excluded), fulfilled at Costco's choosing by repair, replacement, or a refund up to the purchase price, and excluding data and software loss, physical or liquid damage, and commercial use. Adding an Allstate Protection Plan can take qualifying products to 5 years of coverage.",
+    "Costco's own coverage: a Risk-Free 100% Satisfaction Guarantee, so merchandise can be returned for the purchase price, with exceptions, and the membership fee is refundable at any time. Electronics and major appliances must be returned within 90 days: TVs, projectors, computers, tablets, wearables, cameras, drones, camcorders, MP3 players and phones, plus major appliances (refrigerators above 10 cu. ft., freezers, ranges, cooktops, over-the-range and under-counter microwaves, range hoods, dishwashers, water heaters, washers and dryers). Costco Technical & Warranty Services extends the manufacturer's warranty for up to 2 years on TVs, projectors, computers, and major appliances (touchscreen tablets excluded), fulfilled at Costco's choosing by repair, replacement, or a refund up to the purchase price, and excluding data and software loss, physical or liquid damage, and commercial use. Adding an Allstate Protection Plan can take qualifying products to 5 years of coverage.",
   sources: [
     "https://customerservice.costco.com/app/answers/detail/a_id/1191",
     "https://techsupport.costco.com/app/answers/detail/a_id/1001211",
@@ -99,9 +99,10 @@ const IKEA: MerchantPolicy = {
 const APPLE: MerchantPolicy = {
   merchant: "Apple",
   terms:
-    "Apple's own coverage: a one-year limited warranty on hardware, and 14-day returns in original condition. AppleCare+ (bought with the device or within 60 days) extends the hardware coverage and adds accidental-damage protection.",
+    "Apple's own coverage: a one-year limited warranty on hardware, and 14-day returns from the date you receive the item, repackaged with everything it shipped with. AppleCare+ (bought with the device or within 60 days of the purchase) extends the hardware coverage and adds accidental-damage protection.",
   sources: [
     "https://www.apple.com/shop/help/returns_refund",
+    "https://www.apple.com/support/products/",
     "https://www.apple.com/applecare/",
   ],
   asOf: "2026-09",
@@ -110,7 +111,7 @@ const APPLE: MerchantPolicy = {
 const AMAZON: MerchantPolicy = {
   merchant: "Amazon",
   terms:
-    "Amazon's own coverage: most items can be returned within 30 days of delivery. Amazon Renewed items carry the Renewed Guarantee, a 90-day return window (365 days for Renewed Premium), and select ones add a free 11-month limited warranty on defects in materials and workmanship, serviced by Asurion with no deductible.",
+    "Amazon's own coverage: most items can be returned within 30 days of delivery. Amazon Renewed items carry the Renewed Guarantee, a 90-day return window (365 days on Renewed Premium and Renewed Automotive), and select ones add a free 11-month limited warranty on defects in materials and workmanship, serviced by Asurion with no deductible.",
   sources: [
     "https://www.amazon.com/gp/help/customer/display.html?nodeId=GKM69DUUYKQWKWX7",
     "https://www.amazon.com/gp/help/customer/display.html?nodeId=G4ZAA22U35N373NX",
@@ -142,7 +143,7 @@ const TARGET: MerchantPolicy = {
 const LOWES: MerchantPolicy = {
   merchant: "Lowe's",
   terms:
-    "Lowe's own coverage: 90 days on most new, unused merchandise with receipt, 30 days on liquid paint, TVs and electronics, water heaters, most outdoor power equipment, custom special-order blinds and window treatments, HVAC systems, and plants, 48 hours on major appliances, air conditioners and evaporative coolers, paint sprayers, generators, pressure washers, chainsaws, utility vehicles, and tile saws, and 365 days on trees, shrubs and perennials and on Commercial Account or business rewards card purchases. Lowe's Outlet locations take major appliances back only for mechanical or electrical damage, within 48 hours of taking possession, and marketplace orders (Instacart, DoorDash, Shipt, Uber) are refunded as in-store credit within 90 days. A Lowe's Protection Plan extends coverage past the limited manufacturer warranty: up to five years on major appliances and up to three years on everything else.",
+    "Lowe's own coverage: 90 days on most new, unused merchandise with receipt, 30 days on liquid paint, TVs and electronics, water heaters, most outdoor power equipment, custom special-order blinds and window treatments, HVAC systems, and plants, 48 hours on major appliances, air conditioners and evaporative coolers, paint sprayers, generators, pressure washers, chainsaws, utility vehicles, construction heat and parts, and tile saws, and 365 days on trees, shrubs and perennials and on Commercial Account or business rewards card purchases. Lowe's Outlet locations take major appliances back only for mechanical or electrical damage, within 48 hours of taking possession, and marketplace orders (Instacart, DoorDash, Shipt, Uber) are refunded as in-store credit within 90 days. A Lowe's Protection Plan extends coverage past the limited manufacturer warranty: up to five years on major appliances and up to three years on everything else.",
   sources: [
     "https://www.lowes.com/l/help/returns-policy",
     "https://www.lowes.com/l/help/lowes-protection-plan",
@@ -153,8 +154,8 @@ const LOWES: MerchantPolicy = {
 const REI: MerchantPolicy = {
   merchant: "REI",
   terms:
-    "REI's own coverage: a 100% satisfaction guarantee for Co-op members, with most items returnable within a year, some exclusions.",
-  sources: ["https://www.rei.com/membership/member-collection"],
+    "REI's own coverage: a 100% Satisfaction Guarantee, so an unsatisfied purchase can be returned for a replacement or refund within one year of the purchase date for a Co-op member, and within 90 days for a non-member, with a few exceptions (in-store Re/Supply used gear, memberships, lift tickets, passes and gift cards).",
+  sources: ["https://www.rei.com/help/return-policy"],
   asOf: "2026-09",
 };
 
@@ -184,7 +185,7 @@ const DISCOUNT_TIRE: MerchantPolicy = {
 const MATTRESS_FIRM: MerchantPolicy = {
   merchant: "Mattress Firm",
   terms:
-    "Mattress Firm's own coverage: a 120 Night Sleep Trial, one exchange or return per purchase between 30 and 120 days after delivery, with a $249.99 return processing charge. The mattress's manufacturer warranty is separate and lives on its warranty card.",
+    "Mattress Firm's own coverage: a 120 Night Sleep Trial, one exchange or return per purchase between 30 and 120 days after delivery, with a $249.99 return processing charge. The manufacturer's warranty is separate, and claims go to the manufacturer for the brands Mattress Firm lists, or to Mattress Firm itself for the rest.",
   sources: [
     "https://www.mattressfirm.com/mattress-returns-exchanges.html",
     "https://www.mattressfirm.com/mattress-warranty.html",
