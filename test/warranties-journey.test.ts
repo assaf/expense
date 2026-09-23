@@ -180,6 +180,16 @@ describe("warranties journey", () => {
       "Coffee grinder",
     );
 
+    // A merchant with a curated coverage policy fills the empty terms, and
+    // terms the user wrote are never replaced.
+    const terms = page.getByLabel("Terms", { exact: true });
+    await page.getByLabel("Merchant", { exact: true }).fill("Costco");
+    await expect(terms).toHaveValue(/90 days/);
+    await expect(terms).toHaveValue(/checked 2026-09/);
+    await terms.fill("My own note");
+    await page.getByLabel("Merchant", { exact: true }).fill("Costco Wholesale");
+    await expect(terms).toHaveValue("My own note");
+
     // Saving an edit goes back to the list, with the change in it.
     await page.getByLabel("Product", { exact: true }).fill("Coffee grinder XL");
     await page.getByRole("button", { name: "Save" }).click();
@@ -234,5 +244,38 @@ describe("warranties journey", () => {
     const document = await page.request.get(`/warranty/${id}/document/0`);
     expect(document.status()).toBe(200);
     expect(document.headers()["content-type"]).toBe("application/pdf");
+  });
+
+  it("starts a warranty from a Costco expense with Costco's terms filled", async () => {
+    // The path the user actually takes: a Costco purchase is already an
+    // expense, and the warranty starts from it.
+    await page.goto("/expenses", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Receipt" }).click();
+    await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
+    await page.waitForTimeout(200);
+    await page.locator("input[list='merchants']").fill("Costco");
+    await page.locator("input[type='number']").fill("249.99");
+    await page.getByRole("button", { name: "Save" }).click();
+    await page.waitForURL((url) => url.pathname === "/expenses", {
+      timeout: 15_000,
+    });
+
+    await page.getByText("Costco", { exact: true }).click();
+    await page.waitForURL(/\/expense\/[^/]+$/, { timeout: 10_000 });
+    await page.getByRole("link", { name: "Add warranty" }).click();
+    await page.waitForURL(/\/warranty\/new\?expenseId=/, { timeout: 10_000 });
+    await page.waitForTimeout(200);
+
+    await expect(page.getByLabel("Merchant", { exact: true })).toHaveValue(
+      "Costco",
+    );
+    await expect(page.getByLabel("Terms", { exact: true })).toHaveValue(
+      /90 days/,
+    );
+    // Left unsaved on purpose: the record belongs to the user to create.
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.waitForURL((url) => url.pathname === "/warranties", {
+      timeout: 10_000,
+    });
   });
 });

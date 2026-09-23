@@ -17,6 +17,7 @@ import {
   extractWarrantyFields,
   productFromFileName,
 } from "~/lib/warranty-ai.server";
+import { termsForMerchant } from "~/lib/warranty-policies";
 
 /** Read the label paired with the i-th uploaded document, or "Document"
  * when the field is missing/blank. */
@@ -165,7 +166,9 @@ export async function createWarrantyFromDocument(
     value: extraction.value,
     purchasedAt: extraction.purchasedAt,
     expiresAt: extraction.expiresAt,
-    terms: extraction.terms,
+    // The document's own terms win; a merchant with a curated policy fills
+    // the gap (the document rarely states them).
+    terms: extraction.terms || termsForMerchant(extraction.merchant),
     documents: [{ key: saved.filename, name: originalName, label: "Document" }],
     updatedAt: new Date().toISOString(),
   };

@@ -123,9 +123,14 @@ afterAll(async () => {
 });
 
 // Each extraction test stubs the provider; a leftover stub would let a later
-// test pass without its own reply.
-afterEach(() => {
+// test pass without its own reply. The cache is cleared too: the tests reuse
+// the same document bytes, and a hit would hand the earlier test's answer to
+// the next one.
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await testPrisma.receiptExtraction.deleteMany({
+    where: { accountId: TEST_ACCOUNT_ID },
+  });
 });
 
 describe("warranty records", () => {
@@ -367,6 +372,53 @@ describe("createWarrantyFromDocument", () => {
     expect(
       (await readImage(TEST_ACCOUNT_ID, saved!.documents[0]!.key))?.mime,
     ).toBe("application/pdf");
+  });
+
+  it("files the merchant's coverage terms when the document states none", async () => {
+    vi.stubGlobal(
+      "fetch",
+      completionReply(
+        '{"merchant":"Costco Wholesale","product":"Vitamix blender",' +
+          '"value":"399.99","purchased_at":"2026-03-04","expires_at":"",' +
+          '"terms":"","confidence":"medium","notes":""}',
+      ),
+    );
+
+    const result = await createWarrantyFromDocument(
+      documentForm(await tinyPng(), "receipt.png", "image/png"),
+      TEST_ACCOUNT_ID,
+    );
+    if (result.error !== null) throw new Error(result.error);
+
+    // The read named the merchant but no terms, so the curated policy fills
+    // them, provenance included.
+    const saved = await readWarranty(result.id, TEST_ACCOUNT_ID);
+    expect(saved?.merchant).toBe("Costco Wholesale");
+    expect(saved?.product).toBe("Vitamix blender");
+    expect(saved?.terms).toContain("90 days");
+    expect(saved?.terms).toContain("checked 2026-09");
+  });
+
+  it("keeps the document's own terms over the curated policy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      completionReply(
+        '{"merchant":"Costco","product":"Espresso machine",' +
+          '"value":"1299","purchased_at":"2026-07-15",' +
+          '"expires_at":"2028-07-15",' +
+          '"terms":"Two years parts and labor.","confidence":"high",' +
+          '"notes":""}',
+      ),
+    );
+
+    const result = await createWarrantyFromDocument(
+      documentForm(await tinyPng(), "terms.png", "image/png"),
+      TEST_ACCOUNT_ID,
+    );
+    if (result.error !== null) throw new Error(result.error);
+    expect((await readWarranty(result.id, TEST_ACCOUNT_ID))?.terms).toBe(
+      "Two years parts and labor.",
+    );
   });
 
   it("refuses a file that is neither an image nor a PDF, storing nothing", async () => {

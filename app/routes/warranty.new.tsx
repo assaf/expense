@@ -6,6 +6,7 @@ import { loadWarrantyEditorOptions } from "~/lib/editor.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { newWarrantyShell } from "~/lib/types";
 import { badRequest, unknownIntent } from "~/lib/validation";
+import { termsForMerchant } from "~/lib/warranty-policies";
 import { saveWarrantyFromForm } from "~/lib/warranty-save.server";
 import type { Route } from "./+types/warranty.new";
 
@@ -30,6 +31,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     warranty.value = linked.amount;
     warranty.purchasedAt = linked.date;
     warranty.expenseId = linked.id;
+    // A merchant with a curated policy starts the record with its terms
+    // filled; the field stays editable.
+    warranty.terms = termsForMerchant(linked.merchant);
   }
   return { mode: "create" as const, warranty, ...options };
 }

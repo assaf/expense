@@ -18,7 +18,11 @@ What it does:
   labelled documents), optionally linked to the expense they came from, on
   `/warranties`. A document dropped on that page is read by the LLM
   (`app/lib/warranty-ai.server.ts`) and filed as a warranty with the file
-  attached. A warranty can outlive the tax year or cover a
+  attached; a merchant with a curated coverage policy
+  (`app/lib/warranty-policies.ts`, sourced and dated) starts the record with
+  those terms filled in. Retailer policy pages are bot-gated (costco.com's
+  answer 404/401 to a server fetch), which is why that table is curated
+  rather than fetched. A warranty can outlive the tax year or cover a
   non-deductible purchase, so it is its own collection and never reaches
   `readExpenses()` or the tax surfaces built on it.
 - Reconciles a bank statement against logged expenses to surface missed

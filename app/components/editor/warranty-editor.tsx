@@ -16,6 +16,7 @@ import { isReceiptFile } from "~/lib/file-types";
 import { formatAmount, formatDate, normalizeAmount } from "~/lib/format";
 import { useDropTarget } from "~/lib/use-drop-target";
 import type { Warranty, WarrantyExpenseOption } from "~/lib/types";
+import { termsForMerchant } from "~/lib/warranty-policies";
 import {
   EditorActions,
   TransitionOverlay,
@@ -161,7 +162,14 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
             name="merchant"
             list="warranties-merchants"
             value={merchant}
-            onChange={(e) => setMerchant(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setMerchant(next);
+              // A merchant with a curated coverage policy fills the terms
+              // while they are still empty, the way the document read does.
+              // Terms the user wrote are never replaced.
+              if (terms === "") setTerms(termsForMerchant(next));
+            }}
           />
           <datalist id="warranties-merchants">
             {data.merchants.map((m) => (
@@ -220,8 +228,13 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
         </p>
 
         <Field label="Terms" className="mt-4">
+          {/* aria-label because this textarea can arrive pre-filled (the
+              document read, or the merchant's curated policy): a wrapping
+              label's computed name picks up the control's own value, which
+              would announce the whole policy as the field's name. */}
           <Textarea
             name="terms"
+            aria-label="Terms"
             rows={4}
             value={terms}
             onChange={(e) => setTerms(e.target.value)}
