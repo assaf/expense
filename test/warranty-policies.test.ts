@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import {
   MERCHANT_POLICIES,
@@ -5,6 +7,10 @@ import {
   policyTermsText,
   termsForMerchant,
 } from "~/lib/warranty-policies";
+
+/** The table a human edits; `app/data/warranty-policies.ts` is emitted from
+ * it, and the last test below is what keeps the two in step. */
+const POLICIES_YAML = "app/data/warranty-policies.yaml";
 
 /**
  * The curated merchant coverage table: what it matches, what every entry has
@@ -112,5 +118,26 @@ describe("merchant coverage policies", () => {
     // A merchant with no curated policy files no terms of its own.
     expect(termsForMerchant("Blue Bottle")).toBe("");
     expect(termsForMerchant("")).toBe("");
+  });
+
+  it("is exactly what the editable YAML holds", () => {
+    // The table ships as an emitted module so that no YAML parser reaches the
+    // client bundle, which means an edit to the YAML has to be built into it.
+    // This is the check that the committed module is not stale: the whole
+    // table, entry by entry, against the file a human edits. `pnpm
+    // build:policies` (also run by `pnpm check`, `pnpm dev` and `pnpm build`)
+    // regenerates it.
+    const source = parse(readFileSync(POLICIES_YAML, "utf8")) as {
+      policies: unknown;
+    };
+    expect(source.policies).toEqual(
+      MERCHANT_POLICIES.map((policy) => ({
+        merchant: policy.merchant,
+        ...(policy.aliases ? { aliases: [...policy.aliases] } : {}),
+        terms: policy.terms,
+        sources: [...policy.sources],
+        asOf: policy.asOf,
+      })),
+    );
   });
 });

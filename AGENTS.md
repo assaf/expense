@@ -19,12 +19,14 @@ What it does:
   `/warranties`. A document dropped on that page is read by the LLM
   (`app/lib/warranty-ai.server.ts`) and filed as a warranty with the file
   attached; a merchant with a curated coverage policy
-  (`app/lib/warranty-policies.ts`, sourced and dated) starts the record with
-  those terms filled in. Retailer policy pages are bot-gated (costco.com's
+  (`app/data/warranty-policies.yaml`, sourced and dated) starts the record
+  with those terms filled in. Retailer policy pages are bot-gated (costco.com's
   answer 404/401 to a server fetch), which is why that table is curated
-  rather than fetched. A warranty can outlive the tax year or cover a
-  non-deductible purchase, so it is its own collection and never reaches
-  `readExpenses()` or the tax surfaces built on it.
+  rather than fetched, and why it lives in YAML: edit it, then
+  `pnpm build:policies` emits the table `app/lib/warranty-policies.ts` matches
+  against. A warranty can outlive the tax year or cover a non-deductible
+  purchase, so it is its own collection and never reaches `readExpenses()` or
+  the tax surfaces built on it.
 - Reconciles a bank statement against logged expenses to surface missed
   deductions.
 - Speaks MCP at `/mcp` for AI assistants, registers read-only WebMCP tools in
@@ -118,8 +120,8 @@ flowchart LR
 
 | Command                                           | Runs                                                             | Notes                                                          |
 | ------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost`                          |
-| `pnpm build`                                      | `react-router build --force`                                     | `prebuild` runs `prisma contract emit` first                   |
+| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost` (emits the table)        |
+| `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table             |
 | `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
 | `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; rewrites files via `--fix`          |
 | `pnpm test`                                       | `react-router build --force && vp test run`                      | **Gate.** Build then the full suite                            |
@@ -129,6 +131,7 @@ flowchart LR
 | `pnpm test:db:push`                               | `bash scripts/reset-test-db`                                     | Drops and recreates `expense_test`                             |
 | `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
 | `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                  |
+| `pnpm build:policies`                             | `tsx scripts/build-warranty-policies.ts`                         | Emits the merchant coverage table                              |
 | `pnpm screenshot`                                 | `SCREENSHOT=1 vp test run test/screenshot.test.ts`               | Regenerates README screenshots                                 |
 | `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                |
 | `pnpm setup:push` / `infer:rules` / `drain:email` | `tsx scripts/...`                                                | Fastmail push setup, email-rule inference, dev drain           |
@@ -136,11 +139,13 @@ flowchart LR
 | `./scripts/clone`                                 | prod dump -> local DB                                            | Read-only against prod; `LOCAL_DB_URL` overrides               |
 | `./scripts/smoke-check <url>`                     | `GET /api/smoke`, fails unless `ok === true`                     | Shared by `scripts/deploy` and CI                              |
 
-`pnpm check` runs, in order: `prisma contract emit` -> `react-router typegen` ->
-`vp check --fix` (oxfmt + oxlint with type-aware tsgolint + `tsc`) ->
-`node scripts/check-dark-mode.mjs` -> `secretlint` -> a tesseract patch probe ->
-`knip`. Because step 3 auto-fixes, a nonzero exit means an unfixable lint or
-type error. The same `vp check --fix` runs as a pre-commit hook.
+`pnpm check` runs, in order: `prisma contract emit` -> the merchant coverage
+table emit (`tsx scripts/build-warranty-policies.ts`) ->
+`react-router typegen` -> `vp check --fix` (oxfmt + oxlint with type-aware
+tsgolint + `tsc`) -> `node scripts/check-dark-mode.mjs` -> `secretlint` ->
+a tesseract patch probe -> `knip`. Because the `vp check --fix` step
+auto-fixes, a nonzero exit means an unfixable lint or type error. The same
+`vp check --fix` runs as a pre-commit hook.
 
 ## Code Conventions & Common Patterns
 
@@ -298,7 +303,7 @@ out of both.
 | `app/lib/env.ts`                      | Env constants; server-only (reads `.env` via `process.loadEnvFile`)            |
 | `app/lib/cron.server.ts`              | `cronTick`, the only supported cron wrapper                                    |
 | `app/lib/mcp.server.ts`               | MCP tool registry and OAuth `authenticateRequest`                              |
-| `app/data/`                           | The public copy: one markdown/YAML content file per page                       |
+| `app/data/`                           | The public copy, plus the merchant coverage table (`warranty-policies.yaml`)   |
 | `app/lib/content.server.ts`           | Parses `app/data/`, exports the parsed bundles and the `.md` mirrors           |
 | `app/lib/seo-content.ts`              | Site config, shared meta helpers, and the computed mileage helpers             |
 | `app/lib/images.server.ts`            | BYTEA image storage and `images/{accountId}/...` keys                          |

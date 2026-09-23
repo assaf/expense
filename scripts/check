@@ -5,6 +5,9 @@ set -eo pipefail
 echo -e "\033[0;32m--- Emit Prisma contract ---\033[0m"
 prisma contract emit
 
+echo -e "\033[0;32m--- Build the merchant coverage table ---\033[0m"
+tsx scripts/build-warranty-policies.ts
+
 echo -e "\033[0;32m--- Generate types for route modules ---\033[0m"
 react-router typegen
 

@@ -230,3 +230,23 @@ export interface LlmsContent {
   corePages: Array<{ title: string; url: string; blurb: string }>;
   optionalPages: Array<{ title: string; url: string; blurb?: string }>;
 }
+
+/** `warranty-policies.yaml`: the curated merchant coverage table, the one
+ * data file here that is not public copy. Each entry is what a warranty
+ * record for that merchant starts with, so it carries the pages the summary
+ * was read from and the month it was checked: an entry with no source or no
+ * `asOf` must not ship. `app/lib/warranty-policies.ts` matches a record's
+ * merchant against these and renders the terms. */
+export interface MerchantPolicy {
+  /** Merchant name as the retailer writes it; matched as whole words. */
+  merchant: string;
+  /** Other names the retailer trades under ("America's Tire" for Discount
+   * Tire), matched exactly like `merchant`. */
+  aliases?: readonly string[];
+  /** Coverage summary in the record's own voice, a sentence or two. */
+  terms: string;
+  /** The official pages the summary was taken from. */
+  sources: readonly string[];
+  /** The month the summary was last checked, "YYYY-MM". */
+  asOf: string;
+}

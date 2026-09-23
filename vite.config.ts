@@ -21,6 +21,9 @@ export default defineConfig((config) => {
         "node_modules/**",
         "data-test/**",
         "test/fixtures/**",
+        // Emitted by scripts/build-warranty-policies.ts: mechanical, and
+        // reformatting it would churn against the generator's own output.
+        "app/data/warranty-policies.ts",
       ],
       printWidth: 80,
       tabWidth: 2,

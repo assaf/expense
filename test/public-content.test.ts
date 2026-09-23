@@ -67,6 +67,8 @@ const CONTENT_FILES = [
   "site.yaml",
   "support.md",
   "terms.md",
+  "warranty-policies.ts",
+  "warranty-policies.yaml",
 ];
 
 const PAGES = [
