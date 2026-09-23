@@ -881,9 +881,12 @@ describe("Expense CRUD", () => {
 
   it("drags a file onto the home page to create a receipt draft", async () => {
     await page.goto("/expenses", { waitUntil: "load" });
+    // The drop target is the whole page (the listener is on the document), so
+    // these land on <body>, outside the content column.
+    const anywhere = page.locator("body");
 
     // Dropping an unsupported file does nothing (no navigation).
-    await page.locator("main").dispatchEvent("drop", {
+    await anywhere.dispatchEvent("drop", {
       dataTransfer: await fileTransfer(page, {
         name: "note.txt",
         type: "text/plain",
@@ -912,7 +915,7 @@ describe("Expense CRUD", () => {
           r.url().includes("/api/expense") && r.request().method() === "POST",
         { timeout: 30_000 },
       ),
-      page.locator("main").dispatchEvent("drop", { dataTransfer }),
+      page.locator("body").dispatchEvent("drop", { dataTransfer }),
     ]);
     await page.waitForURL(/\/expense\/new$/, { timeout: 10_000 });
     expect(resp.ok()).toBeTruthy();
@@ -955,17 +958,26 @@ describe("Expense CRUD", () => {
     // is down (the image is not a completeness factor).
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
-    // Dragging over the page highlights the drop target with a dashed
-    // outline and announces it to screen readers.
-    const drag = await page.evaluateHandle(() => new DataTransfer());
-    await main.dispatchEvent("dragenter", { dataTransfer: drag });
+    // Dragging a file over the page anywhere — the header and the margins
+    // included — highlights the content column with a dashed outline and
+    // announces it to screen readers.
+    const drag = await fileTransfer(page, {
+      name: "drop.png",
+      type: "image/png",
+      body: [...(await tinyPng())],
+    });
+    await page
+      .locator("body")
+      .dispatchEvent("dragenter", { dataTransfer: drag });
     await expect(main).toHaveClass(/outline-dashed/);
     await expect(
       page.locator('.sr-only[role="status"][aria-live="polite"]'),
     ).toContainText("Receipt file detected");
 
     // Leaving clears the highlight.
-    await main.dispatchEvent("dragleave", { dataTransfer: drag });
+    await page
+      .locator("body")
+      .dispatchEvent("dragleave", { dataTransfer: drag });
     await expect(main).not.toHaveClass(/outline-dashed/);
 
     // Dropping a receipt image on edit: the new image is held as a draft;
@@ -988,7 +1000,7 @@ describe("Expense CRUD", () => {
         r.url().includes("/api/expense") && r.request().method() === "POST",
       { timeout: 30_000 },
     );
-    await main.dispatchEvent("drop", { dataTransfer: drop });
+    await page.locator("body").dispatchEvent("drop", { dataTransfer: drop });
     expect((await draft).ok()).toBeTruthy();
     expect((await ocr).ok()).toBeTruthy();
 
@@ -1022,7 +1034,7 @@ describe("Expense CRUD", () => {
         r.url().includes("/api/expense") && r.request().method() === "POST",
       { timeout: 30_000 },
     );
-    await main2.dispatchEvent("drop", { dataTransfer: drop2 });
+    await page.locator("body").dispatchEvent("drop", { dataTransfer: drop2 });
     expect((await draft2).ok()).toBeTruthy();
     await expect(page.locator("img")).toBeVisible();
     await page.getByRole("button", { name: "Save" }).click();

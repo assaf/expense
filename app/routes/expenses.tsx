@@ -43,11 +43,7 @@ import { duplicateLabel, groupDuplicateMatches } from "~/lib/duplicates";
 import { matchesSearch, parseQuery } from "~/lib/expense-search";
 import type { DuplicateMatch } from "~/lib/duplicates";
 import { isReceiptFile } from "~/lib/file-types";
-import {
-  DROP_OUTLINE,
-  dropHandlers,
-  useDropTarget,
-} from "~/lib/use-drop-target";
+import { DROP_OUTLINE, useDropTarget } from "~/lib/use-drop-target";
 import {
   countLabel,
   formatAmount,
@@ -447,7 +443,6 @@ function ExpenseList({
     <main
       id="main-content"
       className={`mx-auto max-w-4xl px-4 py-8 ${drop.over ? DROP_OUTLINE : ""}`}
-      {...dropHandlers(drop)}
       aria-label="Expense list — drag a receipt image anywhere to upload"
     >
       <LiveStatus>{drop.message}</LiveStatus>

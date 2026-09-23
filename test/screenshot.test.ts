@@ -662,20 +662,23 @@ describe.skipIf(!process.env.DEMO)("landing demo", () => {
       await recorder.place(1080, 720);
       await recorder.shot(2_200);
 
-      // Scene 2: a receipt file arrives over the page. The drop target is the
-      // list's own <main> (the handlers live there), so the outline and the
-      // "drop to upload" note are the app's, not the recorder's. The poll is
-      // what makes this frame the highlight rather than a guess at it.
-      const dropZone = page.locator("#main-content");
+      // Scene 2: a receipt file arrives over the page. The file is let go on
+      // the page itself, not on the column: the listener is on the document,
+      // and what lights up is the column (the app's own outline).
+      const main = page.locator("#main-content");
       const hovering = await fileTransfer(page, {
         name: "blue-bottle-receipt.pdf",
         type: "application/pdf",
         body: [...pdf],
       });
-      await dropZone.dispatchEvent("dragenter", { dataTransfer: hovering });
-      await dropZone.dispatchEvent("dragover", { dataTransfer: hovering });
+      await page
+        .locator("body")
+        .dispatchEvent("dragenter", { dataTransfer: hovering });
+      await page
+        .locator("body")
+        .dispatchEvent("dragover", { dataTransfer: hovering });
       await expect
-        .poll(() => dropZone.getAttribute("class"), { timeout: 10_000 })
+        .poll(() => main.getAttribute("class"), { timeout: 10_000 })
         .toContain("outline-dashed");
       // Carry the pointer into the page with the outline up: the drag reads as
       // motion rather than a highlight that appears over a still cursor.
@@ -689,7 +692,9 @@ describe.skipIf(!process.env.DEMO)("landing demo", () => {
         type: "application/pdf",
         body: [...pdf],
       });
-      await dropZone.dispatchEvent("drop", { dataTransfer: dropping });
+      await page
+        .locator("body")
+        .dispatchEvent("drop", { dataTransfer: dropping });
       await page.waitForURL(/\/expense\/new/, { timeout: 15_000 });
       await waitForSettled(page);
       await recorder.shot(1_000);

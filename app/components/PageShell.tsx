@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "~/components/ui/Button";
-import {
-  DROP_OUTLINE,
-  dropHandlers,
-  type DropTarget,
-} from "~/lib/use-drop-target";
+import { DROP_OUTLINE, type DropTarget } from "~/lib/use-drop-target";
 
 /**
  * Shared page chrome inside the standard centered container, in one of two
@@ -54,8 +50,8 @@ export function PageShell({
    * a transcript can scroll internally and a composer sits flush at the
    * bottom of the screen. */
   fullHeight?: boolean;
-  /** Drag-and-drop target handlers + outline (receipt editor, reconcile
-   * landing). */
+  /** Drag-and-drop target state: the page-wide listeners are the hook's
+   * own, this only draws the outline on the column. */
   drop?: DropTarget;
   children: ReactNode;
 }) {
@@ -80,7 +76,6 @@ export function PageShell({
       <main
         id="main-content"
         className={`${containerClass} ${drop?.over ? DROP_OUTLINE : ""}`}
-        {...dropHandlers(drop)}
       >
         <header className="mb-6 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -110,7 +105,6 @@ export function PageShell({
     <main
       id="main-content"
       className={`mx-auto ${maxWidth} px-4 py-8 transition-opacity duration-150 ${dimmed ? "pointer-events-none opacity-80" : ""} ${drop?.over ? DROP_OUTLINE : ""}`}
-      {...dropHandlers(drop)}
     >
       <div className="mb-4 flex items-center justify-between">
         {onBack ? (

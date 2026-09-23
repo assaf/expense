@@ -1,44 +1,45 @@
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 /**
- * Everything a drop zone needs: the hook that tracks the drag state, the
- * handlers a container spreads, and the outline class it shows while a file
- * is over it. The home list, the receipt editor, the warranty editor, and
- * the reconcile landing all read from here, so no two of them can highlight
- * differently.
+ * Everything a drop zone needs: the hook that tracks the drag state and the
+ * outline class it shows while a file is over it. The home list, the receipt
+ * editor, the warranty editor, and the reconcile landing all read from here,
+ * so no two of them can highlight differently.
+ *
+ * The listeners live on the document rather than on a container: a file can
+ * be dropped anywhere on the page, margins included, and the browser's own
+ * "navigate to the file it was handed" is prevented along with it. What wears
+ * the outline is still the content column (callers read `over`), which is what
+ * makes the target obvious without shrinking it to a box.
+ *
+ * One drop target per page: two enabled at once would both take the drop.
  */
 
-/** A drop target's state and handlers, as a page's container spreads them. */
+/** What a drop target publishes. The listeners are the hook's own (see
+ * useDropTarget), so nothing has to be spread on a container to arm it. */
 export interface DropTarget {
+  /** True while a file is being dragged over the page. */
   over: boolean;
-  onDragEnter: (e: DragEvent<HTMLElement>) => void;
-  onDragOver: (e: DragEvent<HTMLElement>) => void;
-  onDragLeave: (e: DragEvent<HTMLElement>) => void;
-  onDrop: (e: DragEvent<HTMLElement>) => void;
+  /** Live-region text shown while a file is over the page. */
+  message: string;
 }
 
 /** Dashed outline while a file is over the page. */
 export const DROP_OUTLINE =
   "outline-dashed outline-2 -outline-offset-2 outline-blue-500 dark:outline-blue-400";
 
-/** The four handler props for a drop container, or nothing when the page has
- * no drop target (an undroppable page must not look droppable). */
-export function dropHandlers(drop?: DropTarget): Partial<DropTarget> {
-  if (!drop) return {};
-  return {
-    onDragEnter: drop.onDragEnter,
-    onDragOver: drop.onDragOver,
-    onDragLeave: drop.onDragLeave,
-    onDrop: drop.onDrop,
-  };
+/** Whether this drag carries files. A text or link drag must not light up a
+ * file target, nor be intercepted on its way to the browser. */
+function hasFiles(e: DragEvent): boolean {
+  return e.dataTransfer?.types?.includes("Files") ?? false;
 }
 
 /**
  * Depth-counted drag-and-drop target state. dragenter/dragleave fire for
  * every child element crossed, so track depth instead of toggling on each
  * event, which prevents the highlight from flickering. When `enabled` is false
- * every handler is inert and the drop is left to the browser's default
- * (which ignores it); this is used to keep closed reports read-only.
+ * nothing listens and the drop is left to the browser's default (which
+ * ignores it); this is used to keep closed reports read-only.
  */
 export function useDropTarget({
   enabled = true,
@@ -56,64 +57,76 @@ export function useDropTarget({
   onFiles: (files: File[]) => void;
   /** Live-region text shown while a file hovers (consumer-specific verb). */
   message: string;
-}): DropTarget & {
-  /** Text for an sr-only live region while a file is over the page. */
-  message: string;
-} {
+}): DropTarget {
   const [over, setOver] = useState(false);
   const depth = useRef(0);
 
-  const onDragEnter = useCallback(
-    (e: DragEvent<HTMLElement>) => {
-      if (!enabled) return;
-      e.preventDefault();
-      depth.current += 1;
-      setOver(true);
-    },
-    [enabled],
-  );
+  // Effect events: consumers pass fresh arrows every render, and these keep
+  // the document listeners installed once while still seeing the latest
+  // props (`useFormKeys` in the editors reads them the same way).
+  const onEnter = useEffectEvent((e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth.current += 1;
+    setOver(true);
+  });
 
-  const onDragOver = useCallback(
-    (e: DragEvent<HTMLElement>) => {
-      if (!enabled) return;
-      // preventDefault is required to turn the drag into a drop target.
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-    },
-    [enabled],
-  );
+  const onOver = useEffectEvent((e: DragEvent) => {
+    if (!hasFiles(e)) return;
+    // preventDefault is what makes any spot on the page a drop target: without
+    // it the browser rejects the drop outside a registered area, and hands the
+    // file to itself (navigating away from the app).
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  });
 
-  const onDragLeave = useCallback(
-    (e: DragEvent<HTMLElement>) => {
-      if (!enabled) return;
-      e.preventDefault();
-      depth.current -= 1;
-      if (depth.current <= 0) {
-        depth.current = 0;
-        setOver(false);
-      }
-    },
-    [enabled],
-  );
-
-  const onDrop = useCallback(
-    (e: DragEvent<HTMLElement>) => {
-      if (!enabled) return;
-      e.preventDefault();
+  const onLeave = useEffectEvent((e: DragEvent) => {
+    // Leaving the window skips the per-element dragleave pair the depth count
+    // relies on, so the drag would otherwise end with the outline still up.
+    if (e.relatedTarget === null) {
       depth.current = 0;
       setOver(false);
-      const files = [...(e.dataTransfer.files ?? [])].filter(accepts);
-      if (files.length > 0) onFiles(files);
-    },
-    [accepts, enabled, onFiles],
-  );
+      return;
+    }
+    depth.current -= 1;
+    if (depth.current <= 0) {
+      depth.current = 0;
+      setOver(false);
+    }
+  });
 
-  return {
-    over,
-    message: over ? message : "",
-    onDragEnter,
-    onDragOver,
-    onDragLeave,
-    onDrop,
-  };
+  const onDrop = useEffectEvent((e: DragEvent) => {
+    e.preventDefault();
+    depth.current = 0;
+    setOver(false);
+    const files = [...(e.dataTransfer?.files ?? [])].filter(accepts);
+    if (files.length > 0) onFiles(files);
+  });
+
+  const onEnd = useEffectEvent(() => {
+    depth.current = 0;
+    setOver(false);
+  });
+
+  useEffect(() => {
+    if (!enabled) return;
+    document.addEventListener("dragenter", onEnter);
+    document.addEventListener("dragover", onOver);
+    document.addEventListener("dragleave", onLeave);
+    document.addEventListener("drop", onDrop);
+    document.addEventListener("dragend", onEnd);
+    return () => {
+      document.removeEventListener("dragenter", onEnter);
+      document.removeEventListener("dragover", onOver);
+      document.removeEventListener("dragleave", onLeave);
+      document.removeEventListener("drop", onDrop);
+      document.removeEventListener("dragend", onEnd);
+      // A drag in flight when the zone goes away (a save starts, the report
+      // closes, the route changes) must not leave the next page outlined.
+      depth.current = 0;
+      setOver(false);
+    };
+  }, [enabled]);
+
+  return { over, message };
 }

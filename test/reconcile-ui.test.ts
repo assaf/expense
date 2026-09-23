@@ -132,22 +132,23 @@ describe("Reconcile flow", () => {
     // build: one fresh transfer per event (a DataTransfer is spent by the
     // drop it carries).
 
-    // Over the page: the whole page is the drop target (the header is not
-    // special), highlighted with the same dashed outline the expense list
-    // shows and announced to screen readers.
+    // Over the page: the whole page is the drop target (the header and the
+    // margins are not special, the listener is on the document), highlighted
+    // with the same dashed outline the expense list shows and announced to
+    // screen readers.
     const hover = await fileTransfer(page, {
       name: "dropped-statement.csv",
       type: "text/csv",
       body: STATEMENT_CSV,
     });
-    await page.dispatchEvent("h1", "dragenter", { dataTransfer: hover });
+    await page.dispatchEvent("body", "dragenter", { dataTransfer: hover });
     await expect(main).toHaveClass(/outline-dashed/);
     await expect(
       page.locator('.sr-only[role="status"][aria-live="polite"]'),
     ).toContainText("Statement file detected");
 
     // Leaving clears the highlight.
-    await page.dispatchEvent("h1", "dragleave", { dataTransfer: hover });
+    await page.dispatchEvent("body", "dragleave", { dataTransfer: hover });
     await expect(main).not.toHaveClass(/outline-dashed/);
 
     // A file the page does not take is ignored: browsers drop the picker's
@@ -157,7 +158,7 @@ describe("Reconcile flow", () => {
       type: "image/png",
       body: "not a statement",
     });
-    await page.dispatchEvent("h1", "drop", { dataTransfer: ignored });
+    await page.dispatchEvent("body", "drop", { dataTransfer: ignored });
     await expect(submit).toBeDisabled();
 
     // The statement fills the picker, so the browser shows the filename and
@@ -167,7 +168,7 @@ describe("Reconcile flow", () => {
       type: "text/csv",
       body: STATEMENT_CSV,
     });
-    await page.dispatchEvent("h1", "drop", { dataTransfer: statement });
+    await page.dispatchEvent("body", "drop", { dataTransfer: statement });
     await expect(submit).toBeEnabled();
     expect(
       await page.evaluate(() => {

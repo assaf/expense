@@ -155,7 +155,7 @@ describe("warranties journey", () => {
     // No expiry is a valid end state, not a missing value. The terms file
     // arrives by drop, not the picker: a dropped file becomes a pick.
     await page.getByLabel("Product", { exact: true }).fill("Coffee grinder");
-    await page.locator("main").dispatchEvent("drop", {
+    await page.locator("body").dispatchEvent("drop", {
       dataTransfer: await fileTransfer(page, {
         name: "terms.pdf",
         type: "application/pdf",
@@ -229,7 +229,7 @@ describe("warranties journey", () => {
           r.url().endsWith("/api/warranty") && r.request().method() === "POST",
         { timeout: 60_000 },
       ),
-      page.locator("main").dispatchEvent("drop", {
+      page.locator("body").dispatchEvent("drop", {
         dataTransfer: await fileTransfer(page, {
           name: "cappuccino-machine.pdf",
           type: "application/pdf",

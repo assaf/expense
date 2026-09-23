@@ -244,6 +244,14 @@ browser does the multipart encoding for picked files) and `cancelTo`. Anything
 a shared piece cannot express (e.g. the noun in the delete prompt) becomes a
 prop with the expense wording as the default.
 
+**File drops cover the whole page.** `useDropTarget` installs its listeners on
+the document, so a file can be let go anywhere, margins included; what wears the
+dashed outline is still the content column, which is what makes the target
+obvious without shrinking it to a box. A page arms a zone by calling the hook
+and passing the result to `PageShell`/`Shell` (or reading `over` for its own
+`<main>`): the callbacks are the hook's own now, so never spread handlers on a
+container, and keep it to one zone per page.
+
 **Feature highlights.** Every new user-facing feature or page ships with a "Did
 you know?" card in `app/components/FeatureHighlight.tsx`, picked per request on
 the home page; gate data-dependent ones in `availableHighlights` and pin the
