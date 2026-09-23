@@ -61,6 +61,7 @@ const CONTENT_FILES = [
   "mileage-rates.yaml",
   "notification-senders.ts",
   "parse-categories.ts",
+  "parse-warranty-policies.ts",
   "privacy.md",
   "product-facts.yaml",
   "schedule-c-categories.yaml",

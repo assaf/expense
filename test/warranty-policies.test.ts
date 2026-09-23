@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { parse } from "yaml";
 import { describe, expect, it } from "vite-plus/test";
+import { parsePolicies } from "~/data/parse-warranty-policies";
 import {
   MERCHANT_POLICIES,
   merchantPolicy,
@@ -120,24 +120,89 @@ describe("merchant coverage policies", () => {
     expect(termsForMerchant("")).toBe("");
   });
 
-  it("is exactly what the editable YAML holds", () => {
+  it("parses the editable YAML into exactly the table it ships", () => {
     // The table ships as an emitted module so that no YAML parser reaches the
     // client bundle, which means an edit to the YAML has to be built into it.
-    // This is the check that the committed module is not stale: the whole
-    // table, entry by entry, against the file a human edits. `pnpm
-    // build:policies` (also run by `pnpm check`, `pnpm dev` and `pnpm build`)
-    // regenerates it.
-    const source = parse(readFileSync(POLICIES_YAML, "utf8")) as {
-      policies: unknown;
-    };
-    expect(source.policies).toEqual(
-      MERCHANT_POLICIES.map((policy) => ({
-        merchant: policy.merchant,
-        ...(policy.aliases ? { aliases: [...policy.aliases] } : {}),
-        terms: policy.terms,
-        sources: [...policy.sources],
-        asOf: policy.asOf,
-      })),
+    // This is the check that the committed module is not stale: the file a
+    // human edits, parsed and validated, against the table the app imports.
+    // `pnpm build:policies` (also run by `pnpm check`, `pnpm dev` and
+    // `pnpm build`) regenerates it.
+    expect(parsePolicies(readFileSync(POLICIES_YAML, "utf8"))).toEqual(
+      MERCHANT_POLICIES,
     );
+  });
+});
+
+describe("the merchant coverage YAML", () => {
+  // One well-formed entry, as the file writes it. Each case below breaks one
+  // part of it, because those are the mistakes an edit actually makes: the
+  // parser has to refuse them by name rather than ship a half-empty entry.
+  const ENTRY = [
+    "  - merchant: Acme",
+    '    terms: "Acme\'s own coverage: what Acme commits to, in one line."',
+    "    sources:",
+    "      - https://example.com/policy",
+    '    asOf: "2026-09"',
+  ];
+  const doc = (lines: string[]) => ["policies:", ...lines].join("\n");
+
+  it.each([
+    [
+      "a misspelled field",
+      doc([...ENTRY, "    source: https://example.com/policy"]),
+      /unknown field `source`/,
+    ],
+    [
+      "no terms",
+      doc(ENTRY.filter((line) => !line.startsWith("    terms:"))),
+      /`terms` must be a non-empty string/,
+    ],
+    [
+      "a blank merchant",
+      doc(['  - merchant: ""', ...ENTRY.slice(1)]),
+      /`merchant` must be a non-empty string/,
+    ],
+    [
+      "an empty sources list",
+      doc([...ENTRY.slice(0, 2), "    sources: []", ...ENTRY.slice(4)]),
+      /`sources` must be a non-empty list/,
+    ],
+    [
+      "a checked month that is not YYYY-MM",
+      doc([...ENTRY.slice(0, 4), '    asOf: "September 2026"']),
+      /`asOf` must be "YYYY-MM"/,
+    ],
+    [
+      "two entries claiming one name",
+      doc([...ENTRY, ...ENTRY]),
+      /claimed by both/,
+    ],
+    [
+      "an alias that collides with another entry's name",
+      doc([
+        ...ENTRY,
+        "  - merchant: Acme Tools",
+        "    aliases:",
+        "      - Acme",
+        '    terms: "Acme Tools\' own coverage: a second entry."',
+        "    sources:",
+        "      - https://example.com/tools",
+        '    asOf: "2026-09"',
+      ]),
+      /`Acme` is claimed by both Acme and Acme Tools/,
+    ],
+    ["an entry that is not a mapping", doc(["  - Acme"]), /must be a mapping/],
+    [
+      "a file that is not a mapping",
+      "just text",
+      /must be a mapping with a `policies` list/,
+    ],
+    [
+      "an empty policies list",
+      "policies: []",
+      /`policies` must be a non-empty list/,
+    ],
+  ])("refuses %s", (_what, source, message) => {
+    expect(() => parsePolicies(source)).toThrow(message);
   });
 });
