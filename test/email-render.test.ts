@@ -268,6 +268,69 @@ describe("stripForwardedText (plain-text forwards)", () => {
     expect(out).toContain("Amount paid $10.00");
   });
 
+  it("drops the sender's own signature above the marker", () => {
+    const text = [
+      "— Assaf",
+      "",
+      "----- Original message -----",
+      "From: zai <receipts@stripe.com>",
+      "Subject: Your zai receipt [#1909-8795]",
+      "",
+      "Receipt from zai",
+      "Amount paid $10.00",
+    ].join("\n");
+    const out = stripForwardedText(text, "Assaf Arkin <assaf@labnotes.org>");
+    expect(out).not.toContain("Assaf");
+    expect(out).toBe("Receipt from zai\nAmount paid $10.00");
+  });
+
+  it("keeps a signature it cannot attribute, and a note the forwarder wrote", () => {
+    const text = [
+      "The June invoice, for the mileage log.",
+      "",
+      "— Assaf",
+      "",
+      "----- Original message -----",
+      "From: zai <receipts@stripe.com>",
+      "Subject: Your zai receipt",
+      "",
+      "Receipt from zai",
+    ].join("\n");
+    // No sender to match against: the preamble stays, as it did before.
+    const out = stripForwardedText(text);
+    expect(out).toContain("— Assaf");
+    expect(out).toContain("The June invoice, for the mileage log.");
+  });
+
+  it("drops the bare RFC signature separator with no sender to match", () => {
+    const text = [
+      "Note above the marker.",
+      "",
+      "--",
+      "----- Original message -----",
+      "From: zai <receipts@stripe.com>",
+      "Subject: Your zai receipt",
+      "",
+      "Receipt from zai",
+    ].join("\n");
+    const out = stripForwardedText(text);
+    expect(out).toContain("Note above the marker.");
+    expect(out).not.toContain("--");
+  });
+
+  it("never drops a receipt line that only looks like a signature", () => {
+    const text = [
+      "— Assaf's Auto Repair",
+      "",
+      "----- Original message -----",
+      "From: zai <receipts@stripe.com>",
+      "",
+      "Receipt from zai",
+    ].join("\n");
+    const out = stripForwardedText(text, "Assaf Arkin <assaf@labnotes.org>");
+    expect(out).toContain("— Assaf's Auto Repair");
+  });
+
   it("removes Gmail-style forward blocks", () => {
     const text = [
       "---------- Forwarded message ----------",
@@ -330,6 +393,40 @@ describe("stripForwardHeader (html forwards)", () => {
     expect(out).not.toContain("Original message");
     expect(out).not.toContain("From: zai");
     expect(out).not.toContain("Subject:");
+    expect(out).toContain("Receipt from zai");
+  });
+
+  it("drops the signature block a client marks above the marker", () => {
+    const html = [
+      "<html><body>",
+      "<div><br></div><div><br></div>",
+      '<div id="sig155209607"><div class="signature">— Assaf</div></div>',
+      "<div><br></div>",
+      "<div>----- Original message -----</div>",
+      "<div>From: zai &lt;receipts@stripe.com&gt;</div>",
+      "<div>Subject: Your zai receipt [#1909-8795]</div>",
+      "<div><br></div>",
+      '<div type="cite"><h1>Receipt from zai</h1></div>',
+      "</body></html>",
+    ].join("\n");
+    const out = stripForwardHeader(html);
+    expect(out).not.toContain("Assaf");
+    expect(out).not.toContain("Original message");
+    expect(out).toContain("Receipt from zai");
+  });
+
+  it("keeps a line the forwarder wrote above the marker", () => {
+    const html = [
+      "<html><body>",
+      "<div>The June invoice, for the mileage log.</div>",
+      "<div>----- Original message -----</div>",
+      "<div>From: zai &lt;receipts@stripe.com&gt;</div>",
+      "<div><br></div>",
+      "<div>Receipt from zai</div>",
+      "</body></html>",
+    ].join("\n");
+    const out = stripForwardHeader(html, "Assaf Arkin <assaf@labnotes.org>");
+    expect(out).toContain("The June invoice, for the mileage log.");
     expect(out).toContain("Receipt from zai");
   });
 

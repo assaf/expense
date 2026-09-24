@@ -897,14 +897,17 @@ export async function extractReceiptFromSource(opts: {
           : filename;
     }
   } else {
-    const bodyText = stripForwardedText(source.text).slice(0, 20_000);
+    const bodyText = stripForwardedText(source.text, email.from).slice(
+      0,
+      20_000,
+    );
     // Render the actual email with headless Chromium: the HTML part when
     // present, otherwise the plain text as a narrow email-style column.
     // The resvg text sheet stays as the final fallback (e.g. a runtime
     // without a browser binary). The forward-quote header block is
     // stripped first so the receipt image shows the receipt, not the
     // envelope.
-    const cleanHtml = stripForwardHeader(email.html ?? "");
+    const cleanHtml = stripForwardHeader(email.html ?? "", email.from);
     if (cleanHtml) {
       try {
         receiptImage = await deps.renderEmailImage(cleanHtml, {

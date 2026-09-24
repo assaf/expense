@@ -45,6 +45,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-09-24"
+    changes:
+      - type: fix
+        text: "A forwarded receipt no longer carries your own signature into the expense: the header block above the original message was already dropped, and the signature your mail client adds goes with it now."
   - date: "2026-09-23"
     changes:
       - type: fix

@@ -414,12 +414,15 @@ export async function renderTextEmail(
 //
 // Forwards (Fastmail, Gmail, Apple Mail, iOS, …) paste a header block in
 // front of the receipt: a marker line such as "----- Original message -----"
-// followed by From/To/Subject/Date lines. The receipt image should show the
-// receipt, not that envelope. `stripForwardHeader` removes the block from
-// HTML (for the browser render + htmlToText), `stripForwardedText` removes
-// it from plain text (for the text render, the resvg fallback, and LLM
-// extraction). Both only remove consecutive header-looking lines that
-// immediately follow a forward marker, so receipt content is never touched.
+// followed by From/To/Subject/Date lines, under the signature their client
+// adds for them. The receipt image should show the receipt, not that
+// envelope. `stripForwardHeader` removes the block from HTML (for the browser
+// render + htmlToText), `stripForwardedText` removes it from plain text (for
+// the text render, the resvg fallback, and LLM extraction). Both only remove
+// the marker, the consecutive header-looking lines that follow it, and a
+// signature directly above it that is the sender's own (or that their client
+// marked as one), so receipt content and anything the forwarder wrote are
+// never touched.
 
 export {
   FORWARD_MARKERS,
