@@ -80,25 +80,23 @@ identity's Sent mailbox → submit; the submit step retries once on a
 transient failure, reusing the same email id; the blob/Sent import
 doesn't repeat) when `FASTMAIL_TOKEN` has send
 permission; without it the send is skipped with a warning. The
-confirmation reply carries the **original receipt**, not the stored
-rendered image: a body-text receipt is quoted verbatim below the details
-(both the HTML blockquote and the plain-text part, ">"-prefixed, capped
-at 4000 chars); an image/PDF attachment source is attached as the
-original file under its original filename with a byte-sniffed content
-type (`replyAttachmentContentType`; the declared `application/octet-stream`
-for screenshots is corrected from the bytes). An image the client can
-render (`INLINE_IMAGE_TYPES`: JPEG, PNG, GIF, WebP) is **also shown
-inline, above the details**, referenced by a Content-ID derived from the
-expense id; `confirmationEmail` returns the matching MIME part in
-`attachments`, so the reference and the part cannot drift. The mail no
-longer spends an attachment row on the receipt, and the reader can tell
-what was imported at a glance. A file the client cannot render (a PDF, a
-HEIC photo, an unrecognized blob) stays a plain attachment, since an
-`<img>` pointing at bytes the client cannot decode renders as a broken
-image; it gets the **stored render** inlined in its place instead
-(`preview`), so the reader still sees the page the app filed while the
-original file rides along. `canInlineReceipt` is the one place that rule
-lives, so the pipeline's decision and the builder's cannot drift. The
+confirmation reply carries the **receipt itself**, never a copy of the
+original email text: an image/PDF attachment source is carried as the
+original file under its original filename with a byte-sniffed content type
+(`replyAttachmentContentType`; the declared `application/octet-stream` for
+screenshots is corrected from the bytes), and a body-source receipt
+contributes no file at all. Above the details sits the image the app **saved** for the
+expense — the normalized, smaller render the expense page shows — in every
+case: a body-text receipt, a screenshot, or a PDF all import the same way,
+so the reply shows what was filed rather than a second copy of the
+sender's file. It is referenced by a Content-ID derived from the expense
+id (`confirmationEmail` returns the matching MIME part in `attachments`,
+so the reference and the part cannot drift). An original a mail client
+cannot render (a PDF, a HEIC photo, an unrecognized blob) is attached
+beside it, since an `<img>` on those bytes is a broken image; an original
+that IS an image is not attached again, because the reader is already
+looking at it. `canInlineReceipt` is the one place the rule lives, so the
+pipeline's decision and the builder's cannot drift. The
 connected-account pipeline's
 confirmation (delivered into the owner's Inbox) shows the **stored**
 image the same way: the original email is already there. The self-reply guard
@@ -199,3 +197,47 @@ folder),`INBOUND_EMAIL_ADDRESS`, `CRON_SECRET`, and `PUBLIC_URL`(the push URL is
 - Heavy deps (sharp, @resvg/resvg-js, @napi-rs/canvas, tesseract.js,
   pdfjs-dist) are Node-runtime only; native modules must stay external in
   the server build (Vite SSR externalizes node_modules by default).
+
+## Previewing a confirmation locally
+
+`pnpm preview:confirmation` runs this pipeline for ONE message (or one
+local receipt) and shows the confirmation it would send, so the email can
+be checked without forwarding anything to production:
+
+```
+pnpm preview:confirmation --latest                # newest unprocessed forward
+pnpm preview:confirmation --email <jmapId>        # one specific message
+pnpm preview:confirmation --file ~/receipt.pdf    # a local receipt file
+pnpm preview:confirmation --body ~/receipt.txt    # a local receipt as text
+pnpm preview:confirmation --html ~/receipt.html   # a local receipt as HTML
+pnpm preview:confirmation --body ~/receipt.txt --send   # submit it for real
+```
+
+Everything is real: extraction (LLM/OCR), the receipt render, the stored
+image, the expense row, and the confirmation builder. It writes
+`confirmation-<expenseId>.eml` (open it in a mail client: the inline
+receipt renders there) and `.html` (open it in a browser: `cid:` images
+are inlined as `data:` URLs), prints the MIME parts so "is the receipt
+inline?" needs no mail client, and prints the expense link. The mailbox
+is read-only: no `$receipt-processed` mark, no Trash, no delete (the
+`--body`/`--file` modes never touch it at all). It writes to the dev DB
+and clears that message's `inbound_emails` claim first, so re-runs work.
+
+The package script loads `scripts/lib/vite-assets.mjs`, which teaches tsx
+the Vite `?inline`/`?raw` suffixes: without it the renderer's bundled
+font fails to load and the receipt image falls back to a stub.
+
+Pick the mode that matches how the receipt arrived: a receipt that IS an
+email renders from its HTML part with headless Chromium (`--html`), so the
+saved image looks like the email did. The same email fed as `--body` previews
+the plain-text fallback instead: legible, but a wall of the email's own
+spacing, not what the reader saw (its image is 648px wide against the email
+render's 640).
+
+`--send` submits the confirmation for real, so it arrives in the sender's
+Inbox: the honest end-to-end check. The edit link inside it is built from
+`PUBLIC_URL` (production, even for a dev-DB expense), so prefix the command
+with `PUBLIC_URL=http://expense.localhost` when you want that link to open
+the local app. Re-running the same receipt within 30 minutes reports "No
+reply was produced": the pipeline suppressed a duplicate confirmation, so
+send yourself a set of _different_ receipts.

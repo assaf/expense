@@ -661,9 +661,14 @@ review-ignored row is never double-processed.
 
 - `pnpm drain:email --connection <id> [--role inbox|trash] [--limit N]
 [--days N]` (`scripts/drain-email-connection.ts`): drains a mailbox
-  under tsx with **stubbed renderers** (tsx can't load Vite's `?inline`
-  font asset), so the saved receipt image is a 1×1 placeholder. Use it
-  for fast logic checks, not for the final image.
+  under tsx with **stubbed renderers**, so the saved receipt image is a
+  1×1 placeholder. Use it for fast logic checks, not for the final image.
+- `NODE_OPTIONS=--import=./scripts/lib/vite-assets.mjs tsx <script>`
+  (`scripts/lib/vite-assets.mjs`) makes tsx resolve Vite's `?inline` and
+  `?raw` imports, which is what keeps a renderer's bundled font loading
+  outside the bundler. With it a tsx script renders for real, so the
+  stub above is only needed by scripts that don't opt in — see
+  `pnpm preview:confirmation`.
 - `GET /api/dev-email-drain?connection=<id>` (dev only, `Bearer
 <CRON_SECRET>`): drains the Inbox in the **bundled dev server** with the
   real Playwright renderer, so the saved image is a true render of the

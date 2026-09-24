@@ -33,6 +33,7 @@ import {
 import { htmlToText } from "~/lib/html-text";
 import { parseJsonObject } from "~/lib/receipt-ai.server";
 import { deleteExpense, readExpenses } from "~/lib/db/expenses";
+import { readImage } from "~/lib/images.server";
 import { TINY_PNG } from "./helpers/email-test-fixtures";
 import {
   TEST_ACCOUNT_ID,
@@ -750,47 +751,23 @@ describe("processInboundEvent (body receipt)", () => {
     expect(created.imageFile).not.toBe("");
     expect(created.imageMime).toBe("image/jpeg"); // body render stored as JPEG
     usedExpenseIds.push(expenseIdOf(result));
-    // Successful imports send a confirmation email with the ORIGINAL body
-    // text quoted below the details (attachment only for image sources,
-    // never inline in the body).
+    // Successful imports send a confirmation email with the receipt image
+    // inline: the render the app filed for this expense.
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toBe(
       "👍 Receipt accepted: $42.50 \u2014 Office Supplies",
     );
     const confirmation = deps.sent[0]!;
-    // A body receipt carries no attachment: the original text is quoted.
-    expect(confirmation.attachments).toBeUndefined();
-    expect(confirmation.html).toContain("Original receipt");
-    expect(confirmation.html).toContain("MERCHANT: Amazon");
-    expect(confirmation.html).not.toContain("cid:");
-    expect(confirmation.html).not.toContain("<img");
-    // The plain-text alternative quotes the original with ">" prefixes.
-    expect(confirmation.text).toContain("> MERCHANT: Amazon");
-    expect(confirmation.text).toContain("> TOTAL: 42.50");
-  });
-
-  it("truncates a very long quoted original in the confirmation", async () => {
-    const deps = fakeDeps();
-    // ~10k chars of body, far past the 4000-char quote cap.
-    const longBody = [
-      "MERCHANT: Amazon",
-      "TOTAL: 42.50",
-      "CATEGORY: office supplies",
-      "",
-      "Order details:",
-      ...Array.from({ length: 300 }, (_, i) => `line ${i}: ${"x".repeat(30)}`),
-    ].join("\n");
-    deps.fetchReceivedEmail = async () => receivedEmail({ text: longBody });
-    const result = await processInboundEvent(eventData(), deps);
-    usedEmailIds.push("email-1");
-    usedExpenseIds.push(expenseIdOf(result));
-    expect(result).toMatchObject({ status: "created" });
-    const confirmation = deps.sent[0]!;
-    // Both renderers flag the truncation…
-    expect(confirmation.html).toContain("… receipt text truncated");
-    expect(confirmation.text).toContain("> … receipt text truncated");
-    // …and the quote is capped, not the whole body.
-    expect(confirmation.text).not.toContain("line 299:");
+    // A body receipt has no file to attach, so the render IS the image the
+    // reader sees.
+    const inline = confirmation.attachments![0]!;
+    expect(inline.filename).toBe("receipt.jpg");
+    expect(inline.contentType).toBe("image/jpeg");
+    expect(inline.contentId).toBeTruthy();
+    expect(confirmation.html).toContain(`src="cid:${inline.contentId}"`);
+    // The original body text is not quoted back: the image is the receipt.
+    expect(confirmation.html).not.toContain("Original receipt");
+    expect(confirmation.text).not.toContain("> MERCHANT: Amazon");
   });
 
   it("shows the extracted description as a field and saves it on the expense", async () => {
@@ -1193,12 +1170,14 @@ describe("processInboundEvent (body receipt)", () => {
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.subject).toContain("needs attention");
     expect(deps.sent[0]!.html).toContain("merchant");
-    // A body receipt: no attachment. The original text is quoted instead.
+    // A body receipt: no file to attach, so the app's own render is the
+    // image the reader sees.
     const partial = deps.sent[0]!;
-    expect(partial.attachments).toBeUndefined();
-    expect(partial.html).toContain("Original receipt");
-    expect(partial.html).not.toContain("cid:");
-    expect(partial.html).not.toContain("<img");
+    const inlinePart = partial.attachments![0]!;
+    expect(inlinePart.contentType).toBe("image/jpeg");
+    expect(inlinePart.contentId).toBeTruthy();
+    expect(partial.html).toContain(`src="cid:${inlinePart.contentId}"`);
+    expect(partial.html).not.toContain("Original receipt");
   });
 
   it("files an amount the money column cannot hold as a partial row", async () => {
@@ -1952,7 +1931,7 @@ describe("processInboundEvent (attachments)", () => {
     expect(pdfConfirmation.text).toContain(
       "Original receipt attached: invoice.pdf",
     );
-    // The quoted-original block is for body sources, not attachments.
+    // Nothing quotes the original text back; the render is the receipt.
     expect(pdfConfirmation.html).not.toContain("Original receipt");
   });
 
@@ -1983,23 +1962,24 @@ describe("processInboundEvent (attachments)", () => {
     expect(created.merchant).toBe("Photo Shop");
     expect(created.amount).toBe("5.00");
     expect(created.imageFile).not.toBe("");
-    // The confirmation attaches the ORIGINAL image file (the fake download
-    // returns PNG bytes for the jpg-named attachment, so the sniffed type
-    // wins over the declared one).
+    // The confirmation shows the image the expense was SAVED with — the
+    // normalized render, the same picture the expense page shows — not a
+    // second copy of the sender's original. One part, inline: the HTML
+    // points at its Content-ID, so the reader sees the receipt without
+    // opening a file.
     const confirmation = deps.sent[0]!;
     expect(confirmation.attachments).toHaveLength(1);
     const att = confirmation.attachments![0]!;
-    expect(att.filename).toBe("photo.jpg");
-    expect(att.contentType).toBe("image/png");
-    expect(att.content).toBe(TINY_PNG.toString("base64"));
-    // Shown inline in the confirmation: the HTML points at the part's
-    // Content-ID, so the reader sees the receipt without opening a file.
+    expect(att.filename).toBe("receipt.jpg");
+    expect(att.contentType).toBe("image/jpeg");
+    const stored = await readImage(TEST_ACCOUNT_ID, created.imageFile);
+    expect(att.content).toBe(stored!.buffer.toString("base64"));
     expect(att.contentId).toBeTruthy();
     expect(confirmation.html).toContain(`cid:${att.contentId}`);
     expect(confirmation.html).not.toContain("Original receipt");
   });
 
-  it("attaches the original image with a sniffed content type when the declared type is octet-stream", async () => {
+  it("shows the saved image for an untyped screenshot (octet-stream, sniffed)", async () => {
     const deps = fakeDeps();
     deps.fetchReceivedEmail = async () =>
       receivedEmail({ text: null, html: null });
@@ -2019,14 +1999,19 @@ describe("processInboundEvent (attachments)", () => {
     usedEmailIds.push("email-shot");
     usedExpenseIds.push(expenseIdOf(result));
     expect(result).toMatchObject({ status: "created" });
-    // The original bytes are attached under their original filename, with
-    // the sniffed (real) image type instead of octet-stream.
+    // Sniffing the bytes still decides this is a receipt (the declared
+    // octet-stream would not), and the reply shows the image the app saved
+    // for it rather than the untyped original.
+    const expenses = await readExpenses(TEST_ACCOUNT_ID);
+    const created = asReceipt(
+      expenses.find((e) => e.id === expenseIdOf(result)),
+    );
     const confirmation = deps.sent[0]!;
     expect(confirmation.attachments).toHaveLength(1);
     const att = confirmation.attachments![0]!;
-    expect(att.filename).toBe("receipt.png");
-    expect(att.contentType).toBe("image/png");
-    expect(att.content).toBe(TINY_PNG.toString("base64"));
+    expect(att.contentType).toBe("image/jpeg");
+    const stored = await readImage(TEST_ACCOUNT_ID, created.imageFile);
+    expect(att.content).toBe(stored!.buffer.toString("base64"));
     expect(att.contentId).toBeTruthy();
     expect(confirmation.html).toContain(`cid:${att.contentId}`);
     expect(confirmation.html).not.toContain("Original receipt");

@@ -48,7 +48,7 @@ releases:
   - date: "2026-09-23"
     changes:
       - type: fix
-        text: "Confirmation emails show PDF receipts inline too: the page the app rendered travels as the image, with the original PDF still attached."
+        text: "Confirmation emails now show the receipt image inline in every case — the image the app saved for the expense, whether the receipt arrived as an email body, a screenshot, or a PDF (which also stays attached) — and no longer repeat the original email text below it."
       - type: fix
         text: "Pressing ? now shows the G E keycap above the logo, the control that goes back to the expenses page."
       - type: fix

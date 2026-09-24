@@ -82,13 +82,36 @@ describe("confirmationEmail", () => {
     expect(text).toContain("Original receipt attached: invoice.pdf");
   });
 
-  it("drops the preview when the receipt itself renders inline", () => {
+  it("shows the saved render, not a second copy of the original image", () => {
+    const saved = {
+      content: Buffer.from("saved-render").toString("base64"),
+      filename: "receipt.jpg",
+      contentType: "image/jpeg",
+    };
+    const original = {
+      content: Buffer.from("original-photo").toString("base64"),
+      filename: "IMG_1234.jpg",
+      contentType: "image/jpeg",
+    };
+    const { attachments, html } = confirmationEmail({
+      ...BASE,
+      receipt: original,
+      preview: saved,
+    });
+    // One part, not two: the render the expense was saved with is what the
+    // reader sees, so the original image is neither inlined again nor
+    // attached as a duplicate.
+    expect(attachments).toHaveLength(1);
+    expect(attachments![0]!.content).toBe(saved.content);
+    expect(attachments![0]!.contentId).toBeTruthy();
+    expect(html).toContain("<img");
+  });
+
+  it("falls back to the original image when no render was stored", () => {
     const { attachments, html } = confirmationEmail({
       ...BASE,
       receipt: JPEG,
-      preview: PDF,
     });
-    // One part, not two: the preview would be an image nothing references.
     expect(attachments).toHaveLength(1);
     expect(attachments![0]!.filename).toBe("receipt.jpg");
     expect(attachments![0]!.contentId).toBeTruthy();
@@ -108,14 +131,26 @@ describe("confirmationEmail", () => {
     expect(html).not.toContain("<img");
   });
 
-  it("carries no attachment for a body-source receipt", () => {
-    const { html, attachments } = confirmationEmail({
+  it("inlines the render for a body-source receipt (no file to attach)", () => {
+    const { html, text, attachments } = confirmationEmail({
       ...BASE,
-      quotedOriginal: "MERCHANT: Blue Bottle Coffee\nTOTAL: 18.50",
+      preview: JPEG,
     });
+    // One inline part and nothing attached: the render is the image, and the
+    // original body text is NOT quoted back below it — the image shows the
+    // receipt, so a copy of the text adds nothing.
+    expect(attachments).toHaveLength(1);
+    expect(attachments![0]!.contentId).toBeTruthy();
+    expect(html).toContain(`<img src="cid:${attachments![0]!.contentId}"`);
+    expect(html).not.toContain("Original receipt");
+    expect(text).toContain("Receipt image attached: receipt.jpg");
+    expect(text).not.toContain("Original receipt attached");
+  });
+
+  it("carries nothing at all when no image is available", () => {
+    const { html, attachments } = confirmationEmail({ ...BASE });
     expect(attachments).toBeUndefined();
-    // The original body is quoted instead: there is no file to show.
-    expect(html).toContain("Original receipt");
     expect(html).not.toContain("<img");
+    expect(html).not.toContain("Original receipt");
   });
 });

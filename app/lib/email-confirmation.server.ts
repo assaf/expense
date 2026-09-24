@@ -3,13 +3,12 @@
  * receipts-by-email pipeline (sent to the SENDER) and the connected-account
  * pipeline (imported into the OWNER's Inbox).
  *
- * The confirmation carries the extracted details plus the ORIGINAL receipt:
- * a body-source receipt is quoted verbatim below the details (HTML
- * blockquote + ">"-prefixed plain text, capped at QUOTED_ORIGINAL_MAX_CHARS);
- * an attachment-source receipt carries the original file, built by the
- * caller (`saveExpenseFromExtraction` in inbound-email.server.ts). A receipt
- * a mail client cannot render (a PDF) travels as a plain attachment, with
- * the stored render inlined above the details as its preview.
+ * The confirmation carries the extracted details plus the receipt itself:
+ * above the details sits the image the app FILED for the expense — the
+ * normalized render every import stores — and an original a client cannot
+ * render (a PDF) is attached beside it, built by the caller
+ * (`saveExpenseFromExtraction` in inbound-email.server.ts). The original
+ * body text is not quoted: the image already shows the receipt.
  */
 import { escapeHtml } from "~/lib/escape";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
@@ -38,24 +37,6 @@ function confirmationFields(
       ? ([["Description", opts.description]] as [string, string][])
       : []),
   ];
-}
-
-/** Longest original-receipt text quoted in a confirmation reply: the
- * parsed email body can be a whole thread; a receipt is never this big. */
-const QUOTED_ORIGINAL_MAX_CHARS = 4000;
-
-/** The quoted-original text, capped at QUOTED_ORIGINAL_MAX_CHARS. Returns
- * the text to quote and whether it was truncated (the renderers append a
- * truncation note). */
-function cappedQuotedOriginal(text: string): {
-  quoted: string;
-  truncated: boolean;
-} {
-  const truncated = text.length > QUOTED_ORIGINAL_MAX_CHARS;
-  return {
-    quoted: truncated ? text.slice(0, QUOTED_ORIGINAL_MAX_CHARS) : text,
-    truncated,
-  };
 }
 
 /**
@@ -126,33 +107,35 @@ export interface ConfirmationReceipt {
 type ConfirmationPart = NonNullable<SendEmailInput["attachments"]>[number];
 
 /**
- * The parts a confirmation carries, given the receipt and its stored render.
+ * The parts a confirmation carries: the image the app filed for this expense,
+ * plus the original file only when a mail client cannot show it.
  *
- * The receipt itself is shown inline when a client can render it, and rides
- * as a plain attachment otherwise. A receipt a client can't render (a PDF)
- * gets the stored render inlined instead, so the reader still sees the
- * receipt without opening anything, while the original file stays attached.
- * No receipt at all (a body-source import) means no parts: that reply quotes
- * the original text.
+ * Every import stores an image — the normalized, smaller render the expense
+ * page shows — whatever the receipt arrived as (a body, a screenshot, a PDF),
+ * so that image is what the reader sees, in all three cases. The original
+ * file rides along only when it is NOT something a client can render (a PDF):
+ * an image already shown as the preview would be a duplicate part, and the
+ * sender has their own copy anyway. Only a missing render falls back to
+ * inlining the original.
  */
 function confirmationParts(opts: {
   expenseId: string;
   receipt?: ConfirmationReceipt;
   preview?: ConfirmationReceipt;
 }): { inline?: ConfirmationPart; attached?: ConfirmationReceipt } {
-  if (!opts.receipt) return {};
-  if (canInlineReceipt(opts.receipt.contentType)) {
-    return {
-      inline: { ...opts.receipt, contentId: receiptContentId(opts.expenseId) },
-    };
-  }
-  if (opts.preview && canInlineReceipt(opts.preview.contentType)) {
-    return {
-      inline: { ...opts.preview, contentId: receiptContentId(opts.expenseId) },
-      attached: opts.receipt,
-    };
-  }
-  return { attached: opts.receipt };
+  const { receipt, preview } = opts;
+  const shown = canInlineReceipt(preview?.contentType)
+    ? preview
+    : canInlineReceipt(receipt?.contentType)
+      ? receipt
+      : undefined;
+  return {
+    inline: shown
+      ? { ...shown, contentId: receiptContentId(opts.expenseId) }
+      : undefined,
+    attached:
+      receipt && !canInlineReceipt(receipt.contentType) ? receipt : undefined,
+  };
 }
 
 /** The Content-ID the inline receipt image is referenced by. Derived from the
@@ -180,21 +163,15 @@ export interface ConfirmationEmailOptions {
     before: { count: number; total: string };
     after: { count: number; total: string };
   };
-  /** The original receipt text (a body-source receipt) to quote below the
-   * details. The connected pipeline doesn't pass it, since the original email
-   * already sits in the owner's Inbox. */
-  quotedOriginal?: string;
-  /** The receipt file this message carries. An image the client can render
-   * is ALSO shown inline above the details, so the reader can tell what was
-   * imported without opening an attachment; any other file stays a plain
-   * attachment. Send the bytes from the returned `attachments`, which carry
-   * the Content-ID that the inline image is referenced by. */
+  /** The original receipt file. It is attached only when a client cannot
+   * render it (a PDF): an image is shown anyway, through `preview`. Send the
+   * bytes from the returned `attachments`, which carry the Content-ID that
+   * the inline image is referenced by. */
   receipt?: ConfirmationReceipt;
-  /** The receipt's stored render (the JPEG/PNG the app shows for this
-   * expense), inlined in place of `receipt` when a mail client cannot render
-   * the original: a PDF receipt travels as an attachment, and this preview is
-   * what the reader sees of it. Ignored when `receipt` itself is renderable
-   * (no duplicate image part) or when there is no `receipt` at all. */
+  /** The image the app filed for this expense: the normalized JPEG/PNG the
+   * expense page shows. This is what the confirmation inlines, whatever the
+   * receipt arrived as. Falls back to `receipt` only when there is no stored
+   * render. */
   preview?: ConfirmationReceipt;
 }
 
@@ -235,15 +212,6 @@ function confirmationHtml(
       `<p style="margin:8px 0;color:#6b7280;font-size:13px">${escapeHtml(opts.notes)}</p>`,
     );
   }
-  if (opts.quotedOriginal) {
-    // The original receipt, quoted verbatim below the details so the
-    // sender can compare. Line breaks preserved; truncated for sanity.
-    const { quoted, truncated } = cappedQuotedOriginal(opts.quotedOriginal);
-    blocks.push(
-      `<div style="margin:16px 0 4px;font-size:13px;font-weight:600;color:#374151">Original receipt</div>`,
-      `<blockquote style="margin:0;padding:10px 14px;border-left:3px solid #d1d5db;background:#f9fafb;color:#374151;font-size:13px;line-height:1.5;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${escapeHtml(quoted)}${truncated ? `<div style="margin-top:8px;color:#9ca3af">… receipt text truncated</div>` : ""}</blockquote>`,
-    );
-  }
   if (editUrl) {
     blocks.push(
       `<p style="margin:16px 0 0"><a href="${escapeHtml(editUrl)}" style="display:inline-block;padding:8px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Edit this receipt</a></p>`,
@@ -258,9 +226,8 @@ function confirmationHtml(
 }
 
 /** The plain-text alternative for a confirmation: the same fields as the
- * HTML, then the original receipt quoted with ">" prefixes (the email
- * convention for quoted text). The image itself renders in the HTML, so a
- * text-only reader gets the name of each part instead. */
+ * HTML. The image itself renders in the HTML, so a text-only reader gets the
+ * name of each part instead. */
 function confirmationText(
   opts: ConfirmationEmailOptions,
   inline?: ConfirmationPart,
@@ -284,15 +251,6 @@ function confirmationText(
     );
   }
   if (opts.notes) parts.push(opts.notes);
-  if (opts.quotedOriginal) {
-    const { quoted, truncated } = cappedQuotedOriginal(opts.quotedOriginal);
-    parts.push(
-      `Original receipt:\n${quoted
-        .split("\n")
-        .map((line) => `> ${line}`)
-        .join("\n")}${truncated ? "\n> … receipt text truncated" : ""}`,
-    );
-  }
   return parts.join("\n\n");
 }
 

@@ -28,7 +28,6 @@ import {
 } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { extractEmailAddress } from "~/lib/validation";
-import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
@@ -107,7 +106,15 @@ export function fastmailInboundDeps(adapter: FastmailAdapter): InboundDeps {
     classifyAttachment: classifyReceiptAttachment,
     extractReceipt,
     extractFromImage,
-    renderReceiptImage,
+    // Deferred, like email-connection-process's realExtractionDeps and the
+    // two email renderers below: resvg's rasterizer pulls the bundled
+    // JetBrains Mono woff2 (Vite ?inline), which a tsx process cannot
+    // resolve, and this module sits on the receipts-inbox boot path where
+    // only an email whose body IS the receipt ever needs it.
+    renderReceiptImage: (text, opts) =>
+      import("~/lib/receipt-render.server").then((m) =>
+        m.renderReceiptImage(text, opts),
+      ),
     // Deferred, as in email-connection-process's realExtractionDeps: the
     // browser stack (puppeteer + sparticuz chromium) and email-render's
     // inlined font decode only matter for an email whose body IS the

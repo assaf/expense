@@ -937,8 +937,6 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
           description: "Client dinner",
           notes: "Amount is in USD.",
           missing: [],
-          quotedOriginal:
-            "HARRIS RESTAURANT\n2026-08-30 19:42\nTable 12\n1x Duck Confit 54.00\n1x Glass of wine 12.50\nTip 17.70\nTotal $84.20",
         }).html,
       ],
       // inbound-email.server.ts auth-failure reply (INB-SPOOF-1 path)
