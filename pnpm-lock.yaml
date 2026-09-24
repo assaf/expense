@@ -278,9 +278,6 @@ importers:
       pg:
         specifier: 8.23.0
         version: 8.23.0
-      portless:
-        specifier: ^0.15.6
-        version: 0.15.6
       postal-mime:
         specifier: ^3.0.0
         version: 3.0.0
@@ -4958,12 +4955,6 @@ packages:
   pngjs@7.0.0:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
-
-  portless@0.15.6:
-    resolution: {integrity: sha512-uOAwWLF32rmyEGFASzSO0VOaqb/AQxFCCzyZbPGd82UNNOfIEvc09zy92nroNibE5HNfzV4oVB0ObKbPXgkM9A==}
-    engines: {node: '>=24'}
-    os: [darwin, linux, win32]
-    hasBin: true
 
   postal-mime@3.0.0:
     resolution: {integrity: sha512-Z4a9ar2Bv3YpK3IXag+Yda30k7bMZfpRuUGyqtHnZ2pjHG8Bl62EhZIk4n1dzv00gfzP9g+94e9kd8+XmjVWLA==}
@@ -10079,8 +10070,6 @@ snapshots:
       fflate: 0.8.3
 
   pngjs@7.0.0: {}
-
-  portless@0.15.6: {}
 
   postal-mime@3.0.0: {}
 

@@ -64,7 +64,6 @@
     "pdfjs-dist": "^6.3.289",
     "pdfkit": "^0.20.2",
     "pg": "8.23.0",
-    "portless": "^0.15.6",
     "postal-mime": "^3.0.0",
     "puppeteer-core": "^25.12.0",
     "react": "^19.3.0",

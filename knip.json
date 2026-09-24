@@ -7,7 +7,7 @@
     "test/fixtures/**",
     "vendor/**"
   ],
-  "ignoreBinaries": ["cloc"],
+  "ignoreBinaries": ["cloc", "portless"],
   "ignoreDependencies": [
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend"
