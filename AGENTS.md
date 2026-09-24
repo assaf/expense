@@ -437,9 +437,6 @@ out of both.
 Docs and comments reference several things that no longer exist. Verify against
 the tree before acting on a doc:
 
-- `scripts/import-expensify.ts` is cited in `docs/files.md` and
-  `scripts/compress-images.ts` in `app/lib/image-normalize.ts`, but neither
-  exists.
 - `docs/mcp-demo.md` prescribes `pnpm demo:seed` / `pnpm demo:run`; neither
   alias exists.
 - `prisma/migrations/` was deleted (its handful of dated dirs were never run;

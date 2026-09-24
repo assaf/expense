@@ -5,9 +5,9 @@ import type { Metadata } from "sharp";
  * applied at save time so every stored receipt (manual upload, paste,
  * inbound email, PDF render) is bounded in size.
  *
- * Kept dependency-free (no app imports, erasable TypeScript only) so the
- * one-off backfill script (`scripts/compress-images.ts`) can reuse it with
- * plain `node` type stripping, no tsx needed.
+ * Kept dependency-free (no app imports, erasable TypeScript only) so a
+ * one-off backfill script can reuse it with plain `node` type stripping, no
+ * tsx needed.
  *
  * Rules:
  *  - Not decodable by sharp, GIF (animation), or SVG → pass through
