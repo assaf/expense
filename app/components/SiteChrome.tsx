@@ -63,7 +63,16 @@ export function SiteHeader() {
     <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 sm:px-6">
       <Logo link />
       <nav className="flex items-center gap-4 text-sm">
-        <Button asChild variant="ghost" size="sm" className="ml-2">
+        {/* The header's one action wears the accent fill (the same blue as
+            the sign-in submit and the connect chooser), at the logo's own
+            height: a ghost link in the corner read as stray chrome rather
+            than the thing to click. */}
+        <Button
+          asChild
+          variant="ghost"
+          size="md"
+          className="ml-2 bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+        >
           {/* The document is the same for every visitor (these pages are
               shared-cached), so the session arrives from /api/session after
               hydration: the link paints as "Sign in" and flips to the app's
