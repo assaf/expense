@@ -86,10 +86,12 @@ const INLINE_IMAGE_TYPES: Record<string, true> = {
   "image/webp": true,
 };
 
-/** Can a mail client render a file of this type inline? The single source of
- * the rule, shared with the callers that decide whether to send a preview of
- * a receipt whose original is not renderable (a PDF). */
-export function canInlineReceipt(contentType?: string): boolean {
+/** Can a mail client render a file of this type inline? The rule the
+ * confirmation decides with: what it inlines, and whether an original it
+ * cannot inline rides along as an attachment. The pipeline passes each
+ * file's stored mime through rather than deciding, so this stays the one
+ * place the set lives. */
+function canInlineReceipt(contentType?: string): boolean {
   const type = contentType?.toLowerCase();
   return Boolean(type && INLINE_IMAGE_TYPES[type]);
 }

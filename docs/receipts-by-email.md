@@ -95,8 +95,9 @@ so the reference and the part cannot drift). An original a mail client
 cannot render (a PDF, a HEIC photo, an unrecognized blob) is attached
 beside it, since an `<img>` on those bytes is a broken image; an original
 that IS an image is not attached again, because the reader is already
-looking at it. `canInlineReceipt` is the one place the rule lives, so the
-pipeline's decision and the builder's cannot drift. The
+looking at it. `canInlineReceipt` is the one place the rule lives: the
+pipeline passes each file's stored mime through and the builder decides, so
+there is no second copy of the set to drift from. The
 connected-account pipeline's
 confirmation (delivered into the owner's Inbox) shows the **stored**
 image the same way: the original email is already there. The self-reply guard
