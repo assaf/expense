@@ -25,6 +25,12 @@ const JPEG = {
   contentType: "image/jpeg",
 };
 
+const PDF = {
+  content: Buffer.from("pdf-bytes").toString("base64"),
+  filename: "invoice.pdf",
+  contentType: "application/pdf",
+};
+
 describe("confirmationEmail", () => {
   it("shows an image receipt inline, above the details", () => {
     const { html, text, attachments } = confirmationEmail({
@@ -44,23 +50,49 @@ describe("confirmationEmail", () => {
   });
 
   it("attaches a receipt it cannot render inline", () => {
-    const content = Buffer.from("pdf-bytes").toString("base64");
     const { html, text, attachments } = confirmationEmail({
       ...BASE,
-      receipt: {
-        content,
-        filename: "invoice.pdf",
-        contentType: "application/pdf",
-      },
+      receipt: PDF,
     });
     // No Content-ID: a part nothing references stays a plain attachment,
     // where an <img> pointing at bytes the client cannot decode would show
     // a broken image.
-    expect(attachments).toEqual([
-      { content, filename: "invoice.pdf", contentType: "application/pdf" },
-    ]);
+    expect(attachments).toEqual([PDF]);
     expect(html).not.toContain("<img");
     expect(text).not.toContain("Receipt image attached");
+    // A text-only reader still learns what came with the message.
+    expect(text).toContain("Original receipt attached: invoice.pdf");
+  });
+
+  it("inlines the stored render when the original cannot be rendered", () => {
+    const { html, text, attachments } = confirmationEmail({
+      ...BASE,
+      receipt: PDF,
+      preview: JPEG,
+    });
+    // Two parts: the render shown inline, the original still attached.
+    const [inlinePart, filePart] = attachments!;
+    expect(inlinePart!.filename).toBe("receipt.jpg");
+    expect(inlinePart!.contentType).toBe("image/jpeg");
+    expect(inlinePart!.contentId).toBeTruthy();
+    expect(filePart).toEqual(PDF);
+    expect(html).toContain(`<img src="cid:${inlinePart!.contentId}"`);
+    expect(html).toContain('alt="Receipt"');
+    expect(text).toContain("Receipt image attached: receipt.jpg");
+    expect(text).toContain("Original receipt attached: invoice.pdf");
+  });
+
+  it("drops the preview when the receipt itself renders inline", () => {
+    const { attachments, html } = confirmationEmail({
+      ...BASE,
+      receipt: JPEG,
+      preview: PDF,
+    });
+    // One part, not two: the preview would be an image nothing references.
+    expect(attachments).toHaveLength(1);
+    expect(attachments![0]!.filename).toBe("receipt.jpg");
+    expect(attachments![0]!.contentId).toBeTruthy();
+    expect(html).toContain("<img");
   });
 
   it("leaves an image format clients do not render inline alone", () => {

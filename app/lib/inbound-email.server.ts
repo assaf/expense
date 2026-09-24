@@ -32,6 +32,7 @@ import { captureWarning } from "~/lib/errors.server";
 import { evaluateAuthChain, passingAuthDomains } from "~/lib/email-auth.server";
 import { escapeHtml } from "~/lib/escape";
 import {
+  canInlineReceipt,
   confirmationEmail,
   confirmationNotes,
   type ConfirmationMessage,
@@ -459,10 +460,12 @@ function replyAttachmentContentType(buffer: Buffer, declared: string): string {
     : "application/octet-stream";
 }
 
-/** The stored receipt image as a base64 attachment (the connected
- * pipeline's owner-inbox confirmation). undefined when the import produced
- * no stored image. The stored mime rides along: it is what decides whether
- * the confirmation can show the receipt inline. */
+/** The stored receipt image as a base64 attachment: the connected
+ * pipeline's owner-inbox confirmation, and the inline preview in the
+ * sender's reply when the original file is one a client cannot render (a
+ * PDF). undefined when the import produced no stored image. The stored mime
+ * rides along: it is what decides whether the confirmation can show it
+ * inline. */
 async function receiptImageAttachment(
   accountId: string,
   imageFile: string,
@@ -1015,6 +1018,12 @@ interface SavedExpense {
    * the sender's confirmation reply; it is the sender's file, not the rendered
    * image. */
   originalAttachment?: ConfirmationReceipt;
+  /** The stored render to show inline in the sender's reply when the
+   * original file is not one a mail client can render (a PDF): the original
+   * still travels as a plain attachment, and this is what the reader sees
+   * above the details. Undefined for a renderable original (it is inlined
+   * itself) and for a body source (the body text is quoted). */
+  previewReceipt?: ConfirmationReceipt;
   /** The original email body text (body source) to quote in the sender's
    * confirmation reply. */
   quotedOriginal?: string;
@@ -1133,8 +1142,9 @@ export async function saveExpenseFromExtraction(opts: {
   // The sender's reply carries the ORIGINAL receipt, never the stored
   // processed image: the original file for an attachment source, the
   // original body text for a body source. (The stored-image attachment
-  // above exists only for the connected pipeline's owner-inbox
-  // confirmation, where the original email is already in the Inbox.)
+  // above exists for the connected pipeline's owner-inbox confirmation,
+  // where the original email is already in the Inbox, and as the inline
+  // preview for an original file a mail client cannot render.)
   const receiptAttachment = await receiptImageAttachment(
     opts.accountId,
     imageFile,
@@ -1151,6 +1161,14 @@ export async function saveExpenseFromExtraction(opts: {
   } else {
     quotedOriginal = opts.originalSource.text;
   }
+  // A PDF (or any file a client can't render) would show as a broken image
+  // if inlined, so the reply inlines the stored render instead and keeps the
+  // original attached. canInlineReceipt is the shared rule, so this decision
+  // cannot drift from the one the confirmation builder makes.
+  const previewReceipt =
+    originalAttachment && !canInlineReceipt(originalAttachment.contentType)
+      ? receiptAttachment
+      : undefined;
 
   // The same receipt already imported within the recent window. The
   // connected-account pipeline imported the inbox original moments ago and
@@ -1189,6 +1207,7 @@ export async function saveExpenseFromExtraction(opts: {
     originalAttachment,
     quotedOriginal,
     receiptAttachment,
+    previewReceipt,
     recentMatch,
     currency: receiptCurrency,
     fx: conversion,
@@ -1491,6 +1510,7 @@ export async function processInboundEvent(
         reportStats,
         quotedOriginal: saved.quotedOriginal,
         receipt: saved.originalAttachment,
+        preview: saved.previewReceipt,
       });
       await sendConfirmationOrSuppress({
         deps,

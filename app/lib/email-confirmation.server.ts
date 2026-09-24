@@ -7,7 +7,9 @@
  * a body-source receipt is quoted verbatim below the details (HTML
  * blockquote + ">"-prefixed plain text, capped at QUOTED_ORIGINAL_MAX_CHARS);
  * an attachment-source receipt carries the original file, built by the
- * caller (`saveExpenseFromExtraction` in inbound-email.server.ts).
+ * caller (`saveExpenseFromExtraction` in inbound-email.server.ts). A receipt
+ * a mail client cannot render (a PDF) travels as a plain attachment, with
+ * the stored render inlined above the details as its preview.
  */
 import { escapeHtml } from "~/lib/escape";
 import { countLabel, formatAmount, formatDate } from "~/lib/format";
@@ -103,6 +105,14 @@ const INLINE_IMAGE_TYPES: Record<string, true> = {
   "image/webp": true,
 };
 
+/** Can a mail client render a file of this type inline? The single source of
+ * the rule, shared with the callers that decide whether to send a preview of
+ * a receipt whose original is not renderable (a PDF). */
+export function canInlineReceipt(contentType?: string): boolean {
+  const type = contentType?.toLowerCase();
+  return Boolean(type && INLINE_IMAGE_TYPES[type]);
+}
+
 /** The receipt file a confirmation carries: base64 content plus the name and
  * media type its MIME part is built from. */
 export interface ConfirmationReceipt {
@@ -111,16 +121,45 @@ export interface ConfirmationReceipt {
   contentType?: string;
 }
 
-/** The Content-ID a confirmation's inline receipt image is referenced by, or
- * undefined when the receipt can't be shown inline. Derived from the expense
- * id so the HTML's `cid:` URL and the MIME part's Content-ID cannot drift. */
-function inlineReceiptCid(opts: {
+/** One MIME part of a confirmation: an inline image (with its Content-ID) or
+ * a plain file attachment. */
+type ConfirmationPart = NonNullable<SendEmailInput["attachments"]>[number];
+
+/**
+ * The parts a confirmation carries, given the receipt and its stored render.
+ *
+ * The receipt itself is shown inline when a client can render it, and rides
+ * as a plain attachment otherwise. A receipt a client can't render (a PDF)
+ * gets the stored render inlined instead, so the reader still sees the
+ * receipt without opening anything, while the original file stays attached.
+ * No receipt at all (a body-source import) means no parts: that reply quotes
+ * the original text.
+ */
+function confirmationParts(opts: {
   expenseId: string;
   receipt?: ConfirmationReceipt;
-}): string | undefined {
-  const type = opts.receipt?.contentType?.toLowerCase();
-  if (!opts.receipt || !type || !INLINE_IMAGE_TYPES[type]) return undefined;
-  return `receipt-${opts.expenseId}@expense.local`;
+  preview?: ConfirmationReceipt;
+}): { inline?: ConfirmationPart; attached?: ConfirmationReceipt } {
+  if (!opts.receipt) return {};
+  if (canInlineReceipt(opts.receipt.contentType)) {
+    return {
+      inline: { ...opts.receipt, contentId: receiptContentId(opts.expenseId) },
+    };
+  }
+  if (opts.preview && canInlineReceipt(opts.preview.contentType)) {
+    return {
+      inline: { ...opts.preview, contentId: receiptContentId(opts.expenseId) },
+      attached: opts.receipt,
+    };
+  }
+  return { attached: opts.receipt };
+}
+
+/** The Content-ID the inline receipt image is referenced by. Derived from the
+ * expense id so the HTML's `cid:` URL and the MIME part's Content-ID cannot
+ * drift. */
+function receiptContentId(expenseId: string): string {
+  return `receipt-${expenseId}@expense.local`;
 }
 
 /** Options for the confirmation email (shared by both email pipelines). */
@@ -151,6 +190,12 @@ export interface ConfirmationEmailOptions {
    * attachment. Send the bytes from the returned `attachments`, which carry
    * the Content-ID that the inline image is referenced by. */
   receipt?: ConfirmationReceipt;
+  /** The receipt's stored render (the JPEG/PNG the app shows for this
+   * expense), inlined in place of `receipt` when a mail client cannot render
+   * the original: a PDF receipt travels as an attachment, and this preview is
+   * what the reader sees of it. Ignored when `receipt` itself is renderable
+   * (no duplicate image part) or when there is no `receipt` at all. */
+  preview?: ConfirmationReceipt;
 }
 
 /** Build the confirmation email for a receipt import (partial or complete). */
@@ -214,10 +259,12 @@ function confirmationHtml(
 
 /** The plain-text alternative for a confirmation: the same fields as the
  * HTML, then the original receipt quoted with ">" prefixes (the email
- * convention for quoted text). */
+ * convention for quoted text). The image itself renders in the HTML, so a
+ * text-only reader gets the name of each part instead. */
 function confirmationText(
   opts: ConfirmationEmailOptions,
-  inlineCid?: string,
+  inline?: ConfirmationPart,
+  attached?: ConfirmationReceipt,
 ): string {
   const rows = confirmationFields(opts)
     .map(([label, value]) => `${label}: ${value || "\u2014"}`)
@@ -226,10 +273,9 @@ function confirmationText(
   const parts = [
     opts.intro ?? "Thanks for forwarding your receipt. Here's what we found:",
   ];
-  // The image itself renders in the HTML; a text-only reader gets the name
-  // of the part they can open.
-  if (inlineCid && opts.receipt) {
-    parts.push(`Receipt image attached: ${opts.receipt.filename}`);
+  if (inline) parts.push(`Receipt image attached: ${inline.filename}`);
+  if (attached) {
+    parts.push(`Original receipt attached: ${attached.filename}`);
   }
   parts.push(rows);
   if (opts.missing.length > 0) {
@@ -256,9 +302,10 @@ export interface ConfirmationMessage {
   subject: string;
   html: string;
   text: string;
-  /** The receipt to carry, when the caller supplied one: an inline part
-   * (Content-ID plus base64) or a plain attachment. Pass to the sender
-   * unchanged. */
+  /** What the message carries, in part order: the inline receipt image (the
+   * receipt itself, or its preview) when the caller supplied something a
+   * client can render, then the original file when it is not that image.
+   * Pass to the sender unchanged. */
   attachments?: SendEmailInput["attachments"];
 }
 
@@ -278,15 +325,23 @@ export function confirmationEmail(
     report: opts.report,
     missing: opts.missing,
   });
-  const inlineCid = inlineReceiptCid(opts);
+  const { inline, attached } = confirmationParts({
+    expenseId: opts.expenseId,
+    receipt: opts.receipt,
+    preview: opts.preview,
+  });
   return {
     subject,
-    html: confirmationHtml(opts, subject, inlineCid),
-    text: confirmationText(opts, inlineCid),
-    attachments: opts.receipt
-      ? [inlineCid ? { ...opts.receipt, contentId: inlineCid } : opts.receipt]
-      : undefined,
+    html: confirmationHtml(opts, subject, inline?.contentId),
+    text: confirmationText(opts, inline, attached),
+    attachments:
+      inline || attached ? [inline, attached].filter(isPart) : undefined,
   };
+}
+
+/** Keep the defined parts, in order (inline first, then the original file). */
+function isPart(part: ConfirmationPart | undefined): part is ConfirmationPart {
+  return part !== undefined;
 }
 /** The free-text notes under a confirmation's summary: the extraction's own
  * notes plus caveats (foreign currency and its conversion, body-render

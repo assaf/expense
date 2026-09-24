@@ -1023,7 +1023,6 @@ describe("Expense CRUD", () => {
     await expect(page.getByText("Incomplete")).toHaveCount(0);
 
     // Dropping again and saving attaches the draft to the row.
-    const main2 = page.locator("main#main-content");
     const drop2 = await fileTransfer(page, {
       name: "drop.png",
       type: "image/png",

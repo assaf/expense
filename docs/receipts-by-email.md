@@ -92,9 +92,14 @@ inline, above the details**, referenced by a Content-ID derived from the
 expense id; `confirmationEmail` returns the matching MIME part in
 `attachments`, so the reference and the part cannot drift. The mail no
 longer spends an attachment row on the receipt, and the reader can tell
-what was imported at a glance. A PDF or an unrecognized format stays a
-plain attachment, since an `<img>` pointing at bytes the client cannot
-decode renders as a broken image. The connected-account pipeline's
+what was imported at a glance. A file the client cannot render (a PDF, a
+HEIC photo, an unrecognized blob) stays a plain attachment, since an
+`<img>` pointing at bytes the client cannot decode renders as a broken
+image; it gets the **stored render** inlined in its place instead
+(`preview`), so the reader still sees the page the app filed while the
+original file rides along. `canInlineReceipt` is the one place that rule
+lives, so the pipeline's decision and the builder's cannot drift. The
+connected-account pipeline's
 confirmation (delivered into the owner's Inbox) shows the **stored**
 image the same way: the original email is already there. The self-reply guard
 compares the incoming

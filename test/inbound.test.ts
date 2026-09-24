@@ -128,6 +128,18 @@ interface SentReply {
   attachments?: SendEmailInput["attachments"];
 }
 
+/** The bytes the fake download returns for a PDF attachment: its magic
+ * bytes are what the pipeline sniffs, so serving PNG bytes for a PDF would
+ * quietly exercise the image path instead. */
+const PDF_BYTES = Buffer.from(
+  "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n",
+);
+
+/** The bytes the fake download returns for one attachment. */
+function bytesFor(meta: AttachmentMeta): Buffer {
+  return meta.content_type === "application/pdf" ? PDF_BYTES : TINY_PNG;
+}
+
 /** Build fake deps: real renderReceiptImage (resvg + bundled font), everything else faked. */
 function fakeDeps(): InboundDeps & {
   sent: SentReply[];
@@ -140,7 +152,7 @@ function fakeDeps(): InboundDeps & {
     listAttachments: async () => [],
     downloadAttachment: async (meta) => {
       downloads.push(meta);
-      return TINY_PNG;
+      return bytesFor(meta);
     },
     classifyAttachment: async () => null,
     extractReceipt: async (input) => fakeExtract(input.text),
@@ -1922,10 +1934,25 @@ describe("processInboundEvent (attachments)", () => {
     expect(created.date).toBe("2026-06-20"); // no forward block → header date
     // Logo was downloaded? No, only the chosen attachment is downloaded.
     expect(deps.downloads.map((m) => m.id)).toEqual(["att-pdf"]);
-    // The confirmation attaches the ORIGINAL PDF, not the rendered image.
+    // The confirmation inlines the rendered page of the PDF (so the reader
+    // sees the receipt) and still attaches the ORIGINAL file. Two parts, the
+    // image first, and only the image carries a Content-ID.
     const pdfConfirmation = deps.sent[0]!;
-    expect(pdfConfirmation.attachments).toHaveLength(1);
-    expect(pdfConfirmation.attachments![0]!.filename).toBe("invoice.pdf");
+    const [previewPart, originalPart] = pdfConfirmation.attachments!;
+    // The stored render is the JPEG the app shows for this expense.
+    expect(previewPart!.filename).toBe("receipt.jpg");
+    expect(previewPart!.contentType).toBe("image/jpeg");
+    expect(previewPart!.contentId).toBeTruthy();
+    expect(originalPart!.filename).toBe("invoice.pdf");
+    expect(originalPart!.contentType).toBe("application/pdf");
+    expect(originalPart!.contentId).toBeUndefined();
+    expect(pdfConfirmation.html).toContain(
+      `src="cid:${previewPart!.contentId}"`,
+    );
+    expect(pdfConfirmation.text).toContain(
+      "Original receipt attached: invoice.pdf",
+    );
+    // The quoted-original block is for body sources, not attachments.
     expect(pdfConfirmation.html).not.toContain("Original receipt");
   });
 
