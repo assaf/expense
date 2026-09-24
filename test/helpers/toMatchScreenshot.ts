@@ -1,11 +1,17 @@
 /**
- * Visual-regression matcher (`toMatchBaseline`) for the suite screenshots
+ * Visual-regression helper (`matchBaseline`) for the suite screenshots
  * (adapted from rentail/test/helpers/toMatchScreenshot.ts): the first run
  * writes the baseline into screenshots/ (committed); later runs compare
- * against it with looks-same and fail on drift, leaving
+ * against it with looks-same and THROW on drift, leaving
  * screenshots/<name>.new.png (the new capture) and screenshots/<name>.diff.png
  * (highlighted diff) next to the baseline for review. Review/accept them with
  * `pnpm screenshots:review`. Skipped in CI.
+ *
+ * Deliberately a plain function rather than an `expect.extend` matcher: this
+ * runner resolves a matcher name it does not know to a native no-op, so
+ * `expect(page).toMatchBaseline(...)` passed without ever comparing anything
+ * and re-recorded each baseline in place, hiding every drift. A function that
+ * throws cannot be swallowed that way.
  */
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { globSync, unlinkSync } from "node:fs";
@@ -13,7 +19,6 @@ import path from "node:path";
 import looksSame from "looks-same";
 import sharp from "sharp";
 import type { Page } from "playwright";
-import { expect } from "vite-plus/test";
 
 const SCREENSHOTS_DIR = path.resolve("screenshots");
 
@@ -27,88 +32,66 @@ interface ScreenshotOptions {
   fullPage?: boolean;
 }
 
-// Augments the entry point the tests import from (vite-plus/test re-exports
-// vitest's Assertion). Named toMatchBaseline, not toMatchScreenshot: vitest 5
-// declares its own toMatchScreenshot (the browser-mode comparator matcher) on
-// Assertion, and redeclaring that member fails the interface's extends check.
-declare module "vite-plus/test" {
-  interface Assertion<R extends void | Promise<void> = void, T = unknown> {
-    toMatchBaseline(options?: ScreenshotOptions): Promise<void>;
+/** Capture `page` and compare it with the committed baseline for
+ * `options.name`, throwing when they differ (and on the way writing the
+ * `.new.png` / `.diff.png` artifacts for review). Creates the baseline on the
+ * first run; a no-op in CI, where the baselines are not maintained. */
+export async function matchBaseline(
+  page: Page,
+  options: ScreenshotOptions,
+): Promise<void> {
+  if (process.env.CI) return;
+  // Give the page a moment to finish uploading images and rendering.
+  await page.waitForTimeout(500);
+  // A webfont still loading swaps glyphs mid-capture; wait for the
+  // settled font set or text-region diffs will flag phantom drift.
+  await page.evaluate(() => document.fonts.ready);
+  const baselinePath = path.resolve(SCREENSHOTS_DIR, `${options.name}.png`);
+  const screenshot = await page.screenshot({
+    fullPage: options.fullPage ?? false,
+    animations: "disabled",
+    caret: "hide",
+    scale: "css",
+    type: "png",
+  });
+
+  try {
+    await access(baselinePath, 4); // R_OK
+  } catch {
+    await mkdir(path.dirname(baselinePath), { recursive: true });
+    await writeFile(baselinePath, screenshot);
+    return;
+  }
+  // createDiffImage stays on: its result carries the different/total
+  // pixel counts for the failure message (the review image is ours).
+  const result = await looksSame(await readFile(baselinePath), screenshot, {
+    tolerance: DEFAULT_TOLERANCE,
+    createDiffImage: true,
+    ignoreAntialiasing: true,
+    ignoreCaret: true,
+    strict: false,
+  });
+  const { equal, differentPixels, totalPixels } = result;
+  const diffRatio = totalPixels ? differentPixels / totalPixels : 0;
+
+  if (!equal) {
+    const newPath = path.resolve(SCREENSHOTS_DIR, `${options.name}.new.png`);
+    const diffPath = path.resolve(SCREENSHOTS_DIR, `${options.name}.diff.png`);
+    await mkdir(path.dirname(newPath), { recursive: true });
+    await writeFile(newPath, screenshot);
+    // Best effort: a broken diff image must not mask the drift finding.
+    try {
+      await saveDiffImage(await readFile(baselinePath), screenshot, diffPath);
+    } catch {
+      // Leave the previous diff.png (or none) in place.
+    }
+    throw new Error(
+      `Screenshot differs from baseline: ${options.name} ` +
+        `(${differentPixels}/${totalPixels} pixels, ${(diffRatio * 100).toFixed(3)}% differ). ` +
+        `See ${diffPath} and ${newPath}; review with \`pnpm screenshots:review\`.`,
+    );
   }
 }
-
-expect.extend({
-  async toMatchBaseline(
-    page: Page,
-    options: ScreenshotOptions,
-  ): Promise<{ message: () => string; pass: boolean }> {
-    if (process.env.CI) {
-      return {
-        message: () => "Skipping screenshot comparison in CI",
-        pass: true,
-      };
-    }
-    // Give the page a moment to finish uploading images and rendering.
-    await page.waitForTimeout(500);
-    // A webfont still loading swaps glyphs mid-capture; wait for the
-    // settled font set or text-region diffs will flag phantom drift.
-    await page.evaluate(() => document.fonts.ready);
-    const baselinePath = path.resolve(SCREENSHOTS_DIR, `${options.name}.png`);
-    const screenshot = await page.screenshot({
-      fullPage: options.fullPage ?? false,
-      animations: "disabled",
-      caret: "hide",
-      scale: "css",
-      type: "png",
-    });
-
-    try {
-      await access(baselinePath, 4); // R_OK
-    } catch {
-      await mkdir(path.dirname(baselinePath), { recursive: true });
-      await writeFile(baselinePath, screenshot);
-      return {
-        message: () => `Baseline screenshot created at ${baselinePath}.`,
-        pass: true,
-      };
-    }
-    // createDiffImage stays on: its result carries the different/total
-    // pixel counts for the failure message (the review image is ours).
-    const result = await looksSame(await readFile(baselinePath), screenshot, {
-      tolerance: DEFAULT_TOLERANCE,
-      createDiffImage: true,
-      ignoreAntialiasing: true,
-      ignoreCaret: true,
-      strict: false,
-    });
-    const { equal, differentPixels, totalPixels } = result;
-    const diffRatio = totalPixels ? differentPixels / totalPixels : 0;
-
-    if (!equal) {
-      const newPath = path.resolve(SCREENSHOTS_DIR, `${options.name}.new.png`);
-      const diffPath = path.resolve(
-        SCREENSHOTS_DIR,
-        `${options.name}.diff.png`,
-      );
-      await mkdir(path.dirname(newPath), { recursive: true });
-      await writeFile(newPath, screenshot);
-      // Best effort: a broken diff image must not mask the drift finding.
-      try {
-        await saveDiffImage(await readFile(baselinePath), screenshot, diffPath);
-      } catch {
-        // Leave the previous diff.png (or none) in place.
-      }
-      return {
-        message: () =>
-          `Screenshot differs from baseline: ${options.name} ` +
-          `(${differentPixels}/${totalPixels} pixels, ${(diffRatio * 100).toFixed(3)}% differ). ` +
-          `See ${diffPath} and ${newPath}; review with \`pnpm screenshots:review\`.`,
-        pass: false,
-      };
-    }
-    return { message: () => "Image matches baseline", pass: true };
-  },
-});
 
 /** Render the drift for human review: identical pixels ghost at 80% over
  * white (visible context, muted), changed pixels stand out in solid red.

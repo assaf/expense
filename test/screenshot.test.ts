@@ -41,8 +41,9 @@ import {
   waitForHydration,
 } from "./helpers/launchBrowser";
 import type { Page } from "playwright";
-import { removeDiffImages } from "./helpers/toMatchScreenshot";
+import { matchBaseline, removeDiffImages } from "./helpers/toMatchScreenshot";
 import { confirmationEmail } from "~/lib/email-confirmation.server";
+import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { replyHtml } from "~/lib/inbound-email.server";
 import { verificationEmailHtml } from "~/lib/verification-email.server";
 import {
@@ -751,12 +752,85 @@ describe.skipIf(!process.env.DEMO)("landing demo", () => {
 /**
  * Suite screenshot regression: on every `pnpm test` run, capture the app's
  * important screens and the emails it sends, comparing each against the
- * committed baseline in screenshots/ (see toMatchBaseline). Uses whatever
+ * committed baseline in screenshots/ (see matchBaseline). Uses whatever
  * state the suite has left in expense_test, so the shots reflect the same
  * data the tests verified. Fails loudly: a screen that throws, never
  * hydrates, or drifts from its baseline is a broken screen, not a missing
  * artifact. Review drift with `pnpm screenshots:review`.
  */
+/** What the pipeline would have saved for each source shape: the receipt as
+ * the app renders it. The gallery inlines these, so what it shows is what a
+ * reader of the real email sees. */
+const SAVED_TEXT_RECEIPT = [
+  "HARRIS RESTAURANT",
+  "2026-08-30 19:42",
+  "Table 12",
+  "1x Duck Confit 54.00",
+  "1x Glass of wine 12.50",
+  "Tip 17.70",
+  "Total $84.20",
+].join("\n");
+const SAVED_IMAGE_RECEIPT = [
+  "MARINA PHARMACY",
+  "2026-08-28 09:15",
+  "Vitamin D3 18.40",
+  "Total $18.40",
+].join("\n");
+const SAVED_PDF_RECEIPT = [
+  "MET LOFTS",
+  "Balance due 09/23/2026",
+  "Monthly rent 20.00",
+  "Total $20.00",
+].join("\n");
+
+/** Replace every `cid:` reference with that part's bytes, so the gallery page
+ * shows the receipt exactly where a mail client puts it. */
+function inlineCidImages(
+  html: string,
+  attachments: { content: string; contentType?: string; contentId?: string }[],
+): string {
+  let out = html;
+  for (const att of attachments) {
+    if (!att.contentId) continue;
+    out = out.replaceAll(
+      `cid:${att.contentId}`,
+      `data:${att.contentType ?? "application/octet-stream"};base64,${att.content}`,
+    );
+  }
+  return out;
+}
+
+/** A receipt-confirmation gallery entry: the email the app sends for a
+ * receipt that arrived as the email body (`--text`), as an image, or as a
+ * PDF. All three inline the image the app SAVED for the expense; the PDF one
+ * also carries the original file. */
+function receiptConfirmation(
+  name: string,
+  opts: {
+    saved: Buffer;
+    receipt: { content: string; filename: string; contentType: string } | null;
+  },
+): [string, string] {
+  const message = confirmationEmail({
+    expenseId: "01J00000000000000000000000",
+    date: "2026-08-30",
+    merchant: "Harris Restaurant",
+    amount: "84.20",
+    category: "Meals",
+    report: "2026 Business",
+    description: "Client dinner",
+    notes: "Amount is in USD.",
+    missing: [],
+    preview: {
+      content: opts.saved.toString("base64"),
+      filename: "receipt.png",
+      contentType: "image/png",
+    },
+    ...(opts.receipt ? { receipt: opts.receipt } : {}),
+  });
+  return [name, inlineCidImages(message.html, message.attachments ?? [])];
+}
+
 describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
   /** Drift findings across all captures, asserted empty at the end so one
    * run surfaces every drifted screen (and leaves its diff artifacts),
@@ -800,7 +874,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
     try {
-      await expect(page).toMatchBaseline({ name, fullPage: true });
+      await matchBaseline(page, { name, fullPage: true });
     } catch (error) {
       drift.push(`${name}: ${(error as Error).message.split("\n")[0]}`);
     }
@@ -924,21 +998,28 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
             "If you didn't request this, you can ignore this email — your password stays the same.",
         }),
       ],
-      // email-confirmation.server.ts receipt confirmation (complete import)
-      [
-        "receipt-confirmation",
-        confirmationEmail({
-          expenseId: "01J00000000000000000000000",
-          date: "2026-08-30",
-          merchant: "Harris Restaurant",
-          amount: "84.20",
-          category: "Meals",
-          report: "2026 Business",
-          description: "Client dinner",
-          notes: "Amount is in USD.",
-          missing: [],
-        }).html,
-      ],
+      // email-confirmation.server.ts receipt confirmations, one per source
+      // shape: a receipt that arrived as the email body, one that arrived as
+      // an image, and one that arrived as a PDF. All three show the image the
+      // app SAVED for the expense; only the PDF also carries the original.
+      receiptConfirmation("receipt-confirmation-text", {
+        saved: await renderReceiptImage(SAVED_TEXT_RECEIPT),
+        receipt: null,
+      }),
+      receiptConfirmation("receipt-confirmation-image", {
+        saved: await renderReceiptImage(SAVED_IMAGE_RECEIPT),
+        receipt: null,
+      }),
+      receiptConfirmation("receipt-confirmation-pdf", {
+        saved: await renderReceiptImage(SAVED_PDF_RECEIPT),
+        receipt: {
+          content: Buffer.from(
+            "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n",
+          ).toString("base64"),
+          filename: "BalanceDueLetter.pdf",
+          contentType: "application/pdf",
+        },
+      }),
       // inbound-email.server.ts auth-failure reply (INB-SPOOF-1 path)
       [
         "receipt-not-imported",
@@ -955,7 +1036,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       for (const [name, html] of emails) {
         await page.setContent(html, { waitUntil: "load" });
         try {
-          await expect(page).toMatchBaseline({
+          await matchBaseline(page, {
             name: `emails/${name}`,
             fullPage: true,
           });

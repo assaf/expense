@@ -97,8 +97,10 @@
 - Every `pnpm test` run captures the app's important screens and the emails
   it sends (`test/screenshot.test.ts`, "suite screenshots" block) and
   compares each against the committed baseline in `screenshots/` via
-  `toMatchBaseline` (`test/helpers/toMatchScreenshot.ts`, looks-same,
-  ΔE tolerance 2.3). Any drift fails the run and leaves
+  `matchBaseline` (`test/helpers/toMatchScreenshot.ts`, looks-same,
+  ΔE tolerance 2.3) — a plain function that throws, not an
+  `expect.extend` matcher: a matcher name the runner does not know resolves
+  to a native no-op, which passed without comparing anything. Any drift fails the run and leaves
   `screenshots/<name>.new.png` (the new capture) and
   `screenshots/<name>.diff.png` next to the baseline; all drifted screens
   are reported in one failure, not just the first.
@@ -110,7 +112,10 @@
   Baselines that were edited by hand show up in the review as
   "modified" (compared against the Git HEAD version, Revert/Keep).
 - Comparisons are skipped when `CI` is set, so CI never fails on
-  environment-rendering noise; they only run locally.
+  environment-rendering noise; they only run locally. A shell that exports
+  `CI` (some local setups do) therefore passes the whole block without
+  comparing anything — run `CI= pnpm exec vp test run test/screenshot.test.ts`
+  when you actually want the check.
 - Determinism guards: the test server pins the random content on captured
   screens (`SCREENSHOT_HIGHLIGHT_PIN`, set by `launchServer.ts`): the home
   page's "Did you know?" highlight pick and the insights page's opening
