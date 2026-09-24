@@ -91,8 +91,10 @@ Every one of them is public by design, caches for an hour, and revalidates
 with `If-None-Match`. HTML responses also carry `Link` headers naming the API
 catalog (`rel="api-catalog"`), the card (`rel="service-desc"`), and
 `/llms.txt` (`rel="describedby"`); a page that has a `.md` mirror names it too
-(`rel="alternate"`), and a request for `Accept: text/markdown` on that page
-gets the mirror instead of the app shell (`Vary: Accept` on both). `robots.txt`
+(`rel="alternate"`). Nothing is negotiated on `Accept`: the mirror is its own
+URL, so a cache keyed on the URL alone is always right (`Vary` used to make
+that every cache's problem, and the ones that ignore it serve the wrong
+body). `robots.txt`
 declares `Content-Signal: ai-train=yes, search=yes, ai-input=yes` in its
 wildcard block and points at the catalog with `Agentmap:`.
 

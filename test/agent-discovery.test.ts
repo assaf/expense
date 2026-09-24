@@ -283,8 +283,9 @@ describe("discovery pointers", () => {
       "service-desc": "/mcp/server-card",
       describedby: "/llms.txt",
     });
-    // Markdown negotiation only makes sense when caches are told about it.
-    expect(new Headers(headers()).get("Vary")).toContain("Accept");
+    // Nothing here is negotiated: a URL has one representation, so no Vary
+    // at all (a cache that does not understand it serves the wrong body).
+    expect(new Headers(headers()).get("Vary")).toBeNull();
     // The root's generic header names no mirror: it is served on pages
     // without one (the app, /login).
     expect(link).not.toContain("alternate");
@@ -296,7 +297,7 @@ describe("discovery pointers", () => {
     expect(marketing.get("Link")).toContain(
       '</about.md>; rel="alternate"; type="text/markdown"',
     );
-    expect(marketing.get("Vary")).toContain("Accept");
+    expect(marketing.get("Vary")).toBeNull();
     expect(marketing.get("X-Frame-Options")).toBe("DENY");
   });
 
@@ -334,35 +335,30 @@ describe("discovery pointers", () => {
   });
 });
 
-describe("markdown negotiation", () => {
-  it("answers a markdown request with the page's mirror", async () => {
-    const response = await thrownResponse("/about", "text/markdown");
-    expect(response?.status).toBe(302);
-    expect(response?.headers.get("Location")).toBe("/about.md");
-    expect(response?.headers.get("Vary")).toContain("Accept");
-  });
-
-  it("prefers the mirror only when the client asks for it", async () => {
+describe("no content negotiation on Accept", () => {
+  // A URL has exactly one representation. Serving a different one per Accept
+  // (a mirror redirect, an HTML landing page) means a shared cache has to
+  // understand Vary to get it right, and the ones that do not serve the wrong
+  // body to the next client. The `.md` mirrors are still their own URLs,
+  // advertised by rel="alternate" and by llms.txt.
+  it("never redirects a markdown-preferring client to the mirror", async () => {
     for (const accept of [
+      "text/markdown",
+      "text/markdown;q=0.9, text/html;q=0.1",
       "text/html,application/xhtml+xml",
       "*/*",
-      "text/markdown;q=0.5, text/html;q=0.9",
     ]) {
       expect(await thrownResponse("/about", accept)).toBeNull();
+      expect(await thrownResponse("/faq", accept)).toBeNull();
     }
-    expect(await thrownResponse("/faq", "text/markdown")).not.toBeNull();
   });
 
-  it("never sends a mirror redirect for anything else", async () => {
-    // A page with no mirror: the request falls through to the auth gate, so
-    // whatever comes back is not a markdown redirect.
-    for (const [path, method] of [
-      ["/llms.txt", "GET"],
-      ["/expenses", "GET"],
-      ["/about", "POST"],
-    ] as const) {
-      const response = await thrownResponse(path, "text/markdown", method);
-      expect(response?.headers.get("Location")).not.toBe("/about.md");
-    }
+  it("keeps the mirrors reachable as their own URLs", () => {
+    // The negotiation is gone, the mirrors are not: they are resource routes
+    // beside the page, and the page still advertises one.
+    const marketing = new Headers(marketingPageHeaders("/about.md"));
+    expect(marketing.get("Link")).toContain(
+      '</about.md>; rel="alternate"; type="text/markdown"',
+    );
   });
 });

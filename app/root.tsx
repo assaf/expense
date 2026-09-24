@@ -8,7 +8,6 @@ import {
   Scripts,
   ScrollRestoration,
   isRouteErrorResponse,
-  redirect,
   useNavigation,
   useRouteError,
   useRouteLoaderData,
@@ -66,49 +65,6 @@ const PUBLIC_PAGES: Record<string, true> = {
   "/auth": true,
   "/llms.txt": true,
 };
-
-/** Marketing pages that publish a markdown mirror, page path -> mirror. Each
- * mirror is a resource route beside the page (app/routes/<page>[.]md.ts).
- * A request that asks for markdown gets the mirror instead of the HTML app
- * shell; nothing else negotiates. */
-const MARKDOWN_MIRRORS: Record<string, string> = {
-  "/about": "/about.md",
-  "/ai": "/ai.md",
-  "/alternatives": "/alternatives.md",
-  "/changelog": "/changelog.md",
-  "/connect": "/connect.md",
-  "/faq": "/faq.md",
-  "/mileage-rates": "/mileage-rates.md",
-  "/privacy": "/privacy.md",
-  "/product-facts": "/product-facts.md",
-  "/schedule-c-categories": "/schedule-c-categories.md",
-  "/support": "/support.md",
-  "/terms": "/terms.md",
-};
-
-/** The quality an Accept header assigns to one exact media type, or -1 when
- * it never names it. Wildcards are ignored on purpose: a wildcard expresses
- * no preference between two representations. */
-function acceptQuality(accept: string, type: string): number {
-  let best = -1;
-  for (const entry of accept.split(",")) {
-    const [media, ...params] = entry.trim().toLowerCase().split(";");
-    if (media?.trim() !== type) continue;
-    const q = params.find((param) => param.trim().startsWith("q="));
-    const value = q === undefined ? 1 : Number(q.trim().slice(2));
-    if (Number.isFinite(value)) best = Math.max(best, value);
-  }
-  return best;
-}
-
-/** True when a client asked for markdown over HTML (an agent, not a
- * browser). */
-function prefersMarkdown(accept: string | null): boolean {
-  if (!accept) return false;
-  return (
-    acceptQuality(accept, "text/markdown") > acceptQuality(accept, "text/html")
-  );
-}
 
 /** The path the gate judges a request by. React Router appends `.data` to
  * loader fetches during client-side navigation (e.g. /about.data for a Link
@@ -205,20 +161,6 @@ export const middleware: Route.MiddlewareFunction[] = [authGate];
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const path = gatePath(url.pathname);
-  // Markdown for agents: a client that asks for markdown over HTML gets the
-  // page's published mirror instead of the app shell. The mirrors themselves
-  // (resource routes) and React Router's own .data fetches never negotiate,
-  // and only GET does.
-  if (
-    request.method === "GET" &&
-    !url.pathname.endsWith(".md") &&
-    !url.pathname.endsWith(".data")
-  ) {
-    const mirror = MARKDOWN_MIRRORS[path];
-    if (mirror && prefersMarkdown(request.headers.get("accept"))) {
-      throw redirect(mirror, { headers: { Vary: "Accept" } });
-    }
-  }
   // Public paths get neither the user nor the palette's report names, because
   // those pages are shared-cached (marketingPageHeaders) and their document
   // must be identical for every visitor. `deferredSession` tells the client
@@ -275,9 +217,6 @@ export function headers(): HeadersInit {
   return {
     ...securityHeaders(),
     ...discoveryLinks(),
-    // Two representations per marketing URL (the HTML page and its markdown
-    // mirror), chosen by Accept.
-    Vary: "Accept",
   };
 }
 

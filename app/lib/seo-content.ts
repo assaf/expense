@@ -84,15 +84,16 @@ export function discoveryLinks(mirror?: string): Record<string, string> {
  * account's report names.) Letting a shared cache serve them is the point:
  * crawlers and uptime monitors then cost no function invocations. A page whose
  * body embeds the visitor's own data must not use this helper - see
- * /unsubscribe/:token, which sets its own headers. `Vary: Accept` is here
- * because these pages have two representations: the HTML page and its `.md`
- * mirror, whose location `mirror` advertises as `rel="alternate"`.
+ * /unsubscribe/:token, which sets its own headers. Nothing is negotiated
+ * here: a URL has ONE representation, and the `.md` mirror is its own URL,
+ * advertised by `mirror` through the `rel="alternate"` link. (Vary: Accept
+ * used to be set for the mirror; a cache that keys the response on a header
+ * it does not understand serves the wrong one.)
  */
 export function marketingPageHeaders(mirror?: string): Record<string, string> {
   return {
     ...securityHeaders(),
     ...discoveryLinks(mirror),
-    Vary: "Accept",
     "Cache-Control": "public, s-maxage=600, stale-while-revalidate=86400",
   };
 }

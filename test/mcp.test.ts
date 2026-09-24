@@ -85,6 +85,18 @@ describe("MCP endpoint", () => {
     return { status: res.status, json };
   }
 
+  it("never redirects a browser off the endpoint (no Accept-based routing)", async () => {
+    // A GET from a browser used to be redirected to /connect. A cache that
+    // stored that redirect for /mcp would hand it to an MCP client, so the
+    // endpoint answers as an endpoint whatever the Accept says (the SDK
+    // answers 406 for a body type it cannot serve; the human guide is /connect).
+    const browser = await fetch(`${baseURL}/mcp`, {
+      headers: { Accept: "text/html" },
+    });
+    expect(browser.headers.get("location")).toBeNull();
+    expect(browser.status < 300 || browser.status >= 400).toBe(true);
+  });
+
   /** 2025-era handshake, served statelessly (no session id is issued). Its
    * result carries the identity the Server Card publishes, plus the
    * cross-cutting instructions an agent reads before it calls anything. */
