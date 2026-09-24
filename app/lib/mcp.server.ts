@@ -551,9 +551,11 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
     const callSettings = async (
       body: Record<string, unknown>,
       label: string,
+      extraHeaders: Record<string, string> = {},
     ): Promise<void> => {
       const result = await assertResult(
         await post(body, {
+          ...extraHeaders,
           "Mcp-Method": "tools/call",
           "Mcp-Name": "get_settings",
         }),
@@ -615,6 +617,13 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
       "io.modelcontextprotocol/clientInfo": { name: "smoke", version: "1.0.0" },
       "io.modelcontextprotocol/clientCapabilities": {},
     };
+    // The 2026-07-28 leg names its revision twice: in the body envelope and in
+    // the MCP-Protocol-Version header. The transport rejects a request whose
+    // header and body disagree ("the required MCP-Protocol-Version header is
+    // absent"), so every modern request below carries this.
+    const modernHeaders: Record<string, string> = {
+      "MCP-Protocol-Version": "2026-07-28",
+    };
     await assertResult(
       await post(
         {
@@ -623,7 +632,7 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
           method: "server/discover",
           params: { _meta: envelope },
         },
-        { "Mcp-Method": "server/discover" },
+        { ...modernHeaders, "Mcp-Method": "server/discover" },
       ),
       "modern server/discover",
     );
@@ -636,7 +645,7 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
             method: "tools/list",
             params: { _meta: envelope },
           },
-          { "Mcp-Method": "tools/list" },
+          { ...modernHeaders, "Mcp-Method": "tools/list" },
         ),
         "modern tools/list",
       ),
@@ -650,6 +659,7 @@ export async function runMcpSmoke(): Promise<{ tools: number; ms: number }> {
         params: { _meta: envelope, name: "get_settings", arguments: {} },
       },
       "modern",
+      modernHeaders,
     );
 
     return { tools: modernNames.length, ms: Date.now() - started };

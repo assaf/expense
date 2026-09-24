@@ -209,6 +209,11 @@ describe("MCP endpoint", () => {
     "io.modelcontextprotocol/clientCapabilities": {},
   };
 
+  /** The 2026-07-28 leg states its revision in the body envelope AND in the
+   * MCP-Protocol-Version header: the transport answers 400 when the two
+   * disagree, which is how the SDK enforces the spec since 2.1.0. */
+  const MODERN_HEADERS = { "MCP-Protocol-Version": "2026-07-28" };
+
   /** 2026-07-28 era: tools/call carrying `_meta` + standard headers. */
   async function modernCallTool(
     token: string,
@@ -223,7 +228,7 @@ describe("MCP endpoint", () => {
         method: "tools/call",
         params: { _meta: MODERN_META, name, arguments: args },
       },
-      { "Mcp-Method": "tools/call", "Mcp-Name": name },
+      { ...MODERN_HEADERS, "Mcp-Method": "tools/call", "Mcp-Name": name },
     );
     expect(res.status).toBe(200);
     const parsed = parseResult(res.json);
@@ -402,7 +407,7 @@ describe("MCP endpoint", () => {
         method: "server/discover",
         params: { _meta: MODERN_META },
       },
-      { "Mcp-Method": "server/discover" },
+      { ...MODERN_HEADERS, "Mcp-Method": "server/discover" },
     );
     expect(discover.status).toBe(200);
     // JSON-RPC envelope from the live server: the cast names the shape this
@@ -441,7 +446,7 @@ describe("MCP endpoint", () => {
         method: "tools/list",
         params: { _meta: MODERN_META },
       },
-      { "Mcp-Method": "tools/list" },
+      { ...MODERN_HEADERS, "Mcp-Method": "tools/list" },
     );
     expect(list.status).toBe(200);
     const tools = (list.json as { result: { tools: { name: string }[] } })
@@ -634,7 +639,11 @@ describe("MCP endpoint", () => {
         method: "tools/call",
         params: { _meta: MODERN_META, name: "get_settings", arguments: {} },
       },
-      { "Mcp-Method": "tools/call", "Mcp-Name": "list_expenses" },
+      {
+        ...MODERN_HEADERS,
+        "Mcp-Method": "tools/call",
+        "Mcp-Name": "list_expenses",
+      },
     );
     expect(res.status).toBe(400);
   });

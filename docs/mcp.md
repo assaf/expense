@@ -230,11 +230,14 @@ curl -s https://expense.example.com/mcp \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 
 # 2026-07-28 stateless: every request carries the _meta envelope and the
-# standard Mcp-Method / Mcp-Name headers
+# standard Mcp-Method / Mcp-Name headers, and names its revision in
+# MCP-Protocol-Version too. The transport answers 400 when the header and the
+# body envelope disagree, so a hand-written request needs both.
 curl -s https://expense.example.com/mcp \
   -H "Authorization: Bearer oat_…" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -H "Mcp-Method: tools/call" \
   -H "Mcp-Name: get_settings" \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}},"name":"get_settings","arguments":{}}}'
