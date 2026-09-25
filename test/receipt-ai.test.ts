@@ -16,6 +16,7 @@ import {
   chatWithTools,
   extractReceipt,
   LLMError,
+  suppressesThinking,
 } from "~/lib/receipt-ai.server";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 
@@ -126,6 +127,26 @@ describe("chatWithTools provider shapes", () => {
     });
     await expect(call).rejects.toBeInstanceOf(LLMError);
     await expect(call).rejects.toThrow(/unreachable/i);
+  });
+});
+
+describe("thinking suppression by provider and model", () => {
+  it("disables thinking for DeepSeek and Z.AI's GLM-4.7 text models", () => {
+    expect(
+      suppressesThinking("https://api.deepseek.com", "deepseek-v4-flash"),
+    ).toBe(true);
+    expect(
+      suppressesThinking("https://api.z.ai/api/paas/v4", "glm-4.7-flash"),
+    ).toBe(true);
+  });
+
+  it("leaves the GLM-V vision models and other providers alone", () => {
+    expect(
+      suppressesThinking("https://api.z.ai/api/paas/v4", "glm-4.6v-flash"),
+    ).toBe(false);
+    expect(suppressesThinking("https://api.openai.com/v1", "gpt-5.1")).toBe(
+      false,
+    );
   });
 });
 

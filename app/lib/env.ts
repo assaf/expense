@@ -168,6 +168,17 @@ export const LLM_MODEL =
 const llmMaxTokens = Number(env.LLM_MAX_TOKENS ?? 500);
 export const LLM_MAX_TOKENS =
   Number.isFinite(llmMaxTokens) && llmMaxTokens > 0 ? llmMaxTokens : 500;
+// Z.AI's free GLM tier queues requests for 20-60s before the first token;
+// 30s timed out most extraction calls, so the default is generous and the
+// value is overridable for faster providers.
+const llmTimeoutMs = Number(env.LLM_REQUEST_TIMEOUT_MS ?? 120_000);
+export const LLM_REQUEST_TIMEOUT_MS =
+  Number.isFinite(llmTimeoutMs) && llmTimeoutMs > 0 ? llmTimeoutMs : 120_000;
+
+/** Model for the Insights chat, decoupled from the receipt-extraction model
+ * so the two can move independently (a smarter chat model, a cheaper
+ * extractor). Defaults to `LLM_MODEL`. */
+export const LLM_CHAT_MODEL = env.LLM_CHAT_MODEL ?? LLM_MODEL;
 
 /**
  * Model for image/receipt vision calls (OpenAI-compatible). Defaults to

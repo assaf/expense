@@ -12,6 +12,7 @@ import {
   LLM_MAX_TOKENS,
   LLM_VISION_MAX_TOKENS,
   LLM_VISION_MODEL,
+  LLM_REQUEST_TIMEOUT_MS,
   LLM_MODEL,
   APP_EMAIL,
 } from "~/lib/env";
@@ -564,7 +565,6 @@ const LLM_ALERT_INTERVAL_MS = 24 * 60 * 60 * 1000;
  * carries a timeout; without one a provider that accepts the connection and
  * then stalls hangs an interactive request (or eats a drain's whole budget)
  * until the platform kills the function. */
-const LLM_REQUEST_TIMEOUT_MS = 30_000;
 
 export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
   if (!(err instanceof LLMError)) return;
@@ -625,13 +625,32 @@ export async function chatCompletion(
  * continue the conversation (see insights-ai's answer loop). */
 export async function chatWithTools(
   messages: ChatMessage[],
-  opts: { tools: ToolSpec[]; maxTokens?: number; signal?: AbortSignal },
+  opts: {
+    tools: ToolSpec[];
+    maxTokens?: number;
+    signal?: AbortSignal;
+    /** Model override: the Insights chat passes `LLM_CHAT_MODEL`. */
+    model?: string;
+  },
 ): Promise<{ content: string; toolCalls: ToolCall[] }> {
   const message = await llmMessage(messages, opts);
   return {
     content: message.content ?? "",
     toolCalls: message.tool_calls ?? [],
   };
+}
+
+/** Providers/models that accept `thinking: {type: "disabled"}`: DeepSeek's
+ * endpoint, and Z.AI's GLM-4.7 text models — which otherwise reason by
+ * default and exhaust small max_tokens budgets before emitting any content
+ * (finish_reason "length", empty answer). The GLM-V vision models are a
+ * different family and don't take the param, so this is keyed off the
+ * resolved model, not just the provider. */
+export function suppressesThinking(baseUrl: string, model: string): boolean {
+  return (
+    baseUrl.includes("api.deepseek.com") ||
+    (baseUrl.includes("api.z.ai") && model.startsWith("glm-4.7"))
+  );
 }
 
 function providerLabelOf(): string {
@@ -672,10 +691,10 @@ async function llmMessage(
   }
   // Tool rounds send their own message list (assistant tool_calls + tool
   // results), so only the image form rewrites the last message.
-  const isDeepSeek = LLM_BASE_URL.includes("api.deepseek.com");
   const providerLabel = providerLabelOf();
+  const model = opts.model ?? LLM_MODEL;
   const body = {
-    model: opts.model ?? LLM_MODEL,
+    model,
     messages: opts.image
       ? [...messages.slice(0, -1), { role: "user", content }]
       : messages,
@@ -683,7 +702,7 @@ async function llmMessage(
     ...(opts.tools && opts.tools.length > 0
       ? { tools: opts.tools, tool_choice: "auto" }
       : {}),
-    ...(isDeepSeek && opts.thinking !== false
+    ...(suppressesThinking(LLM_BASE_URL, model) && opts.thinking !== false
       ? { thinking: { type: "disabled" } }
       : {}),
     temperature: 0.1,

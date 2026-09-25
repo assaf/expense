@@ -67,9 +67,9 @@ function loadPdfjs() {
  * (scanned PDF) the pages are rasterized to a PNG and read by the image path
  * below. Images are normalized (HEIC/webp→png, alpha flattened, downscaled)
  * and extracted with the RECEIPT_OCR_MODE backend:
- *  - "auto" (default): DeepSeek vision first (no local OCR CPU on the happy
- *    path); tesseract runs only when the provider errors
- *  - "deepseek": DeepSeek vision only
+ *  - "auto" (default): the provider's vision model first (no local OCR CPU
+ *    on the happy path); tesseract runs only when the provider errors
+ *  - "deepseek": vision model only, no local OCR (name is historical)
  *  - "tesseract": local OCR only (tesseract.js, worker/core/lang fetched from
  *    a CDN at runtime, which is safe for serverless bundles)
  */

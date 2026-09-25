@@ -1,3 +1,4 @@
+import { LLM_CHAT_MODEL } from "~/lib/env";
 import {
   chatCompletion,
   chatWithTools,
@@ -407,6 +408,7 @@ export async function answerInsightQuestion(input: {
             content: await chatCompletion(messages, {
               maxTokens: ANSWER_MAX_TOKENS,
               signal: input.signal,
+              model: LLM_CHAT_MODEL,
             }),
             toolCalls: [] as ToolCall[],
           }
@@ -417,6 +419,7 @@ export async function answerInsightQuestion(input: {
             ],
             maxTokens: ANSWER_MAX_TOKENS,
             signal: input.signal,
+            model: LLM_CHAT_MODEL,
           });
     if (toolCalls.length === 0) {
       return reply(content);
