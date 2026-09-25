@@ -30,11 +30,18 @@ import type { ToolCall } from "~/lib/receipt-ai.server";
 // these tests cover the prompt contract, validation, and fallbacks, not
 // the API client (covered by the receipt flows). chatWithTools is mocked
 // too: the answer step's tool loop must not reach the network here.
-vi.mock("~/lib/receipt-ai.server", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  chatCompletion: vi.fn(),
-  chatWithTools: vi.fn(async () => ({ content: "", toolCalls: [] })),
-}));
+vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
+  // One mock backs both entry points: the tool loop now streams through
+  // streamChatRound, so the dispatch tests configure either name and both
+  // see the same calls.
+  const chatWithTools = vi.fn(async () => ({ content: "", toolCalls: [] }));
+  return {
+    ...(await importOriginal<object>()),
+    chatCompletion: vi.fn(),
+    chatWithTools,
+    streamChatRound: chatWithTools,
+  };
+});
 // The plan tools themselves are covered in test/insights-mileage-tool.test.ts
 // and test/insights-expense-tool.test.ts (fake resolvers) and end-to-end in
 // test/insights-route.test.ts: here only the answer step's dispatch is under

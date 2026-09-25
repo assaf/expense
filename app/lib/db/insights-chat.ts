@@ -250,6 +250,49 @@ export async function appendExchange(
   console.warn("[insights] dropped an exchange after repeated write conflicts");
 }
 
+/** Fill in the chart fields of an already-saved exchange: the stream route
+ * appends the answer the moment it finishes and names the chart after a
+ * second model call. The exchange is found by its question in the newest
+ * conversation, last match first. Same optimistic swap as appendExchange;
+ * a lost race costs only the chart, so it warns instead of retrying past
+ * three. updatedAt is untouched (see markFiledExpenseDeleted). */
+export async function updateLastExchange(
+  userId: string,
+  question: string,
+  patch: {
+    chart: boolean;
+    shape: ChartShape;
+    query: string;
+    months: number;
+    title: string;
+  },
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await db.orm.public.InsightConversation.where((c) =>
+      c.userId.eq(userId),
+    )
+      .orderBy((c) => c.id.desc())
+      .first();
+    if (!row) return;
+    const entries = readEntries(row.messages);
+    const index = entries.findLastIndex(
+      (entry) => entry.exchange?.question === question,
+    );
+    if (index < 0) return;
+    entries[index] = {
+      exchange: { ...entries[index]!.exchange!, ...patch },
+      raw: null,
+    };
+    if (
+      await swapMessages(row.id, row.messages, entriesForWrite(entries), {})
+    ) {
+      await bustConversationCache(userId);
+      return;
+    }
+  }
+  console.warn("[insights] dropped a chart update after repeated conflicts");
+}
+
 /** The transcript's own line for an exchange whose expense is gone: the
  * answer becomes "Logged ... (deleted afterwards)." An answer that does not
  * end in a sentence gets the note appended as it is. */

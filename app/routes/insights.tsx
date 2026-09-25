@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
-import { RevealText } from "~/components/RevealText";
 import { authLockedUntil, recordAuthFailure } from "~/lib/db/auth-attempts";
 import { PageShell } from "~/components/PageShell";
 import { Alert } from "~/components/ui/Alert";
@@ -72,6 +71,7 @@ import { periodScope, withPeriodRange } from "~/lib/insight-periods";
 import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
 import { requireIntent } from "~/lib/route-helpers.server";
+import { Markdown } from "~/components/Markdown";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
 
@@ -505,6 +505,29 @@ interface ConfirmOk {
 
 /** One question/answer exchange in the conversation. Chart exchanges
  * carry their own filter and window so they render their own chart. */
+type StreamEvent =
+  | {
+      type: "translation";
+      query: string;
+      title: string;
+      chart: boolean;
+      shape: ChartShape;
+      months: number;
+    }
+  | { type: "delta"; text: string }
+  | { type: "tools" }
+  | { type: "error"; error: string }
+  | {
+      type: "done";
+      query: string;
+      title: string;
+      chart: boolean;
+      shape: ChartShape;
+      months: number;
+      answer: string;
+      pending?: PendingProposal;
+    };
+
 interface Exchange {
   question: string;
   answer: string;
@@ -523,8 +546,16 @@ interface Exchange {
   /** What that link points at; the card is gone by the time it renders. */
   proposalKind?: ProposalKind;
   /** The user stopped this question before it answered; client-only, never
-   * persisted (see markPendingStopped). */
+   * persisted. */
   stopped?: boolean;
+  /** Client-only identity for an exchange this session created: the stream
+   * reader targets its updates by it, so a partially streamed answer stays
+   * addressable after the first delta. Not persisted; the saved
+   * conversation has its own ids. */
+  id?: string;
+  /** The model is running a tool query; shown until the answer text starts
+   * or the final answer lands. */
+  checking?: boolean;
 }
 
 const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
@@ -532,22 +563,6 @@ const EXAMPLES = ["my AI expenses", "coffee", "software", "travel"];
 /** How many lines the composer's question field grows to before it starts to
  * scroll: past that it would eat the transcript it is asking about. */
 const ASK_MAX_LINES = 5;
-
-/** The newest exchange with no answer yet: the question the composer is
- * waiting on, or -1 when nothing is in flight. A stopped exchange is not
- * pending: its request was aborted, so nothing is coming for it. */
-function pendingIndex(t: Exchange[]): number {
-  const last = t[t.length - 1];
-  return last && last.answer === "" && !last.stopped ? t.length - 1 : -1;
-}
-
-/** Mark the in-flight question stopped: the card keeps the question the user
- * asked and drops the "Thinking…" placeholder. Pure. */
-function markPendingStopped(t: Exchange[]): Exchange[] {
-  const i = pendingIndex(t);
-  if (i === -1) return t;
-  return t.map((ex, j) => (j === i ? { ...ex, stopped: true } : ex));
-}
 
 /** The proposal card's chrome, shared by both kinds: the amber eyebrow, the
  * primary line, the facts row and the muted note. */
@@ -647,7 +662,6 @@ export function ExpenseTable({ expenses }: { expenses: InsightExpense[] }) {
 }
 
 export default function InsightsPage({ loaderData }: Route.ComponentProps) {
-  const fetcher = useFetcher<typeof action>();
   const newFetcher = useFetcher<typeof action>();
   const confirmFetcher = useFetcher<typeof action>();
   const [ask, setAsk] = useState("");
@@ -658,53 +672,18 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // proposal this reply answers.
   const [confirmedIndex, setConfirmedIndex] = useState<number | null>(null);
   const today = useToday();
-  // True while the newest answer is being revealed; restored history
-  // never animates.
-  const [revealing, setRevealing] = useState(false);
-  // The composer's own failure line. Held in state rather than read from
-  // fetcher.data, so it clears the moment the next question is sent (and
-  // never reappears from a fetcher's retained data).
+  // The in-flight question streams: the controller aborts it on Stop, and
+  // the flag flips the composer between Ask and Stop.
+  const streamAbort = useRef<AbortController | undefined>(undefined);
+  const inFlight = useRef<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  // The composer's own failure line. Held in state so it clears the moment
+  // the next question is sent, and never reappears from retained data.
   const [composerError, setComposerError] = useState<string | null>(null);
   // The composer form, submitted imperatively: the hidden intent/today/
   // localTime/tz inputs stay the single source of the request body, and
   // `text` is overridden with the trimmed question.
   const formRef = useRef<HTMLFormElement>(null);
-
-  const result = fetcher.data as TranslateOk | TranslateErr | undefined;
-  useEffect(() => {
-    if (!result) return;
-    if (fetcher.state !== "idle") return;
-    // Fill the answer into the question the composer is waiting on (pushed
-    // optimistically at submit time); idempotent across re-renders, and a
-    // stopped card is skipped: its row was never recorded.
-    setTranscript((t) => {
-      const i = pendingIndex(t);
-      if (i === -1) return t;
-      const copy = [...t];
-      copy[i] = {
-        ...copy[i]!,
-        answer: result.ok
-          ? result.answer
-          : (result.error ?? "Something went wrong."),
-        ...(result.ok
-          ? {
-              chart: result.chart,
-              shape: result.shape,
-              query: result.query,
-              months: result.months,
-              title: result.title,
-              ...(result.pending ? { pending: result.pending } : {}),
-            }
-          : {}),
-      };
-      return copy;
-    });
-    // A fresh answer reveals progressively; see RevealText.
-    setRevealing(true);
-    setComposerError(
-      result.ok ? null : (result.error ?? "Something went wrong."),
-    );
-  }, [result, fetcher.state]);
 
   // A confirmed proposal: the card is replaced by the exchange the server
   // recorded, so the transcript reads the same after a reload.
@@ -753,7 +732,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   // header form): the intent has no failure branch, so waiting for the
   // round trip would only make the button feel broken.
 
-  const busy = fetcher.state !== "idle";
+  const busy = streaming;
   // While a question is in flight an empty field means Stop; a field with the
   // next question means Ask (which interrupts). The composer is never dead.
   const stopping = busy && !ask.trim();
@@ -765,9 +744,16 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     const text = ask.trim();
     const form = formRef.current;
     if (!text || !form) return;
+    // Barge-in: the in-flight question is marked stopped and its request
+    // aborted before the new one goes out.
+    streamAbort.current?.abort();
+    const id = crypto.randomUUID();
     setTranscript((t) => [
-      ...markPendingStopped(t),
+      ...t.map((ex) =>
+        ex.id === inFlight.current ? { ...ex, stopped: true } : ex,
+      ),
       {
+        id,
         question: text,
         answer: "",
         chart: false,
@@ -777,19 +763,114 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         title: "",
       },
     ]);
+    inFlight.current = id;
     setAsk("");
-    setRevealing(false);
     setComposerError(null);
-    // Abort the in-flight question before submitting: reset() is the
-    // documented way to cancel a fetcher, and the interrupted answer must
-    // not land in the new card.
-    if (busy) fetcher.reset();
+    const controller = new AbortController();
+    streamAbort.current = controller;
+    setStreaming(true);
     const data = new FormData(form);
     data.set("text", text);
-    // flushSync flips the composer to Stop in the same paint as the click,
-    // instead of riding a transition behind the reveal's interval. The
-    // submission itself reports through fetcher state, not this promise.
-    void fetcher.submit(data, { method: "post", flushSync: true });
+    data.set("intent", "stream");
+    void (async () => {
+      try {
+        const res = await fetch("/insights/stream", {
+          method: "post",
+          body: data,
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) {
+          throw new Error(
+            "The AI service didn't answer. Try again in a moment.",
+          );
+        }
+        const reader = res.body
+          .pipeThrough(new TextDecoderStream())
+          .getReader();
+        let buffer = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += value;
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() ?? "";
+          for (const frame of frames) {
+            const line = frame.split("\n").find((l) => l.startsWith("data:"));
+            if (!line) continue;
+            let event: StreamEvent;
+            try {
+              event = JSON.parse(line.slice(5).trim()) as StreamEvent;
+            } catch {
+              continue;
+            }
+            // Every update targets this exchange by its id: a partially
+            // streamed answer must stay addressable, which "newest empty
+            // one" matching got wrong the moment the first delta landed.
+            if (event.type === "translation") {
+              setTranscript((t) =>
+                t.map((ex) =>
+                  ex.id === id
+                    ? {
+                        ...ex,
+                        chart: event.chart,
+                        shape: event.shape,
+                        query: event.query,
+                        months: event.months,
+                        title: event.title,
+                      }
+                    : ex,
+                ),
+              );
+            } else if (event.type === "tools") {
+              setTranscript((t) =>
+                t.map((ex) => (ex.id === id ? { ...ex, checking: true } : ex)),
+              );
+            } else if (event.type === "delta") {
+              setTranscript((t) =>
+                t.map((ex) =>
+                  ex.id === id
+                    ? { ...ex, answer: ex.answer + event.text, checking: false }
+                    : ex,
+                ),
+              );
+            } else if (event.type === "done") {
+              // The answer completes the exchange; the chart, if any, is
+              // translated afterwards and arrives as its own event.
+              setTranscript((t) =>
+                t.map((ex) =>
+                  ex.id === id
+                    ? {
+                        ...ex,
+                        answer: event.answer,
+                        checking: false,
+                        ...(event.pending ? { pending: event.pending } : {}),
+                      }
+                    : ex,
+                ),
+              );
+            } else if (event.type === "error") {
+              setComposerError(event.error);
+              setTranscript((t) =>
+                t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
+              );
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          setComposerError(
+            "The AI service didn't answer. Try again in a moment.",
+          );
+          setTranscript((t) =>
+            t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
+          );
+        }
+      } finally {
+        if (inFlight.current === id) inFlight.current = null;
+        setStreaming(false);
+        streamAbort.current = undefined;
+      }
+    })();
     // Keep the field hot: the next question is typed, not re-targeted.
     askRef.current?.focus({ preventScroll: true });
   };
@@ -797,12 +878,19 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
   /** Stop waiting on the in-flight question. Its request is aborted, so the
    * server records nothing. */
   const stopAnswer = () => {
-    const i = pendingIndex(transcript);
-    const question = i === -1 ? null : transcript[i]!.question;
-    setTranscript(markPendingStopped);
+    const id = inFlight.current;
+    const question =
+      id === null
+        ? null
+        : (transcript.find((ex) => ex.id === id)?.question ?? null);
+    if (id !== null) {
+      setTranscript((t) =>
+        t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
+      );
+    }
     // Hand the question back, unless the user has already typed the next one.
     if (question && !ask.trim()) setAsk(question);
-    fetcher.reset();
+    streamAbort.current?.abort();
     askRef.current?.focus({ preventScroll: true });
   };
 
@@ -1019,7 +1107,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           method="post"
           onSubmit={() => {
             setTranscript([]);
-            setRevealing(false);
             setComposerError(null);
           }}
         >
@@ -1080,20 +1167,18 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                   {ex.question}
                 </p>
                 {ex.answer ? (
-                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-300 [&_strong]:font-semibold [&_strong]:text-gray-800 dark:[&_strong]:text-gray-100">
-                    <RevealText
-                      text={ex.answer}
-                      reveal={revealing && i === views.length - 1}
-                      onDone={() => setRevealing(false)}
-                    />
+                  <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                    <Markdown text={ex.answer} />
                   </div>
                 ) : (
                   <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                     {ex.stopped
                       ? "Stopped."
-                      : busy && i === views.length - 1
-                        ? "Thinking…"
-                        : "No answer recorded."}
+                      : ex.checking
+                        ? "Checking the books…"
+                        : busy && i === views.length - 1
+                          ? "Thinking…"
+                          : "No answer recorded."}
                   </p>
                 )}
                 {/* The proposal: the model resolved it, the user files it.
@@ -1199,9 +1284,9 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
                     </Link>
                   </p>
                 ) : null}
-                {/* Chart + table wait for the text reveal to finish, so
-                 * the answer streams in like a sentence, not a pop-in. */}
-                {ex.chart && today && !(revealing && i === views.length - 1) ? (
+                {/* The chart lands when the model translates the question;
+                 * the answer text streams in below it. */}
+                {ex.chart && today ? (
                   <>
                     <div className="mb-3 mt-3 flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -1231,9 +1316,8 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
       </div>
 
       <Card className="p-4">
-        <fetcher.Form
+        <form
           ref={formRef}
-          method="post"
           className="flex flex-col gap-2"
           onSubmit={(e) => {
             e.preventDefault();
@@ -1332,7 +1416,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
               </button>
             ))}
           </div>
-        </fetcher.Form>
+        </form>
       </Card>
     </PageShell>
   );

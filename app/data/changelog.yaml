@@ -45,6 +45,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-09-25"
+    changes:
+      - type: improvement
+        text: "The Insights answer now starts streaming the moment you ask, with no model call in front of it, and the chart is drawn right after the answer finishes rather than holding it up. The card also tells you when it is checking your books mid-answer, and stopping or re-asking mid-answer leaves the card in a clean state."
   - date: "2026-09-24"
     changes:
       - type: fix

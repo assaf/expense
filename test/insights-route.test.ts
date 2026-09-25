@@ -50,15 +50,20 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("~/lib/receipt-ai.server")>();
   const chatCompletion = vi.fn();
+  // One mock backs both entry points: the answer loop now streams through
+  // streamChatRound, so per-test chatWithTools configurations keep driving
+  // the tool rounds either way.
+  const chatWithTools = vi.fn(
+    async (messages: ChatMessage[], opts: { maxTokens?: number }) => ({
+      content: await chatCompletion(messages, opts),
+      toolCalls: [] as ToolCall[],
+    }),
+  );
   return {
     ...actual,
     chatCompletion,
-    chatWithTools: vi.fn(
-      async (messages: ChatMessage[], opts: { maxTokens?: number }) => ({
-        content: await chatCompletion(messages, opts),
-        toolCalls: [] as ToolCall[],
-      }),
-    ),
+    chatWithTools,
+    streamChatRound: chatWithTools,
   };
 });
 
