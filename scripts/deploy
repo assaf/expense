@@ -40,9 +40,9 @@ else
 fi
 
 echo -e "\033[0;32m--- Step 3: Sync production database schema ---\033[0m"
-vercel env pull --environment=production --yes .env.prod.pull
+vercel env pull --environment=production --yes .env.prod
 set -a
-source .env.prod.pull
+source .env.prod
 set +a
 export DATABASE_URL="$DATABASE_URL_UNPOOLED"
 if [ "$SKIP_DB_SYNC" = "1" ]; then

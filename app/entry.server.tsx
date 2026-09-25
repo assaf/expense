@@ -24,14 +24,25 @@ if (process.env.VERCEL_ENV === "production") {
       // Matches the release the build created (sourcemaps, release health).
       release: process.env.VERCEL_GIT_COMMIT_SHA || undefined,
 
+      // v11 collects user info, cookies, HTTP headers and bodies, DB query
+      // data and GenAI inputs by default; this app's posture is v10's
+      // restrictive default, so pin it instead of inheriting the broader one.
       dataCollection: {
-        // To disable sending user data and HTTP bodies, uncomment the lines below:
-        // userInfo: false,
-        // httpBodies: [],
+        userInfo: false,
+        cookies: false,
+        httpHeaders: {
+          request: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+          response: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+        },
+        httpBodies: [],
+        urlQueryParams: {
+          deny: ["forwarded", "-ip", "remote-", "via", "-user"],
+        },
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        queues: false,
+        graphQL: { document: false, variables: false },
       },
-
-      // Enable logs to be sent to Sentry
-      enableLogs: true,
 
       // Errors are always captured; the sample rate only governs performance
       // data. Tracing every request roughly doubled the CPU each invocation

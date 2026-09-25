@@ -31,15 +31,15 @@ peerDependencyRules:
 patchedDependencies:
   tesseract.js@7.0.0: patches/tesseract.js@7.0.0.patch
 minimumReleaseAgeExclude:
-  - "@prisma/cli-engine@0.2.3"
-  - "@prisma/orm-family-sql@8.0.0-rc.7"
-  - "@prisma/orm-framework@8.0.0-rc.7"
-  - "@prisma/orm-postgres@8.0.0-rc.7"
-  - "@prisma/orm-target-postgres@8.0.0-rc.7"
-  - "@prisma/orm-toolchain@8.0.0-rc.7"
-  - "@prisma/composer-cli@0.14.0"
-  - "@prisma/composer@0.14.0"
-  - prisma@8.0.0-rc.10
+  - "@prisma/cli-engine@0.6.1"
+  - "@prisma/orm-family-sql@8.0.0-rc.7 || 8.0.0-rc.12"
+  - "@prisma/orm-framework@8.0.0-rc.7 || 8.0.0-rc.12"
+  - "@prisma/orm-postgres@8.0.0-rc.7 || 8.0.0-rc.12"
+  - "@prisma/orm-target-postgres@8.0.0-rc.7 || 8.0.0-rc.12"
+  - "@prisma/orm-toolchain@8.0.0-rc.7 || 8.0.0-rc.12"
+  - "@prisma/composer-cli@0.14.0 || 0.23.0"
+  - "@prisma/composer@0.14.0 || 0.23.0"
+  - prisma@8.0.0-rc.17
   - "@voidzero-dev/vite-plus-core@1.0.0-rc.0"
   - "@voidzero-dev/vite-plus-darwin-arm64@1.0.0-rc.0"
   - "@voidzero-dev/vite-plus-darwin-x64@1.0.0-rc.0"

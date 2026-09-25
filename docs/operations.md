@@ -282,8 +282,9 @@ while the tick itself ran healthy.
 
 `vercel env pull` REDACTS sensitive env vars as the literal string
 `[SENSITIVE]` — scripts that need real secrets (EMAIL_TOKEN_ENCRYPTION_KEY,
-FASTMAIL_TOKEN, SENTRY_AUTH_TOKEN) must source them from `.env` or read
-them from the Vercel dashboard, not from a pulled env file.
+FASTMAIL_TOKEN) must source them from `.env` or read them from the Vercel
+dashboard, not from a pulled env file. (`SENTRY_AUTH_TOKEN` used to be on
+this list; it is stored as type Config, so pulls now deliver it in full.)
 
 Related trap: `.env.prod`'s `FASTMAIL_TOKEN` is a short placeholder, not a
 working token (401 on the JMAP session endpoint). The real send token lives
@@ -336,9 +337,14 @@ lazy list above.
 Both vars must be set in Vercel;
 `VITE_SENTRY_DSN` is baked at build time, `SENTRY_DSN` is read at runtime.
 `SENTRY_AUTH_TOKEN` is now SET (organization token, Vercel production env;
-create at Sentry → org settings → Auth Tokens). It lets the vite plugin
-(`sentryReactRouter` in `vite.config.ts`) create releases + upload
-sourcemaps at build time. Releases are named after `VERCEL_GIT_COMMIT_SHA`
+create at Sentry → org settings → Auth Tokens). It must be stored as type
+Config, NOT Sensitive/Secret: sensitive vars are withheld from the build
+step, and the push then fails with only "Not authenticated. Run 'sentry
+auth login' first." as a clue. The push runs in production builds only
+(gated on `VERCEL_ENV`): the vite plugin (`sentryReactRouter` from
+`@sentry/react-router/vite` in `vite.config.ts`) and the `buildEnd` hook in
+`react-router.config.ts` create releases + upload sourcemaps; local and CI
+builds mount neither and log nothing. Releases are named after `VERCEL_GIT_COMMIT_SHA`
 (override with `SENTRY_RELEASE`); client events get the same release via
 `VITE_SENTRY_RELEASE`, injected at build time by `vite.config.ts`, and the
 server reads `VERCEL_GIT_COMMIT_SHA` at runtime, so release health and

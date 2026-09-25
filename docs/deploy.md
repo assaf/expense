@@ -47,7 +47,11 @@ Flags (any order): `--skip-tests`, `--skip-db-sync`. The latter skips
 `prisma db update`. Agent-driven deploys that skip the sync can verify
 schema drift separately:
 `pnpm prisma db verify` (with `DATABASE_URL=$DATABASE_URL_UNPOOLED` from
-`.env.prod.pull`).
+`.env.prod`).
 
-Sentry releases/sourcemaps work through this script because it sources
-`.env.prod.pull` (see `docs/operations.md` → `SENTRY_AUTH_TOKEN`).
+Sentry releases/sourcemaps are pushed by the production build itself (the
+`sentryReactRouter` vite plugin and the `buildEnd` hook in
+`react-router.config.ts`), which read `SENTRY_AUTH_TOKEN` from Vercel's
+stored env; the `source .env.prod` here feeds only the database sync. Local
+and CI builds skip the push entirely (see `docs/operations.md` →
+`SENTRY_AUTH_TOKEN`).

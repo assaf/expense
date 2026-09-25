@@ -1,4 +1,4 @@
-import { sentryReactRouter } from "@sentry/react-router";
+import { sentryReactRouter } from "@sentry/react-router/vite";
 import { prismaVitePlugin } from "@prisma/orm-postgres/vite-plugin-contract-emit";
 import { resolve } from "node:path";
 import { reactRouter } from "@react-router/dev/vite";
@@ -40,6 +40,11 @@ export default defineConfig((config) => {
         "test/fixtures/**",
         // tsgolint overflows on vite config generics; tsc checks it cleanly.
         "vite.config.ts",
+        // Generated contract snapshots, one per storage hash. They pin the
+        // orm package's export paths at the time each was written, so after
+        // an @prisma/orm-* bump old snapshots reference subpaths that no
+        // longer exist; tsconfig keeps them out of tsc's program entirely.
+        "migrations/**",
       ],
       options: {
         reportUnusedDisableDirectives: "warn",
@@ -70,23 +75,34 @@ export default defineConfig((config) => {
       // evaluates without a `require`, so every run logged a failed config
       // graph root before emitting anyway.
       ...(process.env.VITEST ? [] : [prismaVitePlugin("prisma.config.ts")]),
-      sentryReactRouter(
-        {
-          org: "labnotes",
-          project: "expense",
-          authToken: process.env.SENTRY_AUTH_TOKEN,
-          telemetry: false,
-          // Release name for sourcemaps + release health. Vercel provides the
-          // commit SHA at build time; SENTRY_RELEASE overrides if ever needed.
-          // (The react-router wrapper forwards a release OBJECT; a bare string
-          // gets spread into char indices and the name is silently lost.)
-          release: {
-            name:
-              process.env.SENTRY_RELEASE ?? process.env.VERCEL_GIT_COMMIT_SHA,
-          },
-        },
-        config,
-      ),
+      // Sentry's release + sourcemap push belongs to production deploys: the
+      // plugin injects the sentryConfig the buildEnd hook reads, then pushes
+      // in its writeBundle pass. Local and CI builds skip it entirely, and
+      // the buildEnd hook in react-router.config.ts skips with them, so a
+      // missing or placeholder SENTRY_AUTH_TOKEN cannot produce build noise.
+      ...(process.env.VERCEL_ENV === "production"
+        ? [
+            sentryReactRouter(
+              {
+                org: "labnotes",
+                project: "expense",
+                authToken: process.env.SENTRY_AUTH_TOKEN,
+                telemetry: false,
+                // Release name for sourcemaps + release health. Vercel provides
+                // the commit SHA at build time; SENTRY_RELEASE overrides if ever
+                // needed. (The react-router wrapper forwards a release OBJECT; a
+                // bare string gets spread into char indices and the name is
+                // silently lost.)
+                release: {
+                  name:
+                    process.env.SENTRY_RELEASE ??
+                    process.env.VERCEL_GIT_COMMIT_SHA,
+                },
+              },
+              config,
+            ),
+          ]
+        : []),
     ],
 
     resolve: {

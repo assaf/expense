@@ -18,6 +18,20 @@ if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
     // load when handed the latter).
     integrations: [Sentry.reactRouterTracingIntegration()],
     tracesSampleRate: 0.2,
+    // Mirrors the server init's restrictive baseline: v11 would collect
+    // user info, cookies and HTTP data by default.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: {
+        request: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+        response: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+      },
+      httpBodies: [],
+      urlQueryParams: {
+        deny: ["forwarded", "-ip", "remote-", "via", "-user"],
+      },
+    },
     // Browser errors are mostly ours; don't blow up the quota with noise.
     ignoreErrors: [
       // Browser extension / autofill noise (LastPass, Bitwarden, Chrome).
