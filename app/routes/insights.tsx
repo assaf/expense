@@ -745,13 +745,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     const form = formRef.current;
     if (!text || !form) return;
     // Barge-in: the in-flight question is marked stopped and its request
-    // aborted before the new one goes out.
+    // aborted before the new one goes out. The id is captured first: the
+    // updater runs after this handler returns, by which point inFlight
+    // already names the new exchange.
+    const interrupted = inFlight.current;
     streamAbort.current?.abort();
     const id = crypto.randomUUID();
     setTranscript((t) => [
-      ...t.map((ex) =>
-        ex.id === inFlight.current ? { ...ex, stopped: true } : ex,
-      ),
+      ...t.map((ex) => (ex.id === interrupted ? { ...ex, stopped: true } : ex)),
       {
         id,
         question: text,

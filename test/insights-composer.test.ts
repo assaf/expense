@@ -22,10 +22,10 @@ import {
  * error boundary, and a growing answer does not yank a reader who scrolled
  * away from the bottom.
  *
- * Questions are answered with a real failure envelope captured from the
- * action (see answerWithFailure): the spawned test server runs
- * `NODE_ENV=production`, so its outbound network guard is off and it would
- * otherwise call the live provider — slow, paid, and unavailable in CI.
+ * Questions are answered by stubbing the composer's own wire (see
+ * stubStream): the spawned test server runs `NODE_ENV=production`, so its
+ * outbound network guard is off and it would otherwise call the live
+ * provider — slow, paid, and unavailable in CI.
  */
 
 /** The seeded transcript user (see seedTestData: user_test1). */
@@ -50,8 +50,10 @@ const QUESTION = "does coffee beat software?";
 /** Deliberately not one of the "Try:" chips, so a card locator for it is
  * unambiguous. */
 const SECOND = "double espresso";
-/** What every answer in this file says (see answerWithFailure). */
+/** The composer alert on a stubbed stream failure. */
 const FAILURE = "The AI service didn't answer. Try again in a moment.";
+/** The answer text a completed stubbed stream delivers. */
+const ANSWER = "Stubbed answer, streamed in.";
 
 beforeAll(async () => {
   // A long conversation, so the transcript scrolls and the cards are
@@ -70,48 +72,46 @@ beforeAll(async () => {
   }
 });
 
-/** One real failure envelope from the action, captured once per run: a
- * translate with no question, which the action answers without touching the
- * provider. Its message text is swapped for the one a transport failure
- * produces, so the assertions read like the user's experience; the wire
- * shape (a single-fetch turbo-stream of `{ok, error}`) is the server's own. */
-let envelope: { contentType: string; body: string } | null = null;
-
-async function answerWithFailure(page: Page, holdMs = 0): Promise<void> {
-  if (!envelope) {
-    const captured = await page.evaluate(async () => {
-      const res = await fetch("/insights.data", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ intent: "translate", text: "" }).toString(),
-      });
-      return {
-        contentType: res.headers.get("content-type") ?? "application/json",
-        body: await res.text(),
-      };
-    });
-    envelope = {
-      contentType: captured.contentType,
-      body: captured.body.replace("Type a question first.", FAILURE),
-    };
-  }
-  const answer = envelope;
+/** The stream route's event wire, stubbed: `mode: "answer"` replays a
+ * completed exchange (deltas then done, so the answer arrives the way the
+ * client applies it); `mode: "error"` replays a provider failure, which the
+ * composer shows as its inline alert. The hold keeps the request open for
+ * that long first — a real delay on the platform clock is the point: the
+ * in-flight assertions are about what the user sees while nothing has
+ * arrived. Fulfilling an aborted request is a no-op; the abort is the
+ * behavior under test. */
+async function stubStream(
+  page: Page,
+  opts: { holdMs?: number; mode?: "answer" | "error" } = {},
+): Promise<void> {
+  const { holdMs = 0, mode = "answer" } = opts;
   await page.route(
-    (url) => url.pathname === "/insights.data",
+    (url) => url.pathname === "/insights/stream",
     async (route) => {
       if (route.request().method() !== "POST") return route.continue();
-      // A real delay on the platform clock is the point: the assertions are
-      // about what the user sees while the request is still open.
       if (holdMs > 0) {
         const held = Promise.withResolvers<void>();
         setTimeout(held.resolve, holdMs);
         await held.promise;
       }
-      await route.fulfill({
-        status: 200,
-        headers: { "content-type": answer.contentType },
-        body: answer.body,
-      });
+      const events =
+        mode === "error"
+          ? [{ type: "error", error: FAILURE }]
+          : [
+              { type: "delta", text: ANSWER.slice(0, 10) },
+              { type: "delta", text: ANSWER.slice(10) },
+              { type: "done", answer: ANSWER },
+            ];
+      const body = events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+      try {
+        await route.fulfill({
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+          body,
+        });
+      } catch {
+        // The reader went away (Stop, barge-in): nothing left to fulfill.
+      }
     },
   );
 }
@@ -161,7 +161,7 @@ describe("insights composer", () => {
 
   it("sends optimistically: Stop is up before the answer lands", async () => {
     const page = watch(await goto("/insights"));
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
 
@@ -175,7 +175,7 @@ describe("insights composer", () => {
 
   it("stays usable while a question is in flight", async () => {
     const page = watch(await goto("/insights"));
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
 
@@ -189,7 +189,7 @@ describe("insights composer", () => {
 
   it("interrupts the in-flight question when the next one is sent", async () => {
     const page = watch(await goto("/insights"));
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
     await pwExpect(page.getByRole("button", { name: "Stop" })).toBeVisible();
@@ -207,9 +207,9 @@ describe("insights composer", () => {
       .locator(":scope > div > div")
       .filter({ has: page.getByText(SECOND, { exact: true }) });
     await pwExpect(second).toHaveCount(1);
-    await pwExpect(second.getByText(FAILURE)).toBeVisible();
+    await pwExpect(second.getByText(ANSWER)).toBeVisible();
     // Only that card: the stopped one never got an answer.
-    await pwExpect(cards.getByText(FAILURE)).toHaveCount(1);
+    await pwExpect(cards.getByText(ANSWER)).toHaveCount(1);
   });
 
   it("grows with a long question, up to five lines", async () => {
@@ -264,7 +264,7 @@ describe("insights composer", () => {
   it("sends on Enter and takes a newline on Shift+Enter", async () => {
     const page = watch(await goto("/insights"));
     // Held, so the in-flight state after Enter is observable.
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
     const field = page.locator("#insights-ask");
     const rest = (await field.boundingBox())!.height;
 
@@ -291,7 +291,7 @@ describe("insights composer", () => {
 
   it("stops on demand and hands the question back", async () => {
     const page = watch(await goto("/insights"));
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
     await pwExpect(page.getByRole("button", { name: "Stop" })).toBeVisible();
@@ -308,7 +308,7 @@ describe("insights composer", () => {
 
   it("reports a failure inline instead of replacing the page", async () => {
     const page = watch(await goto("/insights"));
-    await answerWithFailure(page);
+    await stubStream(page, { mode: "error" });
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
 
@@ -327,7 +327,7 @@ describe("insights composer", () => {
     await signIn(page, TEST_EMAIL, TEST_PASSWORD);
     await page.goto("/insights", { waitUntil: "load" });
     await waitForHydration(page);
-    await answerWithFailure(page, 1500);
+    await stubStream(page, { holdMs: 1500 });
 
     await page.fill("#insights-ask", QUESTION);
     await page.getByRole("button", { name: "Ask" }).click();
@@ -340,11 +340,13 @@ describe("insights composer", () => {
       el.scrollTop = 0;
     });
 
-    // The answer's last words only render when the reveal has run to the end,
-    // so waiting for them waits out the whole arrival. Scoped to the
-    // transcript, because the composer's alert carries the same sentence from
-    // the moment the reply lands.
-    await pwExpect(region.getByText(/Try again in a moment\./)).toBeVisible();
+    // Waiting for the answer's last words waits out the whole arrival, so
+    // the growth genuinely happens after the scroll. Scoped to the
+    // transcript, because the composer's alert carries the failure sentence
+    // from the moment the reply lands.
+    await pwExpect(
+      region.getByText(/Stubbed answer, streamed in\./),
+    ).toBeVisible();
     expect(await region.evaluate((el) => el.scrollTop)).toBe(0);
     await page.close();
   });
