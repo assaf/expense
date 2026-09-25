@@ -227,8 +227,11 @@ export async function translateInsightQuery(input: {
   ];
   const raw = await chatCompletion(messages, {
     json: true,
-    maxTokens: 200,
+    // GLM-5.3 always reasons before answering and those tokens share this
+    // budget; 200 left nothing for the JSON on real questions.
+    maxTokens: 800,
     signal: input.signal,
+    model: LLM_CHAT_MODEL,
   });
   return parseInsightTranslation(raw);
 }
@@ -396,6 +399,7 @@ export async function answerInsightQuestion(input: {
     const raw = await chatCompletion(messages, {
       maxTokens: ANSWER_MAX_TOKENS,
       signal: input.signal,
+      model: LLM_CHAT_MODEL,
     });
     return reply(raw);
   }

@@ -16,7 +16,7 @@ import {
   chatWithTools,
   extractReceipt,
   LLMError,
-  suppressesThinking,
+  thinkingParam,
 } from "~/lib/receipt-ai.server";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
 
@@ -130,23 +130,32 @@ describe("chatWithTools provider shapes", () => {
   });
 });
 
-describe("thinking suppression by provider and model", () => {
+describe("thinking param by provider and model", () => {
   it("disables thinking for DeepSeek and Z.AI's GLM-4.7 text models", () => {
     expect(
-      suppressesThinking("https://api.deepseek.com", "deepseek-v4-flash"),
-    ).toBe(true);
+      thinkingParam("https://api.deepseek.com", "deepseek-v4-flash"),
+    ).toEqual({ type: "disabled" });
     expect(
-      suppressesThinking("https://api.z.ai/api/paas/v4", "glm-4.7-flash"),
-    ).toBe(true);
+      thinkingParam("https://api.z.ai/api/paas/v4", "glm-4.7-flash"),
+    ).toEqual({ type: "disabled" });
   });
 
-  it("leaves the GLM-V vision models and other providers alone", () => {
+  it("uses the low level for Z.AI's GLM-5.3, which always thinks", () => {
     expect(
-      suppressesThinking("https://api.z.ai/api/paas/v4", "glm-4.6v-flash"),
-    ).toBe(false);
-    expect(suppressesThinking("https://api.openai.com/v1", "gpt-5.1")).toBe(
-      false,
-    );
+      thinkingParam("https://api.z.ai/api/paas/v4", "glm-5.3-flash"),
+    ).toEqual({ level: "low" });
+    expect(
+      thinkingParam("https://api.z.ai/api/paas/v4", "glm-5.3-flashx"),
+    ).toEqual({ level: "low" });
+  });
+
+  it("omits the param for the GLM-V vision models and other providers", () => {
+    expect(
+      thinkingParam("https://api.z.ai/api/paas/v4", "glm-4.6v-flash"),
+    ).toBeUndefined();
+    expect(
+      thinkingParam("https://api.openai.com/v1", "gpt-5.1"),
+    ).toBeUndefined();
   });
 });
 

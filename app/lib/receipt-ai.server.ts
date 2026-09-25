@@ -616,7 +616,11 @@ export async function chatCompletion(
   const message = await llmMessage(messages, opts);
   const contentStr = message.content ?? "";
   if (!contentStr)
-    throw new LLMError(`${providerLabelOf()} returned empty content`, 502, "");
+    throw new LLMError(
+      `${opts.model ?? LLM_MODEL}: ${providerLabelOf()} returned empty content`,
+      502,
+      "",
+    );
   return contentStr;
 }
 
@@ -640,17 +644,22 @@ export async function chatWithTools(
   };
 }
 
-/** Providers/models that accept `thinking: {type: "disabled"}`: DeepSeek's
- * endpoint, and Z.AI's GLM-4.7 text models — which otherwise reason by
- * default and exhaust small max_tokens budgets before emitting any content
- * (finish_reason "length", empty answer). The GLM-V vision models are a
- * different family and don't take the param, so this is keyed off the
- * resolved model, not just the provider. */
-export function suppressesThinking(baseUrl: string, model: string): boolean {
-  return (
-    baseUrl.includes("api.deepseek.com") ||
-    (baseUrl.includes("api.z.ai") && model.startsWith("glm-4.7"))
-  );
+/** The `thinking` request param each provider/model pair needs, or undefined
+ * when the param must be omitted. DeepSeek and Z.AI's GLM-4.7 text models
+ * accept `{type: "disabled"}`; Z.AI's GLM-5.3 always reasons and instead
+ * takes a level (`low`/`high`/`max` — sending `disabled` is error 1210), so
+ * it gets `{level: "low"}` to keep the reasoning from eating the output
+ * budget. The GLM-V vision models and other providers take no param. */
+export function thinkingParam(
+  baseUrl: string,
+  model: string,
+): { type?: string; level?: string } | undefined {
+  if (baseUrl.includes("api.deepseek.com")) return { type: "disabled" };
+  if (baseUrl.includes("api.z.ai")) {
+    if (model.startsWith("glm-4.7")) return { type: "disabled" };
+    if (model.startsWith("glm-5.3")) return { level: "low" };
+  }
+  return undefined;
 }
 
 function providerLabelOf(): string {
@@ -702,8 +711,8 @@ async function llmMessage(
     ...(opts.tools && opts.tools.length > 0
       ? { tools: opts.tools, tool_choice: "auto" }
       : {}),
-    ...(suppressesThinking(LLM_BASE_URL, model) && opts.thinking !== false
-      ? { thinking: { type: "disabled" } }
+    ...(thinkingParam(LLM_BASE_URL, model) && opts.thinking !== false
+      ? { thinking: thinkingParam(LLM_BASE_URL, model) }
       : {}),
     temperature: 0.1,
     max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
@@ -733,7 +742,7 @@ async function llmMessage(
     // missing, the app is not broken — so callers get the error envelope
     // they already handle instead of an unhandled throw.
     throw new LLMError(
-      `${providerLabel} unreachable: ${
+      `${model}: ${providerLabel} unreachable: ${
         err instanceof Error ? err.message : String(err)
       }`,
       502,
@@ -743,7 +752,7 @@ async function llmMessage(
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     const err = new LLMError(
-      `${providerLabel} API ${res.status}: ${text.slice(0, 500)}`,
+      `${model}: ${providerLabel} API ${res.status}: ${text.slice(0, 500)}`,
       res.status,
       text,
     );
@@ -751,7 +760,14 @@ async function llmMessage(
     throw err;
   }
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string; tool_calls?: unknown } }[];
+    choices?: {
+      finish_reason?: string;
+      message?: {
+        content?: string;
+        reasoning_content?: unknown;
+        tool_calls?: unknown;
+      };
+    }[];
   };
   const raw = data.choices?.[0]?.message ?? {};
   // The endpoint is untrusted: the dispatchers read `call.function.name` and
@@ -766,10 +782,20 @@ async function llmMessage(
     : [];
   const message = { content: raw.content, tool_calls: toolCalls };
   if (!message.content && toolCalls.length === 0) {
+    // The raw response is the only place that explains an empty answer:
+    // a finish_reason of "length" means the model spent the whole token
+    // budget on reasoning_content before writing anything.
     throw new LLMError(
-      `${providerLabel} returned neither content nor a tool call`,
+      `${model}: ${providerLabel} returned neither content nor a tool call`,
       502,
-      "",
+      JSON.stringify({
+        finish_reason: data.choices?.[0]?.finish_reason ?? null,
+        content_type: typeof raw.content,
+        reasoning_length:
+          typeof raw.reasoning_content === "string"
+            ? raw.reasoning_content.length
+            : 0,
+      }),
     );
   }
   return message;

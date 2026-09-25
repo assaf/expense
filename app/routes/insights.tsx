@@ -448,6 +448,13 @@ export async function action({ request, context }: Route.LoaderArgs) {
       return { ok: false as const, error: "Stopped." };
     }
     if (err instanceof LLMError) {
+      // The user-facing message stays generic; the server log carries the
+      // provider detail (bad key, quota, timeout) so failures are
+      // diagnosable from the dev-server output or Vercel logs.
+      console.error(
+        `[insights] LLM call failed (status ${err.status}): ${err.message}` +
+          (err.body ? ` — ${err.body.slice(0, 300)}` : ""),
+      );
       return {
         ok: false as const,
         error: "The AI service didn't answer. Try again in a moment.",
