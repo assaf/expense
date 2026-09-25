@@ -13,9 +13,9 @@ import {
   LLM_VISION_MODEL,
 } from "~/lib/env";
 import {
-  chatWithTools,
   extractReceipt,
   LLMError,
+  streamChatRound,
   thinkingParam,
 } from "~/lib/receipt-ai.server";
 import { FENCE_SENTINEL } from "~/lib/prompt-fence.server";
@@ -66,31 +66,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("chatWithTools provider shapes", () => {
+/** A streamed chat-completions response: one `data:` frame per chunk. */
+const sse = (chunks: object[]) =>
+  new Response(
+    chunks
+      .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+      .concat("data: [DONE]\n\n")
+      .join(""),
+    { status: 200 },
+  );
+
+describe("streamChatRound provider shapes", () => {
   it("drops a malformed tool call instead of handing it to a dispatcher", async () => {
     // The dispatch reads `call.function.name` / `.arguments` directly, so a
-    // call the provider sent without a `function` has to be dropped here.
+    // fragment the provider sent without a function body has to be dropped
+    // at assembly.
     vi.stubGlobal("fetch", async () =>
-      Response.json({
-        choices: [
-          {
-            message: {
-              content: "",
-              tool_calls: [
-                { id: "broken" },
-                {
-                  id: "ok",
-                  type: "function",
-                  function: { name: "query_expenses", arguments: "{}" },
-                },
-              ],
+      sse([
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [{ index: 0, id: "broken" }],
+              },
             },
-          },
-        ],
-      }),
+          ],
+        },
+        {
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 1,
+                    id: "ok",
+                    function: { name: "query_expenses", arguments: "{}" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ]),
     );
 
-    const result = await chatWithTools(
+    const result = await streamChatRound(
       [{ role: "user", content: "how much on coffee?" }],
       { tools: [] },
     );
@@ -105,12 +125,14 @@ describe("chatWithTools provider shapes", () => {
 
   it("treats a response with only malformed calls as no tool call", async () => {
     vi.stubGlobal("fetch", async () =>
-      Response.json({
-        choices: [{ message: { content: "", tool_calls: [{ id: "broken" }] } }],
-      }),
+      sse([
+        {
+          choices: [{ delta: { tool_calls: [{ index: 0, id: "broken" }] } }],
+        },
+      ]),
     );
     await expect(
-      chatWithTools([{ role: "user", content: "hi" }], { tools: [] }),
+      streamChatRound([{ role: "user", content: "hi" }], { tools: [] }),
     ).rejects.toThrow(/neither content nor a tool call/i);
   });
 
@@ -122,7 +144,7 @@ describe("chatWithTools provider shapes", () => {
     vi.stubGlobal("fetch", async () => {
       throw new Error("Blocked live network call in tests");
     });
-    const call = chatWithTools([{ role: "user", content: "hi" }], {
+    const call = streamChatRound([{ role: "user", content: "hi" }], {
       tools: [],
     });
     await expect(call).rejects.toBeInstanceOf(LLMError);

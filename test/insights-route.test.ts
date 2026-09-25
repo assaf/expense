@@ -17,7 +17,7 @@ import {
 import { sessionStorage, SESSION_USER_KEY } from "~/lib/auth.server";
 import {
   chatCompletion,
-  chatWithTools,
+  streamChatRound,
   type ChatMessage,
   type ToolCall,
 } from "~/lib/receipt-ai.server";
@@ -50,10 +50,9 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("~/lib/receipt-ai.server")>();
   const chatCompletion = vi.fn();
-  // One mock backs both entry points: the answer loop now streams through
-  // streamChatRound, so per-test chatWithTools configurations keep driving
-  // the tool rounds either way.
-  const chatWithTools = vi.fn(
+  // The answer loop's tool rounds delegate to the mocked chatCompletion,
+  // so tests that count or inspect the chat calls keep seeing every round.
+  const streamChatRound = vi.fn(
     async (messages: ChatMessage[], opts: { maxTokens?: number }) => ({
       content: await chatCompletion(messages, opts),
       toolCalls: [] as ToolCall[],
@@ -62,8 +61,7 @@ vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
   return {
     ...actual,
     chatCompletion,
-    chatWithTools,
-    streamChatRound: chatWithTools,
+    streamChatRound,
   };
 });
 
@@ -490,13 +488,13 @@ describe("answer tool round (query_expenses)", () => {
   // tests, so each describe resets the mocks it inspects.
   beforeEach(() => {
     chat.mockReset();
-    vi.mocked(chatWithTools).mockClear();
+    vi.mocked(streamChatRound).mockClear();
   });
 
   // The answer step may call the read tool: the second request must carry
   // the tool result (fenced), and the final answer must be returned.
   it("runs a requested query and answers from its result", async () => {
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     chat.mockResolvedValueOnce(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
@@ -541,7 +539,7 @@ describe("answer tool round (query_expenses)", () => {
 describe("period range net (this month)", () => {
   beforeEach(() => {
     chat.mockReset();
-    vi.mocked(chatWithTools).mockClear();
+    vi.mocked(streamChatRound).mockClear();
   });
 
   it("applies the range even when the translator omits it", async () => {
@@ -724,7 +722,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
 
   beforeEach(async () => {
     chat.mockReset();
-    vi.mocked(chatWithTools).mockClear();
+    vi.mocked(streamChatRound).mockClear();
     stubMapServices();
     await startNewConversation("user_test1", TEST_ACCOUNT_ID);
   });
@@ -737,7 +735,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     tools
       .mockResolvedValueOnce({
         content: "",
@@ -892,7 +890,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
 
   beforeEach(async () => {
     chat.mockReset();
-    vi.mocked(chatWithTools).mockClear();
+    vi.mocked(streamChatRound).mockClear();
     await startNewConversation("user_test1", TEST_ACCOUNT_ID);
   });
 
@@ -900,7 +898,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     tools
       .mockResolvedValueOnce({
         content: "",
@@ -1072,7 +1070,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     tools
       .mockResolvedValueOnce({
         content: "",
@@ -1183,7 +1181,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     tools
       .mockResolvedValueOnce({
         content: "",
@@ -1238,7 +1236,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"T","months":12,"chart":false}',
     );
-    const tools = vi.mocked(chatWithTools);
+    const tools = vi.mocked(streamChatRound);
     tools
       .mockResolvedValueOnce({
         content: "",
@@ -1282,7 +1280,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
-    vi.mocked(chatWithTools)
+    vi.mocked(streamChatRound)
       .mockResolvedValueOnce({
         content: "",
         toolCalls: [

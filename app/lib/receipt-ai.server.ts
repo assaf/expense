@@ -541,7 +541,9 @@ export type ToolCall = {
 const toolCallSchema = z.object({
   id: z.string(),
   type: z.literal("function").optional(),
-  function: z.object({ name: z.string(), arguments: z.string() }),
+  // A nameless call (a fragment the provider sent without a function body)
+  // has to fail this parse: the dispatch reads function.name directly.
+  function: z.object({ name: z.string().min(1), arguments: z.string() }),
 });
 
 /** A tool the model may call. */
@@ -768,27 +770,14 @@ export async function streamChatRound(
       });
       return parsed.success ? [parsed.data] : [];
     });
+  if (!content && assembled.length === 0) {
+    throw new LLMError(
+      `${model}: ${providerLabelOf()} returned neither content nor a tool call`,
+      502,
+      "",
+    );
+  }
   return { content, toolCalls: assembled };
-}
-
-/** Same request path with function calling enabled: returns the raw
- * assistant message so the caller can run the requested tools and
- * continue the conversation (see insights-ai's answer loop). */
-export async function chatWithTools(
-  messages: ChatMessage[],
-  opts: {
-    tools: ToolSpec[];
-    maxTokens?: number;
-    signal?: AbortSignal;
-    /** Model override: the Insights chat passes `LLM_CHAT_MODEL`. */
-    model?: string;
-  },
-): Promise<{ content: string; toolCalls: ToolCall[] }> {
-  const message = await llmMessage(messages, opts);
-  return {
-    content: message.content ?? "",
-    toolCalls: message.tool_calls ?? [],
-  };
 }
 
 /** The `thinking` request param each provider/model pair needs, or undefined

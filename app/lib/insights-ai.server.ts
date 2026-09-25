@@ -473,21 +473,16 @@ export async function answerInsightQuestion(input: {
   messages.push({ role: "system", content: ANSWER_PROMPT });
   messages.push({ role: "user", content: parts.join("\n\n") });
   if (!input.expenses) {
-    const { content } =
-      input.onEvent !== undefined
-        ? await streamChatRound(messages, {
-            maxTokens: ANSWER_MAX_TOKENS,
-            signal: input.signal,
-            model: LLM_CHAT_MODEL,
-            onDelta: (text) => input.onEvent?.({ type: "delta", text }),
-          })
-        : {
-            content: await chatCompletion(messages, {
-              maxTokens: ANSWER_MAX_TOKENS,
-              signal: input.signal,
-              model: LLM_CHAT_MODEL,
-            }),
-          };
+    // One path, streaming or not: without a callback the round simply
+    // doesn't forward deltas, and the result is the same.
+    const { content } = await streamChatRound(messages, {
+      maxTokens: ANSWER_MAX_TOKENS,
+      signal: input.signal,
+      model: LLM_CHAT_MODEL,
+      onDelta: input.onEvent
+        ? (text) => input.onEvent?.({ type: "delta", text })
+        : undefined,
+    });
     return reply(content);
   }
   // Bounded tool loop: at most MAX_TOOL_ROUNDS tool rounds, then one

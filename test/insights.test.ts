@@ -28,18 +28,24 @@ import type { ToolCall } from "~/lib/receipt-ai.server";
 
 // The translator's LLM transport is mocked at the receipt-ai boundary:
 // these tests cover the prompt contract, validation, and fallbacks, not
-// the API client (covered by the receipt flows). chatWithTools is mocked
+// the API client (covered by the receipt flows). streamChatRound is mocked
 // too: the answer step's tool loop must not reach the network here.
 vi.mock("~/lib/receipt-ai.server", async (importOriginal) => {
   // One mock backs both entry points: the tool loop now streams through
   // streamChatRound, so the dispatch tests configure either name and both
   // see the same calls.
-  const chatWithTools = vi.fn(async () => ({ content: "", toolCalls: [] }));
+  // The tool rounds delegate to the mocked chatCompletion, so a fallback
+  // configured through either mock keeps reaching the same call.
+  const streamChatRound = vi.fn(
+    async (messages: ChatMessage[], opts: { maxTokens?: number }) => ({
+      content: await chatCompletion(messages, opts),
+      toolCalls: [] as ToolCall[],
+    }),
+  );
   return {
     ...(await importOriginal<object>()),
     chatCompletion: vi.fn(),
-    chatWithTools,
-    streamChatRound: chatWithTools,
+    streamChatRound,
   };
 });
 // The plan tools themselves are covered in test/insights-mileage-tool.test.ts
@@ -71,12 +77,16 @@ vi.mock("~/lib/insights-expense-tool.server", () => ({
   }),
   runPlanExpense: vi.fn(),
 }));
-import { chatCompletion, chatWithTools } from "~/lib/receipt-ai.server";
+import {
+  chatCompletion,
+  streamChatRound,
+  type ChatMessage,
+} from "~/lib/receipt-ai.server";
 import { runPlanMileage } from "~/lib/insights-mileage-tool.server";
 import { runPlanExpense } from "~/lib/insights-expense-tool.server";
 
 const chat = vi.mocked(chatCompletion);
-const tools = vi.mocked(chatWithTools);
+const tools = vi.mocked(streamChatRound);
 
 function exp(fields: Partial<InsightExpense>): InsightExpense {
   return {
@@ -477,7 +487,7 @@ describe("answerInsightQuestion plan_mileage dispatch", () => {
     },
   };
   const offeredToolNames = () =>
-    tools.mock.calls[0]![1].tools.map((t) => t.function.name);
+    tools.mock.calls[0]![1].tools!.map((t) => t.function.name);
 
   it("collects the planned trip as pending when writes are enabled", async () => {
     tools.mockClear();
@@ -568,7 +578,7 @@ describe("answerInsightQuestion plan_expense dispatch", () => {
     },
   };
   const offeredToolNames = () =>
-    tools.mock.calls[0]![1].tools.map((t) => t.function.name);
+    tools.mock.calls[0]![1].tools!.map((t) => t.function.name);
 
   it("collects the proposed expense as pending when writes are enabled", async () => {
     tools.mockClear();
