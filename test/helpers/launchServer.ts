@@ -3,7 +3,7 @@
  * Builds the app first if needed (so `vp test` works standalone),
  * spawns react-router-serve, and polls the port until ready.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { existsSync, globSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -62,7 +62,33 @@ async function startMockJmap(): Promise<string> {
 
 let serverPort = 5199;
 
+/** The PID holding the port, or undefined when it is free (or lsof cannot
+ * tell us — CI containers without it just skip the check). */
+function squatterPidOn(port: number): number | undefined {
+  try {
+    const out = execFileSync("lsof", ["-ti", `:${port}`], {
+      encoding: "utf8",
+    });
+    const pid = Number(out.trim().split("\n")[0]);
+    return Number.isFinite(pid) ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function launchServer(): Promise<string> {
+  // Fail fast on a squatted port: several suites hardcode 5199, so
+  // silently shifting to 5200 would point them at a leftover server
+  // running against a schema this setup is about to drop — dozens of
+  // failures with assertions that have nothing to do with the cause.
+  const squatter = squatterPidOn(serverPort);
+  if (squatter !== undefined) {
+    throw new Error(
+      `Port ${serverPort} is already held by PID ${squatter} — a leftover ` +
+        "test server from an interrupted run. Kill it and re-run: " +
+        `lsof -ti :${serverPort} | xargs kill`,
+    );
+  }
   await ensureBuild();
   await findAvailablePort();
   const jmapBase = await startMockJmap();
