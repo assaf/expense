@@ -12,7 +12,7 @@ echo -e "\033[0;32m--- Generate types for route modules ---\033[0m"
 react-router typegen
 
 echo -e "\033[0;32m--- Run format, lint, and type checks ---\033[0m"
-vp check --fix
+vp check
 
 echo -e "\033[0;32m--- Run dark-mode variant check ---\033[0m"
 node scripts/check-dark-mode.mjs
