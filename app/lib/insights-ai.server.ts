@@ -5,7 +5,6 @@ import {
   LLMError,
   parseJsonObject,
   type ChatMessage,
-  type ToolCall,
 } from "~/lib/receipt-ai.server";
 import {
   MAX_TOOL_ROUNDS,

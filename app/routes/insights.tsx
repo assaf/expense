@@ -468,20 +468,6 @@ export function meta(): Route.MetaDescriptors {
   return [{ title: "Insights — Expense" }];
 }
 
-interface TranslateOk {
-  ok: true;
-  query: string;
-  title: string;
-  months: number;
-  /** Whether the question was best answered with a chart. */
-  chart: boolean;
-  /** Which chart the question is drawn as. */
-  shape: ChartShape;
-  /** The grounded text answer (computed figures, phrased by the model). */
-  answer: string;
-  /** A trip or a purchase the model worked out for the user to confirm. */
-  pending?: PendingProposal;
-}
 interface TranslateErr {
   ok: false;
   error: string;
