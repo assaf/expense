@@ -24,6 +24,11 @@ export default defineConfig((config) => {
         // Emitted by scripts/build-warranty-policies.ts: mechanical, and
         // reformatting it would churn against the generator's own output.
         "app/data/warranty-policies.ts",
+        // Emitted by `prisma contract emit`: same story. Formatting these
+        // churns thousands of lines against what the generator writes, and
+        // the next emit undoes it.
+        "prisma/contract.d.ts",
+        "prisma/contract.json",
       ],
       printWidth: 80,
       tabWidth: 2,
@@ -45,6 +50,9 @@ export default defineConfig((config) => {
         // an @prisma/orm-* bump old snapshots reference subpaths that no
         // longer exist; tsconfig keeps them out of tsc's program entirely.
         "migrations/**",
+        // Emitted contract files: generated, never hand-edited (see fmt).
+        "prisma/contract.d.ts",
+        "prisma/contract.json",
       ],
       options: {
         reportUnusedDisableDirectives: "warn",
