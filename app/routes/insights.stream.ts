@@ -63,13 +63,26 @@ export async function action({ request, context }: Route.ActionArgs) {
             1000
           ).toFixed(1)}s`,
         );
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // The client went away and the stream was canceled; the log line
+          // above already recorded the outcome.
+        }
       };
       console.info("[insights] stream start:", text.slice(0, 80));
       const send = (event: Record<string, unknown>) => {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
-        );
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+          );
+        } catch {
+          // The client went away and the stream was canceled: the enqueue
+          // throw must not crash the start callback. Deliberately NOT
+          // marked closed — each path calls finish exactly once, and the
+          // outcome line above must still be logged even when the reader
+          // is already gone.
+        }
       };
       try {
         // The question budget: the same per-user counter the page action
@@ -95,8 +108,7 @@ export async function action({ request, context }: Route.ActionArgs) {
         // The answer streams first, with no model call in front of it: the
         // rule-based period scope sizes the window, the all-spending totals
         // ground the first draft, and the model pulls topic numbers itself
-        // through query_expenses. The translator runs only after the answer
-        // is in hand, to name the chart.
+        // through query_expenses.
         const scope = periodScope(text, today);
         const months = scope?.months ?? 12;
 
@@ -216,18 +228,18 @@ export async function action({ request, context }: Route.ActionArgs) {
         });
         finish("completed");
       } catch (err) {
-        if (request.signal.aborted) {
-          finish(
-            answerSent ? "aborted during the chart" : "aborted mid-answer",
-          );
+        // Post-answer failures are reported first: with the answer already
+        // delivered, the only throws that reach here are the transcript
+        // update (a real persistence failure — captureError it even when
+        // the client has also gone away) — everything else chart-side was
+        // routed around above.
+        if (answerSent) {
+          captureError(err, { url: request.url });
+          finish("completed; transcript update failed");
           return;
         }
-        if (answerSent) {
-          console.warn(
-            "[insights] chart skipped after the answer:",
-            err instanceof Error ? err.message : String(err),
-          );
-          finish("completed; chart skipped");
+        if (request.signal.aborted) {
+          finish("aborted mid-answer");
           return;
         }
         if (err instanceof LLMError) {
