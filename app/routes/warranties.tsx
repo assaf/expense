@@ -13,7 +13,7 @@ import { useFlashRow } from "~/components/ui/ListRow";
 import { requireContextUser } from "~/lib/auth.server";
 import { readWarranties } from "~/lib/db/warranties";
 import { isReceiptFile } from "~/lib/file-types";
-import { formatAmount, formatDate } from "~/lib/format";
+import { formatAmount, formatDate, pluralLabel } from "~/lib/format";
 import { useDropTarget } from "~/lib/use-drop-target";
 import { useToday } from "~/lib/use-today";
 import {
@@ -45,10 +45,6 @@ const GROUPS: Array<{ key: WarrantyExpiryGroup; title: string }> = [
   { key: "none", title: "No expiration date" },
   { key: "expired", title: "Already expired" },
 ];
-
-function documentCountLabel(count: number): string {
-  return `${count} document${count === 1 ? "" : "s"}`;
-}
 
 export default function WarrantiesPage({ loaderData }: Route.ComponentProps) {
   return <WarrantyList warranties={loaderData.warranties} />;
@@ -270,7 +266,7 @@ function WarrantyRow({
                 <span>{formatDate(warranty.purchasedAt, { long: true })}</span>
               ) : null}
               <Badge tone={badge.tone}>{badge.label}</Badge>
-              <span>{documentCountLabel(warranty.documents.length)}</span>
+              <span>{pluralLabel(warranty.documents.length, "document")}</span>
             </div>
           </div>
         </Link>

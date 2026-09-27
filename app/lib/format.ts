@@ -176,9 +176,15 @@ export function sortExpenses(expenses: Expense[], desc = true): Expense[] {
   return expenses.toSorted((a, b) => compareExpenses(a, b, desc));
 }
 
+/** "1 document" / "3 documents": the noun pluralized only when the count
+ * differs from one. */
+export function pluralLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 /** "1 expense" / "3 expenses": human count label. */
 export function countLabel(count: number): string {
-  return `${count} expense${count === 1 ? "" : "s"}`;
+  return pluralLabel(count, "expense");
 }
 
 /**

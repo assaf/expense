@@ -9,7 +9,12 @@ import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Select } from "~/components/ui/Select";
 import { Textarea } from "~/components/ui/Textarea";
 import { isReceiptFile } from "~/lib/file-types";
-import { formatAmount, formatDate, normalizeAmount } from "~/lib/format";
+import {
+  formatAmount,
+  formatDate,
+  normalizeAmount,
+  pluralLabel,
+} from "~/lib/format";
 import { useDropTarget } from "~/lib/use-drop-target";
 import type { Warranty, WarrantyExpenseOption } from "~/lib/types";
 import { termsForMerchant } from "~/lib/warranty-policies";
@@ -40,10 +45,6 @@ export interface WarrantyEditorData {
 interface PendingDocument {
   file: File;
   label: string;
-}
-
-function documentCountLabel(count: number): string {
-  return `${count} document${count === 1 ? "" : "s"}`;
 }
 
 /** The warranty editor both routes render. Local state per field, with the
@@ -263,7 +264,7 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
               className="text-xs text-gray-500 dark:text-gray-400"
               role="status"
             >
-              {documentCountLabel(totalDocuments)}
+              {pluralLabel(totalDocuments, "document")}
             </span>
           </div>
           <ul className="flex flex-col gap-2">
