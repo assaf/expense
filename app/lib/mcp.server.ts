@@ -22,6 +22,7 @@ import {
   MCP_SERVER_WEBSITE_URL,
 } from "~/lib/mcp-discovery.server";
 import { ok, fail, captureReceipt, logMileage } from "~/lib/mcp-write.server";
+import { MAX_RECEIPT_ENCODED_CHARS } from "~/lib/upload-limits";
 import {
   isOAuthToken,
   issueTokenPair,
@@ -117,6 +118,7 @@ function getModernHandler(): Promise<ReturnType<typeof createMcpHandler>> {
         {
           legacy: "reject",
           responseMode: "json",
+          maxRequestBodySize: MAX_MCP_BODY_BYTES,
           onerror: (error) => console.error("[mcp] %s", error.message),
         },
       ),
@@ -157,6 +159,7 @@ async function serveLegacy(
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
+    maxRequestBodySize: MAX_MCP_BODY_BYTES,
   });
   const server = await buildServer(auth.accountId);
   await server.connect(transport);
@@ -193,7 +196,17 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
   const auth = await authenticateRequest(request);
   if (auth instanceof Response) return auth;
   const { isLegacyRequest } = await import("@modelcontextprotocol/server");
-  if (await isLegacyRequest(request)) return serveLegacy(request, auth);
+  // The predicate reads the body under the SAME cap the legs were created
+  // with: on its own 4 MiB default, a large 2025-era capture_receipt classifies
+  // false (body-too-large) and lands on the modern handler's strict rejection
+  // instead of this legacy leg.
+  if (
+    await isLegacyRequest(request, undefined, {
+      maxRequestBodySize: MAX_MCP_BODY_BYTES,
+    })
+  ) {
+    return serveLegacy(request, auth);
+  }
   return (await getModernHandler()).fetch(request, {
     authInfo: authInfoFor(auth),
   });
@@ -235,6 +248,12 @@ const MISSING_TOKEN_MESSAGE =
  * argument before the parser walks it. A year of a busy account is a few
  * hundred KB. */
 const MAX_STATEMENT_CHARS = 2_000_000;
+
+/** POST-body cap for /mcp (bytes): the largest legitimate body is
+ * capture_receipt's encoded image (MAX_RECEIPT_ENCODED_CHARS of base64)
+ * plus the JSON envelope, so anything bigger is refused (413) before a
+ * byte is parsed. */
+const MAX_MCP_BODY_BYTES = MAX_RECEIPT_ENCODED_CHARS + 4 * 1024 * 1024;
 
 /**
  * A 401 with the OAuth protected-resource metadata hint (RFC 9728), so
