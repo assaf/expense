@@ -347,6 +347,18 @@ out of both.
 | `test/helpers/launchBrowser.ts`       | Playwright browser plus signed-in context, hydration wait                      |
 | `docs/files.md`, `docs/operations.md` | File map; env, pooler, Sentry, and incident history                            |
 
+## Git workflow
+
+Assaf reviews every change before it lands. Never run `git commit`, `git
+push`, or trigger a deploy on your own initiative in this repo: make the
+change, verify it (targeted tests, `pnpm check`, browser checks as
+appropriate), then stop and report what changed, how it was verified, and
+that it is uncommitted. Assaf commits and pushes — or explicitly asks; only
+then commit/push. CI auto-deploys `main` to production, so a push IS a
+deploy. This applies to every change however small, including screenshot
+baselines, migrations and generated files; if a change needs a commit
+mid-task (e.g. to exercise a deploy-specific path), ask first.
+
 ## Runtime/Tooling Preferences
 
 - **Node >= 24** (`engines`), **pnpm 12.5.1** (`packageManager`, authoritative;
