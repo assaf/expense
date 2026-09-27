@@ -123,8 +123,9 @@ export async function saveWarrantyFromForm(
  * point, so a document the model couldn't read still becomes a warranty with
  * its file attached; only an unreadable *upload* refuses.
  *
- * Nothing is stored until the reading succeeds, so a failed extraction (or a
- * lost request) leaves no orphan blob behind.
+ * The blob is stored and the record filed whether or not the model could
+ * read the document: a failed extraction falls back to an empty one (the
+ * document itself is the point), and only an unreadable *upload* refuses.
  */
 export async function createWarrantyFromDocument(
   form: FormData,
