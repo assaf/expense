@@ -102,11 +102,11 @@ flowchart LR
 
 | Path                 | Purpose                                                                      |
 | -------------------- | ---------------------------------------------------------------------------- |
-| `app/routes/`        | 58 route modules; file-based routing, loaders/actions live here              |
+| `app/routes/`        | 83 route modules; file-based routing, loaders/actions live here              |
 | `app/components/`    | React components; `app/components/ui/` holds the shared primitives           |
-| `app/lib/`           | 92 modules: domain logic, server integrations (`*.server.ts`), data access   |
+| `app/lib/`           | 106 modules: domain logic, server integrations (`*.server.ts`), data access  |
 | `app/lib/db/`        | One module per domain (`expenses`, `reports`, `categories`, `accounts`, ...) |
-| `test/`              | 108 test files plus `helpers/` and `fixtures/`                               |
+| `test/`              | 144 test files plus `helpers/` and `fixtures/`                               |
 | `scripts/`           | Operational and one-off scripts (deploy, clone, check, smoke, redactors)     |
 | `docs/`              | 15 reference docs; `docs/files.md` is the closest thing to an index          |
 | `prisma/`            | `contract.prisma` (source of truth), emitted `contract.json`/`contract.d.ts` |
@@ -123,7 +123,7 @@ flowchart LR
 | `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost` (emits the table)        |
 | `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table             |
 | `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
-| `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; rewrites files via `--fix`          |
+| `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; fails on any issue (no auto-fix)    |
 | `pnpm test`                                       | `react-router build --force && vp test run`                      | **Gate.** Build then the full suite                            |
 | `pnpm test:changed [ref]`                         | `vp test run --changed ${1:-HEAD}`                               | Fast lane over the static import graph                         |
 | `pnpm test:related <file>`                        | `vp test related --run`                                          | Fast lane for tests importing the named files                  |
@@ -141,11 +141,11 @@ flowchart LR
 
 `pnpm check` runs, in order: `prisma contract emit` -> the merchant coverage
 table emit (`tsx scripts/build-warranty-policies.ts`) ->
-`react-router typegen` -> `vp check --fix` (oxfmt + oxlint with type-aware
+`react-router typegen` -> `vp check` (oxfmt + oxlint with type-aware
 tsgolint + `tsc`) -> `node scripts/check-dark-mode.mjs` -> `secretlint` ->
-a tesseract patch probe -> `knip`. Because the `vp check --fix` step
-auto-fixes, a nonzero exit means an unfixable lint or type error. The same
-`vp check --fix` runs as a pre-commit hook.
+a tesseract patch probe -> `knip`. Nothing is auto-fixed: a nonzero exit
+means some finding needs a real edit. The pre-commit hook runs
+`vp staged` over the staged files plus the same secretlint scan.
 
 ## Code Conventions & Common Patterns
 
@@ -170,7 +170,7 @@ then `import type { Route } from "./+types/<basename>"` and type against
 `Route.LoaderArgs` / `Route.ActionArgs` / `Route.ComponentProps`.
 
 **Server-only modules.** The `.server.ts` suffix marks a module that must never
-enter the client bundle (about 40 under `app/lib/`). Do not import one from a
+enter the client bundle (67 under `app/lib/`). Do not import one from a
 component. Non-`.server` modules that touch Node APIs need discipline, e.g.
 `app/lib/env.ts` uses `process.loadEnvFile` and is only ever imported
 server-side.
@@ -429,8 +429,8 @@ out of both.
   vitest config; do not assume a coverage gate.
 - **CI** is `.github/workflows/deployment-checks.yml`, in job order:
   `secretlint` -> `check` and `test` (postgres:18 service, `RUN_OCR_TESTS=1`) ->
-  `migrate-db` (main only) -> `pdf-ocr-smoke`, which rolls the Vercel deployment
-  back when the smoke check fails.
+  `migrate-db` (main only) -> "Deploy prod" -> "Smoke prod + rollback", which
+  rolls the Vercel deployment back when the smoke check fails.
 
 ## Known Drift
 

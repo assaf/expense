@@ -67,20 +67,21 @@ that it's easily quotable and includes the app name and the URL and lives only
 in one place, the content files under `app/data/` (one markdown or YAML file per
 page, parsed by `app/lib/content.server.ts`), which render all the surfaces:
 
-| Page            | Purpose                                                       |
-| --------------- | ------------------------------------------------------------- |
-| `/`             | Landing page (SoftwareApplication JSON-LD)                    |
-| `/about`        | Full feature/benefit list (AboutPage JSON-LD)                 |
-| `/faq`          | 24 Q&As matching real AI queries (FAQPage JSON-LD)            |
-| `/alternatives` | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)   |
-| `/llms.txt`     | The llmstxt.org file, the curated overview AI assistants read |
-| `.md` mirrors   | Markdown mirrors per the llms.txt convention                  |
+| Page            | Purpose                                                                         |
+| --------------- | ------------------------------------------------------------------------------- |
+| `/`             | Landing page (SoftwareApplication JSON-LD)                                      |
+| `/about`        | Full feature/benefit list (AboutPage JSON-LD)                                   |
+| `/faq`          | 24 Q&As matching real AI queries (FAQPage JSON-LD)                              |
+| `/alternatives` | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)                     |
+| `/changelog`    | What changed in the app, newest first (rendered from `app/data/changelog.yaml`) |
+| `/llms.txt`     | The llmstxt.org file, the curated overview AI assistants read                   |
+| `.md` mirrors   | Markdown mirrors per the llms.txt convention                                    |
 
 Plumbing to support it: `public/robots.txt` explicitly permits the AI crawlers
 while app routes are blocked, and `public/sitemap.xml` lists the public pages.
 
-These routes are public (see the root loader in `app/root.tsx`); everything
-else still requires a session.
+These routes are public (see the auth-gate middleware in `app/root.tsx`);
+everything else still requires a session.
 
 ## What it does
 
@@ -93,6 +94,13 @@ else still requires a session.
 - Paste (⌘V) or upload an image anywhere to create a new receipt.
 - **Export** each report as a PDF (grouped by category, with all receipt images
   attached) and a ZIP archive (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
+- **Warranties**: drop a warranty document (or a receipt) on the warranties
+  page and it becomes a record with merchant, product, value, terms and expiry;
+  the LLM reads the document, a merchant with a curated policy prefills the
+  terms, and the list groups records by how soon coverage ends.
+- **Insights chat**: ask spending questions in plain English and get a streamed
+  answer with a chart, grounded in your own expenses; confirm card proposals
+  (an expense or a drive) right from the chat.
 - **AI assistants (MCP)**: any MCP client (Claude, OpenAI) can connect by
   logging in with your account (OAuth; no API keys). See [AI
   assistants](#ai-assistants-mcp) below.
