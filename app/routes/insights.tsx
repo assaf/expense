@@ -17,12 +17,8 @@ import { Textarea } from "~/components/ui/Textarea";
 import { InsightChart } from "~/components/InsightChart";
 import { MoneyCheckup } from "~/components/MoneyCheckup";
 import { requireContextUser } from "~/lib/auth.server";
-import { readAccount, readAccountUsers } from "~/lib/db/accounts";
-import { readCategories } from "~/lib/db/categories";
 import { readExpenses } from "~/lib/db/expenses";
-import { readLocations } from "~/lib/db/locations";
-import { readReports } from "~/lib/db/reports";
-import { readDuplicateDismissals, readSettings } from "~/lib/db/settings";
+import { readDuplicateDismissals } from "~/lib/db/settings";
 import {
   appendExchange,
   readLatestConversation,
@@ -38,16 +34,13 @@ import {
 import {
   insightExpense,
   insightStarters,
-  insightSummary,
-  knownMerchants,
   matchingExpenses,
   pickStarter,
-  recentTripStops,
   monthlyTotals,
   type InsightExpense,
   type MonthBucket,
 } from "~/lib/insights";
-import { checkupText, moneyCheckup } from "~/lib/money-checkup";
+import { moneyCheckup } from "~/lib/money-checkup";
 import { parseExpenseConfirmation } from "~/lib/insights-expense-tool.server";
 import { parseTripConfirmation } from "~/lib/insights-mileage-tool.server";
 import {
@@ -59,15 +52,7 @@ import {
 import { MILEAGE_TYPE_LABELS, formatRate } from "~/lib/mileage-rates";
 import type { ProposalKind } from "~/lib/types";
 import { formatFxRate } from "~/lib/fx-note";
-import {
-  answerInsightQuestion,
-  insightProfile,
-  insightReportNames,
-  translateInsightQuery,
-  LLMError,
-  type PendingProposal,
-} from "~/lib/insights-ai.server";
-import { periodScope, withPeriodRange } from "~/lib/insight-periods";
+import type { PendingProposal } from "~/lib/insights-ai.server";
 import { useToday } from "~/lib/use-today";
 import { captureError } from "~/lib/errors.server";
 import { requireIntent } from "~/lib/route-helpers.server";
@@ -75,26 +60,12 @@ import { Markdown } from "~/components/Markdown";
 import { formString, unknownIntent } from "~/lib/validation";
 import type { Route } from "./+types/insights";
 
-/**
- * Record an exchange without failing the work that produced it: the row (or
- * the answer) is the deliverable, and the transcript is the retelling the
- * model reads back next turn.
- */
-async function recordExchange(
-  user: { id: string; accountId: string },
-  exchange: Parameters<typeof appendExchange>[2],
-): Promise<void> {
-  try {
-    await appendExchange(user.id, user.accountId, exchange);
-  } catch (err) {
-    captureError(err, { where: "insights-record-exchange" });
-  }
-}
-
 /** The transcript entry for a filed proposal: both confirm branches write
  * the same shape, differing only in the answer, the title, and the review
- * link they carry. */
-function logFiledExchange(
+ * link they carry. Recording the exchange never fails the work that
+ * produced it: the filed row (or the answer) is the deliverable, and the
+ * transcript is the retelling the model reads back next turn. */
+async function logFiledExchange(
   user: { id: string; accountId: string },
   entry: {
     title: string;
@@ -103,17 +74,21 @@ function logFiledExchange(
     proposalKind: ProposalKind;
   },
 ): Promise<void> {
-  return recordExchange(user, {
-    question: "Log it",
-    answer: entry.answer,
-    chart: false,
-    shape: DEFAULT_CHART_SHAPE,
-    query: "",
-    months: 12,
-    title: entry.title,
-    expenseId: entry.expenseId,
-    proposalKind: entry.proposalKind,
-  });
+  try {
+    await appendExchange(user.id, user.accountId, {
+      question: "Log it",
+      answer: entry.answer,
+      chart: false,
+      shape: DEFAULT_CHART_SHAPE,
+      query: "",
+      months: 12,
+      title: entry.title,
+      expenseId: entry.expenseId,
+      proposalKind: entry.proposalKind,
+    });
+  } catch (err) {
+    captureError(err, { where: "insights-record-exchange" });
+  }
 }
 
 /**
@@ -158,12 +133,14 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   };
 }
 
-/** Two grounded LLM calls: the question becomes a
- * filter (translate), the app computes the exact numbers from the real
- * expenses, and the model phrases the answer from those numbers — it
- * never invents figures. Chart questions carry their own chart in the
- * transcript. */
-export async function action({ request, context }: Route.LoaderArgs) {
+/**
+ * The page action for the small intents only: start a new conversation,
+ * confirm a proposed trip, confirm a proposed expense. Nothing here calls
+ * the LLM: the question flow streams through /insights/stream
+ * (insights.stream.ts), which owns the throttle, the grounding, and the
+ * transcript row for an answer.
+ */
+export async function action({ request, context }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request, context);
   if (intent === "new") {
     // Start a fresh conversation; the previous one stays in the database
@@ -276,192 +253,8 @@ export async function action({ request, context }: Route.LoaderArgs) {
       logged: { expenseId: saved.expenseId },
     };
   }
-  if (intent !== "translate") return unknownIntent();
-  // Same bound the translator applies internally, so the answer call and
-  // the stored exchange never see an uncapped string.
-  const text = formString(form, "text").trim().slice(0, 500);
-  if (!text) return { ok: false as const, error: "Type a question first." };
-
-  // The client's local today: the server must not guess the user's day.
-  const today = formString(form, "today");
-  const localTime = formString(form, "localTime");
-  // The client's IANA timezone: report dates are formatted in it (the
-  // server's clock is UTC and must not guess the user's zone).
-  const tz = formString(form, "tz");
-
-  // Cost throttle: every translate request drives two LLM calls. A
-  // per-user counter on the auth_attempts keyspace (a rate limit here,
-  // not a lockout: each request counts as one "failure") keeps scripted
-  // loops from running up the bill. THROTTLE-2 class counter; the plan
-  // gate lands with the plan feature itself.
-  const throttleKey = `insights:${user.id}`;
-  if (await authLockedUntil(throttleKey)) {
-    return {
-      ok: false as const,
-      error: "Too many questions in a row. Try again in a few minutes.",
-    };
-  }
-  await recordAuthFailure(throttleKey, {
-    windowMs: 15 * 60_000,
-    threshold: 12,
-    lockMs: 15 * 60_000,
-  });
-
-  const [
-    account,
-    categories,
-    reports,
-    settings,
-    members,
-    locations,
-    dismissed,
-  ] = await Promise.all([
-    readAccount(user.accountId),
-    readCategories(user.accountId),
-    readReports(user.accountId),
-    readSettings(user.accountId),
-    readAccountUsers(user.accountId),
-    readLocations(user.accountId),
-    readDuplicateDismissals(user.accountId),
-  ]);
-  const expenses = (await readExpenses(user.accountId)).map(insightExpense);
-  const merchants = knownMerchants(expenses);
-  // The settings lists are authoritative (they include unused entries,
-  // unlike the ones derived from expenses).
-  const categoryNames = categories.map((c) => c.name);
-  const reportNames = insightReportNames(reports, tz);
-  const profile = insightProfile({
-    account,
-    settings,
-    locations: locations.map((l) => ({ name: l.name, address: l.address })),
-    userEmail: user.email,
-    members,
-    categories,
-    reports,
-    recentStops: recentTripStops(expenses, settings.homeAddress),
-    tz,
-  });
-  // Full anchor: an unanchored pattern let padded strings (multi-MB
-  // prompt stuffing) ride into the answer prompt (INS-INPUT-1-RESIDUAL).
-  // The page sends toLocaleTimeString("en-US", {hour, minute}).
-  const localTimeOk = /^\d{1,2}:\d{2}( [AP]M)?$/i.test(localTime);
-  const conversation = await readLatestConversation(user.id);
-  try {
-    const translated = await translateInsightQuery({
-      text,
-      history: conversation?.exchanges.slice(-3) ?? [],
-      today,
-      merchants,
-      categories: categoryNames,
-      reports: reportNames,
-      // The browser's own signal: pressing Stop aborts the fetch, which
-      // aborts this request, which cancels the provider call.
-      signal: request.signal,
-    });
-    // The app owns the period (range and chart shape): a day, a week, or a
-    // single-month window has no monthly shape to plot, so the model's
-    // guess is replaced whenever the question names a period (see
-    // insight-periods).
-    const scope = periodScope(text, today);
-    const t = {
-      ...translated,
-      query: withPeriodRange(translated.query, text, today),
-      ...(scope ? { chart: scope.chart, months: scope.months } : {}),
-    };
-    // Ground the text answer in real numbers: compute the same view the
-    // chart shows and let the model phrase it. Invalid client dates (the
-    // field is always sent by this page) degrade to a chart-only answer.
-    if (/^\d{4}-\d{2}-\d{2}$/.test(today)) {
-      const buckets = monthlyTotals(expenses, t.query, today, t.months);
-      const matched = matchingExpenses(expenses, t.query, buckets);
-      // The checkup covers the whole account and the whole tax year, not
-      // the chart's window or its filter, and it is what a judgment
-      // question ("am I being smart with my money?") is answered from. It
-      // rides in the same computed-data fence as the summary, so the
-      // injection guard and its prompt-fencing tests still apply.
-      const checkup = moneyCheckup({ expenses, today, dismissed });
-      const { answer, pending } = await answerInsightQuestion({
-        question: text,
-        history: conversation?.exchanges.slice(-3) ?? [],
-        summary: [insightSummary(buckets, matched), checkupText(checkup)].join(
-          "\n",
-        ),
-        // The read tool queries the request's own snapshot, so a follow-up
-        // question ("what about this week?") needs no second DB read.
-        expenses,
-        // The plan tool resolves a trip the user asked to log; the app
-        // files it only when the confirm card is submitted. The report
-        // names are the plain ones (the profile annotates them for the
-        // model, but a stored expense's report must be the bare name).
-        writes: {
-          accountId: user.accountId,
-          reportNames: reports.map((r) => r.name),
-          today,
-        },
-        // The answer step needs the user's local DATE, not just the clock:
-        // the chart data is month-bucketed, so without this a "what's
-        // today?" question gets a date inferred from the expense rows.
-        // Same `Current date:` wording the translator prompt uses.
-        profile: [
-          profile,
-          `Current date: ${today} (user's local date)`,
-          ...(localTimeOk
-            ? [`Current time: ${localTime} (user's local clock)`]
-            : []),
-        ].join("\n"),
-        signal: request.signal,
-      });
-      // The browser went away (the user pressed Stop): the answer has no
-      // reader, and a transcript row nobody saw is a lie about the
-      // conversation.
-      if (request.signal.aborted) {
-        return { ok: false as const, error: "Stopped." };
-      }
-      await recordExchange(user, {
-        question: text,
-        answer,
-        chart: t.chart,
-        shape: t.shape,
-        query: t.query,
-        months: t.months,
-        title: t.title,
-      });
-      // The proposal is a one-shot UI affordance, never persisted: a reload
-      // drops the card, and asking again plans a fresh trip.
-      return {
-        ok: true as const,
-        ...t,
-        answer,
-        ...(pending ? { pending } : {}),
-      };
-    }
-    return {
-      ok: true as const,
-      ...t,
-      answer: `Charting ${t.title}.`,
-    };
-  } catch (err) {
-    // A cancelled request is not a failure to report: the user asked for
-    // it. Checked first because the cancelled provider call arrives here
-    // as an LLMError, and Sentry should not hear about an intentional stop.
-    if (request.signal.aborted) {
-      return { ok: false as const, error: "Stopped." };
-    }
-    if (err instanceof LLMError) {
-      // The user-facing message stays generic; the server log carries the
-      // provider detail (bad key, quota, timeout) so failures are
-      // diagnosable from the dev-server output or Vercel logs.
-      console.error(
-        `[insights] LLM call failed (status ${err.status}): ${err.message}` +
-          (err.body ? ` — ${err.body.slice(0, 300)}` : ""),
-      );
-      return {
-        ok: false as const,
-        error: "The AI service didn't answer. Try again in a moment.",
-      };
-    }
-    throw err;
-  }
+  // Unknown intents are the validation envelope's job (unknownIntent).
+  return unknownIntent();
 }
 
 export function meta(): Route.MetaDescriptors {
@@ -503,16 +296,7 @@ type StreamEvent =
   | { type: "delta"; text: string }
   | { type: "tools" }
   | { type: "error"; error: string }
-  | {
-      type: "done";
-      query: string;
-      title: string;
-      chart: boolean;
-      shape: ChartShape;
-      months: number;
-      answer: string;
-      pending?: PendingProposal;
-    };
+  | { type: "done"; answer: string; pending?: PendingProposal };
 
 interface Exchange {
   question: string;
@@ -758,7 +542,6 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
     setStreaming(true);
     const data = new FormData(form);
     data.set("text", text);
-    data.set("intent", "stream");
     void (async () => {
       try {
         const res = await fetch("/insights/stream", {
@@ -1311,7 +1094,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             askQuestion();
           }}
         >
-          <input type="hidden" name="intent" value="translate" />
+          <input type="hidden" name="intent" value="stream" />
           <input type="hidden" name="today" value={today ?? ""} />
           <input
             type="hidden"

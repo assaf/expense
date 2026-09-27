@@ -8,6 +8,7 @@ import {
 } from "vite-plus/test";
 import { action, loader } from "~/routes/insights";
 import { action as expenseAction } from "~/routes/expense.$id";
+import { action as streamAction } from "~/routes/insights.stream";
 import {
   answerInsightQuestion,
   insightProfile,
@@ -119,6 +120,33 @@ async function callRoute(
   } as unknown as InsightsRoute.ActionArgs);
 }
 
+/** One streamed answer, parsed: the stream action's SSE frames in order.
+ * The question flow lives in the stream route (the page action only keeps
+ * the new/confirm intents), so every ask posts there and reads the frames
+ * the client would read. */
+async function callStream(plan: string | null, formData: FormData) {
+  await testPrisma.account.update({
+    where: { id: TEST_ACCOUNT_ID },
+    data: { plan },
+  });
+  const cookie = await sessionCookie();
+  const request = new Request("https://expense.test/insights.stream", {
+    method: "POST",
+    body: formData,
+    headers: { cookie },
+  });
+  const res = await streamAction({
+    request,
+    params: {},
+    context: await contextForRequest(request),
+  } as unknown as Parameters<typeof streamAction>[0]);
+  const text = await res.text();
+  return text
+    .split("\n\n")
+    .filter((f) => f.startsWith("data:"))
+    .map((f) => JSON.parse(f.slice(5).trim()) as Record<string, unknown>);
+}
+
 describe("insights route", () => {
   beforeEach(async () => {
     chat.mockReset();
@@ -128,19 +156,20 @@ describe("insights route", () => {
     });
   });
 
-  it("translates without a plan, reaching the LLM once", async () => {
+  it("streams without a plan, reaching the LLM once", async () => {
     chat.mockResolvedValue('{"query":"","title":"Expenses","months":12}');
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "everything");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      answer: string;
-    };
-    expect(res.ok).toBe(true);
-    // No client today -> chart-only answer, no second call.
+    const frames = await callStream(null, form);
+    // No client today -> no grounded answer call; only the chart's
+    // translator runs, and the done frame carries the (empty) answer.
     expect(chat).toHaveBeenCalledTimes(1);
-    expect(res.answer).toContain("Charting");
+    const done = frames.find((f) => f.type === "done")!;
+    expect(done.answer).toBe("");
+    // The chart lands after the answer, named by the translator.
+    const translation = frames.find((f) => f.type === "translation")!;
+    expect(translation.title).toBe("Expenses");
   });
 
   it("does not record an exchange the client stopped", async () => {
@@ -151,11 +180,11 @@ describe("insights route", () => {
     chat.mockResolvedValue('{"query":"","title":"Expenses","months":12}');
     const controller = new AbortController();
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "everything");
     // A valid client date: this is the path that would persist the row.
     form.set("today", "2026-06-15");
-    const request = new Request("https://expense.test/insights", {
+    const request = new Request("https://expense.test/insights.stream", {
       method: "POST",
       body: form,
       headers: { cookie: await sessionCookie() },
@@ -163,19 +192,20 @@ describe("insights route", () => {
     });
     controller.abort();
 
-    const res = (await action({
+    const res = await streamAction({
       request,
       params: {},
       context: await contextForRequest(request),
-    } as unknown as InsightsRoute.ActionArgs)) as {
-      ok: boolean;
-      error: string;
-    };
+    } as unknown as Parameters<typeof streamAction>[0]);
+    const frames = (await res.text())
+      .split("\n\n")
+      .filter((f) => f.startsWith("data:"))
+      .map((f) => JSON.parse(f.slice(5).trim()) as Record<string, unknown>);
 
     // Pressing Stop aborts the browser's fetch, which aborts this request:
-    // the answer has no reader, so the transcript must not gain an exchange
-    // nobody saw.
-    expect(res).toEqual({ ok: false, error: "Stopped." });
+    // the answer has no reader, so the stream closes without a done frame
+    // and the transcript must not gain an exchange nobody saw.
+    expect(frames.find((f) => f.type === "done")).toBeUndefined();
     expect(appendExchange).not.toHaveBeenCalled();
   });
 
@@ -198,7 +228,7 @@ describe("insights route", () => {
       data: { createdAt: new Date("2026-01-05T09:30:00Z") },
     });
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "all reports and when they were created");
     form.set("today", "2026-07-15");
     form.set("localTime", "1:15 PM");
@@ -207,14 +237,9 @@ describe("insights route", () => {
     await testPrisma.report.deleteMany({});
     await addReport(TEST_ACCOUNT_ID, "2026 Test");
     await addReport(TEST_ACCOUNT_ID, "2027 Test");
-    const res = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      chart: boolean;
-      answer: string;
-    };
-    expect(res.ok).toBe(true);
-    expect(res.chart).toBe(false);
-    expect(res.answer).toContain("$99.99");
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
+    expect(done.answer).toContain("$99.99");
     expect(chat).toHaveBeenCalledTimes(2);
     // The answer prompt carries the computed data, not the raw question.
     const answerCall = chat.mock.calls[1]![0];
@@ -243,6 +268,9 @@ describe("insights route", () => {
       /2026 Test \(created \w{3} \d{1,2}, \d{4}, \d{1,2}:\d{2} [AP]M\)/,
     );
     expect(userMessage).toContain("Reports: 2026 Test (created");
+    // The translator's event names the chart; a text-shaped question has none.
+    const translation = frames.find((f) => f.type === "translation")!;
+    expect(translation.chart).toBe(false);
   });
 });
 
@@ -397,13 +425,13 @@ describe("ask input bound (INS-INPUT-1)", () => {
   it("persists the question capped at 500 chars", async () => {
     chat.mockResolvedValue('{"query":"","title":"T","months":6}');
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "x".repeat(600));
     // A valid client date: only this path persists the exchange.
     form.set("today", "2026-09-09");
     await startNewConversation("user_test1", TEST_ACCOUNT_ID);
-    const res = (await callRoute("action", null, form)) as { ok: boolean };
-    expect(res.ok).toBe(true);
+    const frames = await callStream(null, form);
+    expect(frames.some((f) => f.type === "done")).toBe(true);
     const conversation = await readLatestConversation("user_test1");
     const last = conversation!.exchanges.at(-1)!;
     expect(last.question.length).toBeLessThanOrEqual(500);
@@ -426,12 +454,12 @@ describe("local time bound (INS-INPUT-1-RESIDUAL)", () => {
       .mockResolvedValueOnce("A short answer.");
     const stuffing = "1:15 ".padEnd(200_000, "A");
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "coffee");
     form.set("today", "2026-09-09");
     form.set("localTime", stuffing);
-    const res = (await callRoute("action", null, form)) as { ok: boolean };
-    expect(res.ok).toBe(true);
+    const frames = await callStream(null, form);
+    expect(frames.some((f) => f.type === "done")).toBe(true);
     const userMessage = chat.mock.calls[1]![0].at(-1)!.content;
     expect(userMessage).not.toContain(stuffing.slice(0, 1000));
     expect(userMessage).not.toContain("Current time:");
@@ -444,11 +472,11 @@ describe("local time bound (INS-INPUT-1-RESIDUAL)", () => {
       )
       .mockResolvedValueOnce("A short answer.");
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "coffee");
     form.set("today", "2026-09-09");
     form.set("localTime", "1:15 PM");
-    await callRoute("action", null, form);
+    await callStream(null, form);
     const userMessage = chat.mock.calls[1]![0].at(-1)!.content;
     expect(userMessage).toContain("Current time: 1:15 PM");
     // The answer step must carry the local date, or a "what's today?"
@@ -517,16 +545,13 @@ describe("answer tool round (query_expenses)", () => {
       .mockResolvedValueOnce({ content: "You spent $9.99.", toolCalls: [] });
 
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "how much did I spend yesterday?");
     form.set("today", "2026-09-10");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      answer: string;
-    };
+    const frames = await callStream(null, form);
+    const done = frames.find((f) => f.type === "done")!;
 
-    expect(res.ok).toBe(true);
-    expect(res.answer).toBe("You spent $9.99.");
+    expect(done.answer).toBe("You spent $9.99.");
     // The follow-up request carries the tool result as fenced DATA.
     const followUp = tools.mock.calls[1]![0];
     const toolMessage = followUp.at(-1)!;
@@ -551,16 +576,13 @@ describe("period range net (this month)", () => {
       )
       .mockResolvedValueOnce("Travel was your biggest report.");
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "which reports did I spend on the most this month?");
     form.set("today", "2026-09-10");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      query: string;
-    };
-
-    expect(res.ok).toBe(true);
-    expect(res.query).toBe(
+    const frames = await callStream(null, form);
+    // The deterministic net rides the translation event the client renders.
+    const translation = frames.find((f) => f.type === "translation")!;
+    expect(translation.query).toBe(
       "category:Travel after:2026-09-01 before:2026-09-10",
     );
   });
@@ -578,16 +600,12 @@ describe("period range net (this month)", () => {
       )
       .mockResolvedValueOnce("Meals took most of it.");
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "where does my money go?");
     form.set("today", "2026-09-10");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      shape: string;
-    };
-
-    expect(res.ok).toBe(true);
-    expect(res.shape).toBe("by-category");
+    const frames = await callStream(null, form);
+    const translation = frames.find((f) => f.type === "translation")!;
+    expect(translation.shape).toBe("by-category");
     const conversation = await readLatestConversation("user_test1");
     expect(conversation!.exchanges.at(-1)!.shape).toBe("by-category");
   });
@@ -601,19 +619,16 @@ describe("period range net (this month)", () => {
       )
       .mockResolvedValueOnce("Blue Bottle was your biggest merchant.");
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set(
       "text",
       "which reports did I spend on the most in the last 30 days?",
     );
     form.set("today", "2026-09-10");
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      chart: boolean;
-    };
-
-    expect(res.ok).toBe(true);
-    expect(res.chart).toBe(false);
+    const frames = await callStream(null, form);
+    // The app's decision wins: the translation event carries no chart.
+    const translation = frames.find((f) => f.type === "translation")!;
+    expect(translation.chart).toBe(false);
   });
 });
 
@@ -760,17 +775,13 @@ describe("filing a trip from the chat (plan_mileage)", () => {
 
     const before = await mileageIds();
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "log the drive from the office back home on Tuesday");
     form.set("today", "2026-07-15");
-    const asked = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      answer: string;
-      pending?: PendingTrip;
-    };
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
 
-    expect(asked.ok).toBe(true);
-    expect(asked.answer).toContain("confirm");
+    expect(done.answer).toContain("confirm");
     // "the office" and "home" are resolvable from the model's context: the
     // account's home address plus every named place the chat may name.
     const prompt = tools.mock.calls[0]![0].find(
@@ -781,7 +792,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     );
     expect(prompt).toContain("Recent trip stops: 456 Dev Ave, Coding, CA");
     // The proposal carries the app's own geocoded addresses and figures.
-    expect(asked.pending).toMatchObject({
+    expect(done.pending).toMatchObject({
       kind: "mileage",
       date: "2026-07-14",
       type: "business",
@@ -795,7 +806,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
       // back, so the card proposes the leg they drove.
       roundTrip: false,
     });
-    expect(asked.pending!.stops.map((s) => s.address)).toEqual([
+    expect((done.pending as PendingTrip).stops.map((s) => s.address)).toEqual([
       "1 Office Way, Testing, CA",
       "2 Home St, Testing, CA",
     ]);
@@ -805,7 +816,7 @@ describe("filing a trip from the chat (plan_mileage)", () => {
     expect(conversation!.exchanges).toHaveLength(1);
 
     // The card's payload: the trip's inputs, no computed figures.
-    const pending = asked.pending!;
+    const pending = done.pending as PendingTrip;
     const confirm = new FormData();
     confirm.set("intent", "confirm");
     confirm.set(
@@ -924,20 +935,16 @@ describe("filing a purchase from the chat (plan_expense)", () => {
 
     const before = await receiptIds();
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "log $50 spent on coffee");
     form.set("today", "2026-07-15");
-    const asked = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      answer: string;
-      pending?: PendingExpense;
-    };
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
 
-    expect(asked.ok).toBe(true);
     // The proposal carries the app's own resolution of what the model
     // described: the amount is normalized, and the category is one of the
     // account's own names or nothing at all.
-    expect(asked.pending).toEqual({
+    expect(done.pending).toEqual({
       kind: "expense",
       merchant: "Peet's Coffee",
       amount: "50.00",
@@ -959,7 +966,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     expect(conversation!.exchanges).toHaveLength(1);
 
     // The card's payload: what the user described, no computed field.
-    const pending = asked.pending!;
+    const pending = done.pending as PendingExpense;
     const confirm = new FormData();
     confirm.set("intent", "confirmExpense");
     confirm.set(
@@ -1096,17 +1103,15 @@ describe("filing a purchase from the chat (plan_expense)", () => {
 
     const before = await receiptIds();
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "log 50 eu on coffee at Costa Coffee");
     form.set("today", "2026-07-15");
-    const asked = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      pending?: PendingExpense;
-    };
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
 
     // The app converts (the model never does): the card carries the dollars
     // the expense will store plus what the user paid and the rate used.
-    expect(asked.pending).toMatchObject({
+    expect(done.pending).toMatchObject({
       merchant: "Costa Coffee",
       amount: "58.10",
       originalAmount: "50.00",
@@ -1123,7 +1128,7 @@ describe("filing a purchase from the chat (plan_expense)", () => {
     expect(await receiptIds()).toEqual(before);
 
     // The card posts what the user said; confirming converts again.
-    const pending = asked.pending!;
+    const pending = done.pending as PendingExpense;
     const confirm = new FormData();
     confirm.set("intent", "confirmExpense");
     confirm.set(
@@ -1207,16 +1212,13 @@ describe("filing a purchase from the chat (plan_expense)", () => {
 
     const before = await receiptIds();
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "log 50 gbp on coffee at Costa Coffee");
     form.set("today", "2026-07-15");
-    const asked = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      pending?: PendingExpense;
-    };
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
 
-    expect(asked.ok).toBe(true);
-    expect(asked.pending).toBeUndefined();
+    expect(done.pending).toBeUndefined();
     const toolMessage = tools.mock.calls[1]![0].filter(
       (m) => m.role === "tool",
     ).at(-1)!;
@@ -1256,18 +1258,14 @@ describe("filing a purchase from the chat (plan_expense)", () => {
       });
 
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "log $50 at Costa");
     form.set("today", "2026-07-15");
-    const res = (await callRoute("action", "gratis", form)) as {
-      ok: boolean;
-      answer: string;
-      pending?: unknown;
-    };
+    const frames = await callStream("gratis", form);
+    const done = frames.find((f) => f.type === "done")!;
 
-    expect(res.ok).toBe(true);
-    expect(res.answer).toBe("I couldn't work that one out; try again?");
-    expect(res.pending).toBeUndefined();
+    expect(done.answer).toBe("I couldn't work that one out; try again?");
+    expect(done.pending).toBeUndefined();
     const toolMessage = tools.mock.calls[1]![0].filter(
       (m) => m.role === "tool",
     ).at(-1)!;
@@ -1276,7 +1274,6 @@ describe("filing a purchase from the chat (plan_expense)", () => {
 
   it("files the expense even when the transcript write fails", async () => {
     await clearAuthFailures("insights:user_test1");
-    vi.mocked(appendExchange).mockRejectedValueOnce(new Error("no transcript"));
     chat.mockResolvedValue(
       '{"query":"","title":"Expenses","months":12,"chart":false}',
     );
@@ -1296,16 +1293,16 @@ describe("filing a purchase from the chat (plan_expense)", () => {
       .mockResolvedValueOnce({ content: "Confirm it?", toolCalls: [] });
 
     const ask = new FormData();
-    ask.set("intent", "translate");
+    ask.set("intent", "stream");
     ask.set("text", "log $50 at Costa");
     ask.set("today", "2026-07-15");
-    const asked = (await callRoute("action", "gratis", ask)) as {
-      ok: boolean;
-      pending?: unknown;
-    };
-    expect(asked.ok).toBe(true);
+    const frames = await callStream("gratis", ask);
+    expect(frames.some((f) => f.type === "done")).toBe(true);
 
     const before = await receiptIds();
+    // The transcript write fails on the confirm: logFiledExchange must
+    // absorb it.
+    vi.mocked(appendExchange).mockRejectedValueOnce(new Error("no transcript"));
     const confirm = new FormData();
     confirm.set("intent", "confirmExpense");
     confirm.set(
@@ -1350,25 +1347,22 @@ describe("filing a purchase from the chat (plan_expense)", () => {
   });
 });
 
-describe("translate throttle (INS-GATE-1)", () => {
+describe("question throttle (INS-GATE-1)", () => {
   it("rejects with a friendly error once the per-user limit trips", async () => {
     chat.mockResolvedValue('{"query":"","title":"T","months":6}');
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "coffee");
     // Trip the limit (threshold 12 in this test's window). The file's other
     // tests share the key, so the request below is refused whatever the
     // budget's state; what matters is that a refusal costs no model call.
     for (let i = 0; i < 12; i++) {
-      await callRoute("action", null, form);
+      await callStream(null, form);
     }
     const before = chat.mock.calls.length;
-    const res = (await callRoute("action", null, form)) as {
-      ok: boolean;
-      error?: string;
-    };
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/Too many questions/i);
+    const frames = await callStream(null, form);
+    const error = frames.find((f) => f.type === "error")!;
+    expect(error.error).toMatch(/Too many questions/i);
     // The refused request must not reach the model: a "check after the
     // call" would still run up the bill the counter exists to cap.
     expect(chat).toHaveBeenCalledTimes(before);
@@ -1387,10 +1381,10 @@ describe("translate throttle (INS-GATE-1)", () => {
     );
     chat.mockResolvedValue('{"query":"","title":"T","months":6}');
     const form = new FormData();
-    form.set("intent", "translate");
+    form.set("intent", "stream");
     form.set("text", "coffee");
-    const res = (await callRoute("action", null, form)) as { ok: boolean };
-    expect(res.ok).toBe(true);
+    const frames = await callStream(null, form);
+    expect(frames.some((f) => f.type === "done")).toBe(true);
     expect(chat).toHaveBeenCalled();
   });
 });
