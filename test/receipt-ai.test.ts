@@ -150,6 +150,55 @@ describe("streamChatRound provider shapes", () => {
     await expect(call).rejects.toBeInstanceOf(LLMError);
     await expect(call).rejects.toThrow(/unreachable/i);
   });
+
+  /** A 200 whose body is a live stream (never closed by the "provider")
+   * that records whether the reader canceled it. */
+  const openSse = (frames: object[]) => {
+    const state = { canceled: false };
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const frame of frames) {
+          controller.enqueue(
+            new TextEncoder().encode(`data: ${JSON.stringify(frame)}\n\n`),
+          );
+        }
+        // Deliberately left open: the provider has not ended the stream.
+      },
+      cancel() {
+        state.canceled = true;
+      },
+    });
+    return { response: new Response(body, { status: 200 }), state };
+  };
+
+  it("cancels the provider stream when it fails mid-flight", async () => {
+    const { response, state } = openSse([
+      { error: { message: "quota exceeded" } },
+    ]);
+    vi.stubGlobal("fetch", async () => response);
+    await expect(
+      streamChatRound([{ role: "user", content: "hi" }], { tools: [] }),
+    ).rejects.toThrow(/stream error/i);
+    // The failed round must release the connection instead of holding it
+    // until the provider closes it or the timeout fires.
+    expect(state.canceled).toBe(true);
+  });
+
+  it("refuses an answer stream far past the token budget", async () => {
+    // ~82 KB of streamed answer: a provider that ignored max_tokens this
+    // hard must not be able to flow unbounded bytes into memory and the
+    // transcript.
+    const { response, state } = openSse(
+      Array.from({ length: 20 }, () => ({
+        choices: [{ delta: { content: "x".repeat(4096) } }],
+      })),
+    );
+    vi.stubGlobal("fetch", async () => response);
+    await expect(
+      streamChatRound([{ role: "user", content: "hi" }], { tools: [] }),
+    ).rejects.toThrow(/stream exceeded/i);
+    expect(state.canceled).toBe(true);
+  });
 });
 
 describe("thinking param by provider and model", () => {

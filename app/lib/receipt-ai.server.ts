@@ -678,6 +678,12 @@ async function postChatCompletions(
   return res as Response & { body: NonNullable<Response["body"]> };
 }
 
+/** Ceiling on total volume from one streamed completion (answer text,
+ * tool-call fragments, any single unterminated line): ANSWER_MAX_TOKENS
+ * (6000 tokens) is roughly 24 KB of prose, so a stream this far past it
+ * has stopped honouring the token budget. */
+const MAX_STREAM_CHARS = 64_000;
+
 /**
  * Stream a toolless chat completion, forwarding answer text as it is
  * generated (the Insights chat renders deltas as they arrive). Same wire
@@ -721,82 +727,103 @@ export async function streamChatRound(
     { id?: string; name?: string; arguments: string }
   >();
   let buffer = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += value;
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const payload = line.trim().replace(/^data:\s*/, "");
-      if (!payload || payload === "[DONE]") continue;
-      let parsed: {
-        choices?: {
-          delta?: {
-            content?: string;
-            tool_calls?: {
-              index?: number;
-              id?: string;
-              function?: { name?: string; arguments?: string };
-            }[];
-          };
-        }[];
-        error?: { message?: string };
-      };
-      try {
-        parsed = JSON.parse(payload);
-      } catch {
-        continue;
-      }
-      if (parsed.error) {
-        // The provider streams failures as frames too (rate limits,
-        // quota) — surface the reason instead of an empty answer.
+  // Total decoded stream volume, checked on every chunk: it bounds the
+  // answer text AND the tool-call fragments (whose accumulation the content
+  // cap would miss) and any single unterminated line.
+  let streamChars = 0;
+  let finished = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      streamChars += value.length;
+      if (streamChars > MAX_STREAM_CHARS) {
         throw new LLMError(
-          `${model}: ${providerLabelOf()} stream error: ${parsed.error.message ?? "unknown"}`,
+          `${model}: ${providerLabelOf()} stream exceeded ${MAX_STREAM_CHARS} characters`,
           502,
-          payload,
+          "",
         );
       }
-      const delta = parsed.choices?.[0]?.delta ?? {};
-      if (delta.content) {
-        content += delta.content;
-        opts.onDelta?.(delta.content);
-      }
-      // Streamed tool calls arrive as fragments keyed by index; the name
-      // and arguments accumulate across chunks until the round finishes.
-      for (const fragment of delta.tool_calls ?? []) {
-        const index = fragment.index ?? 0;
-        const call = toolCalls.get(index) ?? {
-          id: "",
-          name: "",
-          arguments: "",
+      buffer += value;
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const payload = line.trim().replace(/^data:\s*/, "");
+        if (!payload || payload === "[DONE]") continue;
+        let parsed: {
+          choices?: {
+            delta?: {
+              content?: string;
+              tool_calls?: {
+                index?: number;
+                id?: string;
+                function?: { name?: string; arguments?: string };
+              }[];
+            };
+          }[];
+          error?: { message?: string };
         };
-        if (fragment.id) call.id = fragment.id;
-        if (fragment.function?.name) call.name = fragment.function.name;
-        if (fragment.function?.arguments)
-          call.arguments += fragment.function.arguments;
-        toolCalls.set(index, call);
+        try {
+          parsed = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        if (parsed.error) {
+          // The provider streams failures as frames too (rate limits,
+          // quota) — surface the reason instead of an empty answer.
+          throw new LLMError(
+            `${model}: ${providerLabelOf()} stream error: ${parsed.error.message ?? "unknown"}`,
+            502,
+            payload,
+          );
+        }
+        const delta = parsed.choices?.[0]?.delta ?? {};
+        if (delta.content) {
+          content += delta.content;
+          opts.onDelta?.(delta.content);
+        }
+        // Streamed tool calls arrive as fragments keyed by index; the name
+        // and arguments accumulate across chunks until the round finishes.
+        for (const fragment of delta.tool_calls ?? []) {
+          const index = fragment.index ?? 0;
+          const call = toolCalls.get(index) ?? {
+            id: "",
+            name: "",
+            arguments: "",
+          };
+          if (fragment.id) call.id = fragment.id;
+          if (fragment.function?.name) call.name = fragment.function.name;
+          if (fragment.function?.arguments)
+            call.arguments += fragment.function.arguments;
+          toolCalls.set(index, call);
+        }
       }
     }
-  }
-  const assembled = [...toolCalls.entries()]
-    .sort(([a], [b]) => a - b)
-    .flatMap(([, call]) => {
-      const parsed = toolCallSchema.safeParse({
-        id: call.id || `streamed-${call.name}`,
-        type: "function",
-        function: { name: call.name ?? "", arguments: call.arguments },
+    const assembled = [...toolCalls.entries()]
+      .sort(([a], [b]) => a - b)
+      .flatMap(([, call]) => {
+        const parsed = toolCallSchema.safeParse({
+          id: call.id || `streamed-${call.name}`,
+          type: "function",
+          function: { name: call.name ?? "", arguments: call.arguments },
+        });
+        return parsed.success ? [parsed.data] : [];
       });
-      return parsed.success ? [parsed.data] : [];
-    });
-  if (!content && assembled.length === 0) {
-    throw new LLMError(
-      `${model}: ${providerLabelOf()} returned neither content nor a tool call`,
-      502,
-      "",
-    );
+    if (!content && assembled.length === 0) {
+      throw new LLMError(
+        `${model}: ${providerLabelOf()} returned neither content nor a tool call`,
+        502,
+        "",
+      );
+    }
+    finished = true;
+    return { content, toolCalls: assembled };
+  } finally {
+    // An error exit leaves the reader locked and the response body
+    // unconsumed; cancel it so the connection returns to the pool instead
+    // of hanging until the provider closes it or the timeout fires.
+    if (!finished) await reader.cancel().catch(() => {});
   }
-  return { content, toolCalls: assembled };
 }
 
 /** The `thinking` request param each provider/model pair needs, or undefined
