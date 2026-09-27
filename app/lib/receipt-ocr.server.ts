@@ -165,9 +165,15 @@ const TESSERACT_NODE_WORKER = nodeRequire.resolve(
  * next call recreates it.
  */
 let ocrWorker: Worker | null = null;
+// The in-flight creation, if any: caching the PROMISE (not the worker)
+// closes the creation race — two concurrent OCR calls must not both run
+// createWorker, since the loser's worker would be overwritten here and
+// leak its thread and wasm heap.
+let ocrWorkerPromise: Promise<Worker> | null = null;
 
-async function getOcrWorker() {
-  if (!ocrWorker) {
+/** Exposed for the worker-lifecycle test: create-once under concurrency. */
+export function getOcrWorker(): Promise<Worker> {
+  ocrWorkerPromise ??= (async () => {
     // tesseract.js is heavy; load it only when OCR actually runs (the
     // package, wasm core, and traineddata all load on first worker
     // creation). Importing here keeps cold starts of non-OCR requests
@@ -177,23 +183,37 @@ async function getOcrWorker() {
       workerPath: TESSERACT_NODE_WORKER,
       langPath: "https://tessdata.projectnaptha.com/4.0.0",
     });
-  }
-  return ocrWorker;
+    return ocrWorker;
+  })();
+  return ocrWorkerPromise;
+}
+
+/** Drop the singleton: a failed recognize can leave the worker in a bad
+ * state, and the next call builds a fresh one. Exposed so the lifecycle
+ * test can reset module state between cases. */
+export function resetOcrWorker(): void {
+  ocrWorker = null;
+  ocrWorkerPromise = null;
 }
 
 /** OCR an image with tesseract.js. */
 export async function ocrImage(buffer: Buffer): Promise<string> {
   const png = await normalizeImage(buffer);
+  // The reset in the catch must only touch state THIS call owns: another
+  // concurrent call may have already replaced the worker (or be mid-
+  // creation), and killing that one would leak or churn it.
+  const creation = getOcrWorker();
+  let worker: Worker | null = null;
   try {
-    const worker = await getOcrWorker();
+    worker = await creation;
     const { data } = await worker.recognize(png);
     return (data.text ?? "").trim();
   } catch (err) {
     // The worker may be wedged, so drop it and let the next call build a fresh
     // one. Terminate it first: the thread (and its wasm heap) would otherwise
     // outlive the reset, one leaked worker per failure.
-    await ocrWorker?.terminate().catch(() => {});
-    ocrWorker = null;
+    await worker?.terminate().catch(() => {});
+    if (ocrWorkerPromise === creation) resetOcrWorker();
     throw err;
   }
 }

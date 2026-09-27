@@ -42,6 +42,7 @@ export default defineConfig({
       "test/excel.test.ts",
       "test/statements.test.ts",
       "test/receipt-pdf.test.ts",
+      "test/receipt-ocr-worker.test.ts",
       "test/within-window.test.ts",
       "test/jmap-email-schema.test.ts",
       "test/jmap-server.test.ts",

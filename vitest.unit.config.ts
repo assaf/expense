@@ -26,6 +26,7 @@ export default defineConfig({
       "test/validation.test.ts",
       "test/statements.test.ts",
       "test/receipt-pdf.test.ts",
+      "test/receipt-ocr-worker.test.ts",
       "test/email-classify.test.ts",
       "test/email-confirmation.test.ts",
       "test/llm-alert.test.ts",
