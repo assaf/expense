@@ -200,31 +200,19 @@ function expandedTokens(tokens: Set<string>): Set<string> {
 const REFUND_RE =
   /refund|payment|pymt|credit|cash\s?back|adjustment|rebate|deposit|return|reversal/i;
 
-/** Direction for a signed amount: credit-card convention (negative = the
- * purchase, positive = a credit), guarded by whether the file carries signs
- * at all; unsigned files are all charges. */
+/** Direction for a signed amount. `chargeIsPositive` comes from the file's
+ * majority sign (Chase CSVs list purchases as negatives; Amex exports list
+ * them as positives); null for files that carry no signs at all, where
+ * every row is a charge unless the description says refund. Refund
+ * keywords win before any sign rule. */
 function directionFor(
   signed: Decimal,
   description: string,
-  fileHasNegative: boolean,
+  chargeIsPositive: boolean | null,
 ): "charge" | "refund" {
   if (REFUND_RE.test(description)) return "refund";
-  if (!fileHasNegative) return "charge";
-  return signed.isNegative() ? "charge" : "refund";
-}
-
-/** Direction for CSV/XLSX amounts, where the charge sign varies by bank
- * (Chase CSVs list purchases as negatives; Amex exports list them as
- * positives). `chargeIsPositive` comes from the file's majority sign;
- * refund keywords still win first. */
-function directionForSign(
-  signed: Decimal,
-  description: string,
-  chargeIsPositive: boolean,
-): "charge" | "refund" {
-  if (REFUND_RE.test(description)) return "refund";
-  const negativeIsCharge = !chargeIsPositive;
-  return signed.isNegative() === negativeIsCharge ? "charge" : "refund";
+  if (chargeIsPositive === null) return "charge";
+  return signed.isNegative() === !chargeIsPositive ? "charge" : "refund";
 }
 
 /** Strong, unambiguous direction words for a Type/Category column. The
@@ -342,7 +330,7 @@ function parseStatementCells(
         if (TYPE_REFUND_RE.test(typeText)) {
           direction = "refund";
         } else {
-          direction = directionForSign(signed, description, chargeIsPositive);
+          direction = directionFor(signed, description, chargeIsPositive);
         }
       }
     }
@@ -445,7 +433,7 @@ export function parseOfxStatement(text: string): {
       date,
       description,
       amount: signed.abs().toFixed(2),
-      direction: directionFor(signed, description, hasNegative),
+      direction: directionFor(signed, description, hasNegative ? false : null),
       fitId,
       source: "ofx",
       raw: `<STMTTRN> ${posted} ${signed.toFixed(2)} ${description}`.trim(),

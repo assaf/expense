@@ -493,10 +493,19 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
 
   /** Drop a proposal the user does not want (nothing was filed). */
   const discardProposal = (index: number) => {
-    setTranscript((t) =>
-      t.map((ex, i) => (i === index ? { ...ex, pending: undefined } : ex)),
-    );
+    patchExchangeAt(index, { pending: undefined });
   };
+
+  /** Patch one streamed exchange by its client id, or by index for the
+   * confirm-flow sites that run before the id exists. */
+  const patchExchange = (id: string, patch: Partial<Exchange>) =>
+    setTranscript((t) =>
+      t.map((ex) => (ex.id === id ? { ...ex, ...patch } : ex)),
+    );
+  const patchExchangeAt = (index: number, patch: Partial<Exchange>) =>
+    setTranscript((t) =>
+      t.map((ex, i) => (i === index ? { ...ex, ...patch } : ex)),
+    );
 
   // "New conversation" clears the transcript optimistically (see the
   // header form): the intent has no failure branch, so waiting for the
@@ -577,24 +586,15 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             // streamed answer must stay addressable, which "newest empty
             // one" matching got wrong the moment the first delta landed.
             if (event.type === "translation") {
-              setTranscript((t) =>
-                t.map((ex) =>
-                  ex.id === id
-                    ? {
-                        ...ex,
-                        chart: event.chart,
-                        shape: event.shape,
-                        query: event.query,
-                        months: event.months,
-                        title: event.title,
-                      }
-                    : ex,
-                ),
-              );
+              patchExchange(id, {
+                chart: event.chart,
+                shape: event.shape,
+                query: event.query,
+                months: event.months,
+                title: event.title,
+              });
             } else if (event.type === "tools") {
-              setTranscript((t) =>
-                t.map((ex) => (ex.id === id ? { ...ex, checking: true } : ex)),
-              );
+              patchExchange(id, { checking: true });
             } else if (event.type === "delta") {
               setTranscript((t) =>
                 t.map((ex) =>
@@ -606,23 +606,14 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
             } else if (event.type === "done") {
               // The answer completes the exchange; the chart, if any, is
               // translated afterwards and arrives as its own event.
-              setTranscript((t) =>
-                t.map((ex) =>
-                  ex.id === id
-                    ? {
-                        ...ex,
-                        answer: event.answer,
-                        checking: false,
-                        ...(event.pending ? { pending: event.pending } : {}),
-                      }
-                    : ex,
-                ),
-              );
+              patchExchange(id, {
+                answer: event.answer,
+                checking: false,
+                ...(event.pending ? { pending: event.pending } : {}),
+              });
             } else if (event.type === "error") {
               setComposerError(event.error);
-              setTranscript((t) =>
-                t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
-              );
+              patchExchange(id, { stopped: true });
             }
           }
         }
@@ -631,9 +622,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
           setComposerError(
             "The AI service didn't answer. Try again in a moment.",
           );
-          setTranscript((t) =>
-            t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
-          );
+          patchExchange(id, { stopped: true });
         }
       } finally {
         if (inFlight.current === id) inFlight.current = null;
@@ -654,9 +643,7 @@ export default function InsightsPage({ loaderData }: Route.ComponentProps) {
         ? null
         : (transcript.find((ex) => ex.id === id)?.question ?? null);
     if (id !== null) {
-      setTranscript((t) =>
-        t.map((ex) => (ex.id === id ? { ...ex, stopped: true } : ex)),
-      );
+      patchExchange(id, { stopped: true });
     }
     // Hand the question back, unless the user has already typed the next one.
     if (question && !ask.trim()) setAsk(question);

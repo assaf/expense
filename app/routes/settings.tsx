@@ -49,6 +49,7 @@ import {
   readLocations,
   removeLocation as removeLocationRow,
   updateLocation as updateLocationRow,
+  type LocationResult,
 } from "~/lib/db/locations";
 import { MAX_ADDRESS_LENGTH } from "~/lib/types";
 import { disconnectOAuthClient, listUserOAuthSessions } from "~/lib/db/oauth";
@@ -165,6 +166,42 @@ function closeAccountSummary(footprint: AccountFootprint): string {
     .join(" ");
 }
 
+/** Shared add/update prelude: trim, refuse over-long addresses (a clamped
+ * address would geocode to somewhere else), geocode when non-empty.
+ * Returns the error response to send, or the values to save. */
+async function addressFromForm(form: FormData): Promise<
+  | Response
+  | {
+      address: string;
+      geocoded: Awaited<ReturnType<typeof geocode>> | null;
+    }
+> {
+  const address = formString(form, "address").trim();
+  if (address.length > MAX_ADDRESS_LENGTH) {
+    // Refused rather than truncated: a clamped address would be geocoded
+    // as a prefix, so the saved place could sit somewhere else.
+    return Response.json({
+      ok: false,
+      error: "That address is too long — keep it under 300 characters.",
+    });
+  }
+  return { address, geocoded: address ? await geocode(address) : null };
+}
+
+/** Both location intents answer with the saved row, or the db error. */
+function locationResponse(result: LocationResult): Response {
+  return Response.json(
+    result.ok
+      ? {
+          ok: true,
+          id: result.location.id,
+          name: result.location.name,
+          geocoded: result.location.lat !== null,
+        }
+      : result,
+  );
+}
+
 export async function action({ request, context }: Route.ActionArgs) {
   const { user, form, intent } = await requireIntent(request, context);
 
@@ -212,62 +249,30 @@ export async function action({ request, context }: Route.ActionArgs) {
       break;
     }
     case "addLocation": {
-      const address = formString(form, "address").trim();
-      if (address.length > MAX_ADDRESS_LENGTH) {
-        // Refused rather than truncated: a clamped address would be geocoded
-        // as a prefix, so the saved place could sit somewhere else.
-        return Response.json({
-          ok: false,
-          error: "That address is too long — keep it under 300 characters.",
-        });
-      }
-      const geocoded = address ? await geocode(address) : null;
+      const prelude = await addressFromForm(form);
+      if (prelude instanceof Response) return prelude;
       const result = await addLocationRow(user.accountId, {
         name: formString(form, "name"),
-        address,
-        lat: geocoded?.lat ?? null,
-        lng: geocoded?.lng ?? null,
+        address: prelude.address,
+        lat: prelude.geocoded?.lat ?? null,
+        lng: prelude.geocoded?.lng ?? null,
       });
-      return Response.json(
-        result.ok
-          ? {
-              ok: true,
-              id: result.location.id,
-              name: result.location.name,
-              geocoded: result.location.lat !== null,
-            }
-          : result,
-      );
+      return locationResponse(result);
     }
     case "updateLocation": {
-      const address = formString(form, "address").trim();
-      if (address.length > MAX_ADDRESS_LENGTH) {
-        return Response.json({
-          ok: false,
-          error: "That address is too long — keep it under 300 characters.",
-        });
-      }
-      const geocoded = address ? await geocode(address) : null;
+      const prelude = await addressFromForm(form);
+      if (prelude instanceof Response) return prelude;
       const result = await updateLocationRow(
         user.accountId,
         formString(form, "id"),
         {
           name: formString(form, "name"),
-          address,
-          lat: geocoded?.lat ?? null,
-          lng: geocoded?.lng ?? null,
+          address: prelude.address,
+          lat: prelude.geocoded?.lat ?? null,
+          lng: prelude.geocoded?.lng ?? null,
         },
       );
-      return Response.json(
-        result.ok
-          ? {
-              ok: true,
-              id: result.location.id,
-              name: result.location.name,
-              geocoded: result.location.lat !== null,
-            }
-          : result,
-      );
+      return locationResponse(result);
     }
     case "removeLocation":
       await removeLocationRow(user.accountId, formString(form, "id"));

@@ -839,6 +839,12 @@ export async function extractReceiptFromSource(opts: {
   let originalName: string;
   let renderError = "";
 
+  const recordRenderError = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    renderError = renderError ? `${renderError}; ${message}` : message;
+    receiptImage = null;
+  };
+
   if (source.kind === "attachment") {
     const { buffer, contentType, filename } = source;
     if (opts.localOnly) {
@@ -868,7 +874,7 @@ export async function extractReceiptFromSource(opts: {
       try {
         receiptImage = await renderPdfToPng(buffer);
       } catch (err) {
-        renderError = err instanceof Error ? err.message : String(err);
+        recordRenderError(err);
       }
       imageMime = "image/png";
       originalName = filename.replace(/\.pdf$/i, ".png");
@@ -915,8 +921,7 @@ export async function extractReceiptFromSource(opts: {
           fetchRemoteImage: fetchRemoteImageImpl,
         });
       } catch (err) {
-        renderError = err instanceof Error ? err.message : String(err);
-        receiptImage = null;
+        recordRenderError(err);
       }
     } else {
       try {
@@ -925,8 +930,7 @@ export async function extractReceiptFromSource(opts: {
           from: email.from,
         });
       } catch (err) {
-        renderError = err instanceof Error ? err.message : String(err);
-        receiptImage = null;
+        recordRenderError(err);
       }
     }
     if (!receiptImage) {
@@ -935,9 +939,7 @@ export async function extractReceiptFromSource(opts: {
           subject: email.subject,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        renderError = renderError ? `${renderError}; ${message}` : message;
-        receiptImage = null;
+        recordRenderError(err);
       }
     }
     imageMime = "image/png";

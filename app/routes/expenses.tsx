@@ -52,7 +52,6 @@ import {
   summarizeAmounts,
 } from "~/lib/format";
 import { useToday } from "~/lib/use-today";
-import { captureError } from "~/lib/errors.server";
 import { requireIntent } from "~/lib/route-helpers.server";
 import { requireContextUser } from "~/lib/auth.server";
 import { INBOUND_EMAIL_ADDRESS } from "~/lib/env";
@@ -63,10 +62,10 @@ import {
   type MileageRateEntry,
 } from "~/lib/mileage-rates";
 import { usePasteImage } from "~/lib/use-paste-image";
+import { deleteExpenseWithMarker } from "~/lib/expense-save.server";
 import { readAccount } from "~/lib/db/accounts";
-import { deleteExpense, readExpenses } from "~/lib/db/expenses";
+import { readExpenses } from "~/lib/db/expenses";
 import { listEmailConnections } from "~/lib/db/email-connections";
-import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { readMileageRates } from "~/lib/db/seed";
 import {
@@ -185,13 +184,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (intent === "delete") {
     const id = formString(form, "id");
-    await deleteExpense(id, user.accountId);
-    // Same as the editor's delete: a chat-filed expense left a transcript
-    // line that would otherwise keep claiming it is filed. The row is gone
-    // either way, so a transcript failure logs instead of failing the delete.
-    await markFiledExpenseDeleted(user.id, id).catch((err: unknown) => {
-      captureError(err, { where: "insights-delete-marker" });
-    });
+    await deleteExpenseWithMarker(id, user.accountId, user.id);
     return null;
   }
 

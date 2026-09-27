@@ -6,7 +6,9 @@ import {
   renameImageToConvention,
 } from "~/lib/images.server";
 import { isMileageType } from "~/lib/mileage-rates";
-import { upsertExpense } from "~/lib/db/expenses";
+import { upsertExpense, deleteExpense } from "~/lib/db/expenses";
+import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
+import { captureError } from "~/lib/errors.server";
 import { fxColumns, fxProvenance, withConversionNote } from "~/lib/fx-note";
 import { addReport, findOpenReportFresh } from "~/lib/db/reports";
 import {
@@ -32,6 +34,21 @@ export async function addReportAction(
   const name = formString(form, "name").trim();
   const result = await addReport(accountId, name);
   return Response.json(result.ok ? { ok: true, name } : result);
+}
+
+/** Delete an expense and note the deletion in the chat transcript: the
+ * answer model reads the last few exchanges back as fact, so a filed
+ * expense would otherwise keep claiming it is there. The row is already
+ * gone, so a transcript failure logs instead of failing the delete. */
+export async function deleteExpenseWithMarker(
+  id: string,
+  accountId: string,
+  userId: string,
+): Promise<void> {
+  await deleteExpense(id, accountId);
+  await markFiledExpenseDeleted(userId, id).catch((err: unknown) => {
+    captureError(err, { where: "insights-delete-marker" });
+  });
 }
 
 /**

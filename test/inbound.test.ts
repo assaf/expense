@@ -15,7 +15,7 @@ import {
 } from "~/lib/inbound-email.server";
 import { isPrivateHost } from "~/lib/ssrf.server";
 import type { SendEmailInput } from "~/lib/email-mime.server";
-import { matchCategory } from "~/lib/receipt-ai.server";
+import { matchName } from "~/lib/receipt-ai.server";
 import type {
   InboundDeps,
   EmailReceivedData,
@@ -553,12 +553,12 @@ describe("Category matching", () => {
   const cats = ["Office Supplies", "Travel", "Meals"];
 
   it("matches case-insensitively", () => {
-    expect(matchCategory("office supplies", cats)).toBe("Office Supplies");
+    expect(matchName("office supplies", cats)).toBe("Office Supplies");
   });
 
   it("returns empty when nothing matches", () => {
-    expect(matchCategory("Unrelated", cats)).toBe("");
-    expect(matchCategory("", cats)).toBe("");
+    expect(matchName("Unrelated", cats)).toBe("");
+    expect(matchName("", cats)).toBe("");
   });
 });
 

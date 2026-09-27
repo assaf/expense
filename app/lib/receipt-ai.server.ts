@@ -626,6 +626,58 @@ export async function chatCompletion(
   return contentStr;
 }
 
+/** One chat-completions POST shared by every LLM entry point: the API-key
+ * guard, the caller signal and provider timeout as one bound, and the two
+ * error mappings (unreachable vs bad status). */
+async function postChatCompletions(
+  body: Record<string, unknown>,
+  opts: { signal?: AbortSignal; alertOnBadStatus?: boolean } = {},
+): Promise<Response & { body: NonNullable<Response["body"]> }> {
+  if (!LLM_API_KEY) {
+    throw new LLMError("LLM_API_KEY is not configured", 500, "");
+  }
+  const model = String(body.model);
+  const signal = opts.signal
+    ? AbortSignal.any([
+        opts.signal,
+        AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
+      ])
+    : AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LLM_API_KEY}`,
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (err) {
+    throw new LLMError(
+      `${model}: ${providerLabelOf()} unreachable: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      502,
+      "",
+    );
+  }
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    const err = new LLMError(
+      `${model}: ${providerLabelOf()} API ${res.status}: ${text.slice(0, 500)}`,
+      res.status,
+      text,
+    );
+    if (opts.alertOnBadStatus) maybeAlertLlmUnusable(err);
+    throw err;
+  }
+  // The check above guarantees a body; the intersection type keeps the
+  // streaming caller from re-checking it.
+  return res as Response & { body: NonNullable<Response["body"]> };
+}
+
 /**
  * Stream a toolless chat completion, forwarding answer text as it is
  * generated (the Insights chat renders deltas as they arrive). Same wire
@@ -661,40 +713,7 @@ export async function streamChatRound(
     temperature: 0.1,
     max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
   };
-  const signal = opts.signal
-    ? AbortSignal.any([
-        opts.signal,
-        AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
-      ])
-    : AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LLM_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (err) {
-    throw new LLMError(
-      `${model}: ${providerLabelOf()} unreachable: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-      502,
-      "",
-    );
-  }
-  if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => "");
-    throw new LLMError(
-      `${model}: ${providerLabelOf()} API ${res.status}: ${text.slice(0, 500)}`,
-      res.status,
-      text,
-    );
-  }
+  const res = await postChatCompletions(body, { signal: opts.signal });
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let content = "";
   const toolCalls = new Map<
@@ -818,9 +837,6 @@ async function llmMessage(
     signal?: AbortSignal;
   } = {},
 ): Promise<{ content?: string; tool_calls?: ToolCall[] }> {
-  if (!LLM_API_KEY) {
-    throw new LLMError("LLM_API_KEY is not configured", 500, "");
-  }
   const last = messages[messages.length - 1]!;
   let content: unknown = last.content;
   if (opts.image) {
@@ -836,8 +852,8 @@ async function llmMessage(
   }
   // Tool rounds send their own message list (assistant tool_calls + tool
   // results), so only the image form rewrites the last message.
-  const providerLabel = providerLabelOf();
   const model = opts.model ?? LLM_MODEL;
+  const thinking = thinkingParam(LLM_BASE_URL, model);
   const body = {
     model,
     messages: opts.image
@@ -847,54 +863,14 @@ async function llmMessage(
     ...(opts.tools && opts.tools.length > 0
       ? { tools: opts.tools, tool_choice: "auto" }
       : {}),
-    ...(thinkingParam(LLM_BASE_URL, model) && opts.thinking !== false
-      ? { thinking: thinkingParam(LLM_BASE_URL, model) }
-      : {}),
+    ...(thinking && opts.thinking !== false ? { thinking } : {}),
     temperature: 0.1,
     max_tokens: opts.maxTokens ?? LLM_MAX_TOKENS,
   };
-  // The caller's signal (the browser gave up) and the provider timeout are
-  // one bound: whichever fires first ends the wait.
-  const signal = opts.signal
-    ? AbortSignal.any([
-        opts.signal,
-        AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
-      ])
-    : AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LLM_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (err) {
-    // The provider never answered (unreachable, timed out, or cancelled).
-    // That is the same class of event as a bad status — the answer is
-    // missing, the app is not broken — so callers get the error envelope
-    // they already handle instead of an unhandled throw.
-    throw new LLMError(
-      `${model}: ${providerLabel} unreachable: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-      502,
-      "",
-    );
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const err = new LLMError(
-      `${model}: ${providerLabel} API ${res.status}: ${text.slice(0, 500)}`,
-      res.status,
-      text,
-    );
-    maybeAlertLlmUnusable(err);
-    throw err;
-  }
+  const res = await postChatCompletions(body, {
+    signal: opts.signal,
+    alertOnBadStatus: true,
+  });
   const data = (await res.json()) as {
     choices?: {
       finish_reason?: string;
@@ -922,7 +898,7 @@ async function llmMessage(
     // a finish_reason of "length" means the model spent the whole token
     // budget on reasoning_content before writing anything.
     throw new LLMError(
-      `${model}: ${providerLabel} returned neither content nor a tool call`,
+      `${model}: ${providerLabelOf()} returned neither content nor a tool call`,
       502,
       JSON.stringify({
         finish_reason: data.choices?.[0]?.finish_reason ?? null,
@@ -1061,7 +1037,7 @@ function buildExtractionResult(raw: string): ExtractionResult {
 /** Best-matching existing name, or "" when nothing matches. Exact match
  * wins; otherwise a containment match either direction. Shared by the
  * category and report lookups, which differ only in the label. */
-function matchName(suggested: string, existing: string[]): string {
+export function matchName(suggested: string, existing: string[]): string {
   const s = suggested.trim().toLowerCase();
   if (!s) return "";
   const exact = existing.find((name) => name.toLowerCase() === s);
@@ -1070,11 +1046,6 @@ function matchName(suggested: string, existing: string[]): string {
     (name) => name.toLowerCase().includes(s) || s.includes(name.toLowerCase()),
   );
   return fuzzy ?? "";
-}
-
-/** Best-matching existing category name, or "" when nothing matches. */
-export function matchCategory(suggested: string, existing: string[]): string {
-  return matchName(suggested, existing);
 }
 
 /**
@@ -1096,7 +1067,7 @@ export function resolveCategory(
     knownMerchants,
     existing,
     (m) => m.category,
-    matchCategory,
+    matchName,
   );
 }
 

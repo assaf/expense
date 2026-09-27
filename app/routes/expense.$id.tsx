@@ -2,17 +2,16 @@ import { redirect } from "react-router";
 import type { EditorData } from "~/components/editor/editor-shared";
 import { MileageEditor } from "~/components/editor/mileage-editor";
 import { ReceiptEditor } from "~/components/editor/receipt-editor";
-import { captureError } from "~/lib/errors.server";
 import { requireContextUser } from "~/lib/auth.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import {
   addReportAction,
+  deleteExpenseWithMarker,
   saveExpenseFromForm,
 } from "~/lib/expense-save.server";
 import { MILEAGE_TYPE_LABELS } from "~/lib/mileage-rates";
-import { deleteExpense, readExpense, readNeighborIds } from "~/lib/db/expenses";
+import { readExpense, readNeighborIds } from "~/lib/db/expenses";
 import { readWarrantiesForExpense } from "~/lib/db/warranties";
-import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { closedReportNames, readReports } from "~/lib/db/reports";
 import { badRequest, notFound, unknownIntent } from "~/lib/validation";
 import { requireIntent } from "~/lib/route-helpers.server";
@@ -53,14 +52,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
   if (!existing) throw notFound();
 
   if (intent === "delete") {
-    await deleteExpense(params.id, user.accountId);
-    // The chat transcript recorded filing it, and the answer model reads the
-    // last few exchanges back as fact: note the deletion so the transcript
-    // stops claiming the expense is there. The row is already gone, so a
-    // transcript failure logs instead of failing the delete.
-    await markFiledExpenseDeleted(user.id, params.id).catch((err: unknown) => {
-      captureError(err, { where: "insights-delete-marker" });
-    });
+    await deleteExpenseWithMarker(params.id, user.accountId, user.id);
     return redirect("/expenses");
   }
 
