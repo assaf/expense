@@ -85,16 +85,27 @@ describe("MCP endpoint", () => {
     return { status: res.status, json };
   }
 
-  it("never redirects a browser off the endpoint (no Accept-based routing)", async () => {
-    // A GET from a browser used to be redirected to /connect. A cache that
-    // stored that redirect for /mcp would hand it to an MCP client, so the
-    // endpoint answers as an endpoint whatever the Accept says (the SDK
-    // answers 406 for a body type it cannot serve; the human guide is /connect).
+  it("redirects a browser to the guide, and never an MCP client", async () => {
+    // A GET from a browser (Accept: text/html) lands on /connect. The
+    // redirect is no-store and varies on Accept, so a cache that stored it
+    // can never hand it to an MCP client, whose Accept is always
+    // application/json, text/event-stream — those still reach the endpoint.
     const browser = await fetch(`${baseURL}/mcp`, {
       headers: { Accept: "text/html" },
+      redirect: "manual",
     });
-    expect(browser.headers.get("location")).toBeNull();
-    expect(browser.status < 300 || browser.status >= 400).toBe(true);
+    expect(browser.status).toBeGreaterThanOrEqual(300);
+    expect(browser.status).toBeLessThan(400);
+    expect(browser.headers.get("location")).toBe("/connect");
+    expect(browser.headers.get("cache-control")).toContain("no-store");
+
+    // A client-shaped GET still reaches the endpoint (401, not a redirect).
+    const client = await fetch(`${baseURL}/mcp`, {
+      headers: { Accept: "application/json, text/event-stream" },
+      redirect: "manual",
+    });
+    expect(client.headers.get("location")).toBeNull();
+    expect(client.status).toBe(401);
   });
 
   /** 2025-era handshake, served statelessly (no session id is issued). Its

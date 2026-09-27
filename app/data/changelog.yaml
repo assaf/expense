@@ -45,6 +45,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-09-27"
+    changes:
+      - type: improvement
+        text: "Opening the assistant endpoint {{mcpEndpoint}} in a browser now lands you on the connect guide instead of a JSON error; assistant clients are unaffected."
   - date: "2026-09-25"
     changes:
       - type: improvement
