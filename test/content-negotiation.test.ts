@@ -17,7 +17,14 @@ import { describe, expect, it } from "vite-plus/test";
  * request-scoped and uncacheable. Anything else that genuinely must vary
  * belongs in ALLOWED with a comment saying why caching cannot apply to it.
  */
-const ALLOWED: Record<string, string> = {};
+const ALLOWED: Record<string, string> = {
+  // /mcp redirects a BROWSER (Accept: text/html) to the /connect guide. The
+  // redirect is Cache-Control: no-store and Vary: Accept, so no shared cache
+  // ever stores it, and MCP clients (application/json, text/event-stream)
+  // never send text/html — the endpoint they reach is byte-identical
+  // whatever the Accept says.
+  "app/routes/mcp.ts": "no-store redirect for browsers only",
+};
 
 describe("content type never depends on Accept", () => {
   it("no app source reads the Accept header or varies on it", () => {

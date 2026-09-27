@@ -19,7 +19,11 @@ const PATHS = [
   "/about.md", // the mirror, as its own URL
   "/llms.txt", // plain text
   "/sitemap.xml", // XML
-  "/mcp", // the MCP endpoint (JSON, and the SDK's own transport)
+  // /mcp is deliberately NOT in the sample: it redirects a browser
+  // (Accept: text/html) to /connect — Cache-Control: no-store, so the
+  // redirect is never cached and an MCP client (application/json,
+  // text/event-stream) can never receive it. See the ALLOWED entry in
+  // test/content-negotiation.test.ts.
   "/login", // app HTML
   "/expenses", // auth-gated: the gate redirects, then /login answers
 ];
