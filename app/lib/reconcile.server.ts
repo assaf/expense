@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { daysBetween } from "~/lib/date-days";
 import { parseCsv } from "~/lib/csv";
 import { parseXlsxSheets } from "~/lib/excel.server";
 import { isPdf } from "~/lib/file-types";
@@ -152,17 +153,7 @@ export function tokensOf(text: string): Set<string> {
 
 /** Calendar-day difference between two YYYY-MM-DD dates. */
 function dayDiff(a: string, b: string): number {
-  const da = Date.UTC(
-    Number(a.slice(0, 4)),
-    Number(a.slice(5, 7)) - 1,
-    Number(a.slice(8, 10)),
-  );
-  const db = Date.UTC(
-    Number(b.slice(0, 4)),
-    Number(b.slice(5, 7)) - 1,
-    Number(b.slice(8, 10)),
-  );
-  return Math.abs(Math.round((da - db) / 86_400_000));
+  return Math.abs(daysBetween(a, b) ?? Number.NaN);
 }
 
 /** True when the statement description and the expense merchant share a

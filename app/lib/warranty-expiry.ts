@@ -10,28 +10,13 @@
  * day boundary.
  */
 
+import { daysBetween } from "~/lib/date-days";
+
 /** How many days ahead a warranty counts as "expiring soon". */
 export const EXPIRING_SOON_DAYS = 90;
 
 /** Which list group a warranty belongs to. */
 export type WarrantyExpiryGroup = "expired" | "soon" | "later" | "none";
-
-/** Midnight UTC for a "YYYY-MM-DD" date, or null when malformed. */
-function utcDay(date: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!m) return null;
-  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Number.isNaN(ms) ? null : ms;
-}
-
-/** Whole days from `from` to `to` ("YYYY-MM-DD" each), or null when either
- * is malformed. Negative when `to` is before `from`. */
-function daysBetween(from: string, to: string): number | null {
-  const a = utcDay(from);
-  const b = utcDay(to);
-  if (a === null || b === null) return null;
-  return Math.round((b - a) / 86_400_000);
-}
 
 /** Which list group a warranty belongs to: "" (no end date) and an
  * unparseable date are "none"; before today is "expired"; within

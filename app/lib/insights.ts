@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { shiftDays } from "~/lib/date-days";
 import {
   matchesSearch,
   parseQuery,
@@ -351,14 +352,6 @@ export function recentTripStops(
 export interface InsightStarter {
   question: string;
   answer: string;
-}
-
-function shiftDays(today: string, days: number): string {
-  const [y, m, d] = today.split("-").map(Number);
-  if (!y || !m || !d) return today;
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
 }
 
 function starterLabel(e: InsightExpense): string {
