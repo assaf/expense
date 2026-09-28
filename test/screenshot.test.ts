@@ -859,7 +859,7 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
     page: Page,
     path: string,
     name: string,
-    opts: { reducedMotion?: boolean } = {},
+    opts: { reducedMotion?: boolean; waitFocus?: string } = {},
   ): Promise<void> {
     currentName = name;
     // The landing page plays a video, and a playing video is never the same
@@ -871,6 +871,16 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
     });
     await page.goto(path, { waitUntil: "load", timeout: 15_000 });
     await waitForSettled(page);
+    // Some editors focus a field on mount (the receipt editor autofocuses
+    // the amount). Whether that focus ring has painted when the screenshot
+    // fires is a race; waiting for it makes the captured state the one the
+    // app actually shows, every run.
+    if (opts.waitFocus) {
+      await page.waitForFunction(
+        (selector) => document.activeElement?.matches(selector ?? ""),
+        opts.waitFocus,
+      );
+    }
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
     try {
@@ -904,7 +914,9 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
         pageErrors.push(`${currentName}: ${String(error)}`),
       );
       await capture(page, "/expenses", "home");
-      await capture(page, "/expense/new", "expense-new");
+      await capture(page, "/expense/new", "expense-new", {
+        waitFocus: 'input[placeholder="0.00"]',
+      });
       await capture(page, "/insights", "insights");
 
       // The editor needs a real expense row: the seeded Test Store receipt.
@@ -941,7 +953,9 @@ describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
       // Prisma's generated create-result type is loose here (see the same
       // cast in the README block above).
       const editorId = editor.id as string;
-      await capture(page, `/expense/${editorId}`, "expense-editor");
+      await capture(page, `/expense/${editorId}`, "expense-editor", {
+        waitFocus: 'input[placeholder="0.00"]',
+      });
 
       await capture(page, "/emails", "emails");
       await capture(page, "/email-review", "email-review");
