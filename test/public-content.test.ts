@@ -34,7 +34,6 @@ import {
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import {
   currentMileageSummary,
-  EARLY_ACCESS_SPOTS,
   MCP_ENDPOINT,
   mileageRateRows,
   SITE_URL,
@@ -189,15 +188,6 @@ describe("public page content", () => {
     expect(SCHEDULE_C_PAGE.description).toContain(
       `The ${DEFAULT_CATEGORIES.length} expense lines`,
     );
-    // The fact sheet quotes the same two computed numbers the landing page
-    // and the Schedule C page do: the early-access cap and the seeded
-    // category count, never a number typed into the file.
-    expect(PRODUCT_FACTS.description).toContain(String(EARLY_ACCESS_SPOTS));
-    expect(
-      PRODUCT_FACTS.facts.some((fact) =>
-        fact.value.includes(String(EARLY_ACCESS_SPOTS)),
-      ),
-    ).toBe(true);
     expect(
       PRODUCT_FACTS.facts.some((fact) =>
         fact.value.includes(String(DEFAULT_CATEGORIES.length)),

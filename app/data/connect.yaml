@@ -12,13 +12,13 @@ eyebrow: "MCP server"
 title: |-
   Connect any AI assistant to Expense.
 summary: |-
-  Expense speaks the Model Context Protocol: connect any MCP client (Claude, ChatGPT, Gemini CLI, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth; there are no API keys.
+  Expense speaks the Model Context Protocol: connect any MCP client (Claude, ChatGPT, Gemini CLI, and others) and it can capture receipts from photos and PDFs, log drives at the IRS rate, answer spending questions from your data, build and export reports, and reconcile bank statements. Connecting is signing in with your Expense account via OAuth.
 setupHeading: |-
   Setup instructions
 baseAddressLabel: |-
   The base MCP server address is:
 oauthNote: |-
-  All connections use OAuth: the first connection opens a sign-in flow to your Expense account. No API keys.
+  All connections use OAuth: the first connection opens a sign-in flow to your Expense account.
 
 clients:
   - id: "claude"
@@ -109,7 +109,7 @@ clients:
       - |-
         Any MCP client with Streamable HTTP transport works: point it at the server URL above.
       - |-
-        The client discovers the OAuth flow automatically via /.well-known/oauth-authorization-server and opens the Expense sign-in; approve once and consent is remembered.
+        The client discovers the OAuth flow automatically via /.well-known/oauth-authorization-server and opens the Expense sign-in.
 
 promptsHeading: |-
   Example prompts
@@ -120,11 +120,11 @@ tools:
   - name: "capture_receipt"
     writes: true
     what: |-
-      Capture a receipt from an image or PDF (file data or URL): extraction pipeline, stores the image, creates the expense.
+      Capture a receipt from an image or PDF (file data or URL): the extraction pipeline, stores the image, creates the expense.
   - name: "log_mileage"
     writes: true
     what: |-
-      Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate. One way unless the trip returns to its first stop.
+      Log a driving trip from ordered stops; geocodes, routes, and prices it at the IRS rate. One way or return trip, up to you.
   - name: "list_expenses"
     writes: false
     what: |-
@@ -177,7 +177,7 @@ cta:
   heading: |-
     Your expenses, on speaking terms with your assistant.
   body: |-
-    Accounts are free and start empty. Add your first receipt in under a minute, then connect your assistant whenever you're ready.
+    Add your first receipt in under a minute, then connect your assistant whenever you're ready.
   secondaryLabel: "Read the FAQ"
 
 mirror:

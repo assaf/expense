@@ -154,11 +154,18 @@ function collapse(text: string): string {
 
 /** A document's sections, past its front matter and the mirror's own
  * title/summary preamble. Placeholders are filled first, so a source file and
- * the mirror built from it carry the same values. */
+ * the mirror built from it carry the same values. Wrapping position inside a
+ * paragraph is not part of the contract (the mirror re-wraps when it is
+ * rebuilt), so whitespace collapses within each paragraph while the blank
+ * lines that separate paragraphs stay significant. */
 function documentSections(text: string): string {
   const body = fillPlaceholders(text.replace(/^---\n[\s\S]*?\n---\n/, ""));
   const at = body.indexOf("## ");
-  return at === -1 ? "" : body.slice(at);
+  const sections = at === -1 ? "" : body.slice(at);
+  return sections
+    .split(/\n{2,}/)
+    .map((paragraph) => collapse(paragraph))
+    .join("\n\n");
 }
 
 describe.each(MIRRORS)("GET $path", ({ loader, content, type }) => {

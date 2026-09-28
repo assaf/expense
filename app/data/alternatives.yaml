@@ -17,18 +17,7 @@ eyebrow: "Compare"
 title: |-
   How Expense compares to the other receipt apps.
 summary: |-
-  How Expense stacks up against the receipt
-  apps it is most often listed next to: Expensify, Zoho Expense, SparkReceipt,
-  Shoeboxed, and Wave. Expense is built for one job: getting a private person's
-  or small team's expenses ready for tax season. It is free, the first
-  {{freeSpots}} accounts while the app is early, with no card and no ads. It
-  reads receipts with OCR, suggests categories, reconciles credit card
-  statements to catch missed deductions, arranges everything in Schedule C
-  format with mileage at the IRS rate, and answers questions about your
-  spending on its own Insights page,
-  computing the answer from your records instead of guessing at it. The apps it
-  gets compared to mostly aim at company expense management or general
-  bookkeeping; the table below shows who is best for what.
+  How Expense stacks up against the receipt apps it is most often listed next to: Expensify, Zoho Expense, SparkReceipt, Shoeboxed, and Wave. Expense is built for one job: getting a private person's or small team's expenses ready for tax season. It is free, with no card and no ads. It reads receipts with OCR, suggests categories, reconciles credit card statements to catch missed deductions, arranges everything in Schedule C format with mileage at the IRS rate, and answers questions about your spending on its own Insights page, computing the answer from your records instead of guessing at it. The apps it gets compared to mostly aim at company expense management or general bookkeeping; the table below shows who is best for what.
 
 tableHeadings:
   - "App"
@@ -106,16 +95,16 @@ mirror:
 inboxHeading: |-
   Best expense tracker for the self-employed: the row that decides it
 inboxNote: |-
-  Every app in this category scans a photo, and that is not where a
-  freelancer's receipts are. They arrive as email: the hotel confirmation, the
-  software invoice, the client lunch. So the row that decides this comparison
-  is which apps read your inbox. Forwarding and reading are not the same
-  feature, and the difference is who does the work: forwarding asks you to
-  notice the receipt, find the email, and send it somewhere, which is the step
-  people skip in a busy month, while reading a mailbox puts the receipt in your
-  records before you think about it. Checked on September 17, 2026, none of the
-  three apps below documents a mailbox connection. Expense reads Gmail and
-  Fastmail, so the mailbox you already use is the one that gets read.
+  Every app in this category scans a photo, and that is not where a freelancer's
+  receipts are. They arrive as email: the hotel confirmation, the software
+  invoice, the client lunch. So the row that decides this comparison is which
+  apps read your inbox. Forwarding and reading are not the same feature, and the
+  difference is who does the work: forwarding asks you to notice the receipt,
+  find the email, and send it somewhere, which is the step people skip in a busy
+  month, while reading a mailbox puts the receipt in your records before you
+  think about it. Checked on September 17, 2026, none of the three apps below
+  documents a mailbox connection. Expense reads Gmail and Fastmail, so the
+  mailbox you already use is the one that gets read.
 
 inboxTableHeadings:
   - "App"
@@ -169,8 +158,8 @@ inboxApps:
 exampleHeading: "One receipt email, start to finish"
 exampleIntro: |-
   A hotel confirmation arrives on a Tuesday in March. You never forward it,
-  because the mailbox is already connected. Here is what happens before you
-  next open the app.
+  because the mailbox is already connected. Here is what happens before you next
+  open the app.
 
 example:
   - step: "The sender is checked"

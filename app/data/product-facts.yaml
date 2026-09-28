@@ -6,26 +6,26 @@
 # app/data/schedule-c-categories.yaml, paired by index, so this page follows
 # the seeded list rather than repeating it.
 # Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{mileage}},
-# {{mileagePeriod}}, {{freeSpots}}, {{categoryCount}}, {{supportEmail}}.
+# {{mileagePeriod}}, {{categoryCount}}, {{supportEmail}}.
 # See app/lib/content.server.ts.
 
 metaTitle: |-
   Expense product facts: free, Schedule C categories, receipt capture, mileage
 description: |-
-  A self-employed expense tracker in facts: free with no card and no ads, the first {{freeSpots}} accounts while it is early, all {{categoryCount}} IRS Schedule C Part II categories pre-seeded, receipts in by photo, screenshot, drag and drop, paste, PDF or forwarded email, Gmail and Fastmail inbox import, mileage at the IRS rate, bank reconciliation, warranty records that group by what is still covered, and PDF or ZIP export.
+  A self-employed expense tracker in facts: free with no card and no ads, all {{categoryCount}} IRS Schedule C Part II categories pre-seeded, receipts in by photo, screenshot, drag and drop, paste, PDF or forwarded email, Gmail and Fastmail inbox import, mileage at the IRS rate, bank reconciliation, warranty records that group by what is still covered, and PDF or ZIP export.
 eyebrow: "Facts"
 title: |-
   Expense product facts
 summary: |-
   Expense is a free expense tracker for people who file taxes as individuals:
   freelancers, the self-employed, side hustlers. A receipt comes in from a
-  photo, a screenshot, a PDF or the mailbox itself; every expense lands under
-  an IRS Schedule C category and in a report you name; drives are priced at
-  the IRS rate for the date and type; and the year leaves as a PDF per report
-  or a ZIP with everything. A warranty document goes in the same way, and the
-  record it makes (merchant, product, purchase date, expiry, and the document
-  itself) groups by what is still covered. This page is the short version, in
-  the shape a write-up can copy.
+  photo, a screenshot, a PDF or the mailbox itself; every expense lands under an
+  IRS Schedule C category and in a report you name; drives are priced at the IRS
+  rate for the trip date and type; and the year leaves as a PDF per report or a
+  ZIP with everything. A warranty document goes in the same way, and the record
+  it makes (merchant, product, purchase date, expiry, and the document itself)
+  groups by what is still covered. This page is the short version, in the shape
+  a write-up can copy.
 
 factsHeading: "At a glance"
 tableHeadings:
@@ -40,8 +40,6 @@ facts:
     value: "An expense tracker for individuals filing taxes, and the small teams around them"
   - label: "Price"
     value: "Free. No card, no trial clock, no ads, no paid tier to be upgraded into"
-  - label: "Early access"
-    value: "The first {{freeSpots}} accounts"
   - label: "Built for"
     value: "Freelancers, self-employed people and side hustlers who file Schedule C"
   - label: "Platform"
@@ -87,25 +85,19 @@ capture:
       Copy a screenshot, press Cmd-V on the page.
   - method: "Forwarded email"
     what: |-
-      Forward the receipt email to your account's address. Only senders you approved get through, and the same email cannot be imported twice.
+      Forward the receipt email to your account's address. Only senders you approved get through, and the same email will not be imported twice.
   - method: "Connected mailbox"
     what: |-
       Connect Gmail or Fastmail and the receipts already in the inbox import on their own: merchant, amount and category filled in, nothing to forward. Most expense trackers import from Gmail only; Expense supports Fastmail natively.
 
 categoriesHeading: "IRS Schedule C line items"
 categoriesNote: |-
-  Every new account starts with these {{categoryCount}} categories, in the
-  order the form lists them, so a year's totals line up with your return
-  without re-bucketing. The [reference page]({{siteUrl}}/schedule-c-categories)
-  has a plain-language note for each line, and mileage on line 9 is priced at
-  the [IRS rate]({{siteUrl}}/mileage-rates) for the drive's date and type.
+  Every new account starts with these {{categoryCount}} categories, in the order the form lists them, so a year's totals line up with your return without re-bucketing. The [reference page]({{siteUrl}}/schedule-c-categories) has a plain-language note for each line, and mileage on line 9 is priced at the [IRS rate]({{siteUrl}}/mileage-rates) for the drive's date and type.
 
 pricingHeading: "What it costs"
 pricing:
   - |-
     Free. No card, no trial clock, no ads.
-  - |-
-    Early access is capped at {{freeSpots}} accounts, and the home page shows how many are claimed.
   - |-
     OCR, categorizing, mileage, reconciliation, exports and the MCP server are all in the free account. There is no paid tier above it.
   - |-
@@ -120,4 +112,4 @@ cta:
 mirror:
   title: "Expense product facts"
   footer: |-
-    Expense ({{siteUrl}}) is a free expense tracker for individuals filing taxes: receipts are read with OCR and categorized with an LLM, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, and a year exports as a PDF per report or a ZIP with everything. A warranty document becomes a record of the merchant, the product, the purchase date, the expiry and the document itself, grouped by what is still covered. The first {{freeSpots}} accounts are free while the app is early. Questions go to {{supportEmail}}.
+    Expense ({{siteUrl}}) is a free expense tracker for individuals filing taxes: receipts are read with OCR and categorized with an LLM, categories come from the IRS Schedule C lines, mileage is priced at the IRS rate for the drive date and type, and a year exports as a PDF per report or a ZIP with everything. A warranty document becomes a record of the merchant, the product, the purchase date, the expiry and the document itself, grouped by what is still covered. Questions go to {{supportEmail}}.

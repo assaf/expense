@@ -6,12 +6,12 @@
 # {{supportEmail}}, {{categoryCount}}. See app/lib/content.server.ts.
 
 metaTitle: |-
-  About Expense: a free expense tracker built for tax season
+  About Expense: an expense tracker built for tax season
 description: |-
-  Expense is a free expense tracker built for tax season: OCR reads your receipts, AI picks the category, drives are logged at the IRS rate, and reports export as PDF or ZIP.
+  Expense is an expense tracker built for tax season: OCR reads your receipts, AI picks the category, drives are logged at the IRS mileage rate, and reports export as PDF or ZIP.
 eyebrow: "About"
 title: |-
-  A free expense tracker for tax season.
+  An expense tracker for tax season.
 benefitsHeading: |-
   What do you get
 factsHeading: |-
@@ -21,39 +21,36 @@ benefits:
   - title: "Free while we're early"
     body: |-
       No credit card, no payment, no ads. Join now while it's free.
-  - title: "Stop losing receipts in your gallery"
+  - title: "Stop losing receipts in your photo library"
     body: |-
-      The receipts are already on your phone: photos in the gallery, screenshots, a PDF in Downloads. Drop one in, or paste it or forward the email, and OCR and AI pull out the merchant, amount, date and category and file the expense. Invoices work the same way, and an attachment on a receipt email, PDF or image, is pulled out and read, not just the text in the body.
+      The receipts are already on your phone: photo library, screenshots, PDF downloads. Paste one in or forward the email, our OCR+AI pulls out the merchant, amount, and category and files the expense.
   - title: "Email receipts effortless"
     body: |-
-      Forward a receipt email to your account and the expense is recorded for you, dated from the original email.
+      Forward a receipt email to your Expense account and we'll recorded it for you, dated from the original email.
   - title: "Connect your Fastmail account"
     body: |-
-      Connect your Fastmail mailbox and receipts are processed as they land: merchant, amount and category filled in, nothing to forward. Mail is screened locally before any AI runs, so newsletters and bank alerts are ignored, and a merchant you have paid before skips the model entirely. Connecting also scans back through the last 90 days of inbox, so your records start the day you connect, not the day after. Most other expense apps only auto-import from Gmail; Expense works with Fastmail.
-  - title: "Get ready with your deductions on time"
+      Connect Fastmail and we'll process receipts that land in your inbox: merchant, amount and category filled in, nothing to forward. We ignore newsletters and bank alerts. Connecting Fastmail also scans the last 90 days, so your records start the day you connect.
+  - title: "Get your deductions ready on time"
     body: |-
-      Every account starts with the categories from the IRS Schedule C lines, so a receipt is filed on the line it belongs to and nothing has to be sorted out at tax time.
+      Every account starts with the categories from IRS Schedule C, so a receipt is filed on the line it belongs to and nothing has to be sorted out at tax time.
   - title: "PDF reports to show your accountant"
     body: |-
-      Group your expenses into reports you name, Home or Work or Travel, and each report keeps its own total. Download a PDF per report with its receipts attached, or a ZIP with the CSV and all the receipt images, ready to hand to your accountant.
+      Group your expenses into reports. Download a PDF for each report, or download a ZIP with all receipts, ready to hand to your accountant.
   - title: "Log drives without Excel"
     body: |-
-      Map the drive and the app works out the distance and the deduction, at the IRS rate for the date you drove.
-  - title: "Duplicates detection"
-    body: |-
-      Every receipt image is fingerprinted with SHA-256 when it's stored, so the same file arriving twice, by upload, forward or connected inbox, is recognized as one receipt. Auto-imports skip the second copy, an upload gets a warning before it messes up your totals.
+      Map the drive and the app works out the distance and the allowed deduction, at the IRS rate for that date.
   - title: "Reconcile against your monthly statement"
     body: |-
-      Upload a credit card or bank statement (PDF, CSV, QuickBooks, or Excel) and Expense matches the charges against what you logged. Anything you never logged stands out, and you can reconcile as many statements as you like, personal and business spending on one card included.
+      Upload a credit card or bank statement (PDF, CSV, QuickBooks, Excel) and Expense matches the charges against what you logged. Anything you never logged stands out, and you can reconcile as many statements as you like.
   - title: "Track the warranty, not just the purchase"
     body: |-
-      A receipt gets you a deduction; the warranty is what you need when the thing breaks, usually years later, when the paperwork is long gone. Drop a warranty document on the Warranties page and Expense reads the merchant, the product, the purchase date and the expiry off it, keeps the document attached, and starts the record with the retailer's own return and coverage terms where we have researched them. Records are grouped by what is still in force, what expires within 90 days, what has already expired, and what has no end date, so you can tell whether something is still covered without digging through a drawer.
+      A receipt gets you a deduction; the warranty is what you need when the thing breaks, usually years later, when the paperwork is long gone. Drop a warranty document on the Warranties page and Expense saves it for you. Expense groups warranties by their end date, so you can tell whether something is still covered without digging through a drawer.
   - title: "Share with your family or accountant"
     body: |-
       Invite someone with a code and you all see the same expenses. Your other accounts stay private.
   - title: "Use your personal AI assistant"
     body: |-
-      Connect your own AI assistant (Claude, OpenAI or anything MCP-capable) by signing in with your account, no token to paste. Drop a receipt into the chat and it gets uploaded and categorized, ask what you spent on flights, or have it build a report for you. Disconnect in one click in settings. In Chrome, browser agents also get read-only in-page tools (WebMCP) without any setup.
+      Connect your own AI assistant (Claude, OpenAI, etc) to your Expense account. Drop a receipt into the chat and it gets uploaded and categorized; ask what you spent on flights, or have it build a report for you.
   - title: "Your data belongs to you"
     body: |-
       No ads, no data selling. Your expenses stay in your account, and you can export and leave anytime.
@@ -62,9 +59,9 @@ cta:
   heading: |-
     Start collecting this year's expenses.
   body: |-
-    Accounts are free and start empty. Add your first receipt in under a minute.
+    Add your first receipt in under a minute.
   secondaryLabel: "Read the FAQ"
 
 mirror:
-  title: "Expense: a free expense tracker built for tax season"
+  title: "Expense: an expense tracker built for tax season"
   footer: "Stewarded by Assaf Arkin (https://labnotes.org)."

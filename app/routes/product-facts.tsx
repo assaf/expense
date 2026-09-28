@@ -5,12 +5,7 @@ import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
 import { PRODUCT_FACTS, scheduleCRows } from "~/lib/content.server";
 import { countAccounts } from "~/lib/db/accounts";
-import {
-  EARLY_ACCESS_SPOTS,
-  marketingPageHeaders,
-  pageMeta,
-  SITE_URL,
-} from "~/lib/seo-content";
+import { marketingPageHeaders, pageMeta, SITE_URL } from "~/lib/seo-content";
 import type { Route } from "./+types/product-facts";
 
 export async function loader() {
@@ -95,12 +90,6 @@ export default function ProductFactsPage({ loaderData }: Route.ComponentProps) {
             </tbody>
           </table>
         </div>
-        {loaderData.spotsClaimed > 0 ? (
-          <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-            {loaderData.spotsClaimed} of {EARLY_ACCESS_SPOTS} free spots
-            claimed.
-          </p>
-        ) : null}
       </section>
 
       <section className="mt-14">

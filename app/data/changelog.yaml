@@ -13,8 +13,8 @@
 # assistant reads, so an entry has to make sense on its own, without the day's
 # other entries.
 #
-# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{freeSpots}},
-# {{supportEmail}}. See app/lib/content.server.ts.
+# Filled in at build time: {{siteUrl}}, {{mcpEndpoint}}, {{supportEmail}}.
+# See app/lib/content.server.ts.
 #
 # The oldest group is a summary, not a day: the pre-launch stretch (the app
 # being built, 2026-07-30 .. 2026-08-08) is folded into one line per capability
@@ -23,21 +23,15 @@
 metaTitle: |-
   Expense changelog: what changed in the app, by date
 description: |-
-  What changed in Expense, newest first, by date: the new features, improvements and fixes a person using the app can see, from receipt capture and the inbox import to mileage, reports, bank reconciliation, warranties, exports and the MCP server. Written for people using the app and for assistants reading it.
+  What changed in Expense: new features, improvements and fixes a person using the app can see, from receipt capture and the inbox import to mileage, reports, bank reconciliation, warranties, exports and the MCP server.
 eyebrow: "Changelog"
 title: |-
   What changed in Expense
 summary: |-
-  What changed in the app, newest first, grouped by date. Each entry is
-  something a person using the app can see or do: a capability that did not
-  exist, a fix for something that was wrong, a change to something that
-  already worked. The same list is published as markdown at
-  /changelog.md, so a model reading this site can see what changed and when.
+  Each entry is something a person using the app can see or do: a new featur, a fix for something that was wrong, a change to something that already worked. The same list is published as markdown at /changelog.md, so a model reading this site can see what changed and when.
 
 intro: |-
-  Newest first. The entries are the changes a person using the app can see,
-  not the plumbing behind them. The last group is a summary: the nine days of
-  building that followed the first commit on 2026-07-30.
+  The entries are the changes a person using the app can see, not the plumbing behind them.
 
 typeLabels:
   feature: "New"
@@ -47,6 +41,8 @@ typeLabels:
 releases:
   - date: "2026-09-27"
     changes:
+      - type: fix
+        text: "The prose pages (support, terms, privacy) no longer split every wrapped line into its own paragraph: consecutive lines form one paragraph, and a link that wraps onto the next line now works."
       - type: improvement
         text: "Opening the assistant endpoint {{mcpEndpoint}} in a browser now lands you on the connect guide instead of a JSON error; assistant clients are unaffected."
   - date: "2026-09-25"
@@ -205,10 +201,6 @@ releases:
         text: "Connecting FastMail no longer means pasting an API token: you sign in with FastMail instead."
       - type: fix
         text: "Receipt confirmation emails are sent again for FastMail accounts."
-  - date: "2026-08-29"
-    changes:
-      - type: feature
-        text: "The landing page shows how many of the first 100 free accounts have been taken."
   - date: "2026-08-28"
     changes:
       - type: feature
@@ -336,10 +328,9 @@ releases:
 
 cta:
   heading: |-
-    Free while it is early.
+    Try Expense free.
   body: |-
-    The first {{freeSpots}} accounts, no card. Everything on this page is
-    already in them.
+    No subscription, no 25-scan monthly cap, no ads.
 
 mirror:
   title: "Expense changelog"

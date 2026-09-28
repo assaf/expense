@@ -42,7 +42,6 @@ import {
 } from "~/lib/markdown";
 import {
   currentMileageSummary,
-  EARLY_ACCESS_SPOTS,
   MCP_ENDPOINT,
   mileageRateRows,
   SITE_URL,
@@ -112,7 +111,6 @@ const CONTENT_VALUES: Record<string, string> = {
   mileageFirstYear: mileageRateRows().at(-1)!.start.slice(0, 4),
   mileageLastYear: mileageRateRows()[0]!.end.slice(0, 4),
   categoryCount: String(DEFAULT_CATEGORIES.length),
-  freeSpots: String(EARLY_ACCESS_SPOTS),
 };
 
 const PLACEHOLDER = /\{\{(\w+)\}\}/g;
