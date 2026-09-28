@@ -39,6 +39,14 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-09-28"
+    changes:
+      - type: feature
+        text: "Ask Insights how to use an AI assistant with Expense and it walks you through connecting the MCP server: it asks which assistant you use when that matters and gives the steps for Claude, ChatGPT, Gemini CLI, and the rest."
+      - type: fix
+        text: "Setup steps in Insights answers now render properly: file paths and commands show as code, and a pasted JSON config shows as a code block instead of a wall of backticks."
+      - type: fix
+        text: 'Questions that need a longer think no longer fail with "the AI service didn''t answer": the safety cap on streamed answers no longer counts the model''s internal reasoning, only the answer you see.'
   - date: "2026-09-27"
     changes:
       - type: fix

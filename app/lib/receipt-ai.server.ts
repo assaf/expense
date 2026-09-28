@@ -678,10 +678,11 @@ async function postChatCompletions(
   return res as Response & { body: NonNullable<Response["body"]> };
 }
 
-/** Ceiling on total volume from one streamed completion (answer text,
- * tool-call fragments, any single unterminated line): ANSWER_MAX_TOKENS
- * (6000 tokens) is roughly 24 KB of prose, so a stream this far past it
- * has stopped honouring the token budget. */
+/** Ceiling on what one streamed completion may accumulate (answer text,
+ * tool-call fragments, one unterminated line): ANSWER_MAX_TOKENS (6000
+ * tokens) is roughly 24 KB of prose, so an accumulation this far past it
+ * has stopped honouring the token budget. Raw SSE volume — every token in
+ * its own JSON frame, plus the ignored reasoning stream — is not counted. */
 const MAX_STREAM_CHARS = 64_000;
 
 /**
@@ -727,17 +728,18 @@ export async function streamChatRound(
     { id?: string; name?: string; arguments: string }
   >();
   let buffer = "";
-  // Total decoded stream volume, checked on every chunk: it bounds the
-  // answer text AND the tool-call fragments (whose accumulation the content
-  // cap would miss) and any single unterminated line.
-  let streamChars = 0;
+  // Bound on what this round ACCUMULATES: answer text plus tool-call
+  // fragments. The raw SSE volume is much larger (every token rides its
+  // own JSON frame, and the ignored reasoning stream can dwarf the
+  // answer), so it is not what the cap measures; the provider's own
+  // max_tokens and the request timeout bound that side.
+  let accumulatedChars = 0;
   let finished = false;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      streamChars += value.length;
-      if (streamChars > MAX_STREAM_CHARS) {
+      if (accumulatedChars > MAX_STREAM_CHARS) {
         throw new LLMError(
           `${model}: ${providerLabelOf()} stream exceeded ${MAX_STREAM_CHARS} characters`,
           502,
@@ -746,7 +748,16 @@ export async function streamChatRound(
       }
       buffer += value;
       const lines = buffer.split("\n");
+      // Only the unterminated remainder can grow without bound (a provider
+      // that never sends a newline); complete lines are consumed below.
       buffer = lines.pop() ?? "";
+      if (buffer.length > MAX_STREAM_CHARS) {
+        throw new LLMError(
+          `${model}: ${providerLabelOf()} stream line exceeded ${MAX_STREAM_CHARS} characters`,
+          502,
+          "",
+        );
+      }
       for (const line of lines) {
         const payload = line.trim().replace(/^data:\s*/, "");
         if (!payload || payload === "[DONE]") continue;
@@ -780,6 +791,7 @@ export async function streamChatRound(
         const delta = parsed.choices?.[0]?.delta ?? {};
         if (delta.content) {
           content += delta.content;
+          accumulatedChars += delta.content.length;
           opts.onDelta?.(delta.content);
         }
         // Streamed tool calls arrive as fragments keyed by index; the name
@@ -793,8 +805,10 @@ export async function streamChatRound(
           };
           if (fragment.id) call.id = fragment.id;
           if (fragment.function?.name) call.name = fragment.function.name;
-          if (fragment.function?.arguments)
+          if (fragment.function?.arguments) {
             call.arguments += fragment.function.arguments;
+            accumulatedChars += fragment.function.arguments.length;
+          }
           toolCalls.set(index, call);
         }
       }

@@ -199,6 +199,27 @@ describe("streamChatRound provider shapes", () => {
     ).rejects.toThrow(/stream exceeded/i);
     expect(state.canceled).toBe(true);
   });
+
+  it("does not count the ignored reasoning stream against the cap", async () => {
+    // GLM-5.3 streams reasoning_content deltas and each token rides its own
+    // JSON frame, so a long think is far past the cap in raw SSE volume
+    // while the answer itself is small. The cap bounds what the round
+    // accumulates, not what crossed the wire.
+    const frames = [
+      ...Array.from({ length: 40 }, () => ({
+        choices: [
+          { delta: { reasoning_content: "deliberating ".repeat(512) } },
+        ],
+      })),
+      { choices: [{ delta: { content: "Short answer." } }] },
+    ];
+    vi.stubGlobal("fetch", async () => sse(frames));
+    const { content } = await streamChatRound(
+      [{ role: "user", content: "hi" }],
+      { tools: [] },
+    );
+    expect(content).toBe("Short answer.");
+  });
 });
 
 describe("thinking param by provider and model", () => {
