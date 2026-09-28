@@ -79,7 +79,7 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   },
   {
     icon: Tags,
-    title: "Inquire about your spends",
+    title: "Ask about your expenses",
     body: `“How much have I spent on plane tickets this quarter?” — see the precise amount, straight from the source.`,
   },
   {
@@ -89,7 +89,7 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   },
   {
     icon: MapPinned,
-    title: "Register a journey in plain speak",
+    title: "Log your trip in plan speak",
     body: `“Log the drive from the office back home on Tuesday.” Geocoded, routed, and costed at the IRS rate for that trip.
 `,
   },
