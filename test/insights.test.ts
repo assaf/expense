@@ -440,6 +440,13 @@ describe("answerInsightQuestion", () => {
     expect(user).toContain("Previous exchanges:");
     expect(user).toContain("Q: earlier question\nA: earlier answer");
     expect(user).toContain("Question: did I spend more on AI this month?");
+    // The MCP setup guide rides along: connect questions answer from it.
+    expect(user).toContain("MCP setup guide:");
+    expect(user).toContain(
+      "The Expense MCP server URL is https://expense.labnotes.org/mcp",
+    );
+    expect(user).toContain("- Claude (claude.ai and Claude Desktop):");
+    expect(user).toContain("claude.ai/customize/connectors");
     // A judgment question is answered from the checkup, not refused.
     const system = messages.find((m) => m.role === "system")!;
     expect(system.content).toContain(
@@ -448,6 +455,11 @@ describe("answerInsightQuestion", () => {
     expect(system.content).toContain(
       'A "Money checkup" block in the computed data covers the whole account',
     );
+    // "Using AI" questions mean the MCP server, with per-client steps.
+    expect(system.content).toContain(
+      '"using AI" and "connecting the MCP server" are the',
+    );
+    expect(system.content).toContain("ask which one first");
   });
 
   it("falls back to a placeholder when the model returns nothing", async () => {

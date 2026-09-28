@@ -388,7 +388,7 @@ describe("prompt fencing (INJ-AI-1)", () => {
     expect(user).toContain(`gap ${FENCE_SENTINEL} close`);
   });
 
-  it("fences profile, history, and summary in the answer prompt", async () => {
+  it("fences profile, history, summary, and the MCP guide in the answer prompt", async () => {
     chat.mockResolvedValue("A short answer.");
     await answerInsightQuestion({
       question: "how much on coffee?",
@@ -397,8 +397,10 @@ describe("prompt fencing (INJ-AI-1)", () => {
       profile: "Name (account): X",
     });
     const user = chat.mock.calls[0][0].find((m) => m.role === "user")!.content;
-    expect(user.match(/<<<DATA>>>/g)).toHaveLength(3);
-    expect(user.match(/<<\/DATA>>>/g)).toHaveLength(3);
+    // Profile, history, computed data, and the MCP setup guide each ride in
+    // their own fence; the question itself stays outside.
+    expect(user.match(/<<<DATA>>>/g)).toHaveLength(4);
+    expect(user.match(/<<\/DATA>>>/g)).toHaveLength(4);
     expect(user).toContain("Question: how much on coffee?");
   });
 

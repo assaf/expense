@@ -1,4 +1,6 @@
 import { LLM_CHAT_MODEL } from "~/lib/env";
+import { CONNECT } from "~/lib/content.server";
+import { MCP_ENDPOINT } from "~/lib/seo-content";
 import {
   chatCompletion,
   streamChatRound,
@@ -410,7 +412,41 @@ date tracking.
   |---|---|
   | Z.ai | $80.00 |
   Never improvise another structure (no indented columns, no bullet
-  tables). No links, no headings.`;
+  tables). No links, no headings.
+- Code formatting is the exception: a file path, a command, or a setting
+  goes in \`backticks\`, and a multi-line config (JSON, TOML) goes in a
+  fenced code block.
+
+- Questions about using an AI assistant with Expense ("can I use this from
+  Claude?", "hook up ChatGPT", "is there an API?") mean connecting the
+  Expense MCP server: "using AI" and "connecting the MCP server" are the
+  same thing. Answer from the "MCP setup guide" block in the data. When
+  they name their assistant, give only that client's steps. When it is not
+  clear which assistant they use and the steps differ, ask which one first
+  (naming the supported clients) instead of reciting every set of steps.
+  The first connection opens the Expense sign-in (OAuth); the server URL
+  stays plain text. They manage or revoke connections in Settings →
+  Agents & API (MCP).`;
+
+/** The connect copy, flattened for the chat: when someone asks how to use
+ * an AI assistant with Expense, these are the setup steps. Derived from
+ * CONNECT (app/data/connect.yaml) so the /connect page and the chat cannot
+ * drift apart; edit the YAML, not this. */
+const MCP_GUIDE = [
+  `The Expense MCP server URL is ${MCP_ENDPOINT}. ${CONNECT.oauthNote}`,
+  ...CONNECT.clients.map((client) => {
+    const steps = client.steps
+      .map((step) => step.replace(/\s+/g, " ").trim())
+      .join("; ");
+    const code = client.code
+      ? ` Config: ${client.code.body.replace(/\s+/g, " ").trim()}`
+      : "";
+    const note = client.note
+      ? ` (${client.note.replace(/\s+/g, " ").trim()})`
+      : "";
+    return `- ${client.name}: ${steps}${code}${note}`;
+  }),
+].join("\n");
 
 /** What a plan tool may hand back: the one proposal the answer step
  * surfaces for the user to confirm. */
@@ -459,6 +495,9 @@ export async function answerInsightQuestion(input: {
     );
   }
   parts.push(fenceData(`Computed data:\n${input.summary}`));
+  // The connect steps ride along with every question: "using an AI
+  // assistant" questions are answered from them (see ANSWER_PROMPT).
+  parts.push(fenceData(`MCP setup guide:\n${MCP_GUIDE}`));
   parts.push(`Question: ${input.question}`);
   const messages: ChatMessage[] = [];
   if (input.expenses) {
