@@ -5,8 +5,8 @@ import type { DocumentPage } from "~/data/content-types";
 
 /**
  * Renders the small markdown subset (paragraphs, bullets, tables, headings,
- * **bold**, [links](https://…)) as React elements. The parser produces plain
- * strings only, so model output can never inject HTML.
+ * code blocks, **bold**, `code`, [links](https://…)) as React elements. The
+ * parser produces plain strings only, so model output can never inject HTML.
  */
 
 /** The marketing link style, shared with the hand-written links on the
@@ -57,6 +57,16 @@ export function Markdown({ text }: { text: string }) {
                 </tbody>
               </table>
             </div>
+          );
+        }
+        if (block.kind === "code") {
+          return (
+            <pre
+              key={i}
+              className="overflow-x-auto rounded-lg bg-gray-100 p-3 text-sm dark:bg-gray-800"
+            >
+              <code>{block.body}</code>
+            </pre>
           );
         }
         if (block.kind === "heading") {
@@ -120,6 +130,16 @@ export function InlineMarkdown({ text }: { text: string }) {
 
 function renderInline(segments: InlineSegment[]) {
   return splitSpaceBeforeLinks(segments).map((segment, i) => {
+    if (segment.code) {
+      return (
+        <code
+          key={i}
+          className="rounded bg-gray-100 px-1 py-0.5 text-[0.925em] dark:bg-gray-800"
+        >
+          {segment.text}
+        </code>
+      );
+    }
     if (segment.href === undefined) {
       // Plain text stays a text node: wrapping it in an element would change
       // where the browser breaks its glyph runs, and the marketing pages are

@@ -2,8 +2,10 @@
  * A deliberately small markdown subset, shared by the LLM answers on the
  * Insights page and the public content files under `app/data/`:
  * paragraphs, `-` bullet lists, GFM tables (`| a | b |` with a `|---|`
- * separator row), `#`/`##`/`###` headings, and inline `**bold**` and
- * `[text](https://…)` links.
+ * separator row), `#`/`##`/`###` headings, inline `**bold**`, `code`
+ * backticks, and `[text](https://…)` links, plus ``` fenced code blocks
+ * (kept verbatim: the fence line, language tag and all, is dropped, and
+ * nothing inside is inline-parsed).
  *
  * Everything else renders as plain text — importantly, the parser produces
  * plain strings and structure only, so the React renderer can build text
@@ -14,18 +16,24 @@
  * client. Bold and links do not nest, so a `**` inside link text stays
  * literal.
  *
- * Each line is one block: a paragraph is a single line, never a soft-wrapped
- * run of lines. Blank lines separate blocks, and a table separator row is
- * optional (model output often omits it).
+ * Consecutive lines form ONE paragraph (soft wrapping); a paragraph
+ * separator is a blank line, which also closes bullet lists and tables.
  */
 
-export type InlineSegment = { text: string; bold: boolean; href?: string };
+export type InlineSegment = {
+  text: string;
+  bold: boolean;
+  href?: string;
+  /** A `code` run: rendered verbatim, never bold/linked. */
+  code?: boolean;
+};
 
 export type Block =
   | { kind: "paragraph"; segments: InlineSegment[] }
   | { kind: "bullets"; items: InlineSegment[][] }
   | { kind: "table"; header: string[]; rows: string[][] }
-  | { kind: "heading"; level: 1 | 2 | 3; segments: InlineSegment[] };
+  | { kind: "heading"; level: 1 | 2 | 3; segments: InlineSegment[] }
+  | { kind: "code"; body: string };
 
 /** One `[text](https://…)` or `[text](mailto:…)` link, absolute only. */
 const LINK = /\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)/;
@@ -51,18 +59,42 @@ function withLinks(text: string, bold: boolean): InlineSegment[] {
   return segments;
 }
 
-/** Split a line into plain and **bold** segments, then into links.
+/** Split a run of text into plain and **bold** segments, then into links.
  * Bold separators pair left to right; an odd count leaves the last one
  * unpaired, and it stays literal text. */
-export function parseInline(line: string): InlineSegment[] {
-  const raw = line.split("**");
-  if (raw.length === 1) return withLinks(line, false);
+function withBold(text: string): InlineSegment[] {
+  const raw = text.split("**");
+  if (raw.length === 1) return withLinks(text, false);
   const unpaired = (raw.length - 1) % 2 === 1 ? raw.length - 1 : -1;
   const segments: InlineSegment[] = [];
   for (let i = 0; i < raw.length; i++) {
-    const text = i === unpaired ? `**${raw[i]}` : raw[i]!;
-    if (text === "") continue;
-    segments.push(...withLinks(text, i % 2 === 1 && i !== unpaired));
+    const run = i === unpaired ? `**${raw[i]}` : raw[i]!;
+    if (run === "") continue;
+    segments.push(...withLinks(run, i % 2 === 1 && i !== unpaired));
+  }
+  return segments;
+}
+
+/** Split a line into `code` and plain runs first (backticks pair left to
+ * right; an odd trailing backtick stays literal, backtick and all), then
+ * each plain run into bold and links. A code run is verbatim: nothing
+ * inside it is bolded or linked. */
+export function parseInline(line: string): InlineSegment[] {
+  const runs = line.split("`");
+  if (runs.length === 1) return withBold(line);
+  const unpaired = (runs.length - 1) % 2 === 1 ? runs.length - 1 : -1;
+  const segments: InlineSegment[] = [];
+  for (let i = 0; i < runs.length; i++) {
+    if (i === unpaired) {
+      segments.push(...withBold(`\`${runs[i]}`));
+      continue;
+    }
+    if (i % 2 === 1) {
+      if (runs[i] !== "")
+        segments.push({ text: runs[i]!, bold: false, code: true });
+      continue;
+    }
+    if (runs[i] !== "") segments.push(...withBold(runs[i]!));
   }
   return segments;
 }
@@ -75,7 +107,8 @@ export function plainText(text: string): string {
       LINK_ALL,
       (_match, label: string, href: string) => `${label} (${href})`,
     )
-    .replaceAll("**", "");
+    .replaceAll("**", "")
+    .replaceAll("`", "");
 }
 
 function segmentText(segments: InlineSegment[]): string {
@@ -94,6 +127,9 @@ export function parseMarkdown(text: string): Block[] {
   let bulletItems: string[] | null = null;
   let table: { header: string[]; rows: string[][] } | null = null;
   let paragraph: string[] | null = null;
+  // Lines inside a ``` fence, kept verbatim (indentation and blank lines
+  // included); the fence line itself, language tag and all, is dropped.
+  let code: string[] | null = null;
 
   const flushBullets = () => {
     if (bulletItems && bulletItems.length > 0) {
@@ -134,7 +170,23 @@ export function parseMarkdown(text: string): Block[] {
 
   const lines = text.trim().split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i]!.trim();
+    const raw = lines[i]!;
+    const trimmed = raw.trim();
+    if (code) {
+      if (trimmed.startsWith("```")) {
+        const body = code.join("\n").replace(/\n+$/, "");
+        if (body.trim() !== "") blocks.push({ kind: "code", body });
+        code = null;
+      } else {
+        code.push(raw);
+      }
+      continue;
+    }
+    if (trimmed.startsWith("```")) {
+      flushAll();
+      code = [];
+      continue;
+    }
     if (!trimmed) {
       flushAll();
       continue;
@@ -191,6 +243,10 @@ export function parseMarkdown(text: string): Block[] {
     paragraph.push(trimmed);
   }
   flushAll();
+  if (code) {
+    const body = code.join("\n").replace(/\n+$/, "");
+    if (body.trim() !== "") blocks.push({ kind: "code", body });
+  }
   return blocks;
 }
 

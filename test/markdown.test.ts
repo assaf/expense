@@ -66,6 +66,27 @@ describe("parseInline", () => {
     expect(parseInline(line)).toEqual([{ text: line, bold: false }]);
   });
 
+  it("turns paired backticks into a code segment", () => {
+    expect(parseInline("add it to `.omp/mcp.json` (project)")).toEqual([
+      { text: "add it to ", bold: false },
+      { text: ".omp/mcp.json", bold: false, code: true },
+      { text: " (project)", bold: false },
+    ]);
+  });
+
+  it("keeps a trailing odd backtick literal, backtick and all", () => {
+    const segments = parseInline("the `config file");
+    expect(segments[segments.length - 1].text).toBe("`config file");
+  });
+
+  it("keeps code verbatim: no bold or links inside a code run", () => {
+    expect(parseInline("run `**npm** install` first")).toEqual([
+      { text: "run ", bold: false },
+      { text: "**npm** install", bold: false, code: true },
+      { text: " first", bold: false },
+    ]);
+  });
+
   it("keeps a link inside a bold run, and bold inside link text, literal", () => {
     // Bold wraps a whole link: the link is found inside the bold segment, so
     // the label renders bold and the href still navigates.
@@ -245,6 +266,47 @@ describe("parseMarkdown", () => {
       ]);
     }
   });
+
+  it("parses a fenced code block verbatim, dropping the fence lines", () => {
+    const blocks = parseMarkdown(
+      [
+        "Add to the config:",
+        "```json",
+        "{",
+        '  "mcpServers": {',
+        '    "expense": { "url": "https://expense.labnotes.org/mcp" }',
+        "  }",
+        "}",
+        "```",
+        "Then restart.",
+      ].join("\n"),
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "paragraph",
+        segments: [{ text: "Add to the config:", bold: false }],
+      },
+      {
+        kind: "code",
+        body: '{\n  "mcpServers": {\n    "expense": { "url": "https://expense.labnotes.org/mcp" }\n  }\n}',
+      },
+      { kind: "paragraph", segments: [{ text: "Then restart.", bold: false }] },
+    ]);
+  });
+
+  it("keeps blank lines and indentation inside a fence", () => {
+    const blocks = parseMarkdown('```\n{\n\n  "a": 1\n}\n```');
+    expect(blocks).toEqual([{ kind: "code", body: '{\n\n  "a": 1\n}' }]);
+  });
+
+  it("treats an unterminated fence as a code block (streaming partial)", () => {
+    const blocks = parseMarkdown('```json\n{ "a": 1 }');
+    expect(blocks).toEqual([{ kind: "code", body: '{ "a": 1 }' }]);
+  });
+
+  it("drops an empty fence", () => {
+    expect(parseMarkdown("```\n```")).toEqual([]);
+  });
 });
 
 describe("splitSections", () => {
@@ -292,5 +354,11 @@ describe("plainText", () => {
   it("leaves a line without markdown alone", () => {
     const line = "The rate is $0.76 per mile for 2026.";
     expect(plainText(line)).toBe(line);
+  });
+
+  it("strips code backticks", () => {
+    expect(plainText("add it to `.omp/mcp.json` (project)")).toBe(
+      "add it to .omp/mcp.json (project)",
+    );
   });
 });
