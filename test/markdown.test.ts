@@ -82,6 +82,48 @@ describe("parseInline", () => {
 });
 
 describe("parseMarkdown", () => {
+  it("joins consecutive lines into one paragraph", () => {
+    // Standard markdown soft wrapping: consecutive non-blank lines are ONE
+    // paragraph; the separator is a blank line.
+    const blocks = parseMarkdown(
+      "Expense is maintained by one person, Assaf Arkin. Support requests\nare directed directly to him:\n[{{supportEmail}}](mailto:a@b.me).",
+    );
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual({
+      kind: "paragraph",
+      segments: expect.any(Array),
+    });
+    // The wrapped link survived the join: one link segment, not literal text.
+    expect(
+      blocks[0]!.kind === "paragraph" &&
+        blocks[0]!.segments.some(
+          (s) => s.href === "mailto:a@b.me" && s.text === "{{supportEmail}}",
+        ),
+    ).toBe(true);
+  });
+
+  it("joins a wrapped bullet item's continuation into the item", () => {
+    // Standard markdown lazy continuation: the indented second line belongs
+    // to the preceding item, it does not start a new paragraph.
+    const blocks = parseMarkdown(
+      "- Your account: your sign-up email address, hashed password (not your\n  actual password) and invite code.\n- What you enter: receipts and their image.",
+    );
+    expect(blocks).toEqual([
+      {
+        kind: "bullets",
+        items: [
+          [
+            {
+              text: "Your account: your sign-up email address, hashed password (not your actual password) and invite code.",
+              bold: false,
+            },
+          ],
+          [{ text: "What you enter: receipts and their image.", bold: false }],
+        ],
+      },
+    ]);
+  });
+
   it("splits paragraphs on blank lines", () => {
     const blocks = parseMarkdown("First paragraph.\n\nSecond one.");
     expect(blocks).toHaveLength(2);
@@ -169,11 +211,23 @@ describe("parseMarkdown", () => {
     });
   });
 
-  it("flushes a bullet list when a paragraph follows", () => {
+  it("continues the last bullet with a following paragraph line", () => {
+    // Standard markdown lazy continuation: without a blank line, a paragraph
+    // line after a bullet item belongs to that item. A blank line (or a
+    // heading) is what ends the list.
     const blocks = parseMarkdown("- a\n- b\nDone.");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toEqual({
+      kind: "bullets",
+      items: [[{ text: "a", bold: false }], [{ text: "b Done.", bold: false }]],
+    });
+  });
+
+  it("flushes a bullet list at a heading", () => {
+    const blocks = parseMarkdown("- a\n## Head");
     expect(blocks).toHaveLength(2);
     expect(blocks[0]!.kind).toBe("bullets");
-    expect(blocks[1]!.kind).toBe("paragraph");
+    expect(blocks[1]!.kind).toBe("heading");
   });
 
   it("parses headings of one to three hashes", () => {

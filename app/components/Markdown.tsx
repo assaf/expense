@@ -91,14 +91,14 @@ export function DocumentSections({
             block.kind === "paragraph" ? (
               <p
                 key={index}
-                className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
+                className="mt-3 leading-relaxed text-gray-600 dark:text-gray-300"
               >
                 {renderInline(block.segments)}
               </p>
             ) : (
               <ul
                 key={index}
-                className="mt-3 list-disc space-y-0.5 pl-5 text-sm leading-relaxed text-gray-600 dark:text-gray-300"
+                className="mt-3 list-disc space-y-0.5 pl-5 leading-relaxed text-gray-600 dark:text-gray-300"
               >
                 {block.items.map((item, itemIndex) => (
                   <li key={itemIndex}>{renderInline(item)}</li>

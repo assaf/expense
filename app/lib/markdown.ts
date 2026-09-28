@@ -84,17 +84,25 @@ function segmentText(segments: InlineSegment[]): string {
 
 const TABLE_SEPARATOR = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/;
 
-/** Parse the markdown subset into blocks. */
+/** Parse the markdown subset into blocks. Paragraphs follow standard
+ * markdown: consecutive lines are ONE paragraph (soft wrapping), and a
+ * paragraph separator is a blank line. */
 export function parseMarkdown(text: string): Block[] {
   const blocks: Block[] = [];
-  let bullets: InlineSegment[][] | null = null;
+  // Raw bullet-item texts, parsed at flush time so a wrapped item's
+  // continuation lines can join it before inline parsing runs.
+  let bulletItems: string[] | null = null;
   let table: { header: string[]; rows: string[][] } | null = null;
+  let paragraph: string[] | null = null;
 
   const flushBullets = () => {
-    if (bullets && bullets.length > 0) {
-      blocks.push({ kind: "bullets", items: bullets });
+    if (bulletItems && bulletItems.length > 0) {
+      blocks.push({
+        kind: "bullets",
+        items: bulletItems.map((item) => parseInline(item)),
+      });
     }
-    bullets = null;
+    bulletItems = null;
   };
   const flushTable = () => {
     if (table && table.rows.length > 0) {
@@ -102,7 +110,17 @@ export function parseMarkdown(text: string): Block[] {
     }
     table = null;
   };
+  const flushParagraph = () => {
+    if (paragraph && paragraph.length > 0) {
+      blocks.push({
+        kind: "paragraph",
+        segments: parseInline(paragraph.join(" ")),
+      });
+    }
+    paragraph = null;
+  };
   const flushAll = () => {
+    flushParagraph();
     flushBullets();
     flushTable();
   };
@@ -132,25 +150,28 @@ export function parseMarkdown(text: string): Block[] {
       continue;
     }
     if (/^-\s+/.test(trimmed)) {
+      flushParagraph();
       flushTable();
-      bullets ??= [];
-      bullets.push(parseInline(trimmed.replace(/^-\s+/, "")));
+      bulletItems ??= [];
+      bulletItems.push(trimmed.replace(/^-\s+/, ""));
       continue;
     }
     const isPipeRow = trimmed.startsWith("|") && trimmed.endsWith("|");
     if (isPipeRow && !table) {
       // A pipe-row opens a table when the NEXT line is also a pipe-row
       // (the `---` separator may be missing from model output): the first
-      // row becomes the header. A lone pipe-row is just a paragraph.
+      // row becomes the header. A lone pipe-row is just paragraph text.
       const next = lines[i + 1]?.trim() ?? "";
       const nextIsPipeRow = next.startsWith("|") && next.endsWith("|");
       const nextIsSeparator = TABLE_SEPARATOR.test(next);
       if (!nextIsPipeRow && !nextIsSeparator) {
-        flushAll();
-        blocks.push({ kind: "paragraph", segments: parseInline(trimmed) });
+        flushBullets();
+        flushTable();
+        paragraph ??= [];
+        paragraph.push(trimmed);
         continue;
       }
-      flushBullets();
+      flushAll();
       table = { header: splitRow(trimmed), rows: [] };
       continue;
     }
@@ -159,8 +180,15 @@ export function parseMarkdown(text: string): Block[] {
       table.rows.push(splitRow(trimmed));
       continue;
     }
-    flushAll();
-    blocks.push({ kind: "paragraph", segments: parseInline(trimmed) });
+    flushTable();
+    if (bulletItems) {
+      // Lazy continuation: a non-blank line after a bullet item belongs to
+      // that item (standard markdown), however it is indented.
+      bulletItems[bulletItems.length - 1]! += ` ${trimmed}`;
+      continue;
+    }
+    paragraph ??= [];
+    paragraph.push(trimmed);
   }
   flushAll();
   return blocks;
