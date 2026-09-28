@@ -65,7 +65,7 @@ jobs:
   # could reach the repo. Config: .secretlintrc.json
   secretlint:
     name: Secretlint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The secretlint action self-installs from the npm registry inside the
     # job; a slow registry (2026-09-03/04 outage) stalled that install past
     # 3 minutes. 10m matches the test job's headroom — the scan itself is
@@ -89,7 +89,7 @@ jobs:
   # parallel with the test job (after the secretlint gate).
   check:
     name: Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: [secretlint]
     steps:
@@ -116,7 +116,7 @@ jobs:
   # install hits ~5-6m, so 10m leaves headroom for flaky CI runners.
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [secretlint]
     services:
@@ -188,7 +188,7 @@ jobs:
   # ahead of the deployed bundle).
   migrate-db:
     name: Migrate prod DB
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Must fit checkout + pnpm install + pgbouncer + prisma db update. The
     # budget has been raised twice as installs grew: 1m (the
     # pnpm/action-setup self-installer alone took 27s on 2026-08-06), then
@@ -277,7 +277,7 @@ jobs:
   # else would reach prod.
   deploy:
     name: Deploy prod
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Production builds take ~2m; 5m bounds a hung CLI.
     timeout-minutes: 5
     needs: [migrate-db]
@@ -329,7 +329,7 @@ jobs:
   # scripts/deploy.
   pdf-ocr-smoke:
     name: Smoke prod + rollback
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [deploy]
     # No secrets in this condition: the secrets context is rejected in
