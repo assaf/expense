@@ -352,7 +352,6 @@ const PAGES: MarketingPage[] = [
       ]),
       PRODUCT_FACTS.pricingHeading,
       ...PRODUCT_FACTS.pricing,
-      "37 of 100 free spots claimed.",
     ],
   },
   {
