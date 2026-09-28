@@ -16,7 +16,7 @@ import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
-import { EARLY_ACCESS_SPOTS, SITE_URL } from "~/lib/seo-content";
+import { SITE_URL } from "~/lib/seo-content";
 import { JsonLd } from "~/components/JsonLd";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -46,9 +46,9 @@ const SOFTWARE_SCHEMA = {
  * the copy itself stays in app/data/about.yaml (the single source of the
  * site's public copy). Order here is the card order. */
 const FEATURE_ICONS: Record<string, LucideIcon> = {
-  "Stop losing receipts in your gallery": ReceiptText,
+  "Stop losing receipts in your photo library": ReceiptText,
   "Connect your Fastmail account": Plug,
-  "Get ready with your deductions on time": Tags,
+  "Get your deductions ready on time": Tags,
   "PDF reports to show your accountant": FolderOpen,
   "Log drives without Excel": MapPinned,
   "Reconcile against your monthly statement": CreditCard,
@@ -57,16 +57,16 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
 
 const STEPS = [
   {
-    title: "Attach a receipt",
-    body: "Simply upload the image, copy and paste the image, or even forward your receipt email to yourself. Receipt is automatically created.",
+    title: "Add a receipt",
+    body: "Upload the image, or forward the email. Expense holds it for you.",
   },
   {
-    title: "Save and confirm",
-    body: "Merchant name, amount, and category are all automatically entered. Receipts just require a single click to save.",
+    title: "Confirm and save",
+    body: "Expense deducts merchant name, amount, and category. It takes one click to save the new expense.",
   },
   {
-    title: "Export when it's tax time",
-    body: "Receive your report in PDF format with receipt attached, or ZIP of all receipts.",
+    title: "Export at tax time",
+    body: "Export your reports as PDFs, or one ZIP with all receipts.",
   },
 ];
 
@@ -75,22 +75,22 @@ const AGENT_EXAMPLES: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ReceiptText,
     title: "Extract a receipt from chat",
-    body: "Drop a receipt photo or PDF into the conversation, and it's OCR'd, categorized from your own history, and filed. No app to open.",
+    body: "Drop a receipt photo or PDF into the conversation, and it's OCR'd, categorized, and filed. No app to open.",
   },
   {
     icon: Tags,
-    title: "Inquire about your expenditures",
-    body: `“How much have I spent on plane tickets this quarter?”—the precise amount, straight from the source.`,
+    title: "Inquire about your spends",
+    body: `“How much have I spent on plane tickets this quarter?” — see the precise amount, straight from the source.`,
   },
   {
     icon: FolderOpen,
     title: "Generate reports on demand",
-    body: `“Insert all unreconciled June expenses into the Q2 report and save it as a PDF file.” One line of text, and it's done.`,
+    body: `“Insert all unreconciled June expenses into the Q2 report and save it as a PDF file.” One line of text. Done.`,
   },
   {
     icon: MapPinned,
-    title: "Register a journey in natural language",
-    body: `“Log the drive from the office back home on Tuesday.” Geocoded, routed, and costed at the IRS rates for the year.
+    title: "Register a journey in plain speak",
+    body: `“Log the drive from the office back home on Tuesday.” Geocoded, routed, and costed at the IRS rate for that trip.
 `,
   },
 ];
@@ -202,7 +202,7 @@ function BrowserFrame({
         <div
           role="img"
           aria-label={alt}
-          className="relative aspect-[1440/940] w-full"
+          className="relative aspect-1440/940 w-full"
         >
           <video
             ref={video}
@@ -237,10 +237,8 @@ function BrowserFrame({
   );
 }
 export default function LandingPage({
-  signupCount = 0,
   benefits,
 }: {
-  signupCount?: number;
   benefits: Array<{ title: string; body: string }>;
 }) {
   const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
@@ -274,18 +272,15 @@ export default function LandingPage({
             Every receipt, ready for tax season.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600 dark:text-gray-300">
-            Your receipts, all collected to prepare for tax season. Expense does
-            that for you: take a picture of it, drop a screenshot or a receipt
-            email. OCR recognizes the merchant and amount and puts the spend
-            into the correct category of a Schedule C form and a report of your
-            choice. And when tax season comes, all is ready.
+            Expense makes tax filing boring. Capture a photo of your receipt,
+            upload a PDF, or forward an email. Expense uses OCR to gather the
+            merchant and purchase amount, uses AI to determine the correct spend
+            category (from Schedule C), and then adds it to the proper report.
+            When tax season comes, all is ready for you.
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500 dark:text-gray-400">
-            Have a Fastmail account? Connect it and receipts from your inbox are
-            processed automatically, no forwarding and no Gmail required.
-          </p>
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-            By a freelancer. Open-source, no funding.
+            Have a Fastmail account? Connect it and Expense will gather receipts
+            from your inbox, no forwarding necessary.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="w-full sm:w-auto">
@@ -296,11 +291,6 @@ export default function LandingPage({
             No credit card required. Your data stays in your account. Export and
             leave anytime.
           </p>
-          {signupCount > 0 ? (
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-              {signupCount} of {EARLY_ACCESS_SPOTS} free spots claimed.
-            </p>
-          ) : null}
         </section>
 
         {/* App demo */}
@@ -333,9 +323,8 @@ export default function LandingPage({
               What you get
             </h2>
             <p className="mx-auto mt-3 max-w-xl text-center text-gray-600 dark:text-gray-300">
-              Tailored for one purpose: to get your expense data as quickly as
-              possible, so year-end is not a grueling process but just a
-              download.
+              Tailored for one purpose: to get your expenses done as quickly as
+              possible. We simplified tax filing to a file download.
             </p>
             <div className="mx-auto mt-12 flex max-w-2xl flex-col gap-3">
               {FEATURES.map((f) => (
@@ -358,12 +347,11 @@ export default function LandingPage({
         {/* Insights */}
         <section className="mx-auto max-w-5xl px-4 pb-20 sm:px-6">
           <h2 className="text-3xl font-bold tracking-tight text-ink">
-            Ask your expenses a question
+            Ask your expenses any question
           </h2>
           <p className="mt-3 max-w-2xl text-gray-600 dark:text-gray-300">
-            Insights answers from your own records, not from a model's memory:
-            every number is computed from your expenses. The longer you use
-            Expense, the more it has to work with.
+            Get insights from your expenses. The longer you use Expense, the
+            more it has to work with.
           </p>
           <p className="mt-8 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Example
@@ -392,12 +380,6 @@ export default function LandingPage({
               </span>
             ))}
           </div>
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-            Only answers what your data supports. When it can't, it says so.
-          </p>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-            Next: summaries that arrive on their own when your spending changes.
-          </p>
         </section>
 
         {/* How it works */}
@@ -443,7 +425,7 @@ export default function LandingPage({
                 aria-hidden="true"
                 className="h-4 w-4 text-blue-600 dark:text-blue-400"
               />
-              OCR and AI filled in merchant, amount, and category.
+              OCR gathers merchant and amount, AI finds the category
             </figcaption>
           </BrowserFrame>
         </section>
@@ -458,15 +440,12 @@ export default function LandingPage({
               <Bot aria-hidden="true" className="h-4 w-4" /> AI-native
             </div>
             <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">
-              Your Own Personal AI Assistant
+              Your own personal AI assistant
             </h2>
             <p className="mt-3 max-w-2xl text-gray-600 dark:text-gray-300">
-              Expense uses the Model Context Protocol (MCP). Simply point
-              Claude, OpenAI, or any other MCP client to your account, log in
-              for authentication (no tokens to deal with), and let the assistant
-              do the mundane work. In Chrome, the app also registers in-page
-              tools so the browser's own agent can read your expenses without
-              any setup:
+              Expense supports the Model Context Protocol (MCP). Point Claude,
+              OpenAI, Gemini, or any other AI at your account, and let the
+              assistant do the mundane work.
             </p>
             <ul className="mt-6 grid gap-4 sm:grid-cols-2">
               {AGENT_EXAMPLES.map((example) => (
@@ -489,11 +468,6 @@ export default function LandingPage({
                 </li>
               ))}
             </ul>
-            <p className="mt-6 text-sm text-gray-500 dark:text-gray-400">
-              Connection is authorization: the assistant opens the browser, you
-              allow access, and it is connected. Disconnect any time with one
-              click in the Settings menu.
-            </p>
           </Card>
         </section>
 

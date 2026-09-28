@@ -66,10 +66,5 @@ export function meta(): Route.MetaDescriptors {
 }
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
-  return (
-    <LandingPage
-      signupCount={loaderData.signupCount}
-      benefits={loaderData.benefits}
-    />
-  );
+  return <LandingPage benefits={loaderData.benefits} />;
 }

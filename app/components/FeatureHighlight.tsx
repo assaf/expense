@@ -1,5 +1,4 @@
 import {
-  AtSign,
   Bot,
   ChartColumn,
   Command,
@@ -8,10 +7,8 @@ import {
   Fuel,
   Globe,
   Keyboard,
-  KeyRound,
   Lightbulb,
   Mail,
-  MailCheck,
   MapPinned,
   Plug,
   ReceiptText,
@@ -19,7 +16,6 @@ import {
   Server,
   ShieldCheck,
   Tags,
-  Trash2,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -56,10 +52,6 @@ export type HighlightId =
   | "reconcile"
   | "search-operators"
   | "shortcut-hints"
-  | "email-preferences"
-  | "change-email"
-  | "change-password"
-  | "close-account"
   | "warranties"
   | "webmcp";
 
@@ -93,8 +85,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Add a receipt without typing",
     body: () => (
       <>
-        Upload or paste (⌘V) a receipt image or PDF, or drag one anywhere on
-        this page. Merchant, amount, and category fill in automatically.
+        Upload or paste (<kbd>⌘V</kbd>) a receipt image or PDF, or drag one
+        anywhere on this page. We automatically fill in the merchant, amount,
+        and category.
       </>
     ),
     cta: { label: "Add a receipt", to: "/expense/new" },
@@ -112,8 +105,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
           IRS Schedule C categories
         </Link>
         , but you can add your own anytime in Settings, for clients, projects,
-        or whatever makes your taxes clearer. New categories are offered
-        automatically when receipts are parsed.
+        or whatever makes your taxes clearer.
       </>
     ),
     cta: { label: "Manage categories", to: "/settings#categories" },
@@ -124,9 +116,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Insights opens with a checkup of the whole tax year: what has no
-        category, what is in no report, what looks double-entered, what charges
-        repeat monthly, and what changed since last year. Ask it a question and
-        it answers from those figures.
+        category, what belongs to no report, what looks double-entered, what
+        charges repeat monthly, and what changed since last year. Ask it a
+        question and it answers based on your expenses.
       </>
     ),
     cta: { label: "See your checkup", to: "/insights" },
@@ -136,9 +128,10 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Get anywhere from the keyboard",
     body: () => (
       <>
-        Press ⌘K and type what you want: jump to a page, add a receipt or
-        mileage, search expenses, export a report. Power keys work too: g then r
-        opens Reports, a starts a new receipt.
+        Press <kbd>⌘K</kbd> and type what you want: jump to a page, add a
+        receipt, search expenses, export a report. Power keys work too:
+        <kbd>g</kbd> then <kbd>r</kbd> opens Reports, <kbd>a</kbd> starts a new
+        receipt.
       </>
     ),
   },
@@ -147,8 +140,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "The shortcuts, on screen",
     body: () => (
       <>
-        Press Shift+? and Expense pins the keys next to the buttons they drive:
-        pages, new receipt, search. Press it again and the pins go away.
+        Press <kbd>Shift+?</kbd> and Expense highlights keyboard shortcuts next
+        to the actions they drive: pages, new receipt, search, etc. Press again
+        and the highlights go away.
       </>
     ),
   },
@@ -157,10 +151,13 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Search narrows by report, category, or merchant",
     body: () => (
       <>
-        Prefix your search and pick from suggestions: report: Q3, category:
-        meals, merchant: Amazon, amount: 100-110, description: webinar. Combine
-        prefixes to stack filters, and the status line totals every match
-        exactly.
+        Prefix your search and pick our suggestions: report:{" "}
+        <code>
+          Q3, category: meals, merchant: Amazon, amount: 100-110, description:
+          webinar
+        </code>
+        . Combine prefixes to stack filters, and the status line will total all
+        matches.
       </>
     ),
   },
@@ -169,9 +166,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Your inbox, processed automatically",
     body: () => (
       <>
-        Connect your Fastmail account and receipts landing in your inbox are
-        processed for you: merchant, amount, and category filled in, no
-        forwarding needed.
+        Connect your Fastmail account and we'll process receipts landing in your
+        inbox: merchant, amount, and category filled in, no forwarding needed.
       </>
     ),
     cta: { label: "Connect your email account", to: "/emails" },
@@ -198,9 +194,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inboundAddress}
         </span>{" "}
-        and it is added automatically (PDF and image attachments supported).
-        Only emails from verified sender addresses are imported; add yours on
-        the Email page.
+        and we add it automatically (supporting PDF and image attachments). We
+        only accept emails from verified senders: add yours on the Email page.
       </>
     ),
     cta: { label: "Manage email addresses", to: "/emails" },
@@ -214,8 +209,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.mcpUrl}
         </span>
-        . It can capture receipts, log mileage, answer spending questions, and
-        export reports. Revoke access to any app in Settings.
+        . You can now use your AI to add receipts, log miles, answer spending
+        questions, and export reports.
       </>
     ),
     cta: { label: "Set up a client", to: "/connect" },
@@ -226,8 +221,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         In Chrome, Expense registers read-only tools for the browser's own agent
-        (WebMCP): same data, your signed-in session, nothing to set up. Ask the
-        page a question about your spending.
+        (WebMCP). You can now ask your browser questions about your spending.
       </>
     ),
     cta: { label: "How agent access works", to: "/ai" },
@@ -238,9 +232,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     body: () => (
       <>
         Set a start location (home, wherever you choose) and every drive is
-        measured from it, one way or there and back. Save the other places you
-        drive to by name (work, the hospital) and any trip becomes home, work,
-        restaurant, home. Change either in Settings.
+        measured from it. You can also save other places you drive to by name
+        (work, airport, doctor, etc).
       </>
     ),
     cta: { label: "Set your location", to: "/settings#start-location" },
@@ -250,7 +243,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Mileage rates come from the IRS",
     body: (data) => (
       <>
-        Rates update automatically from the IRS:{" "}
+        We update mileage rates from the IRS:{" "}
         {data.mileageRate ? (
           <span className="font-semibold text-gray-700 dark:text-gray-200">
             ${data.mileageRate}/mi
@@ -258,15 +251,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         ) : (
           "the rate for today"
         )}{" "}
-        for business right now. Classify each drive as business, charity, or
-        medical and the right rate is applied. Every rate since 2011 is on the{" "}
-        <Link
-          to="/mileage-rates"
-          className="underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500 dark:decoration-gray-600"
-        >
-          mileage rates page
-        </Link>
-        .
+        for business trips. Classify each drive as business, charity, or medical
+        and we apply the proper rate.
       </>
     ),
     cta: { label: "Log a drive", to: "/expense/new?type=mileage" },
@@ -276,9 +262,9 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Reports for every filing",
     body: () => (
       <>
-        Create as many reports as you need and export any of them as a PDF.
-        Close the ones you have filed, or delete ones you no longer use, all on
-        the Reports page.
+        Create as many reports as you need and export them as PDF. Close the
+        ones you have filed, or delete ones you no longer use, all on the
+        Reports page.
       </>
     ),
     cta: { label: "Manage reports", to: "/export" },
@@ -292,7 +278,7 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         <span className="break-all font-mono font-semibold text-gray-700 dark:text-gray-200">
           {data.inviteCode}
         </span>{" "}
-        and they can join your account; everyone sees the same expenses,
+        and others can join your account; everyone sees the same expenses,
         reports, and settings.
       </>
     ),
@@ -303,13 +289,12 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Ask your expenses a question",
     body: () => (
       <>
-        On Insights, describe what you want to see ("my AI expenses") and the
-        chart picks the merchants and the time window for you. You can always
-        type a filter by hand instead. Ask it to log a drive ("the drive from
-        the office back home on Tuesday") and it works out the route and the IRS
-        amount, then asks you to confirm. Ask for a purchase too ("$50 on
-        coffee") and it fills in the merchant, amount, and category for you to
-        confirm.
+        On Insights, describe what you want to see (eg "my AI expenses this
+        quarter") and the chart picks the merchants and the time window for you.
+        Ask it to log a drive (eg "the drive from the office back home on
+        Tuesday") and it works out the route and the IRS amount, then asks you
+        to confirm. Ask for a purchase (eg "$50 on coffee") and it fills in the
+        merchant, amount, and category for you.
       </>
     ),
     cta: { label: "Open Insights", to: "/insights" },
@@ -326,62 +311,14 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     ),
     cta: { label: "Reconcile now", to: "/reconcile" },
   },
-  "email-preferences": {
-    icon: MailCheck,
-    title: "You decide which emails arrive",
-    body: () => (
-      <>
-        Marketing emails (product news and tips) are your call: turn them off in
-        Settings, or use the unsubscribe link at the bottom of any of them.
-        Receipts-by-email notices and security email always come through.
-      </>
-    ),
-    cta: { label: "Manage emails", to: "/settings#emails" },
-  },
-  "change-email": {
-    icon: AtSign,
-    title: "Moved to a new address?",
-    body: () => (
-      <>
-        Change your sign-in email in Settings with your password, and the old
-        address gets a note saying it happened.
-      </>
-    ),
-    cta: { label: "Change email", to: "/settings#sign-in-email" },
-  },
-  "change-password": {
-    icon: KeyRound,
-    title: "Your password, your timing",
-    body: () => (
-      <>
-        Settings → Password takes your current password and sets a new one. It
-        signs out every other device, and connected assistants reconnect on
-        their next sign-in.
-      </>
-    ),
-    cta: { label: "Change password", to: "/settings#change-password" },
-  },
-  "close-account": {
-    icon: Trash2,
-    title: "Leave whenever you want",
-    body: () => (
-      <>
-        Settings can close your account and delete everything in it: expenses,
-        receipt images, reports, trips and connected mailboxes. If others are
-        still on the account, only your login leaves.
-      </>
-    ),
-    cta: { label: "Close account", to: "/settings#close-account" },
-  },
   warranties: {
     icon: ShieldCheck,
     title: "Keep the proof with the thing it covers",
     body: () => (
       <>
         A warranty records the merchant, the product, the value, and when the
-        cover ends, with the receipt, the terms, or a card statement attached.
-        Start one from the expense it came with, or drop a receipt or terms PDF
-        on the Warranties page and the details are read from it.
+        cover ends. Start one from the expense, or drop a warranty PDF on the
+        Warranties page and we'll gather the details for you.
       </>
     ),
     cta: { label: "Add a warranty", to: "/warranties" },
@@ -407,10 +344,6 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reconcile",
     "reports",
     "search-operators",
-    "email-preferences",
-    "change-email",
-    "change-password",
-    "close-account",
     "warranties",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.
