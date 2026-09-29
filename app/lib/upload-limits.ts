@@ -10,6 +10,15 @@
 export const MAX_RECEIPT_BYTES = 15_000_000;
 
 /**
+ * How many documents one warranty may carry. The byte cap above bounds a
+ * single file, never a count, and each accepted file costs a decode, a
+ * thumbnail, a hash and two inserts inside one request. Shared by the
+ * warranty editor (which refuses the pick) and its save action (which
+ * refuses the request), so the two never disagree.
+ */
+export const MAX_WARRANTY_DOCUMENTS = 12;
+
+/**
  * The same cap expressed as encoded characters: base64 emits 4 characters
  * per 3 bytes, so an argument longer than this cannot decode into an image
  * that fits. Exact on purpose, with no slack: padding lives inside the

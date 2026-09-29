@@ -12,6 +12,8 @@ import {
 } from "~/lib/images.server";
 import { newWarrantyShell, type Warranty } from "~/lib/types";
 import { formString, validateDate } from "~/lib/validation";
+import { MAX_WARRANTY_DOCUMENTS } from "~/lib/upload-limits";
+
 import {
   EMPTY_WARRANTY_EXTRACTION,
   extractWarrantyFields,
@@ -19,13 +21,19 @@ import {
 } from "~/lib/warranty-ai.server";
 import { termsForMerchant } from "~/lib/warranty-policies";
 
+/** A stored label is user prose rendered in the editor; the AI path bounds
+ * every field it produces, so the form path has to as well. */
+const MAX_DOCUMENT_LABEL_CHARS = 120;
+
 /** Read the label paired with the i-th uploaded document, or "Document"
  * when the field is missing/blank. */
 function documentLabel(form: FormData, index: number): string {
   const labels = form
     .getAll("documentLabels")
     .filter((v): v is string => typeof v === "string");
-  return labels[index]?.trim() || "Document";
+  const label = labels[index]?.trim();
+  if (!label) return "Document";
+  return label.slice(0, MAX_DOCUMENT_LABEL_CHARS);
 }
 
 /**
@@ -70,6 +78,20 @@ export async function saveWarrantyFromForm(
     return { error: "Use a valid expiry date.", id: null };
   }
 
+  // The cap is on the RECORD, not on this request: the edit path appends, so
+  // counting only the posted files would let a warranty grow by the cap on
+  // every save. It is checked before readUploadedFiles, which would otherwise
+  // buffer each file again.
+  const picked = form
+    .getAll("documents")
+    .filter((entry): entry is File => entry instanceof File);
+  const storedCount = existing?.documents.length ?? 0;
+  if (storedCount + picked.length > MAX_WARRANTY_DOCUMENTS) {
+    return {
+      error: `A warranty takes up to ${MAX_WARRANTY_DOCUMENTS} documents.`,
+      id: null,
+    };
+  }
   // Resolve every upload before persisting any, so one over-cap file can't
   // leave the earlier ones stored and unreferenced.
   const uploads = await readUploadedFiles(form, "documents");

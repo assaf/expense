@@ -14,6 +14,7 @@ import {
   createWarrantyFromDocument,
   saveWarrantyFromForm,
 } from "~/lib/warranty-save.server";
+import { MAX_WARRANTY_DOCUMENTS } from "~/lib/upload-limits";
 import {
   OTHER_ACCOUNT_ID,
   TEST_ACCOUNT_ID,
@@ -259,6 +260,80 @@ describe("warranty records", () => {
     await deleteWarranty(id, TEST_ACCOUNT_ID);
     expect(await readWarranty(id, TEST_ACCOUNT_ID)).toBeUndefined();
     expect(await readImage(TEST_ACCOUNT_ID, keys[0]!)).toBeNull();
+  });
+
+  it("refuses more documents than one warranty can carry, storing none", async () => {
+    // Each accepted file costs a decode, a thumbnail, a hash and two inserts
+    // inside one request, so the count is bounded before anything is read.
+    const png = await tinyPng();
+    const files = Array.from(
+      { length: MAX_WARRANTY_DOCUMENTS + 1 },
+      (_, i) => ({
+        name: `doc-${i}.png`,
+        type: "image/png",
+        bytes: png,
+        label: `Doc ${i}`,
+      }),
+    );
+    const result = await saveWarrantyFromForm(
+      warrantyForm({ merchant: "Best Buy", product: "Drill" }, files),
+      TEST_ACCOUNT_ID,
+      null,
+    );
+    expect(result.id).toBeNull();
+    expect(result.error).toBe(
+      `A warranty takes up to ${MAX_WARRANTY_DOCUMENTS} documents.`,
+    );
+    // Nothing was written: the cap bites before the first save.
+    const rows = await testPrisma.warranty.findMany({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Best Buy" },
+    });
+    expect(rows).toHaveLength(0);
+  });
+
+  it("stores the cap's worth of documents", async () => {
+    const png = await tinyPng();
+    const files = Array.from({ length: MAX_WARRANTY_DOCUMENTS }, (_, i) => ({
+      name: `doc-${i}.png`,
+      type: "image/png",
+      bytes: png,
+      label: `Doc ${i}`,
+    }));
+    const id = await save({ merchant: "Best Buy", product: "Drill" }, files);
+    const saved = await readWarranty(id, TEST_ACCOUNT_ID);
+    expect(saved?.documents).toHaveLength(MAX_WARRANTY_DOCUMENTS);
+    await deleteWarranty(id, TEST_ACCOUNT_ID);
+  });
+
+  it("counts the documents already saved against the cap on an edit", async () => {
+    // The save path appends, so a per-request cap would let a warranty grow
+    // by the cap on every save.
+    const png = await tinyPng();
+    const file = (n: number) => ({
+      name: `doc-${n}.png`,
+      type: "image/png",
+      bytes: png,
+      label: `Doc ${n}`,
+    });
+    const id = await save(
+      { merchant: "Best Buy", product: "Drill" },
+      Array.from({ length: MAX_WARRANTY_DOCUMENTS - 1 }, (_, i) => file(i)),
+    );
+    const existing = await readWarranty(id, TEST_ACCOUNT_ID);
+    const result = await saveWarrantyFromForm(
+      warrantyForm({ merchant: "Best Buy", product: "Drill" }, [
+        file(100),
+        file(101),
+      ]),
+      TEST_ACCOUNT_ID,
+      existing!,
+    );
+    expect(result.error).toBe(
+      `A warranty takes up to ${MAX_WARRANTY_DOCUMENTS} documents.`,
+    );
+    const after = await readWarranty(id, TEST_ACCOUNT_ID);
+    expect(after?.documents).toHaveLength(MAX_WARRANTY_DOCUMENTS - 1);
+    await deleteWarranty(id, TEST_ACCOUNT_ID);
   });
 
   it("links to an existing expense and silently unlinks a stale id", async () => {

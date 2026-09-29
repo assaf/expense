@@ -16,6 +16,8 @@ import {
   pluralLabel,
 } from "~/lib/format";
 import { useDropTarget } from "~/lib/use-drop-target";
+import { MAX_WARRANTY_DOCUMENTS } from "~/lib/upload-limits";
+
 import type { Warranty, WarrantyExpenseOption } from "~/lib/types";
 import { termsForMerchant } from "~/lib/warranty-policies";
 import {
@@ -68,6 +70,8 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   const [terms, setTerms] = useState(warranty.terms);
   const [expenseId, setExpenseId] = useState(warranty.expenseId);
   const [picks, setPicks] = useState<PendingDocument[]>([]);
+  const [pickError, setPickError] = useState<string | null>(null);
+
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -76,15 +80,24 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
   const error = fetcherError(fetcher.data);
   const savedDocuments = warranty.documents;
   const totalDocuments = savedDocuments.length + picks.length;
-
   /** Hold every picked file as a pending document (nothing uploads before
    * Save). Shared by the file picker and the page's drop target, so a drop
-   * and a pick land identically. */
+   * and a pick land identically. The cap is on the warranty, not on this
+   * pick, so the documents already saved count against the room. */
   function addPicks(files: File[]) {
     if (files.length === 0) return;
+    const room = MAX_WARRANTY_DOCUMENTS - totalDocuments;
+    if (files.length > room) {
+      setPickError(
+        `A warranty takes up to ${MAX_WARRANTY_DOCUMENTS} documents.`,
+      );
+    } else {
+      setPickError(null);
+    }
+    if (room <= 0) return;
     setPicks((prev) => [
       ...prev,
-      ...files.map((file) => ({ file, label: "Document" })),
+      ...files.slice(0, room).map((file) => ({ file, label: "Document" })),
     ]);
   }
 
@@ -267,6 +280,14 @@ export function WarrantyEditor({ data }: { data: WarrantyEditorData }) {
               {pluralLabel(totalDocuments, "document")}
             </span>
           </div>
+          {pickError ? (
+            <p
+              className="mb-2 text-sm text-red-600 dark:text-red-400"
+              role="alert"
+            >
+              {pickError}
+            </p>
+          ) : null}
           <ul className="flex flex-col gap-2">
             {savedDocuments.map((doc, index) => (
               <li
