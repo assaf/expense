@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { parseAmount } from "~/lib/money";
+import { createCache } from "~/lib/ttl-cache";
 
 /**
  * Foreign-currency → USD conversion at the exchange rate for the expense's
@@ -105,7 +106,12 @@ export async function usdRate(
   return lookup;
 }
 
-const rateCache = new Map<string, FxRate>();
+/** Successful (currency, date) lookups: rates are immutable history, so a
+ * hit is always correct. TTL and entry bound match the other per-process
+ * caches, so an instance that converts many currencies and dates over its
+ * life cannot grow this map without limit. */
+const RATE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const rateCache = createCache<FxRate>(RATE_CACHE_TTL_MS);
 const inFlightLookups = new Map<string, Promise<FxRate | null>>();
 
 /**
