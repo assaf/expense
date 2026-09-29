@@ -258,6 +258,14 @@ export function FilterCombobox({
         aria-expanded={open && options.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
+        // DOM focus stays on the input while the arrow keys move a visible
+        // highlight, so the highlight has to be named here or a screen reader
+        // never hears which option the keys are on.
+        aria-activedescendant={
+          open && active >= 0 && active < options.length
+            ? `${listId}-opt-${active}`
+            : undefined
+        }
         aria-label={ariaLabel}
       />
       {leading ? (
@@ -278,6 +286,7 @@ export function FilterCombobox({
             <li key={`${s.completion}-${i}`}>
               <button
                 type="button"
+                id={`${listId}-opt-${i}`}
                 role="option"
                 aria-selected={i === active}
                 ref={i === active ? activeRef : undefined}

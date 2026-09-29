@@ -705,7 +705,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
                   type="button"
                   className="mt-2 rounded p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
                   onClick={() => removeLocation(i)}
-                  aria-label="Remove stop"
+                  aria-label={`Remove stop ${i}`}
                 >
                   <X aria-hidden="true" className="h-4 w-4" />
                 </button>
