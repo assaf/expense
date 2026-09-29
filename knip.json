@@ -7,6 +7,7 @@
     "test/fixtures/**",
     "vendor/**"
   ],
+  "ignoreFiles": ["test/helpers/pinned-clock.mjs"],
   "ignoreBinaries": ["cloc", "portless"],
   "ignoreDependencies": [
     "@secretlint/secretlint-rule-pattern",

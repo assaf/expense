@@ -102,10 +102,5 @@
     "node": ">=24"
   },
   "packageManager": "pnpm@12.6.0",
-  "knip": {
-    "ignoreFiles": [
-      "test/helpers/pinned-clock.mjs"
-    ]
-  },
   "portless": "expense"
 }
