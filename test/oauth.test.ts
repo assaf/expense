@@ -495,6 +495,67 @@ describe("MCP OAuth", () => {
     expect(dead.status).toBe(400);
   });
 
+  it("revoking a refresh token takes the access token issued with it", async () => {
+    // RFC 7009 §2.1: the cascade is scoped to the presented token being a
+    // refresh token, and it must reach the access token minted alongside it.
+    // Rotating first matters: the presented token is spent by its own
+    // rotation, so the live pair has to come from the exchange.
+    const clientId = await registerClient("oauth-test-revoke-family");
+    const verifier = generateCodeVerifier();
+    const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
+    const redirected = await runAuthorize(
+      page,
+      authorizeUrl(clientId, verifier),
+      "approve",
+    );
+    const exchanged = await exchangeCode({
+      grant_type: "authorization_code",
+      code: redirected.searchParams.get("code")!,
+      code_verifier: verifier,
+      redirect_uri: CALLBACK,
+      client_id: clientId,
+    });
+    const rotated = await exchangeCode({
+      grant_type: "refresh_token",
+      refresh_token: exchanged.json.refresh_token as string,
+      client_id: clientId,
+    });
+    expect(rotated.status).toBe(200);
+    const liveAccess = rotated.json.access_token as string;
+    const liveRefresh = rotated.json.refresh_token as string;
+    await initialize(liveAccess);
+
+    const revoke = await fetch(`${baseURL}/oauth/revoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token: liveRefresh, client_id: clientId }),
+    });
+    expect(revoke.status).toBe(200);
+    // Check the access token FIRST: presenting the revoked refresh token
+    // trips the replay detector, which revokes the family on its own and
+    // would make this assertion pass for the wrong reason.
+    const denied = await mcpPost(liveAccess, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "t", version: "1" },
+      },
+    });
+    expect(denied.status).toBe(401);
+    expect(
+      (
+        await exchangeCode({
+          grant_type: "refresh_token",
+          refresh_token: liveRefresh,
+          client_id: clientId,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
   it("keeps users' connections isolated per account", async () => {
     const clientId = await registerClient("oauth-test-isolation");
     const verifier = generateCodeVerifier();
