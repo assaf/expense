@@ -105,8 +105,12 @@ function dateStyles(zip: Record<string, Uint8Array>): Set<number> {
  * fractions are dropped (the statement matcher only needs the date). */
 function serialToDate(serial: number): string {
   // Serial 1 is 1900-01-01 and 0 is the 1899 epoch itself; an empty or
-  // missing <v> reads as 0 and would otherwise become a 1899-12-30 row.
-  if (!Number.isFinite(serial) || serial < 1) return "";
+  // missing <v> reads as 0 and would otherwise become a 1899-12-30 row. The
+  // upper bound keeps a hostile or corrupt cell out of Date's range: past it
+  // every field is NaN and the row would carry "NaN-NaN-NaN" as its date.
+  if (!Number.isFinite(serial) || serial < 1 || serial > MAX_EXCEL_SERIAL) {
+    return "";
+  }
   const ms = (Math.floor(serial) - 25569) * 86_400_000;
   const d = new Date(ms);
   const y = d.getUTCFullYear();
@@ -166,6 +170,12 @@ function parseSheet(
   });
   return rows;
 }
+
+/** The last serial a date cell can legitimately hold. Excel's own ceiling is
+ * far lower (serial 2958465 is year 9999); this bound only has to keep the
+ * arithmetic inside Date's range, so a corrupt or hostile cell returns no
+ * date instead of a "NaN-NaN-NaN" one. */
+const MAX_EXCEL_SERIAL = 100_000;
 
 // NET-006: a .xlsx is attacker-supplied input (reconcile upload). fflate's
 // unzipSync trusts the central directory's declared uncompressed sizes and
