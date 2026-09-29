@@ -247,6 +247,14 @@ export async function action({ request, context }: Route.ActionArgs) {
       return Response.json({ ok: true });
     }
     case "connectJmapServer": {
+      // encryptSecret throws when the key is absent, and this case reaches it
+      // after two round trips to a server the user named. The loader already
+      // hides the form in that deployment; this refuses a direct POST.
+      if (!isTokenCryptoConfigured()) {
+        return badRequest(
+          "Email account connections are not configured on this deployment.",
+        );
+      }
       const rawUrl = formString(form, "serverUrl").trim();
       const authMode = formString(form, "authMode");
       const username = formString(form, "username").trim();
