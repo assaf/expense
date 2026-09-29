@@ -39,6 +39,14 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-09-29"
+    changes:
+      - type: fix
+        text: "Marking several statement rows on the reconcile page at once no longer loses the earlier choices: each decision is saved against the version it was made from, so a row you picked never quietly reverts to undecided."
+      - type: improvement
+        text: "A warranty now takes up to 12 documents, and the editor says so instead of letting you attach files the save would refuse."
+      - type: fix
+        text: "Disconnecting an assistant through the standard OAuth revocation endpoint now stops its access token too, not just the refresh token you handed it."
   - date: "2026-09-28"
     changes:
       - type: feature
