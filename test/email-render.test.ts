@@ -4,10 +4,9 @@ import {
   renderEmailImage,
   renderTextEmail,
   collectRemoteImageUrls,
-  stripForwardedText,
-  stripForwardHeader,
   dropSourcelessImages,
 } from "~/lib/email-render.server";
+import { stripForwardedText, stripForwardHeader } from "~/lib/email-forward";
 
 const TINY_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",

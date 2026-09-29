@@ -296,9 +296,11 @@ async function renderDocument(
         url.startsWith("blob:") ||
         url.startsWith("about:")
       ) {
-        void request.continue();
+        // The page can be closed by the render's timeout while a request is
+        // still in flight, which rejects these; nothing is waiting on them.
+        void request.continue().catch(() => {});
       } else {
-        void request.abort();
+        void request.abort().catch(() => {});
       }
     });
     const render = async (): Promise<Uint8Array> => {
@@ -409,26 +411,6 @@ export async function renderTextEmail(
     TEXT_VIEWPORT_WIDTH,
   );
 }
-
-// --- Forwarded-message header stripping --------------------------------------
-//
-// Forwards (Fastmail, Gmail, Apple Mail, iOS, …) paste a header block in
-// front of the receipt: a marker line such as "----- Original message -----"
-// followed by From/To/Subject/Date lines, under the signature their client
-// adds for them. The receipt image should show the receipt, not that
-// envelope. `stripForwardHeader` removes the block from HTML (for the browser
-// render + htmlToText), `stripForwardedText` removes it from plain text (for
-// the text render, the resvg fallback, and LLM extraction). Both only remove
-// the marker, the consecutive header-looking lines that follow it, and a
-// signature directly above it that is the sender's own (or that their client
-// marked as one), so receipt content and anything the forwarder wrote are
-// never touched.
-
-export {
-  FORWARD_MARKERS,
-  stripForwardedText,
-  stripForwardHeader,
-} from "~/lib/email-forward";
 
 function buildTextDocument(text: string, opts: RenderTextEmailOptions): string {
   const envelope =
