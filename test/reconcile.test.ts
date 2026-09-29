@@ -821,6 +821,39 @@ describe("reconciliation store", () => {
     expect(read!.data.decisions["2"]).toBeUndefined();
   });
 
+  it("keeps every decision when rows are decided at the same time", async () => {
+    // The review page gives each row card its own fetcher, so a user marking
+    // several rows in quick succession really does put several POSTs in
+    // flight. All the decisions live in one jsonb column, so a plain
+    // read-modify-write loses whichever write lands second, and completion
+    // then discards a row the user explicitly decided. Enough callers are
+    // needed to actually interleave: two often serialize.
+    const rows = 12;
+    const csv = [
+      "date,description,amount",
+      ...Array.from(
+        { length: rows },
+        (_, i) => `2026-0${(i % 9) + 1}-15,SHOP ${i},1.0${i}`,
+      ),
+    ].join("\n");
+    const run = await draftRun(csv);
+    const results = await Promise.all(
+      Array.from({ length: rows }, (_, i) =>
+        updateReconciliationDecision(TEST_ACCOUNT_ID, run.id, i, {
+          kind: "match",
+          expenseId: `expense-${i}`,
+        }),
+      ),
+    );
+    expect(results.every(Boolean)).toBe(true);
+    const read = await readReconciliationRun(TEST_ACCOUNT_ID, run.id);
+    expect(
+      Object.keys(read!.data.decisions)
+        .map(Number)
+        .sort((a, b) => a - b),
+    ).toEqual(Array.from({ length: rows }, (_, i) => i));
+  });
+
   it("completes: marks matched expenses reconciled and creates new ones", async () => {
     const run = await draftRun();
     // Row 2 (UNKNOWN COFFEE SHOP 9.99) → add as a new expense.

@@ -165,36 +165,87 @@ export async function listReconciliationRuns(
   return rows.map(runToRecord);
 }
 
+/** One in-flight chain per draft run. The review page gives every row card
+ * its own fetcher, so a user marking several rows in quick succession puts
+ * several POSTs in flight for the SAME run; the decisions all live in one
+ * jsonb column, so two of them interleaving means one is silently dropped
+ * and completion later discards a row the user explicitly decided.
+ * Completion shares the chain: it reads the decisions and then does slow
+ * work (a render per new row) before it claims the run, so a decision
+ * landing in that window would be accepted and then thrown away. The chain
+ * serializes both inside this process; a second instance is still possible,
+ * which is what the claim below is for. */
+const runChains = new Map<string, Promise<unknown>>();
+
+function inRunChain<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = runChains.get(key) ?? Promise.resolve();
+  // `then(work, work)`: a previous link that rejected must not wedge the
+  // chain, and the caller still sees its own error.
+  const next = previous.then(work, work);
+  const settled: Promise<unknown> = next.catch(() => undefined);
+  runChains.set(key, settled);
+  void settled.then(() => {
+    if (runChains.get(key) === settled) runChains.delete(key);
+  });
+  return next;
+}
+
+function runKey(accountId: string, runId: string): string {
+  return `${accountId}\n${runId}`;
+}
+
 /** Record (or clear, with null) the user's decision for one statement row
- * of a draft run. Returns false when the run isn't a draft or isn't the
- * account's. */
+ * of a draft run. Returns false when the run isn't a draft, isn't the
+ * account's, or lost three races in a row. */
 export async function updateReconciliationDecision(
   accountId: string,
   runId: string,
   rowIndex: number,
   decision: ReconciliationDecision | null,
 ): Promise<boolean> {
-  const run = await db.orm.public.ReconciliationRun.where((r) =>
-    draftRun(r, accountId, runId),
-  )
-    .select("data")
-    .first();
-  if (!run) return false;
-  const data = run.data as unknown as ReconciliationRunData;
-  // Same normalization the read path applies: a legacy row whose `data` has no
-  // `decisions` object must not 500 the review page on the first click.
-  if (!data.decisions || typeof data.decisions !== "object")
-    data.decisions = {};
-  const key = String(rowIndex);
-  if (decision === null) {
-    delete data.decisions[key];
-  } else {
-    data.decisions[key] = decision;
+  return inRunChain(runKey(accountId, runId), () =>
+    claimReconciliationDecision(accountId, runId, rowIndex, decision),
+  );
+}
+
+/** The read-modify-write, as a claim: the update only lands while `data`
+ * still holds the snapshot the decision was computed from, so a writer on
+ * another instance cannot be overwritten by a write built on a stale read.
+ * It re-reads and retries instead. */
+async function claimReconciliationDecision(
+  accountId: string,
+  runId: string,
+  rowIndex: number,
+  decision: ReconciliationDecision | null,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const run = await db.orm.public.ReconciliationRun.where((r) =>
+      draftRun(r, accountId, runId),
+    )
+      .select("data")
+      .first();
+    if (!run) return false;
+    const snapshot = run.data;
+    const stored = snapshot as unknown as ReconciliationRunData;
+    // Copy the decisions map rather than the blob: the rows array can be
+    // large and only this one key changes.
+    const decisions =
+      stored.decisions && typeof stored.decisions === "object"
+        ? { ...stored.decisions }
+        : {};
+    const key = String(rowIndex);
+    if (decision === null) {
+      delete decisions[key];
+    } else {
+      decisions[key] = decision;
+    }
+    const data = { ...stored, decisions };
+    const updated = await db.orm.public.ReconciliationRun.where((r) =>
+      and(draftRun(r, accountId, runId), r.data.eq(snapshot)),
+    ).updateAll({ data: asJson(data) });
+    if (updated.length > 0) return true;
   }
-  await db.orm.public.ReconciliationRun.where((r) =>
-    draftRun(r, accountId, runId),
-  ).updateAll({ data: asJson(data) });
-  return true;
+  return false;
 }
 
 /** Abandon a draft run; the statement is dropped without touching any
@@ -232,11 +283,28 @@ interface CompleteReconciliationResult {
  * transaction (sharp/resvg have no DB dependency); a render failure aborts
  * the whole completion so the run stays draft.
  */
-export async function completeReconciliationRun(
+export function completeReconciliationRun(
   accountId: string,
   runId: string,
   /** The client's local today (YYYY-MM-DD): the browser knows its own
    * timezone; the server runs UTC. Used as the future-date ceiling. */
+  today?: string,
+): Promise<
+  | { error: string; result: null }
+  | { error: null; result: CompleteReconciliationResult }
+> {
+  // Shares the per-run chain with the decision writers: a decision that
+  // arrives while this is rendering either lands first and is applied, or
+  // finds the run already claimed and is refused with a 409 instead of being
+  // accepted and silently dropped.
+  return inRunChain(runKey(accountId, runId), () =>
+    applyReconciliationRun(accountId, runId, today),
+  );
+}
+
+async function applyReconciliationRun(
+  accountId: string,
+  runId: string,
   today?: string,
 ): Promise<
   | { error: string; result: null }
