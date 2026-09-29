@@ -9,7 +9,8 @@ import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { asNumericOf, fromIso } from "~/lib/db/wire";
 import { isEmail } from "~/lib/validation";
-import { cachedRead, createCache, userFromRow } from "~/lib/db/shared";
+import { cachedRead, userFromRow } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 import type { MileageRateEntry } from "~/lib/mileage-rates";
 import type { MileageType, User } from "~/lib/types";
 

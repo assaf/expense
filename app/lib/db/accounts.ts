@@ -20,12 +20,12 @@ import {
   accountFromRow,
   bust,
   cachedRead,
-  createCache,
   userFromRow,
   VERIFICATION_RESEND_MS,
   VERIFICATION_TTL_MS,
   withinWindow,
 } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 import { initStore } from "~/lib/db/seed";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
 import { extractEmailAddress } from "~/lib/validation";

@@ -1,5 +1,6 @@
 import { db } from "~/lib/prisma.server";
-import { bust, cachedRead, createCache } from "~/lib/db/shared";
+import { bust, cachedRead } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 import { addNamedRow, renameNamedRow, type NamedResult } from "~/lib/db/names";
 import type { Category } from "~/lib/types";
 

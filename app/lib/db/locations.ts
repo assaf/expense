@@ -1,7 +1,8 @@
 import { ulid } from "ulid";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
-import { bust, cachedRead, createCache } from "~/lib/db/shared";
+import { bust, cachedRead } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 import { fromIso } from "~/lib/db/wire";
 import {
   HOME_NAME,

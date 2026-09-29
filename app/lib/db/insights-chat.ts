@@ -32,7 +32,8 @@ export interface StoredExchange {
 
 /** The in-process cache mirrors the 5-minute pattern used for accounts
  * and reports: the conversation only changes through this module. */
-import { cachedRead, createCache, bust } from "~/lib/db/shared";
+import { cachedRead, bust } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 
 const conversationCache = createCache<{
   id: string;

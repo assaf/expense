@@ -2,7 +2,8 @@ import { ulid } from "ulid";
 import { db } from "~/lib/prisma.server";
 import { isForeignKeyViolation, isUniqueViolation } from "~/lib/db/pg-errors";
 import { duplicatePairKey } from "~/lib/duplicates";
-import { bust, cachedRead, createCache } from "~/lib/db/shared";
+import { bust, cachedRead } from "~/lib/db/shared";
+import { createCache } from "~/lib/ttl-cache";
 import { DEFAULT_SETTINGS, type Settings } from "~/lib/types";
 
 /** Per-account cache for settings (5-minute TTL). */
