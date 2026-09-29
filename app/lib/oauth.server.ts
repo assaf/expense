@@ -10,6 +10,7 @@ import {
   revokeOAuthTokenFamily,
   stampOAuthTokenFamily,
 } from "~/lib/db/oauth";
+import { readBodyLimited } from "~/lib/ssrf.server";
 import type { OAuthClientRecord, OAuthTokenRecord } from "~/lib/types";
 
 /** Re-exported so the token/code routes hash secrets and compare values
@@ -42,6 +43,11 @@ const REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 const CODE_TTL_MS = 10 * 60 * 1000;
 /** The only PKCE method we accept (RFC 7636 requires S256 for OAuth 2.1). */
 export const PKCE_METHOD = "S256";
+
+/** Ceiling on a form-urlencoded OAuth request body. The token and revoke
+ * endpoints are unauthenticated protocol surface, and their real payloads
+ * are a handful of short parameters. */
+const MAX_FORM_BYTES = 8 * 1024;
 
 // --- Primitives ------------------------------------------------------------
 
@@ -420,6 +426,17 @@ export async function authenticateFormRequest(
 ): Promise<
   { form: URLSearchParams; client: OAuthClientRecord } | { error: Response }
 > {
+  // Both callers are unauthenticated protocol endpoints, and their real
+  // payloads are a client_id, a code, a redirect_uri and a verifier. The
+  // declared length is a cheap early return only: it is absent on a chunked
+  // or HTTP/2 request and can lie, so the read below is the real bound.
+  const declared = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > MAX_FORM_BYTES) {
+    return {
+      error: oauthError(400, "invalid_request", "Request body too large."),
+    };
+  }
+
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.includes("application/x-www-form-urlencoded")) {
     return {
@@ -430,7 +447,19 @@ export async function authenticateFormRequest(
       ),
     };
   }
-  const form = new URLSearchParams(await request.text());
+  let body: string;
+  try {
+    // Bounded DURING the read: checking `body.length` afterwards would only
+    // convert an oversized body into a 400 after the memory was committed.
+    body = (
+      await readBodyLimited(new Response(request.body), MAX_FORM_BYTES)
+    ).toString("utf8");
+  } catch {
+    return {
+      error: oauthError(400, "invalid_request", "Request body too large."),
+    };
+  }
+  const form = new URLSearchParams(body);
   const auth = await authenticateClient(
     form.get("client_id"),
     request.headers.get("authorization"),
