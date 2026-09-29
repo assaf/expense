@@ -48,6 +48,17 @@ interface ParsedEntry {
 const PARSE_TTL_MS = 10 * 60_000;
 const PARSE_CACHE_MAX = 20;
 
+/** MIME nesting and header budgets for one message. A receipt is a receipt
+ * or an invoice: a few parts deep, a few kilobytes of headers. Past either
+ * limit postal-mime rejects the parse, which the drain records against the
+ * email like any other failure. */
+const MAX_MIME_NESTING_DEPTH = 32;
+const MAX_MIME_HEADER_BYTES = 256 * 1024;
+
+/** How many levels of inline message/rfc822 parsing to allow. One covers a
+ * forwarded receipt; deeper parts arrive as attachments instead. */
+const MAX_INLINE_RFC822_DEPTH = 1;
+
 function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
   return Buffer.from(content as ArrayBuffer);
 }
@@ -83,7 +94,26 @@ export function createMimeInboundCache(): MimeInboundCache {
       const promise = (async () => {
         try {
           const raw = await adapter.rawEmail(id);
-          const email = await PostalMime.parse(raw.raw);
+          // Explicit limits rather than the library defaults (nesting 256,
+          // 2 MiB of headers): the 15 MB byte cap bounds the message, not
+          // its shape.
+          //
+          // Inline message/rfc822 parsing stays ON, at one level: a forwarded
+          // receipt often arrives as a part with no Content-Disposition, which
+          // postal-mime treats as inline, and at depth 0 the whole inner
+          // message became one opaque attachment whose image never reached the
+          // receipt picker (the .eml path only reads date and sender from it,
+          // it is not a receipt candidate itself). One level covers the real
+          // shape. Residual: a part nested deeper is emitted as an attachment
+          // flagged `rfc822DepthExceeded`, and its own parts are not
+          // reflected in text/html/attachments, so a sender can still hide a
+          // payload one level down. Closing that needs the .eml path to
+          // become a receipt candidate, not a deeper parse.
+          const email = await PostalMime.parse(raw.raw, {
+            maxNestingDepth: MAX_MIME_NESTING_DEPTH,
+            maxHeadersSize: MAX_MIME_HEADER_BYTES,
+            maxRfc822NestingDepth: MAX_INLINE_RFC822_DEPTH,
+          });
           return { raw, email, fetchedAt: Date.now() };
         } catch (err) {
           parseCache.delete(key);
