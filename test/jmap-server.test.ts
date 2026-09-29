@@ -290,3 +290,106 @@ describe("jmapBatch", () => {
     }
   });
 });
+
+describe("jmapBatch response bounds", () => {
+  const api = "https://example.com/jmap/api";
+  const batch = [["Email/get", {}, "m0"]];
+
+  it("refuses an API response larger than the cap instead of buffering it", async () => {
+    // A connected server is one the user names, so its body is untrusted
+    // input: past the cap the read is refused, not completed.
+    const oversized = new Uint8Array(16 * 1024 * 1024 + 1);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(oversized, {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    try {
+      await expect(jmapBatch(api, "Bearer tok-1", batch)).rejects.toThrow(
+        /byte cap/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports a truncated body as a provider error, not a SyntaxError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('{"methodResponses": [', {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    try {
+      await expect(jmapBatch(api, "Bearer tok-1", batch)).rejects.toThrow(
+        /not JSON/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("refuses to carry the credential to another host's redirect", async () => {
+    // The credential is the connection's own; a redirect to link-local or
+    // loopback would be an authenticated request the user never named.
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        seen.push(url);
+        return new Response(null, {
+          status: 302,
+          headers: { location: "http://169.254.169.254/latest/meta-data/" },
+        });
+      }),
+    );
+    try {
+      await expect(jmapBatch(api, "Bearer tok-1", batch)).rejects.toThrow(
+        /refused/,
+      );
+      expect(seen).toEqual([api]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("follows a same-origin redirect", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        seen.push(url);
+        if (url === api) {
+          return new Response(null, {
+            status: 307,
+            headers: { location: "/jmap/api/v2" },
+          });
+        }
+        return new Response(
+          JSON.stringify({ methodResponses: [["Email/get", {}, "m0"]] }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }),
+    );
+    try {
+      await expect(jmapBatch(api, "Bearer tok-1", batch)).resolves.toEqual([
+        ["Email/get", {}, "m0"],
+      ]);
+      expect(seen).toEqual([api, "https://example.com/jmap/api/v2"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

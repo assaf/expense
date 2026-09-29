@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
 import { MAX_RECEIPT_BYTES } from "~/lib/upload-limits";
+import { createCache } from "~/lib/ttl-cache";
 
 /**
  * Session endpoint override: the test suite points this at a local mock
@@ -73,7 +74,12 @@ export function serverLabel(sessionUrl: string): string {
  * operator-controlled, possibly loopback URL), the SSRF-guarded fetch for a
  * user-supplied server. */
 const defaultSessionFetch: SessionFetch = (url, init) => {
-  if (isAppSessionUrl(url)) return fetch(url, init);
+  if (isAppSessionUrl(url)) {
+    // Bare fetch would follow a redirect to any host, and the session
+    // document is where the three endpoint URLs come from: a document from
+    // another origin is a document that names where the credential goes.
+    return fetchJmapEndpoint(url, init, "JMAP session");
+  }
   return fetchPublicUrl(url, {
     timeoutMs: REQUEST_TIMEOUT_MS,
     headers: init.headers as Record<string, string> | undefined,
@@ -169,6 +175,95 @@ function selectMailAccountId(
 /** Hard cap on the session document: it is a small JSON object, and a
  * hostile or broken server must not be able to stream into the function. */
 const SESSION_MAX_BYTES = 256 * 1024;
+
+/** Hard cap on a JMAP API response. The session document is far smaller;
+ * `Email/query` over a large mailbox is the biggest legitimate body. A
+ * connected server is one the user names, so its responses are untrusted
+ * input like any other and must not be able to stream into the function. */
+const API_MAX_BYTES = 16 * 1024 * 1024;
+
+/** An error body only needs enough of it to be diagnosable, and it arrives
+ * exactly when a broken or hostile server is the one answering. */
+const ERROR_BODY_MAX_BYTES = 8 * 1024;
+const ERROR_BODY_CHARS = 200;
+
+/** How many same-origin redirects an endpoint may answer with. */
+const MAX_ENDPOINT_REDIRECTS = 2;
+
+/** Parse a JSON response under the API cap. A truncated or non-JSON body is
+ * a provider error, not a bare SyntaxError thrown at the caller. */
+async function jsonBody(res: Response, what: string): Promise<unknown> {
+  let bytes: Buffer;
+  try {
+    bytes = await readBodyLimited(res, API_MAX_BYTES);
+  } catch (err) {
+    if (err instanceof SsrfError) {
+      throw new Error(
+        `${what} response went past the ${API_MAX_BYTES} byte cap; refused`,
+      );
+    }
+    throw err;
+  }
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    throw new Error(`${what} returned a body that is not JSON`);
+  }
+}
+
+/** The first slice of an error body, bounded in bytes and in characters. */
+async function errorBody(res: Response): Promise<string> {
+  const bytes = await readBodyLimited(res, ERROR_BODY_MAX_BYTES).catch(() =>
+    Buffer.alloc(0),
+  );
+  return bytes.toString("utf8").slice(0, ERROR_BODY_CHARS);
+}
+
+/**
+ * Call a JMAP endpoint, following redirects by hand so a credential can
+ * never be replayed to a host the user did not name. The session loader
+ * already pins every endpoint to the session's own origin, and a redirect
+ * is the one way left to leave it: the default `redirect: "follow"` would
+ * carry the Authorization header to whatever host answers, loopback and
+ * link-local included. Off-origin is refused, same-origin is followed, and
+ * the hop count is bounded.
+ */
+async function fetchJmapEndpoint(
+  url: string,
+  init: RequestInit,
+  what: string,
+): Promise<Response> {
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    const res = await fetch(current, { ...init, redirect: "manual" });
+    const location = res.headers.get("location");
+    if (
+      res.status < 300 ||
+      res.status > 399 ||
+      !location ||
+      hop >= MAX_ENDPOINT_REDIRECTS
+    ) {
+      return res;
+    }
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      void res.body?.cancel().catch(() => {});
+      throw new Error(`${what} answered with an unusable redirect`);
+    }
+    const from = new URL(current).origin;
+    if (next.origin !== from) {
+      void res.body?.cancel().catch(() => {});
+      throw new Error(
+        `${what} tried to redirect from ${from} to ${next.origin}; refused`,
+      );
+    }
+    // The 3xx we are not returning holds its socket until it is drained.
+    void res.body?.cancel().catch(() => {});
+    current = next.toString();
+  }
+}
 
 async function loadSession(
   server: JmapServer,
@@ -321,7 +416,11 @@ export class JmapMethodError extends Error {
 
 // --- Per-token JMAP calls ----------------------------------------------------
 
-const sessionCache = new Map<string, Promise<JmapTokenInfo>>();
+/** A session document is provider state: it can be rotated or revoked, so a
+ * long-lived instance must not hand a cached one out forever. Same 5-minute
+ * TTL as the other per-account caches, and bounded like them. */
+const SESSION_CACHE_TTL_MS = 300_000;
+const sessionCache = createCache<Promise<JmapTokenInfo>>(SESSION_CACHE_TTL_MS);
 
 /** A server's cache key: the endpoint plus the credential, so two accounts
  * on one server never share a session. */
@@ -369,26 +468,30 @@ export async function jmapBatch(
   capabilities: JmapCapability[] = [],
   opts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<[string, unknown, string][]> {
-  const res = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      Authorization: authorization,
-      "Content-Type": "application/json",
+  const res = await fetchJmapEndpoint(
+    apiUrl,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        using: [
+          "urn:ietf:params:jmap:core",
+          "urn:ietf:params:jmap:mail",
+          ...capabilities,
+        ],
+        methodCalls,
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     },
-    body: JSON.stringify({
-      using: [
-        "urn:ietf:params:jmap:core",
-        "urn:ietf:params:jmap:mail",
-        ...capabilities,
-      ],
-      methodCalls,
-    }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+    "JMAP API",
+  );
   if (!res.ok) {
-    throw new Error(`JMAP API failed: ${res.status} ${await res.text()}`);
+    throw new Error(`JMAP API failed: ${res.status} ${await errorBody(res)}`);
   }
-  const j = (await res.json()) as ApiResponse;
+  const j = (await jsonBody(res, "JMAP API")) as ApiResponse;
   // A malformed 200 (no methodResponses array) must fail as a provider error,
   // not as `undefined is not iterable` here or as a bad `[0]` deref upstream.
   if (!Array.isArray(j.methodResponses) || j.methodResponses.length === 0) {
@@ -459,19 +562,23 @@ export async function jmapUploadBlob(
   raw: Buffer,
 ): Promise<string> {
   const url = uploadUrl.replace("{accountId}", mailAccountId);
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: authorization,
-      "Content-Type": "message/rfc822",
+  const res = await fetchJmapEndpoint(
+    url,
+    {
+      method: "POST",
+      headers: {
+        Authorization: authorization,
+        "Content-Type": "message/rfc822",
+      },
+      body: new Uint8Array(raw),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     },
-    body: new Uint8Array(raw),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+    "JMAP upload",
+  );
   if (!res.ok) {
-    throw new Error(`upload failed: ${res.status} ${await res.text()}`);
+    throw new Error(`upload failed: ${res.status} ${await errorBody(res)}`);
   }
-  const j = (await res.json()) as { blobId?: string };
+  const j = (await jsonBody(res, "JMAP upload")) as { blobId?: string };
   if (!j.blobId) throw new Error("upload missing blobId");
   return j.blobId;
 }
@@ -741,19 +848,30 @@ export async function fetchRawRfc822(opts: {
     .replace("{blobId}", email.blobId ?? "")
     .replace("{name}", "email.eml")
     .replace("{type}", "message/rfc822");
-  const res = await fetch(url, {
-    headers: opts.headers,
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  const res = await fetchJmapEndpoint(
+    url,
+    {
+      headers: opts.headers,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    },
+    "JMAP download",
+  );
   if (!res.ok) {
-    throw new Error(`email download failed: ${res.status} ${await res.text()}`);
+    throw new Error(
+      `email download failed: ${res.status} ${await errorBody(res)}`,
+    );
   }
   return {
     id: opts.id,
-    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch(() => {
-      throw new Error(
-        `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
-      );
+    raw: await readBodyLimited(res, MAX_EMAIL_BYTES).catch((err) => {
+      // Only an oversize body is an SsrfError; a reset, a truncated upstream
+      // or the request timeout must not be reported as "too large".
+      if (err instanceof SsrfError) {
+        throw new Error(
+          `email too large to process (over ${MAX_EMAIL_BYTES} bytes)`,
+        );
+      }
+      throw new Error(`email download failed: ${String(err)}`);
     }),
     receivedAt: email.receivedAt ?? new Date().toISOString(),
     subject: email.subject ?? "",
