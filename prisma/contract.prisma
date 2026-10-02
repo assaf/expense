@@ -1,8 +1,7 @@
 // use prisma-next
 // Contract inferred from the live database schema. Edit as needed, then run `prisma contract emit`.
-
 model Account {
-  id                         String                       @id(map: "accounts_pkey")
+  id                         String                      @id(map: "accounts_pkey")
   name                       String
   inviteCode                 String
   /// Billing tier: "paid" or "gratis" unlocks conversational AI; null =
@@ -31,7 +30,7 @@ model Account {
 }
 
 model AuthAttempt {
-  key         String        @id(map: "auth_attempts_pkey")
+  key         String              @id(map: "auth_attempts_pkey")
   failures    Int
   windowStart TimestampString(3)
   lockedUntil TimestampString(3)?
@@ -41,7 +40,7 @@ model AuthAttempt {
 }
 
 model Category {
-  id        BigInt   @id(map: "categories_pkey") @default(autoincrement())
+  id        BigInt  @id(map: "categories_pkey") @default(autoincrement())
   name      String
   accountId String
   account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "categories_accountId_fkey", index: false)
@@ -55,7 +54,7 @@ model Category {
 /// key/value rows, because it is the fixed first/last stop of every trip
 /// (see app/lib/db/settings.ts).
 model Location {
-  id        String   @id(map: "locations_pkey")
+  id        String             @id(map: "locations_pkey")
   accountId String
   name      String
   /// The canonical address as typed (never geocoder-rewritten here); the
@@ -67,14 +66,14 @@ model Location {
   lng       Float?
   createdAt TimestampString(3)
   updatedAt TimestampString(3)
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "locations_accountId_fkey", index: false)
+  account   Account            @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "locations_accountId_fkey", index: false)
 
   @@index([accountId, name], map: "locations_accountId_name_key", unique: true)
   @@map("locations")
 }
 
 model ReconciliationRun {
-  id           String        @id(map: "reconciliation_runs_pkey")
+  id           String              @id(map: "reconciliation_runs_pkey")
   accountId    String
   fileName     String
   fileHash     String
@@ -87,7 +86,7 @@ model ReconciliationRun {
   createdAt    TimestampString(3)
   completedAt  TimestampString(3)?
   expenses     Expense[]
-  account      Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reconciliation_runs_accountId_fkey", index: false)
+  account      Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "reconciliation_runs_accountId_fkey", index: false)
 
   @@index([accountId, fileHash], map: "reconciliation_runs_accountId_fileHash_idx")
   @@index([accountId, status], map: "reconciliation_runs_accountId_status_idx")
@@ -95,39 +94,39 @@ model ReconciliationRun {
 }
 
 model Expense {
-  id                                     String                @id(map: "expenses_pkey")
-  _type                                  String                @map("type")
-  date                                   String
-  report                                 String
-  category                               String
-  description                            String
-  amount                                 Numeric(10, 2)?
-  currency                               String                @default("USD")
-  originalAmount                         Numeric(10, 2)?
-  fxRate                                 Numeric(10, 6)?
-  merchant                               String
-  imageFile                              String
-  imageMime                              String
-  originalName                           String
-  imageSha256                            String?
-  distanceMiles                          Numeric(10, 2)?
-  locations                              Jsonb
-  createdAt                              TimestampString(3)
-  updatedAt                              TimestampString(3)
-  accountId                              String
-  route                                  Jsonb?
-  mileageType                            String                @default("business")
+  id                String               @id(map: "expenses_pkey")
+  _type             String               @map("type")
+  date              String
+  report            String
+  category          String
+  description       String
+  amount            Numeric(10, 2)?
+  currency          String               @default("USD")
+  originalAmount    Numeric(10, 2)?
+  fxRate            Numeric(10, 6)?
+  merchant          String
+  imageFile         String
+  imageMime         String
+  originalName      String
+  imageSha256       String?
+  distanceMiles     Numeric(10, 2)?
+  locations         Jsonb
+  createdAt         TimestampString(3)
+  updatedAt         TimestampString(3)
+  accountId         String
+  route             Jsonb?
+  mileageType       String               @default("business")
   /// Mileage: true when the trip returns to its first stop (a closed loop),
   /// false for a one-way drive that ends at its last stop. Defaults to true
   /// so every trip filed before one-way trips existed keeps its meaning.
-  roundTrip                              Boolean               @default(true)
-  reconciledAt                           TimestampString(3)?
-  reconciledInRunId                      String?
-  dismissedAsA                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseAId_fkey")
-  dismissedAsB                           DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseBId_fkey")
-  account                                Account              @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "expenses_accountId_fkey", index: false)
-  reconciliationRun                      ReconciliationRun?   @relation(fields: [reconciledInRunId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "expenses_reconciledInRunId_fkey", index: false)
-  warranties                             Warranty[]
+  roundTrip         Boolean              @default(true)
+  reconciledAt      TimestampString(3)?
+  reconciledInRunId String?
+  dismissedAsA      DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseAId_fkey")
+  dismissedAsB      DuplicateDismissal[] @relation(name: "duplicate_dismissals_expenseBId_fkey")
+  account           Account              @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "expenses_accountId_fkey", index: false)
+  reconciliationRun ReconciliationRun?   @relation(fields: [reconciledInRunId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "expenses_reconciledInRunId_fkey", index: false)
+  warranties        Warranty[]
 
   /// Every account-scoped read (the home list, insights, exports) filters
   /// on these two; without the index that filter is a full table scan.
@@ -142,7 +141,7 @@ model Expense {
 }
 
 model DuplicateDismissal {
-  id         String   @id(map: "duplicate_dismissals_pkey")
+  id         String  @id(map: "duplicate_dismissals_pkey")
   expenseAId String
   expenseBId String
   accountId  String
@@ -155,7 +154,7 @@ model DuplicateDismissal {
 }
 
 model EmailConnection {
-  id                 String            @id(map: "email_connections_pkey")
+  id                 String              @id(map: "email_connections_pkey")
   accountId          String
   provider           String
   // The generic JMAP session URL (provider = "jmap"); null for OAuth rows.
@@ -164,13 +163,13 @@ model EmailConnection {
   // sender-authentication gate pins this stamp.
   authservId         String?
   emailAddress       String
-  remoteAccountId   String
+  remoteAccountId    String
   tokenEnc           String
-  refreshTokenEnc   String?
-  tokenExpiresAt    TimestampString(3)?
-  status             String            @default("active")
-  receivedCount      Int               @default(0)
-  processedCount     Int               @default(0)
+  refreshTokenEnc    String?
+  tokenExpiresAt     TimestampString(3)?
+  status             String              @default("active")
+  receivedCount      Int                 @default(0)
+  processedCount     Int                 @default(0)
   lastPushAt         TimestampString(3)?
   pushSubscriptionId String?
   pushExpiresAt      TimestampString(3)?
@@ -180,14 +179,14 @@ model EmailConnection {
   // healthy, so the next episode notifies again.
   errorNotifiedAt    TimestampString(3)?
   emailProcessLogs   EmailProcessLog[]
-  account            Account          @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_connections_accountId_fkey", index: false)
+  account            Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_connections_accountId_fkey", index: false)
 
   @@index([emailAddress], map: "email_connections_emailAddress_key", unique: true)
   @@map("email_connections")
 }
 
 model EmailProcessLog {
-  id           BigInt           @id(map: "email_process_log_pkey") @default(autoincrement())
+  id           BigInt              @id(map: "email_process_log_pkey") @default(autoincrement())
   connectionId String
   emailId      String
   fromAddress  String
@@ -212,7 +211,7 @@ model EmailProcessLog {
   createdAt    TimestampString(3)
   fromDisplay  String?
   receivedAt   TimestampString(3)?
-  connection   EmailConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_process_log_connectionId_fkey", index: false)
+  connection   EmailConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "email_process_log_connectionId_fkey", index: false)
 
   @@index([connectionId, createdAt], map: "email_process_log_connectionId_createdAt_idx")
   @@index([connectionId, emailId], map: "email_process_log_connectionId_emailId_key", unique: true)
@@ -220,7 +219,7 @@ model EmailProcessLog {
 }
 
 model EmailRule {
-  id        String       @id(map: "email_rules_pkey")
+  id        String             @id(map: "email_rules_pkey")
   accountId String
   sender    String
   source    String
@@ -257,23 +256,23 @@ model ImageBlob {
 }
 
 model InboundEmail {
-  emailId   String       @id(map: "inbound_emails_pkey")
+  emailId   String             @id(map: "inbound_emails_pkey")
   accountId String
   subject   String
   status    String
   error     String
   createdAt TimestampString(3)
   updatedAt TimestampString(3)
-  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_emails_accountId_fkey", index: false)
+  account   Account            @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_emails_accountId_fkey", index: false)
 
   @@map("inbound_emails")
 }
 
 model InboundSenderVerification {
-  address    String       @id(map: "inbound_sender_verifications_pkey")
+  address    String             @id(map: "inbound_sender_verifications_pkey")
   accountId  String
   verifiedAt TimestampString(3)
-  account    Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_sender_verifications_accountId_fkey", index: false)
+  account    Account            @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_sender_verifications_accountId_fkey", index: false)
 
   @@map("inbound_sender_verifications")
 }
@@ -284,7 +283,7 @@ model InboundSender {
   createdAt             TimestampString(3)
   verificationSentAt    TimestampString(3)?
   verificationTokenHash String?
-  account               Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_senders_accountId_fkey", index: false)
+  account               Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "inbound_senders_accountId_fkey", index: false)
 
   @@id([accountId, address], map: "inbound_senders_pkey")
   @@index([address], map: "inbound_senders_address_idx")
@@ -301,12 +300,13 @@ model InboundSender {
 model InboundEmailCooldown {
   address String             @id(map: "inbound_email_cooldowns_pkey")
   sentAt  TimestampString(3)
+
   @@map("inbound_email_cooldowns")
 }
 
 model MileageRate {
-  id        BigInt        @id(map: "mileage_rates_pkey") @default(autoincrement())
-  _type     String        @map("type")
+  id        BigInt             @id(map: "mileage_rates_pkey") @default(autoincrement())
+  _type     String             @map("type")
   startDate String
   endDate   String
   rate      Numeric(5, 3)
@@ -317,7 +317,7 @@ model MileageRate {
 }
 
 model OAuthClient {
-  id            String          @id(map: "oauth_clients_pkey")
+  id            String             @id(map: "oauth_clients_pkey")
   secretHash    String?
   name          String
   redirectUris  String
@@ -332,15 +332,15 @@ model OAuthClient {
 }
 
 model OAuthCode {
-  id          String       @id(map: "oauth_codes_pkey")
+  id          String             @id(map: "oauth_codes_pkey")
   userId      String
   clientId    String
   challenge   String
   redirectUri String
   expiresAt   TimestampString(3)
-  used        Boolean      @default(false)
+  used        Boolean            @default(false)
   createdAt   TimestampString(3)
-  client      OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_codes_clientId_fkey")
+  client      OAuthClient        @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_codes_clientId_fkey")
 
   @@index([clientId], map: "oauth_codes_clientId_idx")
   @@map("oauth_codes")
@@ -350,17 +350,17 @@ model OAuthConsent {
   userId    String
   clientId  String
   grantedAt TimestampString(3)
-  client    OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_consents_clientId_fkey", index: false)
+  client    OAuthClient        @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_consents_clientId_fkey", index: false)
 
   @@id([userId, clientId], map: "oauth_consents_pkey")
   @@map("oauth_consents")
 }
 
 model OAuthToken {
-  tokenHash String        @id(map: "oauth_tokens_pkey")
+  tokenHash String              @id(map: "oauth_tokens_pkey")
   userId    String
   clientId  String
-  _type     String        @map("type")
+  _type     String              @map("type")
   scope     String
   expiresAt TimestampString(3)
   revokedAt TimestampString(3)?
@@ -369,7 +369,7 @@ model OAuthToken {
   /// carries the same id, so a reused (already rotated) refresh token can
   /// revoke the whole chain instead of only itself.
   familyId  String?
-  client    OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_tokens_clientId_fkey")
+  client    OAuthClient         @relation(fields: [clientId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "oauth_tokens_clientId_fkey")
 
   @@index([clientId], map: "oauth_tokens_clientId_idx")
   @@index([userId], map: "oauth_tokens_userId_idx")
@@ -379,25 +379,25 @@ model OAuthToken {
 
 model LegacyPrismaMigrations {
   @@control(tolerated)
-  id                VarChar(36)  @id(map: "_prisma_migrations_pkey")
+  id                VarChar(36)        @id(map: "_prisma_migrations_pkey")
   checksum          VarChar(64)
   finishedAt        TimestamptzString? @map("finished_at")
-  migrationName     VarChar(255) @map("migration_name")
+  migrationName     VarChar(255)       @map("migration_name")
   logs              String?
   rolledBackAt      TimestamptzString? @map("rolled_back_at")
   startedAt         TimestamptzString  @default(now()) @map("started_at")
-  appliedStepsCount Int          @default(0) @map("applied_steps_count")
+  appliedStepsCount Int                @default(0) @map("applied_steps_count")
 
   @@map("_prisma_migrations")
 }
 
 model ReceiptExtraction {
-  id        String       @id(map: "receipt_extractions_pkey")
+  id        String             @id(map: "receipt_extractions_pkey")
   accountId String
   hash      String
   result    Jsonb
   createdAt TimestampString(3)
-  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "receipt_extractions_accountId_fkey", index: false)
+  account   Account            @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "receipt_extractions_accountId_fkey", index: false)
 
   @@index([accountId, hash], map: "receipt_extractions_accountId_hash_key", unique: true)
   @@index([createdAt], map: "receipt_extractions_createdAt_idx")
@@ -405,21 +405,21 @@ model ReceiptExtraction {
 }
 
 model Report {
-  id        BigInt   @id(map: "reports_pkey") @default(autoincrement())
+  id        BigInt              @id(map: "reports_pkey") @default(autoincrement())
   name      String
   accountId String
-  closed    Boolean  @default(false)
+  closed    Boolean             @default(false)
   /// When the report row was created. Null for reports that predate the
   /// column (their creation date is unknown; id order approximates age).
   createdAt TimestampString(3)?
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
+  account   Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 
   @@index([accountId, name], map: "reports_accountId_name_key", unique: true)
   @@map("reports")
 }
 
 model InsightConversation {
-  id        String            @id(map: "insight_conversations_pkey")
+  id        String             @id(map: "insight_conversations_pkey")
   userId    String
   accountId String
   messages  Jsonb
@@ -441,22 +441,22 @@ model Settings {
 }
 
 model User {
-  id                     String        @id(map: "users_pkey")
-  accountId              String
-  email                  String
-  passwordHash           String
-  createdAt              TimestampString(3)
-  emailVerifiedAt        TimestampString(3)?
-  verificationSentAt     TimestampString(3)?
-  verificationTokenHash  String?
-  passwordResetSentAt    TimestampString(3)?
-  passwordResetTokenHash String?
+  id                      String              @id(map: "users_pkey")
+  accountId               String
+  email                   String
+  passwordHash            String
+  createdAt               TimestampString(3)
+  emailVerifiedAt         TimestampString(3)?
+  verificationSentAt      TimestampString(3)?
+  verificationTokenHash   String?
+  passwordResetSentAt     TimestampString(3)?
+  passwordResetTokenHash  String?
   // Bumped when the password changes (a reset). Sessions and OAuth tokens
   // minted before it are refused, so a password reset actually ends the
   // access a stolen cookie or token granted.
-  credentialsChangedAt   TimestampString(3)?
+  credentialsChangedAt    TimestampString(3)?
   marketingUnsubscribedAt TimestampString(3)?
-  account                Account      @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
+  account                 Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 
   @@index([email], map: "users_email_key", unique: true)
   @@map("users")
@@ -468,7 +468,7 @@ model User {
 /// outlive the tax year (or cover a non-deductible purchase), so it must not
 /// reach readExpenses() and the tax surfaces built on it.
 model Warranty {
-  id          String                @id(map: "warranties_pkey")
+  id          String             @id(map: "warranties_pkey")
   accountId   String
   merchant    String
   product     String
@@ -485,8 +485,8 @@ model Warranty {
   expenseId   String?
   createdAt   TimestampString(3)
   updatedAt   TimestampString(3)
-  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "warranties_accountId_fkey", index: false)
-  expense     Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "warranties_expenseId_fkey", index: false)
+  account     Account            @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "warranties_accountId_fkey", index: false)
+  expense     Expense?           @relation(fields: [expenseId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "warranties_expenseId_fkey", index: false)
 
   /// The list reads by account and groups by expiry.
   @@index([accountId, expiresAt], map: "warranties_accountId_expiresAt_idx")

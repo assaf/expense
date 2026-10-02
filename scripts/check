@@ -2,6 +2,36 @@
 
 set -eo pipefail
 
+echo -e "\033[0;32m--- Verify Prisma ORM pins match the CLI ---\033[0m"
+node --input-type=module -e '
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const req = createRequire(pathToFileURL(join(process.cwd(), "package.json")).href);
+const cli = JSON.parse(
+  readFileSync(req.resolve("prisma/package.json"), "utf8"),
+);
+// The CLI validates the packs the project orm package contributes with its own
+// bundled @prisma/orm-toolchain, so the two must be the same rc. A newer orm
+// package renamed the pslBlock descriptor field (parameters -> spec) and the
+// CLI rejects it as CONTRACT.PACK_CONTRIBUTION_INVALID at "enum".
+const expected = cli.dependencies["@prisma/orm-toolchain"];
+const declared = ["@prisma/orm-family-sql", "@prisma/orm-postgres"];
+const mismatched = declared.filter((name) => pkg.dependencies[name] !== expected);
+if (mismatched.length > 0) {
+  console.error(
+    `Prisma ORM packages must be pinned to ${expected} (what prisma ${cli.version} bundles), but:`,
+  );
+  for (const name of mismatched) console.error(`  ${name}: ${pkg.dependencies[name]}`);
+  console.error(
+    "Pin them exactly (no range) or move the CLI to a release bundling the same orm rc.",
+  );
+  process.exit(1);
+}
+console.log(`pass: prisma orm packages pinned to ${expected}`)
+'
 echo -e "\033[0;32m--- Emit Prisma contract ---\033[0m"
 prisma contract emit
 

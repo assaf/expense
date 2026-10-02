@@ -29,6 +29,11 @@ export default defineConfig((config) => {
         // the next emit undoes it.
         "prisma/contract.d.ts",
         "prisma/contract.json",
+        // Agent skill bundles written by `prisma skills sync` on install.
+        ".agents/**",
+        ".claude/**",
+        ".cursor/**",
+        ".devin/**",
       ],
       printWidth: 80,
       tabWidth: 2,
@@ -53,6 +58,11 @@ export default defineConfig((config) => {
         // Emitted contract files: generated, never hand-edited (see fmt).
         "prisma/contract.d.ts",
         "prisma/contract.json",
+        // Generated agent skill bundles (see fmt).
+        ".agents/**",
+        ".claude/**",
+        ".cursor/**",
+        ".devin/**",
       ],
       options: {
         reportUnusedDisableDirectives: "warn",

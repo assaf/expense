@@ -40,3 +40,8 @@ blog
 marketing
 gmail.json
 .vitest/
+# Agent skill bundles written by `prisma skills sync` (postinstall).
+.agents/
+.claude/
+.cursor/
+.devin/
