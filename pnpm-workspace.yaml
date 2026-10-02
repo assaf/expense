@@ -17,17 +17,13 @@ allowBuilds:
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.0.0
   vite-plus: 1.0.0
-  vitest: 5.0.1
 overrides:
   vite@*: "catalog:"
-  vitest@*: "catalog:"
 peerDependencyRules:
   allowAny:
     - vite
-    - vitest
   allowedVersions:
     vite: "*"
-    vitest: "*"
 patchedDependencies:
   tesseract.js@7.0.0: patches/tesseract.js@7.0.0.patch
 minimumReleaseAgeExclude:

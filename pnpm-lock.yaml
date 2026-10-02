@@ -173,7 +173,6 @@ catalogs:
 
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@1.0.0
-  vitest@*: 5.0.1
 
 patchedDependencies:
   tesseract.js@7.0.0: f33477c45a121b0e6a42c7d1660b67b7ba2614c4c1b3d04d21b673d3e3b959c9
@@ -712,13 +711,13 @@ packages:
     resolution: {integrity: sha512-DJR0hfdr3HNXAkzW8AzfvUz6VmrNFLrKk9tZGDURi33faMyxkc7ZewxELMMZwGpOTGN4mfqYVbX2CXgI+ZJBeQ==}
     peerDependencies:
       effect: ^4.0.0-rc.115
-      vitest: 5.0.1
+      vitest: '>=5.0.0 <6.0.0'
 
   '@effect/vitest@4.0.0-rc.118':
     resolution: {integrity: sha512-O0CPgtFVhkB+pyFtjP4up2XF4uVWsPgUmlv4hMjq8ARLOPKYix+uu3AUFIUKRHjzzQpx+JPce6KPhD6Flkrfag==}
     peerDependencies:
       effect: ^4.0.0-rc.118
-      vitest: 5.0.1
+      vitest: '>=5.0.0 <6.0.0'
 
   '@electric-sql/pglite-socket@0.0.20':
     resolution: {integrity: sha512-J5nLGsicnD9wJHnno9r+DGxfcZWh+YJMCe0q/aCgtG6XOm9Z7fKeite8IZSNXgZeGltSigM9U/vAWZQWdgcSFg==}
