@@ -41,7 +41,11 @@ import {
 import type { JmapServer } from "~/lib/jmap.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
-import { writeEmailLogRow } from "~/lib/db/email-log";
+import {
+  readEmailLogSnapshots,
+  writeEmailLogRow,
+  type EmailLogSnapshot,
+} from "~/lib/db/email-log";
 import {
   classifyReceiptEmail,
   hasOwnConfirmationHeader,
@@ -50,7 +54,7 @@ import { htmlToText } from "~/lib/html-text";
 import * as Sentry from "@sentry/react-router";
 import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
-import { fromIso, nowWire, toIso } from "~/lib/db/wire";
+import { fromIso, nowWire } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
 import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
 
@@ -272,24 +276,27 @@ async function claimEmailForProcessing(
   return claimed === "created" || claimed === "updated";
 }
 
-/** Has this email already been settled? A row in any state answers yes,
- * except a claim that outlived the worker holding it: `claimEmailForProcess-
- * ing` takes those over, so the drain has to offer the email again or that
- * takeover is unreachable (a drain killed mid-flight would leave the email
- * sitting in the Inbox forever, invisible to the drain and to /email-review
- * alike, and the receipt would never be filed). */
-async function seenEmail(
-  connectionId: string,
-  emailId: string,
-): Promise<boolean> {
-  const row = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connectionId), l.emailId.eq(emailId)),
-  )
-    .select("outcome", "createdAt")
-    .first();
-  if (row === null) return false;
-  if (row.outcome !== "processing") return true;
-  return Date.parse(toIso(row.createdAt)) >= Date.now() - STALE_CLAIM_MS;
+/** Which of a batch's emails are already settled, decided in memory from ONE
+ * read of the batch's log rows. A row in any state answers yes, except a
+ * claim that outlived the worker holding it: `claimEmailForProcessing` takes
+ * those over, so the drain has to offer the email again or that takeover is
+ * unreachable (a drain killed mid-flight would leave the email sitting in
+ * the Inbox forever, invisible to the drain and to /email-review alike, and
+ * the receipt would never be filed).
+ *
+ * The per-email read this replaced cost one pooled round trip per email
+ * before the batch began any work: a `pg-pool.connect` N+1 in production
+ * (Sentry EXPENSE-1F). */
+function settledEmailIds(
+  snapshots: EmailLogSnapshot[],
+  nowMs: number,
+): Set<string> {
+  const settled = new Set<string>();
+  for (const row of snapshots) {
+    const stale = Date.parse(row.createdAt) < nowMs - STALE_CLAIM_MS;
+    if (row.outcome !== "processing" || !stale) settled.add(row.emailId);
+  }
+  return settled;
 }
 
 /** Bump one counter in a single atomic UPDATE: Postgres evaluates `col + 1`
@@ -877,10 +884,16 @@ async function drainConnection(
     });
     if (summaries.length === 0) break;
     // Skip already-evaluated emails (push + cron race, re-delivered mail).
-    const fresh: ConnectionEmailSummary[] = [];
-    for (const summary of summaries) {
-      if (!(await seenEmail(connection.id, summary.id))) fresh.push(summary);
-    }
+    // One read for the whole batch: this filter runs before any work, so a
+    // per-email read put a round trip in front of every batched email.
+    const settled = settledEmailIds(
+      await readEmailLogSnapshots(
+        connection.id,
+        summaries.map((s) => s.id),
+      ),
+      Date.now(),
+    );
+    const fresh = summaries.filter((s) => !settled.has(s.id));
     // The batch's newest email (summaries are oldest-first); the cursor
     // slides to just past it.
     const newestMs = Date.parse(summaries[summaries.length - 1]!.receivedAt);

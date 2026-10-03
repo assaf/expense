@@ -5,6 +5,7 @@ import {
 } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
+import { toIso } from "~/lib/db/wire";
 import type { Contract } from "../../../prisma/contract.d";
 
 /**
@@ -97,4 +98,35 @@ export async function writeEmailLogRow(
     throw err;
   }
   return "created";
+}
+
+/** One log row as the batched read hands it back: what a caller needs to
+ * apply its own settled/claim policy, with the timestamp already ISO so no
+ * caller has to know the wire codec. */
+export interface EmailLogSnapshot {
+  emailId: string;
+  outcome: string;
+  createdAt: string;
+}
+
+/** Every log row for a batch of emails, in ONE query. The drain asks about a
+ * whole mailbox batch at once; the per-email read it replaced cost a pooled
+ * round trip per email before the batch did any work, which Sentry tracked as
+ * the `pg-pool.connect` N+1 in EXPENSE-1F. The id list is the caller's query
+ * batch, so it is bounded by the same `limit` the mailbox query used. */
+export async function readEmailLogSnapshots(
+  connectionId: string,
+  emailIds: string[],
+): Promise<EmailLogSnapshot[]> {
+  if (emailIds.length === 0) return [];
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.emailId.in(emailIds)),
+  )
+    .select("emailId", "outcome", "createdAt")
+    .all();
+  return rows.map((row) => ({
+    emailId: row.emailId,
+    outcome: row.outcome,
+    createdAt: toIso(row.createdAt),
+  }));
 }

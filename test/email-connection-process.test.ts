@@ -11,6 +11,7 @@ import { FASTMAIL_AUTHSERV } from "~/lib/mime-inbound.server";
 import { buildRfc822Message } from "~/lib/email-mime.server";
 import { readImage } from "~/lib/images.server";
 import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
+import type * as EmailLogModule from "~/lib/db/email-log";
 import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
@@ -72,6 +73,27 @@ vi.mock("~/lib/db/email-rules", async (importOriginal) => {
         throw new Error('relation "public.email_rule_removals" does not exist');
       }
       return actual.matchEmailRule(...args);
+    },
+  };
+});
+
+const logMocks = vi.hoisted(() => ({
+  // Spied, not replaced: the drain's pre-work read of the process log is
+  // once per mailbox batch, and this pins that count. It was once per email
+  // (Sentry EXPENSE-1F, the `pg-pool.connect` N+1), which cost a pooled
+  // round trip per email before the batch began any work.
+  readEmailLogSnapshots: vi.fn(),
+}));
+
+vi.mock("~/lib/db/email-log", async (importOriginal) => {
+  const actual = await importOriginal<typeof EmailLogModule>();
+  return {
+    ...actual,
+    readEmailLogSnapshots: (
+      ...args: Parameters<typeof actual.readEmailLogSnapshots>
+    ) => {
+      logMocks.readEmailLogSnapshots(...args);
+      return actual.readEmailLogSnapshots(...args);
     },
   };
 });
@@ -940,6 +962,8 @@ describe("drainEmailConnection", () => {
     // The rule-gate failure spy is per-test; reset it for every one.
     rulesMocks.failMatch = false;
     mocks.notifyOwner.mockClear();
+    // The batched log read is counted per test (see logMocks).
+    logMocks.readEmailLogSnapshots.mockClear();
   });
 
   it("evaluates new mail, bumps counters, and is idempotent", async () => {
@@ -1039,6 +1063,73 @@ describe("drainEmailConnection", () => {
     expect(trashed).toEqual(["s1"]);
     const row = await logRow(conn.id, "s1");
     expect(row?.outcome === "created" || row?.outcome === "partial").toBe(true);
+  });
+
+  it("reads the process log once per batch, not once per email", async () => {
+    // One mailbox batch of four: three new, one already settled. The settled
+    // filter must not cost a query per email — through the pooler that put
+    // four sequential round trips in front of every batch (EXPENSE-1F).
+    await testPrisma.emailProcessLog.create({
+      data: {
+        connectionId: conn.id,
+        emailId: "d1",
+        fromAddress: "no_reply@email.apple.com",
+        subject: "Receipt 1",
+        matched: false,
+        outcome: "ignored",
+      },
+    });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "d1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 3.50",
+          },
+        ],
+        [
+          "d2",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest 2",
+            body: "nothing to see",
+          },
+        ],
+        [
+          "d3",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest 3",
+            body: "nothing to see",
+          },
+        ],
+        [
+          "d4",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest 4",
+            body: "nothing to see",
+          },
+        ],
+      ]),
+    );
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    // The settled email stays out; the other three are evaluated, and the
+    // whole batch cost one log read.
+    expect(result.evaluated).toBe(3);
+    expect(logMocks.readEmailLogSnapshots).toHaveBeenCalledTimes(1);
+    expect(logMocks.readEmailLogSnapshots.mock.calls[0]).toEqual([
+      conn.id,
+      ["d1", "d2", "d3", "d4"],
+    ]);
   });
 
   it("stamps the email's arrival on the row it files", async () => {
