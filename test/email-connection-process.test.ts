@@ -1066,9 +1066,7 @@ describe("drainEmailConnection", () => {
   });
 
   it("reads the process log once per batch, not once per email", async () => {
-    // One mailbox batch of four: three new, one already settled. The settled
-    // filter must not cost a query per email — through the pooler that put
-    // four sequential round trips in front of every batch (EXPENSE-1F).
+    // One mailbox batch of four, three of them new. d1 is already settled.
     await testPrisma.emailProcessLog.create({
       data: {
         connectionId: conn.id,
@@ -1077,6 +1075,7 @@ describe("drainEmailConnection", () => {
         subject: "Receipt 1",
         matched: false,
         outcome: "ignored",
+        createdAt: new Date().toISOString(),
       },
     });
     const { adapter } = fakeAdapter(

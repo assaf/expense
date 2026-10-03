@@ -654,7 +654,7 @@ Implementation (`app/lib/email-review.server.ts`, route
 Outcomes live on the existing `EmailProcessLog` row (one per email):
 `pending-review` (on the list), `review-ignored` (user said no),
 `created`/`partial` (processed), plus the pipeline's own values. The
-auto-drain's seenEmail check skips any logged email, so a pending or
+auto-drain's settled check skips any logged email, so a pending or
 review-ignored row is never double-processed.
 
 ## Dev tooling

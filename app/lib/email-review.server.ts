@@ -53,8 +53,8 @@ import {
  * State lives on EmailProcessLog (the pipeline's decision store, one row per
  * email): the scan upserts rows with outcome `pending-review` (plus the
  * receivedAt/fromDisplay the list renders); process flips to
- * created/partial, ignore to `review-ignored`. The auto-pipeline's
- * seenEmail check skips any logged email, so pending/review-ignored rows
+ * created/partial, ignore to `review-ignored`. The auto-drain's settled
+ * check skips any logged email, so pending/review-ignored rows
  * are never double-processed by a drain, and emails the pipeline already
  * created or ignored stay out of the list (the scan re-examines only
  * undecided or recoverable rows).
