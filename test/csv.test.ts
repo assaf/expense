@@ -26,27 +26,23 @@ const significant = (rows: string[][]): string[][] =>
   rows.filter((row) => row.some((cell) => cell.trim() !== ""));
 
 describe("parseCsv properties", () => {
-  it("always returns rows of strings", () => {
-    assertProperty([binary(300)], (text) => {
-      const rows = parseCsv(text);
-      expect(Array.isArray(rows)).toBe(true);
-      for (const row of rows) {
-        expect(Array.isArray(row)).toBe(true);
-        for (const cell of row) expect(typeof cell).toBe("string");
-      }
+  it("never throws over arbitrary text", () => {
+    // The signature already promises `string[][]`, so the only thing a
+    // generated input can break here is totality: a bad row or an
+    // out-of-range index would throw rather than return.
+    assertProperty([binary(300)], (s) => {
+      expect(() => parseCsv(s)).not.toThrow();
     });
   });
 
   it("round-trips an encoded grid", () => {
     const grid = fc.array(
       fc.array(fc.string({ maxLength: 12 }), { maxLength: 6 }),
-      {
-        maxLength: 6,
-      },
+      { maxLength: 6 },
     );
     assertProperty([grid], (rows) => {
-      const encoded = encodeCsv(significant(rows));
-      expect(parseCsv(encoded)).toEqual(significant(rows));
+      const kept = significant(rows);
+      expect(parseCsv(encodeCsv(kept))).toEqual(kept);
     });
   });
 

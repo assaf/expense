@@ -392,23 +392,22 @@ function segmentsOf(block: Block): InlineSegment[] {
   }
 }
 
+/** Every href in a segment list must be on the allowlist. */
+function expectAllowedHrefs(segments: InlineSegment[]): void {
+  for (const segment of segments) {
+    if (segment.href !== undefined) expect(segment.href).toMatch(ALLOWED_HREF);
+  }
+}
+
 describe("app/lib/markdown.ts properties", () => {
   it("only ever links an allowed absolute scheme", () => {
-    // The input always carries a well-formed https link, so the property
-    // inspects real hrefs instead of vacuously finding none in random text.
+    // The seeded link guarantees the property inspects a real href instead
+    // of vacuously finding none in random text.
     assertProperty([binary(200)], (s) => {
       for (const input of [s, `[seed](https://example.com/a) ${s}`]) {
-        for (const segment of parseInline(input)) {
-          if (segment.href !== undefined) {
-            expect(segment.href).toMatch(ALLOWED_HREF);
-          }
-        }
+        expectAllowedHrefs(parseInline(input));
         for (const block of parseMarkdown(input)) {
-          for (const segment of segmentsOf(block)) {
-            if (segment.href !== undefined) {
-              expect(segment.href).toMatch(ALLOWED_HREF);
-            }
-          }
+          expectAllowedHrefs(segmentsOf(block));
         }
       }
     });
@@ -432,11 +431,8 @@ describe("app/lib/markdown.ts properties", () => {
   });
 
   it("never throws over arbitrary text", () => {
-    assertProperty([binary(200)], (s) => {
-      expect(() => parseInline(s)).not.toThrow();
-      expect(() => parseMarkdown(s)).not.toThrow();
-    });
     assertProperty([binary(400)], (s) => {
+      expect(() => parseInline(s)).not.toThrow();
       expect(() => parseMarkdown(s)).not.toThrow();
     });
   });

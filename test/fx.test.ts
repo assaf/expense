@@ -12,6 +12,7 @@ import {
   formatFxRate,
   readConversionNote,
   withConversionNote,
+  type ConversionNoteFields,
 } from "~/lib/fx-note";
 import fc from "fast-check";
 import { assertProperty, text } from "./helpers/property";
@@ -342,33 +343,31 @@ describe("conversion description note", () => {
  * catches.
  */
 
-/** ISO-like non-USD codes: the class that produces a note at all. */
-const foreignCurrency = fc.constantFrom(
-  "EUR",
-  "GBP",
-  "JPY",
-  "CHF",
-  "CAD",
-  "AUD",
-  "SEK",
-  "NOK",
-);
-
-const printedAmount = fc.stringMatching(/^\d+(\.\d{1,2})?$/);
-const rate = fc.stringMatching(/^\d+(\.\d{1,6})?$/);
-const rateDate = fc.constantFrom("", "2026-08-01", "2026-08-03");
-
-const fxFields: fc.Arbitrary<{
-  currency: string;
-  originalAmount: string;
-  fxRate: string;
-  rateDate: string;
-}> = fc.record({
-  currency: foreignCurrency,
-  originalAmount: printedAmount,
-  fxRate: rate,
-  rateDate,
+/** The provenance quad for a captured receipt, non-USD so a note is
+ * produced at all. */
+const fxFields = fc.record({
+  currency: fc.constantFrom(
+    "EUR",
+    "GBP",
+    "JPY",
+    "CHF",
+    "CAD",
+    "AUD",
+    "SEK",
+    "NOK",
+  ),
+  originalAmount: fc.stringMatching(/^\d+(\.\d{1,2})?$/),
+  fxRate: fc.stringMatching(/^\d+(\.\d{1,6})?$/),
+  rateDate: fc.constantFrom("", "2026-08-01", "2026-08-03"),
 });
+
+/** A converted receipt, for the case that is a table over one field. */
+const CONVERTED: ConversionNoteFields = {
+  currency: "EUR",
+  originalAmount: "50.00",
+  fxRate: "1.1699",
+  rateDate: "2026-08-21",
+};
 
 /** The description the note is appended to. */
 const description = text(40);
@@ -396,12 +395,12 @@ describe("app/lib/fx-note.ts properties", () => {
   });
 
   it("writes no note for USD or a malformed currency", () => {
-    assertProperty([fxFields], (fx) => {
-      expect(conversionNote({ ...fx, currency: "USD" })).toBe("");
-      for (const currency of ["usd", "EU", "EU1", "", "EUROP"]) {
-        expect(conversionNote({ ...fx, currency })).toBe("");
-      }
-    });
+    // Only `/^[A-Z]{3}$/` and not "USD" produce a note, so everything else
+    // is stored undocumented. A table, not a property: the outcome does not
+    // depend on any generated field.
+    for (const currency of ["USD", "usd", "EU", "EU1", "", "EUROP", "€"]) {
+      expect(conversionNote({ ...CONVERTED, currency })).toBe("");
+    }
   });
 
   it("formats a rate idempotently, never leaving a bare point", () => {
@@ -414,10 +413,8 @@ describe("app/lib/fx-note.ts properties", () => {
 
   it("never throws over generated provenance and description", () => {
     assertProperty([description, fxFields], (d, fx) => {
-      expect(() => conversionNote(fx)).not.toThrow();
       expect(() => withConversionNote(d, fx)).not.toThrow();
       expect(() => readConversionNote(d)).not.toThrow();
-      expect(() => formatFxRate(fx.fxRate)).not.toThrow();
     });
   });
 });

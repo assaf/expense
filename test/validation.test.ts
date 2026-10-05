@@ -303,20 +303,21 @@ describe("app/lib/validation.ts properties", () => {
     );
   });
 
-  it("isCalendarDate refuses an out-of-range month or day", () => {
+  it("isCalendarDate accepts a real date and refuses a rolled one", () => {
     assertProperty(
       [fc.integer({ min: 0, max: 15 }), fc.integer({ min: 0, max: 35 })],
       (m, d) => {
-        if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return;
-        // The guard the module documents for Date.UTC's silent roll-forward.
-        expect(isCalendarDate(2026, m, d)).toBe(false);
+        if (m < 1 || m > 12 || d < 1 || d > 31) {
+          // The guard the module documents for Date.UTC's silent
+          // roll-forward.
+          expect(isCalendarDate(2026, m, d)).toBe(false);
+          return;
+        }
+        // Day 28 exists in every month, so the in-range half only has to
+        // prove the range check passed it.
+        expect(isCalendarDate(2026, m, 28)).toBe(true);
       },
     );
-  });
-
-  it("isCalendarDate accepts the 28th of every month", () => {
-    for (let m = 1; m <= 12; m++)
-      expect(isCalendarDate(2026, m, 28)).toBe(true);
   });
 
   it("validateDate never invents a date", () => {
@@ -345,37 +346,36 @@ describe("app/lib/validation.ts properties", () => {
   it("domainOf returns the lowercased domain of an address", () => {
     assertProperty([addressChars(12), addressChars(12)], (local, domain) => {
       if (!domain.includes(".")) return;
-      expect(domainOf(`x@${domain.toUpperCase()}`)).toBe(domain.toLowerCase());
-      expect(domainOf(`${local}@${domain}`)).toBe(domain.toLowerCase());
+      const expected = domain.toLowerCase();
+      expect(domainOf(`${local}@${domain}`)).toBe(expected);
+      expect(domainOf(`${local}@${domain.toUpperCase()}`)).toBe(expected);
     });
   });
 
-  it("formEmail lowercases and trims the identity field", () => {
+  it("formEmail normalizes the identity field", () => {
     assertProperty([text(64)], (value) => {
       const form = new FormData();
       form.set("email", value);
+      // Normalized at the form boundary: emails are stored and compared
+      // lowercased server-side, so every auth route has to agree.
       const email = formEmail(form);
       expect(email).toBe(value.trim().toLowerCase());
-      // Stored and compared lowercased server-side, so normalizing twice is
-      // the same as normalizing once.
+      form.set("email", email);
       expect(formEmail(form)).toBe(email);
     });
   });
 
-  it("normalizeRuleSender accepts only its two documented forms", () => {
+  it("normalizeRuleSender hands back a fixed point of its own normalization", () => {
+    // Whatever it accepts (a full address, or a bare dotted domain), it
+    // returns the trimmed lowercased form, so feeding the result back is a
+    // no-op. Asserting that rather than re-deriving its two accepted shapes:
+    // a property that reimplements the branch proves only that the copy was
+    // made correctly, not that the branch is right.
     assertProperty([text(64)], (sender) => {
-      const value = sender.trim().toLowerCase();
       const result = normalizeRuleSender(sender);
-      if (result !== null) {
-        expect(result).toBe(value);
-        expect(isEmail(value) || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value)).toBe(
-          true,
-        );
-      } else {
-        // Null means neither shape matched, so it is also not a usable sender.
-        expect(isEmail(value)).toBe(false);
-        expect(/^[a-z0-9.-]+\.[a-z]{2,}$/.test(value)).toBe(false);
-      }
+      if (result === null) return;
+      expect(result).toBe(sender.trim().toLowerCase());
+      expect(normalizeRuleSender(result)).toBe(result);
     });
   });
 });

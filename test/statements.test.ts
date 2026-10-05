@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
-import fc from "fast-check";
 import Decimal from "decimal.js";
 import { parseCsv } from "~/lib/csv";
 import { validateDate } from "~/lib/validation";
@@ -11,7 +10,12 @@ import {
   tokensOf,
   withinAmount,
 } from "~/lib/reconcile.server";
-import { assertProperty, text, validDate } from "./helpers/property";
+import {
+  assertProperty,
+  moneyAmount,
+  text,
+  validDate,
+} from "./helpers/property";
 
 /**
  * Every statement fixture in test/fixtures/statements/ is paired with a
@@ -114,21 +118,14 @@ describe("statement fixtures parse to their expected expenses", () => {
  * standalone runner.
  */
 
-const moneyString = fc.stringMatching(/^\d+(\.\d{1,2})?$/);
-
 describe("app/lib/reconcile.server.ts pure helpers", () => {
-  it("matches an amount to itself", () => {
-    assertProperty([moneyString], (s) => {
-      expect(withinAmount(new Decimal(s), new Decimal(s))).toBe(true);
-    });
-  });
-
   it("matches exactly the documented tolerance band", () => {
     // Not asserted as symmetric: the tolerance derives from the expense
     // argument alone, so a narrow band above $50 is one-directional.
-    assertProperty([moneyString], (s) => {
+    assertProperty([moneyAmount], (s) => {
       const e = new Decimal(s);
       const tol = Decimal.max(e.mul("0.01"), new Decimal("0.50"));
+      expect(withinAmount(e, e)).toBe(true);
       expect(withinAmount(e.plus(tol), e)).toBe(true);
       expect(withinAmount(e.minus(tol), e)).toBe(true);
       expect(withinAmount(e.plus(tol).plus("0.01"), e)).toBe(false);
@@ -138,14 +135,12 @@ describe("app/lib/reconcile.server.ts pure helpers", () => {
 
   it("parses money exactly when the text carries a digit", () => {
     assertProperty([text(24)], (s) => {
-      const parsed = parseMoney(s);
-      if (/\d/.test(s)) expect(parsed).not.toBeNull();
-      else expect(parsed).toBeNull();
+      expect(parseMoney(s) !== null).toBe(/\d/.test(s));
     });
   });
 
   it("reads a parenthesized amount as negative", () => {
-    assertProperty([moneyString], (s) => {
+    assertProperty([moneyAmount], (s) => {
       expect(parseMoney(`(${s})`)!.eq(parseMoney(s)!.neg())).toBe(true);
     });
     expect(parseMoney("$1,234.56")!.eq(parseMoney("1234.56")!)).toBe(true);
@@ -153,15 +148,25 @@ describe("app/lib/reconcile.server.ts pure helpers", () => {
 
   it("normalizes every accepted date form to the same canonical day", () => {
     assertProperty([validDate], (d) => {
-      expect(normalizeDate(d)).toBe(d);
       const month = Number(d.slice(5, 7));
       const day = Number(d.slice(8, 10));
       const year = d.slice(0, 4);
-      expect(normalizeDate(`${month}/${day}/${year}`)).toBe(d);
-      expect(normalizeDate(`${month}/${day}/${year.slice(2)}`)).toBe(d);
-      const result = normalizeDate(d);
+      for (const form of [
+        d,
+        `${month}/${day}/${year}`,
+        `${month}/${day}/${year.slice(2)}`,
+      ]) {
+        expect(normalizeDate(form)).toBe(d);
+      }
+    });
+  });
+
+  it("normalizes only to a canonical date that exists", () => {
+    assertProperty([text(30)], (s) => {
+      const result = normalizeDate(s);
+      if (result === null) return;
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(validateDate(result!)).toBeNull();
+      expect(validateDate(result)).toBeNull();
     });
   });
 

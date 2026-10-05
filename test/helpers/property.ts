@@ -28,6 +28,10 @@ export function binary(maxLength: number): fc.Arbitrary<string> {
   return fc.string({ unit: "binary", maxLength });
 }
 
+/** A money-shaped amount: the only class every consumer ever parses. */
+export const moneyAmount: fc.Arbitrary<string> =
+  fc.stringMatching(/^\d+(\.\d{1,2})?$/);
+
 /**
  * Arbitrary text weighted toward printable ASCII, which is what these
  * modules actually parse: `unit: "binary"` alone draws uniformly from all
@@ -42,14 +46,17 @@ export function text(maxLength: number): fc.Arbitrary<string> {
   );
 }
 
+/**
+ * Run one property. The seed is fixed rather than random so a failure always
+ * replays the same counterexample; fast-check prints it with the failure.
+ */
 export function assertProperty<Ts extends [unknown, ...unknown[]]>(
   arbitraries: { [K in keyof Ts]: fc.Arbitrary<Ts[K]> },
   predicate: (...args: Ts) => void,
-  seed = 1,
 ): void {
   fc.assert(fc.property(...arbitraries, predicate), {
     numRuns: PROPERTY_RUNS,
-    seed,
+    seed: 1,
     endOnFailure: true,
   });
 }

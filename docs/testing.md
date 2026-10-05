@@ -75,15 +75,26 @@
 - **Give every `fc.string()` an explicit `maxLength`.** fast-check does not
   bound string length by default, and an unbounded input to `parseCsv` or
   `parseMarkdown` is how a property test eats the per-test timeout.
-- Use the helper's arbitraries rather than a local one: `binary(n)` for the
-  full code-point range (what breaks a naive char loop), `text(n)` for
-  general input, `validDate` for a real calendar date. `text` mixes in
-  ASCII on purpose — `unit: "binary"` alone draws uniformly from all 1.1M
-  code points, so a digit lands in roughly 1 character in 100,000 and a
-  property keyed on digits, quotes or commas passes **vacuously**. When a
-  property needs a specific shape to exist at all (a real link, a
-  bracketed email, a parseable amount), seed it into the input rather than
-  hoping the generator produces one.
+- Use the helper's arbitraries rather than a local one: `text(n)` for
+  general input, `binary(n)` for the full code-point range (what breaks a
+  naive char loop), `validDate` for a real calendar date, and `moneyAmount`
+  for a money-shaped decimal. `text` mixes in ASCII on purpose —
+  `unit: "binary"` alone draws uniformly from all 1.1M code points, so a
+  digit lands in roughly 1 character in 100,000 and a property keyed on
+  digits, quotes or commas passes **vacuously**. The same trap is a matter of
+  _frequency_, not alphabet: a generated row matched another about 4% of the
+  time, so the duplicate-detection properties ran mostly against empty match
+  lists. When a property needs a specific shape to exist at all (a real link,
+  a bracketed email, a parseable amount, a row that genuinely duplicates
+  another), seed it into the input or derive it from the module's own output
+  rather than hoping the generator produces one.
+- **Assert the contract, not the implementation.** A property that
+  reimplements the module's branch (deriving the same regex, or the same
+  accept/reject decision, and comparing) only proves the code was copied
+  correctly. State the guarantee instead: a fixed point, an agreement
+  between two surfaces, a bound that holds at its edges. When a case is a
+  table over one field with no generated input involved, write it as a plain
+  loop rather than wrapping it in `assertProperty` for decoration.
 - A property suite that asserts nothing is worse than none. When you add
   one, break a single assertion, confirm the file fails with a shrunk
   counterexample, and put it back.

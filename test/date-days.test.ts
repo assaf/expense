@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import fc from "fast-check";
 import { daysBetween, shiftDays } from "~/lib/date-days";
-import { assertProperty, validDate, binary } from "./helpers/property";
+import { assertProperty, text, validDate } from "./helpers/property";
 
 /**
  * `app/lib/date-days.ts` is the shared UTC-day arithmetic for the warranty
@@ -10,7 +10,12 @@ import { assertProperty, validDate, binary } from "./helpers/property";
  * calendar, which is the input class the round-trips need.
  */
 
-const DAY_SHIFT = fc.integer({ min: -3650, max: 3650 });
+const dayShift = fc.integer({ min: -3650, max: 3650 });
+
+/** Anything the module's shape regex rejects, so the malformed path is what
+ * actually runs. `text` reaches the ASCII the regex needs to almost-match. */
+const notADate = (maxLength: number): fc.Arbitrary<string> =>
+  text(maxLength).filter((s) => !/^\d{4}-\d{2}-\d{2}$/.test(s));
 
 describe("date-days properties", () => {
   it("is zero from a date to itself", () => {
@@ -30,21 +35,15 @@ describe("date-days properties", () => {
     });
   });
 
-  it("counts the days a shift adds", () => {
-    assertProperty([validDate, DAY_SHIFT], (date, days) => {
+  it("counts a shift and undoes it", () => {
+    assertProperty([validDate, dayShift], (date, days) => {
       expect(daysBetween(date, shiftDays(date, days))).toBe(days);
-    });
-  });
-
-  it("undoes a shift", () => {
-    assertProperty([validDate, DAY_SHIFT], (date, days) => {
       expect(shiftDays(shiftDays(date, days), -days)).toBe(date);
     });
   });
 
   it("echoes a malformed date unchanged and measures nothing", () => {
-    const malformed = binary(12).filter((s) => !/^\d{4}-\d{2}-\d{2}$/.test(s));
-    assertProperty([malformed], (s) => {
+    assertProperty([notADate(12)], (s) => {
       expect(shiftDays(s, 5)).toBe(s);
       expect(daysBetween(s, "2026-01-01")).toBeNull();
     });
