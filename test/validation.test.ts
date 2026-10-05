@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import fc from "fast-check";
 import {
   isEmail,
   extractEmailAddress,
@@ -9,7 +10,12 @@ import {
   validateDateNotFuture,
   badRequest,
   notFound,
+  domainOf,
+  formEmail,
+  isCalendarDate,
+  normalizeRuleSender,
 } from "~/lib/validation";
+import { assertProperty, text } from "./helpers/property";
 
 describe("isEmail", () => {
   it("accepts valid email addresses", () => {
@@ -243,5 +249,133 @@ describe("thrown error envelopes carry statusText for error boundaries", () => {
 
   it("unknownIntent sets statusText", () => {
     expect(unknownIntent().statusText).toBe("Unknown intent.");
+  });
+});
+
+const ADDRESS_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789._-".split("");
+
+/** Address characters only: the module's inner regex forbids `<`, `>`, `@`
+ * and whitespace inside an address, so those cannot appear in one. Both
+ * halves need at least one character: the regex requires it, so an empty
+ * local or domain leaves nothing to extract. */
+const addressChars = (maxLength: number): fc.Arbitrary<string> =>
+  fc.string({
+    unit: fc.constantFrom(...ADDRESS_CHARS),
+    minLength: 1,
+    maxLength,
+  });
+
+describe("app/lib/validation.ts properties", () => {
+  it("sanitizeFilenamePart is idempotent and yields a safe token", () => {
+    // Each clause follows from the transform's own steps: strip
+    // `\/:*?"<>|`, collapse whitespace to `_`, collapse `_` runs, trim edge
+    // `_`. A second pass has nothing left to do on any of the four.
+    assertProperty([text(64)], (s) => {
+      const once = sanitizeFilenamePart(s);
+      expect(sanitizeFilenamePart(once)).toBe(once);
+      expect(once).toMatch(/^[^\s\\/:*?"<>|]*$/);
+      expect(once).not.toContain("__");
+      expect(once.startsWith("_")).toBe(false);
+      expect(once.endsWith("_")).toBe(false);
+    });
+  });
+
+  it("extractEmailAddress is idempotent and lowercased", () => {
+    assertProperty([text(64)], (s) => {
+      const once = extractEmailAddress(s);
+      expect(extractEmailAddress(once)).toBe(once);
+      expect(once).toBe(once.toLowerCase());
+    });
+  });
+
+  it("extractEmailAddress pulls the address out of angle brackets", () => {
+    // The display name is arbitrary text; the address carries none of the
+    // characters the inner regex forbids, so the bracketed pair is the only
+    // match in the string.
+    assertProperty(
+      [text(20), addressChars(12), addressChars(12)],
+      (name, local, domain) => {
+        const input = `${name} <${local}@${domain}>`;
+        expect(extractEmailAddress(input)).toBe(
+          `${local}@${domain}`.toLowerCase(),
+        );
+      },
+    );
+  });
+
+  it("isCalendarDate refuses an out-of-range month or day", () => {
+    assertProperty(
+      [fc.integer({ min: 0, max: 15 }), fc.integer({ min: 0, max: 35 })],
+      (m, d) => {
+        if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return;
+        // The guard the module documents for Date.UTC's silent roll-forward.
+        expect(isCalendarDate(2026, m, d)).toBe(false);
+      },
+    );
+  });
+
+  it("isCalendarDate accepts the 28th of every month", () => {
+    for (let m = 1; m <= 12; m++)
+      expect(isCalendarDate(2026, m, 28)).toBe(true);
+  });
+
+  it("validateDate never invents a date", () => {
+    assertProperty([text(10)], (s) => {
+      const error = validateDate(s);
+      if (error !== null) return;
+      if (s === "") return;
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+      expect(m).not.toBeNull();
+      expect(isCalendarDate(Number(m![1]), Number(m![2]), Number(m![3]))).toBe(
+        true,
+      );
+    });
+  });
+
+  it("domainOf returns null without a dotted domain part", () => {
+    assertProperty([text(40)], (s) => {
+      const domain = domainOf(s);
+      if (domain === null) return;
+      const part = s.split("@")[1];
+      expect(part).toBeDefined();
+      expect(part).toContain(".");
+    });
+  });
+
+  it("domainOf returns the lowercased domain of an address", () => {
+    assertProperty([addressChars(12), addressChars(12)], (local, domain) => {
+      if (!domain.includes(".")) return;
+      expect(domainOf(`x@${domain.toUpperCase()}`)).toBe(domain.toLowerCase());
+      expect(domainOf(`${local}@${domain}`)).toBe(domain.toLowerCase());
+    });
+  });
+
+  it("formEmail lowercases and trims the identity field", () => {
+    assertProperty([text(64)], (value) => {
+      const form = new FormData();
+      form.set("email", value);
+      const email = formEmail(form);
+      expect(email).toBe(value.trim().toLowerCase());
+      // Stored and compared lowercased server-side, so normalizing twice is
+      // the same as normalizing once.
+      expect(formEmail(form)).toBe(email);
+    });
+  });
+
+  it("normalizeRuleSender accepts only its two documented forms", () => {
+    assertProperty([text(64)], (sender) => {
+      const value = sender.trim().toLowerCase();
+      const result = normalizeRuleSender(sender);
+      if (result !== null) {
+        expect(result).toBe(value);
+        expect(isEmail(value) || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value)).toBe(
+          true,
+        );
+      } else {
+        // Null means neither shape matched, so it is also not a usable sender.
+        expect(isEmail(value)).toBe(false);
+        expect(/^[a-z0-9.-]+\.[a-z]{2,}$/.test(value)).toBe(false);
+      }
+    });
   });
 });

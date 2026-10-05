@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
+import fc from "fast-check";
 import {
   duplicateLabel,
   duplicatePairKey,
   findDuplicates,
   groupDuplicateMatches,
+  normalizeMerchant,
 } from "~/lib/duplicates";
 import type { MileageExpense, ReceiptExpense } from "~/lib/types";
+import { assertProperty } from "./helpers/property";
 
 const makeReceipt = (
   overrides: Partial<ReceiptExpense> = {},
@@ -384,5 +387,145 @@ describe("image fingerprint matching", () => {
     const matches = findDuplicates(b, [a]);
     expect(matches).toHaveLength(1);
     expect(matches[0]?.reason).toBe("same-date-merchant-amount");
+  });
+});
+
+/**
+ * `app/lib/duplicates.ts` decides which rows a user is told are the same
+ * entry, and it reaches that decision through a key bucket, a per-direction
+ * `reported` set and a `dismissed` filter. The properties below check the
+ * invariants those three depend on, over generated rows built from the same
+ * `makeReceipt` / `makeMileage` factories the hand-written cases use.
+ */
+
+/** Ids, dates, merchants and amounts drawn from a small pool, so generated
+ * rows actually collide instead of all being distinct. */
+const id = fc.stringMatching(/^[a-z]{1,4}$/);
+const date = fc.constantFrom("2026-01-15", "2026-03-10", "2026-07-02");
+const merchant = fc.constantFrom(
+  "Blue Bottle Coffee",
+  "blue  bottle coffee",
+  "Zhed",
+);
+const amount = fc.constantFrom("42.50", "42.5", "0.00", "999.99");
+
+const receipt: fc.Arbitrary<ReceiptExpense> = fc
+  .record({
+    id,
+    date,
+    merchant,
+    amount,
+    category: fc.constantFrom("Testing", " testing "),
+    description: fc.constantFrom("", "note"),
+  })
+  .map((over) => makeReceipt(over));
+
+const ROUTES: MileageExpense["locations"][] = [
+  [
+    { address: "Home", lat: 34.05, lng: -118.24 },
+    { address: "Client Office", lat: 34.06, lng: -118.25 },
+  ],
+  [
+    { address: "Client Office", lat: 34.06, lng: -118.25 },
+    { address: "Home", lat: 34.05, lng: -118.24 },
+  ],
+];
+
+const mileage: fc.Arbitrary<MileageExpense> = fc
+  .record({
+    id,
+    date,
+    distanceMiles: fc.constantFrom("32.00", "32", "1.00"),
+    // A route needs two non-empty addresses in order to key at all, so both
+    // a matching and a reversed route are in the pool.
+    locations: fc.constantFrom(...ROUTES),
+  })
+  .map((over) => makeMileage(over));
+
+const row: fc.Arbitrary<ReceiptExpense | MileageExpense> = fc.oneof(
+  receipt,
+  mileage,
+);
+
+describe("app/lib/duplicates.ts properties", () => {
+  it("builds the same pair key in either direction", () => {
+    assertProperty([fc.string({ minLength: 1, maxLength: 8 })], (v) => {
+      const other = `${v}x`;
+      expect(duplicatePairKey(v, other)).toBe(duplicatePairKey(other, v));
+    });
+  });
+
+  it("normalizes a merchant idempotently", () => {
+    assertProperty([fc.string({ unit: "binary", maxLength: 24 })], (m) => {
+      const once = normalizeMerchant(m);
+      expect(normalizeMerchant(once)).toBe(once);
+    });
+  });
+
+  it("never matches a candidate to itself", () => {
+    assertProperty(
+      [row, fc.array(row, { maxLength: 6 })],
+      (candidate, others) => {
+        for (const match of findDuplicates(candidate, others)) {
+          expect(match.expense.id).not.toBe(candidate.id);
+        }
+      },
+    );
+  });
+
+  it("only ever removes matches when dismissed", () => {
+    assertProperty(
+      [row, fc.array(row, { maxLength: 6 }), fc.array(row, { maxLength: 3 })],
+      (candidate, others, dismissedRows) => {
+        const all = findDuplicates(candidate, others);
+        const dismissed = new Set(
+          dismissedRows.map((other) =>
+            duplicatePairKey(candidate.id, other.id),
+          ),
+        );
+        const kept = findDuplicates(candidate, others, dismissed);
+        const keyOf = (m: (typeof all)[number]): string =>
+          `${m.expense.id}|${m.reason}`;
+        const keptKeys = new Set(kept.map(keyOf));
+        for (const match of all) {
+          if (keptKeys.has(keyOf(match))) continue;
+          expect(
+            dismissed.has(duplicatePairKey(candidate.id, match.expense.id)),
+          ).toBe(true);
+        }
+        expect(kept.length).toBeLessThanOrEqual(all.length);
+      },
+    );
+  });
+
+  it("empties the match list when every pair is dismissed", () => {
+    assertProperty(
+      [row, fc.array(row, { maxLength: 6 })],
+      (candidate, others) => {
+        const matches = findDuplicates(candidate, others);
+        const dismissed = new Set(
+          matches.map((m) => duplicatePairKey(candidate.id, m.expense.id)),
+        );
+        expect(findDuplicates(candidate, others, dismissed)).toHaveLength(0);
+      },
+    );
+  });
+
+  it("groups the same pairs regardless of input order", () => {
+    const ids = (
+      m: Map<string, { expense: ReceiptExpense | MileageExpense }[]>,
+    ) =>
+      new Map(
+        [...m].map(([key, list]) => [
+          key,
+          list.map((x) => x.expense.id).sort(),
+        ]),
+      );
+    assertProperty([fc.array(row, { maxLength: 7 })], (list) => {
+      const permuted = [...list].reverse();
+      expect(ids(groupDuplicateMatches(list))).toEqual(
+        ids(groupDuplicateMatches(permuted)),
+      );
+    });
   });
 });

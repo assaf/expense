@@ -18,6 +18,10 @@ export function parseAmount(amount: string): Decimal | null {
   } catch {
     return null;
   }
+  // decimal.js accepts "NaN" and "Infinity" and carries `e` as NaN for them,
+  // so the exponent bound below cannot see them: an amount is a finite
+  // decimal or it is junk.
+  if (!parsed.isFinite()) return null;
   if (parsed.e > 15) return null;
   return parsed;
 }

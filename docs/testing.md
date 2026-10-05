@@ -58,6 +58,44 @@
   editor's `useEffect` upload fires from mount #1 and `draftUploadsInFlight`
   dedupes the remount).
 
+## Property-based tests
+
+- The `unit` project carries property-based suites (fast-check) alongside
+  its hand-written cases. A property lives in the **mirror-named test file
+  for the module** (`app/lib/csv.ts` → `test/csv.test.ts`), inside one
+  appended `describe("… properties")` block, so the hand-written cases stay
+  as they are and a new file still has to be registered in both
+  `vitest.unit.config.ts` `include` and `vitest.main.config.ts` `exclude`.
+- Every property goes through `assertProperty` from
+  `test/helpers/property.ts`, so the run count and the seed live in one
+  place: **200 runs, seed 1**, `endOnFailure: true`. A failure prints the
+  seed and a shrunk counterexample and replays identically from the seed
+  alone. Drop `PROPERTY_RUNS` to 50 for a slow property, with a comment
+  saying why; never raise the 10s timeout.
+- **Give every `fc.string()` an explicit `maxLength`.** fast-check does not
+  bound string length by default, and an unbounded input to `parseCsv` or
+  `parseMarkdown` is how a property test eats the per-test timeout.
+- Use the helper's arbitraries rather than a local one: `binary(n)` for the
+  full code-point range (what breaks a naive char loop), `text(n)` for
+  general input, `validDate` for a real calendar date. `text` mixes in
+  ASCII on purpose — `unit: "binary"` alone draws uniformly from all 1.1M
+  code points, so a digit lands in roughly 1 character in 100,000 and a
+  property keyed on digits, quotes or commas passes **vacuously**. When a
+  property needs a specific shape to exist at all (a real link, a
+  bracketed email, a parseable amount), seed it into the input rather than
+  hoping the generator produces one.
+- A property suite that asserts nothing is worse than none. When you add
+  one, break a single assertion, confirm the file fails with a shrunk
+  counterexample, and put it back.
+- When a property fails, decide in this order: the counterexample violates a
+  contract the module **documents** → fix the app in the same change and
+  keep the property; the property is wrong about the code (it contradicts a
+  documented behavior, or asserts something never promised) → fix the
+  property and say why in a comment. Never delete or weaken a property to
+  reach green. (`parseAmount`'s finiteness guard is the worked example: the
+  exponent bound could not see `"NaN"` or `"Infinity"`, which decimal.js
+  accepts with `e` set to NaN.)
+
 ## Landing demo (`pnpm demo`)
 
 - The home-page hero is a video of the app filing a receipt:

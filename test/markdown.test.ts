@@ -4,7 +4,10 @@ import {
   parseMarkdown,
   plainText,
   splitSections,
+  type Block,
+  type InlineSegment,
 } from "~/lib/markdown";
+import { assertProperty, binary } from "./helpers/property";
 
 describe("parseInline", () => {
   it("splits bold segments", () => {
@@ -360,5 +363,81 @@ describe("plainText", () => {
     expect(plainText("add it to `.omp/mcp.json` (project)")).toBe(
       "add it to .omp/mcp.json (project)",
     );
+  });
+});
+
+/**
+ * `app/lib/markdown.ts` renders LLM-authored answers, so its link allowlist is
+ * a security boundary: only absolute http(s) and mailto hrefs may become
+ * links. The LINK regex encodes that allowlist in one place, and the
+ * properties below are the part no hand-written case can reach: arbitrary
+ * input that happens to contain a bracketed scheme.
+ */
+
+/** The hrefs a link segment may carry. */
+const ALLOWED_HREF = /^(https?:\/\/|mailto:)/;
+
+/** Every inline segment a block carries, however the block nests them. */
+function segmentsOf(block: Block): InlineSegment[] {
+  switch (block.kind) {
+    case "paragraph":
+    case "heading":
+      return block.segments;
+    case "bullets":
+      return block.items.flat();
+    default:
+      // A table's cells are plain strings and a code block is verbatim: no
+      // segment can carry an href.
+      return [];
+  }
+}
+
+describe("app/lib/markdown.ts properties", () => {
+  it("only ever links an allowed absolute scheme", () => {
+    // The input always carries a well-formed https link, so the property
+    // inspects real hrefs instead of vacuously finding none in random text.
+    assertProperty([binary(200)], (s) => {
+      for (const input of [s, `[seed](https://example.com/a) ${s}`]) {
+        for (const segment of parseInline(input)) {
+          if (segment.href !== undefined) {
+            expect(segment.href).toMatch(ALLOWED_HREF);
+          }
+        }
+        for (const block of parseMarkdown(input)) {
+          for (const segment of segmentsOf(block)) {
+            if (segment.href !== undefined) {
+              expect(segment.href).toMatch(ALLOWED_HREF);
+            }
+          }
+        }
+      }
+    });
+  });
+
+  it("never links a hostile or relative href", () => {
+    const hostile = [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,<script>",
+      "vbscript:msgbox",
+      "//evil.example",
+      "/relative",
+      "ftp://host/f",
+    ];
+    for (const href of hostile) {
+      for (const segment of parseInline(`[x](${href})`)) {
+        expect(segment.href).toBeUndefined();
+      }
+    }
+  });
+
+  it("never throws over arbitrary text", () => {
+    assertProperty([binary(200)], (s) => {
+      expect(() => parseInline(s)).not.toThrow();
+      expect(() => parseMarkdown(s)).not.toThrow();
+    });
+    assertProperty([binary(400)], (s) => {
+      expect(() => parseMarkdown(s)).not.toThrow();
+    });
   });
 });

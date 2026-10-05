@@ -9,9 +9,12 @@ import {
 import { convertToUsd, usdRate } from "~/lib/fx.server";
 import {
   conversionNote,
+  formatFxRate,
   readConversionNote,
   withConversionNote,
 } from "~/lib/fx-note";
+import fc from "fast-check";
+import { assertProperty, text } from "./helpers/property";
 
 /**
  * Foreign-currency → USD conversion. The Frankfurter fetch is stubbed (the
@@ -328,5 +331,93 @@ describe("conversion description note", () => {
         "Coffee (Amount is in GBP; no exchange rate was available, stored as-is.)",
       ),
     ).toBeNull();
+  });
+});
+
+/**
+ * `app/lib/fx-note.ts` keeps one note shape in three places: the two
+ * templates in `conversionNote` and the `NOTE_RE` that strips it on a re-save.
+ * A formatting change to one that misses the others desynchronises them
+ * silently, which is exactly what the strip-then-append property below
+ * catches.
+ */
+
+/** ISO-like non-USD codes: the class that produces a note at all. */
+const foreignCurrency = fc.constantFrom(
+  "EUR",
+  "GBP",
+  "JPY",
+  "CHF",
+  "CAD",
+  "AUD",
+  "SEK",
+  "NOK",
+);
+
+const printedAmount = fc.stringMatching(/^\d+(\.\d{1,2})?$/);
+const rate = fc.stringMatching(/^\d+(\.\d{1,6})?$/);
+const rateDate = fc.constantFrom("", "2026-08-01", "2026-08-03");
+
+const fxFields: fc.Arbitrary<{
+  currency: string;
+  originalAmount: string;
+  fxRate: string;
+  rateDate: string;
+}> = fc.record({
+  currency: foreignCurrency,
+  originalAmount: printedAmount,
+  fxRate: rate,
+  rateDate,
+});
+
+/** The description the note is appended to. */
+const description = text(40);
+
+describe("app/lib/fx-note.ts properties", () => {
+  it("replaces the note instead of stacking copies", () => {
+    // The inner result is `base(d) + " " + note(fx1)` and NOTE_RE removes
+    // exactly that note before trimming, so the outer call is the only one
+    // that survives.
+    assertProperty([description, fxFields, fxFields], (d, fx1, fx2) => {
+      expect(withConversionNote(withConversionNote(d, fx1), fx2)).toBe(
+        withConversionNote(d, fx2),
+      );
+    });
+  });
+
+  it("reads back the formatted rate it stored", () => {
+    assertProperty([fxFields], (fx) => {
+      const read = readConversionNote(withConversionNote("", fx));
+      expect(read).toEqual({
+        fxRate: formatFxRate(fx.fxRate),
+        rateDate: fx.rateDate,
+      });
+    });
+  });
+
+  it("writes no note for USD or a malformed currency", () => {
+    assertProperty([fxFields], (fx) => {
+      expect(conversionNote({ ...fx, currency: "USD" })).toBe("");
+      for (const currency of ["usd", "EU", "EU1", "", "EUROP"]) {
+        expect(conversionNote({ ...fx, currency })).toBe("");
+      }
+    });
+  });
+
+  it("formats a rate idempotently, never leaving a bare point", () => {
+    assertProperty([fc.stringMatching(/^\d*(\.\d*)?$/)], (r) => {
+      const once = formatFxRate(r);
+      expect(formatFxRate(once)).toBe(once);
+      expect(once.endsWith(".")).toBe(false);
+    });
+  });
+
+  it("never throws over generated provenance and description", () => {
+    assertProperty([description, fxFields], (d, fx) => {
+      expect(() => conversionNote(fx)).not.toThrow();
+      expect(() => withConversionNote(d, fx)).not.toThrow();
+      expect(() => readConversionNote(d)).not.toThrow();
+      expect(() => formatFxRate(fx.fxRate)).not.toThrow();
+    });
   });
 });

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vite-plus/test";
+import fc from "fast-check";
 import Decimal from "decimal.js";
+import { exceedsMaxMoney, parseAmount } from "~/lib/money";
+import { assertProperty, text } from "./helpers/property";
 
 describe("Decimal money math", () => {
   it("adds without IEEE 754 drift (0.1 + 0.2 = 0.3 exactly)", () => {
@@ -43,5 +46,67 @@ describe("Decimal money math", () => {
     const parsed = new Decimal("42.50");
     expect(parsed.toString()).toBe("42.5");
     expect(parsed.toFixed(2)).toBe("42.50");
+  });
+});
+
+/** A money-shaped amount: the only class every consumer ever parses. */
+const moneyString = fc.stringMatching(/^\d+(\.\d{1,2})?$/);
+
+/** The spellings decimal.js accepts but no money column can hold: it parses
+ * each one with `e` set to NaN, so the `e > 15` bound does not catch them.
+ * Random strings never spell them, so the property would be vacuous without
+ * seeding them explicitly. */
+const nonFinite = fc.constantFrom(
+  "NaN",
+  "+NaN",
+  "-NaN",
+  "Infinity",
+  "+Infinity",
+  "-Infinity",
+);
+
+/** An arbitrary amount string: arbitrary text, plus the non-finite shapes. */
+const amountString: fc.Arbitrary<string> = fc.oneof(text(40), nonFinite);
+
+describe("app/lib/money.ts properties", () => {
+  it("refuses an exponent bomb and accepts a small one", () => {
+    // The documented bound is `parsed.e > 15`: e-notation with a huge positive
+    // exponent would expand to a heap-killing string in toFixed.
+    assertProperty([fc.integer({ min: 16, max: 40 })], (n) => {
+      expect(parseAmount(`1e${n}`)).toBeNull();
+    });
+    assertProperty([fc.integer({ min: 0, max: 15 })], (n) => {
+      expect(parseAmount(`1e${n}`)).not.toBeNull();
+    });
+  });
+
+  it("parses a negated amount as the negation, with the same sizeness", () => {
+    assertProperty([moneyString], (s) => {
+      const positive = parseAmount(s);
+      expect(positive).not.toBeNull();
+      expect(parseAmount(`-${s}`)!.eq(positive!.neg())).toBe(true);
+      expect(exceedsMaxMoney(`-${s}`)).toBe(exceedsMaxMoney(s));
+    });
+  });
+
+  it("never returns a non-finite or over-scale Decimal", () => {
+    // decimal.js parses "NaN" and "Infinity" successfully, carrying `e` as
+    // NaN so the exponent bound cannot see them. This property is what
+    // caught that, and `parseAmount` now rejects a non-finite value before
+    // the exponent check.
+    assertProperty([amountString], (s) => {
+      const parsed = parseAmount(s);
+      if (parsed === null) return;
+      expect(parsed.isFinite()).toBe(true);
+      expect(parsed.e).not.toBeGreaterThan(15);
+    });
+  });
+
+  it("treats unparseable input as junk rather than as too large", () => {
+    assertProperty([amountString], (s) => {
+      const parsed = parseAmount(s);
+      if (parsed !== null) return;
+      expect(exceedsMaxMoney(s)).toBe(false);
+    });
   });
 });

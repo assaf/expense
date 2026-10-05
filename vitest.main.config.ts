@@ -68,6 +68,8 @@ export default defineConfig({
       "test/upload-limits.test.ts",
       "test/warranty-expiry.test.ts",
       "test/warranty-policies.test.ts",
+      "test/csv.test.ts",
+      "test/date-days.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

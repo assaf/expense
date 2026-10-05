@@ -382,8 +382,10 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   - `main` (`vitest.main.config.ts`): `test/**/*.test.ts(x)` minus an explicit
     exclude list. Real Postgres, a spawned app server, Playwright, and the email
     pipeline. `pool: "forks"`, one worker, `testTimeout: 30s`.
-  - `unit` (`vitest.unit.config.ts`): an explicit 25-file list of pure-logic
-    suites. `pool: "threads"`, parallel, no DB and no server.
+  - `unit` (`vitest.unit.config.ts`): an explicit 53-file list of pure-logic
+    suites, some of them property-based (fast-check, via `assertProperty` in
+    `test/helpers/property.ts`; see `docs/testing.md`). `pool: "threads"`,
+    parallel, no DB and no server.
   - `vitest.noglobal.config.ts` is an ad-hoc runner that skips the DB reset; it
     is deliberately outside `projects`.
 - **Browser tests use the Playwright library, not `@playwright/test`.** There is
