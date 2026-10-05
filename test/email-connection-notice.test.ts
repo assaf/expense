@@ -211,6 +211,26 @@ describe("reportConnectionFailure", () => {
     expect(await marker(conn.id)).toBeNull();
   });
 
+  it("still tells them when the drain wrapped the failure in a stage label", async () => {
+    // The drain re-throws each step as a labelled Error with the original as
+    // `cause`. A bare `instanceof` here turned a revoked grant into a badge
+    // and no email — the one thing the user can act on.
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+
+    await reportConnectionFailure({
+      connection: conn,
+      error: new Error(
+        "[email-connections] resolving the credential failed: Error: Google token endpoint returned HTTP 400",
+        { cause: new OAuthRefreshError("invalid_grant") },
+      ),
+    });
+
+    // Every verified user of the account, exactly as the direct case does.
+    expect(SEND.sendEmail).toHaveBeenCalled();
+    expect(await marker(conn.id)).not.toBeNull();
+  });
+
   it("links a Gmail connection to the Gmail connect flow", async () => {
     const account = await makeAccount();
     const conn = await makeConnection(account.accountId, { provider: "gmail" });

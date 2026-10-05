@@ -232,6 +232,17 @@ async function logEmailDecision(input: {
  * leaves `processing` alone, so nothing would ever look at it again. */
 const STALE_CLAIM_MS = 10 * 60 * 1000;
 
+/** The instant before which a `processing` claim is stale. Both halves of
+ * the takeover rule ask for it — the SQL predicate that lets
+ * `claimEmailForProcessing` take over a dead worker's claim, and the
+ * in-memory predicate that offers the email to the drain again — so the
+ * boundary is computed once. If the two disagreed, a takeover would be
+ * unreachable in one direction and a live claim could be stolen in the
+ * other. */
+function staleClaimCutoffMs(nowMs: number): number {
+  return nowMs - STALE_CLAIM_MS;
+}
+
 /** Atomically claim an email for processing by writing its log row with
  * outcome "processing" BEFORE any work runs. Returns true if this caller
  * won the claim, false if a live claim for the email is already there
@@ -270,7 +281,7 @@ async function claimEmailForProcessing(
         and(
           l.outcome.eq("processing"),
           l.createdAt.lt(
-            fromIso(new Date(Date.now() - STALE_CLAIM_MS).toISOString()),
+            fromIso(new Date(staleClaimCutoffMs(Date.now())).toISOString()),
           ),
         ),
     },
@@ -297,7 +308,7 @@ function settledEmailIds(
 ): Set<string> {
   const settled = new Set<string>();
   for (const row of snapshots) {
-    const stale = Date.parse(row.createdAt) < nowMs - STALE_CLAIM_MS;
+    const stale = Date.parse(row.createdAt) < staleClaimCutoffMs(nowMs);
     if (row.outcome !== "processing" || !stale) settled.add(row.emailId);
   }
   return settled;
@@ -359,9 +370,12 @@ export interface ConnectionCounters {
 }
 
 /** The drain's counters: increments in memory, one UPDATE per counter per
- * flush. A drain that dies before its flush loses the batch's counts; the
- * connection is flagged at that point anyway and the counters are a display
- * number, not a ledger. */
+ * flush. Two ways a batch's counts can be lost, both bounded by the batch
+ * size and both display-only: a drain that dies before its flush, and a
+ * flush whose two UPDATEs split (one commits, the other rejects — the
+ * deltas are cleared before the await, so the rejected one is not retried).
+ * Either way the connection is flagged at that point, and these are numbers
+ * on a list page, not a ledger. */
 function counterBatch(connectionId: string) {
   let received = 0;
   let processed = 0;
@@ -895,14 +909,19 @@ async function drainConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
-  const credential = await connectionCredential(connection);
+  const credential = await drainStep("resolving the credential failed", () =>
+    connectionCredential(connection),
+  );
   const client = mailClientFor(connection, credential);
   const adapter = options.adapter ?? client.adapter;
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   // Fail closed: an unpinned generic JMAP connection with no learnable
   // delivery stamp must not run, because evaluateAuthChain([]) answers ok
   // ("legacy transport") and would open the sender-authentication gate.
-  const authservIds = await connectionAuthservIds(connection, credential);
+  const authservIds = await drainStep(
+    "reading the delivery authentication stamp failed",
+    () => connectionAuthservIds(connection, credential),
+  );
   if (authservIds === null) {
     captureWarning(
       `[email-connections] no delivery authentication stamp yet for ${connection.emailAddress}`,

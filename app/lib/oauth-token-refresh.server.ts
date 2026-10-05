@@ -22,6 +22,20 @@ import {
  */
 export class OAuthRefreshError extends Error {}
 
+/** Whether `error` is an OAuthRefreshError, directly or anywhere along a
+ * wrapper's `cause` chain. Anything that re-labels a failure hides the
+ * class: the drain wraps each step to name it (so the stage survives Sentry's
+ * scrubber) and keeps the original as `cause`, which would otherwise leave a
+ * revoked grant flagged but never mailed to the user. */
+export function isOAuthRefreshError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current instanceof Error; depth++) {
+    if (current instanceof OAuthRefreshError) return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
 /** Token endpoints answer quickly; a hung one must not pin a request. */
 const TOKEN_REQUEST_TIMEOUT_MS = 15_000;
 

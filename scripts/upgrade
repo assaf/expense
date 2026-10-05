@@ -11,7 +11,7 @@ echo -e "\033[32m  Deduping dependencies …\033[0m"
 pnpm dedupe --ignore-scripts
 pnpm prune --ignore-scripts
 
-echo -e "\033[32m  Security audit …\033[0m"
+echo -e "\033[32m  Installing from the updated lockfile …\033[0m"
 pnpm install
 
 echo -e "\033[32m  Installing Playwright browsers …\033[0m"
@@ -29,17 +29,23 @@ vpr check
 vpr test
 
 echo -e "\033[32m  Auditing dependencies …\033[0m"
-pnpm audit --prod || echo "Security audit failed"
+AUDIT_FAILED=0
+pnpm audit --prod || AUDIT_FAILED=1
 
 echo -e "\033[32m  Cleaning up …\033[0m"
 git gc --prune=now || echo
 
 echo -e "\033[32m  Commit …\033[0m"
-git add package.json pnpm-lock.yaml
+git add package.json pnpm-lock.yaml pnpm-workspace.yaml
 omp commit
 
 echo -e "\033[32m  Checking for outdated dependencies …\033[0m"
 pnpm outdated
 
 terminal-notifier -group "scripts.upgrade" -sound default  -title "$0" -message "Done!" -contentImage "public/logo-icon-512.png"
+
+if [ "$AUDIT_FAILED" -ne 0 ]; then
+  echo "pnpm audit reported vulnerabilities in production dependencies; the bump is committed, review them before deploying." >&2
+  exit 1
+fi
 exit 0

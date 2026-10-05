@@ -83,6 +83,9 @@ const logMocks = vi.hoisted(() => ({
   // (Sentry EXPENSE-1F, the `pg-pool.connect` N+1), which cost a pooled
   // round trip per email before the batch began any work.
   readEmailLogSnapshots: vi.fn(),
+  // Set to an error to make the drain's batched process-log read throw it,
+  // so the stage label and the preserved cause can be asserted.
+  readError: null as Error | null,
 }));
 
 vi.mock("~/lib/db/email-log", async (importOriginal) => {
@@ -93,6 +96,7 @@ vi.mock("~/lib/db/email-log", async (importOriginal) => {
       ...args: Parameters<typeof actual.readEmailLogSnapshots>
     ) => {
       logMocks.readEmailLogSnapshots(...args);
+      if (logMocks.readError) throw logMocks.readError;
       return actual.readEmailLogSnapshots(...args);
     },
   };
@@ -964,6 +968,7 @@ describe("drainEmailConnection", () => {
     mocks.notifyOwner.mockClear();
     // The batched log read is counted per test (see logMocks).
     logMocks.readEmailLogSnapshots.mockClear();
+    logMocks.readError = null;
   });
 
   it("evaluates new mail, bumps counters, and is idempotent", async () => {
@@ -1222,6 +1227,116 @@ describe("drainEmailConnection", () => {
 
     expect((thrown as Error).message).toBe(
       "[email-connections] reading the mailbox failed: Error: JMAP /api/query returned HTTP 502: upstream unavailable",
+    );
+    expect((thrown as Error).cause).toBe(upstream);
+  });
+
+  it("names the step when the batched process-log read fails", async () => {
+    // The batched read is the call the N+1 fix introduced, so it is the one
+    // whose failures this stage labelling exists to place.
+    const upstream = new Error("canceling statement due to pool timeout");
+    logMocks.readError = upstream;
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "d1",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest",
+            body: "nothing to see",
+          },
+        ],
+      ]),
+    );
+
+    const thrown = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    }).catch((err: unknown) => err);
+
+    expect((thrown as Error).message).toBe(
+      "[email-connections] reading the process log failed: Error: canceling statement due to pool timeout",
+    );
+    expect((thrown as Error).cause).toBe(upstream);
+  });
+
+  it("names the step when the batch's counter write fails", async () => {
+    const upstream = new Error(
+      "could not serialize access due to concurrent update",
+    );
+    const runtime = db.runtime();
+    const spy = vi.spyOn(db, "runtime").mockReturnValue(
+      new Proxy(runtime, {
+        get(target, prop, receiver) {
+          if (prop !== "execute") return Reflect.get(target, prop, receiver);
+          return () => Promise.reject(upstream);
+        },
+      }),
+    );
+
+    try {
+      const { adapter } = fakeAdapter(
+        new Map([
+          [
+            "d1",
+            {
+              from: "newsletter@random.com",
+              subject: "Digest",
+              body: "nothing to see",
+            },
+          ],
+        ]),
+      );
+      const thrown = await drainEmailConnection(conn, {
+        adapter,
+        batchSize: 10,
+        lookbackMs: FIXTURE_LOOKBACK_MS,
+      }).catch((err: unknown) => err);
+
+      expect((thrown as Error).message).toBe(
+        "[email-connections] counting the batch failed: Error: could not serialize access due to concurrent update",
+      );
+      expect((thrown as Error).cause).toBe(upstream);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("names the step when the connection's credential cannot be resolved", async () => {
+    // The drain's setup runs before the batch loop, so these two calls were
+    // the stage-less throws the labelling was meant to remove: a revoked or
+    // half-configured connection reported "drain failed" with nothing
+    // pointing at credential resolution.
+    const thrown = await drainEmailConnection(
+      { ...conn, provider: "jmap", sessionUrl: "" },
+      { batchSize: 10, lookbackMs: FIXTURE_LOOKBACK_MS },
+    ).catch((err: unknown) => err);
+
+    expect((thrown as Error).message).toBe(
+      "[email-connections] resolving the credential failed: Error: This connection has no server URL; reconnect it.",
+    );
+  });
+
+  it("names the step when the delivery authentication stamp cannot be read", async () => {
+    // The other setup call: a JMAP connection with no pinned stamp learns it
+    // from the mailbox, so an unreachable mailbox fails here rather than in
+    // the batch loop — with nothing to say so.
+    const upstream = new Error("JMAP /api/emailchanges query failed");
+    mailMocks.learnAuthservId.mockRejectedValueOnce(upstream);
+
+    const thrown = await drainEmailConnection(
+      {
+        ...conn,
+        provider: "jmap",
+        sessionUrl: "https://jmap.example.test/session",
+        authservId: "",
+      },
+      { batchSize: 10, lookbackMs: FIXTURE_LOOKBACK_MS },
+    ).catch((err: unknown) => err);
+
+    expect((thrown as Error).message).toBe(
+      "[email-connections] reading the delivery authentication stamp failed: Error: JMAP /api/emailchanges query failed",
     );
     expect((thrown as Error).cause).toBe(upstream);
   });
@@ -1668,6 +1783,64 @@ describe("drainEmailConnection", () => {
         where: { connectionId: conn.id },
       }),
     ).toBe(0);
+  });
+
+  it("keeps the counts of the emails it evaluated before the budget ran out", async () => {
+    // The mid-batch exit is the flush that matters: without it every batch
+    // the budget cuts short would leave the connection under-reporting the
+    // work it actually did. Skewing the clock from the first Trash move
+    // expires the budget after one email instead of before the batch starts.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    let skewMs = 0;
+    const realNow = Date.now;
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockImplementation(() => realNow.call(Date) + skewMs);
+
+    try {
+      const { adapter, trashed } = fakeAdapter(
+        new Map([
+          [
+            "b1",
+            {
+              from: "Apple <no_reply@email.apple.com>",
+              subject: "Receipt 1",
+              body: "MERCHANT: Apple\nTOTAL: 1.00\nCATEGORY: office supplies",
+            },
+          ],
+          [
+            "b2",
+            {
+              from: "Apple <no_reply@email.apple.com>",
+              subject: "Receipt 2",
+              body: "MERCHANT: Apple\nTOTAL: 2.00\nCATEGORY: office supplies",
+            },
+          ],
+        ]),
+      );
+      const skewed = {
+        ...adapter,
+        moveToTrash: async (id: string) => {
+          await adapter.moveToTrash(id);
+          skewMs = 60_000;
+        },
+      };
+
+      const result = await drainEmailConnection(conn, {
+        adapter: skewed,
+        batchSize: 10,
+        lookbackMs: FIXTURE_LOOKBACK_MS,
+      });
+
+      expect(result.evaluated).toBe(1);
+      expect(trashed).toEqual(["b1"]);
+      const row = await testPrisma.emailConnection.findUnique({
+        where: { id: conn.id },
+      });
+      expect(row?.receivedCount).toBe(1);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("files the expense but reports failure when the Trash move fails", async () => {

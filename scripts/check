@@ -18,19 +18,30 @@ const cli = JSON.parse(
 // package renamed the pslBlock descriptor field (parameters -> spec) and the
 // CLI rejects it as CONTRACT.PACK_CONTRIBUTION_INVALID at "enum".
 const expected = cli.dependencies["@prisma/orm-toolchain"];
-const declared = ["@prisma/orm-family-sql", "@prisma/orm-postgres"];
-const mismatched = declared.filter((name) => pkg.dependencies[name] !== expected);
-if (mismatched.length > 0) {
-  console.error(
-    `Prisma ORM packages must be pinned to ${expected} (what prisma ${cli.version} bundles), but:`,
+if (typeof expected !== "string") {
+  // A CLI that stops naming the toolchain cannot be checked against; say so
+  // instead of failing the gate with "must be pinned to undefined".
+  console.warn(
+    `warning: prisma ${cli.version} declares no @prisma/orm-toolchain; the orm pins could not be verified`,
   );
-  for (const name of mismatched) console.error(`  ${name}: ${pkg.dependencies[name]}`);
-  console.error(
-    "Pin them exactly (no range) or move the CLI to a release bundling the same orm rc.",
+} else {
+  const declared = ["@prisma/orm-family-sql", "@prisma/orm-postgres"];
+  const mismatched = declared.filter(
+    (name) => pkg.dependencies[name] !== expected,
   );
-  process.exit(1);
+  if (mismatched.length > 0) {
+    console.error(
+      `Prisma ORM packages must be pinned to ${expected} (what prisma ${cli.version} bundles), but:`,
+    );
+    for (const name of mismatched)
+      console.error(`  ${name}: ${pkg.dependencies[name]}`);
+    console.error(
+      "Pin them exactly (no range) or move the CLI to a release bundling the same orm rc.",
+    );
+    process.exit(1);
+  }
+  console.log(`pass: prisma orm packages pinned to ${expected}`);
 }
-console.log(`pass: prisma orm packages pinned to ${expected}`)
 '
 echo -e "\033[0;32m--- Emit Prisma contract ---\033[0m"
 prisma contract emit

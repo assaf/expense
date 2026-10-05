@@ -35,7 +35,7 @@ import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { captureError, captureWarning } from "~/lib/errors.server";
 import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
-import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import { isOAuthRefreshError } from "~/lib/oauth-token-refresh.server";
 import {
   type EmailConnectionWithSecret,
   setEmailConnectionStatus,
@@ -1093,7 +1093,7 @@ export async function scanInboxForReview(
   try {
     return await scanConnectionInbox(connection);
   } catch (err) {
-    if (err instanceof OAuthRefreshError) {
+    if (isOAuthRefreshError(err)) {
       if (connection.status !== "error") {
         captureWarning("[email-review] inbox scan hit a dead credential", {
           connectionId: connection.id,

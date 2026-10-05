@@ -23,15 +23,14 @@ import type { Route } from "./+types/api.email-connections-push";
  *
  *  - PushVerification: echo the code back with the connection's token so
  *    the subscription becomes verified.
- *  - StateChange: stamp lastPushAt. Draining the inbox (matching emails and
- *    creating expenses) is the phase-3 pipeline; until it lands, this
- *    route only records that pushes flow.
+ *  - StateChange: stamp lastPushAt, then drain the inbox (match emails,
+ *    create expenses) with drainEmailConnection.
  *
  * The daily cron (/api/email-connections-cron) renews subscriptions and is
  * the catch-up net.
  */
 
-// Vercel: the phase-3 processing pipeline will need the full budget.
+// Vercel: the drain needs the full budget.
 export const config = { maxDuration: 60 };
 
 export async function action({ request }: Route.ActionArgs) {

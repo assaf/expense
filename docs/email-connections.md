@@ -451,7 +451,13 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   from a rule-matched sender is ignored in place. Errors are logged to
   EmailProcessLog and the email stays in the Inbox: never trashed on
   failure, never re-expensed. Counters: receivedCount per evaluated
-  email, processedCount per created.
+  email, processedCount per created, accumulated per mailbox batch and
+  written once per batch (one UPDATE per counter) rather than once per
+  email. Every step of the drain runs through `drainStep`, so a failure
+  says which step died ("[email-connections] reading the mailbox failed:
+  Error: ...") — the raw provider message is exactly what Sentry's data
+  scrubber drops, so the stage label and the masked `errorSummary` are
+  the parts that survive.
 - **JMAP mail ops as the user** (`app/lib/email-connection-mail.server.ts`):
   Inbox query, raw RFC 5322 download, Trash move, and Inbox delivery of
   the confirmation (upload RFC 5322 blob → `Email/import` into the Inbox;

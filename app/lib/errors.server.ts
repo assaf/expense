@@ -48,8 +48,19 @@ export function captureWarning(
  * carries an Authorization header is what makes Sentry's data scrubber drop
  * the whole value — taking the stack with it. */
 const AUTH_SCHEME_RUN = /\b(?:bearer|basic)\s+\S+/gi;
+// Three things this has to get right, each of them a bug the adversarial
+// pass found in the first version:
+//  - the prefix run (`refresh_token=`, `x-api-key=`) is what `\b` cannot do,
+//    since it never fires after `_`. It is BOUNDED at 6 segments: unbounded,
+//    the run backtracks quadratically on ordinary `a_a_a_…` text (30s+ at
+//    64k characters);
+//  - the lookbehind keeps the match zero-width, so replacing it does not eat
+//    the space or comma in front of the secret;
+//  - `["']?` and the quoted-value alternative cover a JSON body
+//    (`{"client_secret":"…"}`), which is the shape a provider error quotes.
+//    The trailing `key|value|hash|id` covers `secret_key=` / `token_value=`.
 const ASSIGNED_SECRET =
-  /\b(?:token|secret|password|api[-_]?key)\b\s*[:=]\s*\S+/gi;
+  /(?<![a-z0-9])(?:[a-z0-9]+[_-]){0,6}(?:token|secret|password|api[-_]?key)(?:_?(?:key|value|hash|id))?["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi;
 const JWT_RUN = /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 
 /** One bounded line describing an unknown thrown value, with anything

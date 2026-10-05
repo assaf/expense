@@ -104,7 +104,7 @@ flowchart LR
 | -------------------- | ---------------------------------------------------------------------------- |
 | `app/routes/`        | 83 route modules; file-based routing, loaders/actions live here              |
 | `app/components/`    | React components; `app/components/ui/` holds the shared primitives           |
-| `app/lib/`           | 106 modules: domain logic, server integrations (`*.server.ts`), data access  |
+| `app/lib/`           | 107 modules: domain logic, server integrations (`*.server.ts`), data access  |
 | `app/lib/db/`        | One module per domain (`expenses`, `reports`, `categories`, `accounts`, ...) |
 | `test/`              | 144 test files plus `helpers/` and `fixtures/`                               |
 | `scripts/`           | Operational and one-off scripts (deploy, clone, check, smoke, redactors)     |
@@ -361,7 +361,7 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
 
 ## Runtime/Tooling Preferences
 
-- **Node >= 24** (`engines`), **pnpm 12.5.1** (`packageManager`, authoritative;
+- **Node >= 24** (`engines`), **pnpm 12.9.1** (`packageManager`, authoritative;
   CI reads it and installs the matching version). Bun is not used anywhere in
   this repo.
 - **One toolchain: vite-plus.** `pnpm-workspace.yaml` catalogs `vite-plus`

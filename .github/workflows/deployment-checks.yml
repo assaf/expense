@@ -170,6 +170,18 @@ jobs:
       # re-emitting keeps the build honest about drift on a fresh checkout.
       - run: pnpm build:prisma
 
+      # Here the tree is committed, so a diff after the re-emit means the
+      # COMMIT carries a stale artifact: the schema sync below reads
+      # prisma/contract.json, would find nothing to do, and the deploy would
+      # ship code against a database that never got the column.
+      - name: The committed contract artifacts match the schema
+        run: |
+          if ! git diff --quiet -- prisma migrations; then
+            echo "::error::The committed contract artifacts are stale; run pnpm build:prisma and commit the result." >&2
+            git --no-pager diff --stat -- prisma migrations >&2
+            exit 1
+          fi
+
       # Playwright browsers are not installed by pnpm install; the E2E tests
       # launch headless Chromium, so download it (with OS deps) first, and
       # cache the browsers so the ~20-40s install only happens once per lockfile.
@@ -268,12 +280,23 @@ jobs:
             exit 0
           fi
           files="repos/$GITHUB_REPOSITORY/compare/$last...HEAD"
-          touched=$(gh api "$files" --jq '[.files[].filename | select(startswith("prisma/contract."))] | length') || touched="unknown"
-          if [ "$touched" = "0" ]; then
+          # One call, two labelled counts: the names travel with the values so
+          # the two can never be read the wrong way round. The API stops at
+          # 300 files WITHOUT failing, so a full page may be truncated — and a
+          # contract change past the cap would read as "unchanged".
+          counts=$(gh api "$files" --jq '"contract=\([.files[].filename | select(startswith("prisma/contract."))] | length) total=\(.files | length)"') || counts=""
+          if [ -z "$counts" ]; then
+            echo "could not compare against $last; syncing"
+            exit 0
+          fi
+          touched=${counts#contract=}
+          touched=${touched%% *}
+          total=${counts##*total=}
+          if [ "$touched" = "0" ] && [ "$total" -lt 300 ]; then
             echo "contract unchanged since $last; the schema sync is a no-op, skipping it"
             echo "SKIP_SCHEMA_SYNC=1" >> "$GITHUB_ENV"
           else
-            echo "contract differs from $last ($touched contract file(s) changed); syncing"
+            echo "contract differs from $last ($touched contract file(s) of $total compared) or the compare reached its 300-file cap; syncing"
           fi
 
       # The linux Prisma CLI build ships without TLS, and Supabase rejects
@@ -433,6 +456,7 @@ jobs:
           if [ -z "$SMOKE_TEST_SECRET" ] || [ -z "$VERCEL_PROTECTION_BYPASS" ] || [ -z "$VERCEL_TOKEN" ]; then
             echo "Smoke secrets not configured as GitHub secrets — skipping the smoke gate."
             echo "Add SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS to enable it."
+            echo "::warning title=Smoke gate DISABLED::This deployment was NOT smoked and will NOT be rolled back automatically. Add SMOKE_TEST_SECRET, VERCEL_PROTECTION_BYPASS and VERCEL_TOKEN to the repository secrets to arm it."
             exit 0
           fi
           URL="${{ needs.deploy.outputs.url }}"

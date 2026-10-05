@@ -11,7 +11,7 @@ import {
 import { PUBLIC_URL } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
 import { escapeHtml } from "~/lib/escape";
-import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import { isOAuthRefreshError } from "~/lib/oauth-token-refresh.server";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
@@ -138,7 +138,11 @@ async function notifyConnectionFailure({
   connection,
   error,
 }: ConnectionFailureInput): Promise<void> {
-  if (!(error instanceof OAuthRefreshError)) return;
+  // Through wrappers, not just directly: the drain names each step by
+  // re-throwing a labelled Error with the original as `cause`, so a bare
+  // `instanceof` here silently swallowed every revoked-grant notice once a
+  // step was wrapped.
+  if (!isOAuthRefreshError(error)) return;
 
   const row = await readEmailConnectionById(connection.id);
   if (!row || row.errorNotifiedAt) return;
