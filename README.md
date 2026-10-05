@@ -5,6 +5,10 @@
 > assistant does your data entry so that you can forget about the process
 > altogether.
 
+**[PRODUCT.md](product.md) is the map**: what the product is, how it works, the
+pages a person uses, the architecture and data model, and the vocabulary. This
+file is the front door; that one is the orientation.
+
 ## Screenshots
 
 ![Expense list: reports, receipts, and a mileage route](public/screenshot-home.png)
@@ -13,117 +17,26 @@
 
 ![Receipt with hand-drawn notes: the merchant and the total called out, and the receipt filed as Meals and entertainment](public/figure-receipt.png)
 
-What it does:
-
-- Log receipt expenses (upload/scan the image, specify the date, report,
-  category, merchant, amount) and mileage expenses (map a route on the map,
-  powered by Leaflet + OSRM, using the per year mileage rate)
-- Forward your receipt to the email associated with your Expense account, and
-  the receipt will be parsed and automatically added (see below)
-- Reports and categories to organize your expenses into; every receipt image is
-  saved and automatically renamed to `YYYY-MM-DD_Report_Name.jpg`
-- Export: as a PDF (one PDF per report with receipt images attached) and a ZIP
-  archive
-
-Stack:
-
-- React Router v8 (framework mode) + Tailwind v4, TypeScript
-- Postgres via Prisma: accounts, users, expenses, reports, categories,
-  settings, mileage, image blobs
-- Images: Postgres BYTEA (production and development/test), with no external
-  storage
-- Deployed on Vercel + Supabase Postgres (git push to main automatically
-  deploys)
-
-Auth and accounts:
-
-- Email/password login (hashed with scrypt), sessions with signed cookies
-- Multi-user accounts: everything in one account is shared between users, each
-  account is separate from other ones
-- A user can join an account by entering an 8-character invite code (visible in
-  Settings) and can sign up to a new account from scratch; image keys are
-  namespaced by an account so that two accounts won't interfere
-
-## Accounts and sharing
-
-Email/password login: email is the login name, stored in lowercase and
-validated, and unique at signup/join. All expenses, reports, categories, and
-settings belong to an account; everything in an account is shared between users,
-and accounts are fully isolated from each other.
-
-- **Sign up** -> creates an entirely new account (empty).
-- **Join** -> enters an account invite code (Settings -> Account) to join an
-  existing account and share its data.
-- The first account/user is bootstrapped from `APP_EMAIL`/`APP_PASSWORD` when
-  the database is empty; pre-existing accounts get their login restored from
-  `APP_EMAIL` on the first launch (initStore).
-
-## SEO and AI discovery
-
-Marketing pages that are available publicly double as the AI search surface: if
-an assistant is asked for an expense tracker, the GPTBot / OAI-SearchBot /
-ClaudeBot / PerplexityBot crawler quotes them. The copy is written in such a way
-that it's easily quotable and includes the app name and the URL and lives only
-in one place, the content files under `app/data/` (one markdown or YAML file per
-page, parsed by `app/lib/content.server.ts`), which render all the surfaces:
-
-| Page            | Purpose                                                                         |
-| --------------- | ------------------------------------------------------------------------------- |
-| `/`             | Landing page (SoftwareApplication JSON-LD)                                      |
-| `/about`        | Full feature/benefit list (AboutPage JSON-LD)                                   |
-| `/faq`          | 24 Q&As matching real AI queries (FAQPage JSON-LD)                              |
-| `/alternatives` | Expense vs Expensify comparison (WebPage + FAQPage JSON-LD)                     |
-| `/changelog`    | What changed in the app, newest first (rendered from `app/data/changelog.yaml`) |
-| `/llms.txt`     | The llmstxt.org file, the curated overview AI assistants read                   |
-| `.md` mirrors   | Markdown mirrors per the llms.txt convention                                    |
-
-Plumbing to support it: `public/robots.txt` explicitly permits the AI crawlers
-while app routes are blocked, and `public/sitemap.xml` lists the public pages.
-
-These routes are public (see the auth-gate middleware in `app/root.tsx`);
-everything else still requires a session.
-
 ## What it does
 
-- Track **receipt** expenses (date, merchant, amount, image, category, report)
-  and **mileage** expenses (date, 2+ addresses, distance, amount, report).
-- Mileage routes run **Home → stops → Home**; distance is calculated using OSRM
-  and the amount based on a per-year mileage rate. Maps is powered by Leaflet +
-  OpenStreetMap; **no API keys necessary**.
-- Incomplete expenses are highlighted to make it easy to complete them.
-- Paste (⌘V) or upload an image anywhere to create a new receipt.
-- **Export** each report as a PDF (grouped by category, with all receipt images
-  attached) and a ZIP archive (CSV + images named `YYYY-MM-DD_REPORT_FILE.ext`).
-- **Warranties**: drop a warranty document (or a receipt) on the warranties
-  page and it becomes a record with merchant, product, value, terms and expiry;
-  the LLM reads the document, a merchant with a curated policy prefills the
-  terms, and the list groups records by how soon coverage ends.
-- **Insights chat**: ask spending questions in plain English and get a streamed
-  answer with a chart, grounded in your own expenses; confirm card proposals
-  (an expense or a drive) right from the chat.
-- **AI assistants (MCP)**: any MCP client (Claude, OpenAI) can connect by
-  logging in with your account (OAuth; no API keys). See [AI
-  assistants](#ai-assistants-mcp) below.
+Receipts come in from a photo, a screenshot, a PDF, the clipboard, a connected
+Fastmail or Gmail mailbox, or an MCP assistant; each one is read for merchant,
+amount and category, filed under an IRS Schedule C line, and kept with its image.
+Drives are mapped and priced at the IRS rate for the trip date and type. The year
+leaves as a PDF per report, with the receipts attached, or as one ZIP of
+everything. A warranty document dropped on the warranties page becomes a record
+you can find by how soon coverage ends.
+
+Free, no card, no ads, no paid tier. Not built for corporate expense policy,
+approvals, or double-entry bookkeeping. The full tour, with the pages and the
+rules behind each one, is in [PRODUCT.md](product.md).
 
 ## AI assistants (MCP)
 
-The app speaks the Model Context Protocol at `https://expense.labnotes.org/mcp`
-(auth: OAuth 2.1 authorization-code + PKCE, where you sign in and authorize
-the connection; no API keys). An assistant linked with to your account can:
-
-- **Upload a receipt**: drag and drop a picture or PDF into chat; it processes
-  the same way as the web app and uses the same OCR and extraction as well as
-  your merchant history for categorization.
-- **Log a drive**: drag and drop stops written in plain English; it geocodes,
-  routs, and prices the route according to the year's IRS rates.
-- **Answer questions about spending**: for example "how much have I spent on
-  flights last quarter?" You'll receive the answer based on your data.
-- **Create reports**: create/close a report, move expenses into it, export
-  a report PDF.
-- **Reconcile**: upload your bank statement as a CSV; it will match all charges
-  without a matching receipt (read-only).
-
-Connect any MCP client:
+The app speaks the Model Context Protocol at `https://expense.labnotes.org/mcp`.
+An assistant connects with OAuth — you sign in and click Allow — so there are no
+API keys. A connected assistant can capture a receipt, log a drive, answer
+questions about your spending, manage reports, and match a bank statement.
 
 ```json
 // Claude — .mcp.json (no headers needed: the client discovers OAuth)
@@ -137,111 +50,44 @@ Connect any MCP client:
 }
 ```
 
-The client will open your browser; you'll log in and click Allow. You can manage
-connections (delete per token, disconnect completely) in **Settings -> Agents &
-API (MCP)**. For the full reference, see [`docs/mcp.md`](docs/mcp.md) and for
-directory listings: [`docs/mcp-directories.md`](docs/mcp-directories.md).
+The reference is [docs/mcp.md](docs/mcp.md); the tools are listed in
+[product.md](product.md#ai-assistants-mcp).
 
-## State
+## Accounts
 
-The storage is Postgres-only via **Prisma 8** (`prisma/contract.prisma` is
-the source of truth; `pnpm build:prisma` emits the contract artifacts the
-runtime reads). `DATABASE_URL` is required upon launch (otherwise the app will
-crash with an error). Image blobs are stored inside Postgres BYTEA
-(`image_blobs`) in production and development; there is no additional storage
-service.
+Email is the login name, hashed with scrypt, with a signed-cookie session.
+Everything belongs to an account; an account has several users; accounts are
+fully isolated from each other. Sign up for a new one, or join an existing one
+with the 8-character invite code in Settings. Image keys are namespaced per
+account, so two accounts can never collide. More detail in
+[product.md](product.md#accounts-and-access) and [docs/accounts.md](docs/accounts.md).
 
-| Data                        | Images                         |
-| --------------------------- | ------------------------------ |
-| `accounts` / `users` /      | Postgres BYTEA (`image_blobs`, |
-| `expenses` / `reports` /    | prod and dev)                  |
-| `categories` / `settings` / |                                |
-| `mileage` / `image_blobs`   |                                |
+## How it is built
 
-All reads/writes go through the modules in `app/lib/db/` (Prisma queries scoped
-by `accountId`); image storage is handled by `app/lib/images.server.ts` (Prisma
-`imageBlob`). Image blobs are kept in `images/{accountId}/...` pathnames on all
-backends. They are namespaced per account, so two accounts can never have a
-name conflict. Schema changes: edit `prisma/contract.prisma`, run
-`pnpm build:prisma` (contract emit), then `pnpm db:push` locally and on
-deploy (see `docs/deploy.md`).
+One app, one Postgres database, no monorepo. React Router v8 in framework mode
+(SSR), where the URL tree is the filesystem; Prisma 8 contract-first, so
+`prisma/contract.prisma` is the schema and there are no migration files; images
+stored as bytes in Postgres rather than in object storage. Deployed on Vercel
+plus Supabase Postgres, where a push to `main` deploys. The diagrams are in
+[product.md](product.md#how-it-is-built).
 
-## Environment variables
+Run it locally with `pnpm dev`; the environment variables, the connection
+poolers and the deploy path are in [docs/operations.md](docs/operations.md) and
+[docs/deploy.md](docs/deploy.md).
 
-Load order: real `process.env` (Vercel dashboard, or inline) wins; a local
-`.env` is used to fill holes. `DATABASE_URL` is required; `.env` is gitignored.
-**dev / test (local `.env`):**
+## Documentation
 
-```bash
-# .env (project root, gitignored)
-DATABASE_URL=postgres://assaf@localhost/expense_dev   # include the local user
-SESSION_SECRET=…         # signs the session cookie (random hex)
-```
-
-On an empty database the first account + user are bootstrapped from
-`APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing); thereafter, users are
-created via the app's signup/join flow. `SESSION_SECRET` is always required.
-`APP_EMAIL`/`APP_PASSWORD` can be omitted from `.env` after you have at least
-one user.
-
-Accounts created before email login (username era) retain their original
-username as the stored email until `APP_EMAIL` is set; `initStore` then adds
-that address to the bootstrap (oldest) user, so the configured credentials
-continue to work.
-
-Tests deliberately hardcode `expense_test` (Postgres with blobs/images), ignore
-the local database, and reset the schema from Prisma on every run (`pnpm
-test:db:push` in the test setup).
-
-**prod (Vercel):** set env vars in the project dashboard (Settings →
-Environment Variables): `DATABASE_URL` (Supabase Supavisor pooled URL),
-`SESSION_SECRET`,
-and (only until the first user exists) `APP_EMAIL` / `APP_PASSWORD`.
-Vercel sets them during runtime; `.env` does not exist.
-
-## Receipts by email
-
-Forward an email receipt to your inbox address and it will be parsed and
-imported automatically: the merchant, amount, and category are extracted, the
-receipt is uploaded as an image, and the expense date is the date when the email
-was forwarded. In case something could not be parsed, an explanation email is
-sent back.
-
-How it determines what to import:
-
-- Receipt **attached as PDF/image** → the attachment is uploaded as the receipt
-  image; text is extracted from the PDF text layer (or OCR'd) in order to parse
-  the merchant/amount/category.
-- Receipt **inline in the email** (ASCII/HTML) → the email body is converted to
-  an image and uploaded; text is parsed similarly.
-- Several attachments (for example, a receipt and some logo or signature) → only
-  the actual receipt is processed (with heuristics + model tie-break).
-- Sender email must be in the account's **allowed senders list** (Settings →
-  Receipts by email); otherwise the email is replied with "sender not
-  recognized".
-- Successful imports trigger a response with all the parsed data; incomplete
-  ones (missing merchant, amount, …) create the expense anyway and reply listing
-  what's missing.
-- Each email is processed at most once (idempotent on email id).
-
-### Setup DeepSeek
-
-- **DeepSeek vision**: receipt images go to the hosted vision model first
-  (`LLM_VISION_MODEL`), and tesseract.js (worker/fonts fetched from a CDN at
-  runtime) runs only when the provider errors. `RECEIPT_OCR_MODE=tesseract`
-  forces local OCR, `=deepseek` forces the model.
-- **Scanned PDFs** (without the text layer) are rasterized and OCR'd; the first
-  pages are uploaded as receipt image.
-- **HTML receipts** are converted to a text image (receipt form on the paper);
-  no headless browser needed.
-- Forwarding **as attachment (.eml)**: the receipt enclosed in `.eml` is not
-  parsed; use normal inline forwarding (for example, Gmail/iOS includes original
-  email in the body).
-- Webhook processing time limit is 60 seconds (max Vercel `maxDuration`),
-  enough to download attachment + OCR + parse.
-
-## Maps & geocoding
-
-OpenStreetMap services (Nominatim geocoding, OSRM routing, OSM raster tiles
-maps). Rate limited but good enough for personal use. If OSRM is not available,
-distance calculation fallbacks to the straight line (marked "approx.").
+| Document                                                                                                               | What is in it                                                |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [product.md](product.md)                                                                                               | What it is, how it works, the tour, architecture, vocabulary |
+| [AGENTS.md](AGENTS.md)                                                                                                 | The invariants, commands and traps that bind a change here   |
+| [docs/files.md](docs/files.md)                                                                                         | Every notable file, one line each                            |
+| [docs/operations.md](docs/operations.md)                                                                               | Env vars, poolers, secrets, incident history                 |
+| [docs/deploy.md](docs/deploy.md)                                                                                       | Deploy ordering and the smoke checks                         |
+| [docs/extraction.md](docs/extraction.md)                                                                               | How a receipt is read, and the caps around it                |
+| [docs/receipts-by-email.md](docs/receipts-by-email.md)                                                                 | The Fastmail forwarding path                                 |
+| [docs/email-connections.md](docs/email-connections.md)                                                                 | Connected mailboxes and inbox review                         |
+| [docs/reconciliation.md](docs/reconciliation.md)                                                                       | Matching a statement to expenses                             |
+| [docs/accounts.md](docs/accounts.md)                                                                                   | Accounts, users, invites                                     |
+| [docs/mcp.md](docs/mcp.md)                                                                                             | The assistant-facing reference                               |
+| [docs/code-style.md](docs/code-style.md) · [docs/testing.md](docs/testing.md) · [docs/dark-mode.md](docs/dark-mode.md) | Conventions                                                  |

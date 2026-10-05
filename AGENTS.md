@@ -6,50 +6,15 @@ Expense is a personal expense tracker for people filing taxes as individuals
 (freelancers, self-employed, side hustlers). One app, one Postgres database, no
 monorepo.
 
-What it does:
-
-- Captures **receipt** expenses (upload, paste, drag and drop, or a forwarded
-  email) and **mileage** expenses (map a route, priced at the IRS rate for the
-  drive date and type).
-- OCR plus an LLM extract merchant, amount, and an IRS Schedule C category;
-  every expense lands in a named **report**.
-- Exports a PDF per report (receipts attached) or a ZIP (CSV plus images).
-- Keeps **warranty** records (merchant, product, value, expiry, terms, and
-  labelled documents), optionally linked to the expense they came from, on
-  `/warranties`. A document dropped on that page is read by the LLM
-  (`app/lib/warranty-ai.server.ts`) and filed as a warranty with the file
-  attached; a merchant with a curated coverage policy
-  (`app/data/warranty-policies.yaml`, sourced and dated) starts the record
-  with those terms filled in. Retailer policy pages are bot-gated (costco.com's
-  answer 404/401 to a server fetch), which is why that table is curated
-  rather than fetched, and why it lives in YAML: edit it, then
-  `pnpm build:policies` emits the table `app/lib/warranty-policies.ts` matches
-  against. A warranty can outlive the tax year or cover a non-deductible
-  purchase, so it is its own collection and never reaches `readExpenses()` or
-  the tax surfaces built on it.
-- Reconciles a bank statement against logged expenses to surface missed
-  deductions.
-- Speaks MCP at `/mcp` for AI assistants, registers read-only WebMCP tools in
-  Chrome, and answers spending questions in-app on `/insights`.
-- Publishes its marketing pages as the AI-search surface: `/llms.txt` and the
-  `.md` mirrors are generated from one source file.
-
-Accounts are multi-user: everything is scoped by `accountId`, users join an
-account with an 8-character invite code, and accounts are fully isolated from
-each other. Deployed to Vercel plus Supabase Postgres (us-west-2); a push to
-`main` auto-deploys.
+What it does, how it works, and the pages a person uses are in
+**[PRODUCT.md](product.md)** — read it first. This file is the rules that bind a
+change, not the tour.
 
 ## Architecture & Data Flow
 
-```mermaid
-flowchart LR
-  B[Browser] --> R["app/root.tsx loader<br/>auth gate"]
-  R --> RT["app/routes/*<br/>loader / action"]
-  RT --> DB["app/lib/db/*.ts"]
-  DB --> PG[(Postgres)]
-  MAIL["Inbound email / webhook"] --> PIPE["OCR + LLM extraction"] --> DB
-  AG["MCP / WebMCP clients"] --> M["app/lib/mcp.server.ts"] --> DB
-```
+The diagrams (system shape, data model, the connected-mailbox drain, and the
+deploy path) are in [PRODUCT.md](product.md#how-it-is-built). The rules that
+shape the code:
 
 - **Framework**: React Router v8 framework mode, SSR. `app/routes.ts` is just
   `flatRoutes()`, so the URL tree comes from filenames in `app/routes/`:
@@ -100,21 +65,13 @@ flowchart LR
 
 ## Key Directories
 
-| Path                 | Purpose                                                                      |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `app/routes/`        | 83 route modules; file-based routing, loaders/actions live here              |
-| `app/components/`    | React components; `app/components/ui/` holds the shared primitives           |
-| `app/lib/`           | 107 modules: domain logic, server integrations (`*.server.ts`), data access  |
-| `app/lib/db/`        | One module per domain (`expenses`, `reports`, `categories`, `accounts`, ...) |
-| `test/`              | 144 test files plus `helpers/` and `fixtures/`                               |
-| `scripts/`           | Operational and one-off scripts (deploy, clone, check, smoke, redactors)     |
-| `docs/`              | 15 reference docs; `docs/files.md` is the closest thing to an index          |
-| `prisma/`            | `contract.prisma` (source of truth), emitted `contract.json`/`contract.d.ts` |
-| `migrations/`        | Contract snapshots written by `pnpm build:prisma`                            |
-| `public/`            | `robots.txt`, `sitemap.xml`, static images                                   |
-| `patches/`           | `tesseract.js` wasm-core patch, asserted by `scripts/check`                  |
-| `vendor/`            | `pdfkit-standard-fonts`, a tracer-bridge package for the Vercel build        |
-| `.github/workflows/` | `deployment-checks.yml` (the CI gate), `publish-mcp.yml` (registry publish)  |
+The annotated map is [PRODUCT.md](product.md#where-things-live); every notable
+file has a line in [docs/files.md](docs/files.md). The ones worth knowing before
+you touch anything: `app/routes/` (the URL tree is the filesystem), `app/lib/`
+(`*.server.ts` never reaches the client), `app/lib/db/` (every query in the app
+is written here), `app/data/` (all public copy plus the seeds),
+`prisma/contract.prisma` (the schema), `scripts/check` (the gate), and
+`.github/workflows/deployment-checks.yml` (CI, which deploys).
 
 ## Development Commands
 
