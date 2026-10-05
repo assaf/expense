@@ -16,7 +16,11 @@ import {
   mimeFetchDeps,
 } from "~/lib/mime-inbound.server";
 import { evaluateAuthChain } from "~/lib/email-auth.server";
-import { captureError, captureWarning } from "~/lib/errors.server";
+import {
+  captureError,
+  captureWarning,
+  errorSummary,
+} from "~/lib/errors.server";
 import { extractReceipt } from "~/lib/receipt-ai.server";
 // Heavy render/OCR modules (resvg font chain, tesseract wasm, headless
 // chromium) are lazy-loaded inside realExtractionDeps so importing this
@@ -297,6 +301,20 @@ function settledEmailIds(
     if (row.outcome !== "processing" || !stale) settled.add(row.emailId);
   }
   return settled;
+}
+
+/** Run one step of the drain, naming it if it throws. The caller sees only
+ * "drain failed", and a stage-less throw from a five-step loop is unreadable
+ * in a log line and unreadable in Sentry once the raw message trips its data
+ * scrubber. The cause is kept, so the console still prints the real stack. */
+async function drainStep<T>(stage: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    throw new Error(`[email-connections] ${stage}: ${errorSummary(err)}`, {
+      cause: err,
+    });
+  }
 }
 
 /** Bump one counter in a single atomic UPDATE: Postgres evaluates `col + 1`
@@ -878,18 +896,22 @@ async function drainConnection(
   let afterIso = new Date(cursorMs).toISOString();
 
   while (Date.now() - started <= budgetMs) {
-    const summaries = await adapter.inboxEmailSummaries({
-      afterIso,
-      limit: batchSize,
-    });
+    const summaries = await drainStep("reading the mailbox failed", () =>
+      adapter.inboxEmailSummaries({
+        afterIso,
+        limit: batchSize,
+      }),
+    );
     if (summaries.length === 0) break;
     // Skip already-evaluated emails (push + cron race, re-delivered mail).
     // One read for the whole batch: this filter runs before any work, so a
     // per-email read put a round trip in front of every batched email.
     const settled = settledEmailIds(
-      await readEmailLogSnapshots(
-        connection.id,
-        summaries.map((s) => s.id),
+      await drainStep("reading the process log failed", () =>
+        readEmailLogSnapshots(
+          connection.id,
+          summaries.map((s) => s.id),
+        ),
       ),
       Date.now(),
     );
@@ -916,20 +938,21 @@ async function drainConnection(
         return result;
       }
       result.evaluated++;
-      const outcome = await processConnectionEmail(
-        connection,
-        summary,
-        deps,
-        adapters,
+      const outcome = await drainStep(`processing ${summary.id} failed`, () =>
+        processConnectionEmail(connection, summary, deps, adapters),
       );
       switch (outcome.status) {
         case "created":
           result.created++;
-          await bumpProcessedCount(connection.id);
+          await drainStep("counting a processed expense failed", () =>
+            bumpProcessedCount(connection.id),
+          );
           break;
         case "partial":
           result.partial++;
-          await bumpProcessedCount(connection.id);
+          await drainStep("counting a processed expense failed", () =>
+            bumpProcessedCount(connection.id),
+          );
           break;
         case "error":
           result.failed++;

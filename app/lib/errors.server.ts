@@ -15,7 +15,11 @@ export function captureError(
 ): void {
   console.error(error);
   if (Sentry.isInitialized()) {
-    Sentry.captureException(error, extra ? { extra } : undefined);
+    const detail =
+      extra?.error === undefined
+        ? extra
+        : { ...extra, errorSummary: errorSummary(extra.error) };
+    Sentry.captureException(error, detail ? { extra: detail } : undefined);
   }
 }
 
@@ -31,8 +35,37 @@ export function captureWarning(
 ): void {
   console.warn(message, extra);
   if (Sentry.isInitialized()) {
-    Sentry.captureMessage(message, { level: "warning", extra });
+    const detail =
+      extra?.error === undefined
+        ? extra
+        : { ...extra, errorSummary: errorSummary(extra.error) };
+    Sentry.captureMessage(message, { level: "warning", extra: detail });
   }
+}
+
+/** Credential-shaped runs: an auth scheme with its value, a secret assigned
+ * in text, and a JWT. Provider errors quote response bodies, and a body that
+ * carries an Authorization header is what makes Sentry's data scrubber drop
+ * the whole value — taking the stack with it. */
+const AUTH_SCHEME_RUN = /\b(?:bearer|basic)\s+\S+/gi;
+const ASSIGNED_SECRET =
+  /\b(?:token|secret|password|api[-_]?key)\b\s*[:=]\s*\S+/gi;
+const JWT_RUN = /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
+
+/** One bounded line describing an unknown thrown value, with anything
+ * credential-shaped masked. Safe to put in front of a reader (Sentry, a
+ * reconnect email) where the raw message may be redacted or read by a human:
+ * the error's class, the first line of its message, and nothing else. */
+export function errorSummary(error: unknown, limit = 200): string {
+  if (!(error instanceof Error)) return typeof error;
+  const first = (error.message.split("\n")[0] ?? "").trim();
+  if (first.length === 0) return error.name;
+  const masked = first
+    .replace(AUTH_SCHEME_RUN, "[redacted]")
+    .replace(ASSIGNED_SECRET, "[redacted]")
+    .replace(JWT_RUN, "[redacted]")
+    .replace(/\s+/g, " ");
+  return `${error.name}: ${masked}`.slice(0, limit);
 }
 
 /**

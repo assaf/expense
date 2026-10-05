@@ -9,7 +9,11 @@ vi.mock("@sentry/react-router", () => ({
   captureException: vi.fn(),
 }));
 
-import { captureErrorOnce, isRouterNoise } from "~/lib/errors.server";
+import {
+  captureErrorOnce,
+  errorSummary,
+  isRouterNoise,
+} from "~/lib/errors.server";
 
 describe("captureErrorOnce", () => {
   it("reports each error object once no matter how many paths surface it", () => {
@@ -28,6 +32,38 @@ describe("captureErrorOnce", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("errorSummary", () => {
+  it("keeps the class and the first line, and nothing else", () => {
+    expect(
+      errorSummary(new Error("JMAP /api/query failed\n    at fetchAndDecode")),
+    ).toBe("Error: JMAP /api/query failed");
+  });
+
+  it("masks what a secret scrubber would drop", () => {
+    // A provider error quoting a response body is what makes Sentry replace
+    // the whole value with [Filtered]; the summary has to survive that.
+    const bearer = errorSummary(
+      new Error("JMAP returned HTTP 401: Authorization: Bearer eyJhbGciOi"),
+    );
+    expect(bearer).not.toContain("eyJhbGciOi");
+    expect(bearer).toContain("[redacted]");
+    expect(
+      errorSummary(new Error("refresh failed, token=abc123XYZ")),
+    ).toContain("[redacted]");
+    expect(
+      errorSummary(
+        new Error("auth eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dBjft1Z4CVP"),
+      ),
+    ).toContain("[redacted]");
+  });
+
+  it("bounds the length and names a value that has no message", () => {
+    expect(errorSummary(new Error("x".repeat(500)), 40)).toHaveLength(40);
+    expect(errorSummary(new RangeError(""))).toBe("RangeError");
+    expect(errorSummary("a thrown string")).toBe("string");
   });
 });
 

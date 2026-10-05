@@ -1131,6 +1131,33 @@ describe("drainEmailConnection", () => {
     ]);
   });
 
+  it("names the step that failed, and keeps the cause for the console", async () => {
+    // The push route reports "drain failed" and nothing else, and in
+    // production the raw message was scrubbed to [Filtered] (EXPENSE-1B), so
+    // the step is the only thing that says where it died.
+    const { adapter } = fakeAdapter(new Map());
+    const upstream = new Error(
+      "JMAP /api/query returned HTTP 502: upstream unavailable",
+    );
+    const failing = {
+      ...adapter,
+      inboxEmailSummaries: async () => {
+        throw upstream;
+      },
+    };
+
+    const thrown = await drainEmailConnection(conn, {
+      adapter: failing,
+      batchSize: 10,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    }).catch((err: unknown) => err);
+
+    expect((thrown as Error).message).toBe(
+      "[email-connections] reading the mailbox failed: Error: JMAP /api/query returned HTTP 502: upstream unavailable",
+    );
+    expect((thrown as Error).cause).toBe(upstream);
+  });
+
   it("stamps the email's arrival on the row it files", async () => {
     // Inbox review pairs a bank notification's charge with a receipt by the
     // RECEIPT's arrival (alerts land within a minute of the charge). A
