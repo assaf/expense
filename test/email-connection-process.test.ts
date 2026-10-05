@@ -1131,6 +1131,74 @@ describe("drainEmailConnection", () => {
     ]);
   });
 
+  it("writes the batch's counters once, not once per email", async () => {
+    // One pooled round trip per email, for a number the list page shows
+    // (Sentry EXPENSE-1F). The counter UPDATEs are the drain's only calls
+    // through db.runtime().execute, so counting them pins the batch: three
+    // emails, one write per counter.
+    await addEmailRule({ accountId: "", sender: "apple.com", source: "seed" });
+    const { adapter } = fakeAdapter(
+      new Map([
+        [
+          "c1",
+          {
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Receipt 1",
+            body: "MERCHANT: Apple\nTOTAL: 3.50\nCATEGORY: office supplies",
+          },
+        ],
+        [
+          "c2",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest 2",
+            body: "nothing to see",
+          },
+        ],
+        [
+          "c3",
+          {
+            from: "newsletter@random.com",
+            subject: "Digest 3",
+            body: "nothing to see",
+          },
+        ],
+      ]),
+    );
+    const runtime = db.runtime();
+    const execute = runtime.execute.bind(runtime);
+    let writes = 0;
+    const spy = vi.spyOn(db, "runtime").mockReturnValue(
+      new Proxy(runtime, {
+        get(target, prop, receiver) {
+          if (prop !== "execute") return Reflect.get(target, prop, receiver);
+          return (...args: unknown[]) => {
+            writes += 1;
+            return execute(...(args as Parameters<typeof execute>));
+          };
+        },
+      }),
+    );
+
+    try {
+      const result = await drainEmailConnection(conn, {
+        adapter,
+        batchSize: 10,
+        lookbackMs: FIXTURE_LOOKBACK_MS,
+      });
+      expect(result.evaluated).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(writes).toBe(2);
+    const row = await testPrisma.emailConnection.findUnique({
+      where: { id: conn.id },
+    });
+    expect(row?.receivedCount).toBe(3);
+    expect(row?.processedCount).toBe(1);
+  });
+
   it("names the step that failed, and keeps the cause for the console", async () => {
     // The push route reports "drain failed" and nothing else, and in
     // production the raw message was scrubbed to [Filtered] (EXPENSE-1B), so

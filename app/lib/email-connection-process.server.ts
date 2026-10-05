@@ -317,27 +317,28 @@ async function drainStep<T>(stage: string, run: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Bump one counter in a single atomic UPDATE: Postgres evaluates `col + 1`
+/** Bump a counter in a single atomic UPDATE: Postgres evaluates `col + n`
  * against the stored value, so two drains that interleave can't lose an
  * increment the way the old read-then-write could. The ORM lane takes
  * literals only, so this is the SQL builder with a raw expression per
- * column (pg/int4@1, the codec id prisma/contract.json gives both
- * counters). */
+ * column (pg/int4@1, the codec id prisma/contract.json gives both counters).
+ * `by` is the batch's whole delta: one write covers a whole batch. */
 async function bumpCounter(
   connectionId: string,
   field: "receivedCount" | "processedCount",
+  by = 1,
 ): Promise<void> {
   await db.runtime().execute(
     db.sql.public.email_connections
       .update((f, fns) =>
         field === "receivedCount"
           ? {
-              receivedCount: fns.raw`${f.receivedCount} + 1`.returns(
+              receivedCount: fns.raw`${f.receivedCount} + ${by}`.returns(
                 "pg/int4@1",
               ),
             }
           : {
-              processedCount: fns.raw`${f.processedCount} + 1`.returns(
+              processedCount: fns.raw`${f.processedCount} + ${by}`.returns(
                 "pg/int4@1",
               ),
             },
@@ -345,6 +346,45 @@ async function bumpCounter(
       .where((f, fns) => fns.eq(f.id, connectionId))
       .build(),
   );
+}
+
+/** Where a run's counter increments go. The drain collects them and writes
+ * once per batch — one pooled round trip per email bought a number nobody
+ * reads that often (Sentry EXPENSE-1F). A caller with a single email (the
+ * inbox review click) leaves it unset and gets the write straight away, so
+ * the number on screen is current the moment the click returns. */
+export interface ConnectionCounters {
+  received(): void;
+  processed(): void;
+}
+
+/** The drain's counters: increments in memory, one UPDATE per counter per
+ * flush. A drain that dies before its flush loses the batch's counts; the
+ * connection is flagged at that point anyway and the counters are a display
+ * number, not a ledger. */
+function counterBatch(connectionId: string) {
+  let received = 0;
+  let processed = 0;
+  return {
+    received: () => {
+      received += 1;
+    },
+    processed: () => {
+      processed += 1;
+    },
+    flush: async () => {
+      const writes: Promise<void>[] = [];
+      if (received > 0) {
+        writes.push(bumpCounter(connectionId, "receivedCount", received));
+      }
+      if (processed > 0) {
+        writes.push(bumpCounter(connectionId, "processedCount", processed));
+      }
+      received = 0;
+      processed = 0;
+      await Promise.all(writes);
+    },
+  };
 }
 
 /** Count one email the drain evaluated. */
@@ -393,7 +433,7 @@ export async function processConnectionEmail(
     moveToTrash: (id: string) => Promise<void>;
     sendToOwner: (email: OwnerEmail) => Promise<void>;
   },
-  options: { review?: boolean } = {},
+  options: { review?: boolean; counters?: ConnectionCounters } = {},
 ): Promise<ConnectionEmailResult> {
   const review = options.review === true;
   const fromAddress = extractEmailAddress(summary.from ?? "");
@@ -455,7 +495,13 @@ export async function processConnectionEmail(
   // that email was invisible to both. Caught here it becomes an `error`
   // row, which the review scan offers, or `pending-review` for a click.
   try {
-    await bumpReceivedCount(connection.id);
+    if (options.counters) {
+      // The drain batches the write; a caller without a batch (the review
+      // click) counts straight away.
+      options.counters.received();
+    } else {
+      await bumpReceivedCount(connection.id);
+    }
 
     // Our own notification emails (sent to self) must never be processed.
     // Skipped in review mode: the user chose a specific email, and a receipt
@@ -888,6 +934,8 @@ async function drainConnection(
     moveToTrash: (id: string) => adapter.moveToTrash(id),
     sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
   };
+  // The batch's counter deltas, written once when the batch ends.
+  const counters = counterBatch(connection.id);
 
   // Cursor over receivedAt: starts at the lookback floor, advances past
   // each scanned batch. +1ms so the (exclusive) JMAP `after` filter always
@@ -932,6 +980,8 @@ async function drainConnection(
 
     for (const summary of fresh) {
       if (Date.now() - started > budgetMs) {
+        // Flush first: the emails already counted in this batch are real.
+        await drainStep("counting the batch failed", counters.flush);
         captureWarning("[email-connections] drain time budget reached", {
           evaluated: result.evaluated,
         });
@@ -939,20 +989,18 @@ async function drainConnection(
       }
       result.evaluated++;
       const outcome = await drainStep(`processing ${summary.id} failed`, () =>
-        processConnectionEmail(connection, summary, deps, adapters),
+        processConnectionEmail(connection, summary, deps, adapters, {
+          counters,
+        }),
       );
       switch (outcome.status) {
         case "created":
           result.created++;
-          await drainStep("counting a processed expense failed", () =>
-            bumpProcessedCount(connection.id),
-          );
+          counters.processed();
           break;
         case "partial":
           result.partial++;
-          await drainStep("counting a processed expense failed", () =>
-            bumpProcessedCount(connection.id),
-          );
+          counters.processed();
           break;
         case "error":
           result.failed++;
@@ -969,6 +1017,7 @@ async function drainConnection(
         outcome: outcome.status,
       });
     }
+    await drainStep("counting the batch failed", counters.flush);
     // Processed emails are either trashed (gone from the Inbox) or seen;
     // slide the window past the batch so the next query doesn't re-serve it.
     if (nextMs > cursorMs) {
