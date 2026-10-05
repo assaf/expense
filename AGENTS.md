@@ -7,13 +7,13 @@ Expense is a personal expense tracker for people filing taxes as individuals
 monorepo.
 
 What it does, how it works, and the pages a person uses are in
-**[PRODUCT.md](product.md)** — read it first. This file is the rules that bind a
+**[PRODUCT.md](PRODUCT.md)** — read it first. This file is the rules that bind a
 change, not the tour.
 
 ## Architecture & Data Flow
 
 The diagrams (system shape, data model, the connected-mailbox drain, and the
-deploy path) are in [PRODUCT.md](product.md#how-it-is-built). The rules that
+deploy path) are in [PRODUCT.md](PRODUCT.md#how-it-is-built). The rules that
 shape the code:
 
 - **Framework**: React Router v8 framework mode, SSR. `app/routes.ts` is just
@@ -65,7 +65,7 @@ shape the code:
 
 ## Key Directories
 
-The annotated map is [PRODUCT.md](product.md#where-things-live); every notable
+The annotated map is [PRODUCT.md](PRODUCT.md#where-things-live); every notable
 file has a line in [docs/files.md](docs/files.md). The ones worth knowing before
 you touch anything: `app/routes/` (the URL tree is the filesystem), `app/lib/`
 (`*.server.ts` never reaches the client), `app/lib/db/` (every query in the app
@@ -124,6 +124,12 @@ grouped imports, conventional commits. Path aliases: `~/*` -> `app/*`,
 `~/test/*` -> `test/*`, `+types/*` -> `.react-router/types/*`. See
 `docs/code-style.md`. Prose (comments, docs, commit messages) goes easy on em
 dashes.
+
+**File names.** A root document is `BASE.md`: the base name upper case, the
+extension lower case (`README.md`, `AGENTS.md`, `PRODUCT.md`). Links to one
+must match that case exactly — GitHub paths are case-sensitive even though a
+macOS working tree is not, so a lowercase link to `PRODUCT.md` 404s there while
+still resolving locally.
 
 **Routes and mutations.** Loaders `throw redirect(...)`; actions `return
 redirect(...)`. Mutations are FormData POSTs keyed by an `intent` string:
@@ -408,22 +414,16 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   changes with `pnpm screenshots:review`.
 - **Coverage is not configured.** No `coverage` block or thresholds exist in any
   vitest config; do not assume a coverage gate.
-- **CI** is `.github/workflows/deployment-checks.yml`, in job order:
-  `secretlint` -> `check` and `test` (postgres:18 service, `RUN_OCR_TESTS=1`) ->
-  `migrate-db` (main only) -> "Deploy prod" -> "Smoke prod + rollback", which
-  rolls the Vercel deployment back when the smoke check fails.
 
 ## Known Drift
 
-Docs and comments reference several things that no longer exist. Verify against
-the tree before acting on a doc:
+Docs and comments occasionally outlive what they describe. Verify a claim
+against the tree before acting on it, and add what you find here. Nothing is
+outstanding at the moment; the last three were fixed on 2026-10-05 (the demo
+doc's two invented `pnpm demo:*` scripts, the deleted `prisma/migrations/`
+reference, and the registry namespace in `docs/mcp-directories.md`, which is
+`org.labnotes/expense` to match `server.json`).
 
-- `docs/mcp-demo.md` prescribes `pnpm demo:seed` / `pnpm demo:run`; neither
-  alias exists.
-- `prisma/migrations/` was deleted (its handful of dated dirs were never run;
-  the schema is applied with `prisma db update` / `db init`), and files.md no
-  longer documents them.
-- `docs/mcp-directories.md` gives `server.json`'s name as
-  `io.github.assaf/expense`; the manifest says `org.labnotes/expense`.
-- `vpr` is a real vite-plus binary, not a typo: it rewrites to `vp run`, so
-  `pnpm test:ocr` and `scripts/upgrade` are fine as written.
+One thing that looks like drift and is not: `vpr` is a real vite-plus binary,
+the shorthand for `vp run`, so `pnpm test:ocr` and `scripts/upgrade` are fine
+as written.

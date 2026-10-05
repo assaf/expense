@@ -10,7 +10,7 @@ auto-propagates to PulseMCP, VS Code / Copilot, and other aggregators.
 backed by Anthropic, GitHub, PulseMCP, and Microsoft. It's in **preview**;
 expect possible breaking changes. Publishing is done with the
 `mcp-publisher` CLI; the metadata lives in `server.json` at the repo root
-(already written: `name: io.github.assaf/expense`, a remote Streamable HTTP
+(already written: `name: org.labnotes/expense`, a remote Streamable HTTP
 server at `/mcp`, no package).
 
 ```bash
@@ -19,8 +19,8 @@ curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/downlo
 # or: brew install mcp-publisher
 
 cd <repo>
-mcp-publisher login github     # device-code flow; GitHub username "assaf" must
-                               # match the io.github.assaf/ namespace
+mcp-publisher login github     # device-code flow; the GitHub org behind the
+                               # server name must match (org.labnotes)
 mcp-publisher publish          # pushes server.json to the registry
 ```
 

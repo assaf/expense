@@ -11,13 +11,14 @@ This document is the map: **what the product is, how it works, and how a person
 uses it.** It is written to be read by a person deciding whether to use the app
 and by a coding agent dropped into the repository with no other context.
 
-| If you are                | Read                                                                                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Evaluating the app        | [What it is](#what-it-is), [The tour](#the-tour)                                                                   |
-| New to the codebase       | [How it is built](#how-it-is-built), [Where things live](#where-things-live)                                       |
-| About to change something | [Conventions that bind a change](#conventions-that-bind-a-change), then [AGENTS.md](AGENTS.md)                     |
-| Wiring an assistant to it | [AI assistants](#ai-assistants-mcp)                                                                                |
-| Deploying or debugging it | [How a change reaches production](#how-a-change-reaches-production), then [docs/operations.md](docs/operations.md) |
+| If you are                 | Read                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Evaluating the app         | [What it is](#what-it-is), [The tour](#the-tour)                                                                   |
+| New to the codebase        | [How it is built](#how-it-is-built), [Where things live](#where-things-live)                                       |
+| About to change something  | [Conventions that bind a change](#conventions-that-bind-a-change), then [AGENTS.md](AGENTS.md)                     |
+| Wiring an assistant to it  | [AI assistants](#ai-assistants-mcp)                                                                                |
+| Deploying or debugging it  | [How a change reaches production](#how-a-change-reaches-production), then [docs/operations.md](docs/operations.md) |
+| Running it, or building it | [Running it locally](#running-it-locally), [Build order](#build-order)                                             |
 
 Anything a user reads on the site lives in [`app/data/`](app/data) and nowhere
 else; the canonical statement of price, positioning and feature claims is
@@ -354,6 +355,109 @@ The row-level invariants that the rest of the app leans on: an expense's
 that holds a person's data; `EmailProcessLog` has one row per
 (connection, email) and its `outcome` is the decision record the drain, the
 review list and the counters all read.
+
+### Build order
+
+If you were building this from scratch, this is the order that costs the least to
+get wrong, because each step only depends on the ones above it. Everything after
+the first four is a feature, not a foundation.
+
+1. **The schema.** `prisma/contract.prisma`, then `pnpm build:prisma` to emit the
+   artifacts the runtime reads, then `pnpm db:push` to bring a database in line.
+   Everything downstream types against that contract.
+2. **The wire codecs and the db layer.** `app/lib/db/wire.ts` owns the
+   date/number encoding, so nothing above it touches a driver type. Then one
+   module per domain, every query scoped by `accountId`.
+3. **Auth and the gate.** Sessions, the root-route middleware, and
+   `requireContextUser`. Every loader written after this can assume a user
+   exists and read them from context.
+4. **One vertical slice: receipt in, row saved, row listed.** This proves the
+   whole path at once — the route contract (intent-keyed actions, validation
+   envelopes), image storage, and a page that reads what another page wrote.
+   Everything else is another slice through the same seams.
+5. **Extraction**, behind the seam it already has: the known-merchant skip
+   first, the model second, each with its caps and its fence. The app is useful
+   before this (type the amount yourself), so it is not on the critical path.
+6. **Mileage**, which reuses the same expense row and adds geocoding.
+7. **Reports and exports**, which need rows and images to exist.
+8. **Mail ingest last of the core.** Push, the cron, the delivery-stamp gate,
+   the atomic claim: the most intricate part of the system, and the one whose
+   invariants (no double import, nothing trashed on failure) are hardest to
+   retrofit once real mail has flowed.
+9. **Insights and MCP** whenever the rows they read exist. They are read
+   surfaces over the same data, plus the write tools.
+
+Warranties are orthogonal — their own collection, no dependency on expenses —
+so they can land at any point.
+
+Seven decisions are load-bearing, in the sense that changing them later means
+migrating data or touching every call site rather than editing a module:
+
+- **`accountId` scoping lives in the db layer**, not in routes. Retrofitting
+  isolation means auditing every query that ever existed.
+- **One expense table, discriminated by `type`.** Splitting receipt and mileage
+  into two tables later rewrites every reader, report and export.
+- **The schema is a contract, not migrations.** Introducing a migration story
+  after the fact means reconciling two histories.
+- **Images are bytes in Postgres, keyed `(accountId, key)`.** Moving to object
+  storage later is a data migration plus every image reader.
+- **Heavy dependencies load lazily, with shipping shims.** An eager import of
+  the OCR, PDF, canvas or MCP packages breaks the Vercel build.
+- **Authentication is root middleware.** Per-route authentication is a
+  retrofit that touches every route.
+- **The connection pool is two connections per instance.** Reading in batches
+  is a day-one habit; finding every N+1 later is not.
+
+### Running it locally
+
+Node 24 or newer, pnpm 12.9.1 (pinned in `packageManager`), a Postgres you can
+connect to, and the `portless` CLI on your `PATH` for `pnpm dev` (it serves on
+`expense.localhost`; without it, `pnpm build && pnpm start` serves the build on
+`:3000`).
+
+```bash
+pnpm install                 # postinstall syncs the Prisma skill bundles
+cat > .env <<'ENV'
+DATABASE_URL=postgres://you@localhost/expense_dev
+SESSION_SECRET=$(openssl rand -hex 32)
+ENV
+pnpm db:push                 # create the schema from the contract
+pnpm dev
+```
+
+On first boot the app seeds what every account needs: the 22 Schedule C
+categories, the IRS mileage-rate table, and the general email rules. Your first
+account comes from `APP_EMAIL`/`APP_PASSWORD` if they are set, otherwise you
+sign up.
+
+The tests want a Postgres with a passwordless `assaf` role and their own
+database — they drop and recreate `expense_test` on every run and never touch
+your dev data:
+
+```bash
+pnpm exec playwright install chromium   # once; the suite launches a browser
+pnpm test:db:push                       # drop and recreate expense_test
+pnpm test                               # the static gate, a build, the suite
+```
+
+#### Configuration
+
+Every variable is read in `app/lib/env.ts`, which is the authority on names,
+defaults and what breaks without them. What is actually required:
+
+| Purpose                 | Variables                                                                                                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Boot**                | `DATABASE_URL` (the app fails fast without it), `SESSION_SECRET` (signs the session cookie)                                                                                                                                                                         |
+| **First account only**  | `APP_EMAIL`, `APP_PASSWORD` — after the first user exists, remove them                                                                                                                                                                                              |
+| **Extraction and chat** | `LLM_BASE_URL`, `LLM_API_KEY` (or `DEEPSEEK_API_KEY`), `LLM_MODEL`, `LLM_VISION_MODEL`, `LLM_CHAT_MODEL`, `LLM_MAX_TOKENS`, `LLM_VISION_MAX_TOKENS`, `LLM_REQUEST_TIMEOUT_MS`, `RECEIPT_VISION_MAX_WIDTH`, `RECEIPT_OCR_MODE` (`auto`, `deepseek`, `tesseract`)     |
+| **Receipts by email**   | `INBOUND_EMAIL_ADDRESS`, `RECEIPTS_FOLDER`, `FASTMAIL_TOKEN`, `FASTMAIL_OAUTH_CLIENT_ID`, `PUSH_PRIVATE_KEY`, `PUSH_AUTH`, `DEVICE_CLIENT_ID`, `CRON_SECRET` — `pnpm setup:push` generates the push pair                                                            |
+| **Connected mailboxes** | `EMAIL_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`; without it, connecting a mailbox is disabled), plus the Google set: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUSH_SERVICE_ACCOUNT` |
+| **Operations**          | `PUBLIC_URL`, `SMOKE_TEST_SECRET`, `SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`, `UMAMI_WEBSITE_ID`, and for scripts `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`                                                                                                 |
+
+Optional does not mean ignored: an unset variable disables the feature that
+needs it rather than falling back, so the app runs with two of them and the
+rest light up as they are set. Full detail, including the pooler topology:
+[docs/operations.md](docs/operations.md).
 
 ## How a change reaches production
 

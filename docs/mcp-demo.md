@@ -5,27 +5,20 @@ run live against a real account. Record at 1080p, screen + webcam optional,
 no cuts. The point of the demo: **an assistant does the work the app's forms
 used to, and the user just signs in.**
 
-## Running it (scripted, reproducible)
+## Running it
 
-Two scripts make the demo repeatable; no manual data prep:
+The demo is run by hand against a real account; there is no demo seeder or
+demo driver script. Prereqs: local Postgres up, a running server (`pnpm dev` or
+`pnpm start`), and a `.env` with `DATABASE_URL`.
 
-```bash
-pnpm demo:seed   # seed (or reset) the "Demo Account" with realistic data
-pnpm demo:run    # drive the four moves over the MCP endpoint, print a
-                 # transcript, and save the exported PDF to demo-output/
-```
+1. Sign in as the account you want to film with, and give it the data each
+   move needs (a merchant with history, a report with a known total, some
+   unreported expenses, one mileage trip).
+2. Connect the assistant: **Settings -> Agents & API**, or hand the client the
+   endpoint from [docs/mcp.md](mcp.md) and let it open the OAuth consent page.
+3. Run the four moves below in order, in one take.
 
-Prereqs: local Postgres up, a running server (`pnpm dev` or `pnpm start`),
-and `.env` with `DATABASE_URL`. Point the driver elsewhere with
-`DEMO_URL=http://localhost:3000 pnpm demo:run`.
-
-`demo:run` authenticates with an OAuth access token issued straight to the
-store for the demo user, the same token type a browser sign-in produces.
-`capture_receipt` passes merchant/amount/date overrides so the move is
-deterministic without a DeepSeek key; with `LLM_API_KEY` set, the real
-OCR extraction runs instead.
-
-The seeded account makes each move land:
+The data each move leans on:
 
 - **Blue Bottle Coffee history** (3 receipts), so `capture_receipt` reuses
   the merchant's previous category instead of guessing.
@@ -33,6 +26,10 @@ The seeded account makes each move land:
   exact answer.
 - **Four unreported June expenses** to feed the report move.
 - **A mileage trip + 2026 rate**: mileage is priced at the IRS rate.
+
+`capture_receipt` accepts merchant, amount and date overrides, so the first
+move can be made deterministic without a model key; with `LLM_API_KEY` set the
+real OCR extraction runs instead.
 
 ## The four moves
 

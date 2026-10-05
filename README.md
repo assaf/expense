@@ -5,7 +5,7 @@
 > assistant does your data entry so that you can forget about the process
 > altogether.
 
-**[PRODUCT.md](product.md) is the map**: what the product is, how it works, the
+**[PRODUCT.md](PRODUCT.md) is the map**: what the product is, how it works, the
 pages a person uses, the architecture and data model, and the vocabulary. This
 file is the front door; that one is the orientation.
 
@@ -29,7 +29,7 @@ you can find by how soon coverage ends.
 
 Free, no card, no ads, no paid tier. Not built for corporate expense policy,
 approvals, or double-entry bookkeeping. The full tour, with the pages and the
-rules behind each one, is in [PRODUCT.md](product.md).
+rules behind each one, is in [PRODUCT.md](PRODUCT.md).
 
 ## AI assistants (MCP)
 
@@ -51,7 +51,7 @@ questions about your spending, manage reports, and match a bank statement.
 ```
 
 The reference is [docs/mcp.md](docs/mcp.md); the tools are listed in
-[product.md](product.md#ai-assistants-mcp).
+[PRODUCT.md](PRODUCT.md#ai-assistants-mcp).
 
 ## Accounts
 
@@ -60,7 +60,7 @@ Everything belongs to an account; an account has several users; accounts are
 fully isolated from each other. Sign up for a new one, or join an existing one
 with the 8-character invite code in Settings. Image keys are namespaced per
 account, so two accounts can never collide. More detail in
-[product.md](product.md#accounts-and-access) and [docs/accounts.md](docs/accounts.md).
+[PRODUCT.md](PRODUCT.md#accounts-and-access) and [docs/accounts.md](docs/accounts.md).
 
 ## How it is built
 
@@ -69,7 +69,7 @@ One app, one Postgres database, no monorepo. React Router v8 in framework mode
 `prisma/contract.prisma` is the schema and there are no migration files; images
 stored as bytes in Postgres rather than in object storage. Deployed on Vercel
 plus Supabase Postgres, where a push to `main` deploys. The diagrams are in
-[product.md](product.md#how-it-is-built).
+[PRODUCT.md](PRODUCT.md#how-it-is-built).
 
 Run it locally with `pnpm dev`; the environment variables, the connection
 poolers and the deploy path are in [docs/operations.md](docs/operations.md) and
@@ -79,7 +79,7 @@ poolers and the deploy path are in [docs/operations.md](docs/operations.md) and
 
 | Document                                                                                                               | What is in it                                                |
 | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [product.md](product.md)                                                                                               | What it is, how it works, the tour, architecture, vocabulary |
+| [PRODUCT.md](PRODUCT.md)                                                                                               | What it is, how it works, the tour, architecture, vocabulary |
 | [AGENTS.md](AGENTS.md)                                                                                                 | The invariants, commands and traps that bind a change here   |
 | [docs/files.md](docs/files.md)                                                                                         | Every notable file, one line each                            |
 | [docs/operations.md](docs/operations.md)                                                                               | Env vars, poolers, secrets, incident history                 |
