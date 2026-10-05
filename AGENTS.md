@@ -138,6 +138,7 @@ flowchart LR
 | `./scripts/deploy`                                | check -> test -> prod db sync -> vercel -> smoke                 | The only production writer; `--skip-tests`, `--skip-db-sync`   |
 | `./scripts/clone`                                 | prod dump -> local DB                                            | Read-only against prod; `LOCAL_DB_URL` overrides               |
 | `./scripts/smoke-check <url>`                     | `GET /api/smoke`, fails unless `ok === true`                     | Shared by `scripts/deploy` and CI                              |
+| `./scripts/upgrade`                               | bump all -> install -> suite -> commit                           | **Commits itself** (see below)                                 |
 
 `pnpm check` runs, in order: `prisma contract emit` -> the merchant coverage
 table emit (`tsx scripts/build-warranty-policies.ts`) ->
@@ -146,6 +147,17 @@ tsgolint + `tsc`) -> `node scripts/check-dark-mode.mjs` -> `secretlint` ->
 a tesseract patch probe -> `knip`. Nothing is auto-fixed: a nonzero exit
 means some finding needs a real edit. The pre-commit hook runs
 `vp staged` over the staged files plus the same secretlint scan.
+
+`scripts/upgrade` is the one script that writes to the repo's history. It
+bumps every dependency to latest, re-installs, reinstalls chromium, runs
+`vpr check` and the full suite, and only then stages `package.json`,
+`pnpm-lock.yaml` and `pnpm-workspace.yaml` (all three: a catalog or override
+edit is a normal outcome of a bump, and CI installs with a frozen lockfile) and
+runs `omp commit` with a generated message. A failing suite aborts before the
+staging, so the bumped tree is left dirty for inspection rather than committed.
+`pnpm audit --prod` runs after the commit and exits 1 if it found anything, so
+a vulnerable bump still lands as a commit you have to look at. Nothing else in
+the repo auto-commits, and `pnpm test`/`./scripts/deploy` never do.
 
 ## Code Conventions & Common Patterns
 

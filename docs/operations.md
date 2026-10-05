@@ -368,3 +368,28 @@ Vercel SSO protection, so both `scripts/deploy` and the smoke workflow send it
 as the `x-vercel-protection-bypass` header to reach the fresh deployment while
 Deployment Checks hold it from the production alias. Set it as a Vercel
 production env var (for the deploy script) and as a GitHub Actions secret.
+
+## Dependency bumps (`scripts/upgrade`)
+
+`./scripts/upgrade` is the only script in the repo that writes to git
+history. The sequence, and what each step is protecting:
+
+1. `pnpm self-update`, `pnpm update --latest`, `pnpm dedupe`, `pnpm prune`
+2. `pnpm install` from the new lockfile, then `pnpm exec playwright install
+chromium --with-deps` (the suite launches chromium; browsers must match the
+   just-bumped playwright)
+3. `vpr check` and the full suite. **A failure aborts here**, before anything
+   is staged: the bumped tree is left dirty so you can read the diff, and
+   nothing is committed.
+4. `git add package.json pnpm-lock.yaml pnpm-workspace.yaml` and `omp commit`.
+   All three files matter — the catalog, `overrides` and `patchedDependencies`
+   live in `pnpm-workspace.yaml`, and a bump that moves a catalog entry commits
+   a lockfile CI cannot install (it installs with `--frozen-lockfile`).
+5. `pnpm audit --prod` after the commit. A finding exits 1, so the commit
+   stands but the run reports it; read the audit output before deploying.
+
+The commit message is machine-written, so amend or reword it before pushing —
+`git commit --amend`. A push to `main` is a deploy (CI auto-deploys), so a
+bump commit is a production change like any other: review the diff before it
+lands. Nothing else in the repo auto-commits; `pnpm test` and
+`./scripts/deploy` do not.

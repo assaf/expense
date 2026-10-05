@@ -130,3 +130,125 @@ export async function readEmailLogSnapshots(
     createdAt: toIso(row.createdAt),
   }));
 }
+
+/** The decision rows for a batch of emails: what the inbox review scan needs
+ * about an email that already has one. Same (connectionId, emailIds) pair as
+ * the snapshot read above, a wider projection — the scan shows the outcome's
+ * reason and the expense it produced, while the drain only has to know
+ * whether the row is settled. Two reads, one owner: a change to how a log row
+ * is identified lands here, not in two modules that each query the table. */
+export async function readEmailLogDecisions(
+  connectionId: string,
+  emailIds: string[],
+) {
+  if (emailIds.length === 0) return [];
+  return db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.emailId.in(emailIds)),
+  )
+    .select(
+      "emailId",
+      "outcome",
+      "reason",
+      "expenseId",
+      "error",
+      "subject",
+      "fromAddress",
+    )
+    .all();
+}
+
+/** Every log row for a connection that produced an expense: the receipt
+ * arrivals a charge burst is paired against, and the notification expenses
+ * that are a charge's own record and never its cover. */
+export async function readExpenseLinkedEmailLogs(connectionId: string) {
+  return db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.expenseId.isNotNull()),
+  )
+    .select("expenseId", "fromAddress", "subject", "receivedAt")
+    .all();
+}
+
+/** The review list itself: rows still waiting on the user, newest arrival
+ * first. `chargeAmount` rides along for the charges-with-no-expense view,
+ * which reads the same pending set and groups it into bursts by arrival — so
+ * that view's own row order never reaches its output and one query serves
+ * both. */
+export async function readPendingReviewEmailLogs(connectionId: string) {
+  return db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
+  )
+    .select(
+      "emailId",
+      "receivedAt",
+      "fromAddress",
+      "fromDisplay",
+      "subject",
+      "error",
+      "chargeAmount",
+    )
+    .orderBy((l) => l.receivedAt.desc())
+    .all();
+}
+
+/** The audit trail under it: the notifications a covering receipt superseded,
+ * newest first. The email itself stays in the Inbox. */
+export async function readSupersededEmailLogs(
+  connectionId: string,
+  limit: number,
+) {
+  return db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      l.outcome.eq("review-ignored"),
+      l.reason.eq("superseded"),
+    ),
+  )
+    .select("emailId", "receivedAt", "fromDisplay", "subject", "expenseId")
+    .orderBy((l) => l.receivedAt.desc())
+    .limit(limit)
+    .all();
+}
+
+/** How many emails are still waiting on the review list. */
+export async function countPendingReviewEmailLogs(connectionId: string) {
+  const { count } = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
+  ).aggregate((a) => ({ count: a.count() }));
+  return count;
+}
+
+/** Take one email off the review list without touching the mailbox: the row
+ * becomes `review-ignored`, which is also what stops the auto pipeline from
+ * ever re-offering it. False when the row was not on the list anymore (a
+ * concurrent drain, or a click that already took it) — the update is
+ * conditional on the outcome, so it cannot overwrite someone else's
+ * decision. */
+export async function ignorePendingReviewEmail(
+  connectionId: string,
+  emailId: string,
+): Promise<boolean> {
+  const updated = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      l.emailId.eq(emailId),
+      l.outcome.eq("pending-review"),
+    ),
+  ).updateAll({
+    outcome: "review-ignored",
+    reason: "user ignored",
+    expenseId: null,
+    error: null,
+  });
+  return updated.length > 0;
+}
+
+/** One row by email id: the arrival and sender the review click needs before
+ * it runs the pipeline. Undefined when there is no row, which is also how a
+ * stale click (the email already processed) is answered. */
+export async function readOneEmailLog(connectionId: string, emailId: string) {
+  return db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.emailId.eq(emailId)),
+  )
+    .select("receivedAt", "fromAddress", "fromDisplay", "subject")
+    .first();
+}

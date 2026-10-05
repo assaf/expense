@@ -16,7 +16,16 @@ import {
   ruleSenderMatches,
 } from "~/lib/db/email-rules";
 import { findChargeExpenses } from "~/lib/db/expenses";
-import { writeEmailLogRow } from "~/lib/db/email-log";
+import {
+  countPendingReviewEmailLogs,
+  ignorePendingReviewEmail,
+  readEmailLogDecisions,
+  readExpenseLinkedEmailLogs,
+  readOneEmailLog,
+  readPendingReviewEmailLogs,
+  readSupersededEmailLogs,
+  writeEmailLogRow,
+} from "~/lib/db/email-log";
 import { extractEmailAddress } from "~/lib/validation";
 import {
   type ConnectionDeps,
@@ -217,11 +226,7 @@ async function loadReceiptArrivals(connectionId: string): Promise<{
   receiptArrivals: ReceiptArrival[];
   notificationExpenseIds: Set<string>;
 }> {
-  const expenseRows = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connectionId), l.expenseId.isNotNull()),
-  )
-    .select("expenseId", "fromAddress", "subject", "receivedAt")
-    .all();
+  const expenseRows = await readExpenseLinkedEmailLogs(connectionId);
   const receiptArrivals: ReceiptArrival[] = [];
   const notificationExpenseIds = new Set<string>();
   for (const row of expenseRows) {
@@ -605,22 +610,10 @@ export async function scanConnectionInbox(
   });
 
   // Load existing decisions for the batch in one query.
-  const rows = await db.orm.public.EmailProcessLog.where((l) =>
-    and(
-      l.connectionId.eq(connection.id),
-      l.emailId.in(summaries.map((s) => s.id)),
-    ),
-  )
-    .select(
-      "emailId",
-      "outcome",
-      "reason",
-      "expenseId",
-      "error",
-      "subject",
-      "fromAddress",
-    )
-    .all();
+  const rows = await readEmailLogDecisions(
+    connection.id,
+    summaries.map((s) => s.id),
+  );
   const byId = new Map(rows.map((r) => [r.emailId, r]));
 
   const candidates: ConnectionEmailSummary[] = [];
@@ -769,19 +762,7 @@ export interface ReviewItem {
 export async function listReviewItems(
   connectionId: string,
 ): Promise<ReviewItem[]> {
-  const rows = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
-  )
-    .select(
-      "emailId",
-      "receivedAt",
-      "fromAddress",
-      "fromDisplay",
-      "subject",
-      "error",
-    )
-    .orderBy((l) => l.receivedAt.desc())
-    .all();
+  const rows = await readPendingReviewEmailLogs(connectionId);
   return rows.map((r) => ({
     emailId: r.emailId,
     receivedAt: r.receivedAt === null ? "" : toIso(r.receivedAt),
@@ -809,17 +790,7 @@ export async function listSupersededItems(
   connectionId: string,
   limit = 10,
 ): Promise<SupersededItem[]> {
-  const rows = await db.orm.public.EmailProcessLog.where((l) =>
-    and(
-      l.connectionId.eq(connectionId),
-      l.outcome.eq("review-ignored"),
-      l.reason.eq("superseded"),
-    ),
-  )
-    .select("emailId", "receivedAt", "fromDisplay", "subject", "expenseId")
-    .orderBy((l) => l.receivedAt.desc())
-    .limit(limit)
-    .all();
+  const rows = await readSupersededEmailLogs(connectionId, limit);
   return rows.map((r) => ({
     emailId: r.emailId,
     receivedAt: r.receivedAt === null ? "" : toIso(r.receivedAt),
@@ -856,19 +827,7 @@ export interface UncoveredCharge {
 export async function listUncoveredCharges(
   connection: EmailConnectionWithSecret,
 ): Promise<UncoveredCharge[]> {
-  const rows = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connection.id), l.outcome.eq("pending-review")),
-  )
-    .select(
-      "emailId",
-      "receivedAt",
-      "fromAddress",
-      "fromDisplay",
-      "subject",
-      "error",
-      "chargeAmount",
-    )
-    .all();
+  const rows = await readPendingReviewEmailLogs(connection.id);
   const notificationRows = rows.filter(
     (r) =>
       r.receivedAt !== null &&
@@ -928,10 +887,7 @@ export async function listUncoveredCharges(
 
 /** How many emails are waiting on the review list. */
 async function countPendingReview(connectionId: string): Promise<number> {
-  const { count } = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connectionId), l.outcome.eq("pending-review")),
-  ).aggregate((a) => ({ count: a.count() }));
-  return count;
+  return countPendingReviewEmailLogs(connectionId);
 }
 
 // --- Per-item actions -----------------------------------------------------------
@@ -944,19 +900,7 @@ export async function ignoreReviewItem(
   connectionId: string,
   emailId: string,
 ): Promise<boolean> {
-  const updated = await db.orm.public.EmailProcessLog.where((l) =>
-    and(
-      l.connectionId.eq(connectionId),
-      l.emailId.eq(emailId),
-      l.outcome.eq("pending-review"),
-    ),
-  ).updateAll({
-    outcome: "review-ignored",
-    reason: "user ignored",
-    expenseId: null,
-    error: null,
-  });
-  return updated.length > 0;
+  return ignorePendingReviewEmail(connectionId, emailId);
 }
 
 export type ReviewProcessResult =
@@ -982,11 +926,7 @@ export async function processReviewItem(input: {
   extractionDeps?: ConnectionDeps;
 }): Promise<ReviewProcessResult> {
   const { connection, emailId, acceptSender } = input;
-  const row = await db.orm.public.EmailProcessLog.where((l) =>
-    and(l.connectionId.eq(connection.id), l.emailId.eq(emailId)),
-  )
-    .select("receivedAt", "fromAddress", "fromDisplay", "subject")
-    .first();
+  const row = await readOneEmailLog(connection.id, emailId);
   if (!row) {
     return { ok: false, error: "This email is not on the review list." };
   }
