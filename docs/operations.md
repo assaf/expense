@@ -393,3 +393,33 @@ The commit message is machine-written, so amend or reword it before pushing —
 bump commit is a production change like any other: review the diff before it
 lands. Nothing else in the repo auto-commits; `pnpm test` and
 `./scripts/deploy` do not.
+
+## Debugging a production failure
+
+Sentry's **server-side data scrubber** replaces an `extra` value with
+`[Filtered]` when it decides the value looks credential-shaped. The replaced
+field is not necessarily a secret: EXPENSE-1B lost its `error.message`, its
+`error.stack` and its `errorSummary` to it, while EXPENSE-1C carried an
+identical mechanism through intact on the same day. Treat a scrubbed payload
+as "unreadable", not as "proved sensitive", and do not theorise about the cause
+from the shape alone.
+
+So when a Sentry issue has no readable payload:
+
+1. **Find a control before theorising.** Look for another issue from the same
+   code path, same release. If that one is readable, the trigger is in the
+   payload; if it is scrubbed too, suspect the path, not the value. In
+   EXPENSE-1B the control is what disproved the "it contains a secret" theory.
+2. **Read the Vercel runtime log while it is still there.** `captureWarning`
+   writes the full, unmasked error to stdout, and
+   `vercel logs <deployment-url> | grep "<log prefix>"` returns it for roughly
+   the **last hour** — long enough to recover an event, not long enough to
+   come back to it tomorrow. An older deployment answers "No logs found"; that
+   is retention, not a broken command.
+3. **Replay the shape locally** rather than guessing at it. Reconstructing the
+   message from the runtime log and running it through `errorSummary` proves
+   whether our own masking missed something, which is a different question
+   from why Sentry filtered it.
+
+Since 2026-10-05 `captureWarning` puts the summary in the Sentry _message_ as
+well as in `extra`, precisely because the message is the field that survives.

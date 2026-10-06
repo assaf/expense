@@ -157,6 +157,15 @@ with a bracketed context tag (`[auth]`, `[mcp]`, `[inbound]`, `[email]`,
 `captureWarning` / `captureErrorOnce` in `app/lib/errors.server.ts` (console
 plus Sentry).
 
+Two rules that are not guessable from the code: a recoverable failure's
+`errorSummary` rides in the Sentry **message** as well as in `extra`, because
+Sentry's server-side scrubber is free to replace `extra` values with
+`[Filtered]` (EXPENSE-1B lost its message, stack and summary that way) — so
+the diagnosis has to live in the field that survives; and anything that quotes
+a provider response body into a message redacts it first, through
+`redactCredentials` in `app/lib/error-text.ts`, because a Fastmail session
+hands its credential to the endpoint in the URL.
+
 **Validation.** Hand-rolled helpers are the default for forms and domain rules
 (`app/lib/validation.ts`, `app/lib/completeness.ts`). Zod is for tool contracts
 and untrusted-wire boundaries only: MCP tool `inputSchema`, the isomorphic
