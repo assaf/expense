@@ -2,7 +2,7 @@ import { ulid } from "ulid";
 import { MILEAGE_RATES } from "~/data/mileage-rates";
 import { GENERAL_EMAIL_RULES } from "~/data/email-rules";
 import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
-import { APP_EMAIL, APP_PASSWORD } from "~/lib/env";
+import { APP_EMAIL } from "~/lib/env";
 import { generateInviteCode, hashPassword } from "~/lib/passwords";
 import { all } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
@@ -15,7 +15,7 @@ import type { MileageType, User } from "~/lib/types";
 
 /**
  * One-time (per-process) data seeding: bootstrap the first account/user from
- * APP_EMAIL/APP_PASSWORD, backfill the bootstrap user's email from APP_EMAIL
+ * APP_EMAIL, backfill the bootstrap user's email from APP_EMAIL
  * (legacy pre-email accounts logged in with a plain username), adopt
  * single-user era rows (accountId "") into that account, move legacy
  * duplicate-pair dismissals out of the settings blob, and sync the global
@@ -208,9 +208,9 @@ async function ensureBootstrapUser(): Promise<User> {
   return userFromRow(first);
 }
 
-/** Create the very first account + user from APP_EMAIL/APP_PASSWORD. */
+/** Create the very first account + user from APP_EMAIL. */
 async function bootstrapUser(): Promise<User> {
-  if (!APP_EMAIL || !APP_PASSWORD) {
+  if (!APP_EMAIL) {
     throw new Error(
       "No users exist and APP_EMAIL/APP_PASSWORD are not configured — " +
         "set them to create the first account and user.",
@@ -239,9 +239,9 @@ async function bootstrapUser(): Promise<User> {
       id: userId,
       accountId,
       email,
-      passwordHash: await hashPassword(APP_PASSWORD),
+      passwordHash: await hashPassword("secret"),
       // The operator's bootstrap account needs no email verification
-      // (it is created from APP_EMAIL/APP_PASSWORD, not a signup form).
+      // (it is created from APP_EMAIL, not a signup form).
       emailVerifiedAt: fromIso(now),
       createdAt: fromIso(now),
     });

@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-router";
-import { SMOKE_TEST_SECRET } from "~/lib/env";
+import { CRON_SECRET } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
 import { runMcpSmoke } from "~/lib/mcp.server";
 import { safeEqual } from "~/lib/passwords";
@@ -28,7 +28,7 @@ import type { Route } from "./+types/api.smoke";
  * `scripts/deploy` curls this after every production deployment and fails
  * the deploy if it doesn't pass.
  *
- * Disabled unless SMOKE_TEST_SECRET is configured; requests must send it in
+ * Disabled unless CRON_SECRET is configured; requests must send it in
  * the `x-smoke-secret` header so the route isn't a public CPU/bandwidth
  * sink (PDF rendering + OCR are expensive).
  */
@@ -41,8 +41,8 @@ const SMOKE_TEXT = "SMOKE RECEIPT TOTAL $12.34";
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 function hasSmokeSecret(header: string | null): boolean {
-  if (!SMOKE_TEST_SECRET || !header) return false;
-  return safeEqual(header, SMOKE_TEST_SECRET);
+  if (!CRON_SECRET || !header) return false;
+  return safeEqual(header, CRON_SECRET);
 }
 
 /** A one-page LETTER PDF with the smoke text at 40pt (readable by OCR). */

@@ -5,7 +5,7 @@ node_modules, where every file exists; Vercel's dependency tracer is what
 drops pdf.worker.mjs / tesseract wasm and breaks PDF/OCR in production.
 Real coverage: `test/pdf-ocr.test.ts` (text extraction + rasterization in
 `pnpm test`; tesseract round-trip opt-in via `RUN_OCR_TESTS=1`, on in CI)
-and the smoke check (`/api/smoke`, gated by `SMOKE_TEST_SECRET`), which
+and the smoke check (`/api/smoke`, gated by `CRON_SECRET`), which
 runs in the deployed serverless bundle; `scripts/deploy` curls it after
 CLI deploys, and `.github/workflows/deployment-checks.yml` runs it on every
 push to `main`. The workflow: `secretlint` runs first and gates the whole
@@ -31,7 +31,7 @@ alias. To inspect/re-add checks: `vercel project checks` /
 `/v2/projects/…/checks`); the Vercel dashboard path is Settings → Build &
 Deployment → Deployment Checks. Requires `VERCEL_TOKEN`,
 `VERCEL_PROJECT_ID`, `VERCEL_ORG_ID` (team id, `team_…`), and
-`SMOKE_TEST_SECRET` GitHub secrets. The job name is the check name; keep
+`CRON_SECRET` GitHub secrets. The job name is the check name; keep
 it stable.
 
 ## `./scripts/deploy` notes

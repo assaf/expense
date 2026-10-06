@@ -5,7 +5,7 @@
 # so the two can never drift apart.
 #
 # Usage: ./scripts/smoke-check <deployment-url-or-host>
-# Reads SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS from the environment
+# Reads CRON_SECRET and VERCEL_PROTECTION_BYPASS from the environment
 # (the bypass header is needed because deployment URLs are behind Vercel SSO
 # protection). Exits 1 when the pipeline is broken.
 set -eo pipefail
@@ -22,7 +22,7 @@ esac
 
 RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
   -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
-  -H "x-smoke-secret: ${SMOKE_TEST_SECRET}" "${URL}/api/smoke") || {
+  -H "x-smoke-secret: ${CRON_SECRET}" "${URL}/api/smoke") || {
   echo "Smoke check failed (network/HTTP). Check ${URL}/api/smoke manually." >&2
   exit 1
 }

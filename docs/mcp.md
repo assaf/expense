@@ -205,7 +205,7 @@ auto-matched. It never writes, dismisses, or deletes anything.
   client, redirect URI, and PKCE challenge. Refresh tokens rotate; the old
   token dies on every grant.
 - The post-deploy smoke check (`GET /api/smoke`, gated by
-  `SMOKE_TEST_SECRET`) runs real MCP round trips in **both protocol eras**
+  `CRON_SECRET`) runs real MCP round trips in **both protocol eras**
   inside the deployed serverless bundle (`runMcpSmoke` in
   `app/lib/mcp.server.ts`) using an OAuth access token issued straight to
   the store for a throwaway client that is deleted right after. It catches

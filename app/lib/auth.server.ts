@@ -40,7 +40,6 @@ import {
   verificationRecentlySent,
 } from "~/lib/db/accounts";
 import { ensureInboundSenderForUser } from "~/lib/db/inbound";
-import { initStore } from "~/lib/db/seed";
 import {
   authLockedUntil,
   clearAuthFailures,
@@ -55,9 +54,6 @@ import type { User } from "./types";
  * (SESSION_SECRET). Every protected route resolves the user (and therefore
  * the account) before touching any data, so users only ever see their own
  * account's expenses/settings.
- *
- * The very first user/account is bootstrapped from APP_EMAIL /
- * APP_PASSWORD when the database is empty (see app/lib/db/accounts.ts).
  */
 
 if (!SESSION_SECRET) {
@@ -145,7 +141,6 @@ export async function resolveSessionUser(
   context: Readonly<RouterContextProvider>,
   request: Request,
 ): Promise<User | undefined> {
-  await initStore();
   const user = await sessionUser(request);
   context.set(userContext, user ?? null);
   return user;
@@ -358,7 +353,6 @@ export async function login(
   password: string,
   origin?: string,
 ): Promise<string> {
-  await initStore();
   const normalizedEmail = email.trim().toLowerCase();
   const lockKey = `login:${normalizedEmail}`;
   if (password.length > MAX_PASSWORD_LENGTH) {
@@ -440,7 +434,6 @@ export async function createAccountWithUser(
   },
   origin?: string,
 ): Promise<{ email: string }> {
-  await initStore();
   validateSignup(input.email, input.password);
   await claimEmailAddress(input.email);
   const account = await createAccount(input.accountName);
@@ -468,7 +461,6 @@ export async function joinAccountWithInviteCode(
   },
   origin?: string,
 ): Promise<{ email: string }> {
-  await initStore();
   validateSignup(input.email, input.password);
   const code = normalizeInviteCode(input.inviteCode);
   // Brute-force guard on the invite code itself: five wrong guesses inside
@@ -564,7 +556,6 @@ export async function resendAccountVerification(
   email: string,
   origin?: string,
 ): Promise<{ email: string }> {
-  await initStore();
   const normalizedEmail = email.trim().toLowerCase();
   const user = await findUserByEmail(normalizedEmail);
   if (!user || user.emailVerifiedAt) return { email: normalizedEmail };
@@ -592,7 +583,6 @@ export async function requestPasswordReset(
   email: string,
   origin?: string,
 ): Promise<void> {
-  await initStore();
   const user = await findUserByEmail(email.trim().toLowerCase());
   if (!user?.emailVerifiedAt) return;
   if (await passwordResetRecentlySent(user.id)) return;
@@ -629,7 +619,6 @@ export async function resetPasswordWithToken(
   rawToken: string,
   password: string,
 ): Promise<{ email: string }> {
-  await initStore();
   // Same password contract as signup: check BEFORE the token is consumed,
   // so a bad password doesn't burn a live link.
   validatePassword(password);

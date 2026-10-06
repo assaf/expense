@@ -42,10 +42,9 @@ shape the code:
   authenticate themselves and nothing caught one that forgot. A self-gating
   route must be listed in `SELF_GATED_PATHS`/`SELF_GATED_PREFIXES` or the gate
   bounces it to `/login` (fatal for `/oauth/token`, which carries no cookie).
-  Where the credential is not a session they still self-gate:
-  `assertCronSecret` (cron and dev routes), `SMOKE_TEST_SECRET`
-  (`api.smoke.ts`), OAuth bearer inside `handleMcpRequest` (`/mcp`), and PKCE
-  in `oauth.token.ts`.
+  Where the credential is not a session they still self-gate: `assertCronSecret`
+  (cron and dev routes), OAuth bearer inside `handleMcpRequest` (`/mcp`), and
+  PKCE in `oauth.token.ts`.
 - **All persistence goes through `app/lib/db/<domain>.ts`**, never from a route,
   over the Prisma 8 client exported as `db` from `app/lib/prisma.server.ts`.
   Three lanes: `db.orm.public.<Model>` (typed ORM), `db.sql.public.<table>`
@@ -367,10 +366,9 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   Supabase transaction pooler (port 6543, `max: 2` per instance); DDL and the
   test reset use the unpooled/session URL.
 - **Env contract**: `DATABASE_URL` is required at boot or the app crashes;
-  `SESSION_SECRET` always; `APP_EMAIL`/`APP_PASSWORD` only until the first user
-  exists. Names, by purpose: DB (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`,
-  `LOCAL_DB_URL`); auth (`APP_EMAIL`, `APP_PASSWORD`, `SESSION_SECRET`,
-  `CRON_SECRET`, `PUBLIC_URL`, `SMOKE_TEST_SECRET`); email (`FASTMAIL_TOKEN`,
+  `SESSION_SECRET`. Names, by purpose: DB (`DATABASE_URL`,
+  `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`); auth (`APP_EMAIL`, `APP_PASSWORD`,
+  `SESSION_SECRET`, `CRON_SECRET`, `PUBLIC_URL`); email (`FASTMAIL_TOKEN`,
   `FASTMAIL_OAUTH_CLIENT_ID`, `INBOUND_EMAIL_ADDRESS`, `RECEIPTS_FOLDER`,
   `PUSH_PRIVATE_KEY`, `PUSH_AUTH`, `EMAIL_TOKEN_ENCRYPTION_KEY`); Google
   (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
@@ -378,8 +376,8 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   `GOOGLE_PUSH_SERVICE_ACCOUNT`); LLM/OCR (`LLM_BASE_URL`, `LLM_API_KEY` (alias
   `DEEPSEEK_API_KEY`), `LLM_MODEL`, `LLM_VISION_MODEL`, `RECEIPT_OCR_MODE`);
   observability (`SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`,
-  `UMAMI_WEBSITE_ID` — both are needed or the script does not load). `.env*`
-  is gitignored; read [`docs/operations.md`](docs/operations.md) before touching
+  `UMAMI_WEBSITE_ID` — both are needed or the script does not load). `.env*` is
+  gitignored; read [`docs/operations.md`](docs/operations.md) before touching
   any of them.
 
 ## Testing & QA

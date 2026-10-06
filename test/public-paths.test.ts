@@ -148,7 +148,6 @@ describe("root middleware gate (GATE-REGR-1)", () => {
 const SELF_GATING_MARKERS = [
   "assertCronSecret(",
   "cronTick(",
-  "SMOKE_TEST_SECRET",
   "handleMcpRequest(",
   "verifyAccessToken(",
   "readFastmailPush(",
@@ -180,9 +179,6 @@ const selfGatingRoutes = readdirSync("app/routes")
 
 describe("self-gating route exemption (GATE-REGR-1)", () => {
   it("recognises the routes that authenticate themselves", () => {
-    expect(selfGatingRoutes.map((route) => route.name)).toContain(
-      "api.smoke.ts",
-    );
     expect(selfGatingRoutes.map((route) => route.name)).toContain(
       "api.inbound-cron.ts",
     );

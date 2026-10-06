@@ -114,13 +114,13 @@ indexes, update-where + create-if-missing (see `extraction-cache.ts`).
 ## Secrets
 
 Env load order: `process.env` (Vercel/inline) → local `.env` (via
-`process.loadEnvFile` in `app/lib/env.ts`). `DATABASE_URL` is required: no file fallback. Dev/test use
-`.env` (`DATABASE_URL`, and auth: `APP_EMAIL`, `APP_PASSWORD`,
-`SESSION_SECRET`); prod uses the Vercel dashboard (`DATABASE_URL`, plus the same
-three auth vars). Pull prod env with `vercel env pull
---environment=production .env.prod` (use `DATABASE_URL_UNPOOLED` for psql/prisma
-DDL; both point at the Supabase session pooler, see “Database connections” below). Tests hardcode local services (`expense_test`, image blobs
-in Postgres), not `.env`.
+`process.loadEnvFile` in `app/lib/env.ts`). `DATABASE_URL` is required: no file
+fallback. Dev/test use `.env` (`DATABASE_URL`, `SESSION_SECRET`); prod uses the
+Vercel dashboard (`DATABASE_URL`, plus the same three auth vars). Pull prod env
+with `vercel env pull --environment=production .env.prod` (use
+`DATABASE_URL_UNPOOLED` for psql/prisma DDL; both point at the Supabase session
+pooler, see “Database connections” below). Tests hardcode local services
+(`expense_test`, image blobs in Postgres), not `.env`.
 
 Connected email accounts (auto-import, see `docs/email-connections.md`) add
 `EMAIL_TOKEN_ENCRYPTION_KEY`: a 32-byte base64 key encrypting users' Fastmail API
@@ -231,7 +231,7 @@ URL. Set it to the push subscription's service account (e.g.
 Testing-mode caveats: `docs/email-connections.md` → Gmail / Google
 Workspace.
 
-`SMOKE_TEST_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
+`CRON_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
 is disabled (404) and `scripts/deploy` skips the check with a warning. It must
 also be set as a **GitHub Actions secret** (same value) for

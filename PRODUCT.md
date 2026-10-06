@@ -425,11 +425,6 @@ pnpm db:push                 # create the schema from the contract
 pnpm dev
 ```
 
-On first boot the app seeds what every account needs: the 22 Schedule C
-categories, the IRS mileage-rate table, and the general email rules. Your first
-account comes from `APP_EMAIL`/`APP_PASSWORD` if they are set, otherwise you
-sign up.
-
 The tests want a Postgres with a passwordless `assaf` role and their own
 database — they drop and recreate `expense_test` on every run and never touch
 your dev data:
@@ -448,11 +443,10 @@ defaults and what breaks without them. What is actually required:
 | Purpose                 | Variables                                                                                                                                                                                                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Boot**                | `DATABASE_URL` (the app fails fast without it), `SESSION_SECRET` (signs the session cookie)                                                                                                                                                                         |
-| **First account only**  | `APP_EMAIL`, `APP_PASSWORD` — after the first user exists, remove them                                                                                                                                                                                              |
 | **Extraction and chat** | `LLM_BASE_URL`, `LLM_API_KEY` (or `DEEPSEEK_API_KEY`), `LLM_MODEL`, `LLM_VISION_MODEL`, `LLM_CHAT_MODEL`, `LLM_MAX_TOKENS`, `LLM_VISION_MAX_TOKENS`, `LLM_REQUEST_TIMEOUT_MS`, `RECEIPT_VISION_MAX_WIDTH`, `RECEIPT_OCR_MODE` (`auto`, `deepseek`, `tesseract`)     |
 | **Receipts by email**   | `INBOUND_EMAIL_ADDRESS`, `RECEIPTS_FOLDER`, `FASTMAIL_TOKEN`, `FASTMAIL_OAUTH_CLIENT_ID`, `PUSH_PRIVATE_KEY`, `PUSH_AUTH`, `DEVICE_CLIENT_ID`, `CRON_SECRET` — `pnpm setup:push` generates the push pair                                                            |
 | **Connected mailboxes** | `EMAIL_TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`; without it, connecting a mailbox is disabled), plus the Google set: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUSH_SERVICE_ACCOUNT` |
-| **Operations**          | `PUBLIC_URL`, `SMOKE_TEST_SECRET`, `SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`, `UMAMI_WEBSITE_ID`, and for scripts `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`                                                                                                 |
+| **Operations**          | `PUBLIC_URL`, `SENTRY_DSN`, `VITE_SENTRY_DSN`, `UMAMI_SCRIPT_URL`, `UMAMI_WEBSITE_ID`, and for scripts `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`                                                                                                                      |
 
 Optional does not mean ignored: an unset variable disables the feature that
 needs it rather than falling back, so the app runs with two of them and the

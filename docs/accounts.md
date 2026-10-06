@@ -92,14 +92,6 @@ reads and writes are scoped; see `app/lib/db/`).
   `marketingEmailHeaders` from `email-layout.server.ts`. Transactional
   email (verification, password reset, receipts-by-email notices) ignores
   the flag.
-- **Bootstrap**: on an empty database, the first account + user are
-  created from `APP_EMAIL`/`APP_PASSWORD` (fail-closed if missing). On
-  existing pre-email databases, `initStore` backfills the bootstrap
-  (oldest) user's login from `APP_EMAIL` when their stored email is not
-  a valid address (legacy username-era rows).
-  Single-user era rows are adopted into that account automatically. This
-  is app-side data seeding (`initStore` in `app/lib/db/seed.ts`, memoized per
-  process); the SCHEMA itself is managed by Prisma (no runtime DDL).
 - The root route's `middleware` gate resolves the session once and publishes
   the user on `context`; every loader/action reads it with
   `requireContextUser(context, request)` and passes `user.accountId` to the

@@ -136,10 +136,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # initStore bootstraps an account from these on an empty database
-      # (tests force-reset the schema, so they must be present).
       APP_EMAIL: testuser@example.com
-      APP_PASSWORD: test-password
       SESSION_SECRET: ci-only-session-secret-0123456789abcdef
       # Runs the real tesseract OCR round-trip in test/pdf-ocr.test.ts
       # (downloads eng.traineddata from a CDN; skipped locally by default).
@@ -417,10 +414,8 @@ jobs:
 
   # Post-deploy PDF/OCR/MCP smoke + auto-rollback for the deploy job above.
   # Runs the same smoke scripts/deploy uses against the deployment that job
-  # just made, and rolls it back if it fails. Skips (with a missing-secret
-  # message in the logs) until the SMOKE_TEST_SECRET and
-  # VERCEL_PROTECTION_BYPASS GitHub secrets exist; CLI deploys still gate via
-  # scripts/deploy.
+  # just made, and rolls it back if it fails.
+
   pdf-ocr-smoke:
     name: Smoke prod + rollback
     runs-on: ubuntu-24.04
@@ -432,7 +427,6 @@ jobs:
     if: success() && github.ref == 'refs/heads/main'
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      SMOKE_TEST_SECRET: ${{ secrets.SMOKE_TEST_SECRET }}
       VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
       # The rollback below is a CLI call, so it needs the same project
       # identity and the same "no --scope" rule as the deploy job: `--scope`
@@ -453,12 +447,6 @@ jobs:
       # scripts/deploy).
       - name: Smoke production deployment + rollback on failure
         run: |
-          if [ -z "$SMOKE_TEST_SECRET" ] || [ -z "$VERCEL_PROTECTION_BYPASS" ] || [ -z "$VERCEL_TOKEN" ]; then
-            echo "Smoke secrets not configured as GitHub secrets — skipping the smoke gate."
-            echo "Add SMOKE_TEST_SECRET and VERCEL_PROTECTION_BYPASS to enable it."
-            echo "::warning title=Smoke gate DISABLED::This deployment was NOT smoked and will NOT be rolled back automatically. Add SMOKE_TEST_SECRET, VERCEL_PROTECTION_BYPASS and VERCEL_TOKEN to the repository secrets to arm it."
-            exit 0
-          fi
           URL="${{ needs.deploy.outputs.url }}"
           if [ -z "$URL" ]; then
             echo "The deploy job reported no URL — nothing to smoke." >&2

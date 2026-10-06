@@ -45,9 +45,6 @@ export const DATABASE_URL = env.DATABASE_URL ?? "";
  */
 export const APP_EMAIL = env.APP_EMAIL ?? "";
 
-/** Bootstrap password (see APP_EMAIL). */
-export const APP_PASSWORD = env.APP_PASSWORD ?? "";
-
 /** Secret used to sign the session cookie. Required; the app fails fast without it. */
 export const SESSION_SECRET = env.SESSION_SECRET ?? "";
 
@@ -220,13 +217,6 @@ export const RECEIPT_VISION_MAX_WIDTH = clampInt(
   1536,
   768,
 );
-
-/**
- * Secret gating GET /api/smoke (post-deploy PDF+OCR health check). Requests
- * must send it in the `x-smoke-secret` header; when unset the route is
- * disabled (404). `scripts/deploy` uses it after every production deploy.
- */
-export const SMOKE_TEST_SECRET = env.SMOKE_TEST_SECRET ?? "";
 
 /**
  * Public base URL the OAuth metadata advertises (issuer + endpoints) instead
