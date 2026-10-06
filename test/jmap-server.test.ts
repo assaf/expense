@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   FASTMAIL_SESSION_URL,
+  isJmapAuthError,
   jmapBatch,
+  JmapAuthError,
   resolveJmapSessionUrl,
   verifyJmapServer,
   type SessionFetch,
@@ -388,6 +390,84 @@ describe("jmapBatch response bounds", () => {
         ["Email/get", {}, "m0"],
       ]);
       expect(seen).toEqual([api, "https://example.com/jmap/api/v2"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("a rejected credential is classified, not just reported", () => {
+  const api = "https://example.com/jmap/api";
+  const batch = [["Email/get", {}, "m0"]];
+
+  const stub = (body: string, status: number) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(body, {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+  };
+
+  it("raises JmapAuthError on a 401 from the API endpoint", async () => {
+    // Fastmail revoking a session answers 401 here, with the grant itself
+    // untouched. Classified, so the notice path mails the account; it was a
+    // plain Error, so EXPENSE-1B flagged the connection and mailed nobody
+    // for ten days.
+    stub('{"detail":"No session found"}', 401);
+    try {
+      await expect(jmapBatch(api, "Bearer tok-1", batch)).rejects.toSatisfy(
+        isJmapAuthError,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("recognizes it through a wrapper that kept it as cause", async () => {
+    // The drain labels each step by re-throwing with the original as `cause`.
+    // A bare `instanceof` here is what hid the class before.
+    const inner = new JmapAuthError("JMAP API failed: 401");
+    const wrapped = new Error("drain:reading") as Error & { cause?: unknown };
+    wrapped.cause = inner;
+    expect(isJmapAuthError(inner)).toBe(true);
+    expect(isJmapAuthError(wrapped)).toBe(true);
+    expect(isJmapAuthError(new Error("JMAP API failed: 500"))).toBe(false);
+  });
+
+  it("leaves a transient failure unclassified", async () => {
+    stub('{"error":"try later"}', 503);
+    try {
+      const error = await jmapBatch(api, "Bearer tok-1", batch).catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(isJmapAuthError(error)).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps a credential the provider echoed out of the message", async () => {
+    // A session document carries its credential in the URL, so a provider
+    // that quotes the token it looked back up would otherwise print it to
+    // stdout and into the log aggregator.
+    stub(
+      '{"detail":"No session found via https://api.fastmail.com/jmap/api/?access_token=t-abc123XYZ"}',
+      401,
+    );
+    try {
+      const error = await jmapBatch(api, "Bearer tok-1", batch).catch(
+        (e: unknown) => e,
+      );
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain("401");
+      expect(message).toContain("[redacted]");
+      expect(message).not.toContain("t-abc123XYZ");
     } finally {
       vi.unstubAllGlobals();
     }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { ulid } from "ulid";
 import { createAccount } from "~/lib/db/accounts";
 import {
@@ -7,7 +7,11 @@ import {
   updateEmailConnectionTokens,
   type EmailConnectionWithSecret,
 } from "~/lib/db/email-connections";
-import { resolveConnectionAccessToken } from "~/lib/oauth-token-refresh.server";
+import {
+  isOAuthRefreshError,
+  requestTokenSet,
+  resolveConnectionAccessToken,
+} from "~/lib/oauth-token-refresh.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 
 /**
@@ -118,5 +122,53 @@ describe("resolveConnectionAccessToken", () => {
       "access-2",
     ]);
     expect(exchanges).toBe(1);
+  });
+});
+
+describe("requestTokenSet", () => {
+  const url = "https://auth.example.com/token";
+
+  const stub = (body: string, status: number) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status })),
+    );
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps a credential the provider echoed out of the error message", async () => {
+    // The endpoint error is quoted into a message that reaches stdout, Sentry
+    // and a reconnect email. A provider that answers with the token it was
+    // sent would otherwise print that token three times over.
+    stub(
+      '{"error":"invalid_grant","echo":"refresh_token=rMrT-abc123XYZ"}',
+      400,
+    );
+    const error = await requestTokenSet(url, {}, "Fastmail").catch(
+      (e: unknown) => e,
+    );
+    const message = error instanceof Error ? error.message : String(error);
+    expect(message).toContain("Fastmail token endpoint returned HTTP 400");
+    expect(message).toContain("[redacted]");
+    expect(message).not.toContain("rMrT-abc123XYZ");
+  });
+
+  it("still classifies a rejected grant so the notice path can mail it", async () => {
+    stub('{"error":"invalid_grant"}', 400);
+    const error = await requestTokenSet(url, {}, "Fastmail").catch(
+      (e: unknown) => e,
+    );
+    expect(isOAuthRefreshError(error)).toBe(true);
+  });
+
+  it("does not classify a transient failure", async () => {
+    stub("upstream unavailable", 503);
+    const error = await requestTokenSet(url, {}, "Fastmail").catch(
+      (e: unknown) => e,
+    );
+    expect(isOAuthRefreshError(error)).toBe(false);
   });
 });

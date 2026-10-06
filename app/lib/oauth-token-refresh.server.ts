@@ -3,6 +3,7 @@ import {
   readEmailConnectionById,
   updateEmailConnectionTokens,
 } from "~/lib/db/email-connections";
+import { causesInclude, redactCredentials } from "~/lib/error-text";
 
 /**
  * The token plumbing the Fastmail and Google OAuth modules share: the POST
@@ -24,16 +25,13 @@ export class OAuthRefreshError extends Error {}
 
 /** Whether `error` is an OAuthRefreshError, directly or anywhere along a
  * wrapper's `cause` chain. Anything that re-labels a failure hides the
- * class: the drain wraps each step to name it (so the stage survives Sentry's
- * scrubber) and keeps the original as `cause`, which would otherwise leave a
- * revoked grant flagged but never mailed to the user. */
+ * class from a bare `instanceof`: the drain wraps each step to name it (so
+ * the stage survives Sentry's scrubber) and keeps the original as `cause`,
+ * which would otherwise leave a revoked grant flagged but never mailed to
+ * the user. The walk lives in `error-text` because the JMAP recognizer
+ * needs exactly the same one. */
 export function isOAuthRefreshError(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth < 8 && current instanceof Error; depth++) {
-    if (current instanceof OAuthRefreshError) return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
+  return causesInclude(error, OAuthRefreshError);
 }
 
 /** Token endpoints answer quickly; a hung one must not pin a request. */
@@ -74,7 +72,7 @@ export async function requestTokenSet(
   });
   const text = await res.text();
   if (!res.ok) {
-    const message = `${providerLabel} token endpoint returned HTTP ${res.status}: ${text.slice(0, 200)}`;
+    const message = `${providerLabel} token endpoint returned HTTP ${res.status}: ${redactCredentials(text.slice(0, 200))}`;
     // A rejected grant is the one failure the user can act on; the rest are
     // transient or app-side and must not flag a connection or email anyone.
     if (res.status === 400 && /invalid_grant/.test(text)) {

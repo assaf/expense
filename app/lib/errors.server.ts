@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/react-router";
 
+import { redactCredentials, stableForGrouping } from "~/lib/error-text";
+
 /**
  * Log an error to the console and capture it in Sentry. Sentry is a no-op
  * until the server initializes it (app/entry.server.tsx, the bundled
@@ -28,40 +30,34 @@ export function captureError(
  * same contract as captureError). For recoverable failures the app absorbs
  * and keeps running, such as an outbound reply email that could not be sent
  * (the pipeline treats replies as fire-and-forget).
+ *
+ * The summary goes in the MESSAGE as well as in `extra`, because `extra` is
+ * the part Sentry's server-side scrubber is free to replace with
+ * [Filtered]: EXPENSE-1B lost its message, stack and errorSummary that way
+ * while a sibling issue's identical mechanism came through intact. The
+ * message survives, so the diagnostic has to live there. Volatile ids are
+ * collapsed first, so one failure mode stays one Sentry issue rather than
+ * one per request.
  */
 export function captureWarning(
   message: string,
   extra?: Record<string, unknown>,
 ): void {
   console.warn(message, extra);
-  if (Sentry.isInitialized()) {
-    const detail =
-      extra?.error === undefined
-        ? extra
-        : { ...extra, errorSummary: errorSummary(extra.error) };
-    Sentry.captureMessage(message, { level: "warning", extra: detail });
-  }
+  if (!Sentry.isInitialized()) return;
+  const summary =
+    extra?.error === undefined ? undefined : errorSummary(extra.error);
+  Sentry.captureMessage(
+    summary === undefined
+      ? message
+      : `${message} ${stableForGrouping(summary)}`,
+    {
+      level: "warning",
+      extra:
+        summary === undefined ? extra : { ...extra, errorSummary: summary },
+    },
+  );
 }
-
-/** Credential-shaped runs: an auth scheme with its value, a secret assigned
- * in text, and a JWT. Provider errors quote response bodies, and a body that
- * carries an Authorization header is what makes Sentry's data scrubber drop
- * the whole value — taking the stack with it. */
-const AUTH_SCHEME_RUN = /\b(?:bearer|basic)\s+\S+/gi;
-// Three things this has to get right, each of them a bug the adversarial
-// pass found in the first version:
-//  - the prefix run (`refresh_token=`, `x-api-key=`) is what `\b` cannot do,
-//    since it never fires after `_`. It is BOUNDED at 6 segments: unbounded,
-//    the run backtracks quadratically on ordinary `a_a_a_…` text (30s+ at
-//    64k characters);
-//  - the lookbehind keeps the match zero-width, so replacing it does not eat
-//    the space or comma in front of the secret;
-//  - `["']?` and the quoted-value alternative cover a JSON body
-//    (`{"client_secret":"…"}`), which is the shape a provider error quotes.
-//    The trailing `key|value|hash|id` covers `secret_key=` / `token_value=`.
-const ASSIGNED_SECRET =
-  /(?<![a-z0-9])(?:[a-z0-9]+[_-]){0,6}(?:token|secret|password|api[-_]?key)(?:_?(?:key|value|hash|id))?["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi;
-const JWT_RUN = /\b[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 
 /** One bounded line describing an unknown thrown value, with anything
  * credential-shaped masked. Safe to put in front of a reader (Sentry, a
@@ -71,11 +67,7 @@ export function errorSummary(error: unknown, limit = 200): string {
   if (!(error instanceof Error)) return typeof error;
   const first = (error.message.split("\n")[0] ?? "").trim();
   if (first.length === 0) return error.name;
-  const masked = first
-    .replace(AUTH_SCHEME_RUN, "[redacted]")
-    .replace(ASSIGNED_SECRET, "[redacted]")
-    .replace(JWT_RUN, "[redacted]")
-    .replace(/\s+/g, " ");
+  const masked = redactCredentials(first).replace(/\s+/g, " ");
   return `${error.name}: ${masked}`.slice(0, limit);
 }
 

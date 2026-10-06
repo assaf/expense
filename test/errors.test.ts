@@ -1,16 +1,31 @@
-import { describe, it, expect, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  it,
+  expect,
+  vi,
+} from "vite-plus/test";
 
 // errors.server imports @sentry/react-router, which drags in
 // @opentelemetry/api, broken under vite-node's ESM resolution. Mock the
 // Sentry module; captureError only reaches Sentry when isInitialized() is
-// true, so the dedupe logic under test is unaffected.
+// true, so the dedupe logic under test is unaffected. `captureWarning` does
+// need it on, so the switch is a flag the tests flip.
+const SENTRY = vi.hoisted(() => ({
+  initialized: false,
+  captureMessage: vi.fn(),
+  captureException: vi.fn(),
+}));
 vi.mock("@sentry/react-router", () => ({
-  isInitialized: () => false,
+  isInitialized: () => SENTRY.initialized,
+  captureMessage: SENTRY.captureMessage,
   captureException: vi.fn(),
 }));
 
 import {
   captureErrorOnce,
+  captureWarning,
   errorSummary,
   isRouterNoise,
 } from "~/lib/errors.server";
@@ -164,5 +179,86 @@ describe("isRouterNoise", () => {
         value: "Cannot read properties of undefined (reading 'accountId')",
       }),
     ).toBe(false);
+  });
+});
+
+describe("captureWarning", () => {
+  beforeEach(() => {
+    SENTRY.initialized = true;
+    SENTRY.captureMessage.mockClear();
+  });
+
+  afterEach(() => {
+    SENTRY.initialized = false;
+  });
+
+  it("puts the diagnosis in the message, where Sentry cannot scrub it", () => {
+    // EXPENSE-1B: the whole `extra` came back [Filtered] — message, stack and
+    // errorSummary alike — so the only field that survived was the bare
+    // prefix. The summary has to ride in the message.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      captureWarning("[email-connections-push] drain failed:", {
+        connectionId: "conn1",
+        error: new Error("JMAP API failed: 401 No session found"),
+      });
+    } finally {
+      warn.mockRestore();
+    }
+
+    const [message] = SENTRY.captureMessage.mock.calls[0]!;
+    expect(message).toContain("[email-connections-push] drain failed:");
+    expect(message).toContain("JMAP API failed: 401 No session found");
+  });
+
+  it("keeps one failure mode on one issue as the trace id changes", () => {
+    // The drain warns on transition only so a dead connection cannot re-open
+    // the issue every push. A per-request `ti_…` left in the message would
+    // open a fresh issue each time instead, which is the same complaint in a
+    // worse shape.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      captureWarning("drain failed:", {
+        error: new Error(
+          'JMAP API failed: 401 {"trace_id":"ti_aaaa111122223333"}',
+        ),
+      });
+      captureWarning("drain failed:", {
+        error: new Error(
+          'JMAP API failed: 401 {"trace_id":"ti_bbbb444455556666"}',
+        ),
+      });
+    } finally {
+      warn.mockRestore();
+    }
+
+    const messages = SENTRY.captureMessage.mock.calls.map(([m]) => m);
+    expect(messages[0]).toBe(messages[1]);
+  });
+
+  it("leaves the message alone when there is no error to summarize", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      captureWarning("push unsupported; relying on the drain", {
+        connectionId: "conn1",
+      });
+    } finally {
+      warn.mockRestore();
+    }
+
+    const [message, options] = SENTRY.captureMessage.mock.calls[0]!;
+    expect(message).toBe("push unsupported; relying on the drain");
+    expect(options.level).toBe("warning");
+  });
+
+  it("does not reach Sentry when it is not initialized", () => {
+    SENTRY.initialized = false;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      captureWarning("drain failed:", { error: new Error("boom") });
+    } finally {
+      warn.mockRestore();
+    }
+    expect(SENTRY.captureMessage).not.toHaveBeenCalled();
   });
 });

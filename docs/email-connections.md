@@ -369,24 +369,37 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   transition only, so a mailbox nobody reconnects does not re-open the same
   issue every day.
 - **Reconnect notice** (`app/lib/email-connection-notice.server.ts`): a
-  connection that fails because the provider refused the stored grant
-  (`OAuthRefreshError` in `app/lib/oauth-token-refresh.server.ts`, raised
-  only for a 400 `invalid_grant`) also emails every verified user of the
-  account, from the app's own mailbox, naming the mailbox and linking to
-  `/connect-fastmail` or `/connect-gmail`. The connection's own token is
-  dead, so the connection-owned senders cannot deliver it.
+  connection that fails because the provider refused the credential also
+  emails every verified user of the account, from the app's own mailbox,
+  naming the mailbox and linking to `/connect-fastmail` or
+  `/connect-gmail`. The connection's own token is dead, so the
+  connection-owned senders cannot deliver it.
+  `isDeadCredential` in that module is the one predicate for "the account has
+  to reconnect", over two provider shapes that are not the same failure:
+  - `OAuthRefreshError` (`app/lib/oauth-token-refresh.server.ts`), raised
+    only for a 400 `invalid_grant`: the token endpoint refused the grant;
+  - `JmapAuthError` (`app/lib/jmap.server.ts`), raised on a 401/403 from the
+    session load, `jmapBatch`, an upload or a download: the provider revoked
+    the _session_ while the grant is still fine, so the refresh succeeds and
+    the next API call 401s.
+
+  Both recognizers walk the `cause` chain, because the drain labels each step
+  by re-throwing with the original as `cause`; a bare `instanceof` hid the
+  class and turned a revoked grant into a badge with no email.
   `EmailConnection.errorNotifiedAt` stamps the episode, so a cron tick and a
   concurrent review scan that both fail send exactly one notice; the next
   successful status write (a renewal, a drain, a push verification) or a
   reconnect clears it, so a later failure tells them again. Transient
-  failures (timeouts, 5xx) and app misconfiguration (401) flag nothing and
-  send nothing. The review scan (`app/lib/email-review.server.ts`) flags the
-  connection on the same condition; before this it wrote no status at all,
-  which is why a scan failure never showed on the Email page. Like the cron
-  and the push drains, the scan reports a refused grant as a warning and only
-  on the transition (the connection was not already flagged), so a mailbox
-  nobody reconnects does not page on every scan: the badge and this notice are
-  the reporting. Anything else stays an error-level capture, unflagged.
+  failures (timeouts, 5xx) flag nothing and send nothing. The review scan
+  (`app/lib/email-review.server.ts`) flags the connection on the same
+  condition, through the same `isDeadCredential`; before this it wrote no
+  status at all, which is why a scan failure never showed on the Email page.
+  Like the cron and the push drains, the scan reports a dead credential as a
+  warning and only on the transition (the connection was not already flagged),
+  so a mailbox nobody reconnects does not page on every scan: the badge and
+  this notice are the reporting. Anything else stays an error-level capture,
+  unflagged.
+
 - **Disconnect** also destroys the server-side subscription (best effort;
   an orphaned one dies at expiry and its pushes 404).
 - **Settings UI** (`app/components/settings/email-accounts.tsx`): step-by-step

@@ -5,6 +5,7 @@ import {
   type SendEmailInput,
 } from "~/lib/email-mime.server";
 import { formatAddress, type RawRfc822Email } from "~/lib/jmap.server";
+import { redactCredentials } from "~/lib/error-text";
 import type {
   ConnectionEmailSummary,
   RawConnectionEmail,
@@ -55,7 +56,7 @@ async function gmailJson<T>(token: string, path: string): Promise<T> {
   const text = await res.text();
   if (!res.ok) {
     throw new Error(
-      `Gmail API ${path} returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+      `Gmail API ${path} returned HTTP ${res.status}: ${redactCredentials(text.slice(0, 200))}`,
     );
   }
   // A proxy or an outage can turn a 200 into an HTML error page; report it as
@@ -64,7 +65,7 @@ async function gmailJson<T>(token: string, path: string): Promise<T> {
     return JSON.parse(text) as T;
   } catch {
     throw new Error(
-      `Gmail API ${path} returned an unreadable response: ${text.slice(0, 120)}`,
+      `Gmail API ${path} returned an unreadable response: ${redactCredentials(text.slice(0, 120))}`,
     );
   }
 }
@@ -331,7 +332,7 @@ export async function gmailMoveToTrash(
   if (!res.ok) {
     const text = await res.text();
     throw new Error(
-      `Gmail API modify ${id} returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+      `Gmail API modify ${id} returned HTTP ${res.status}: ${redactCredentials(text.slice(0, 200))}`,
     );
   }
 }
@@ -391,7 +392,7 @@ export async function gmailSendConnectionEmailToOwner(
     if (!res.ok) {
       const text = await res.text();
       throw new Error(
-        `Gmail messages.import returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+        `Gmail messages.import returned HTTP ${res.status}: ${redactCredentials(text.slice(0, 200))}`,
       );
     }
     console.info("[email-connections] confirmation delivered to Inbox", {
@@ -432,7 +433,7 @@ export async function ensureGmailWatch(
   const text = await res.text();
   if (!res.ok) {
     throw new Error(
-      `Gmail users.watch returned HTTP ${res.status}: ${text.slice(0, 200)}`,
+      `Gmail users.watch returned HTTP ${res.status}: ${redactCredentials(text.slice(0, 200))}`,
     );
   }
   let body: { historyId?: unknown; expiration?: unknown };
@@ -442,7 +443,7 @@ export async function ensureGmailWatch(
     // A proxy or an outage page can answer 200 with HTML; say so instead of
     // surfacing a bare SyntaxError from the renewal cron.
     throw new Error(
-      `Gmail users.watch returned an unreadable body: ${text.slice(0, 200)}`,
+      `Gmail users.watch returned an unreadable body: ${redactCredentials(text.slice(0, 200))}`,
     );
   }
   const expirationMs = Number(body.expiration);

@@ -12,6 +12,7 @@ import { PUBLIC_URL } from "~/lib/env";
 import { captureError } from "~/lib/errors.server";
 import { escapeHtml } from "~/lib/escape";
 import { isOAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import { isJmapAuthError } from "~/lib/jmap.server";
 import { sendEmail } from "~/lib/reply.server";
 
 /**
@@ -31,6 +32,23 @@ import { sendEmail } from "~/lib/reply.server";
  * back to "active" (a renewal, a drain, a push verification, or a reconnect),
  * which clears the marker, so the next failure tells the account again.
  */
+
+/**
+ * Whether a failure is a credential the account has to fix by reconnecting,
+ * as opposed to a hiccup nobody can act on. Two provider shapes reach it, and
+ * they are not the same failure:
+ *  - `OAuthRefreshError`: the token endpoint refused the stored grant;
+ *  - `JmapAuthError`: the provider revoked the session, with the grant
+ *    itself still fine, so the refresh succeeds and the next API call 401s.
+ *
+ * One predicate, because the classification is a decision about the user's
+ * next move rather than about a module: the review scan and every drain route
+ * have to agree, or the one path that decides *whether to notify* silently
+ * drops the shape the other reports.
+ */
+export function isDeadCredential(error: unknown): boolean {
+  return isOAuthRefreshError(error) || isJmapAuthError(error);
+}
 
 /** What the notifier needs from a connection: the public record's identity
  * columns, nothing secret. */
@@ -115,6 +133,10 @@ function noticeText(input: {
  *    misconfiguration the recipient cannot act on,
  *  - the row is re-read, so a tick and a concurrent scan cannot both notify,
  *    and an already-notified episode is left alone,
+  - a `JmapAuthError` counts too: the provider can revoke a session without
+    the grant being touched, which is a JMAP 401 rather than a failed token
+    refresh. Gating on the refresh error alone meant a revoked Fastmail
+    session flagged the connection and mailed nobody (EXPENSE-1B),
  *  - every verified user is a recipient: an account is shared and any of its
  *    users can reconnect (a connection records no creator),
  *  - the marker is written only when at least one send was taken, so a
@@ -141,8 +163,9 @@ async function notifyConnectionFailure({
   // Through wrappers, not just directly: the drain names each step by
   // re-throwing a labelled Error with the original as `cause`, so a bare
   // `instanceof` here silently swallowed every revoked-grant notice once a
-  // step was wrapped.
-  if (!isOAuthRefreshError(error)) return;
+  // step was wrapped. Both recognizers walk that chain, so both dead-
+  // credential shapes are seen however deeply they were wrapped.
+  if (!isDeadCredential(error)) return;
 
   const row = await readEmailConnectionById(connection.id);
   if (!row || row.errorNotifiedAt) return;

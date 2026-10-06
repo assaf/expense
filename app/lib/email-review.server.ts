@@ -43,8 +43,10 @@ import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
 import { captureError, captureWarning } from "~/lib/errors.server";
-import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
-import { isOAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import {
+  isDeadCredential,
+  reportConnectionFailure,
+} from "~/lib/email-connection-notice.server";
 import {
   type EmailConnectionWithSecret,
   setEmailConnectionStatus,
@@ -1020,11 +1022,12 @@ export async function processReviewItem(input: {
 /** Scan wrapper that surfaces scan failures to Sentry (the scan is
  * user-driven; a failure should stay visible rather than vanish).
  *
- * A grant the provider refused is a needs-attention condition this app now
- * reports on its own: the Email page badge and the reconnect notice go out
- * below. It only warns, and only on the transition, exactly as the cron and
- * the push drains do, so a mailbox nobody reconnects does not page on every
- * scan. Every other failure (a timeout, a provider hiccup) keeps the old
+ * A credential the provider refused — a revoked grant, or a session revoked
+ * while the grant is still fine — is a needs-attention condition this app
+ * now reports on its own: the Email page badge and the reconnect notice go
+ * out below. It only warns, and only on the transition, exactly as the cron
+ * and the push drains do, so a mailbox nobody reconnects does not page on
+ * every scan. Every other failure (a timeout, a provider hiccup) keeps the old
  * behavior: captured as an error and rethrown, nothing flagged, nobody
  * emailed. */
 export async function scanInboxForReview(
@@ -1033,7 +1036,7 @@ export async function scanInboxForReview(
   try {
     return await scanConnectionInbox(connection);
   } catch (err) {
-    if (isOAuthRefreshError(err)) {
+    if (isDeadCredential(err)) {
       if (connection.status !== "error") {
         captureWarning("[email-review] inbox scan hit a dead credential", {
           connectionId: connection.id,

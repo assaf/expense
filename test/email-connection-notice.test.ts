@@ -5,6 +5,7 @@ import {
   setEmailConnectionStatus,
 } from "~/lib/db/email-connections";
 import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
+import { JmapAuthError } from "~/lib/jmap.server";
 import { encryptSecret } from "~/lib/token-crypto.server";
 import { testPrisma } from "./helpers/seedTestData";
 import { cleanupConnection, connection } from "./helpers/email-test-fixtures";
@@ -227,6 +228,41 @@ describe("reportConnectionFailure", () => {
     });
 
     // Every verified user of the account, exactly as the direct case does.
+    expect(SEND.sendEmail).toHaveBeenCalled();
+    expect(await marker(conn.id)).not.toBeNull();
+  });
+
+  it("tells them when the provider revoked the session, not the grant", async () => {
+    // Fastmail can kill a JMAP session while the stored grant is still fine:
+    // the token refresh succeeds, the next API call answers 401. That is the
+    // same user-visible dead end as a revoked grant, and gating on the
+    // refresh error alone left EXPENSE-1B flagging the connection for ten
+    // days without mailing anyone.
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+
+    await reportConnectionFailure({
+      connection: conn,
+      error: new JmapAuthError(
+        'JMAP API failed: 401 {"detail":"No session found"}',
+      ),
+    });
+
+    expect(recipients()).toEqual([...account.verified].sort());
+    expect(await marker(conn.id)).not.toBeNull();
+  });
+
+  it("sees a revoked session through the drain's stage label", async () => {
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+
+    await reportConnectionFailure({
+      connection: conn,
+      error: new Error("[email-connections] reading the mailbox failed", {
+        cause: new JmapAuthError("JMAP API failed: 401"),
+      }),
+    });
+
     expect(SEND.sendEmail).toHaveBeenCalled();
     expect(await marker(conn.id)).not.toBeNull();
   });

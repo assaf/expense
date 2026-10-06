@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
+import { causesInclude, redactCredentials } from "~/lib/error-text";
 import { MAX_RECEIPT_BYTES } from "~/lib/upload-limits";
 import { createCache } from "~/lib/ttl-cache";
 
@@ -217,6 +218,46 @@ async function errorBody(res: Response): Promise<string> {
     Buffer.alloc(0),
   );
   return bytes.toString("utf8").slice(0, ERROR_BODY_CHARS);
+}
+
+/**
+ * The provider refused this connection's credential: a revoked session, a
+ * rotated token, an account that withdrew the grant. It is the one JMAP
+ * failure the user can act on, so it gets its own class and
+ * `reportConnectionFailure` mails them about it.
+ *
+ * This is the session half of "the credential is dead". The token-refresh
+ * half throws `OAuthRefreshError` from `oauth-token-refresh.server.ts`, and
+ * for 10 days a Fastmail session revoked at the provider produced this
+ * plain `Error` instead: the connection was flagged, receipts silently
+ * stopped, and no notice was ever sent (EXPENSE-1B, 15 events).
+ */
+export class JmapAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JmapAuthError";
+  }
+}
+
+/** Whether `error` is a JmapAuthError, through wrappers that keep the
+ * original as `cause` (the drain labels each step that way). */
+export function isJmapAuthError(error: unknown): boolean {
+  return causesInclude(error, JmapAuthError);
+}
+
+/**
+ * The failure for a non-ok JMAP response: a `JmapAuthError` on 401/403, a
+ * plain `Error` otherwise (5xx, an HTML error page, a rate limit — all
+ * transient). The body is redacted before it can reach the message, because
+ * a session document carries its credential in the URL and a provider that
+ * echoes the token it looked up would print it to stdout.
+ */
+async function jmapResponseError(what: string, res: Response): Promise<Error> {
+  const body = redactCredentials(await errorBody(res));
+  const message = `${what}: ${res.status}${body ? ` ${body}` : ""}`;
+  return res.status === 401 || res.status === 403
+    ? new JmapAuthError(message)
+    : new Error(message);
 }
 
 /**
@@ -439,7 +480,13 @@ export async function jmapSessionForToken(
   if (!cached) {
     cached = loadSession(server).then((r) => {
       if (r.ok) return r.info;
-      throw new Error(r.message);
+      // The session loader answers with a result rather than throwing, so a
+      // rejected credential reaches here as `invalid-token`. Classify it the
+      // same way a 401 from the API endpoint is, or the drain reports one
+      // shape of dead credential and silently absorbs the other.
+      throw r.reason === "invalid-token"
+        ? new JmapAuthError(r.message)
+        : new Error(r.message);
     });
     sessionCache.set(key, cached);
     cached.catch(() => sessionCache.delete(key));
@@ -489,7 +536,7 @@ export async function jmapBatch(
     "JMAP API",
   );
   if (!res.ok) {
-    throw new Error(`JMAP API failed: ${res.status} ${await errorBody(res)}`);
+    throw await jmapResponseError("JMAP API failed", res);
   }
   const j = (await jsonBody(res, "JMAP API")) as ApiResponse;
   // A malformed 200 (no methodResponses array) must fail as a provider error,
@@ -576,7 +623,7 @@ export async function jmapUploadBlob(
     "JMAP upload",
   );
   if (!res.ok) {
-    throw new Error(`upload failed: ${res.status} ${await errorBody(res)}`);
+    throw await jmapResponseError("upload failed", res);
   }
   const j = (await jsonBody(res, "JMAP upload")) as { blobId?: string };
   if (!j.blobId) throw new Error("upload missing blobId");
@@ -857,9 +904,7 @@ export async function fetchRawRfc822(opts: {
     "JMAP download",
   );
   if (!res.ok) {
-    throw new Error(
-      `email download failed: ${res.status} ${await errorBody(res)}`,
-    );
+    throw await jmapResponseError("email download failed", res);
   }
   return {
     id: opts.id,
