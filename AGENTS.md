@@ -367,8 +367,8 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   test reset use the unpooled/session URL.
 - **Env contract**: `DATABASE_URL` is required at boot or the app crashes;
   `SESSION_SECRET`. Names, by purpose: DB (`DATABASE_URL`,
-  `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`); auth (`APP_EMAIL`, `APP_PASSWORD`,
-  `SESSION_SECRET`, `CRON_SECRET`, `PUBLIC_URL`); email (`FASTMAIL_TOKEN`,
+  `DATABASE_URL_UNPOOLED`, `LOCAL_DB_URL`); auth (`APP_EMAIL`, `SESSION_SECRET`,
+  `CRON_SECRET`, `PUBLIC_URL`); email (`FASTMAIL_TOKEN`,
   `FASTMAIL_OAUTH_CLIENT_ID`, `INBOUND_EMAIL_ADDRESS`, `RECEIPTS_FOLDER`,
   `PUSH_PRIVATE_KEY`, `PUSH_AUTH`, `EMAIL_TOKEN_ENCRYPTION_KEY`); Google
   (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,

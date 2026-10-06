@@ -40,6 +40,7 @@ import {
   verificationRecentlySent,
 } from "~/lib/db/accounts";
 import { ensureInboundSenderForUser } from "~/lib/db/inbound";
+import { initStore } from "~/lib/db/seed";
 import {
   authLockedUntil,
   clearAuthFailures,
@@ -141,6 +142,7 @@ export async function resolveSessionUser(
   context: Readonly<RouterContextProvider>,
   request: Request,
 ): Promise<User | undefined> {
+  await initStore();
   const user = await sessionUser(request);
   context.set(userContext, user ?? null);
   return user;
@@ -353,6 +355,7 @@ export async function login(
   password: string,
   origin?: string,
 ): Promise<string> {
+  await initStore();
   const normalizedEmail = email.trim().toLowerCase();
   const lockKey = `login:${normalizedEmail}`;
   if (password.length > MAX_PASSWORD_LENGTH) {

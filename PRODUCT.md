@@ -425,6 +425,12 @@ pnpm db:push                 # create the schema from the contract
 pnpm dev
 ```
 
+On an empty database the first request that resolves a session or submits the
+login form creates the first account from `APP_EMAIL`, seeds the 22 Schedule C
+categories, the IRS mileage-rate table and the general email rules. Its password
+is the one in `app/lib/db/seed.ts` — set `APP_EMAIL` to an address you control
+and treat that file as the credential it is.
+
 The tests want a Postgres with a passwordless `assaf` role and their own
 database — they drop and recreate `expense_test` on every run and never touch
 your dev data:

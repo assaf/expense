@@ -29,6 +29,48 @@ const showHints = async (page: Page) => {
   }
   throw new Error("shortcut hint layer never appeared on Shift+?");
 };
+
+/** Attempts per chooser test. The palette's command request is consumed on
+ * fire, so a dropped chooser cannot be re-pressed — the whole sequence runs
+ * again instead. Two, not three: each attempt now waits up to 10s for the
+ * chooser, and these tests carry an explicit 60s timeout. */
+const CHOOSER_ATTEMPTS = 2;
+
+/** How long each step of the palette handoff may take. Generous because the
+ * chain after Enter is: perform() → navigate → the next page mounts and
+ * hydrates → its effect clicks the hidden file input. */
+const CHOOSER_TIMEOUT = 10_000;
+
+/** One attempt: open the palette, filter to `query`, fire the option the list
+ * has selected, and wait for the file chooser it opens. Null means the chooser
+ * never arrived, which is the one failure worth retrying.
+ *
+ * The two waits are assertions, not `.catch(() => {})`. Swallowing them made a
+ * palette that never open and a chooser the headless browser dropped surface
+ * as the same `Received: null`, which is why a 2026-10-06 CI failure read as a
+ * mystery rather than as a slow runner. */
+const fireCommandForChooser = async (
+  page: Page,
+  query: string,
+  option: string,
+): Promise<FileChooser | null> => {
+  await page.keyboard.press("ControlOrMeta+k");
+  const search = page.getByPlaceholder("Type a command or search…");
+  await expect(search).toBeVisible({ timeout: CHOOSER_TIMEOUT });
+  await search.fill(query);
+  // Waiting for the *selected* option is also the settle before Enter: the
+  // list marks its active row, so the keystroke cannot land while the filter
+  // is still choosing one.
+  await expect(
+    page.getByRole("option", { name: option, selected: true }),
+  ).toBeVisible({ timeout: CHOOSER_TIMEOUT });
+  const opened = page.waitForEvent("filechooser", { timeout: CHOOSER_TIMEOUT });
+  await page.keyboard.press("Enter");
+  return opened.then(
+    (chooser) => chooser,
+    () => null,
+  );
+};
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
 // The palette mounts in the root layout for signed-in users. The shared
@@ -300,28 +342,20 @@ describe("Command palette", () => {
   });
 
   it("opens a file picker for Upload expense file and drafts the receipt", async () => {
-    // The palette command's filechooser click can land in a window where the
-    // headless browser drops it (same class as the g-shortcut hydration race
-    // and the "f" retry below). The command request is consumed on fire, so
-    // a missed chooser can't be re-pressed; retry the whole sequence.
+    // The chooser click can land in a window where the headless browser drops
+    // it (the same class as the g-shortcut hydration race). The request is
+    // consumed on fire, so a missed chooser means re-running the sequence.
     let chooser: FileChooser | null = null;
-    for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < CHOOSER_ATTEMPTS && !chooser;
+      attempt += 1
+    ) {
       page = await goto("/expenses");
-      await page.keyboard.press("ControlOrMeta+k");
-      const search = page.getByPlaceholder("Type a command or search…");
-      await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
-      await search.fill("upload expense");
-      await page
-        .getByRole("option", { name: "Upload expense file", selected: true })
-        .waitFor({ state: "visible", timeout: 4000 })
-        .catch(() => {});
-      const chooserPromise = page.waitForEvent("filechooser", {
-        timeout: 4000,
-      });
-      await page.keyboard.press("Enter");
-      chooser = await chooserPromise.then(
-        (c) => c,
-        () => null,
+      chooser = await fireCommandForChooser(
+        page,
+        "upload expense",
+        "Upload expense file",
       );
     }
     expect(chooser).not.toBeNull();
@@ -335,40 +369,30 @@ describe("Command palette", () => {
       ),
     });
     await page.waitForURL("**/expense/new");
-  });
+  }, 60_000); // Two attempts of a four-step browser handoff, each step allowed 10s.
 
   it("routes Upload reconcile statement to the reconcile page's picker", async () => {
-    // Fired from home: the home consumer must not swallow the request;
-    // it stays pending until the reconcile landing mounts and opens its
-    // statement file input. The chooser can be dropped in the same
-    // headless window as the upload-expense test, so retry the whole
-    // sequence (the request is consumed on fire).
+    // Fired from home: the home consumer must not swallow the request; it
+    // stays pending until the reconcile landing mounts and opens its
+    // statement file input. Same dropped-chooser window as above.
     let chooser: FileChooser | null = null;
-    for (let attempt = 0; attempt < 3 && !chooser; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt < CHOOSER_ATTEMPTS && !chooser;
+      attempt += 1
+    ) {
       page = await goto("/expenses");
-      await page.keyboard.press("ControlOrMeta+k");
-      const search = page.getByPlaceholder("Type a command or search…");
-      await search.waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
-      await search.fill("upload reconcile");
-      await page
-        .getByRole("option", {
-          name: "Upload reconcile statement",
-          selected: true,
-        })
-        .waitFor({ state: "visible", timeout: 4000 })
-        .catch(() => {});
-      const chooserPromise = page.waitForEvent("filechooser", {
-        timeout: 4000,
-      });
-      await page.keyboard.press("Enter");
-      await page.waitForURL("**/reconcile", { timeout: 4000 }).catch(() => {});
-      chooser = await chooserPromise.then(
-        (c) => c,
-        () => null,
+      chooser = await fireCommandForChooser(
+        page,
+        "upload reconcile",
+        "Upload reconcile statement",
       );
     }
     expect(chooser).not.toBeNull();
-  });
+    // The routing is the point of this test, so assert the landing rather
+    // than swallowing the wait the way the chooser used to.
+    await page.waitForURL("**/reconcile", { timeout: CHOOSER_TIMEOUT });
+  }, 60_000);
 
   afterAll(async () => {
     await page?.close();

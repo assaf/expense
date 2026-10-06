@@ -212,8 +212,8 @@ async function ensureBootstrapUser(): Promise<User> {
 async function bootstrapUser(): Promise<User> {
   if (!APP_EMAIL) {
     throw new Error(
-      "No users exist and APP_EMAIL/APP_PASSWORD are not configured — " +
-        "set them to create the first account and user.",
+      "No users exist and APP_EMAIL is not configured — set it to create " +
+        "the first account and user.",
     );
   }
 
