@@ -2030,11 +2030,16 @@ describe("coalesceDrain", () => {
 
   it("starts fresh once both runs have settled", async () => {
     const first = gate("first");
-    coalesceDrain("drains", () => first.run());
+    const opening = coalesceDrain("drains", () => first.run());
     first.release();
     await first.began;
-    await Promise.allSettled([coalesceDrain("drains", () => first.run())]);
-    // The slot is cleared, so this is a new run rather than a join.
+    // Both runs are awaited, and in this order deliberately. The slot is
+    // cleared by the LAST run standing, so awaiting `opening` before the
+    // trailing one is scheduled would delete the slot early and turn this
+    // into a different test. If the assertion below ever joined a run instead
+    // of starting one it would return "first", not "second".
+    const trailing = coalesceDrain("drains", () => first.run());
+    await Promise.allSettled([opening, trailing]);
     expect(await coalesceDrain("drains", () => Promise.resolve("second"))).toBe(
       "second",
     );

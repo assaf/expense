@@ -423,3 +423,15 @@ So when a Sentry issue has no readable payload:
 
 Since 2026-10-05 `captureWarning` puts the summary in the Sentry _message_ as
 well as in `extra`, precisely because the message is the field that survives.
+
+### Spans you will not see
+
+`pg-pool.connect` spans are filtered at creation (`ignoreSpans` in
+`app/entry.server.tsx`), so they never appear in a trace. They were 0ms
+checkouts with no signal, and because pg runs with `max: 2` every query checks
+out, the count of those spans equalled the count of queries — which is exactly
+Sentry's N+1 detector shape. It reported EXPENSE-1F 156 times with zero users
+impacted, on a drain whose batched snapshot read (the real earlier N+1) was
+working correctly. **Their absence is not broken instrumentation**: the query
+spans themselves, which carry the timing, are still recorded. If you go
+looking for checkout spans to judge pool contention, use the query spans.

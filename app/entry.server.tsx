@@ -63,6 +63,17 @@ if (process.env.VERCEL_ENV === "production") {
         const error = event.exception?.values?.[0];
         return error && isRouterNoise(error) ? null : event;
       },
+
+      // Never record the per-checkout pool spans. `pg-pool.connect` is
+      // emitted once per checkout and pg runs with max: 2, so every query
+      // checks out and the connect-span count is the query count. Sentry's N+1
+      // detector groups a parent's children by description, so five
+      // identical 0ms checkout spans read as an N+1: it flagged the push
+      // drain 156 times with zero users impacted while the batched snapshot
+      // read that fixed the original EXPENSE-1F was working. The query spans
+      // carry the timing, so nothing is lost. Filtered at creation rather
+      // than in beforeSendSpan, which in Sentry v11 can only rewrite a span.
+      ignoreSpans: ["pg-pool.connect"],
     });
   } catch (error) {
     console.error("[sentry] init failed:", error);
