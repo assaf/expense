@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import PostalMime from "postal-mime";
 import {
+  coalesceDrain,
   drainEmailConnection,
   processConnectionEmail,
   connectionInboundDeps,
@@ -1945,5 +1946,97 @@ describe("fake adapter raw email", () => {
     const parsed = await PostalMime.parse(raw.raw);
     expect(parsed.subject).toBe("Your receipt");
     expect(parsed.text).toContain("TOTAL: 1.23");
+  });
+});
+
+// Fastmail delivers pushes in bursts (nine inside seven seconds on
+// 2026-10-06), and each push used to re-walk the same already-evaluated
+// window. These drive `coalesceDrain` directly: the drain itself needs a live
+// mailbox, and every other test in this file passes options (its own adapter),
+// which by design never coalesces.
+describe("coalesceDrain", () => {
+  /**
+   * A run that reports when it was entered (`began`) and resolves only when
+   * released. `began` is what the assertions await: the trailing run starts
+   * a few microtasks after the run it follows settles, so counting ticks
+   * would be a guess.
+   */
+  const gate = (label: string) => {
+    let release: () => void = () => {};
+    let announce: () => void = () => {};
+    let started = 0;
+    const settled = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const began = new Promise<void>((resolve) => {
+      announce = resolve;
+    });
+    return {
+      began,
+      get started() {
+        return started;
+      },
+      release,
+      run: async (): Promise<string> => {
+        started += 1;
+        announce();
+        await settled;
+        return label;
+      },
+    };
+  };
+
+  it("collapses a burst into the run in flight plus one trailing run", async () => {
+    const first = gate("in-flight");
+    const second = gate("trailing");
+    const runs = [() => first.run(), () => second.run()];
+    const calls = [
+      coalesceDrain("burst", runs[0]!),
+      coalesceDrain("burst", runs[1]!),
+      coalesceDrain("burst", runs[0]!),
+      coalesceDrain("burst", runs[1]!),
+    ];
+
+    // One run so far: the second caller joined it instead of starting one.
+    expect(first.started).toBe(1);
+    expect(second.started).toBe(0);
+
+    first.release();
+    // The trailing run starts only after the one it follows has settled, which
+    // is what keeps the coalescing lossless: its lookback window opens after
+    // the mail that arrived during the first run.
+    await second.began;
+    expect(second.started).toBe(1);
+
+    second.release();
+    // The first caller keeps the run it started; the three that arrived during
+    // it all share one trailing run, so a burst of four costs two drains.
+    expect(await Promise.all(calls)).toEqual([
+      "in-flight",
+      "trailing",
+      "trailing",
+      "trailing",
+    ]);
+  });
+
+  it("lets a rejected run still run the trailing drain", async () => {
+    const boom = coalesceDrain("rejects", () =>
+      Promise.reject(new Error("no")),
+    );
+    const trailing = coalesceDrain("rejects", () => Promise.resolve("ok"));
+    await expect(boom).rejects.toThrow("no");
+    expect(await trailing).toBe("ok");
+  });
+
+  it("starts fresh once both runs have settled", async () => {
+    const first = gate("first");
+    coalesceDrain("drains", () => first.run());
+    first.release();
+    await first.began;
+    await Promise.allSettled([coalesceDrain("drains", () => first.run())]);
+    // The slot is cleared, so this is a new run rather than a join.
+    expect(await coalesceDrain("drains", () => Promise.resolve("second"))).toBe(
+      "second",
+    );
   });
 });

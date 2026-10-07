@@ -494,6 +494,10 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   connection when the push subscription can't be renewed (user-visible).
 - Disconnect deletes the row + token; users should also revoke the token in
   Fastmail UI says so).
+- A burst of pushes costs two drains, not one per push: the run in flight
+  plus a single trailing run that starts after it, so mail arriving during
+  the first run is still inside the trailing run's lookback window. Callers
+  that inject an adapter (the dev route, the tests) run standalone.
 
 ## No-LLM extraction (connected flow)
 

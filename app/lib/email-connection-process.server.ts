@@ -891,16 +891,87 @@ export function mailClientFor(
  * along the way carry the connection and account as tags instead of each
  * one copying those ids into `extra`. The cron path already had a scope
  * (withMonitor forks one); the push and script paths did not.
+ *
+ * Bursts are collapsed by `coalesceDrain` below: a push burst costs the run in
+ * flight plus one trailing run, not one full mailbox walk per push.
  */
-export async function drainEmailConnection(
+
+/** The run in flight for a connection, plus at most one trailing run. */
+interface DrainSlot {
+  current: Promise<unknown>;
+  trailing: Promise<unknown> | null;
+}
+
+const drainSlots = new Map<string, DrainSlot>();
+
+/**
+ * Collapse a burst of drains for one connection into the run in flight plus
+ * at most ONE trailing run. Exported for the unit test; the drain entry point
+ * is the only caller in app code.
+ *
+ * Fastmail delivers pushes in bursts — nine inside seven seconds on
+ * 2026-10-06 — and each one used to re-walk the same window of
+ * already-evaluated mail. Every drain in that burst evaluated zero emails and
+ * still paid a mailbox read plus a `readEmailLogSnapshots` query per batch,
+ * * which is what Sentry kept flagging as the EXPENSE-1F N+1.
+ *
+ * The trailing run is what makes this lossless rather than merely cheaper:
+ * it starts strictly after the run it follows, so mail that arrived while
+ * that run was still walking the mailbox is inside its lookback window. A
+ * caller that simply joined the in-flight run would drop exactly the mail its
+ * own push announced, because that run's last batch read had already passed
+ * the point where the mail landed.
+ *
+ * State is per serverless instance, so a burst spread over several lambdas
+ * coalesces per instance — which is still where the repeats land.
+ */
+export function coalesceDrain<T>(
+  connectionId: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const slot = drainSlots.get(connectionId);
+  if (!slot) {
+    const fresh: DrainSlot = { current: run(), trailing: null };
+    drainSlots.set(connectionId, fresh);
+    void fresh.current
+      .catch(() => undefined)
+      .finally(() => {
+        // Only the last run standing clears the slot; if a trailing run was
+        // scheduled, its own cleanup owns the delete.
+        if (drainSlots.get(connectionId) === fresh && !fresh.trailing) {
+          drainSlots.delete(connectionId);
+        }
+      });
+    return fresh.current as Promise<T>;
+  }
+  if (!slot.trailing) {
+    const trailing = slot.current.catch(() => undefined).then(run);
+    slot.trailing = trailing;
+    void trailing
+      .catch(() => undefined)
+      .finally(() => {
+        if (drainSlots.get(connectionId) === slot)
+          drainSlots.delete(connectionId);
+      });
+  }
+  return slot.trailing as Promise<T>;
+}
+
+export function drainEmailConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
-  return Sentry.withIsolationScope((scope) => {
-    scope.setTag("connection", connection.id);
-    scope.setTag("account", connection.accountId);
-    return drainConnection(connection, options);
-  });
+  const run = () =>
+    Sentry.withIsolationScope((scope) => {
+      scope.setTag("connection", connection.id);
+      scope.setTag("account", connection.accountId);
+      return drainConnection(connection, options);
+    });
+  // Any option at all means the caller supplied its own adapter, extraction
+  // deps or window — the dev route and every test. Those must never join a
+  // production drain (or another test's), so they always run standalone.
+  if (Object.keys(options).length > 0) return run();
+  return coalesceDrain(connection.id, run);
 }
 
 /** The drain itself; drainEmailConnection owns the isolation scope it runs
