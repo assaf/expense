@@ -421,13 +421,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: [deploy]
-    # No secrets in this condition: the secrets context is rejected in
-    # job-level `if` (workflow file error). Missing secrets are handled
-    # inside the step below, which skips the gate with a notice.
+    # No secrets in this condition: the secrets context is rejected in a
+    # job-level `if` (workflow file error). The smoke needs CRON_SECRET below
+    # because app/routes/api.smoke.ts gates on it in `x-smoke-secret`; without
+    # it the route answers a deliberate 404 and the gate fails for the wrong
+    # reason.
     if: success() && github.ref == 'refs/heads/main'
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_PROTECTION_BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+      # app/routes/api.smoke.ts gates every request on this in `x-smoke-secret`
+      # (scripts/smoke-check sends it). Same secret the cron routes assert.
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
       # The rollback below is a CLI call, so it needs the same project
       # identity and the same "no --scope" rule as the deploy job: `--scope`
       # makes the CLI resolve the token's user, which 404s for this token.
@@ -442,9 +447,10 @@ jobs:
 
       # Smoke the deployment the deploy job just made, and roll it back on
       # failure. One step on purpose: the smoke/rollback flow must not
-      # depend on cross-step state. Skipped with a notice when the smoke
-      # secrets aren't configured (CLI deploys still gate via
-      # scripts/deploy).
+      # depend on cross-step state. The rollback passes --token for the same
+      # reason the deploy does: without it the CLI resolves the token's user
+      # and answers "User not found. (404)", which silently disables the
+      # safety net this step exists to provide (2026-10-06).
       - name: Smoke production deployment + rollback on failure
         run: |
           URL="${{ needs.deploy.outputs.url }}"
@@ -457,6 +463,6 @@ jobs:
             echo "Smoke passed — deployment stays live."
           else
             echo "Smoke FAILED on $URL — rolling back to the previous deployment." >&2
-            npx vercel@latest rollback "$URL" --yes || echo "Rollback failed — check the Vercel dashboard." >&2
+            npx vercel@latest rollback "$URL" --yes --token "$VERCEL_TOKEN" || echo "Rollback failed — check the Vercel dashboard." >&2
             exit 1
           fi
