@@ -376,7 +376,7 @@ history. The sequence, and what each step is protecting:
 
 1. `pnpm self-update`, `pnpm update --latest`, `pnpm dedupe`, `pnpm prune`
 2. `pnpm install` from the new lockfile, then `pnpm exec playwright install
-chromium --with-deps` (the suite launches chromium; browsers must match the
+   chromium --with-deps` (the suite launches chromium; browsers must match the
    just-bumped playwright)
 3. `vpr check` and the full suite. **A failure aborts here**, before anything
    is staged: the bumped tree is left dirty so you can read the diff, and

@@ -40,7 +40,7 @@ pasted API token keep working unchanged (see `connectionAccessToken`).
   `refreshRotated` re-reads the row and returns the winner's access token
   instead of failing (and flagging, and notifying about) a healthy mailbox.
 - **Requested scopes**: `urn:ietf:params:jmap:core` + `urn:ietf:params:
-jmap:mail` only (no `jmap:submission`: confirmations are imported, not
+  jmap:mail` only (no `jmap:submission`: confirmations are imported, not
   sent).
 - **Onboarding**: the anonymous path parks the ENCRYPTED credentials on
   the session (`fmPending`, 10-minute TTL) and the onboarding flow consumes
@@ -683,7 +683,7 @@ review-ignored row is never double-processed.
 ## Dev tooling
 
 - `pnpm drain:email --connection <id> [--role inbox|trash] [--limit N]
-[--days N]` (`scripts/drain-email-connection.ts`): drains a mailbox
+  [--days N]` (`scripts/drain-email-connection.ts`): drains a mailbox
   under tsx with **stubbed renderers**, so the saved receipt image is a
   1×1 placeholder. Use it for fast logic checks, not for the final image.
 - `NODE_OPTIONS=--import=./scripts/lib/vite-assets.mjs tsx <script>`
@@ -693,6 +693,6 @@ review-ignored row is never double-processed.
   stub above is only needed by scripts that don't opt in — see
   `pnpm preview:confirmation`.
 - `GET /api/dev-email-drain?connection=<id>` (dev only, `Bearer
-<CRON_SECRET>`): drains the Inbox in the **bundled dev server** with the
+  <CRON_SECRET>`): drains the Inbox in the **bundled dev server** with the
   real Playwright renderer, so the saved image is a true render of the
   email. Use this when the image matters.

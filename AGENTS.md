@@ -361,7 +361,7 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   aliases above re-declared as Vite `resolve.alias`.
 - **Tailwind v4 is CSS-first** via the `@tailwindcss/vite` plugin. The theme
   lives in `app/global.css` (`@theme` tokens, `@custom-variant dark
-(&:is(.dark *))`), not a JS config.
+  (&:is(.dark *))`), not a JS config.
 - **Postgres everywhere**, including images. Runtime connects through the
   Supabase transaction pooler (port 6543, `max: 2` per instance); DDL and the
   test reset use the unpooled/session URL.
