@@ -1,7 +1,8 @@
 import { readAccountUsers } from "~/lib/db/accounts";
 import {
+  claimEmailConnectionErrorNotified,
   readEmailConnectionById,
-  setEmailConnectionErrorNotified,
+  releaseEmailConnectionErrorNotified,
 } from "~/lib/db/email-connections";
 import {
   emailShell,
@@ -128,20 +129,19 @@ function noticeText(input: {
  * may fail because a notice could not be written or delivered.
  *
  * Gating, in order:
- *  - only an `OAuthRefreshError` (the provider refused the grant) counts; a
- *    timeout, a 5xx or a network failure is transient and a 401 is app
- *    misconfiguration the recipient cannot act on,
- *  - the row is re-read, so a tick and a concurrent scan cannot both notify,
- *    and an already-notified episode is left alone,
-  - a `JmapAuthError` counts too: the provider can revoke a session without
-    the grant being touched, which is a JMAP 401 rather than a failed token
-    refresh. Gating on the refresh error alone meant a revoked Fastmail
-    session flagged the connection and mailed nobody (EXPENSE-1B),
+ *  - `isDeadCredential` decides whether the account has to reconnect, and it
+ *    is deliberately narrower than "the provider refused something": only a
+ *    rejected grant (`OAuthRefreshError`), or a credential the session
+ *    endpoint itself refused (`JmapAuthError`), counts. A timeout, a 5xx or a
+ *    network failure is transient, and a revoked *session* is recoverable —
+ *    `jmapCall` re-establishes it and retries, so it never reaches here,
+ *  - the notice is claimed atomically, so a burst that hands one failed run
+ *    to every push in it sends one email rather than one per push, and an
+ *    already-notified episode is left alone,
  *  - every verified user is a recipient: an account is shared and any of its
  *    users can reconnect (a connection records no creator),
- *  - the marker is written only when at least one send was taken, so a
- *    transport failure is retried by the next failure instead of silencing
- *    the episode.
+ *  - the claim is released when nothing was delivered, so a transport failure
+ *    is retried by the next failure instead of silencing the episode.
  */
 export async function reportConnectionFailure(
   input: ConnectionFailureInput,
@@ -168,7 +168,15 @@ async function notifyConnectionFailure({
   if (!isDeadCredential(error)) return;
 
   const row = await readEmailConnectionById(connection.id);
-  if (!row || row.errorNotifiedAt) return;
+  if (!row) return;
+  // Claim before sending. The marker is written only when at least one send
+  // was taken, so a transport failure is retried by the next failure instead
+  // of silencing the episode; the claim is what keeps a burst to one notice.
+  if (
+    !(await claimEmailConnectionErrorNotified(row.id, new Date().toISOString()))
+  ) {
+    return;
+  }
 
   const recipients = (await readAccountUsers(row.accountId)).filter(
     (user) => user.emailVerifiedAt,
@@ -195,15 +203,15 @@ async function notifyConnectionFailure({
   }
 
   if (delivered.length === 0) {
-    // Nothing was taken (no verified user, or the transport refused). The
-    // marker stays null, so the next failure tries again.
+    // Nothing was taken (no verified user, or the transport refused), so the
+    // claim is handed back and the next failure tries again.
     console.warn("[email-connection] reconnect notice not delivered", {
       connectionId: row.id,
       to: recipients.map((user) => user.email),
     });
+    await releaseEmailConnectionErrorNotified(row.id).catch(() => {});
     return;
   }
-  await setEmailConnectionErrorNotified(row.id, new Date().toISOString());
   console.info("[email-connection] reconnect notice sent", {
     connectionId: row.id,
     to: delivered,

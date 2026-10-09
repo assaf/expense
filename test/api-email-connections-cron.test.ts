@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   ),
   setEmailConnectionStatus: vi.fn(async () => {}),
   readEmailConnectionById: vi.fn(async (_id: string) => undefined as unknown),
-  setEmailConnectionErrorNotified: vi.fn(async () => {}),
+  claimEmailConnectionErrorNotified: vi.fn(async () => true),
+  releaseEmailConnectionErrorNotified: vi.fn(async () => {}),
   readAccountUsers: vi.fn(async () => [] as Array<Record<string, unknown>>),
   sendEmail: vi.fn(async (_input: { to: string; subject: string }) => true),
   captureError: vi.fn(),
@@ -46,7 +47,9 @@ vi.mock("~/lib/db/email-connections", () => ({
   listAllEmailConnections: mocks.listAllEmailConnections,
   setEmailConnectionStatus: mocks.setEmailConnectionStatus,
   readEmailConnectionById: mocks.readEmailConnectionById,
-  setEmailConnectionErrorNotified: mocks.setEmailConnectionErrorNotified,
+  claimEmailConnectionErrorNotified: mocks.claimEmailConnectionErrorNotified,
+  releaseEmailConnectionErrorNotified:
+    mocks.releaseEmailConnectionErrorNotified,
   updateEmailConnectionTokens: vi.fn(async () => {}),
 }));
 
@@ -139,7 +142,8 @@ describe("api.email-connections-cron", () => {
     ]);
     mocks.sendEmail.mockClear();
     mocks.sendEmail.mockResolvedValue(true);
-    mocks.setEmailConnectionErrorNotified.mockClear();
+    mocks.claimEmailConnectionErrorNotified.mockClear();
+    mocks.claimEmailConnectionErrorNotified.mockResolvedValue(true);
     mocks.ensureGmailWatch.mockResolvedValue(undefined);
     mocks.ensureConnectionPushSubscription.mockImplementation(async () => ({
       subscriptionId: "sub-1",
@@ -285,7 +289,7 @@ describe("api.email-connections-cron", () => {
       to: "owner@example.com",
       subject: "mailbox@example.com needs reconnecting on Expense",
     });
-    expect(mocks.setEmailConnectionErrorNotified).toHaveBeenCalledWith(
+    expect(mocks.claimEmailConnectionErrorNotified).toHaveBeenCalledWith(
       "b",
       expect.any(String),
     );
@@ -309,7 +313,7 @@ describe("api.email-connections-cron", () => {
     // Still flagged for Settings, exactly as before this notice existed.
     expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith("b", "error");
     expect(mocks.sendEmail).not.toHaveBeenCalled();
-    expect(mocks.setEmailConnectionErrorNotified).not.toHaveBeenCalled();
+    expect(mocks.claimEmailConnectionErrorNotified).not.toHaveBeenCalled();
   });
 
   it("reports a connection that is already flagged only once", async () => {

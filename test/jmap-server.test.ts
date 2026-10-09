@@ -4,6 +4,7 @@ import {
   isJmapAuthError,
   jmapBatch,
   JmapAuthError,
+  JmapSessionGoneError,
   resolveJmapSessionUrl,
   verifyJmapServer,
   type SessionFetch,
@@ -396,7 +397,7 @@ describe("jmapBatch response bounds", () => {
   });
 });
 
-describe("a rejected credential is classified, not just reported", () => {
+describe("a revoked session is told apart from a dead credential", () => {
   const api = "https://example.com/jmap/api";
   const batch = [["Email/get", {}, "m0"]];
 
@@ -413,30 +414,34 @@ describe("a rejected credential is classified, not just reported", () => {
     );
   };
 
-  it("raises JmapAuthError on a 401 from the API endpoint", async () => {
-    // Fastmail revoking a session answers 401 here, with the grant itself
-    // untouched. Classified, so the notice path mails the account; it was a
-    // plain Error, so EXPENSE-1B flagged the connection and mailed nobody
-    // for ten days.
+  it("classifies a 401 from the API endpoint as a gone session", async () => {
+    // This used to assert the opposite, and that assertion was wrong: Fastmail
+    // revokes a *session* while the grant stays valid, so a 401 here is
+    // recoverable and saying "reconnect your mailbox" about it mailed the
+    // owner six notices for a mailbox that was reading mail normally.
     stub('{"detail":"No session found"}', 401);
     try {
-      await expect(jmapBatch(api, "Bearer tok-1", batch)).rejects.toSatisfy(
-        isJmapAuthError,
+      const error = await jmapBatch(api, "Bearer tok-1", batch).catch(
+        (e: unknown) => e,
       );
+      expect(error).toBeInstanceOf(JmapSessionGoneError);
+      // The distinction that matters: it must NOT read as a dead credential.
+      expect(isJmapAuthError(error)).toBe(false);
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it("recognizes it through a wrapper that kept it as cause", async () => {
+  it("recognizes a dead credential through a wrapper that kept it as cause", () => {
     // The drain labels each step by re-throwing with the original as `cause`.
     // A bare `instanceof` here is what hid the class before.
-    const inner = new JmapAuthError("JMAP API failed: 401");
+    const inner = new JmapAuthError("session endpoint refused the credential");
     const wrapped = new Error("drain:reading") as Error & { cause?: unknown };
     wrapped.cause = inner;
     expect(isJmapAuthError(inner)).toBe(true);
     expect(isJmapAuthError(wrapped)).toBe(true);
     expect(isJmapAuthError(new Error("JMAP API failed: 500"))).toBe(false);
+    expect(isJmapAuthError(new JmapSessionGoneError("401"))).toBe(false);
   });
 
   it("leaves a transient failure unclassified", async () => {
@@ -446,6 +451,7 @@ describe("a rejected credential is classified, not just reported", () => {
         (e: unknown) => e,
       );
       expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(JmapSessionGoneError);
       expect(isJmapAuthError(error)).toBe(false);
     } finally {
       vi.unstubAllGlobals();
@@ -468,6 +474,115 @@ describe("a rejected credential is classified, not just reported", () => {
       expect(message).toContain("401");
       expect(message).toContain("[redacted]");
       expect(message).not.toContain("t-abc123XYZ");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("jmapCall recovers from a session revoked under it", () => {
+  /** A fresh module means an empty session cache; `vi.resetModules` +
+   * re-import is how this repo resets module-level state. jmap.server is
+   * env-free on purpose, so re-importing it cannot re-run env.ts's fetch
+   * guard over the stubs below. */
+  const loadJmap = async () => {
+    vi.resetModules();
+    return import("~/lib/jmap.server");
+  };
+
+  const SERVER = {
+    sessionUrl: "https://example.com/.well-known/jmap",
+    authorization: "Bearer tok-1",
+  };
+
+  const sessionDoc = JSON.stringify({
+    username: "someone@example.com",
+    apiUrl: "https://example.com/jmap/api",
+    uploadUrl: "https://example.com/jmap/upload",
+    downloadUrl: "https://example.com/jmap/download",
+    primaryAccounts: { "urn:ietf:params:jmap:mail": "acct1" },
+  });
+
+  it("fetches a fresh session and retries, so the call succeeds", async () => {
+    // The exact failure that mailed six false alarms. The 401 is rejected
+    // before the request executes, so retrying cannot double-apply, and a
+    // working mailbox must not be reported as disconnected.
+    const seen: string[] = [];
+    let apiCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        seen.push(String(url));
+        if (String(url).includes(".well-known")) {
+          return new Response(sessionDoc, { status: 200 });
+        }
+        apiCalls += 1;
+        if (apiCalls === 1) {
+          return new Response('{"detail":"No session found"}', { status: 401 });
+        }
+        return new Response(
+          JSON.stringify({ methodResponses: [["ok", {}, "m0"]] }),
+          { status: 200 },
+        );
+      }),
+    );
+    try {
+      const { jmapCall } = await loadJmap();
+      const responses = await jmapCall(SERVER, [["Email/get", {}, "m0"]]);
+      expect(responses).toEqual([["ok", {}, "m0"]]);
+      // One rejected attempt, then exactly one retry.
+      expect(apiCalls).toBe(2);
+      // And the retry used a NEW session, not the cached one.
+      expect(seen.filter((u) => u.includes(".well-known"))).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not retry a failure that is not a revoked session", async () => {
+    // A 5xx is transient but retrying it here would just double the load;
+    // only the session-gone shape is retried.
+    let apiCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes(".well-known")) {
+          return new Response(sessionDoc, { status: 200 });
+        }
+        apiCalls += 1;
+        return new Response('{"error":"busy"}', { status: 503 });
+      }),
+    );
+    try {
+      const { jmapCall } = await loadJmap();
+      const error = await jmapCall(SERVER, [["Email/get", {}, "m0"]]).catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(apiCalls).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports a dead credential when the fresh session is refused too", async () => {
+    // The branch the reconnect notice is actually for: re-establishing fails
+    // because the credential itself is gone.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes(".well-known")) {
+          return new Response('{"detail":"Unauthorized"}', { status: 401 });
+        }
+        return new Response('{"detail":"No session found"}', { status: 401 });
+      }),
+    );
+    try {
+      const { isJmapAuthError, jmapCall } = await loadJmap();
+      const error = await jmapCall(SERVER, [["Email/get", {}, "m0"]]).catch(
+        (e: unknown) => e,
+      );
+      expect(isJmapAuthError(error)).toBe(true);
     } finally {
       vi.unstubAllGlobals();
     }

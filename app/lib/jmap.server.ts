@@ -246,17 +246,37 @@ export function isJmapAuthError(error: unknown): boolean {
 }
 
 /**
- * The failure for a non-ok JMAP response: a `JmapAuthError` on 401/403, a
- * plain `Error` otherwise (5xx, an HTML error page, a rate limit — all
- * transient). The body is redacted before it can reach the message, because
- * a session document carries its credential in the URL and a provider that
- * echoes the token it looked up would print it to stdout.
+ * A JMAP endpoint rejected the *session* the cache handed out, which is not
+ * the same failure as a rejected credential. Fastmail revokes sessions (the
+ * 401 body says "No session found via … a revocation tombstone stands for
+ * this session") while the stored grant stays perfectly valid, so the whole
+ * remedy is to fetch a fresh session — `jmapCall` does that and retries.
+ *
+ * Deliberately not a `JmapAuthError`: that one means "the account has to
+ * reconnect". Treating this as one mailed the owner six "your mailbox needs
+ * reconnecting" notices for a mailbox that was reading mail normally, because
+ * a cached session can be revoked inside its five-minute TTL and then poisons
+ * every call made with it.
+ */
+export class JmapSessionGoneError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JmapSessionGoneError";
+  }
+}
+
+/**
+ * The failure for a non-ok JMAP response: a `JmapSessionGoneError` on 401/403
+ * (see above), a plain `Error` otherwise (5xx, an HTML error page, a rate
+ * limit — all transient). The body is redacted before it can reach the
+ * message, because a session document carries its credential in the URL and a
+ * provider that echoes the token it looked up would print it to stdout.
  */
 async function jmapResponseError(what: string, res: Response): Promise<Error> {
   const body = redactCredentials(await errorBody(res));
   const message = `${what}: ${res.status}${body ? ` ${body}` : ""}`;
   return res.status === 401 || res.status === 403
-    ? new JmapAuthError(message)
+    ? new JmapSessionGoneError(message)
     : new Error(message);
 }
 
@@ -643,13 +663,35 @@ export async function jmapCall(
   opts: { tolerateNotFoundDestroy?: boolean } = {},
 ): Promise<[string, unknown, string][]> {
   const s = await jmapSessionForToken(server);
-  return jmapBatch(
-    s.apiUrl,
-    server.authorization,
-    methodCalls,
-    capabilities,
-    opts,
-  );
+  try {
+    return await jmapBatch(
+      s.apiUrl,
+      server.authorization,
+      methodCalls,
+      capabilities,
+      opts,
+    );
+  } catch (err) {
+    if (!(err instanceof JmapSessionGoneError)) throw err;
+    // The session the cache handed out was revoked under us: re-establish one
+    // and retry, which is the entire remedy and keeps a working mailbox from
+    // being reported as disconnected. A 401 is rejected before the request is
+    // executed, so nothing ran and the retry cannot double-apply.
+    //
+    // A genuinely dead credential does not reach here twice: the second
+    // `jmapSessionForToken` presents it to the session endpoint, and that
+    // 401 comes back as a `JmapAuthError` — the shape the reconnect notice
+    // is actually for.
+    sessionCache.delete(serverCacheKey(server));
+    const fresh = await jmapSessionForToken(server);
+    return jmapBatch(
+      fresh.apiUrl,
+      server.authorization,
+      methodCalls,
+      capabilities,
+      opts,
+    );
+  }
 }
 
 // --- PushSubscription + Email/import (shared by both auth flavors) ----------

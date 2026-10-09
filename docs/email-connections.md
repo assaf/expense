@@ -378,22 +378,33 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   to reconnect", over two provider shapes that are not the same failure:
   - `OAuthRefreshError` (`app/lib/oauth-token-refresh.server.ts`), raised
     only for a 400 `invalid_grant`: the token endpoint refused the grant;
-  - `JmapAuthError` (`app/lib/jmap.server.ts`), raised on a 401/403 from the
-    session load, `jmapBatch`, an upload or a download: the provider revoked
-    the _session_ while the grant is still fine, so the refresh succeeds and
-    the next API call 401s.
+  - `JmapAuthError` (`app/lib/jmap.server.ts`), raised when the _session_
+    endpoint refuses the credential.
 
-  Both recognizers walk the `cause` chain, because the drain labels each step
-  by re-throwing with the original as `cause`; a bare `instanceof` hid the
-  class and turned a revoked grant into a badge with no email.
+  A 401 from a JMAP mail endpoint is deliberately **not** either of those: it
+  means the session the cache handed out was revoked, which Fastmail does
+  routinely while the stored grant stays valid. `jmapCall` drops the cached
+  session, fetches a fresh one and retries, so the mail keeps flowing; when
+  the credential really is gone that second session fetch is what refuses it,
+  and that is the `JmapAuthError` the notice is for. Treating the endpoint's
+  401 as a dead credential mailed the owner six "reconnect your mailbox"
+  notices for a mailbox that was reading mail normally.
+
+  The notice is then _claimed_ atomically (`claimEmailConnectionErrorNotified`,
+  an update conditional on the marker still being null) before anything is
+  sent. That matters because a coalesced push burst hands one failed run to
+  every push in it: six concurrent callers pass a read-then-write guard before
+  any of them writes, which is how one failure produced six emails.
   `EmailConnection.errorNotifiedAt` stamps the episode, so a cron tick and a
   concurrent review scan that both fail send exactly one notice; the next
   successful status write (a renewal, a drain, a push verification) or a
-  reconnect clears it, so a later failure tells them again. Transient
-  failures (timeouts, 5xx) flag nothing and send nothing. The review scan
-  (`app/lib/email-review.server.ts`) flags the connection on the same
-  condition, through the same `isDeadCredential`; before this it wrote no
-  status at all, which is why a scan failure never showed on the Email page.
+  reconnect clears it, so a later failure tells them again. The claim is
+  released when nothing was delivered, so a transport failure is retried
+  rather than silenced. Transient failures (timeouts, 5xx) flag nothing and
+  send nothing.
+  The review scan (`app/lib/email-review.server.ts`) flags the connection on
+  the same condition, through the same `isDeadCredential`; before this it
+  wrote no status at all, which is why a scan failure never showed on the page.
   Like the cron and the push drains, the scan reports a dead credential as a
   warning and only on the transition (the connection was not already flagged),
   so a mailbox nobody reconnects does not page on every scan: the badge and

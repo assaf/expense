@@ -232,38 +232,76 @@ describe("reportConnectionFailure", () => {
     expect(await marker(conn.id)).not.toBeNull();
   });
 
-  it("tells them when the provider revoked the session, not the grant", async () => {
-    // Fastmail can kill a JMAP session while the stored grant is still fine:
-    // the token refresh succeeds, the next API call answers 401. That is the
-    // same user-visible dead end as a revoked grant, and gating on the
-    // refresh error alone left EXPENSE-1B flagging the connection for ten
-    // days without mailing anyone.
+  it("tells them when the session endpoint refused the credential", async () => {
+    // A `JmapAuthError` is the credential itself being rejected, which is the
+    // one thing the account can act on. A revoked *session* is a different
+    // shape (`JmapSessionGoneError`), retried rather than mailed — asserting
+    // it here by construction is what let a working mailbox be reported as
+    // disconnected.
     const account = await makeAccount();
     const conn = await makeConnection(account.accountId);
 
     await reportConnectionFailure({
       connection: conn,
-      error: new JmapAuthError(
-        'JMAP API failed: 401 {"detail":"No session found"}',
-      ),
+      error: new JmapAuthError("session endpoint refused the credential"),
     });
 
     expect(recipients()).toEqual([...account.verified].sort());
     expect(await marker(conn.id)).not.toBeNull();
   });
 
-  it("sees a revoked session through the drain's stage label", async () => {
+  it("sees a refused credential through the drain's stage label", async () => {
     const account = await makeAccount();
     const conn = await makeConnection(account.accountId);
 
     await reportConnectionFailure({
       connection: conn,
       error: new Error("[email-connections] reading the mailbox failed", {
-        cause: new JmapAuthError("JMAP API failed: 401"),
+        cause: new JmapAuthError("session endpoint refused the credential"),
       }),
     });
 
     expect(SEND.sendEmail).toHaveBeenCalled();
+    expect(await marker(conn.id)).not.toBeNull();
+  });
+
+  it("sends one notice when a burst reports the same failure six times", async () => {
+    // A coalesced push burst hands the one failed run to every push in it, so
+    // six catch blocks call this concurrently. The old read-then-write guard
+    // let all six read "not yet notified" before any of them wrote, which is
+    // how one failure produced six emails.
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+    const error = new JmapAuthError("session endpoint refused the credential");
+
+    await Promise.all(
+      Array.from({ length: 6 }, () =>
+        reportConnectionFailure({ connection: conn, error }),
+      ),
+    );
+
+    expect(SEND.sendEmail).toHaveBeenCalledTimes(account.verified.length);
+  });
+
+  it("hands the claim back when nothing was delivered", async () => {
+    // The marker must not silence an episode whose email never went out, or
+    // the reconnect notice is lost for that failure entirely.
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+    SEND.sendEmail.mockResolvedValue(false);
+
+    await reportConnectionFailure({
+      connection: conn,
+      error: new JmapAuthError("session endpoint refused the credential"),
+    });
+    expect(await marker(conn.id)).toBeNull();
+
+    // The next failure tries again, and this time it lands.
+    SEND.sendEmail.mockResolvedValue(true);
+    await reportConnectionFailure({
+      connection: conn,
+      error: new JmapAuthError("session endpoint refused the credential"),
+    });
     expect(await marker(conn.id)).not.toBeNull();
   });
 

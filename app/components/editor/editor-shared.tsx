@@ -71,10 +71,14 @@ export type EditorData = {
 
 /** Why a matching expense looks like the same entry, in plain words. */
 function reasonText(reason: DuplicateReason): string {
-  if (reason === "same-image") return "the same receipt image";
-  return reason === "same-date-merchant-amount"
-    ? "same date, merchant, and amount"
-    : "the same trip on the same day";
+  switch (reason) {
+    case "same-image":
+      return "the same receipt image";
+    case "same-date-merchant-amount":
+      return "same date, merchant, and amount";
+    case "same-route":
+      return "the same trip on the same day";
+  }
 }
 
 /** Inline warning in the create editors: the draft looks like an existing

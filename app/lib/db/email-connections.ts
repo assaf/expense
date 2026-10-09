@@ -415,14 +415,30 @@ export async function setEmailConnectionStatus(
   );
 }
 
-/** Stamp the reconnect notice for the current failure episode; the next
- * successful status write clears it (setEmailConnectionStatus). */
-export async function setEmailConnectionErrorNotified(
+/** Claim the reconnect notice for the current failure episode, so exactly one
+ * caller in a burst sends it. The update is conditional on the marker still
+ * being null, which is what makes it a claim rather than a check: concurrent
+ * reporters are the normal case, because a coalesced push burst hands the
+ * same failed run to every push in it, and a read-then-send let all six of
+ * them pass the guard before any of them wrote (six emails for one failure).
+ * Returns whether this caller won. */
+export async function claimEmailConnectionErrorNotified(
   id: string,
   at: string,
+): Promise<boolean> {
+  const claimed = await db.orm.public.EmailConnection.where((c) =>
+    and(c.id.eq(id), c.errorNotifiedAt.isNull()),
+  ).updateAll({ errorNotifiedAt: fromIso(at) });
+  return claimed.length > 0;
+}
+
+/** Undo a claim that delivered nothing (no verified user, or the transport
+ * refused), so the next failure tries again instead of being silenced. */
+export async function releaseEmailConnectionErrorNotified(
+  id: string,
 ): Promise<void> {
   await db.orm.public.EmailConnection.where({ id }).update({
-    errorNotifiedAt: fromIso(at),
+    errorNotifiedAt: null,
   });
 }
 

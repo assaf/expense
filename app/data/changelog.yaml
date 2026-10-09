@@ -39,10 +39,14 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-08"
+    changes:
+      - type: fix
+        text: "A mailbox that briefly loses its connection no longer emails you to reconnect: Expense re-establishes it on its own, and a mailbox that really has stopped working emails you once instead of once per notification."
   - date: "2026-10-05"
     changes:
       - type: fix
-        text: "When a mailbox provider revokes a connected account's session, you now get the reconnect email like you already did for a revoked grant, instead of the receipts quietly stopping with no explanation."
+        text: "When a mailbox provider stops accepting the sign-in stored for a connected mailbox, you now get the reconnect email, instead of the receipts quietly stopping with no explanation."
   - date: "2026-09-29"
     changes:
       - type: fix
