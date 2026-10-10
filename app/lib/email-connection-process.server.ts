@@ -47,6 +47,7 @@ import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import {
   readEmailLogSnapshots,
+  readEmailLogWindow,
   readStaleClaimArrivals,
   writeEmailLogRow,
   type EmailLogSnapshot,
@@ -322,6 +323,12 @@ function settledEmailIds(
  * what makes that lossless. The slack on top absorbs the delivery latency
  * between the mailbox's `receivedAt` and this app's clock. */
 const WALK_RESUME_OVERLAP_MS = 60 * 1000;
+
+/** How many log rows one walk reads up front to know what is already settled.
+ * Generous next to a walk that a 45s budget examines a few batches of, and
+ * only a safety valve: past it the drain asks per batch again, which is what
+ * it did before and is correct, just not cheaper. */
+const SETTLED_WINDOW_ROW_CAP = 1_000;
 
 /** Where a connection's mailbox walk starts. With no resume point that is the
  * lookback floor — the whole window, and the conservative default.
@@ -1133,6 +1140,26 @@ async function drainConnection(
   });
   let afterIso = new Date(cursorMs).toISOString();
 
+  // Skip already-evaluated emails (push + cron race, re-delivered mail) from
+  // ONE read of the whole window this walk is about to cover. The per-batch
+  // read this replaced issued one identical `email_process_log` query per
+  // batch of the same walk, which Sentry tracked as EXPENSE-1J (99
+  // occurrences of that one query shape). The claim in `processConnectionEmail`
+  // is what actually prevents a duplicate, so this set is the filter that keeps
+  // settled mail out of the work, not the thing standing between two drains.
+  const windowRows = await drainStep("reading the process log failed", () =>
+    readEmailLogWindow(
+      connection.id,
+      new Date(cursorMs).toISOString(),
+      SETTLED_WINDOW_ROW_CAP,
+    ),
+  );
+  // A full window means the cap cut it short, so the set may be missing ids the
+  // walk meets. Falling back to the per-batch read costs the round trips this
+  // change saves and no coverage.
+  const settledWindow = settledEmailIds(windowRows, started);
+  const windowComplete = windowRows.length < SETTLED_WINDOW_ROW_CAP;
+
   let walkCoveredWholeWindow = false;
   while (Date.now() - started <= budgetMs) {
     const summaries = await drainStep("reading the mailbox failed", () =>
@@ -1148,18 +1175,17 @@ async function drainConnection(
       walkCoveredWholeWindow = true;
       break;
     }
-    // Skip already-evaluated emails (push + cron race, re-delivered mail).
-    // One read for the whole batch: this filter runs before any work, so a
-    // per-email read put a round trip in front of every batched email.
-    const settled = settledEmailIds(
-      await drainStep("reading the process log failed", () =>
-        readEmailLogSnapshots(
-          connection.id,
-          summaries.map((s) => s.id),
-        ),
-      ),
-      Date.now(),
-    );
+    const settled = windowComplete
+      ? settledWindow
+      : settledEmailIds(
+          await drainStep("reading the process log failed", () =>
+            readEmailLogSnapshots(
+              connection.id,
+              summaries.map((s) => s.id),
+            ),
+          ),
+          Date.now(),
+        );
     const fresh = summaries.filter((s) => !settled.has(s.id));
     // The batch's newest email (summaries are oldest-first); the cursor
     // slides to just past it.

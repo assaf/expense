@@ -515,6 +515,14 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   starts at or before where the first run did, so it re-covers the whole
   interval the first one ran over. Callers that inject an adapter (the dev
   route, the tests) run standalone, and always over the whole window.
+- One `email_process_log` read per walk, covering the whole window that walk
+  walks, with the per-batch read kept only as the fallback for a window that
+  comes back at its cap. Reading per batch repeated one query shape once per
+  batch (Sentry EXPENSE-1J, 99 occurrences). What actually stops two drains
+  filing the same receipt twice is the atomic claim in
+  `claimEmailForProcessing`, not this filter: an email a concurrent drain
+  settled a moment ago simply loses the claim and lands as
+  `ignored: already processed`.
 
 ## No-LLM extraction (connected flow)
 

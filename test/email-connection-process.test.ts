@@ -82,13 +82,15 @@ vi.mock("~/lib/db/email-rules", async (importOriginal) => {
 });
 
 const logMocks = vi.hoisted(() => ({
-  // Spied, not replaced: the drain's pre-work read of the process log is
-  // once per mailbox batch, and this pins that count. It was once per email
-  // (Sentry EXPENSE-1F, the `pg-pool.connect` N+1), which cost a pooled
-  // round trip per email before the batch began any work.
+  // Spied, not replaced: the drain's read of the process log is once per walk,
+  // and this pins that count. It was once per email (Sentry EXPENSE-1F, the
+  // `pg-pool.connect` N+1) and then once per mailbox batch (EXPENSE-1J, the
+  // repeated `email_process_log` query); both cost pooled round trips before
+  // the batch did any work.
   readEmailLogSnapshots: vi.fn(),
-  // Set to an error to make the drain's batched process-log read throw it,
-  // so the stage label and the preserved cause can be asserted.
+  readEmailLogWindow: vi.fn(),
+  // Set to an error to make the drain's process-log read throw it, so the
+  // stage label and the preserved cause can be asserted.
   readError: null as Error | null,
 }));
 
@@ -102,6 +104,13 @@ vi.mock("~/lib/db/email-log", async (importOriginal) => {
       logMocks.readEmailLogSnapshots(...args);
       if (logMocks.readError) throw logMocks.readError;
       return actual.readEmailLogSnapshots(...args);
+    },
+    readEmailLogWindow: (
+      ...args: Parameters<typeof actual.readEmailLogWindow>
+    ) => {
+      logMocks.readEmailLogWindow(...args);
+      if (logMocks.readError) throw logMocks.readError;
+      return actual.readEmailLogWindow(...args);
     },
   };
 });
@@ -1074,7 +1083,7 @@ describe("drainEmailConnection", () => {
     expect(row?.outcome === "created" || row?.outcome === "partial").toBe(true);
   });
 
-  it("reads the process log once per batch, not once per email", async () => {
+  it("reads the process log once per walk, not once per email or batch", async () => {
     // One mailbox batch of four, three of them new. d1 is already settled.
     await testPrisma.emailProcessLog.create({
       data: {
@@ -1130,14 +1139,44 @@ describe("drainEmailConnection", () => {
       lookbackMs: FIXTURE_LOOKBACK_MS,
     });
 
-    // The settled email stays out; the other three are evaluated, and the
-    // whole batch cost one log read.
+    // The settled email stays out and the other three are evaluated, from one
+    // read of the window this walk covers.
     expect(result.evaluated).toBe(3);
-    expect(logMocks.readEmailLogSnapshots).toHaveBeenCalledTimes(1);
-    expect(logMocks.readEmailLogSnapshots.mock.calls[0]).toEqual([
-      conn.id,
-      ["d1", "d2", "d3", "d4"],
-    ]);
+    expect(logMocks.readEmailLogWindow).toHaveBeenCalledTimes(1);
+    expect(logMocks.readEmailLogWindow.mock.calls[0]?.[0]).toBe(conn.id);
+    expect(logMocks.readEmailLogSnapshots).not.toHaveBeenCalled();
+  });
+
+  it("still reads the process log once for a walk that spans several batches", async () => {
+    // Sentry EXPENSE-1J: a walk of N batches used to issue N identical
+    // `email_process_log` reads (99 occurrences of that one query shape). Five
+    // emails at batchSize 2 is three mailbox batches, and the log read must
+    // not scale with them.
+    const { adapter } = fakeAdapter(
+      new Map(
+        Array.from({ length: 5 }, (_, i) => [
+          `m${i}`,
+          {
+            from: "newsletter@random.com",
+            subject: `Digest ${i}`,
+            body: "nothing to see",
+            receivedAt: new Date(
+              Date.parse("2026-07-01T10:00:00.000Z") + i * 60_000,
+            ).toISOString(),
+          },
+        ]),
+      ),
+    );
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      batchSize: 2,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    expect(result.evaluated).toBe(5);
+    expect(logMocks.readEmailLogWindow).toHaveBeenCalledTimes(1);
+    expect(logMocks.readEmailLogSnapshots).not.toHaveBeenCalled();
   });
 
   it("writes the batch's counters once, not once per email", async () => {

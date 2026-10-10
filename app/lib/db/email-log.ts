@@ -131,6 +131,36 @@ export async function readEmailLogSnapshots(
   }));
 }
 
+/** Every log row a connection wrote since `sinceIso`, oldest first, capped at
+ * `limit`. This is the drain's one read per walk: it asks about the whole
+ * window the walk is about to cover rather than one mailbox batch at a time,
+ * because a walk of N batches used to issue N identical reads of
+ * `email_process_log` — Sentry EXPENSE-1J, 99 occurrences of one query shape.
+ *
+ * The cap is a safety valve, not a limit on the walk: the caller falls back to
+ * its per-batch read when the window comes back full, so a mailbox busier than
+ * the cap costs the same round trips it costs today and never less coverage.
+ * The `(connectionId, createdAt)` index carries the range, so the read is
+ * bounded by the window rather than by the table. */
+export async function readEmailLogWindow(
+  connectionId: string,
+  sinceIso: string,
+  limit: number,
+): Promise<EmailLogSnapshot[]> {
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(l.connectionId.eq(connectionId), l.createdAt.gte(fromIso(sinceIso))),
+  )
+    .select("emailId", "outcome", "createdAt")
+    .orderBy((l) => l.createdAt.asc())
+    .limit(limit)
+    .all();
+  return rows.map((row) => ({
+    emailId: row.emailId,
+    outcome: row.outcome,
+    createdAt: toIso(row.createdAt),
+  }));
+}
+
 /** The arrival time of every log row still sitting on "processing" past the
  * caller's stale cutoff, oldest first, with `null` where a row recorded no
  * arrival at all. A resumed mailbox walk starts where the last completed one
