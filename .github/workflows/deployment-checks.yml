@@ -357,7 +357,14 @@ jobs:
             fi
             sleep 1
           done
-          pnpm prisma db update --no-interactive --confirm "$DB_NAME"
+          # No --confirm. Prisma 8's CLI reads the flag as a consent TOKEN and
+          # rejects one that answers no question in this run
+          # (CLI.CONSENT_UNUSED, exit 2), which is every non-destructive sync —
+          # the case this job exists for. A plan that would destroy data now
+          # stops the deploy with MIGRATION.DESTRUCTIVE_CHANGES and names the
+          # operations, instead of a push auto-approving the loss; resolve it
+          # deliberately with --rename/--delete, or from scripts/deploy.
+          pnpm prisma db update --no-interactive
 
   # Production deploy, AFTER the schema sync: the same order scripts/deploy
   # uses (its steps 1-3 are the check, test and migrate-db jobs above).

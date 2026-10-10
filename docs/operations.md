@@ -87,12 +87,19 @@ Procedure for a type change (e.g. String → DateTime):
    `DATABASE_URL_UNPOOLED`, swap `sslmode=no-verify` → `require`):
    `ALTER TABLE "t" ALTER COLUMN "c" TYPE TIMESTAMPTZ USING ("c"::timestamptz);`
    Check for cast-breaking values (e.g. `''`) on both databases first.
-3. Then `pnpm db:push` (dev), then the same `db update --confirm <dbname>`
-   against prod with `DATABASE_URL_UNPOOLED`, which normalizes timestamptz
-   → the contract's `TimestampString(3)` (that conversion db update CAN
-   do, data-preserving) and makes the next CI migrate-db a no-op.
+3. Then `pnpm db:push` (dev), then the same `db update` against prod with
+   `DATABASE_URL_UNPOOLED`, which normalizes timestamptz → the contract's
+   `TimestampString(3)` (that conversion db update CAN do, data-preserving)
+   and makes the next CI migrate-db a no-op. Neither CI nor
+   `scripts/deploy` passes `--confirm`: Prisma 8 reads it as a consent
+   token and rejects one that answers no question in the run
+   (`CLI.CONSENT_UNUSED`, exit 2), which is every non-destructive sync.
 4. Apply the ALTER to prod BEFORE pushing the code, or CI's db update
-   sees a data-losing plan and the deploy fails.
+   sees a data-losing plan and the deploy fails with
+   `MIGRATION.DESTRUCTIVE_CHANGES` naming the operations. That is the
+   intended outcome: a push must not be able to approve dropping prod
+   data. Resolve it deliberately with `--rename old:new` or
+   `--delete Model`.
 
 Prisma 8 notes: every timestamp column is `TimestampString(3)` — a
 pass-through string codec, chosen deliberately because the Temporal

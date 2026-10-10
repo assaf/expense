@@ -48,11 +48,13 @@ export DATABASE_URL="$DATABASE_URL_UNPOOLED"
 if [ "$SKIP_DB_SYNC" = "1" ]; then
   echo -e "\033[0;33mSkipping prisma db update (--skip-db-sync) — verify schema drift separately with: pnpm prisma db verify\033[0m"
 else
-  # Non-interactive destructive consent: --confirm carries the database
-  # name the prompt would ask for (db update only prompts when a change
-  # would destroy data).
-  DB_NAME=$(printf '%s' "$DATABASE_URL" | sed -E 's|.*/([^/?]+)(\?.*)?$|\1|')
-  pnpm prisma db update --no-interactive --confirm "$DB_NAME"
+  # No --confirm, and no database name to hand it. Prisma 8's CLI reads the
+  # flag as a consent TOKEN and rejects one that answers no question in this
+  # run (CLI.CONSENT_UNUSED, exit 2), which is every non-destructive sync. A
+  # plan that would destroy data stops here instead, with
+  # MIGRATION.DESTRUCTIVE_CHANGES naming the operations; re-run with
+  # --rename old:new / --delete Model once losing that data is intended.
+  pnpm prisma db update --no-interactive
 fi
 
 echo -e "\033[0;32m--- Step 4: Deploy to Vercel (production) ---\033[0m"
