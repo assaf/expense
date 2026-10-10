@@ -450,10 +450,14 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   that sender's mail goes back to waiting on the review list; remembering
   the sender again, or restoring it from the list, lifts the veto.
 - **Processing pipeline** (`app/lib/email-connection-process.server.ts`):
-  on each push (and daily via the cron) the Inbox is drained (3-day
-  lookback, cursor-scanned over receivedAt; an all-seen batch slides the
-  window forward instead of stopping, so a front of ignored mail never
-  blocks newer mail from the catch-up; EmailProcessLog = idempotency). Per email: self/bounce guards
+  on each push (and daily via the cron) the Inbox is drained: a cursor over
+  receivedAt, starting at the 3-day lookback floor on a cold instance and
+  otherwise where the last completed walk began, so a burst of pushes
+  re-covers the interval since that walk instead of the whole window (a claim
+  a killed drain left behind pulls the start back to it, or to the floor when
+  its arrival was never recorded). An all-seen batch slides the window
+  forward instead of stopping, so a front of ignored mail never blocks newer
+  mail from the catch-up; EmailProcessLog = idempotency. Per email: self/bounce guards
   → rule match (no match = ignore, untouched) → **precision-first
   classification** (`classifyReceiptEmail` in
   `app/lib/email-classify.ts`, regex only, no LLM): bank-notification
@@ -507,8 +511,10 @@ source parsed by `app/lib/content.server.ts`; renders /, /about, /faq,
   Fastmail UI says so).
 - A burst of pushes costs two drains, not one per push: the run in flight
   plus a single trailing run that starts after it, so mail arriving during
-  the first run is still inside the trailing run's lookback window. Callers
-  that inject an adapter (the dev route, the tests) run standalone.
+  the first run is still inside the trailing run's window — that window
+  starts at or before where the first run did, so it re-covers the whole
+  interval the first one ran over. Callers that inject an adapter (the dev
+  route, the tests) run standalone, and always over the whole window.
 
 ## No-LLM extraction (connected flow)
 

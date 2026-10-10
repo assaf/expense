@@ -47,6 +47,7 @@ import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import {
   readEmailLogSnapshots,
+  readStaleClaimArrivals,
   writeEmailLogRow,
   type EmailLogSnapshot,
 } from "~/lib/db/email-log";
@@ -312,6 +313,53 @@ function settledEmailIds(
     if (row.outcome !== "processing" || !stale) settled.add(row.emailId);
   }
   return settled;
+}
+
+/** How far back of a completed walk a resumed one starts. Mail that arrives
+ * while a walk is running can land behind its cursor, so the next walk must
+ * re-cover the whole interval the previous one ran over rather than only the
+ * part of it that was still ahead; starting at the previous walk's start is
+ * what makes that lossless. The slack on top absorbs the delivery latency
+ * between the mailbox's `receivedAt` and this app's clock. */
+const WALK_RESUME_OVERLAP_MS = 60 * 1000;
+
+/** Where a connection's mailbox walk starts. With no resume point that is the
+ * lookback floor — the whole window, and the conservative default.
+ *
+ * With one, the walk re-covers the interval since the previous COMPLETED walk
+ * began, and that is enough: mail older than that start was read by that walk
+ * (it read forward from its own floor), and mail that arrived while it ran is
+ * re-covered, because the interval starts where that walk did. A walk that was
+ * cut short — the time budget, or the process dying — records no resume point,
+ * so the next one starts from the previous completed walk and re-covers it.
+ *
+ * The one row that can outlive a completed walk is a claim older than the stale
+ * cutoff: a drain killed while holding it. Its arrival pulls the floor back to
+ * itself, because `claimEmailForProcessing` can only take that claim over if
+ * the drain offers the email again, and the walk that would have offered it is
+ * precisely the one that never finished. Left behind the floor, that email
+ * would be invisible to the drain and to /email-review alike forever, and its
+ * receipt would never be filed.
+ *
+ * The result is therefore never later than the lookback floor and never later
+ * than the oldest row still waiting on an answer, which is what keeps a
+ * resumed walk as complete as one that starts at the floor. */
+export function drainWalkFloorMs(input: {
+  nowMs: number;
+  lookbackMs: number;
+  lastWalkStartMs: number | null;
+  oldestStaleClaimMs: number | null;
+}): number {
+  const windowFloorMs = input.nowMs - input.lookbackMs;
+  const resumeFloorMs =
+    input.lastWalkStartMs === null
+      ? windowFloorMs
+      : input.lastWalkStartMs - WALK_RESUME_OVERLAP_MS;
+  const floorMs =
+    input.oldestStaleClaimMs === null
+      ? resumeFloorMs
+      : Math.min(resumeFloorMs, input.oldestStaleClaimMs);
+  return Math.max(windowFloorMs, floorMs);
 }
 
 /** Run one step of the drain, naming it if it throws. The caller sees only
@@ -904,6 +952,14 @@ interface DrainSlot {
 
 const drainSlots = new Map<string, DrainSlot>();
 
+/** When each connection's last COMPLETED mailbox walk began, by connection id.
+ * Per serverless instance, like `drainSlots`, and never persisted: an instance
+ * that has not walked a connection starts it at the lookback floor, which is
+ * the safe default and what a cold instance (the daily cron usually is one)
+ * still does. An entry left over from long ago only widens the interval the
+ * next walk re-covers, so it costs work, never correctness. */
+const walkStarts = new Map<string, number>();
+
 /**
  * Collapse a burst of drains for one connection into the run in flight plus
  * at most ONE trailing run. Exported for the unit test; the drain entry point
@@ -911,9 +967,11 @@ const drainSlots = new Map<string, DrainSlot>();
  *
  * Fastmail delivers pushes in bursts — nine inside seven seconds on
  * 2026-10-06 — and each one used to re-walk the same window of
- * already-evaluated mail. Every drain in that burst evaluated zero emails and
- * still paid a mailbox read plus a `readEmailLogSnapshots` query per batch,
- * * which is what Sentry kept flagging as the EXPENSE-1F N+1.
+ * already-evaluated mail, paying a mailbox read plus a `readEmailLogSnapshots`
+ * query per batch (Sentry EXPENSE-1F, and EXPENSE-1J once the pool-checkout
+ * spans behind 1F were ignored and the detector regrouped onto the queries
+ * themselves). Coalescing caps one burst at those two walks; `drainWalkFloorMs`
+ * is what keeps each of them off the mail that is already settled.
  *
  * The trailing run is what makes this lossless rather than merely cheaper:
  * it starts strictly after the run it follows, so mail that arrived while
@@ -961,24 +1019,28 @@ export function drainEmailConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
 ): Promise<DrainResult> {
-  const run = () =>
+  const run = (resumeFromLastWalk: boolean) => () =>
     Sentry.withIsolationScope((scope) => {
       scope.setTag("connection", connection.id);
       scope.setTag("account", connection.accountId);
-      return drainConnection(connection, options);
+      return drainConnection(connection, options, resumeFromLastWalk);
     });
   // Any option at all means the caller supplied its own adapter, extraction
   // deps or window — the dev route and every test. Those must never join a
-  // production drain (or another test's), so they always run standalone.
-  if (Object.keys(options).length > 0) return run();
-  return coalesceDrain(connection.id, run);
+  // production drain (or another test's), so they always run standalone, and
+  // they always walk the whole lookback window: resuming is a production-only
+  // saving, and sharing a resume point would make a test's walk depend on the
+  // test that ran before it.
+  if (Object.keys(options).length > 0) return run(false)();
+  return coalesceDrain(connection.id, run(true));
 }
 
-/** The drain itself; drainEmailConnection owns the isolation scope it runs
- * in. */
+/** The drain itself; drainEmailConnection owns the isolation scope it runs in,
+ * and decides whether the walk may resume from the last one. */
 async function drainConnection(
   connection: EmailConnectionWithSecret,
   options: DrainOptions = {},
+  resumeFromLastWalk = false,
 ): Promise<DrainResult> {
   const credential = await drainStep("resolving the credential failed", () =>
     connectionCredential(connection),
@@ -1027,12 +1089,51 @@ async function drainConnection(
   // The batch's counter deltas, written once when the batch ends.
   const counters = counterBatch(connection.id);
 
-  // Cursor over receivedAt: starts at the lookback floor, advances past
-  // each scanned batch. +1ms so the (exclusive) JMAP `after` filter always
-  // moves strictly forward regardless of same-timestamp batches.
-  let cursorMs = started - lookbackMs;
+  // Cursor over receivedAt, advancing past each scanned batch. +1ms so the
+  // (exclusive) JMAP `after` filter always moves strictly forward regardless
+  // of same-timestamp batches. Where it starts is the whole point of the
+  // resume point: a push re-covers the interval since the last completed walk
+  // instead of the lookback window, which is the difference between one
+  // mailbox read per push and one per batch of mail that is already settled
+  // (Sentry EXPENSE-1J). Everything older is either settled already or was
+  // covered by the walk that set the resume point; drainWalkFloorMs carries
+  // the argument, including the row that can still sit behind it.
+  const lastWalkStartMs = resumeFromLastWalk
+    ? (walkStarts.get(connection.id) ?? null)
+    : null;
+  let oldestStaleClaimMs: number | null = null;
+  if (lastWalkStartMs !== null) {
+    // Only a resume point can leave a claim behind the floor, so the read is
+    // only worth making when there is one.
+    const arrivals = await drainStep("reading the stale claim failed", () =>
+      readStaleClaimArrivals(
+        connection.id,
+        new Date(staleClaimCutoffMs(started)).toISOString(),
+      ),
+    );
+    // Oldest first, so the head is the earliest claim that can be placed on
+    // the mailbox's timeline. One with no recorded arrival sits nowhere on it,
+    // and nothing narrower than the whole window is safe for it; the window
+    // floor is how that is said here (drainWalkFloorMs clamps to the same one).
+    // Neither writer can produce such a row today — the claim insert and the
+    // review upsert both write receivedAt — but a rescued claim must not rest
+    // on that.
+    const oldest = arrivals[0];
+    if (arrivals.includes(null)) {
+      oldestStaleClaimMs = started - lookbackMs;
+    } else if (typeof oldest === "string") {
+      oldestStaleClaimMs = Date.parse(oldest);
+    }
+  }
+  let cursorMs = drainWalkFloorMs({
+    nowMs: started,
+    lookbackMs,
+    lastWalkStartMs,
+    oldestStaleClaimMs,
+  });
   let afterIso = new Date(cursorMs).toISOString();
 
+  let walkCoveredWholeWindow = false;
   while (Date.now() - started <= budgetMs) {
     const summaries = await drainStep("reading the mailbox failed", () =>
       adapter.inboxEmailSummaries({
@@ -1040,7 +1141,13 @@ async function drainConnection(
         limit: batchSize,
       }),
     );
-    if (summaries.length === 0) break;
+    if (summaries.length === 0) {
+      // The window is exhausted, so this walk reached the present: the only
+      // exit that has covered everything from its floor onward, and so the
+      // only one that earns a resume point for the next walk.
+      walkCoveredWholeWindow = true;
+      break;
+    }
     // Skip already-evaluated emails (push + cron race, re-delivered mail).
     // One read for the whole batch: this filter runs before any work, so a
     // per-email read put a round trip in front of every batched email.
@@ -1114,6 +1221,13 @@ async function drainConnection(
       cursorMs = nextMs;
       afterIso = new Date(cursorMs).toISOString();
     }
+  }
+  // Record the resume point only for a walk that covered the window; one cut
+  // short by the budget or killed outright leaves it alone, so the next walk
+  // starts where the last completed one did and re-covers what this one
+  // missed.
+  if (resumeFromLastWalk && walkCoveredWholeWindow) {
+    walkStarts.set(connection.id, started);
   }
   return result;
 }

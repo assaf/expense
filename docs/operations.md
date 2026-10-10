@@ -435,3 +435,16 @@ impacted, on a drain whose batched snapshot read (the real earlier N+1) was
 working correctly. **Their absence is not broken instrumentation**: the query
 spans themselves, which carry the timing, are still recorded. If you go
 looking for checkout spans to judge pool contention, use the query spans.
+
+The N+1 those checkout spans had been hiding regrouped onto the query spans
+once they were filtered (EXPENSE-1J): the drain walked its 3-day window from
+the floor on every push, so a burst paid one `email_process_log` read per batch
+of mail that was already settled. A walk that reaches the end of its window now
+records where it began and the next drain starts there
+(`drainWalkFloorMs` in `app/lib/email-connection-process.server.ts`), so a push
+re-covers the interval since that walk instead of the whole window. One row can
+still sit behind that start — the claim a killed drain was holding — and the
+read that looks for it is what keeps `claimEmailForProcessing`'s takeover
+reachable; a stranded claim means a receipt that is never filed, so do not drop
+it. A cold instance, which is what the daily cron usually gets, still walks the
+whole window.

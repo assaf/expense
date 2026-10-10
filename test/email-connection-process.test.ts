@@ -3,6 +3,7 @@ import PostalMime from "postal-mime";
 import {
   coalesceDrain,
   drainEmailConnection,
+  drainWalkFloorMs,
   processConnectionEmail,
   connectionInboundDeps,
   type ConnectionMailAdapter,
@@ -14,10 +15,11 @@ import { readImage } from "~/lib/images.server";
 import type * as EmailConnectionMailModule from "~/lib/email-connection-mail.server";
 import type * as EmailLogModule from "~/lib/db/email-log";
 import type * as EmailRulesModule from "~/lib/db/email-rules";
+import { readStaleClaimArrivals, writeEmailLogRow } from "~/lib/db/email-log";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
 import { db } from "~/lib/prisma.server";
-import { toIso } from "~/lib/db/wire";
+import { fromIso, fromIsoOrNull, toIso } from "~/lib/db/wire";
 import { testPrisma } from "./helpers/seedTestData";
 import {
   fakeAdapter,
@@ -26,6 +28,7 @@ import {
   cleanupConnection,
   connection,
   summary,
+  type TestConnection,
 } from "./helpers/email-test-fixtures";
 
 /**
@@ -132,7 +135,7 @@ function depsFor(
 }
 
 describe("processConnectionEmail", () => {
-  let conn: ReturnType<typeof connection>;
+  let conn: TestConnection;
 
   beforeEach(async () => {
     conn = connection();
@@ -942,7 +945,7 @@ describe("processConnectionEmail", () => {
 });
 
 describe("drainEmailConnection", () => {
-  let conn: ReturnType<typeof connection>;
+  let conn: TestConnection;
 
   beforeEach(async () => {
     conn = connection();
@@ -1946,6 +1949,203 @@ describe("fake adapter raw email", () => {
     const parsed = await PostalMime.parse(raw.raw);
     expect(parsed.subject).toBe("Your receipt");
     expect(parsed.text).toContain("TOTAL: 1.23");
+  });
+});
+
+// The read that keeps a resumed walk from stepping over the claim its previous
+// drain died holding. Not reachable through the drain in this file — every
+// drain test injects an adapter, which by design never resumes — so the query
+// is what gets pinned here: which rows count as stale, and in what order.
+describe("readStaleClaimArrivals", () => {
+  let conn: TestConnection;
+
+  beforeEach(async () => {
+    conn = connection();
+    await cleanupConnection();
+    await testPrisma.emailConnection.create({
+      data: {
+        id: conn.id,
+        accountId: conn.accountId,
+        provider: conn.provider,
+        emailAddress: conn.emailAddress,
+        remoteAccountId: conn.remoteAccountId,
+        tokenEnc: conn.tokenEnc,
+        createdAt: conn.createdAt,
+      },
+    });
+  });
+
+  /** A log row as a writer leaves it, with the arrival under the test's
+   * control: the claim that outlives its worker is the only row the drain has
+   * to look back for. */
+  const seedRow = (
+    emailId: string,
+    outcome: string,
+    createdAtIso: string,
+    arrivalIso: string | null,
+  ) =>
+    writeEmailLogRow({
+      connectionId: conn.id,
+      emailId,
+      create: {
+        fromAddress: "receipts@example.com",
+        subject: "seeded",
+        matched: false,
+        outcome,
+        createdAt: fromIso(createdAtIso),
+        receivedAt: fromIsoOrNull(arrivalIso),
+      },
+      onUniqueViolation: "throw",
+    });
+
+  it("returns the stale claims' arrivals, oldest first", async () => {
+    const stale = "2026-07-15T11:00:00.000Z";
+    await seedRow(
+      "stale-later",
+      "processing",
+      stale,
+      "2026-07-14T09:00:00.000Z",
+    );
+    await seedRow(
+      "stale-earlier",
+      "processing",
+      stale,
+      "2026-07-14T08:00:00.000Z",
+    );
+    await seedRow("stale-unrecorded", "processing", stale, null);
+    // Fresh: the worker holding this claim may still be alive, so its email is
+    // not the drain's to take over.
+    await seedRow(
+      "live",
+      "processing",
+      "2026-07-15T12:00:00.000Z",
+      "2026-07-14T07:00:00.000Z",
+    );
+    // Decided, whatever its age.
+    await seedRow("settled", "ignored", stale, "2026-07-14T06:00:00.000Z");
+
+    const arrivals = await readStaleClaimArrivals(
+      conn.id,
+      "2026-07-15T11:50:00.000Z",
+    );
+
+    // The head is what the drain points its walk at, so the earliest arrival
+    // has to lead.
+    expect(arrivals.slice(0, 2)).toEqual([
+      "2026-07-14T08:00:00.000Z",
+      "2026-07-14T09:00:00.000Z",
+    ]);
+    // The third recorded no arrival: it places nothing on the mailbox's
+    // timeline, and seeing it is what stops the drain narrowing at all.
+    expect(arrivals).toHaveLength(3);
+    expect(arrivals).toContain(null);
+  });
+
+  it("is empty when every row is fresh or already decided", async () => {
+    await seedRow(
+      "settled",
+      "created",
+      "2026-07-15T11:00:00.000Z",
+      "2026-07-14T08:00:00.000Z",
+    );
+    await seedRow(
+      "live",
+      "processing",
+      "2026-07-15T12:00:00.000Z",
+      "2026-07-14T07:00:00.000Z",
+    );
+    expect(
+      await readStaleClaimArrivals(conn.id, "2026-07-15T11:50:00.000Z"),
+    ).toEqual([]);
+  });
+});
+
+// Where a walk starts, and the one thing that could make resuming one skip
+// mail. Pure on purpose: the drain that uses this needs a live mailbox, so the
+// boundary is what gets pinned. The exact overlap is asserted rather than
+// related, because it is the cushion that makes resuming lossless when the
+// mailbox's `receivedAt` and this app's clock disagree.
+describe("drainWalkFloorMs", () => {
+  const NOW = Date.parse("2026-07-15T12:00:00.000Z");
+  const LOOKBACK = 3 * 24 * 60 * 60 * 1000;
+  const WINDOW_FLOOR = NOW - LOOKBACK;
+
+  it("starts at the lookback floor when there is no resume point", () => {
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs: null,
+        oldestStaleClaimMs: null,
+      }),
+    ).toBe(WINDOW_FLOOR);
+  });
+
+  it("starts just before the last completed walk, not at the last batch", () => {
+    // Mail delivered while a walk ran can land behind its cursor, so the next
+    // walk has to re-cover the interval the previous one ran over.
+    const lastWalkStartMs = NOW - 30_000;
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs,
+        oldestStaleClaimMs: null,
+      }),
+    ).toBe(lastWalkStartMs - 60_000);
+  });
+
+  it("pulls back to a stale claim sitting behind the resume point", () => {
+    // The claim a killed drain left on "processing": the takeover is only
+    // reachable if the walk offers that email again, so its arrival wins.
+    const oldestStaleClaimMs = NOW - 20 * 60 * 1000;
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs: NOW - 30_000,
+        oldestStaleClaimMs,
+      }),
+    ).toBe(oldestStaleClaimMs);
+  });
+
+  it("keeps the resume point when the stale claim is newer than it", () => {
+    const lastWalkStartMs = NOW - 30 * 60 * 1000;
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs,
+        oldestStaleClaimMs: NOW - 10 * 60 * 1000,
+      }),
+    ).toBe(lastWalkStartMs - 60_000);
+  });
+
+  it("narrows nothing for a claim that cannot be placed", () => {
+    // The caller passes the window floor when a stale claim carries no arrival
+    // time: it sits nowhere on the mailbox's timeline, so the walk keeps the
+    // whole window rather than step over it.
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs: NOW - 30_000,
+        oldestStaleClaimMs: WINDOW_FLOOR,
+      }),
+    ).toBe(WINDOW_FLOOR);
+  });
+
+  it("never starts earlier than the lookback floor", () => {
+    // Neither an ancient resume point nor an ancient claim licenses a walk
+    // longer than the window it is allowed to cover.
+    expect(
+      drainWalkFloorMs({
+        nowMs: NOW,
+        lookbackMs: LOOKBACK,
+        lastWalkStartMs: NOW - 10 * LOOKBACK,
+        oldestStaleClaimMs: NOW - 10 * LOOKBACK,
+      }),
+    ).toBe(WINDOW_FLOOR);
   });
 });
 

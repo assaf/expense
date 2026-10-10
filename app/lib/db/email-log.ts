@@ -5,7 +5,7 @@ import {
 } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
-import { toIso } from "~/lib/db/wire";
+import { fromIso, toIso, toIsoOrNull } from "~/lib/db/wire";
 import type { Contract } from "../../../prisma/contract.d";
 
 /**
@@ -129,6 +129,35 @@ export async function readEmailLogSnapshots(
     outcome: row.outcome,
     createdAt: toIso(row.createdAt),
   }));
+}
+
+/** The arrival time of every log row still sitting on "processing" past the
+ * caller's stale cutoff, oldest first, with `null` where a row recorded no
+ * arrival at all. A resumed mailbox walk starts where the last completed one
+ * began instead of at the lookback floor (Sentry EXPENSE-1J), and these are
+ * the rows that can sit behind that start: a claim outlives its worker only
+ * when the process was killed, and a killed walk records no resume point.
+ * Pointing the walk back at them is what keeps
+ * `claimEmailForProcessing`'s takeover reachable — otherwise the email sits in
+ * the Inbox forever, invisible to the drain and to /email-review alike, and
+ * its receipt is never filed. The policy stays with the caller: it passes the
+ * same cutoff the takeover predicate uses, so the two cannot disagree and
+ * either strand a claim or steal a live one. */
+export async function readStaleClaimArrivals(
+  connectionId: string,
+  staleCutoffIso: string,
+): Promise<Array<string | null>> {
+  const rows = await db.orm.public.EmailProcessLog.where((l) =>
+    and(
+      l.connectionId.eq(connectionId),
+      l.outcome.eq("processing"),
+      l.createdAt.lt(fromIso(staleCutoffIso)),
+    ),
+  )
+    .select("receivedAt")
+    .orderBy((l) => l.receivedAt.asc())
+    .all();
+  return rows.map((row) => toIsoOrNull(row.receivedAt));
 }
 
 /** The decision rows for a batch of emails: what the inbox review scan needs
