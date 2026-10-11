@@ -460,6 +460,43 @@ reachable; a stranded claim means a receipt that is never filed, so do not drop
 it. A cold instance, which is what the daily cron usually gets, still walks the
 whole window.
 
+### The walk's cursor cannot stand still (EXPENSE-1M)
+
+That same change carried a bug worth remembering, because of how it failed:
+silently, and only under a condition the tests did not have. Reading the
+settled set **once** meant an email evaluated _during_ the walk was not in it,
+so if the mailbox served the same batch again the drain would re-evaluate what
+it had just filed. Its claim then lost the `(connectionId, emailId)` unique
+index and answered "already processed" — no row, no error, no Sentry event.
+
+Every walk stops on a batch it cannot move past: `nextMs` is one millisecond
+past the newest `receivedAt` in the batch, and when the batch sits at or behind
+the cursor the cursor does not move. The old code took the **last** element
+rather than the batch's newest, and fell back to the current cursor when that
+parsed to NaN; the `fresh.length === 0` branch had a defensive `break`, the
+branch _after_ processing a batch did not. So a re-served batch was evaluated
+again, and again, until the 45s budget ran out. On 2026-10-10 one push
+evaluated a single GitHub notification 143 times (Vercel's log showed 51
+identical lines inside one request, which is what identified it as one walk
+looping rather than many pushes) and **no mail was imported by that push at
+all** — the queue never got past the first batch. The fix is a bound, not an
+arithmetic correction, because "the cursor happens to move" is not something a
+request should depend on for termination:
+
+- fold the newest `receivedAt` across the whole batch (`nextCursorMs`) rather
+  than reading its last element, so one odd row cannot leave the cursor still;
+- **bound the work: one request attempts the same email at most twice**
+  (`MAX_EMAIL_ATTEMPTS_PER_WALK`), which is the invariant that makes a repeated
+  batch a stopped walk whatever the mailbox does;
+- end the walk on a batch that adds no id it has not already been served — the
+  mailbox re-serving a window the cursor did not take.
+
+The lesson is the shape, not the arithmetic: **an optimisation that hoists a
+read out of a loop inherits the loop's tolerance for a stale snapshot, and a
+loop that can re-serve its input needs an explicit bound on the work it will
+do.** Here the loop was presumed to advance; the read was hoisted past its own
+driver, and nothing limited a repeat.
+
 ## Email ingestion alerting
 
 The Sentry alert **"Email ingestion failures"** (workflow `6147757`, org

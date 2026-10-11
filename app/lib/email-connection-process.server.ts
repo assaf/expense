@@ -330,6 +330,37 @@ const WALK_RESUME_OVERLAP_MS = 60 * 1000;
  * it did before and is correct, just not cheaper. */
 const SETTLED_WINDOW_ROW_CAP = 1_000;
 
+/** How many times ONE walk may attempt the same email. One is the normal case:
+ * the claim writes the row, so a later pass sees it settled. The second is the
+ * allowance for a mailbox that serves the same batch twice — and a third would
+ * be a bug, which this bound turns into a stopped walk rather than a request
+ * that repeats one email until its time budget dies (Sentry EXPENSE-1M: 143
+ * attempts at a single GitHub notification, and not one email imported). */
+const MAX_EMAIL_ATTEMPTS_PER_WALK = 2;
+
+/** Where a batch leaves the cursor: one millisecond past the newest
+ * `receivedAt` it actually carries, read across the whole batch rather than
+ * its last element. A batch arrives oldest-first, but a walk must still move
+ * when the server returns it out of order or when a row's `receivedAt` will
+ * not parse — the previous reading took the last element and, on a NaN, fell
+ * back to the cursor it started with, so the same batch was served again and
+ * again until the time budget ran out (Sentry EXPENSE-1M). Returning the
+ * cursor unchanged is the caller's signal that the batch cannot be escaped;
+ * it stops the walk rather than spinning on it. */
+function nextCursorMs(
+  summaries: ConnectionEmailSummary[],
+  cursorMs: number,
+): number {
+  let newestMs = Number.NaN;
+  for (const summary of summaries) {
+    const ms = Date.parse(summary.receivedAt);
+    if (!Number.isNaN(ms) && (Number.isNaN(newestMs) || ms > newestMs)) {
+      newestMs = ms;
+    }
+  }
+  return Number.isNaN(newestMs) ? cursorMs : newestMs + 1;
+}
+
 /** Where a connection's mailbox walk starts. With no resume point that is the
  * lookback floor — the whole window, and the conservative default.
  *
@@ -1171,6 +1202,17 @@ async function drainConnection(
   const windowComplete = windowRows.length < SETTLED_WINDOW_ROW_CAP;
 
   let walkCoveredWholeWindow = false;
+  // Per-walk bookkeeping, and the hard bound on repeated work: every id this
+  // walk has been served, with how many times it has been attempted. Both are
+  // needed. A batch that adds no id the walk has not already been served is the
+  // mailbox re-serving the same window, which ends the walk instead of paying a
+  // mailbox read per iteration. The count is the guarantee: whatever the
+  // mailbox does, one request never attempts the same email more than
+  // MAX_EMAIL_ATTEMPTS_PER_WALK times. On 2026-10-10 a single push attempted one
+  // GitHub notification 143 times and imported nothing (Sentry EXPENSE-1M); the
+  // walk had no such bound, so a batch it could not get past re-served until the
+  // time budget died.
+  const served = new Map<string, number>();
   while (Date.now() - started <= budgetMs) {
     const summaries = await drainStep("reading the mailbox failed", () =>
       adapter.inboxEmailSummaries({
@@ -1185,6 +1227,10 @@ async function drainConnection(
       walkCoveredWholeWindow = true;
       break;
     }
+    // Nothing in this batch is new to the walk: the mailbox is serving a window
+    // the cursor did not take, and re-reading it can only repeat work.
+    if (summaries.every((s) => served.has(s.id))) break;
+    for (const s of summaries) if (!served.has(s.id)) served.set(s.id, 0);
     const settled = windowComplete
       ? settledWindow
       : settledEmailIds(
@@ -1196,11 +1242,19 @@ async function drainConnection(
           ),
           Date.now(),
         );
-    const fresh = summaries.filter((s) => !settled.has(s.id));
-    // The batch's newest email (summaries are oldest-first); the cursor
-    // slides to just past it.
-    const newestMs = Date.parse(summaries[summaries.length - 1]!.receivedAt);
-    const nextMs = Number.isNaN(newestMs) ? cursorMs : newestMs + 1;
+    const fresh = summaries.filter(
+      (s) =>
+        !settled.has(s.id) &&
+        (served.get(s.id) ?? 0) < MAX_EMAIL_ATTEMPTS_PER_WALK,
+    );
+    // The batch's newest email; the cursor slides to just past it. Read the
+    // WHOLE batch for that, not its last element: a batch that arrives out of
+    // order, or whose newest row carries a receivedAt that will not parse,
+    // left the cursor exactly where it was and the same batch was served
+    // again to the end of the time budget. On 2026-10-10 one push evaluated a
+    // single GitHub notification 143 times that way (Sentry EXPENSE-1M), a
+    // fresh row each time, and no mail was processed at all.
+    const nextMs = nextCursorMs(summaries, cursorMs);
 
     if (fresh.length === 0) {
       // Nothing new in this batch: advance past it and keep scanning;
@@ -1221,6 +1275,7 @@ async function drainConnection(
         return result;
       }
       result.evaluated++;
+      served.set(summary.id, (served.get(summary.id) ?? 0) + 1);
       const outcome = await drainStep(`processing ${summary.id} failed`, () =>
         processConnectionEmail(connection, summary, deps, adapters, {
           counters,
@@ -1253,10 +1308,14 @@ async function drainConnection(
     await drainStep("counting the batch failed", counters.flush);
     // Processed emails are either trashed (gone from the Inbox) or seen;
     // slide the window past the batch so the next query doesn't re-serve it.
-    if (nextMs > cursorMs) {
-      cursorMs = nextMs;
-      afterIso = new Date(cursorMs).toISOString();
-    }
+    // A batch that offers no timestamp the cursor can move past cannot be
+    // escaped, so stop the walk here: re-serving it would evaluate the same
+    // mail until the budget ran out (EXPENSE-1M), and each pass costs a
+    // mailbox read. Stopping also withholds the resume point, which is
+    // correct: this walk did not cover the window.
+    if (nextMs <= cursorMs) break;
+    cursorMs = nextMs;
+    afterIso = new Date(cursorMs).toISOString();
   }
   // Record the resume point only for a walk that covered the window; one cut
   // short by the budget or killed outright leaves it alone, so the next walk

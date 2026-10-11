@@ -1208,6 +1208,167 @@ describe("drainEmailConnection", () => {
     expect(logMocks.readEmailLogSnapshots).not.toHaveBeenCalled();
   });
 
+  it("never attempts the same email more than twice in one walk", async () => {
+    // The EXPENSE-1M condition, stated as the invariant: even with a settled
+    // set that reports nothing (which is what a read taken before the walk
+    // wrote its own rows amounts to) and a mailbox that keeps serving the same
+    // email, one request attempts it exactly twice. `repeat` comes back every
+    // batch so the walk always has something to do; the fillers advance the
+    // cursor and are new each time, so nothing else bounds the walk.
+    const repeat = {
+      id: "repeat",
+      receivedAt: "2026-07-01T10:00:00.000Z",
+      subject: "Repeat",
+      from: "News <news@random.com>",
+    };
+    const batches = [
+      [
+        repeat,
+        {
+          id: "filler-1",
+          receivedAt: "2026-07-01T11:00:00.000Z",
+          subject: "Filler 1",
+          from: "News <news@random.com>",
+        },
+      ],
+      [
+        repeat,
+        {
+          id: "filler-2",
+          receivedAt: "2026-07-01T12:00:00.000Z",
+          subject: "Filler 2",
+          from: "News <news@random.com>",
+        },
+      ],
+      [
+        repeat,
+        {
+          id: "filler-3",
+          receivedAt: "2026-07-01T13:00:00.000Z",
+          subject: "Filler 3",
+          from: "News <news@random.com>",
+        },
+      ],
+    ];
+    let call = 0;
+    const adapter = {
+      inboxEmailSummaries: async () => batches[call++] ?? [],
+      rawEmail: async () => {
+        throw new Error("raw email is never needed for an ignored sender");
+      },
+      moveToTrash: async () => {},
+    };
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      timeBudgetMs: 5_000,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    // repeat twice (not three times), three fillers once each.
+    expect(result.evaluated).toBe(5);
+    expect(reportMocks.captureWarning).not.toHaveBeenCalledWith(
+      "[email-connections] drain time budget reached",
+      expect.anything(),
+    );
+  });
+
+  it("does not re-evaluate a batch the cursor cannot move past", async () => {
+    // EXPENSE-1M, on 2026-10-10: one push evaluated a single GitHub
+    // notification 143 times in one request and processed no mail at all. The
+    // server kept serving a batch the cursor could not get past (every row sits
+    // at or behind it), and the settled set — read once, before the walk — did
+    // not contain the row the first pass wrote, so each re-serve evaluated the
+    // email again and its claim lost the unique index ("already processed").
+    // An adapter that keeps returning the same batch is that boundary seen from
+    // the drain's side; `afterIso` is the server's business, which is why this
+    // one ignores it.
+    const summaries = [
+      {
+        id: "spin-1",
+        receivedAt: "2026-07-01T10:00:00.000Z",
+        subject: "One",
+        from: "News <news@random.com>",
+      },
+      {
+        id: "spin-2",
+        receivedAt: "2026-07-01T09:00:00.000Z",
+        subject: "Two",
+        from: "News <news@random.com>",
+      },
+    ];
+    let reads = 0;
+    const adapter = {
+      inboxEmailSummaries: async () => {
+        reads++;
+        return summaries;
+      },
+      rawEmail: async () => {
+        throw new Error("raw email is never needed for an ignored sender");
+      },
+      moveToTrash: async () => {},
+    };
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      timeBudgetMs: 250,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    // Two passes: the second re-serves the batch, finds both settled from the
+    // first, and stops. Before this, every re-serve evaluated both again.
+    expect(result.evaluated).toBe(2);
+    expect(reads).toBe(2);
+    expect(reportMocks.captureWarning).not.toHaveBeenCalledWith(
+      "[email-connections] drain time budget reached",
+      expect.anything(),
+    );
+  });
+
+  it("stops the walk on a batch the cursor cannot move past at all", async () => {
+    // The other side: a floor after every row in the batch means no pass can
+    // move the cursor, so the walk must not spend a second mailbox read on it.
+    const summaries = [
+      {
+        id: "stuck-1",
+        receivedAt: "2026-07-01T10:00:00.000Z",
+        subject: "One",
+        from: "News <news@random.com>",
+      },
+    ];
+    let reads = 0;
+    const adapter = {
+      inboxEmailSummaries: async () => {
+        reads++;
+        return summaries;
+      },
+      rawEmail: async () => {
+        throw new Error("raw email is never needed for an ignored sender");
+      },
+      moveToTrash: async () => {},
+    };
+
+    const result = await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      timeBudgetMs: 250,
+      // No lookback: the walk starts at "now", past every row above.
+      lookbackMs: 0,
+    });
+
+    expect(result.evaluated).toBe(1);
+    expect(reads).toBe(1);
+    expect(reportMocks.captureWarning).not.toHaveBeenCalledWith(
+      "[email-connections] drain time budget reached",
+      expect.anything(),
+    );
+  });
+
   it("still reads the process log once for a walk that spans several batches", async () => {
     // Sentry EXPENSE-1J: a walk of N batches used to issue N identical
     // `email_process_log` reads (99 occurrences of that one query shape). Five

@@ -39,6 +39,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-10"
+    changes:
+      - type: fix
+        text: "Mail sent to a connected mailbox imports again: the import could get stuck re-reading the same message until it ran out of time, on every notification, so new receipts stopped being filed with no explanation."
   - date: "2026-10-08"
     changes:
       - type: fix
