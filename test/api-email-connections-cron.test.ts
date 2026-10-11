@@ -160,6 +160,25 @@ describe("api.email-connections-cron", () => {
     expect(mocks.ensureConnectionPushSubscription).not.toHaveBeenCalled();
   });
 
+  it("reports a tick that died, because a dead tick processed no mail at all", async () => {
+    // A throw out of the tick body used to be a console line and a 500:
+    // `withMonitor` records a failed check-in but creates no issue, so the
+    // "Email ingestion failures" alert never saw the whole daily run die.
+    mocks.listAllEmailConnections.mockRejectedValue(new Error("db is down"));
+    const res = await loader(
+      args(
+        new Request("https://expense.test/api/email-connections-cron", {
+          headers: { Authorization: "Bearer cron-secret" },
+        }),
+      ),
+    );
+    expect(res.status).toBe(500);
+    expect(mocks.captureWarning).toHaveBeenCalledWith(
+      expect.stringContaining("tick failed"),
+      expect.objectContaining({ error: expect.any(Error) }),
+    );
+  });
+
   it("renews every connection", async () => {
     mocks.listAllEmailConnections.mockImplementation(async () => [
       connection({ id: "a", status: "error" }),

@@ -18,6 +18,7 @@ import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { readStaleClaimArrivals, writeEmailLogRow } from "~/lib/db/email-log";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
+import type * as ErrorsModule from "~/lib/errors.server";
 import { db } from "~/lib/prisma.server";
 import { fromIso, fromIsoOrNull, toIso } from "~/lib/db/wire";
 import { testPrisma } from "./helpers/seedTestData";
@@ -111,6 +112,22 @@ vi.mock("~/lib/db/email-log", async (importOriginal) => {
       logMocks.readEmailLogWindow(...args);
       if (logMocks.readError) throw logMocks.readError;
       return actual.readEmailLogWindow(...args);
+    },
+  };
+});
+
+// Spied, not replaced: a per-email failure used to be a console line and a row
+// with outcome "error", which is invisible to the "Email ingestion failures"
+// Sentry alert that filters on this route. These pin that it reports.
+const reportMocks = vi.hoisted(() => ({ captureWarning: vi.fn() }));
+
+vi.mock("~/lib/errors.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof ErrorsModule>();
+  return {
+    ...actual,
+    captureWarning: (...args: Parameters<typeof actual.captureWarning>) => {
+      reportMocks.captureWarning(...args);
+      return actual.captureWarning(...args);
     },
   };
 });
@@ -938,6 +955,7 @@ describe("processConnectionEmail", () => {
         createdAt: new Date().toISOString(),
       },
     });
+
     const { adapter } = fakeAdapter(new Map());
     const result = await processConnectionEmail(
       conn,
@@ -950,6 +968,48 @@ describe("processConnectionEmail", () => {
     );
     expect(result).toEqual({ status: "ignored", reason: "already processed" });
     expect((await logRow(conn.id, "e1"))?.outcome).toBe("processing");
+  });
+  it("reports a per-email failure, so a receipt that was not filed is not silent", async () => {
+    // The row records the error and /email-review can retry it, but before
+    // this capture the only trace was a console line, so the "Email ingestion
+    // failures" Sentry alert (which filters on this route) never saw it. That
+    // is the case the owner most needs to hear about: mail arrived, nothing
+    // was filed.
+    reportMocks.captureWarning.mockClear();
+    const { adapter } = fakeAdapter(new Map());
+    const deps = depsFor(adapter, conn.id);
+    deps.extractReceipt = async () => {
+      throw new Error("vision model refused");
+    };
+    const result = await processConnectionEmail(
+      conn,
+      summary("e-report", "Apple <no_reply@email.apple.com>", "Your receipt"),
+      deps,
+      { moveToTrash: async () => {}, sendToOwner: async () => {} },
+    );
+
+    expect(result).toMatchObject({ status: "error" });
+    expect((await logRow(conn.id, "e-report"))?.outcome).toBe("error");
+    expect(reportMocks.captureWarning).toHaveBeenCalledWith(
+      "[email-connections] processing failed",
+      expect.objectContaining({ emailId: "e-report" }),
+    );
+  });
+
+  it("stays quiet for mail it deliberately ignores", async () => {
+    // The other half of the alert's contract: an ordinary newsletter is the
+    // pipeline working, so it must not turn into an operator notification.
+    reportMocks.captureWarning.mockClear();
+    const { adapter } = fakeAdapter(new Map());
+    const result = await processConnectionEmail(
+      conn,
+      summary("e-quiet", "News <news@random.com>", "This week in tech"),
+      depsFor(adapter, conn.id),
+      { moveToTrash: async () => {}, sendToOwner: async () => {} },
+    );
+
+    expect(result.status).toBe("ignored");
+    expect(reportMocks.captureWarning).not.toHaveBeenCalled();
   });
 });
 
@@ -981,6 +1041,7 @@ describe("drainEmailConnection", () => {
     mocks.notifyOwner.mockClear();
     // The batched log read is counted per test (see logMocks).
     logMocks.readEmailLogSnapshots.mockClear();
+    reportMocks.captureWarning.mockClear();
     logMocks.readError = null;
   });
 

@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react-router";
 
 import { assertCronSecret } from "~/lib/route-helpers.server";
+import { captureWarning } from "~/lib/errors.server";
 
 /**
  * Shared loader body for the Vercel cron routes (see vercel.json). Every
@@ -68,6 +69,12 @@ export async function cronTick(
     return Response.json({ ok: true, ...result });
   } catch (err) {
     console.error(`[${options.name}] tick failed:`, err);
+    // Both crons in this app are mail ingestion (`inbound-cron`,
+    // `email-connections-cron`), and `withMonitor` records a failed check-in
+    // without ever creating an issue. A tick that dies here processed no mail
+    // at all, which is exactly what the "Email ingestion failures" Sentry
+    // alert exists to catch, so it cannot stay a console line.
+    captureWarning(`[${options.name}] tick failed`, { error: err });
     return Response.json({ error: "cron failed" }, { status: 500 });
   } finally {
     if (Sentry.isInitialized()) await Sentry.flush(3000);

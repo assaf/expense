@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vite-plus/test";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+} from "vite-plus/test";
 import sharp from "sharp";
 import { normalizeAmount } from "~/lib/format";
 import { extractEmailAddress } from "~/lib/validation";
@@ -41,6 +48,24 @@ import {
   testPrisma,
   allowSender as sharedAllowSender,
 } from "./helpers/seedTestData";
+import type * as ErrorsModule from "~/lib/errors.server";
+
+// Spied, not replaced, so the module keeps working for every other test in
+// the file. What is pinned here is that a receipt the pipeline failed to
+// import reaches the operator's alerting boundary, and that ordinary mail it
+// declines does not.
+const reportMocks = vi.hoisted(() => ({ captureWarning: vi.fn() }));
+
+vi.mock("~/lib/errors.server", async (importOriginal) => {
+  const actual = await importOriginal<typeof ErrorsModule>();
+  return {
+    ...actual,
+    captureWarning: (...args: Parameters<typeof actual.captureWarning>) => {
+      reportMocks.captureWarning(...args);
+      return actual.captureWarning(...args);
+    },
+  };
+});
 
 const SENDER = "forwarder@example.com";
 
@@ -1274,6 +1299,34 @@ describe("processInboundEvent (body receipt)", () => {
     expect(result).toMatchObject({ status: "error" });
     expect(deps.sent).toHaveLength(1);
     expect(deps.sent[0]!.html).toContain("doesn't look like a receipt");
+  });
+
+  // Spied, not replaced: a receipt that arrived and was never filed used to
+  // reach the sender as a reply and the operator as nothing at all, so the
+  // "Email ingestion failures" Sentry alert could not see it.
+  it("reports a receipt it could not import, and stays quiet when it is not a receipt", async () => {
+    reportMocks.captureWarning.mockClear();
+    const failed = fakeDeps();
+    failed.extractReceipt = async () => {
+      throw new Error("mock extraction failure");
+    };
+    await processInboundEvent(eventData(), failed);
+    usedEmailIds.push("email-1");
+    expect(reportMocks.captureWarning).toHaveBeenCalledWith(
+      "[inbound] receipt not imported",
+      expect.objectContaining({ emailId: "email-1" }),
+    );
+
+    // "Not a receipt" is the classifier working, not a failure: the sender
+    // gets told, and the operator does not. A second email id, because the
+    // first is now a recorded failure and a re-run of it is a duplicate.
+    reportMocks.captureWarning.mockClear();
+    const notAReceipt = fakeDeps();
+    notAReceipt.fetchReceivedEmail = async () =>
+      receivedEmail({ text: "Hi, what's up?", html: null });
+    await processInboundEvent(eventData({ email_id: "email-2" }), notAReceipt);
+    usedEmailIds.push("email-2");
+    expect(reportMocks.captureWarning.mock.calls).toEqual([]);
   });
 
   it("replies and does not create an expense when extraction fails", async () => {

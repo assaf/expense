@@ -1514,6 +1514,16 @@ export async function processInboundEvent(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[inbound] processing failed:", err);
+    // The sender gets the reply below and the row records the error, but the
+    // operator had no signal: a receipt that arrived and was never filed used
+    // to be visible only in this console line. The "Email ingestion failures"
+    // Sentry alert filters on this route, so this capture is what puts a
+    // per-receipt failure in front of him. Only the unexpected path: "Not a
+    // receipt" and "No receipt found" are the pipeline working, not failing.
+    captureWarning("[inbound] receipt not imported", {
+      emailId: data.email_id,
+      error: err,
+    });
     return await fail(message, [
       `The email${subject ? ` “${escapeHtml(subject)}”` : ""} could not be processed: <b>${escapeHtml(message)}</b>`,
       "Fix the problem and forward the receipt again, or add the expense manually in the app.",

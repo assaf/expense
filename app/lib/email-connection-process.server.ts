@@ -849,6 +849,16 @@ export async function processConnectionEmail(
       emailId: summary.id,
       err,
     });
+    // The row records it and /email-review can retry it, but this is the one
+    // ingestion failure nothing used to report: the mail arrived and nothing
+    // was filed for it, with only a console line. The "Email ingestion
+    // failures" Sentry alert filters on this route, so a capture here is what
+    // makes that alert able to see a per-receipt failure at all.
+    captureWarning("[email-connections] processing failed", {
+      connectionId: connection.id,
+      emailId: summary.id,
+      error: err,
+    });
     if (review) {
       // Review mode: keep the item on the list (outcome back to
       // pending-review) so the user can retry or ignore; the error message

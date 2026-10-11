@@ -444,14 +444,65 @@ spans themselves, which carry the timing, are still recorded. If you go
 looking for checkout spans to judge pool contention, use the query spans.
 
 The N+1 those checkout spans had been hiding regrouped onto the query spans
-once they were filtered (EXPENSE-1J): the drain walked its 3-day window from
-the floor on every push, so a burst paid one `email_process_log` read per batch
-of mail that was already settled. A walk that reaches the end of its window now
-records where it began and the next drain starts there
-(`drainWalkFloorMs` in `app/lib/email-connection-process.server.ts`), so a push
-re-covers the interval since that walk instead of the whole window. One row can
-still sit behind that start — the claim a killed drain was holding — and the
-read that looks for it is what keeps `claimEmailForProcessing`'s takeover
+once they were filtered (EXPENSE-1J): the drain read the process log once per
+mailbox batch, so a walk of N batches repeated one `email_process_log` query
+N times, and a burst of pushes repeated the whole walk each time. Both are
+fixed: a walk now reads the settled set **once for the whole window** it is
+about to cover (`readEmailLogWindow`, held in memory, with the per-batch read
+kept only as the fallback for a window that comes back at its row cap), and a
+burst of pushes collapses into the run in flight plus one trailing run
+(`coalesceDrain`). A walk that reaches the end of its window also records
+where it began and the next drain starts there (`drainWalkFloorMs`), so a push
+re-covers the interval since that walk instead of the whole window. One row
+can still sit behind that start — the claim a killed drain was holding — and
+the read that looks for it is what keeps `claimEmailForProcessing`'s takeover
 reachable; a stranded claim means a receipt that is never filed, so do not drop
 it. A cold instance, which is what the daily cron usually gets, still walks the
 whole window.
+
+## Email ingestion alerting
+
+The Sentry alert **"Email ingestion failures"** (workflow `6147757`, org
+`labnotes`, project `expense`) emails `assaf@labnotes.org` when the app cannot
+process incoming mail. It exists because the failure that matters most used to
+be invisible: a receipt that arrived and was never filed produced a row
+(`email_process_log.outcome = "error"`, or an `inbound_emails` row) and a
+console line, and nothing in Sentry. Three captures now feed it, all on the
+ingestion routes:
+
+| Where                                                                             | Message                                 | Level   |
+| --------------------------------------------------------------------------------- | --------------------------------------- | ------- |
+| `processConnectionEmail`'s per-email catch (`email-connection-process.server.ts`) | `[email-connections] processing failed` | warning |
+| `processInboundEvent`'s per-email catch (`inbound-email.server.ts`)               | `[inbound] receipt not imported`        | warning |
+| `cronTick`'s catch (`cron.server.ts`)                                             | `[<cron name>] tick failed`             | warning |
+
+The cron one matters because `withMonitor` records a **failed check-in, not an
+issue**: a tick that died outright processed no mail at all and used to be a
+console line and a 500.
+
+How it is scoped, and why:
+
+- **By endpoint, not by log string.** The filter is `http.url` containing
+  `/api/inbound` or `/api/email-connections`. Those paths are the ingestion
+  routes, so a new capture under one of them is covered without touching the
+  alert, and a failure elsewhere in the app (`POST /api/expense`, the insights
+  chat, the MCP endpoint) is not. A message-prefix filter would have needed an
+  edit per rename and would have silently stopped matching.
+- **Authentication rejections are excluded** (`message` does not contain
+  `authentication`). Those are the security pipeline working: spoofed or
+  unverifiable mail is not imported, by design, and they show up in
+  `/email-review` instead. Notifying on them would be noise from the internet.
+- **"Not a receipt" is not a failure.** Ordinary mail the classifier declines
+  gets a reply to the sender and no Sentry event, so forwarding a non-receipt
+  never emails anyone.
+- **Triggers are first seen, reappeared and regressed**, capped at one
+  notification per 60 minutes, production only. A repeat failure inside an
+  issue that is still unresolved and was already notified does **not**
+  re-notify; add `every_event` to the triggers if you want that (it will email
+  hourly for as long as it keeps failing).
+
+To change it, edit the workflow in Sentry (Alerts → Email ingestion failures),
+or through the Sentry MCP tools (`get_alert_rule`, then `update_alert_rule` —
+the update replaces all action groups, so read the rule first). If a failure you
+care about starts arriving under a new path, extend the filter rather than
+adding a message prefix.
