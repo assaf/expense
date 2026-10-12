@@ -122,6 +122,39 @@ describe("errorSummary", () => {
     }
   });
 
+  it("reports the cause behind a wrapped error, where a network reason lives", () => {
+    // Node reports every undici failure as `TypeError: fetch failed` and puts
+    // the reason on `cause`. Without this the EXPENSE-1K events said "fetch
+    // failed" and nothing else: no reset, no timeout, nothing to act on.
+    const socket = new Error("connect ECONNRESET 203.0.113.7:443");
+    const undici = new TypeError("fetch failed", { cause: socket });
+    const labelled = new Error(
+      `[email-connections] reading the mailbox failed: ${errorSummary(undici)}`,
+      { cause: undici },
+    );
+    expect(errorSummary(labelled)).toBe(
+      "Error: [email-connections] reading the mailbox failed: TypeError: fetch failed: Error: connect ECONNRESET 203.0.113.7:443",
+    );
+  });
+
+  it("masks a secret in the cause and stops on a cause cycle", () => {
+    expect(
+      errorSummary(
+        new Error("outer", {
+          cause: new Error("jmap said token=abc123XYZ"),
+        }),
+      ),
+    ).toContain("[redacted]");
+
+    // A cycle must terminate; the depth limit is what ends it.
+    const a = new Error("a");
+    const b = new Error("b", { cause: a });
+    a.cause = b;
+    const summary = errorSummary(a);
+    expect(summary.startsWith("Error: a")).toBe(true);
+    expect(summary.length).toBeLessThanOrEqual(200);
+  });
+
   it("stays linear on a long non-credential line", () => {
     // The prefix run is bounded at six segments; unbounded it backtracks
     // quadratically on exactly this input (tens of seconds at 64k). The cap
