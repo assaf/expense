@@ -95,7 +95,7 @@ export function SiteFooter() {
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
           <Logo icon />
           {/* One span, so the credit wraps as a phrase rather than
-           * splitting "Stewarded by" from the company. */}
+           * splitting the company name from the rest. */}
           <span className="whitespace-nowrap">
             © {new Date().getFullYear()} · ZHED Media
           </span>

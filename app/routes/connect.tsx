@@ -129,9 +129,8 @@ export default function ConnectPage({ loaderData }: Route.ComponentProps) {
     url: `${SITE_URL}/connect`,
     description: loaderData.summary,
     author: {
-      "@type": "Person",
-      name: "Assaf Arkin",
-      url: "https://labnotes.org",
+      "@type": "Organization",
+      name: "ZHED Media",
     },
   };
   const [searchParams, setSearchParams] = useSearchParams();

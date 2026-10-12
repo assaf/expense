@@ -54,7 +54,7 @@ corePages:
   - title: "Support"
     url: "{{siteUrl}}/support.md"
     blurb: |-
-      How to reach the person who builds Expense, what to include in a message, how to connect or disconnect a mailbox, and how to close your account.
+      How to reach support at Expense, what to include in a message, how to connect or disconnect a mailbox, and how to close your account.
 
 optionalPages:
   - title: "Blog"

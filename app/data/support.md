@@ -12,12 +12,12 @@
 metaTitle: |-
   Expense support: how to get help and who to write to
 description: |-
-  How to reach the person who builds Expense, what to put in a support message, the answers you can find without waiting, how to connect or disconnect a mailbox, and how to close your account.
+  How to reach support at Expense, what to put in a support message, the answers you can find without waiting, how to connect or disconnect a mailbox, and how to close your account.
 eyebrow: "Support"
 title: |-
   How to get help with Expense
 summary: |-
-  Expense is built and run by one person, so support email reaches him directly: {{supportEmail}}.
+  Support email reaches us directly, with no helpdesk ticket system in between: {{supportEmail}}.
 updated: "September 15, 2026"
 
 mirror:
@@ -26,8 +26,8 @@ mirror:
 
 ## Getting support
 
-Expense is stewarded and maintained by Assaf Arkin. Support requests can go
-directly to him, without going through a helpdesk ticket system:
+Expense is made by ZHED Media. Support requests come straight to us, without
+going through a helpdesk ticket system:
 [{{supportEmail}}](mailto:{{supportEmail}}).
 
 Describe your account's login email, what was being done when an issue occurred,
