@@ -11,7 +11,7 @@ operands, and paints a black bar over the region.
 Redacted identifiers: the account holder's name, personal email
 (@labnotes), home street address (1050 … Flower St, Apt 503), home zip codes
 (90015, 94606), the card suffix (1476), and any phone-number digit run.
-Merchant contact details (e.g. teaching@zoehong.com, the Paddle/Shopify
+Merchant contact details (e.g. teaching@example.com, the Paddle/Shopify
 addresses) are left intact.
 
 Usage: redact-receipts.py [dir]

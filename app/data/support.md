@@ -26,10 +26,9 @@ mirror:
 
 ## Getting support
 
-Expense is maintained by a single person, Assaf Arkin. Support requests are
-directed directly to him, without going through a helpdesk ticket system:
-[{{supportEmail}}](mailto:{{supportEmail}}). No ticket system, no chat window,
-and no phone tree need to be navigated prior to contacting him.
+Expense is stewarded and maintained by Assaf Arkin. Support requests can go
+directly to him, without going through a helpdesk ticket system:
+[{{supportEmail}}](mailto:{{supportEmail}}).
 
 Describe your account's login email, what was being done when an issue occurred,
 and what the expectation was.

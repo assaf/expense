@@ -289,7 +289,7 @@ describe("parseAccountBilled", () => {
     // Shopify PDF text: the account name is followed by the account email.
     expect(
       parseAccountBilled(
-        "Total $15.00 Account billed ZHED Media LLC teaching@zoehong.com Assaf Arkin 1050 South Flower Street",
+        "Total $15.00 Account billed ZHED Media LLC teaching@example.com Assaf Arkin 1050 South Flower Street",
       ),
     ).toBe("ZHED Media LLC");
   });

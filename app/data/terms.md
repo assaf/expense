@@ -28,8 +28,7 @@ mirror:
 ## This is
 
 Expense is a free expense tracker for individual taxpayers, developed and
-operated by one person, Assaf Arkin, in LA. It doesn't show ads and is free to
-use.
+operated by Assaf Arkin, in LA. It doesn't show ads and is free to use.
 
 By creating an account you agree to those terms. If you don't agree, please don't use the app.
 

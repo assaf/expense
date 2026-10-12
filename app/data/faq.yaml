@@ -78,7 +78,7 @@ questions:
       Insights is the app's own question page. Ask in plain words, like "how much have I spent this year?" or "where does my money go?", and the app computes the answer from your expenses. A question covering several months will show a chart, and the chart opens to the exact expenses behind it. The figures come from your records and the model only phrases them, so it can't hallucinate a number.
   - question: "Who makes Expense?"
     answer: |-
-      Expense is created and maintained by Assaf Arkin (https://labnotes.org).
+      Expense is stewarded and maintained by Assaf Arkin (https://labnotes.org).
 
 cta:
   heading: |-

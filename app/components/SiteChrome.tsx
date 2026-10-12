@@ -94,11 +94,10 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 px-4 py-8 sm:px-6 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-gray-500 dark:text-gray-400">
           <Logo icon />
-          {/* One span, so the credit wraps as a phrase rather than as
-           * "Stewarded by" plus a link that can land on its own line. */}
+          {/* One span, so the credit wraps as a phrase rather than
+           * splitting "Stewarded by" from the company. */}
           <span className="whitespace-nowrap">
-            © {new Date().getFullYear()} · Stewarded by{" "}
-            <a href="https://labnotes.org">Assaf Arkin</a>
+            © {new Date().getFullYear()} · ZHED Media
           </span>
         </div>
         <nav
