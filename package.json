@@ -8,7 +8,7 @@
     "build:prisma": "prisma contract emit",
     "check": "./scripts/check",
     "clean": "rm -rf node_modules/.vite .react-router build",
-    "cloc": "cloc --exclude-dir=node_modules,dist,build,coverage .",
+    "cloc": "cloc app test scripts prisma/contract.prisma",
     "clone": "./scripts/clone",
     "db:push": "prisma db update",
     "demo": "react-router build --force && DEMO=1 vp test run test/screenshot.test.ts -t \"drop-a-receipt\"",
