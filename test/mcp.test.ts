@@ -865,6 +865,60 @@ describe("MCP endpoint", () => {
     }
   });
 
+  it("ignores a category the account no longer owns", async () => {
+    // The assistant keeps echoing names that were renamed or merged away
+    // ("Fuel/Mileage" was a real bucket until the Schedule C alignment). Filed
+    // verbatim that is a category no row owns: invisible in the list, absent
+    // from the filters. It falls through to the mileage bucket instead.
+    await testPrisma.category.create({
+      data: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
+    });
+    try {
+      await initialize(accessToken);
+      const result = await callTool(accessToken, "log_mileage", {
+        locations: [
+          { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+          { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+        ],
+        date: "2026-05-13",
+        category: "Fuel/Mileage",
+      });
+      expect(result.isError).toBe(false);
+      const row = await testPrisma.expense.findFirst({
+        where: {
+          id: result.payload.expenseId as string,
+          accountId: TEST_ACCOUNT_ID,
+        },
+      });
+      expect(row!.category).toBe(MILEAGE_CATEGORY);
+    } finally {
+      await testPrisma.category.deleteMany({
+        where: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
+      });
+    }
+  });
+
+  it("honours a category the account does own", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: [
+        { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+        { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+      ],
+      date: "2026-05-14",
+      category: "Development",
+    });
+    expect(result.isError).toBe(false);
+    const row = await testPrisma.expense.findFirst({
+      where: {
+        id: result.payload.expenseId as string,
+        accountId: TEST_ACCOUNT_ID,
+      },
+    });
+    // "Development" is a seeded category, so the caller's choice stands.
+    expect(row!.category).toBe("Development");
+  });
+
   it("files a trip with no category when the account has no fuel bucket", async () => {
     await initialize(accessToken);
     const result = await callTool(accessToken, "log_mileage", {

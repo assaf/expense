@@ -25,7 +25,7 @@ import { recomputeMileage } from "~/lib/maps.server";
 import { mileageRateFor } from "~/lib/mileage-rates";
 import { convertToUsd } from "~/lib/fx.server";
 import { fxColumns, fxProvenance, withConversionNote } from "~/lib/fx-note";
-import { resolveCategory } from "~/lib/receipt-ai.server";
+import { matchName, resolveCategory } from "~/lib/receipt-ai.server";
 import { extractFromImage } from "~/lib/receipt-ocr.server";
 import { fetchPublicUrl, readBodyLimited, SsrfError } from "~/lib/ssrf.server";
 import {
@@ -419,20 +419,25 @@ export async function resolveMileage(
   };
 }
 
-/** The category a trip filed without one takes: the account's fuel and
- * mileage bucket (Schedule C line 9, or whatever the account renamed it to),
- * or "" when it has none (today's behaviour, and never a category the account
- * does not own). Read only when nothing was passed, so the common path pays
- * nothing — one call covers the MCP `log_mileage` tool and the insights chat's
- * confirmed trip, which share this function. */
+/** The category a trip takes. A name the caller supplied is honoured only when
+ * the account actually owns it (`matchName`, the same resolution the receipt
+ * paths use): categories get renamed and merged over time while the assistant
+ * keeps echoing the old names, and a stale one would file the trip under a
+ * category no row owns — invisible in the list, missing from the filters, the
+ * orphan state the tax-time cleanup exists to remove. Anything unrecognised
+ * falls through to the mileage bucket, which is the semantically right one for
+ * a drive; a receipt has no such default, which is why that path answers "".
+ *
+ * Reading the list is cheap: `readCategories` is cached per account. */
 async function defaultMileageCategory(
   accountId: string,
   given: string | undefined,
 ): Promise<string> {
-  const trimmed = given?.trim() ?? "";
-  if (trimmed) return trimmed;
   const categories = await readCategories(accountId);
-  return mileageCategory(categories.map((c) => c.name));
+  const names = categories.map((c) => c.name);
+  const named = matchName(given ?? "", names);
+  if (named) return named;
+  return mileageCategory(names);
 }
 
 /** Build and persist the expense for an already-resolved trip. */
