@@ -10,6 +10,7 @@ import { upsertExpense, deleteExpense } from "~/lib/db/expenses";
 import { markFiledExpenseDeleted } from "~/lib/db/insights-chat";
 import { captureError } from "~/lib/errors.server";
 import { fxColumns, fxProvenance, withConversionNote } from "~/lib/fx-note";
+import { readCategories } from "~/lib/db/categories";
 import { addReport, findOpenReportFresh } from "~/lib/db/reports";
 import {
   EMPTY_ROUTE,
@@ -53,23 +54,45 @@ export async function deleteExpenseWithMarker(
 
 /**
  * Validate the inputs every expense write shares: the date (a date that
- * exists; future dates are allowed, an invoice can predate its payment) and
- * the report (must exist and be open, when one is assigned). Returns an
- * error message, or null when the inputs are fine. Callers skip the report
- * check when the expense keeps its existing report unchanged (an expense
- * already in a closed report stays there when saved without changes).
+ * exists; future dates are allowed, an invoice can predate its payment), the
+ * report (must exist and be open, when one is assigned), and the category
+ * (must be one the account owns, when one is assigned). Returns an error
+ * message, or null when the inputs are fine. Callers skip the report check
+ * when the expense keeps its existing report unchanged (an expense already in
+ * a closed report stays there when saved without changes).
+ *
+ * The category check exists for the same reason as the report's: a name the
+ * account does not own is stored as an orphan — invisible in the category
+ * list, absent from the filters, and impossible to match in a report. Categories
+ * get renamed and merged, so a form or a tab can post one that has since gone.
+ * Callers that resolve a category themselves (the assistant paths, which map
+ * the name onto the account's list) pass the resolved value, or "" when the
+ * category is settled later, as the mileage save does.
+ *
+ * Like the report, the category check is skipped when the expense keeps the
+ * one it already has: `removeCategory` deletes the row and leaves the expenses
+ * carrying its name (that is what its "Delete it anyway" confirm promises), so
+ * a stale value on an untouched field must not block a save.
  */
 export async function validateExpenseInputs(
   accountId: string,
   date: string,
   report: string,
-  opts: { checkReport?: boolean } = {},
+  category: string,
+  opts: { checkReport?: boolean; checkCategory?: boolean } = {},
 ): Promise<string | null> {
   const dateError = validateDate(date);
   if (dateError) return dateError;
   if (opts.checkReport && report) {
     const { error } = await findOpenReportFresh(accountId, report);
     if (error) return error;
+  }
+  const named = category.trim();
+  if (opts.checkCategory && named) {
+    const categories = await readCategories(accountId);
+    if (!categories.some((c) => c.name === named)) {
+      return `A category named "${named}" doesn't exist. Pick one from the list.`;
+    }
   }
   return null;
 }
@@ -98,14 +121,23 @@ export async function saveExpenseFromForm(
 ): Promise<{ error: string; id: null } | { error: null; id: string }> {
   const date = formString(form, "date");
   const report = formString(form, "report");
-  const inputError = await validateExpenseInputs(accountId, date, report, {
-    // The report must exist and be open; an expense already in a closed
-    // report keeps it when saved unchanged (the check is skipped then).
-    checkReport: Boolean(report && (!existing || report !== existing.report)),
-  });
+  const category = formString(form, "category");
+  const inputError = await validateExpenseInputs(
+    accountId,
+    date,
+    report,
+    category,
+    {
+      // The report must exist and be open; an expense already in a closed
+      // report keeps it when saved unchanged (the check is skipped then).
+      checkReport: Boolean(report && (!existing || report !== existing.report)),
+      checkCategory: Boolean(
+        category && (!existing || category !== existing.category),
+      ),
+    },
+  );
   if (inputError) return { error: inputError, id: null };
 
-  const category = formString(form, "category");
   const description = formString(form, "description");
   const amount = normalizeAmount(formString(form, "amount"));
   // An amount the numeric(10,2) column cannot hold must be refused here:

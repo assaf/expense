@@ -49,6 +49,8 @@ releases:
         text: "A new mileage is filed under your fuel-and-mileage category, whatever your list calls it — Car and truck expenses on the seeded list, Fuel / Mileage on a renamed one — instead of arriving with no category at all, which is what an exact name match against a renamed list did. Trips logged by an assistant, or confirmed from Insights, get the same category."
       - type: improvement
         text: "A stop left with a business name that the map does not have now resolves through Google Places when a key is configured: typing hsbc bank, Beverly Hills fills in 445 North Bedford Drive, Beverly Hills, CA instead of saying it could not find the place."
+      - type: fix
+        text: "A category your list no longer has can't be filed to: naming a retired one no longer lands a trip or a receipt on it, a charity or medical drive is never booked on the business car-and-truck line, and saving an expense refuses a name the list does not have (an expense that already carries one keeps it when you save it unchanged)."
   - date: "2026-10-10"
     changes:
       - type: fix

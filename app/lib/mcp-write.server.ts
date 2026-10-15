@@ -4,7 +4,10 @@ import { findSameImageExpense, upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { readMileageRates } from "~/lib/db/seed";
-import { mileageCategory } from "~/lib/default-categories.server";
+import {
+  isMileageCategoryName,
+  mileageCategory,
+} from "~/lib/default-categories.server";
 import { captureWarning } from "~/lib/errors.server";
 import { normalizeAmount } from "~/lib/format";
 import { exceedsMaxMoney } from "~/lib/money";
@@ -91,6 +94,10 @@ export function fail(message: string): ToolResult {
 async function validatedExpenseInput(
   accountId: string,
   args: { date?: string; report?: string },
+  /** The category that will be stored — already resolved onto the account's
+   * list by the caller, or "" when the path settles it later (the mileage
+   * save resolves it as the trip is written). */
+  category: string,
 ): Promise<
   | { ok: true; date: string; report: string; serverUtcNow: string }
   | { ok: false; error: string }
@@ -98,12 +105,18 @@ async function validatedExpenseInput(
   const serverUtcNow = new Date().toISOString();
   const date = args.date ?? serverUtcNow.slice(0, 10);
   const report = args.report?.trim() ?? "";
-  const inputError = await validateExpenseInputs(accountId, date, report, {
-    // Every write path applies the same rule: a report that does not exist,
-    // or is closed, is refused (the MCP tool descriptions promise it, and
-    // the chat's own resolver already did).
-    checkReport: true,
-  });
+  const inputError = await validateExpenseInputs(
+    accountId,
+    date,
+    report,
+    category,
+    {
+      // Every write path applies the same rule: a report that does not exist,
+      // or is closed, is refused (the MCP tool descriptions promise it, and
+      // the chat's own resolver already did).
+      checkReport: true,
+    },
+  );
   if (inputError) return { ok: false, error: inputError };
   return { ok: true, date, report, serverUtcNow };
 }
@@ -227,7 +240,7 @@ export async function captureReceipt(
     knownMerchants,
     categories,
   );
-  const input = await validatedExpenseInput(accountId, args);
+  const input = await validatedExpenseInput(accountId, args, category);
   if (!input.ok) return fail(input.error);
   const { date, report, serverUtcNow } = input;
   // The receipt currency: explicit arg wins, else what the receipt reads,
@@ -374,7 +387,9 @@ export async function resolveMileage(
     roundTrip?: boolean;
   },
 ): Promise<{ ok: true; trip: ResolvedTrip } | { ok: false; error: string }> {
-  const input = await validatedExpenseInput(accountId, args);
+  // No category to check yet: a mileage category is resolved onto the
+  // account's list as the trip is written (see defaultMileageCategory).
+  const input = await validatedExpenseInput(accountId, args, "");
   if (!input.ok) return { ok: false, error: input.error };
   const { date, report } = input;
   const roundTrip = args.roundTrip ?? false;
@@ -424,20 +439,29 @@ export async function resolveMileage(
  * paths use): categories get renamed and merged over time while the assistant
  * keeps echoing the old names, and a stale one would file the trip under a
  * category no row owns — invisible in the list, missing from the filters, the
- * orphan state the tax-time cleanup exists to remove. Anything unrecognised
- * falls through to the mileage bucket, which is the semantically right one for
- * a drive; a receipt has no such default, which is why that path answers "".
+ * orphan state the tax-time cleanup exists to remove.
  *
- * Reading the list is cheap: `readCategories` is cached per account. */
+ * A name the account does *not* own is never mapped onto a business expense
+ * line: `log_mileage` takes charity, moving and medical trips too, and a caller
+ * naming a bucket like "Charity" must not silently land on Car and truck
+ * expenses. The one exception is the driving bucket under an old spelling
+ * ("Fuel / Mileage"), which is what the caller meant, so it resolves to the
+ * account's own row. Anything else answers "" — the trip files uncategorized
+ * and the user picks — exactly what the receipt paths do.
+ *
+ * The default (nothing asked for) is the mileage bucket. Reading the list is
+ * cheap: `readCategories` is cached per account. */
 async function defaultMileageCategory(
   accountId: string,
   given: string | undefined,
 ): Promise<string> {
   const categories = await readCategories(accountId);
   const names = categories.map((c) => c.name);
-  const named = matchName(given ?? "", names);
-  if (named) return named;
-  return mileageCategory(names);
+  const asked = given?.trim() ?? "";
+  if (!asked) return mileageCategory(names);
+  const owned = matchName(asked, names);
+  if (owned) return owned;
+  return isMileageCategoryName(asked) ? mileageCategory(names) : "";
 }
 
 /** Build and persist the expense for an already-resolved trip. */
@@ -547,7 +571,9 @@ export async function resolveExpense(
   const report = args.report?.trim() ?? "";
   // The editor's own rules: a real calendar date, and a report that exists
   // and is open (an expense never lands in a closed one).
-  const inputError = await validateExpenseInputs(accountId, date, report, {
+  // No category to check here: a mileage category is resolved as the trip is
+  // saved (defaultMileageCategory), which never stores one the account lacks.
+  const inputError = await validateExpenseInputs(accountId, date, report, "", {
     checkReport: true,
   });
   if (inputError) return { ok: false, error: inputError };

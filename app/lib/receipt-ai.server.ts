@@ -1148,7 +1148,13 @@ function resolvePriorField(
   if (merchant.trim()) {
     const prior = knownMerchants.get(normalizeMerchant(merchant));
     if (prior) {
-      const value = field(prior);
+      // The remembered value wins only while the account still has it. A
+      // category or report that has since been renamed, merged or deleted must
+      // not be re-filed verbatim: every later receipt for that merchant would
+      // repeat a name no row owns, which is invisible in the list and unmatched
+      // by a report. A vanished one falls through to the model's suggestion
+      // rather than blanking the field.
+      const value = match(field(prior), existing);
       if (value) return value;
     }
   }

@@ -865,11 +865,12 @@ describe("MCP endpoint", () => {
     }
   });
 
-  it("ignores a category the account no longer owns", async () => {
+  it("resolves a retired driving-bucket name to the account's own row", async () => {
     // The assistant keeps echoing names that were renamed or merged away
     // ("Fuel/Mileage" was a real bucket until the Schedule C alignment). Filed
     // verbatim that is a category no row owns: invisible in the list, absent
-    // from the filters. It falls through to the mileage bucket instead.
+    // from the filters. A driving-bucket name is what the caller meant, so it
+    // resolves to the account's current row.
     await testPrisma.category.create({
       data: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
     });
@@ -896,6 +897,33 @@ describe("MCP endpoint", () => {
         where: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
       });
     }
+  });
+
+  it("never files a charity trip under a business category", async () => {
+    // log_mileage takes charity, moving and medical trips, and a caller names
+    // those with buckets a Schedule C list does not contain. An unowned name
+    // must not be mapped onto Car and truck expenses — that would book a
+    // charity drive as a business deduction — so the trip files with no
+    // category, and the rate still follows the trip type.
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: [
+        { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+        { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+      ],
+      date: "2026-05-15",
+      type: "charity",
+      category: "Charity",
+    });
+    expect(result.isError).toBe(false);
+    expect(result.payload.rate).toBe("0.14");
+    const row = await testPrisma.expense.findFirst({
+      where: {
+        id: result.payload.expenseId as string,
+        accountId: TEST_ACCOUNT_ID,
+      },
+    });
+    expect(row!.category).toBe("");
   });
 
   it("honours a category the account does own", async () => {

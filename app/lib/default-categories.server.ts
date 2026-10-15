@@ -63,7 +63,11 @@ export function mileageCategory(names: string[]): string {
   const wanted = normaliseCategory(MILEAGE_CATEGORY);
   const exact = names.find((name) => normaliseCategory(name) === wanted);
   if (exact) return exact;
-  return (
-    names.find((name) => MILEAGE_FAMILY.test(normaliseCategory(name))) ?? ""
-  );
+  return names.find((name) => isMileageCategoryName(name)) ?? "";
+}
+
+/** Whether a name is the driving bucket under any of its spellings, so a
+ * caller echoing an old one ("Fuel / Mileage") can still be resolved. */
+export function isMileageCategoryName(name: string): boolean {
+  return MILEAGE_FAMILY.test(normaliseCategory(name));
 }

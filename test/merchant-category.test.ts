@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vite-plus/test";
 import { ulid } from "ulid";
-import { resolveCategory, type KnownMerchant } from "~/lib/receipt-ai.server";
+import {
+  resolveCategory,
+  resolveExtraction,
+  type KnownMerchant,
+} from "~/lib/receipt-ai.server";
 import { readKnownMerchants } from "~/lib/db/expenses";
 import {
   TEST_ACCOUNT_ID,
@@ -30,6 +34,51 @@ describe("resolveCategory", () => {
     expect(
       resolveCategory("OfficeMax", "Meals", knownMerchants, existing),
     ).toBe("Office Supplies");
+  });
+
+  it("ignores a merchant's remembered category the account no longer has", () => {
+    const stale = new Map<string, KnownMerchant>([
+      [
+        "officemax",
+        { display: "OfficeMax", category: "Fuel/Mileage", report: "" },
+      ],
+    ]);
+    // "Fuel/Mileage" was merged away, so reusing it would file the next receipt
+    // under a name no row owns: the model's suggestion decides instead.
+    expect(
+      resolveCategory("OfficeMax", "Office Supplies", stale, [
+        "Office Supplies",
+      ]),
+    ).toBe("Office Supplies");
+    // With no usable suggestion either, nothing is stored.
+    expect(resolveCategory("OfficeMax", "", stale, ["Office Supplies"])).toBe(
+      "",
+    );
+  });
+
+  it("does the same for a remembered report", () => {
+    const context = {
+      categories: ["Office Supplies"],
+      reports: ["2026 Test"],
+      knownMerchants: new Map<string, KnownMerchant>([
+        [
+          "officemax",
+          {
+            display: "OfficeMax",
+            category: "Office Supplies",
+            report: "Gone 2025",
+          },
+        ],
+      ]),
+    };
+    // Same helper, same rule: the deleted report is not re-filed.
+    expect(
+      resolveExtraction(context, {
+        merchant: "OfficeMax",
+        category: "Office Supplies",
+        report: "2026 Test",
+      }).report,
+    ).toBe("2026 Test");
   });
 
   it("matches the merchant case- and whitespace-insensitively", () => {
