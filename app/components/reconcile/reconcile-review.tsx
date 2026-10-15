@@ -52,14 +52,14 @@ export function DraftReview({
   const fetcher = useFetcher();
   const busy = fetcher.state !== "idle";
 
-  // Rows are stored in file order; show them newest first (dates are
+  // Rows are stored in file order; show them oldest first (dates are
   // YYYY-MM-DD, so lexicographic sort is chronological; ties keep file
   // order). Matches and decisions are keyed by `row.index`, so reordering
   // the display list never misaligns them.
   const rows: { row: StatementRow; match: RowMatch | undefined }[] = useMemo(
     () =>
       [...data.rows]
-        .sort((a, b) => b.date.localeCompare(a.date) || a.index - b.index)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.index - b.index)
         .map((row) => ({ row, match: data.matches[row.index] })),
     [data],
   );
@@ -136,6 +136,32 @@ export function DraftReview({
         ) : null}
       </Card>
 
+      {/* Rows that need a decision come first, then what the matcher settled
+          on its own; every section runs oldest to newest. */}
+      {unmatched.length > 0 ? (
+        <section>
+          <h2 className="mb-2 font-semibold">
+            Needs your decision{" "}
+            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+              ({unmatched.length})
+            </span>
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {unmatched.map(({ row, match }) => (
+              <li key={row.index}>
+                <ReviewRowCard
+                  runId={run.id}
+                  row={row}
+                  match={match}
+                  openReports={openReports}
+                  categories={categories}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {autoMatched.length > 0 ? (
         <section>
           <h2 className="mb-2 flex items-center gap-1.5 font-semibold">
@@ -175,30 +201,6 @@ export function DraftReview({
                 </li>
               );
             })}
-          </ul>
-        </section>
-      ) : null}
-
-      {unmatched.length > 0 ? (
-        <section>
-          <h2 className="mb-2 font-semibold">
-            Needs your decision{" "}
-            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-              ({unmatched.length})
-            </span>
-          </h2>
-          <ul className="flex flex-col gap-2">
-            {unmatched.map(({ row, match }) => (
-              <li key={row.index}>
-                <ReviewRowCard
-                  runId={run.id}
-                  row={row}
-                  match={match}
-                  openReports={openReports}
-                  categories={categories}
-                />
-              </li>
-            ))}
           </ul>
         </section>
       ) : null}

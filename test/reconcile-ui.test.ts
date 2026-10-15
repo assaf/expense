@@ -51,6 +51,17 @@ describe("Reconcile flow", () => {
     // The unknown coffee shop needs a decision.
     await expect(page.getByText("Needs your decision")).toBeVisible();
     await expect(page.getByText("UNKNOWN COFFEE SHOP")).toBeVisible();
+    // Decisions come before automatic matches, and each section runs oldest
+    // first.
+    const headings = await page.locator("h2").allTextContents();
+    expect(headings[0]).toContain("Needs your decision");
+    expect(headings[1]).toContain("Matched automatically");
+    const matchedRows = await page
+      .locator("section", { hasText: "Matched automatically" })
+      .locator("li")
+      .allTextContents();
+    expect(matchedRows[0]).toContain("TEST STORE PURCHASE");
+    expect(matchedRows[1]).toContain("OFFICEMAX PRINTER PAPER");
   });
 
   it("adds the unmatched coffee shop as a new expense", async () => {

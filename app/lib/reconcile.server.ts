@@ -1029,8 +1029,8 @@ export function reconcileForMcp(
   const unmatchedLines: unknown[] = [];
   const matchedExpenseIds = new Set<string>();
 
-  // Newest first, matching the web UI; `line` still points at the
-  // row's original position in the statement.
+  // Newest first; `line` still points at the row's original position in
+  // the statement.
   const orderedRows = rows.toSorted(
     (a, b) => b.date.localeCompare(a.date) || a.index - b.index,
   );

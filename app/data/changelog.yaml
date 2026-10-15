@@ -51,6 +51,8 @@ releases:
         text: "A stop left with a business name that the map does not have now resolves through Google Places when a key is configured: typing hsbc bank, Beverly Hills fills in 445 North Bedford Drive, Beverly Hills, CA instead of saying it could not find the place."
       - type: fix
         text: "A category your list no longer has can't be filed to: naming a retired one no longer lands a trip or a receipt on it, a charity or medical drive is never booked on the business car-and-truck line, and saving an expense refuses a name the list does not have (an expense that already carries one keeps it when you save it unchanged)."
+      - type: improvement
+        text: "The reconcile page leads with the rows that need your decision and runs oldest first: what the matcher settled on its own now comes after what is waiting on you, and each section reads in date order."
   - date: "2026-10-10"
     changes:
       - type: fix
