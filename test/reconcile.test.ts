@@ -716,7 +716,7 @@ describe("statement matching", () => {
     expect(matches[0]!.status).toBe("unmatched");
   });
 
-  it("orders the MCP statement lines newest first (matches the web UI)", () => {
+  it("orders the MCP statement lines newest first", () => {
     const csv = [
       "date,description,amount",
       "2026-01-15,OLD STORE PURCHASE,42.50",
@@ -728,7 +728,7 @@ describe("statement matching", () => {
       unmatchedLines: { date: string; line: number }[];
       needsReview: { date: string }[];
     };
-    // No expenses → every line lands in unmatchedLines, in statement order.
+    // No expenses → every line lands in unmatchedLines, newest first.
     expect(result.unmatchedLines.map((l) => l.date)).toEqual([
       "2026-03-10",
       "2026-02-05",
