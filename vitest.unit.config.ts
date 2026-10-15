@@ -17,6 +17,7 @@ export default defineConfig({
     name: "unit",
     include: [
       "test/default-categories.test.ts",
+      "test/places.test.ts",
       "test/schedule-c.test.ts",
       "test/email-rules-seed.test.ts",
       "test/marketing-pages.test.tsx",

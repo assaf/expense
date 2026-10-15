@@ -1,0 +1,78 @@
+{
+    "places": [
+        {
+            "id": "ChIJUQ7ZIQi8woARNh28eKnc4es",
+            "formattedAddress": "445 N Bedford Dr, Beverly Hills, CA 90210, USA",
+            "addressComponents": [
+                {
+                    "longText": "445",
+                    "shortText": "445",
+                    "types": [
+                        "street_number"
+                    ],
+                    "languageCode": "en-US"
+                },
+                {
+                    "longText": "North Bedford Drive",
+                    "shortText": "N Bedford Dr",
+                    "types": [
+                        "route"
+                    ],
+                    "languageCode": "en"
+                },
+                {
+                    "longText": "Beverly Hills",
+                    "shortText": "Beverly Hills",
+                    "types": [
+                        "locality",
+                        "political"
+                    ],
+                    "languageCode": "en"
+                },
+                {
+                    "longText": "Los Angeles County",
+                    "shortText": "Los Angeles County",
+                    "types": [
+                        "administrative_area_level_2",
+                        "political"
+                    ],
+                    "languageCode": "en"
+                },
+                {
+                    "longText": "California",
+                    "shortText": "CA",
+                    "types": [
+                        "administrative_area_level_1",
+                        "political"
+                    ],
+                    "languageCode": "en"
+                },
+                {
+                    "longText": "United States",
+                    "shortText": "US",
+                    "types": [
+                        "country",
+                        "political"
+                    ],
+                    "languageCode": "en"
+                },
+                {
+                    "longText": "90210",
+                    "shortText": "90210",
+                    "types": [
+                        "postal_code"
+                    ],
+                    "languageCode": "en-US"
+                }
+            ],
+            "location": {
+                "latitude": 34.0685011,
+                "longitude": -118.40610579999999
+            },
+            "displayName": {
+                "text": "HSBC Bank",
+                "languageCode": "en"
+            }
+        }
+    ]
+}

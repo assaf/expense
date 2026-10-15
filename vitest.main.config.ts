@@ -24,6 +24,7 @@ export default defineConfig({
       "test/completeness.test.ts",
       "test/errors.test.ts",
       "test/maps.test.ts",
+      "test/places.test.ts",
       "test/mileage-rates.test.ts",
       "test/money.test.ts",
       "test/passwords.test.ts",
