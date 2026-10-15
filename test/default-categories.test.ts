@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { DEFAULT_CATEGORIES } from "~/lib/default-categories.server";
+import {
+  DEFAULT_CATEGORIES,
+  MILEAGE_CATEGORY,
+  mileageCategory,
+} from "~/lib/default-categories.server";
 
 /**
  * Canonical default categories. These mirror the expense categories on IRS
@@ -45,5 +49,34 @@ describe("default categories", () => {
     expect(DEFAULT_CATEGORIES.length).toBeGreaterThan(0);
     expect(DEFAULT_CATEGORIES.every((name) => name.trim() === name)).toBe(true);
     expect(new Set(DEFAULT_CATEGORIES).size).toBe(DEFAULT_CATEGORIES.length);
+  });
+
+  it("resolves the mileage bucket on a renamed list", () => {
+    // The seeded row wins when it is there, whatever else the account keeps.
+    expect(mileageCategory(["Travel", MILEAGE_CATEGORY, "Meals"])).toBe(
+      MILEAGE_CATEGORY,
+    );
+    // Accounts rename their categories; these are real rows from real
+    // accounts, and the separator spacing is not a distinction a person makes.
+    expect(mileageCategory(["Travel & Transportation", "Fuel / Mileage"])).toBe(
+      "Fuel / Mileage",
+    );
+    expect(mileageCategory(["Fuel/Mileage", "Meals"])).toBe("Fuel/Mileage");
+    expect(mileageCategory(["Mileage", "Office Supplies"])).toBe("Mileage");
+    // Travel is the Schedule C line for travel away from home, and the rent
+    // row mentions vehicles: neither is where fuel goes.
+    expect(mileageCategory(["Travel", "Travel & Transportation"])).toBe("");
+    expect(
+      mileageCategory(["Rent or lease: vehicles, machinery, and equipment"]),
+    ).toBe("");
+    expect(mileageCategory(["Meals", "Medical", "Other"])).toBe("");
+    expect(mileageCategory([])).toBe("");
+  });
+
+  it("still contains the bucket a new mileage defaults to", () => {
+    // MILEAGE_CATEGORY is the name the seeded list gives the bucket and the
+    // name mileageCategory matches first: renaming the CSV row without moving
+    // the constant would drop that exact match.
+    expect(DEFAULT_CATEGORIES).toContain(MILEAGE_CATEGORY);
   });
 });

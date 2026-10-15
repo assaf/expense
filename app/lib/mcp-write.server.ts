@@ -1,8 +1,10 @@
 import { hasEnoughStops } from "~/lib/completeness";
+import { readCategories } from "~/lib/db/categories";
 import { findSameImageExpense, upsertExpense } from "~/lib/db/expenses";
 import { readExtractionContext } from "~/lib/db/extraction-context";
 import { isUniqueViolation } from "~/lib/db/pg-errors";
 import { readMileageRates } from "~/lib/db/seed";
+import { mileageCategory } from "~/lib/default-categories.server";
 import { captureWarning } from "~/lib/errors.server";
 import { normalizeAmount } from "~/lib/format";
 import { exceedsMaxMoney } from "~/lib/money";
@@ -417,6 +419,22 @@ export async function resolveMileage(
   };
 }
 
+/** The category a trip filed without one takes: the account's fuel and
+ * mileage bucket (Schedule C line 9, or whatever the account renamed it to),
+ * or "" when it has none (today's behaviour, and never a category the account
+ * does not own). Read only when nothing was passed, so the common path pays
+ * nothing — one call covers the MCP `log_mileage` tool and the insights chat's
+ * confirmed trip, which share this function. */
+async function defaultMileageCategory(
+  accountId: string,
+  given: string | undefined,
+): Promise<string> {
+  const trimmed = given?.trim() ?? "";
+  if (trimmed) return trimmed;
+  const categories = await readCategories(accountId);
+  return mileageCategory(categories.map((c) => c.name));
+}
+
 /** Build and persist the expense for an already-resolved trip. */
 export async function saveMileageTrip(
   accountId: string,
@@ -427,7 +445,7 @@ export async function saveMileageTrip(
     ...(newExpenseShell("mileage") as MileageExpense),
     date: trip.date,
     report: trip.report,
-    category: args.category?.trim() ?? "",
+    category: await defaultMileageCategory(accountId, args.category),
     description: args.description ?? "",
     mileageType: trip.type,
     amount: trip.amount,

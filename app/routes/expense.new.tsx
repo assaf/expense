@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 import { Editor } from "./expense.$id";
 import { requireContextUser } from "~/lib/auth.server";
+import { mileageCategory } from "~/lib/default-categories.server";
 import { loadEditorContext } from "~/lib/editor.server";
 import {
   addReportAction,
@@ -33,10 +34,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     loadEditorContext(user.accountId, expense),
     readDuplicateCandidates(user.accountId),
   ]);
-  // New mileage expenses default to the Travel category when the account has
-  // one (the IRS Schedule C bucket every new account is seeded with).
-  if (expense.type === "mileage" && editor.categories.includes("Travel")) {
-    expense.category = "Travel";
+  // New mileage expenses default to the account's fuel-and-mileage bucket:
+  // IRS Schedule C line 9 on a stock list, or whatever the account renamed it
+  // to (see mileageCategory). The same bucket fills in a trip filed with no
+  // category by the MCP tools or the insights chat (see saveMileageTrip).
+  if (expense.type === "mileage") {
+    expense.category = mileageCategory(editor.categories);
   }
   return {
     mode: "create" as const,

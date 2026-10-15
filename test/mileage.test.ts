@@ -129,7 +129,7 @@ describe("Mileage expense", () => {
       });
     });
 
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await inputs.first().fill("");
     await inputs.nth(1).fill("");
     await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
@@ -171,7 +171,9 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const first = page.locator("input[placeholder='Address']").first();
+    const first = page
+      .locator("input[placeholder='Address or place name']")
+      .first();
     await first.fill("");
 
     const calls: string[] = [];
@@ -218,9 +220,121 @@ describe("Mileage expense", () => {
     await page.unroute("**/api/route");
   });
 
-  it("defaults a new mileage expense to Travel when that category exists", async () => {
+  it("opens a new mileage on the stop that still needs an address", async () => {
+    await page.goto("/expenses", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Mileage" }).click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const inputs = page.locator("input[placeholder='Address or place name']");
+    await expect(inputs).toHaveCount(2);
+    // The start carries the account's home address from Settings, so the
+    // cursor waits on the field the user has to fill: Stop 1.
+    expect(await inputs.nth(0).inputValue()).not.toBe("");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const all = [
+            ...document.querySelectorAll<HTMLInputElement>(
+              "input[placeholder='Address or place name']",
+            ),
+          ];
+          return all.indexOf(document.activeElement as HTMLInputElement);
+        }),
+      )
+      .toBe(1);
+  });
+
+  it("resolves a place name into the address the geocoder matched", async () => {
+    await page.goto("/expenses", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Mileage" }).click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const stop = page
+      .locator("input[placeholder='Address or place name']")
+      .nth(1);
+    const typed = "westwood UCLA center";
+
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          // What Nominatim answers for the place: the address it matched, not
+          // the words that were typed (live, this resolves to 757 Westwood
+          // Plaza, Los Angeles, CA).
+          locations: addresses.map((l) => ({
+            address: l.address.trim()
+              ? "757 Westwood Plaza, Los Angeles, CA"
+              : "",
+            lat: l.address.trim() ? 34.0664 : null,
+            lng: l.address.trim() ? -118.4465 : null,
+          })),
+          distanceMiles: "2.00",
+          amount: "1.45",
+          coords: [[34.05, -118.24]],
+          approximate: false,
+        }),
+      });
+    });
+
+    await stop.fill(typed);
+    expect(await stop.inputValue()).toBe(typed);
+    await stop.blur();
+    // The field shows the resolved address, so a place name is as good as an
+    // address as far as the trip is concerned.
+    await expect
+      .poll(() => stop.inputValue())
+      .toBe("757 Westwood Plaza, Los Angeles, CA");
+    await page.unroute("**/api/route");
+  });
+
+  it("keeps a place name it could not resolve, with a message", async () => {
+    await page.goto("/expenses", { waitUntil: "load" });
+    await page.getByRole("button", { name: "Mileage" }).click();
+    await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+      timeout: 10_000,
+    });
+    const stop = page
+      .locator("input[placeholder='Address or place name']")
+      .nth(1);
+    const typed = "westdood UCLA center";
+
+    await page.route("**/api/route", async (route) => {
+      const body = route.request().postData() ?? "";
+      const addresses = JSON.parse(body).locations as { address: string }[];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        // Nominatim's answer for a name it cannot place: no match at all.
+        body: JSON.stringify({
+          locations: addresses.map((l) => ({
+            address: l.address,
+            lat: null,
+            lng: null,
+          })),
+          distanceMiles: "",
+          amount: "",
+          coords: [],
+          approximate: false,
+        }),
+      });
+    });
+
+    await stop.fill(typed);
+    await stop.blur();
+    // Nothing is guessed: the typed text stays and the field says so.
+    await expect(page.getByText("Couldn't find that place.")).toBeVisible();
+    expect(await stop.inputValue()).toBe(typed);
+    await page.unroute("**/api/route");
+  });
+
+  it("defaults a new mileage expense to Car and truck expenses when that category exists", async () => {
     await testPrisma.category.create({
-      data: { name: "Travel", accountId: TEST_ACCOUNT_ID },
+      data: { name: "Car and truck expenses", accountId: TEST_ACCOUNT_ID },
     });
     try {
       await page.goto("/expenses", { waitUntil: "load" });
@@ -229,16 +343,38 @@ describe("Mileage expense", () => {
         timeout: 10_000,
       });
       // Report + Category selects; the category is the second one.
-      await expect(page.getByLabel("Category")).toHaveValue("Travel");
+      await expect(page.getByLabel("Category")).toHaveValue(
+        "Car and truck expenses",
+      );
     } finally {
       await testPrisma.category.deleteMany({
-        where: { name: "Travel", accountId: TEST_ACCOUNT_ID },
+        where: { name: "Car and truck expenses", accountId: TEST_ACCOUNT_ID },
       });
     }
   });
 
-  it("leaves the category unset when no Travel category exists", async () => {
-    // The seeded categories have no Travel, so the editor starts unset.
+  it("defaults a new mileage expense to the account's own fuel bucket", async () => {
+    // A renamed category list: this account has no "Car and truck expenses",
+    // which is what the seeded list calls the driving bucket.
+    await testPrisma.category.create({
+      data: { name: "Fuel / Mileage", accountId: TEST_ACCOUNT_ID },
+    });
+    try {
+      await page.goto("/expenses", { waitUntil: "load" });
+      await page.getByRole("button", { name: "Mileage" }).click();
+      await page.waitForURL(/\/expense\/new\?type=mileage$/, {
+        timeout: 10_000,
+      });
+      await expect(page.getByLabel("Category")).toHaveValue("Fuel / Mileage");
+    } finally {
+      await testPrisma.category.deleteMany({
+        where: { name: "Fuel / Mileage", accountId: TEST_ACCOUNT_ID },
+      });
+    }
+  });
+
+  it("leaves the category unset when no Car and truck expenses category exists", async () => {
+    // The seeded categories have no Car and truck expenses, so the editor starts unset.
     await page.goto("/expenses", { waitUntil: "load" });
     await page.getByRole("button", { name: "Mileage" }).click();
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
@@ -255,7 +391,7 @@ describe("Mileage expense", () => {
     });
 
     // A new mileage starts one way with Start + Stop 1 and no remove buttons.
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await expect(inputs).toHaveCount(2);
     await expect(page.getByText("Start", { exact: true })).toBeVisible();
     await expect(page.getByText("Stop 1", { exact: true })).toBeVisible();
@@ -319,7 +455,7 @@ describe("Mileage expense", () => {
 
     // The account's saved places, home first: home is the trip's fixed
     // start and end, so it is a chip like the others.
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await expect(
       page.getByRole("button", { name: "Add Home as a stop" }),
     ).toBeVisible();
@@ -435,7 +571,9 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const first = page.locator("input[placeholder='Address']").first();
+    const first = page
+      .locator("input[placeholder='Address or place name']")
+      .first();
     await first.fill("");
 
     let fail = false;
@@ -475,12 +613,12 @@ describe("Mileage expense", () => {
     fail = true;
     await first.fill("Nowhere Lane ZZ");
     await first.blur();
-    await expect(page.getByText("Couldn't find that address")).toBeVisible();
+    await expect(page.getByText("Couldn't find that place")).toBeVisible();
     expect(await first.inputValue()).toBe("Nowhere Lane ZZ");
 
     // Editing the field clears the error (it will be retried on blur).
     await first.fill("1600 Amphitheatre Pkwy");
-    await expect(page.getByText("Couldn't find that address")).toHaveCount(0);
+    await expect(page.getByText("Couldn't find that place")).toHaveCount(0);
     await page.unroute("**/api/route");
   });
 
@@ -490,7 +628,9 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const first = page.locator("input[placeholder='Address']").first();
+    const first = page
+      .locator("input[placeholder='Address or place name']")
+      .first();
     await first.fill("");
 
     // Hold every route response so the geocode stays in flight on demand.
@@ -551,7 +691,7 @@ describe("Mileage expense", () => {
     });
     // The trip's first stop is prefilled with the seeded home address; Stop 1
     // is left blank. Saving must persist only the real address.
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await expect(inputs).toHaveCount(2);
     await inputs.nth(1).fill("");
 
@@ -577,7 +717,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     const calls: string[] = [];
     await page.route("**/api/route", async (route) => {
       const body = route.request().postData() ?? "";
@@ -628,7 +768,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     // Mock the route API BEFORE typing so no real geocode ever fires.
     await page.route("**/api/route", async (route) => {
       const body = route.request().postData() ?? "";
@@ -693,7 +833,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await inputs.first().fill("");
     await inputs.nth(1).fill("");
     await inputs.first().pressSequentially("1600 Amphitheatre Pkwy", {
@@ -774,7 +914,7 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await inputs.first().fill("");
     await inputs.nth(1).fill("");
 
@@ -818,7 +958,9 @@ describe("Mileage expense", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const first = page.locator("input[placeholder='Address']").first();
+    const first = page
+      .locator("input[placeholder='Address or place name']")
+      .first();
     await first.fill("");
 
     await page.route("**/api/route", async (route) => {
@@ -845,7 +987,7 @@ describe("Mileage expense", () => {
     await first.blur();
     // The typed text is kept, never replaced with a guess.
     expect(await first.inputValue()).toBe("Nowhere Lane ZZ");
-    await expect(page.getByText(/couldn't find that address/i)).toBeVisible({
+    await expect(page.getByText(/couldn't find that place/i)).toBeVisible({
       timeout: 15_000,
     });
     await page.unroute("**/api/route");
@@ -880,7 +1022,9 @@ describe("Mileage expense", () => {
         page.getByRole("button", { name: "Add stop" }),
       ).toBeVisible();
       await page.getByRole("button", { name: "Add stop" }).click();
-      await expect(page.locator("input[placeholder='Address']")).toHaveCount(3);
+      await expect(
+        page.locator("input[placeholder='Address or place name']"),
+      ).toHaveCount(3);
     } finally {
       // Restore the seeded account for the rest of the run.
       await writeSettings(TEST_ACCOUNT_ID, settings);

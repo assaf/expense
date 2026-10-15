@@ -91,6 +91,20 @@ export function MileageEditor({ data }: { data: EditorData }) {
   const [locations, setLocations] = useState<Location[]>(() =>
     initLocations(expense, home),
   );
+  // The address field a new trip opens on: the first one still to fill. The
+  // start arrives from Settings (the account's home address), so a new trip
+  // lands on the next stop and the user can describe the drive straight away
+  // instead of clicking into the field. Captured once, so a later edit can
+  // never move the cursor.
+  const [focusStop] = useState(() =>
+    isNew
+      ? initLocations(expense, home).findIndex((l) => !l.address.trim())
+      : -1,
+  );
+  const stopRefs = useRef<(HTMLInputElement | null)[]>([]);
+  useEffect(() => {
+    if (focusStop >= 0) stopRefs.current[focusStop]?.focus();
+  }, [focusStop]);
   // The last geocoded result from /api/route: what the map, the distance,
   // and the saved locations use. Distinct from `locations` (the typed text)
   // so a route response can never rewrite what the user is typing. A slow,
@@ -329,7 +343,7 @@ export function MileageEditor({ data }: { data: EditorData }) {
         setAddressErrors((prev) => {
           const next = [...prev];
           next[i] =
-            "Couldn't find that address. Try a more complete address with city and state.";
+            "Couldn't find that place. Try a place name plus its city, or a full address.";
           return next;
         });
         return;
@@ -669,7 +683,10 @@ export function MileageEditor({ data }: { data: EditorData }) {
                 <div className="relative">
                   <Input
                     type="text"
-                    placeholder="Address"
+                    placeholder="Address or place name"
+                    ref={(el) => {
+                      stopRefs.current[i] = el;
+                    }}
                     disabled={reportClosed}
                     invalid={!!addressErrors[i]}
                     aria-describedby={

@@ -54,7 +54,7 @@ describe("Mileage map rendering", () => {
     await page.waitForURL(/\/expense\/new\?type=mileage$/, {
       timeout: 10_000,
     });
-    const inputs = page.locator("input[placeholder='Address']");
+    const inputs = page.locator("input[placeholder='Address or place name']");
     await inputs.first().fill("");
     await inputs.nth(1).fill("");
     await inputs.first().pressSequentially("Wilshire Blvd", { delay: 20 });
@@ -68,16 +68,31 @@ describe("Mileage map rendering", () => {
     mockRoute();
     await openEditorWithRoute();
 
-    // The map uses the light Carto basemap, not the busy OSM style.
+    // Esri's keyless light-gray pair: the streets layer and the labels layer
+    // over it — not a single layer, not the busy OSM style, and not Carto,
+    // which answers with an "API KEY REQUIRED" watermark tile.
     await page.waitForFunction(
       () => document.querySelectorAll(".leaflet-tile").length > 0,
+      { timeout: 10_000 },
+    );
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll(".leaflet-tile")].some((el) =>
+          (el as HTMLImageElement).src.includes("World_Light_Gray_Reference"),
+        ),
       { timeout: 10_000 },
     );
     const tileSrcs = await page
       .locator(".leaflet-tile")
       .evaluateAll((els) => els.map((e) => (e as HTMLImageElement).src));
     expect(tileSrcs.length).toBeGreaterThan(0);
-    expect(tileSrcs[0]!).toContain("cartocdn");
+    expect(tileSrcs.every((src) => src.includes("arcgisonline"))).toBe(true);
+    expect(tileSrcs.some((src) => src.includes("World_Light_Gray_Base"))).toBe(
+      true,
+    );
+    expect(
+      tileSrcs.some((src) => src.includes("World_Light_Gray_Reference")),
+    ).toBe(true);
 
     // The route is a white casing + blue line (2 polylines) with a gray
     // dashed return leg, each stop has a numbered bubble and an invisible

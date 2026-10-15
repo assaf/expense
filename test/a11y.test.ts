@@ -195,7 +195,9 @@ describe("Accessibility", () => {
 
       const mileage = await goto("/expense/new?type=mileage");
       // The address fields are present but not marked invalid yet.
-      const inputs = mileage.locator("input[placeholder='Address']");
+      const inputs = mileage.locator(
+        "input[placeholder='Address or place name']",
+      );
       const count = await inputs.count();
       if (count > 0) {
         // Fresh inputs should not be aria-invalid.

@@ -19,6 +19,7 @@ import {
   registerOAuthClient,
   revokeOAuthToken,
 } from "~/lib/db/oauth";
+import { MILEAGE_CATEGORY } from "~/lib/default-categories.server";
 import { TEST_ACCOUNT_ID, testPrisma } from "./helpers/seedTestData";
 
 const baseURL = "http://localhost:5199";
@@ -830,6 +831,61 @@ describe("MCP endpoint", () => {
       },
     });
     expect(loopRow!.roundTrip).toBe(true);
+  });
+
+  it("fills in the fuel and mileage category for a trip logged without one", async () => {
+    // The seeded account has no such bucket, so this is the case the
+    // default exists for; create it the way a real account is seeded.
+    await testPrisma.category.create({
+      data: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
+    });
+    try {
+      await initialize(accessToken);
+      const result = await callTool(accessToken, "log_mileage", {
+        locations: [
+          { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+          { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+        ],
+        date: "2026-05-11",
+        description: "No category given",
+      });
+      expect(result.isError).toBe(false);
+      const row = await testPrisma.expense.findFirst({
+        where: {
+          id: result.payload.expenseId as string,
+          accountId: TEST_ACCOUNT_ID,
+        },
+      });
+      expect(row).not.toBeNull();
+      expect(row!.category).toBe(MILEAGE_CATEGORY);
+    } finally {
+      await testPrisma.category.deleteMany({
+        where: { name: MILEAGE_CATEGORY, accountId: TEST_ACCOUNT_ID },
+      });
+    }
+  });
+
+  it("files a trip with no category when the account has no fuel bucket", async () => {
+    await initialize(accessToken);
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: [
+        { address: "123 Test St, Testing, CA", lat: 34.0522, lng: -118.2437 },
+        { address: "456 Dev Ave, Coding, CA", lat: 34.0622, lng: -118.2537 },
+      ],
+      date: "2026-05-12",
+      // The previous case removes the bucket again, so this trip has nothing
+      // to default to: it files uncategorized rather than inventing one.
+      description: "No bucket to use",
+    });
+    expect(result.isError).toBe(false);
+    const row = await testPrisma.expense.findFirst({
+      where: {
+        id: result.payload.expenseId as string,
+        accountId: TEST_ACCOUNT_ID,
+      },
+    });
+    expect(row).not.toBeNull();
+    expect(row!.category).toBe("");
   });
 
   it("queries expenses and summarizes them (scoped to the account)", async () => {

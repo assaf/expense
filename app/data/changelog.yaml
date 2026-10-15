@@ -39,6 +39,16 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-14"
+    changes:
+      - type: fix
+        text: "The map on a trip draws again: the tile service it used started answering with a placeholder reading API KEY REQUIRED, so the route was drawn over that watermark, in the mileage editor and on an exported report's map page alike."
+      - type: improvement
+        text: "A stop takes a place name as well as a street address: type westwood UCLA center and the field fills in the address it resolved to, and keeps what you typed when nothing matched."
+      - type: improvement
+        text: "A new mileage is filed under your fuel-and-mileage category, whatever your list calls it — Car and truck expenses on the seeded list, Fuel / Mileage on a renamed one — instead of arriving with no category at all, which is what an exact name match against a renamed list did. Trips logged by an assistant, or confirmed from Insights, get the same category."
+      - type: improvement
+        text: "A stop left with a business name that the map does not have now resolves through Google Places when a key is configured: typing hsbc bank, Beverly Hills fills in 445 North Bedford Drive, Beverly Hills, CA instead of saying it could not find the place."
   - date: "2026-10-10"
     changes:
       - type: fix

@@ -238,6 +238,20 @@ URL. Set it to the push subscription's service account (e.g.
 Testing-mode caveats: `docs/email-connections.md` → Gmail / Google
 Workspace.
 
+`GOOGLE_PLACES_API_KEY` (optional) lets a mileage stop resolve a business
+_name_ that OpenStreetMap does not have. Geocoding is Nominatim, which reads
+OpenStreetMap: a bank or shop nobody has mapped has no match there, and a name
+combined with a city fails the whole query rather than just the unmatched word,
+so that case falls through to Google Places API (New) Text Search
+(`app/lib/places.server.ts`). The key stays server-side — geocoding runs in the
+app, never in the browser — and the request asks for Pro-tier fields only
+(`displayName`, `formattedAddress`, `addressComponents`, `location`), so it
+bills at Text Search Pro: 5,000 free calls a month, and it fires only when
+Nominatim misses. Enable "Places API (New)" on the project (Legacy Places API
+can no longer be enabled for new projects), attach a billing account, and set a
+budget alert in Cloud Billing as the guard against a surprise. Unset, geocoding
+stays Nominatim only, exactly as before.
+
 `CRON_SECRET` (optional) gates the post-deploy PDF/OCR/MCP smoke check at
 GET `/api/smoke` (send it in the `x-smoke-secret` header); when unset the route
 is disabled (404) and `scripts/deploy` skips the check with a warning. It must

@@ -560,3 +560,137 @@ describe("recomputeMileage money math", () => {
     expect(r.locations[1]!.lng).toBeNull();
   });
 });
+
+describe("business-name lookups (Places fallback)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  /** What Google answers for a bank OpenStreetMap has not mapped. */
+  const placesHit = {
+    places: [
+      {
+        id: "places/abc",
+        displayName: { text: "HSBC Bank USA", languageCode: "en" },
+        formattedAddress: "445 N Bedford Dr, Beverly Hills, CA 90210, USA",
+        addressComponents: [
+          { longText: "445", shortText: "445", types: ["street_number"] },
+          {
+            longText: "North Bedford Drive",
+            shortText: "N Bedford Dr",
+            types: ["route"],
+          },
+          {
+            longText: "Beverly Hills",
+            shortText: "Beverly Hills",
+            types: ["locality", "political"],
+          },
+          {
+            longText: "California",
+            shortText: "CA",
+            types: ["administrative_area_level_1", "political"],
+          },
+          {
+            longText: "United States",
+            shortText: "US",
+            types: ["country", "political"],
+          },
+          { longText: "90210", shortText: "90210", types: ["postal_code"] },
+        ],
+        location: { latitude: 34.068506, longitude: -118.4061374 },
+      },
+    ],
+  };
+
+  /** Nominatim finds nothing — the bank is not on OpenStreetMap — and Places
+   * answers with `placesBody`. Every call is recorded for assertion. */
+  /** The request URL, whichever shape fetch was handed. */
+  function hrefOf(url: string | URL | Request): string {
+    return url instanceof URL
+      ? url.href
+      : url instanceof Request
+        ? url.url
+        : url;
+  }
+
+  function stubBoth(placesBody: unknown) {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async (url: string | URL | Request) => {
+        const href =
+          url instanceof URL
+            ? url.href
+            : url instanceof Request
+              ? url.url
+              : url;
+        if (href.includes("nominatim.openstreetmap.org")) {
+          return { ok: true, json: async () => [] };
+        }
+        if (href.includes("places.googleapis.com")) {
+          return { ok: true, json: async () => placesBody };
+        }
+        throw new Error(`unexpected fetch: ${href}`);
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("resolves a business name OpenStreetMap does not have", async () => {
+    vi.stubEnv("GOOGLE_PLACES_API_KEY", "test-key");
+    const fetchMock = stubBoth(placesHit);
+    const result = await geocode("hsbc bank, Beverly Hills");
+
+    expect(result.lat).toBe(34.068506);
+    expect(result.lng).toBe(-118.4061374);
+    // Street, city and abbreviated state: the same canonical shape the
+    // Nominatim path builds, with the US country left off.
+    expect(result.address).toBe("445 North Bedford Drive, Beverly Hills, CA");
+
+    // The call carries the key, asks for exactly what was typed, and stays in
+    // the Pro tier — an Enterprise field (rating, hours, phone) would bill it
+    // at the next SKU up.
+    const call = fetchMock.mock.calls.find(([url]) =>
+      hrefOf(url as string | URL | Request).includes("places.googleapis.com"),
+    );
+    expect(call?.[0]).toBe(
+      "https://places.googleapis.com/v1/places:searchText",
+    );
+    const init = call?.[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["X-Goog-Api-Key"]).toBe("test-key");
+    expect(headers["X-Goog-FieldMask"]).toContain("places.formattedAddress");
+    expect(String(headers["X-Goog-FieldMask"])).not.toMatch(
+      /rating|OpeningHours|PhoneNumber|WebsiteUri|reviews/,
+    );
+    expect(JSON.parse(init.body as string).textQuery).toBe(
+      "hsbc bank, Beverly Hills",
+    );
+  });
+
+  it("never calls the paid provider without a key", async () => {
+    vi.stubEnv("GOOGLE_PLACES_API_KEY", "");
+    const fetchMock = stubBoth(placesHit);
+    const result = await geocode("hsbc bank, Beverly Hills");
+
+    expect(result.lat).toBeNull();
+    expect(result.address).toBe("hsbc bank, Beverly Hills");
+    expect(
+      fetchMock.mock.calls.every(([url]) =>
+        hrefOf(url as string | URL | Request).includes(
+          "nominatim.openstreetmap.org",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the typed text when the paid provider has nothing either", async () => {
+    vi.stubEnv("GOOGLE_PLACES_API_KEY", "test-key");
+    stubBoth({});
+    const result = await geocode("Nowhere Bank, Beverly Hills");
+
+    expect(result.lat).toBeNull();
+    expect(result.lng).toBeNull();
+    expect(result.address).toBe("Nowhere Bank, Beverly Hills");
+  });
+});

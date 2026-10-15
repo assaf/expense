@@ -2,6 +2,7 @@ import Decimal from "decimal.js";
 import { z } from "zod";
 
 import { mileageAmount } from "~/lib/mileage-rates";
+import { searchPlace } from "~/lib/places.server";
 import { SUPPORT_EMAIL } from "~/lib/seo-content";
 import { geocodedLocations, type Location } from "~/lib/types";
 
@@ -224,14 +225,9 @@ function preserveHouseNumber(typed: string, address: string): string {
   return `${number} ${address}`;
 }
 
-/** One Nominatim query (no locality inference). */
-async function geocodeMatch(address: string): Promise<GeocodeMatch> {
+/** One Nominatim query, or null when it has nothing usable. */
+async function nominatimMatch(address: string): Promise<GeocodeMatch | null> {
   const trimmed = address.trim();
-  const noMatch: GeocodeMatch = {
-    location: { address, lat: null, lng: null },
-    locality: "",
-  };
-  if (!trimmed) return noMatch;
   const url = `${NOMINATIM_URL}?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(trimmed)}`;
   try {
     const res = await fetch(url, {
@@ -242,13 +238,13 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
       },
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) return noMatch;
+    if (!res.ok) return null;
     const parsed = z
       .array(nominatimResultSchema)
       .safeParse(await res.json().catch(() => null));
-    if (!parsed.success) return noMatch;
+    if (!parsed.success) return null;
     const hit = parsed.data[0];
-    if (!hit) return noMatch;
+    if (!hit) return null;
     return {
       location: {
         address: preserveHouseNumber(address, canonicalAddress(hit) || address),
@@ -258,8 +254,60 @@ async function geocodeMatch(address: string): Promise<GeocodeMatch> {
       locality: localityHint(hit),
     };
   } catch {
-    return noMatch;
+    return null;
   }
+}
+
+/** One Places lookup, for the case OpenStreetMap cannot answer at all.
+ * Returns null when no key is configured, nothing matched, or the request
+ * failed — the typed text is kept either way, so this can only resolve less,
+ * never resolve wrong. Shapes the result like a Nominatim match: the same
+ * canonical address (street, city, abbreviated state, country only when it
+ * is not the US) and the same "City, ST" hint for the next stop. */
+async function placesMatch(address: string): Promise<GeocodeMatch | null> {
+  const place = await searchPlace(address);
+  if (!place) return null;
+  const country = US_COUNTRY_NAMES.has(place.country.toLowerCase())
+    ? ""
+    : place.country;
+  const parts = [place.street, place.city, place.state, country].filter(
+    Boolean,
+  );
+  return {
+    location: {
+      address: preserveHouseNumber(
+        address,
+        parts.length >= 2
+          ? parts.join(", ")
+          : place.formattedAddress || address,
+      ),
+      lat: place.lat,
+      lng: place.lng,
+    },
+    locality: [place.city, place.state].filter(Boolean).join(", "),
+  };
+}
+
+/**
+ * One lookup, Nominatim first: it is free and covers addresses and anything
+ * OpenStreetMap has mapped. A place *name* nobody has mapped (a bank, a shop)
+ * — or a name combined with a city, which fails the whole Nominatim query
+ * rather than the unmatched word — comes back empty, and that is the one case
+ * the keyed provider answers (Places lives in places.server.ts).
+ *
+ * The locality-hint retry in geocodeWithLocality runs only on a hit, so a
+ * miss costs at most one paid call.
+ */
+async function geocodeMatch(address: string): Promise<GeocodeMatch> {
+  const trimmed = address.trim();
+  const noMatch: GeocodeMatch = {
+    location: { address, lat: null, lng: null },
+    locality: "",
+  };
+  if (!trimmed) return noMatch;
+  return (
+    (await nominatimMatch(address)) ?? (await placesMatch(address)) ?? noMatch
+  );
 }
 
 /**

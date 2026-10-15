@@ -3,14 +3,21 @@ import {
   jetbrainsMonoBytes,
   resvgFontOptions,
 } from "~/lib/resvg-font.server";
+import {
+  TILE_ATTRIBUTION_TEXT,
+  TILE_BASE_URL,
+  TILE_LABELS_URL,
+  TILE_MAX_ZOOM,
+} from "~/lib/map-tiles";
 import { MAP_USER_AGENT } from "~/lib/maps.server";
 import { geocodedLocations, type MileageExpense } from "~/lib/types";
 
 /**
  * Render a real map of a mileage trip for the report PDF, the same look
- * as the mileage editor's Leaflet map: Carto Positron light tiles with the
- * measured route drawn on top (white-cased blue outbound line, dashed gray
- * return leg, numbered stop bubbles).
+ * as the mileage editor's Leaflet map: Esri's keyless light-gray basemap
+ * (streets, then the labels over them) with the measured route drawn on
+ * top (white-cased blue outbound line, dashed gray return leg, numbered
+ * stop bubbles).
  *
  * The tiles are fetched server-side (with a descriptive User-Agent and a
  * small in-process cache so trips in the same city share tiles), stitched
@@ -27,28 +34,49 @@ const WIDTH = 460;
 const HEIGHT = 220;
 const TILE = 256;
 const PAD = 28;
-const TILE_SUBDOMAINS = ["a", "b", "c", "d"] as const;
 const TILE_CACHE_MAX = 200;
 
+/** One basemap tile: the streets layer and the labels drawn over it. */
+interface TilePair {
+  base: Buffer;
+  labels: Buffer;
+}
+
 /** The tile fetcher signature, injectable so tests stay offline. */
-type TileFetcher = (z: number, x: number, y: number) => Promise<Buffer>;
+type TileFetcher = (z: number, x: number, y: number) => Promise<TilePair>;
 
 /** In-memory tile cache (a promise per key): trips in the same city share
  * tiles and concurrent renders dedupe. Evicts the oldest past the cap. */
 const tileCache = new Map<string, Promise<Buffer>>();
 
-/** Fetch one Carto Positron light tile, the same basemap the editor's
- * Leaflet map uses (attribution is drawn on every rendered map). */
-async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
-  const key = `${z}/${x}/${y}`;
+/** The two halves of one basemap tile: the streets, then the labels drawn
+ * over them. */
+const TILE_LAYERS = {
+  base: { url: TILE_BASE_URL, accept: "image/jpeg" },
+  labels: { url: TILE_LABELS_URL, accept: "image/png" },
+} as const;
+
+/** Fetch one tile of a layer, the same keyless basemap the editor's Leaflet
+ * map draws (attribution is drawn on every rendered map). The cache key
+ * carries the layer, or the streets and the labels would share one entry. */
+async function fetchLayer(
+  layer: keyof typeof TILE_LAYERS,
+  z: number,
+  x: number,
+  y: number,
+): Promise<Buffer> {
+  const { url, accept } = TILE_LAYERS[layer];
+  const key = `${layer}/${z}/${x}/${y}`;
   const cached = tileCache.get(key);
   if (cached) return cached;
   const promise = (async () => {
-    const sub = TILE_SUBDOMAINS[(x + y) % TILE_SUBDOMAINS.length];
     const res = await fetch(
-      `https://${sub}.basemaps.cartocdn.com/light_all/${key}.png`,
+      url
+        .replace("{z}", String(z))
+        .replace("{y}", String(y))
+        .replace("{x}", String(x)),
       {
-        headers: { "User-Agent": MAP_USER_AGENT, Accept: "image/png" },
+        headers: { "User-Agent": MAP_USER_AGENT, Accept: accept },
         signal: AbortSignal.timeout(10_000),
       },
     );
@@ -68,6 +96,25 @@ async function fetchTile(z: number, x: number, y: number): Promise<Buffer> {
   }
 }
 
+/** Fetch both layers of one tile. */
+async function fetchTile(z: number, x: number, y: number): Promise<TilePair> {
+  const [base, labels] = await Promise.all([
+    fetchLayer("base", z, x, y),
+    fetchLayer("labels", z, x, y),
+  ]);
+  return { base, labels };
+}
+
+/** The data URI a tile's bytes belong in. The streets layer answers JPEG and
+ * the labels layer PNG; resvg needs the mime to match the bytes, so the type
+ * is read off the magic number rather than assumed (a fake tile in a test, or
+ * a provider that switches encodings, then still renders). */
+function tileDataUri(buf: Buffer): string {
+  const jpeg = buf[0] === 0xff && buf[1] === 0xd8;
+  const mime = jpeg ? "image/jpeg" : "image/png";
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
 /** Web-Mercator world pixel position at zoom z (256px tiles): the same
  * projection Leaflet uses, so the route lands exactly where the editor's
  * map draws it. */
@@ -84,14 +131,17 @@ function worldY(lat: number, z: number): number {
   );
 }
 
-/** The highest zoom at which the route bounds fit the canvas with padding. */
+/** The highest zoom at which the route bounds fit the canvas with padding.
+ * Stops at the basemap's own limit: the Esri light-gray services answer
+ * every zoom above it with the same tile, so asking higher would only blow
+ * the route up to the same pixel grid. */
 function pickZoom(
   minLon: number,
   maxLon: number,
   minLat: number,
   maxLat: number,
 ): number {
-  for (let z = 19; z >= 2; z--) {
+  for (let z = TILE_MAX_ZOOM; z >= 2; z--) {
     const w = worldX(maxLon, z) - worldX(minLon, z);
     const h = worldY(minLat, z) - worldY(maxLat, z);
     if (w <= WIDTH - 2 * PAD && h <= HEIGHT - 2 * PAD) {
@@ -204,7 +254,7 @@ export async function renderRouteMap(
   }
 }
 
-/** The real map: Carto light tiles with the route and markers on top. */
+/** The real map: Esri light-gray tiles with the route and markers on top. */
 async function renderTiled(
   geo: TripGeometry,
   fetcher: TileFetcher,
@@ -219,12 +269,16 @@ async function renderTiled(
   const minTy = Math.floor(oy / TILE);
   const maxTy = Math.floor((oy + HEIGHT) / TILE);
 
-  const tiles: { tx: number; ty: number; href: string }[] = [];
+  const tiles: { tx: number; ty: number; base: string; labels: string }[] = [];
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
-      const buf = await fetcher(z, tx, ty);
-      const href = `data:image/png;base64,${buf.toString("base64")}`;
-      tiles.push({ tx, ty, href });
+      const { base, labels } = await fetcher(z, tx, ty);
+      tiles.push({
+        tx,
+        ty,
+        base: tileDataUri(base),
+        labels: tileDataUri(labels),
+      });
     }
   }
 
@@ -238,7 +292,12 @@ async function renderTiled(
       `${tiles
         .map(
           (t) =>
-            `<image href="${t.href}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
+            `<image href="${t.base}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
+        )
+        .join("")}${tiles
+        .map(
+          (t) =>
+            `<image href="${t.labels}" x="${(t.tx * TILE - ox).toFixed(1)}" y="${(t.ty * TILE - oy).toFixed(1)}" width="${TILE}" height="${TILE}"/>`,
         )
         .join("")}${routeSvg(geo, px)}`,
     ),
@@ -282,7 +341,7 @@ function markersSvg(
 }
 
 /** The SVG shell: light background, optional border, and the required
- * basemap attribution (Carto's tile terms). */
+ * basemap attribution (Esri's tile terms). */
 function wrapSvg(
   inner: string,
   opts: { background?: string; border?: boolean } = {},
@@ -292,7 +351,7 @@ function wrapSvg(
   <rect width="${WIDTH}" height="${HEIGHT}" fill="${background}"/>
   ${opts.border ? `<rect x="0.5" y="0.5" width="${WIDTH - 1}" height="${HEIGHT - 1}" fill="none" stroke="#e2e8f0"/>` : ""}
   ${inner}
-  <text x="8" y="${HEIGHT - 8}" font-family="${JETBRAINS_MONO}" font-size="8" fill="#475569">© OpenStreetMap contributors © CARTO</text>
+  <text x="8" y="${HEIGHT - 8}" font-family="${JETBRAINS_MONO}" font-size="8" fill="#475569">${TILE_ATTRIBUTION_TEXT}</text>
 </svg>`;
 }
 

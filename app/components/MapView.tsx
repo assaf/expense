@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type LType from "leaflet";
+import {
+  TILE_ATTRIBUTION,
+  TILE_BASE_URL,
+  TILE_LABELS_URL,
+  TILE_MAX_ZOOM,
+} from "~/lib/map-tiles";
 
 interface MapViewProps {
   /** Polyline coordinates as [lat, lng] pairs: the outbound route. */
@@ -77,14 +83,18 @@ export default function MapView({
       attributionControl: interactive,
     });
     mapRef.current = map;
-    // Carto Positron "light": a minimal basemap (light gray streets, no
-    // POI noise) so the route and markers stand out instead of competing
-    // with a busy street map.
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    }).addTo(map);
+    // Esri's keyless light-gray pair: the base carries the streets, the
+    // reference layer the labels. Together they read like the single minimal
+    // basemap the route used to draw on, so the route and markers stand out
+    // instead of competing with a busy street map. Carto's Positron was
+    // dropped because it now answers every tile with an "API KEY REQUIRED"
+    // watermark (see ~/lib/map-tiles).
+    for (const url of [TILE_BASE_URL, TILE_LABELS_URL]) {
+      L.tileLayer(url, {
+        maxZoom: TILE_MAX_ZOOM,
+        attribution: TILE_ATTRIBUTION,
+      }).addTo(map);
+    }
     return () => {
       map.remove();
       mapRef.current = null;
