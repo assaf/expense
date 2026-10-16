@@ -145,10 +145,17 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
   connection,
   refresh,
   persistRefreshToken,
+  forceRefresh = false,
 }: {
   connection: TokenConnection;
   refresh: (refreshToken: string) => Promise<T>;
   persistRefreshToken: (refreshed: T, storedRefreshToken: string) => string;
+  /** Spend an exchange even when the stored access token has not expired. A
+   * caller that was just refused (a mailbox 401) cannot trust freshness: a
+   * token can be revoked, or the session behind it, without its expiry
+   * moving, so the check below would hand back the very credential that was
+   * refused and the caller would have nothing to retry with. */
+  forceRefresh?: boolean;
 }): Promise<string> {
   // Read the row as it stands before deciding the token is usable. The
   // caller's copy can be stale: a drain resolves the credential once and holds
@@ -166,7 +173,7 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
     return decryptSecret(row.tokenEnc);
   }
   const expiresAt = row.tokenExpiresAt ? Date.parse(row.tokenExpiresAt) : 0;
-  if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
+  if (!forceRefresh && expiresAt - REFRESH_SKEW_MS > Date.now()) {
     return decryptSecret(row.tokenEnc);
   }
   let pending = inflightRefreshes.get(connection.id);
@@ -175,6 +182,7 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
       connection,
       refresh,
       persistRefreshToken,
+      forceRefresh,
     }).then(
       (token) => {
         inflightRefreshes.delete(connection.id);
@@ -206,15 +214,17 @@ async function refreshRotated<T extends RefreshedTokens>({
   connection,
   refresh,
   persistRefreshToken,
+  forceRefresh = false,
 }: {
   connection: TokenConnection;
   refresh: (refreshToken: string) => Promise<T>;
   persistRefreshToken: (refreshed: T, storedRefreshToken: string) => string;
+  forceRefresh?: boolean;
 }): Promise<string> {
   const current = await readEmailConnectionById(connection.id);
   const row = current ?? connection;
   const expiresAt = row.tokenExpiresAt ? Date.parse(row.tokenExpiresAt) : 0;
-  if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
+  if (!forceRefresh && expiresAt - REFRESH_SKEW_MS > Date.now()) {
     return decryptSecret(row.tokenEnc);
   }
   if (!row.refreshTokenEnc) {

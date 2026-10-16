@@ -1353,6 +1353,64 @@ describe("drainEmailConnection", () => {
     expect(calls).toBe(2);
   });
 
+  it("spends a token exchange when the stored credential is refused", async () => {
+    // The shape a re-read cannot fix, and the one the 17:57 event had: the
+    // stored access token is refused while its expiry still looks fine, so
+    // nothing about the row has moved and a re-read hands back the same
+    // credential. Only spending an exchange — which the stored refresh token
+    // makes possible — separates a revoked session, where a fresh token works,
+    // from a refused grant, where the exchange itself fails.
+    await testPrisma.emailConnection.update({
+      where: { id: conn.id },
+      data: {
+        refreshTokenEnc: encryptSecret("refresh-1"),
+        tokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      },
+    });
+
+    // The suite has no global unstub, so this restores itself below.
+    const originalFetch = globalThis.fetch;
+    const tokenFetch = vi.fn(async () =>
+      Response.json({
+        access_token: "fmu1-conn-tok-refreshed",
+        refresh_token: "refresh-2",
+        expires_in: 3600,
+      }),
+    );
+    vi.stubGlobal("fetch", tokenFetch);
+
+    let calls = 0;
+    const adapter = {
+      inboxEmailSummaries: async () => {
+        calls++;
+        if (calls === 1)
+          throw new JmapAuthError("Fastmail rejected this token");
+        return [];
+      },
+      rawEmail: async () => {
+        throw new Error("an empty mailbox has no email to read");
+      },
+      moveToTrash: async () => {},
+    };
+
+    try {
+      await drainEmailConnection(conn, {
+        adapter,
+        extractionDeps: fakeExtractionDeps(),
+        batchSize: 10,
+        timeBudgetMs: 250,
+        lookbackMs: FIXTURE_LOOKBACK_MS,
+      });
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+    }
+
+    // One exchange was spent and the walk finished, so the connection was
+    // never reported as needing a reconnect.
+    expect(tokenFetch).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(2);
+  });
+
   it("does not re-evaluate a batch the cursor cannot move past", async () => {
     // EXPENSE-1M, on 2026-10-10: one push evaluated a single GitHub
     // notification 143 times in one request and processed no mail at all. The

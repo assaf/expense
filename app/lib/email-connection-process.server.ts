@@ -1115,7 +1115,17 @@ async function drainConnection(
       return await run();
     } catch (err) {
       if (!isJmapAuthError(err)) throw err;
-      const fresh = await connectionCredential(connection);
+      // Force an exchange rather than re-reading the stored token. A token can
+      // be refused without its expiry moving — rotated by the other consumer,
+      // revoked at the provider, or the session behind it revoked — so a plain
+      // re-read hands back the very credential that was just rejected and the
+      // retry has nothing to do. The exchange is what separates "superseded or
+      // revoked session", where a fresh token works, from "refused grant",
+      // where the exchange throws OAuthRefreshError — the shape the reconnect
+      // notice is actually for.
+      const fresh = await connectionCredential(connection, {
+        forceRefresh: true,
+      });
       if (
         fresh.kind !== "jmap" ||
         credential.kind !== "jmap" ||
@@ -1123,15 +1133,25 @@ async function drainConnection(
       ) {
         throw err;
       }
-      console.info(
-        "[email-connections] retried with a re-resolved credential",
-        {
-          connectionId: connection.id,
-        },
-      );
+      console.info("[email-connections] retried with a refreshed credential", {
+        connectionId: connection.id,
+      });
       adapter = injectedAdapter ?? mailClientFor(connection, fresh).adapter;
       return await run();
     }
+  };
+  /**
+   * Every mailbox call goes through that retry, not just the batch read: a
+   * token that dies between two calls of one walk would otherwise fail the
+   * walk and mail. A 401 is rejected before the request executes, so a retry
+   * cannot double-apply. These read `adapter` at call time, so once a retry
+   * has replaced it the rest of the walk uses the refreshed client.
+   */
+  const mailbox: ConnectionMailAdapter = {
+    inboxEmailSummaries: (opts) =>
+      withFreshCredential(() => adapter.inboxEmailSummaries(opts)),
+    rawEmail: (id) => withFreshCredential(() => adapter.rawEmail(id)),
+    moveToTrash: (id) => withFreshCredential(() => adapter.moveToTrash(id)),
   };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   // Fail closed: an unpinned generic JMAP connection with no learnable
@@ -1151,7 +1171,7 @@ async function drainConnection(
   const deps = connectionInboundDeps(
     connection.id,
     authservIds,
-    adapter,
+    mailbox,
     extractionDeps,
   );
 
@@ -1169,7 +1189,7 @@ async function drainConnection(
   };
 
   const adapters = {
-    moveToTrash: (id: string) => adapter.moveToTrash(id),
+    moveToTrash: (id: string) => mailbox.moveToTrash(id),
     sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
   };
   // The batch's counter deltas, written once when the batch ends.
@@ -1259,12 +1279,10 @@ async function drainConnection(
   let markedHealthy = false;
   while (Date.now() - started <= budgetMs) {
     const summaries = await drainStep("reading the mailbox failed", () =>
-      withFreshCredential(() =>
-        adapter.inboxEmailSummaries({
-          afterIso,
-          limit: batchSize,
-        }),
-      ),
+      mailbox.inboxEmailSummaries({
+        afterIso,
+        limit: batchSize,
+      }),
     );
     if (!markedHealthy) {
       markedHealthy = true;

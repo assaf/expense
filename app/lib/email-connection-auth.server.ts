@@ -50,6 +50,7 @@ export type ConnectionCredential =
  * resolve an access token and speak Bearer to the app's own endpoint. */
 export async function connectionJmapServer(
   connection: ConnectionCredentialSource,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<JmapServer> {
   if (connection.provider === "jmap") {
     if (!connection.sessionUrl) {
@@ -62,18 +63,24 @@ export async function connectionJmapServer(
   }
   return {
     sessionUrl: FASTMAIL_SESSION_URL,
-    authorization: `Bearer ${await connectionAccessToken(connection)}`,
+    authorization: `Bearer ${await connectionAccessToken(connection, options)}`,
   };
 }
 
-/** One resolver for every consumer: the drain, the cron, the push webhook. */
+/** One resolver for every consumer: the drain, the cron, the push webhook.
+ * `options.forceRefresh` spends a token exchange rather than trusting the
+ * stored credential's freshness, for a caller that was just refused. */
 export async function connectionCredential(
   connection: ConnectionCredentialSource,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<ConnectionCredential> {
   if (connection.provider === "gmail") {
     return { kind: "gmail", token: await connectionAccessToken(connection) };
   }
-  return { kind: "jmap", server: await connectionJmapServer(connection) };
+  return {
+    kind: "jmap",
+    server: await connectionJmapServer(connection, options),
+  };
 }
 
 /**

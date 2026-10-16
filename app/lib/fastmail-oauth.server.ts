@@ -182,6 +182,7 @@ export interface ConnectionCredentials {
  */
 export async function connectionAccessToken(
   connection: ConnectionCredentials,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<string> {
   // Gmail rows resolve through the Google refresh flow. This import is
   // static on purpose: google-oauth's only edge back here is a type import
@@ -198,5 +199,6 @@ export async function connectionAccessToken(
     // token is the only one worth storing; requestFastmailTokenSet refuses
     // a response without one.
     persistRefreshToken: (tokens: OAuthTokenSet) => tokens.refreshToken,
+    forceRefresh: options.forceRefresh,
   });
 }
