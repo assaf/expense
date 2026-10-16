@@ -41,6 +41,13 @@ const TOKEN_REQUEST_TIMEOUT_MS = 15_000;
  * token (both providers issue ~1h access tokens). */
 const REFRESH_SKEW_MS = 60_000;
 
+/** How long to wait before a second look at the row after a failed exchange.
+ * The winner of a cross-lambda race writes its rotated pair a round trip after
+ * its exchange returns, so the loser's first recheck can still see the spent
+ * one and report a healthy grant as refused. Bounded, and only on the failure
+ * path. */
+const REFRESH_RECHECK_MS = 250;
+
 /** The response fields both endpoints have in common, validated. The two
  * optional ones are null when the response omits them: Google leaves out
  * refresh_token on a refresh, and only Google sends an id_token. Each
@@ -198,6 +205,29 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
   return pending;
 }
 
+/** Wait out a bounded recheck window. */
+function recheckDelay(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+}
+
+/** The row's access token, if another instance has rotated a usable pair into
+ * it since this exchange began. */
+async function rotatedElsewhere(connectionId: string): Promise<string | null> {
+  const recheck = await readEmailConnectionById(connectionId);
+  const rotatedAt = recheck?.tokenExpiresAt
+    ? Date.parse(recheck.tokenExpiresAt)
+    : 0;
+  if (recheck && rotatedAt - REFRESH_SKEW_MS > Date.now()) {
+    console.info("[oauth] refresh lost a race to another instance", {
+      connectionId,
+    });
+    return decryptSecret(recheck.tokenEnc);
+  }
+  return null;
+}
+
 /**
  * One exchange, against the row as it stands now rather than against the
  * caller's copy of it. A cron tick resolves the same connection twice (the
@@ -241,16 +271,16 @@ async function refreshRotated<T extends RefreshedTokens>({
     // connection that is perfectly healthy. A row that now carries a usable
     // access token IS that case, so take it — failing here would flag a
     // working mailbox and tell its owner to reconnect for nothing.
-    const recheck = await readEmailConnectionById(connection.id);
-    const rotatedAt = recheck?.tokenExpiresAt
-      ? Date.parse(recheck.tokenExpiresAt)
-      : 0;
-    if (recheck && rotatedAt - REFRESH_SKEW_MS > Date.now()) {
-      console.info("[oauth] refresh lost a race to another instance", {
-        connectionId: connection.id,
-      });
-      return decryptSecret(recheck.tokenEnc);
-    }
+    // Two looks, because the winner writes a round trip after its exchange
+    // returns: an immediate recheck can still see the spent pair. Forcing an
+    // exchange on a refused credential makes two lambdas exchanging at once
+    // likelier, and a loser failing here would move the false notice from the
+    // session half of the gate to the grant half.
+    const rotated = await rotatedElsewhere(connection.id);
+    if (rotated) return rotated;
+    await recheckDelay(REFRESH_RECHECK_MS);
+    const rotatedLater = await rotatedElsewhere(connection.id);
+    if (rotatedLater) return rotatedLater;
     throw err;
   }
   await updateEmailConnectionTokens({

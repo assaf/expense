@@ -1096,7 +1096,7 @@ async function drainConnection(
   const credential = await drainStep("resolving the credential failed", () =>
     connectionCredential(connection),
   );
-  const client = mailClientFor(connection, credential);
+  let client = mailClientFor(connection, credential);
   const injectedAdapter = options.adapter;
   let adapter = injectedAdapter ?? client.adapter;
   /**
@@ -1136,16 +1136,21 @@ async function drainConnection(
       console.info("[email-connections] retried with a refreshed credential", {
         connectionId: connection.id,
       });
-      adapter = injectedAdapter ?? mailClientFor(connection, fresh).adapter;
+      // Rebuild the whole client, not just its adapter: `sendToOwner` is bound
+      // to the credential it was built with, so a confirmation send after this
+      // retry would otherwise still present the token that was refused.
+      client = mailClientFor(connection, fresh);
+      adapter = injectedAdapter ?? client.adapter;
       return await run();
     }
   };
   /**
-   * Every mailbox call goes through that retry, not just the batch read: a
-   * token that dies between two calls of one walk would otherwise fail the
-   * walk and mail. A 401 is rejected before the request executes, so a retry
-   * cannot double-apply. These read `adapter` at call time, so once a retry
-   * has replaced it the rest of the walk uses the refreshed client.
+   * The mailbox calls of one walk go through that retry — the batch read, the
+   * body and attachment reads, the Trash moves, and the owner confirmation
+   * send. A token that dies between two of them would otherwise fail the walk
+   * and mail. A 401 is rejected before the request executes, so a retry cannot
+   * double-apply. These read `adapter` at call time and `client` is rebuilt by
+   * the retry, so the rest of the walk presents the refreshed credential.
    */
   const mailbox: ConnectionMailAdapter = {
     inboxEmailSummaries: (opts) =>
@@ -1190,7 +1195,8 @@ async function drainConnection(
 
   const adapters = {
     moveToTrash: (id: string) => mailbox.moveToTrash(id),
-    sendToOwner: (email: OwnerEmail) => client.sendToOwner(email),
+    sendToOwner: (email: OwnerEmail) =>
+      withFreshCredential(() => client.sendToOwner(email)),
   };
   // The batch's counter deltas, written once when the batch ends.
   const counters = counterBatch(connection.id);
