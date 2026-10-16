@@ -402,17 +402,31 @@ export async function touchEmailConnectionPush(id: string): Promise<void> {
   });
 }
 
-/** Set/clear the needs-attention state shown on the Email page. Writing
- * "active" also re-arms the reconnect notice: every recovery path (a
- * renewal, a drain, a push verification) lands here, so the next failure
- * notifies the account again. */
+/** Set/clear the needs-attention state shown on the Email page. This is a
+ * badge, not a recovery signal: it never touches the notice marker, because a
+ * renewal proves the credential works and a subscription verification proves
+ * nothing at all, while the notice is about the mailbox being read.
+ * `markConnectionDrained` is the only writer allowed to clear that marker, so
+ * that a proxy for health cannot manufacture a new notice episode. */
 export async function setEmailConnectionStatus(
   id: string,
   status: "active" | "error",
 ): Promise<void> {
-  await db.orm.public.EmailConnection.where({ id }).update(
-    status === "active" ? { status, errorNotifiedAt: null } : { status },
-  );
+  await db.orm.public.EmailConnection.where({ id }).update({ status });
+}
+
+/** The drain read the mailbox, so the connection is healthy again: clear the
+ * needs-attention badge and re-arm the reconnect notice, so a failure after a
+ * real recovery notifies the account once more. Deliberately the only writer
+ * that clears `errorNotifiedAt`. Before the split, every "active" write
+ * re-armed, and because a burst of push re-verifications clears the status,
+ * one failed drain produced one notice per verify — three copies of the same
+ * notice in two seconds. */
+export async function markConnectionDrained(id: string): Promise<void> {
+  await db.orm.public.EmailConnection.where({ id }).update({
+    status: "active",
+    errorNotifiedAt: null,
+  });
 }
 
 /** Claim the reconnect notice for the current failure episode, so exactly one

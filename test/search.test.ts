@@ -92,6 +92,77 @@ describe("Expense search", () => {
     );
   });
 
+  it("completes a multi-word name typed in the clear, and takes the next filter", async () => {
+    // Typing a merchant's name as words offers its filter form; picking it
+    // inserts `merchant:...` with the trailing space the next filter is
+    // typed straight after (that space is what makes `amount:<50` a filter
+    // of its own instead of a merchant called "Test Storeamount").
+    const input = page.getByLabel("Search expenses");
+    const options = page.locator("#expense-search-options [role=option]");
+    // The file shares one page: start from an empty box.
+    await input.fill("");
+    await input.pressSequentially("Test Sto", { delay: 20 });
+    // The words name the merchant, so its filter form is offered (the
+    // alias keyword "store:" is in play too, hence matching by name).
+    const named = options.filter({ hasText: "Test Store" });
+    await expect(named).toHaveText(/1 expense/);
+    await named.click();
+    await expect(input).toHaveValue("merchant:Test Store ");
+    await page.waitForTimeout(400);
+    await expect(
+      page.getByText("Showing 1 of 6 expenses · $42.50 total"),
+    ).toBeVisible();
+    await input.pressSequentially("amount:<50", { delay: 20 });
+    await page.waitForTimeout(400);
+    await expect(
+      page.getByText("Showing 1 of 6 expenses · $42.50 total"),
+    ).toBeVisible();
+  });
+
+  it("completes a multi-word report name typed in the clear", async () => {
+    const input = page.getByLabel("Search expenses");
+    const options = page.locator("#expense-search-options [role=option]");
+    // The file shares one page: start from an empty box.
+    await input.fill("");
+    await input.pressSequentially("2026 t", { delay: 20 });
+    await expect(options).toHaveCount(1);
+    await expect(options.first()).toContainText("2026 Test");
+    await input.press("Enter");
+    await expect(input).toHaveValue("report:2026 Test ");
+    await page.waitForTimeout(400);
+    await expect(
+      page.getByText("Showing 4 of 6 expenses · $80.89 total"),
+    ).toBeVisible();
+  });
+
+  it("picks a suggestion with the arrow keys and Enter, and Escape closes the list", async () => {
+    const input = page.getByLabel("Search expenses");
+    const options = page.locator("#expense-search-options [role=option]");
+    // The file shares one page: start from an empty box.
+    await input.fill("");
+    await input.pressSequentially("test", { delay: 20 });
+    // The merchant that starts with the word, then the category: the first
+    // option is highlighted before any key is pressed.
+    await expect(options).toHaveCount(2);
+    await expect(options.nth(0)).toContainText("Test Store");
+    await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+    await input.press("ArrowDown");
+    await expect(options.nth(1)).toContainText("Testing");
+    await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
+    // Escape dismisses the list and leaves the typed text alone.
+    await input.press("Escape");
+    await expect(options).toHaveCount(0);
+    await expect(input).toHaveValue("test");
+    // Typing brings it back, and Enter takes the highlighted option.
+    await input.pressSequentially("ing", { delay: 20 });
+    await input.press("Enter");
+    await expect(input).toHaveValue("category:Testing ");
+    await page.waitForTimeout(400);
+    await expect(
+      page.getByText("Showing 3 of 6 expenses · $54.50 total"),
+    ).toBeVisible();
+  });
+
   it("filters by a picked suggestion and shows its total", async () => {
     await search("DevShop");
     await expect(

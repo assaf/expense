@@ -60,9 +60,13 @@ export async function action({ request }: Route.ActionArgs) {
       pushVerificationOrEmpty(payload);
     try {
       await setConnectionVerificationCode(connection, subscriptionId, code);
-      if (connection.status === "error") {
-        await setEmailConnectionStatus(connection.id, "active");
-      }
+      // No status write here. A PushVerification is a webhook the provider
+      // sends about the *subscription*, not evidence that the mailbox reads,
+      // and clearing the error state also re-arms the reconnect notice and the
+      // transition guard. A burst of re-verifications therefore turned one
+      // failed drain into a notice per verify: the owner got the same notice
+      // three times in two seconds. Health is the drain's to report, and
+      // `markConnectionDrained` is where it does.
       console.info("[email-connections-push] verified subscription", {
         connectionId,
         subscriptionId,

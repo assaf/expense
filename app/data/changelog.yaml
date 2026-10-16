@@ -39,6 +39,14 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-16"
+    changes:
+      - type: fix
+        text: "A connected mailbox that is still importing mail stops asking you to reconnect it: a token refresh happening in the background is no longer read as a dead credential, and the notice goes out once per episode instead of once per webhook re-verification."
+  - date: "2026-10-15"
+    changes:
+      - type: improvement
+        text: "Search completes a name you type in the clear, not just after a prefix: type amazon pha, pick Amazon Pharmacy, and the box fills in merchant:Amazon Pharmacy — with the trailing space the next filter goes straight after, so amount:<7.00 narrows to that merchant's smaller charges."
   - date: "2026-10-14"
     changes:
       - type: fix

@@ -150,14 +150,24 @@ export async function resolveConnectionAccessToken<T extends RefreshedTokens>({
   refresh: (refreshToken: string) => Promise<T>;
   persistRefreshToken: (refreshed: T, storedRefreshToken: string) => string;
 }): Promise<string> {
-  if (!connection.refreshTokenEnc) {
-    return decryptSecret(connection.tokenEnc);
+  // Read the row as it stands before deciding the token is usable. The
+  // caller's copy can be stale: a drain resolves the credential once and holds
+  // its row from the top of the walk, while another consumer (a cron tick, the
+  // push webhook) refreshes the pair in between — and Fastmail revokes the
+  // access token it replaces. The shortcuts below used to answer from the
+  // caller's copy, so a superseded token came back as the resolved credential,
+  // the mailbox rejected it, and the drain reported a dead grant and mailed
+  // "your mailbox needs reconnecting" for a mailbox that was reading mail
+  // (EXPENSE-1K). `refreshRotated` always read the row; this makes the outer
+  // half agree with it.
+  const current = await readEmailConnectionById(connection.id);
+  const row = current ?? connection;
+  if (!row.refreshTokenEnc) {
+    return decryptSecret(row.tokenEnc);
   }
-  const expiresAt = connection.tokenExpiresAt
-    ? Date.parse(connection.tokenExpiresAt)
-    : 0;
+  const expiresAt = row.tokenExpiresAt ? Date.parse(row.tokenExpiresAt) : 0;
   if (expiresAt - REFRESH_SKEW_MS > Date.now()) {
-    return decryptSecret(connection.tokenEnc);
+    return decryptSecret(row.tokenEnc);
   }
   let pending = inflightRefreshes.get(connection.id);
   if (!pending) {

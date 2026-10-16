@@ -14,7 +14,10 @@ import { categoriesForSynonym, OPERATOR_ALIASES } from "~/lib/expense-search";
  * The insights filter input with a token-aware dropdown: the suggestion
  * set is computed for the word the caret is in, so `cate` completes to
  * `category:` + its names whether it's the first token or the fifth
- * (native datalists match the whole input value and can't do that).
+ * (native datalists match the whole input value and can't do that). A
+ * name typed in the clear completes to its filter form, `Amazon Pha` to
+ * `merchant:Amazon Pharmacy `, with the trailing space the next filter
+ * is typed straight after.
  *
  * Keyboard: ↓/↑ move, Enter or Tab accepts, Escape dismisses. Options
  * accept on mousedown so the input never blurs mid-pick.
@@ -27,9 +30,15 @@ export interface FilterNames {
 }
 
 interface Suggestion {
-  /** Full replacement for the active token (trailing space when the
-   * token is complete, none after a bare operator you'll keep typing). */
+  /** Replacement for the active token, from `start` on (trailing space
+   * when the token is complete, none after a bare operator you'll keep
+   * typing). */
   completion: string;
+  /** Offset inside the active token where `completion` starts replacing
+   * it. Zero for everything typed as one word; a bare candidate replaces
+   * only the words a name covers, so the words ahead of them ("coffee"
+   * in "coffee Amazon Pha") stay free text. */
+  start: number;
   label: string;
   hint: string;
 }
@@ -46,7 +55,9 @@ const OPERATORS = [
  * without rendering unbounded DOM. */
 const MAX_OPTIONS = 50;
 
-/** Suggestions for the token under the caret. */
+/** Suggestions for the candidate under the caret: an operator's value
+ * ("merchant:off"), or the free-text run parseQuery reads as bare words
+ * ("Amazon Pha" — the words a name starts complete to it). */
 export function tokenSuggestions(
   token: string,
   names: FilterNames,
@@ -54,7 +65,7 @@ export function tokenSuggestions(
   const t = token.toLowerCase();
   // Nothing typed under the caret: no suggestions (this is also what
   // keeps the dropdown closed when the value is set programmatically).
-  if (!t) return [];
+  if (!t.trim()) return [];
   const byRest = (list: FilterNames["merchants"], key: string, rest: string) =>
     list
       .filter(([name]) =>
@@ -68,12 +79,14 @@ export function tokenSuggestions(
       .slice(0, MAX_OPTIONS)
       .map(([name, count]) => ({
         completion: `${key}:${name} `,
+        start: 0,
         label: name,
         hint: countLabel(count),
       }));
   const categorySynonymSuggestions = (rest: string) =>
     categoriesForSynonym(rest).map((name) => ({
       completion: `category:${name} `,
+      start: 0,
       label: name,
       hint: "category",
     }));
@@ -107,27 +120,62 @@ export function tokenSuggestions(
       ...(canonical === "category" ? categorySynonymSuggestions(rest) : []),
     ].slice(0, MAX_OPTIONS);
   }
+  // A bare candidate is parseQuery's free text (its `words`). The words at
+  // its end that a name starts complete to that name's filter form: one
+  // word as it is typed ("office" -> merchant:OfficeMax), or a multi-word
+  // name typed in the clear by its longest matching run ("Amazon Pha" ->
+  // merchant:Amazon Pharmacy), which leaves any words ahead of it as free
+  // text. Operators, aliases and category synonyms are single words, so
+  // they complete on the word being typed.
+  const words = [...t.matchAll(/\S+/g)];
+  const last = words[words.length - 1]!;
+  const typed = last[0];
+  const typedAt = last.index;
   const aliasCompletions = Object.entries(OPERATOR_ALIASES)
-    .filter(([alias]) => alias.startsWith(t))
+    .filter(([alias]) => alias.startsWith(typed))
     .map(([alias, canonical]) => ({
       completion: `${canonical}:`,
+      start: typedAt,
       label: `${alias}: (${canonical}:)`,
       hint: "filter",
     }));
-  const operators = OPERATORS.filter((o) => o.startsWith(t)).map((o) => ({
+  const operators = OPERATORS.filter((o) => o.startsWith(typed)).map((o) => ({
     completion: o,
+    start: typedAt,
     label: o,
     hint: "filter",
   }));
-  const namesFor = (list: FilterNames["merchants"], key: string) =>
-    byRest(list, key, t);
   // A bare word that is a built-in synonym of a category ("food", "gas")
   // offers that category's operator form.
-  const synonymCategories = categoriesForSynonym(t).map((name) => ({
+  const synonymCategories = categoriesForSynonym(typed).map((name) => ({
     completion: `category:${name} `,
+    start: typedAt,
     label: name,
     hint: "category",
   }));
+  /** The longest run of typed words the account's names start, or 0 when
+   * none does. One run for every list: an older word (the lone "t" in
+   * "2026 t") never rides along on a shorter fallback. */
+  const allNames = [...names.merchants, ...names.categories, ...names.reports];
+  let run = 0;
+  for (let length = words.length; length >= 1 && run === 0; length--) {
+    const phrase = t.slice(words[words.length - length]!.index);
+    if (allNames.some(([name]) => name.toLowerCase().startsWith(phrase)))
+      run = length;
+  }
+  const namesFor = (list: FilterNames["merchants"], key: string) => {
+    if (run === 0) return [];
+    const from = words[words.length - run]!.index;
+    const matching = list.filter(([name]) =>
+      name.toLowerCase().startsWith(t.slice(from)),
+    );
+    return matching.slice(0, MAX_OPTIONS).map(([name, count]) => ({
+      completion: `${key}:${name} `,
+      start: from,
+      label: name,
+      hint: countLabel(count),
+    }));
+  };
   return [
     ...operators,
     ...aliasCompletions,
@@ -175,7 +223,10 @@ export function FilterCombobox({
   // The candidate the caret sits in: if an operator prefix ("report:",
   // aliased included) is open at the caret, its value runs to the caret
   // and may contain spaces (parseQuery semantics: an operator's value
-  // runs to the next operator). Otherwise it's the last bare word.
+  // runs to the next operator). Otherwise it's the free-text run before
+  // the caret (parseQuery's `words`), which is what lets a multi-word
+  // name typed in the clear complete; a caret after whitespace has a
+  // finished word under it and nothing left to complete.
   const { token, tokenStart } = useMemo(() => {
     const upToCaret = value.slice(0, caret).toLowerCase();
     const re =
@@ -186,8 +237,8 @@ export function FilterCombobox({
       const start = last.index + last[0].length - last[1].length - 1;
       return { token: upToCaret.slice(start), tokenStart: start };
     }
-    const m = /(\S*)$/.exec(upToCaret);
-    return { token: m![1]!, tokenStart: caret - m![1]!.length };
+    if (/\s$/.test(upToCaret)) return { token: "", tokenStart: caret };
+    return { token: upToCaret, tokenStart: 0 };
   }, [value, caret]);
 
   const options = useMemo(
@@ -200,10 +251,11 @@ export function FilterCombobox({
   }, [token, open]);
 
   const apply = (s: Suggestion) => {
-    const next = value.slice(0, tokenStart) + s.completion + value.slice(caret);
+    const from = tokenStart + s.start;
+    const next = value.slice(0, from) + s.completion + value.slice(caret);
     onChange(next);
     // Put the caret at the end of the inserted completion.
-    const pos = tokenStart + s.completion.length;
+    const pos = from + s.completion.length;
     queueMicrotask(() => {
       localRef.current?.focus();
       localRef.current?.setSelectionRange(pos, pos);

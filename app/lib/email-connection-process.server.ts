@@ -42,7 +42,7 @@ import {
   connectionCredential,
   type ConnectionCredential,
 } from "~/lib/email-connection-auth.server";
-import type { JmapServer } from "~/lib/jmap.server";
+import { isJmapAuthError, type JmapServer } from "~/lib/jmap.server";
 import { matchEmailRule } from "~/lib/db/email-rules";
 import { findRecentlyImportedMatch } from "~/lib/db/expenses";
 import {
@@ -62,7 +62,10 @@ import { and } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire } from "~/lib/db/wire";
 import { extractEmailAddress } from "~/lib/validation";
-import type { EmailConnectionWithSecret } from "~/lib/db/email-connections";
+import {
+  markConnectionDrained,
+  type EmailConnectionWithSecret,
+} from "~/lib/db/email-connections";
 
 /**
  * The connected-account processing pipeline: new mail in the user's Inbox →
@@ -1094,7 +1097,42 @@ async function drainConnection(
     connectionCredential(connection),
   );
   const client = mailClientFor(connection, credential);
-  const adapter = options.adapter ?? client.adapter;
+  const injectedAdapter = options.adapter;
+  let adapter = injectedAdapter ?? client.adapter;
+  /**
+   * A 401 from the mailbox is not automatically a dead credential. The other
+   * consumer of this connection (a cron tick, the push webhook) can refresh
+   * the pair mid-drain, and Fastmail revokes the access token it replaces, so
+   * the copy this drain resolved is superseded rather than bad. Re-resolving
+   * reads the row as it stands, so when that yields a different credential
+   * the call is worth one retry; when it yields the same one, the verdict
+   * stands and a genuinely dead grant still notifies. Without this, a
+   * superseded token mails the owner "your mailbox needs reconnecting" for a
+   * mailbox that is reading mail normally (EXPENSE-1K).
+   */
+  const withFreshCredential = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (err) {
+      if (!isJmapAuthError(err)) throw err;
+      const fresh = await connectionCredential(connection);
+      if (
+        fresh.kind !== "jmap" ||
+        credential.kind !== "jmap" ||
+        fresh.server.authorization === credential.server.authorization
+      ) {
+        throw err;
+      }
+      console.info(
+        "[email-connections] retried with a re-resolved credential",
+        {
+          connectionId: connection.id,
+        },
+      );
+      adapter = injectedAdapter ?? mailClientFor(connection, fresh).adapter;
+      return await run();
+    }
+  };
   const extractionDeps = options.extractionDeps ?? realExtractionDeps();
   // Fail closed: an unpinned generic JMAP connection with no learnable
   // delivery stamp must not run, because evaluateAuthChain([]) answers ok
@@ -1213,13 +1251,25 @@ async function drainConnection(
   // walk had no such bound, so a batch it could not get past re-served until the
   // time budget died.
   const served = new Map<string, number>();
+  // The mailbox answered, which is what the reconnect notice is about: the
+  // connection is healthy now, so clear the badge and re-arm the notice for a
+  // future episode. Best effort and once per walk, like the failure path. A
+  // later failure in this walk still reports, because the caller writes
+  // "error" after us.
+  let markedHealthy = false;
   while (Date.now() - started <= budgetMs) {
     const summaries = await drainStep("reading the mailbox failed", () =>
-      adapter.inboxEmailSummaries({
-        afterIso,
-        limit: batchSize,
-      }),
+      withFreshCredential(() =>
+        adapter.inboxEmailSummaries({
+          afterIso,
+          limit: batchSize,
+        }),
+      ),
     );
+    if (!markedHealthy) {
+      markedHealthy = true;
+      await markConnectionDrained(connection.id).catch(() => {});
+    }
     if (summaries.length === 0) {
       // The window is exhausted, so this walk reached the present: the only
       // exit that has covered everything from its floor onward, and so the

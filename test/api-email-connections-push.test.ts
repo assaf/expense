@@ -175,7 +175,13 @@ describe("api.email-connections-push", () => {
     expect(mocks.setEmailConnectionStatus).not.toHaveBeenCalled();
   });
 
-  it("clears the error flag after a successful verification echo", async () => {
+  it("leaves the error flag alone after a verification echo", async () => {
+    // A PushVerification is a webhook about the subscription, not evidence that
+    // the mailbox reads. Clearing the flag here also re-armed the reconnect
+    // notice and the transition guard, so a burst of re-verifications turned
+    // one failed drain into one notice per verify — the owner got the same
+    // notice three times in two seconds (EXPENSE-1K). Health is the drain's to
+    // report; markConnectionDrained is where it does.
     mocks.readEmailConnectionById.mockImplementation(async () =>
       connection({ status: "error", tokenEnc: encryptSecret("fmu1-conn-tok") }),
     );
@@ -191,10 +197,8 @@ describe("api.email-connections-push", () => {
       ),
     );
     expect(res.status).toBe(200);
-    expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith(
-      "conn1",
-      "active",
-    );
+    expect(mocks.setConnectionVerificationCode).toHaveBeenCalled();
+    expect(mocks.setEmailConnectionStatus).not.toHaveBeenCalled();
   });
 
   it("stamps lastPushAt on StateChange and drains the connection", async () => {

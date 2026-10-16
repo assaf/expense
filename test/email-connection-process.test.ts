@@ -18,6 +18,13 @@ import type * as EmailRulesModule from "~/lib/db/email-rules";
 import { readStaleClaimArrivals, writeEmailLogRow } from "~/lib/db/email-log";
 import { addEmailRule, removeEmailRule } from "~/lib/db/email-rules";
 import { readExpenses } from "~/lib/db/expenses";
+import {
+  claimEmailConnectionErrorNotified,
+  readEmailConnectionById,
+  setEmailConnectionStatus,
+} from "~/lib/db/email-connections";
+import { JmapAuthError } from "~/lib/jmap.server";
+import { encryptSecret } from "~/lib/token-crypto.server";
 import type * as ErrorsModule from "~/lib/errors.server";
 import { db } from "~/lib/prisma.server";
 import { fromIso, fromIsoOrNull, toIso } from "~/lib/db/wire";
@@ -1273,6 +1280,77 @@ describe("drainEmailConnection", () => {
       "[email-connections] drain time budget reached",
       expect.anything(),
     );
+  });
+
+  it("clears the badge and re-arms the notice once the mailbox answers", async () => {
+    // A mailbox that answered is what the reconnect notice is about, so the
+    // drain is the only thing allowed to call the episode over. Nothing wrote
+    // "active" on a successful read before this, so the notice could only
+    // re-arm through a renewal or a push verification — and a burst of
+    // re-verifications is what turned one failed drain into three notices.
+    await setEmailConnectionStatus(conn.id, "error");
+    await claimEmailConnectionErrorNotified(conn.id, new Date().toISOString());
+    expect(
+      (await readEmailConnectionById(conn.id))?.errorNotifiedAt,
+    ).not.toBeNull();
+
+    await drainEmailConnection(conn, {
+      adapter: {
+        inboxEmailSummaries: async () => [],
+        rawEmail: async () => {
+          throw new Error("an empty mailbox has no email to read");
+        },
+        moveToTrash: async () => {},
+      },
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      timeBudgetMs: 250,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    const row = await readEmailConnectionById(conn.id);
+    expect(row?.status).toBe("active");
+    expect(row?.errorNotifiedAt).toBeNull();
+  });
+
+  it("retries a superseded credential instead of reporting a dead one", async () => {
+    // The drain resolves the credential once, so another consumer (a cron
+    // tick, the push webhook) can refresh the pair mid-drain. Fastmail revokes
+    // the access token it replaces, so the copy in hand is superseded rather
+    // than dead — and a 401 from it used to mail the owner "your mailbox needs
+    // reconnecting" for a mailbox that was reading mail (EXPENSE-1K).
+    const rotated = encryptSecret("fmu1-conn-tok-rotated");
+    let calls = 0;
+    const adapter = {
+      inboxEmailSummaries: async () => {
+        calls++;
+        if (calls === 1) {
+          // The concurrent refresh lands between the resolve and this call.
+          await testPrisma.emailConnection.update({
+            where: { id: conn.id },
+            data: { tokenEnc: rotated },
+          });
+          throw new JmapAuthError("Fastmail rejected this token");
+        }
+        return [];
+      },
+      rawEmail: async () => {
+        throw new Error("an empty mailbox has no email to read");
+      },
+      moveToTrash: async () => {},
+    };
+
+    await drainEmailConnection(conn, {
+      adapter,
+      extractionDeps: fakeExtractionDeps(),
+      batchSize: 10,
+      timeBudgetMs: 250,
+      lookbackMs: FIXTURE_LOOKBACK_MS,
+    });
+
+    // The 401 was retried with the re-resolved credential, so the walk
+    // finished instead of the connection being flagged as needing a reconnect.
+    expect(calls).toBe(2);
   });
 
   it("does not re-evaluate a batch the cursor cannot move past", async () => {

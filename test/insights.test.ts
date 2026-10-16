@@ -867,6 +867,99 @@ describe("tokenSuggestions", () => {
     expect(completions).toContain("merchant:Z.ai ");
   });
 
+  it("completes a multi-word name typed in the clear to its filter form", () => {
+    // "Amazon Pha" is free text to parseQuery, but those words name a
+    // merchant, so the pick inserts `merchant:Amazon Pharmacy ` — the
+    // filter form, trailing space and all, ready for the next filter.
+    const withName: FilterNames = {
+      ...names,
+      merchants: [["Amazon Pharmacy", 2]],
+    };
+    expect(tokenSuggestions("Amazon Pha", withName)).toContainEqual({
+      completion: "merchant:Amazon Pharmacy ",
+      start: 0,
+      label: "Amazon Pharmacy",
+      hint: "2 expenses",
+    });
+  });
+
+  it("replaces only the words the name covers", () => {
+    // The words ahead of the name are the person's free text: they stay
+    // words ("coffee" still has to match the row) and only the name's own
+    // words turn into the operator.
+    const withName: FilterNames = {
+      ...names,
+      merchants: [["Amazon Pharmacy", 2]],
+    };
+    expect(tokenSuggestions("coffee Amazon Pha", withName)).toContainEqual({
+      completion: "merchant:Amazon Pharmacy ",
+      start: 7,
+      label: "Amazon Pharmacy",
+      hint: "2 expenses",
+    });
+  });
+
+  it("needs a name from its first word, not a fragment inside it", () => {
+    // A bare word completes a name it starts: "Pha" is not how the
+    // merchant is named, so nothing is offered (and nothing gets replaced).
+    const withName: FilterNames = {
+      ...names,
+      merchants: [["Amazon Pharmacy", 2]],
+    };
+    expect(tokenSuggestions("Pha", withName)).toEqual([]);
+  });
+
+  it("completes multi-word category and report names too", () => {
+    expect(tokenSuggestions("Meals and ent", names)).toContainEqual({
+      completion: "category:Meals and entertainment ",
+      start: 0,
+      label: "Meals and entertainment",
+      hint: "2 expenses",
+    });
+    expect(tokenSuggestions("July 202", names)).toContainEqual({
+      completion: "report:July 2026 ",
+      start: 0,
+      label: "July 2026",
+      hint: "1 expense",
+    });
+  });
+
+  it("completes the keyword being typed after free text", () => {
+    // Operators, aliases and synonyms are single words: the word under the
+    // caret completes, and the offset keeps the free text ahead of it.
+    expect(tokenSuggestions("printer cate", names)).toContainEqual({
+      completion: "category:",
+      start: 8,
+      label: "category:",
+      hint: "filter",
+    });
+    expect(tokenSuggestions("printer paper", names)).toContainEqual({
+      completion: "category:Office expenses ",
+      start: 8,
+      label: "Office expenses",
+      hint: "category",
+    });
+  });
+
+  it("completes at the longest run that names something", () => {
+    // "2026 t" names the report, so the merchant the lone "t" would have
+    // suggested stays out: one run is shared by every list.
+    const both: FilterNames = {
+      ...names,
+      merchants: [["Test Store", 1]],
+      reports: [["2026 Test", 4]],
+    };
+    expect(tokenSuggestions("2026 t", both).map((s) => s.completion)).toEqual([
+      "report:2026 Test ",
+    ]);
+  });
+
+  it("stays quiet when the words name nothing", () => {
+    // Free text is still free text: no merchant, category or report of
+    // the account starts with these words, so the box guesses nothing.
+    expect(tokenSuggestions("team offsite", names)).toEqual([]);
+  });
+
   it("returns no suggestions for an empty token", () => {
     expect(tokenSuggestions("", names)).toEqual([]);
   });

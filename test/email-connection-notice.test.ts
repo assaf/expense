@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
 import {
   createEmailConnection,
+  markConnectionDrained,
   setEmailConnectionStatus,
 } from "~/lib/db/email-connections";
 import { OAuthRefreshError } from "~/lib/oauth-token-refresh.server";
@@ -167,8 +168,16 @@ describe("reportConnectionFailure", () => {
     const conn = await makeConnection(account.accountId);
 
     await reportConnectionFailure({ connection: conn, error: deadGrant() });
-    // A successful renewal, drain or push verification lands here.
+    // The drain read the mailbox, so the episode is over: the badge clears and
+    // the notice re-arms for the next one. A plain status write must NOT do
+    // that. A renewal proves the credential works, a subscription verification
+    // proves nothing at all, and the notice is about the mailbox being read —
+    // treating either as recovery is what sent the same notice three times in
+    // two seconds (EXPENSE-1K).
     await setEmailConnectionStatus(conn.id, "active");
+    expect(await marker(conn.id)).not.toBeNull();
+
+    await markConnectionDrained(conn.id);
     expect(await marker(conn.id)).toBeNull();
 
     SEND.sendEmail.mockClear();
