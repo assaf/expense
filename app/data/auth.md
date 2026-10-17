@@ -19,9 +19,7 @@ person's token never sees the first person's expenses.
 
 ## Discovery
 
-Everything an agent needs is published before it connects. The URLs below
-are not in backticks on purpose: a document parser reads them literally, and
-a trailing backtick turns them into a 404.
+Everything an agent needs is published before it connects:
 
 - {{siteUrl}}/.well-known/oauth-protected-resource/mcp is the protected
   resource metadata for the endpoint (RFC 9728): the resource identifier and

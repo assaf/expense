@@ -238,6 +238,9 @@ describe("MCP OAuth", () => {
     const refreshToken = exchanged.json.refresh_token as string;
     expect(accessToken).toMatch(/^oat_/);
     expect(refreshToken).toMatch(/^ort_/);
+    // Consumer-visible: OAuth clients read the granted scope from here, and
+    // an empty string is not a valid scope value.
+    expect(exchanged.json.scope).toBe("expense");
 
     const expenses = await callTool(accessToken, "list_expenses", {});
     // Scoped to the signing-in user's account (Test Account), not the other.
