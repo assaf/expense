@@ -73,6 +73,14 @@ export function generateCodeVerifier(): string {
  * RFC 8414 authorization server metadata for the current origin. Served at
  * `/.well-known/oauth-authorization-server` (and mirrored at
  * `/.well-known/openid-configuration` for clients that look there first).
+ *
+ * `agent_auth` is the auth.md discovery block: where the skill document is,
+ * where an agent registers, and how it ends up with a credential. It states
+ * only what this server actually offers — dynamic client registration
+ * followed by authorization_code + PKCE with the user approving — and stays
+ * silent about identity assertions and anonymous access, which are not
+ * implemented here; a block claiming them would send an agent down a dead
+ * end. See app/data/auth.md for the prose version.
  */
 function buildOAuthMetadata(origin: string): Record<string, unknown> {
   return {
@@ -87,6 +95,21 @@ function buildOAuthMetadata(origin: string): Record<string, unknown> {
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_basic"],
     code_challenge_methods_supported: [PKCE_METHOD],
     scopes_supported: [],
+    agent_auth: {
+      skill: `${origin}/auth.md`,
+      register_uri: `${origin}/oauth/register`,
+      revocation_uri: `${origin}/oauth/revoke`,
+      registration_methods: [
+        {
+          type: "oauth2",
+          registration: "dynamic_client_registration",
+          credential_types_supported: ["oauth2"],
+          grant_types_supported: ["authorization_code", "refresh_token"],
+          code_challenge_methods_supported: [PKCE_METHOD],
+          requires_user_approval: true,
+        },
+      ],
+    },
   };
 }
 
@@ -142,26 +165,31 @@ export function oauthMetadataResponse(request: Request): Response {
 }
 
 /**
- * RFC 9728 protected resource metadata, served at both discovery URLs: the
- * origin-level `/.well-known/oauth-protected-resource` and the path-aware
- * `/.well-known/oauth-protected-resource/mcp` that RFC 9728 §3.1 prescribes
- * for a resource with a path (the one every MCP SDK probes first). One
- * document, two locations, exactly like the authorization server metadata.
+ * RFC 9728 protected resource metadata.
  *
- * `resource` names the MCP endpoint in both, on purpose: the origin-level
- * copy is what an older client falls back to, and those clients match the
- * value against the URL they are calling. A scanner that validates the
- * origin-level document against its own origin therefore reads a mismatch;
- * naming the origin instead would break exactly those clients.
+ * Two documents, because `resource` is what the document describes and RFC
+ * 9728 §3.1 puts a resource's metadata between the origin and its path: the
+ * origin-level `/.well-known/oauth-protected-resource` describes the origin,
+ * and `/.well-known/oauth-protected-resource/mcp` describes the endpoint
+ * (the URL every MCP SDK probes first, and the one the /mcp 401 advertises).
+ *
+ * One document at both locations was a bug: the origin-level copy named the
+ * endpoint, so anything that validated it against the origin — a scanner, a
+ * generic OAuth client — read a resource mismatch, and auth.md discovery
+ * failed on it. Naming the origin changes nothing for MCP clients, which
+ * follow the 401's `resource_metadata` URL to the path-aware document.
  *
  * `scopes_supported` is empty because the flow grants the whole account, and
  * the authorization server metadata publishes the same empty list.
  */
-export function protectedResourceMetadataResponse(request: Request): Response {
+export function protectedResourceMetadataResponse(
+  request: Request,
+  path?: string,
+): Response {
   const origin = publicOrigin(request);
   return Response.json(
     {
-      resource: `${origin}/mcp`,
+      resource: path === undefined ? origin : `${origin}${path}`,
       authorization_servers: [origin],
       scopes_supported: [],
       bearer_methods_supported: ["header"],

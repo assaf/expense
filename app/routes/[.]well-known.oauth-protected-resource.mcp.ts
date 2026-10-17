@@ -9,5 +9,5 @@ import type { Route } from "./+types/[.]well-known.oauth-protected-resource.mcp"
  * hint points here.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  return protectedResourceMetadataResponse(request);
+  return protectedResourceMetadataResponse(request, "/mcp");
 }

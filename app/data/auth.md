@@ -23,10 +23,16 @@ Everything an agent needs is published before it connects:
 
 - `{{siteUrl}}/.well-known/oauth-protected-resource/mcp` is the protected
   resource metadata for the endpoint (RFC 9728): the resource identifier and
-  the authorization server that issues tokens for it.
+  the authorization server that issues tokens for it. The origin-level
+  `{{siteUrl}}/.well-known/oauth-protected-resource` describes the site
+  itself instead, so a client that probes the root is not told it is calling
+  some other resource.
 - `{{siteUrl}}/.well-known/oauth-authorization-server` is the authorization
   server metadata (RFC 8414), mirrored at
   `{{siteUrl}}/.well-known/openid-configuration` for clients that look there.
+  It carries an `agent_auth` block: `skill` points back at this document,
+  `register_uri` at the registration endpoint below, and the block lists the
+  one registration method this server supports.
 - `{{mcpEndpoint}}/server-card` is the server card: identity, transport, and
   the protocol revisions the endpoint speaks.
 - A request to `{{mcpEndpoint}}` without a token answers `401` with

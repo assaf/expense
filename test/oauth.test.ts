@@ -591,11 +591,19 @@ describe("MCP OAuth", () => {
       `${baseURL}/.well-known/oauth-authorization-server`,
       { headers },
     );
-    const meta = (await metaRes.json()) as Record<string, string>;
+    const meta = (await metaRes.json()) as Record<string, unknown>;
     expect(meta.issuer).toBe("https://expense.localhost");
     expect(meta.authorization_endpoint).toBe(
       "https://expense.localhost/oauth/authorize",
     );
+    // The auth.md discovery block: where the skill document is and where an
+    // agent registers, so an agent that reads only the metadata still knows
+    // how to get a credential — and that the user has to approve it.
+    expect(meta.agent_auth).toMatchObject({
+      skill: "https://expense.localhost/auth.md",
+      register_uri: "https://expense.localhost/oauth/register",
+      revocation_uri: "https://expense.localhost/oauth/revoke",
+    });
     // Metadata is shared-cacheable: an MCP client or a directory validator
     // probes these on every connect, and an uncached fetch costs a function
     // invocation (the token endpoint, by contrast, must never be stored).
@@ -610,7 +618,10 @@ describe("MCP OAuth", () => {
       authorization_servers: string[];
       bearer_methods_supported: string[];
     };
-    expect(resource.resource).toBe("https://expense.localhost/mcp");
+    // The origin-level document describes the origin (RFC 9728 §3.1). Naming
+    // the endpoint here was a mismatch for anything that probed the origin,
+    // auth.md discovery included.
+    expect(resource.resource).toBe("https://expense.localhost");
     expect(resource.authorization_servers).toEqual([
       "https://expense.localhost",
     ]);
@@ -619,14 +630,17 @@ describe("MCP OAuth", () => {
       "public, max-age=3600",
     );
 
-    // The path-aware location (RFC 9728 §3.1) carries the same document: it
-    // is what MCP SDK clients probe before the origin-level one.
+    // The path-aware location (RFC 9728 §3.1) describes the endpoint: it is
+    // what MCP SDK clients probe before the origin-level one.
     const pathAwareRes = await fetch(
       `${baseURL}/.well-known/oauth-protected-resource/mcp`,
       { headers },
     );
     expect(pathAwareRes.status).toBe(200);
-    expect(await pathAwareRes.json()).toEqual(resource);
+    expect(await pathAwareRes.json()).toEqual({
+      ...resource,
+      resource: "https://expense.localhost/mcp",
+    });
 
     // And the /mcp 401 WWW-Authenticate hint carries the public origin too,
     // pointing at the path-aware document for the endpoint being called.
