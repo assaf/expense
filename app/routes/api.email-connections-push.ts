@@ -10,7 +10,11 @@ import {
   touchEmailConnectionPush,
 } from "~/lib/db/email-connections";
 import { drainEmailConnection } from "~/lib/email-connection-process.server";
-import { reportConnectionFailure } from "~/lib/email-connection-notice.server";
+import {
+  isActionableFailure,
+  isDeadCredential,
+  reportConnectionFailure,
+} from "~/lib/email-connection-notice.server";
 import { badRequest } from "~/lib/validation";
 import type { Route } from "./+types/api.email-connections-push";
 
@@ -91,10 +95,28 @@ export async function action({ request }: Route.ActionArgs) {
         // Warn on the transition only, as the cron does: a connection
         // nobody reconnects must not re-open the same issue on every push.
         if (connection.status !== "error") {
-          captureWarning("[email-connections-push] drain failed:", {
-            connectionId,
-            error: err,
-          });
+          // Only the self-healing credential shape is downgraded: a refused
+          // session on a connection that still holds a refresh token says
+          // nothing the account can act on, and it re-fires on every flap now
+          // that a good read marks the connection active again (EXPENSE-1K).
+          // Everything else — a 5xx, a network failure, an app bug — stays
+          // visible.
+          const selfHealing =
+            isDeadCredential(err) && !isActionableFailure(err, connection);
+          if (selfHealing) {
+            console.warn(
+              "[email-connections-push] drain failed (recoverable, not paged):",
+              {
+                connectionId,
+                error: err instanceof Error ? err.message : String(err),
+              },
+            );
+          } else {
+            captureWarning("[email-connections-push] drain failed:", {
+              connectionId,
+              error: err,
+            });
+          }
         }
         await setEmailConnectionStatus(connection.id, "error").catch(() => {});
         await reportConnectionFailure({ connection, error: err });

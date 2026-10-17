@@ -51,6 +51,29 @@ export function isDeadCredential(error: unknown): boolean {
   return isOAuthRefreshError(error) || isJmapAuthError(error);
 }
 
+/**
+ * Whether the account has to reconnect, as opposed to a failure the app heals
+ * on its own. `isDeadCredential` answers "was the credential refused"; this
+ * answers "can the user do anything about it", which is the only thing a
+ * reconnect notice is for.
+ *
+ * A `JmapAuthError` on a row that still holds a refresh token is the shape the
+ * doc above describes: the grant is fine, so the next exchange mints a token
+ * and the mailbox recovers. Mailing "reconnect your mailbox" for that is
+ * advice the account cannot act on — reconnecting changes nothing — and it
+ * paged this account for a mailbox that was reading mail (EXPENSE-1K). A
+ * refused exchange (`OAuthRefreshError`), or a `JmapAuthError` on a row with no
+ * refresh token to spend (a pasted token, a generic JMAP server), is the
+ * account's to fix.
+ */
+export function isActionableFailure(
+  error: unknown,
+  connection: { refreshTokenEnc?: string | null },
+): boolean {
+  if (!isDeadCredential(error)) return false;
+  return !(isJmapAuthError(error) && connection.refreshTokenEnc);
+}
+
 /** What the notifier needs from a connection: the public record's identity
  * columns, nothing secret. */
 export interface ConnectionFailureInput {
@@ -169,6 +192,9 @@ async function notifyConnectionFailure({
 
   const row = await readEmailConnectionById(connection.id);
   if (!row) return;
+  // A refreshable connection heals a refused session by exchanging, so the
+  // account has nothing to do; only a failure it cannot heal is worth a mail.
+  if (!isActionableFailure(error, row)) return;
   // Claim before sending. The marker is written only when at least one send
   // was taken, so a transport failure is retried by the next failure instead
   // of silencing the episode; the claim is what keeps a burst to one notice.

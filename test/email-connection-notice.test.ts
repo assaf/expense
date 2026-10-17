@@ -241,12 +241,11 @@ describe("reportConnectionFailure", () => {
     expect(await marker(conn.id)).not.toBeNull();
   });
 
-  it("tells them when the session endpoint refused the credential", async () => {
-    // A `JmapAuthError` is the credential itself being rejected, which is the
-    // one thing the account can act on. A revoked *session* is a different
-    // shape (`JmapSessionGoneError`), retried rather than mailed — asserting
-    // it here by construction is what let a working mailbox be reported as
-    // disconnected.
+  it("tells them when a credential with nothing to exchange is refused", async () => {
+    // A `JmapAuthError` on a row with no refresh token — a pasted API token or
+    // a generic JMAP server — has nothing to spend, so reconnecting is the only
+    // remedy and the account must be told. The refreshable shape is the
+    // opposite: it re-exchanges and stays quiet (the next test).
     const account = await makeAccount();
     const conn = await makeConnection(account.accountId);
 
@@ -257,6 +256,28 @@ describe("reportConnectionFailure", () => {
 
     expect(recipients()).toEqual([...account.verified].sort());
     expect(await marker(conn.id)).not.toBeNull();
+  });
+
+  it("stays quiet for a refused session the connection can re-exchange", async () => {
+    // EXPENSE-1K: the session endpoint refused the stored token while the grant
+    // was alive, so the next exchange minted a new one and the mailbox kept
+    // reading mail. "Reconnect your mailbox" is not something the account can
+    // act on — reconnecting changes nothing — so holding a refresh token is
+    // what makes this failure the app's to heal rather than the user's to fix.
+    const account = await makeAccount();
+    const conn = await makeConnection(account.accountId);
+    await testPrisma.emailConnection.update({
+      where: { id: conn.id },
+      data: { refreshTokenEnc: encryptSecret("refresh-1") },
+    });
+
+    await reportConnectionFailure({
+      connection: conn,
+      error: new JmapAuthError("session endpoint refused the credential"),
+    });
+
+    expect(SEND.sendEmail).not.toHaveBeenCalled();
+    expect(await marker(conn.id)).toBeNull();
   });
 
   it("sees a refused credential through the drain's stage label", async () => {

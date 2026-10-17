@@ -1,6 +1,7 @@
 import { createECDH, randomBytes } from "node:crypto";
 import { encrypt } from "http_ece";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { JmapAuthError } from "~/lib/jmap.server";
 
 /**
  * /api/email-connections-push: the per-connection webhook. Decryption is
@@ -15,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   touchEmailConnectionPush: vi.fn(async () => {}),
   setEmailConnectionStatus: vi.fn(async () => {}),
   reportConnectionFailure: vi.fn(async () => {}),
+  isDeadCredential: vi.fn(() => true),
+  isActionableFailure: vi.fn(() => true),
 }));
 
 /** The connected-mailbox row the push tests decrypt; tokenEnc is forged per
@@ -86,9 +89,14 @@ vi.mock("~/lib/db/email-connections", () => ({
 }));
 
 // The notice itself (who gets told, once per episode) has its own suite; the
-// env here carries no database, so it is faked and asserted as a call.
+// env here carries no database, so it is faked and asserted as a call. The
+// predicates are stubbed rather than imported: loading the real module pulls in
+// the DB, which this suite's env mock does not provide. The predicate's own
+// behaviour is pinned in email-connection-notice.test.ts.
 vi.mock("~/lib/email-connection-notice.server", () => ({
   reportConnectionFailure: mocks.reportConnectionFailure,
+  isDeadCredential: mocks.isDeadCredential,
+  isActionableFailure: mocks.isActionableFailure,
 }));
 
 import { action } from "~/routes/api.email-connections-push";
@@ -241,6 +249,49 @@ describe("api.email-connections-push", () => {
       connection: expect.objectContaining({ id: "conn1" }),
       error: failure,
     });
+  });
+
+  it("logs rather than pages a session the connection can re-exchange", async () => {
+    // EXPENSE-1K: the session endpoint refused the token while the grant was
+    // alive, so the next exchange minted a new one and the mailbox kept reading
+    // mail. That is not the account's to fix, and the transition guard re-fires
+    // it on every flap, so it is logged rather than paged.
+    mocks.readEmailConnectionById.mockImplementation(async () =>
+      connection({ refreshTokenEnc: "enc-refresh" }),
+    );
+    mocks.isActionableFailure.mockReturnValueOnce(false);
+    drainMock.drainEmailConnection.mockRejectedValueOnce(
+      new JmapAuthError("session endpoint refused the credential"),
+    );
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const res = await action(
+        args(
+          post(
+            forge({
+              "@type": "StateChange",
+              changed: { "jmap-1": ["Email"] },
+            }),
+          ),
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith(
+        "[email-connections-push] drain failed (recoverable, not paged):",
+        expect.objectContaining({ connectionId: "conn1" }),
+      );
+      // Still flagged for the Settings badge, and the notifier still decides
+      // whether to mail.
+      expect(mocks.setEmailConnectionStatus).toHaveBeenCalledWith(
+        "conn1",
+        "error",
+      );
+      expect(mocks.reportConnectionFailure).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("404s pushes for an unknown connection", async () => {
