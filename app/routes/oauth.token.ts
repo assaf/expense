@@ -3,6 +3,7 @@ import {
   authenticateFormRequest,
   hashToken,
   issueTokenPair,
+  OAUTH_SCOPE,
   oauthError,
   pkceChallenge,
   rotateRefreshToken,
@@ -87,7 +88,7 @@ function tokenResponse(accessToken: string, refreshToken: string): Response {
       token_type: "Bearer",
       expires_in: ACCESS_TOKEN_TTL_SECONDS,
       refresh_token: refreshToken,
-      scope: "",
+      scope: OAUTH_SCOPE,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

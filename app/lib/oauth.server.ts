@@ -70,6 +70,14 @@ export function generateCodeVerifier(): string {
 // --- Authorization server metadata -----------------------------------------
 
 /**
+ * The one scope this server issues. The grant is the whole account, writes
+ * included, so there is nothing finer to request: the list exists because
+ * clients and directory validators read `scopes_supported`, and every token
+ * says which scope it carries.
+ */
+export const OAUTH_SCOPE = "expense";
+
+/**
  * RFC 8414 authorization server metadata for the current origin. Served at
  * `/.well-known/oauth-authorization-server` (and mirrored at
  * `/.well-known/openid-configuration` for clients that look there first).
@@ -94,7 +102,7 @@ function buildOAuthMetadata(origin: string): Record<string, unknown> {
     token_endpoint_auth_methods_supported: ["none", "client_secret_basic"],
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_basic"],
     code_challenge_methods_supported: [PKCE_METHOD],
-    scopes_supported: [],
+    scopes_supported: [OAUTH_SCOPE],
     agent_auth: {
       skill: `${origin}/auth.md`,
       register_uri: `${origin}/oauth/register`,
@@ -191,7 +199,7 @@ export function protectedResourceMetadataResponse(
     {
       resource: path === undefined ? origin : `${origin}${path}`,
       authorization_servers: [origin],
-      scopes_supported: [],
+      scopes_supported: [OAUTH_SCOPE],
       bearer_methods_supported: ["header"],
     },
     { headers: { "Cache-Control": "public, max-age=3600" } },
@@ -297,7 +305,7 @@ export async function issueTokenPair(
       userId,
       clientId,
       type: "access",
-      scope: "",
+      scope: OAUTH_SCOPE,
       expiresAt: new Date(now + ACCESS_TOKEN_TTL_SECONDS * 1000).toISOString(),
       familyId,
     }),
@@ -306,7 +314,7 @@ export async function issueTokenPair(
       userId,
       clientId,
       type: "refresh",
-      scope: "",
+      scope: OAUTH_SCOPE,
       expiresAt: new Date(now + REFRESH_TOKEN_TTL_SECONDS * 1000).toISOString(),
       familyId,
     }),

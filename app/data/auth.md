@@ -19,23 +19,25 @@ person's token never sees the first person's expenses.
 
 ## Discovery
 
-Everything an agent needs is published before it connects:
+Everything an agent needs is published before it connects. The URLs below
+are not in backticks on purpose: a document parser reads them literally, and
+a trailing backtick turns them into a 404.
 
-- `{{siteUrl}}/.well-known/oauth-protected-resource/mcp` is the protected
+- {{siteUrl}}/.well-known/oauth-protected-resource/mcp is the protected
   resource metadata for the endpoint (RFC 9728): the resource identifier and
   the authorization server that issues tokens for it. The origin-level
-  `{{siteUrl}}/.well-known/oauth-protected-resource` describes the site
-  itself instead, so a client that probes the root is not told it is calling
-  some other resource.
-- `{{siteUrl}}/.well-known/oauth-authorization-server` is the authorization
+  {{siteUrl}}/.well-known/oauth-protected-resource describes the site itself
+  instead, so a client that probes the root is not told it is calling some
+  other resource.
+- {{siteUrl}}/.well-known/oauth-authorization-server is the authorization
   server metadata (RFC 8414), mirrored at
-  `{{siteUrl}}/.well-known/openid-configuration` for clients that look there.
+  {{siteUrl}}/.well-known/openid-configuration for clients that look there.
   It carries an `agent_auth` block: `skill` points back at this document,
   `register_uri` at the registration endpoint below, and the block lists the
   one registration method this server supports.
-- `{{mcpEndpoint}}/server-card` is the server card: identity, transport, and
+- {{mcpEndpoint}}/server-card is the server card: identity, transport, and
   the protocol revisions the endpoint speaks.
-- A request to `{{mcpEndpoint}}` without a token answers `401` with
+- A request to {{mcpEndpoint}} without a token answers `401` with
   `WWW-Authenticate: Bearer resource_metadata="…"` pointing at the first
   document above.
 
@@ -79,9 +81,10 @@ again.
 
 ## Scopes
 
-There are none to choose. An approval covers the whole account, writes
-included, so treat it as full access and ask the user before a call that
-changes data.
+One scope, `expense`, and it covers the whole account, writes included: ask
+the user before a call that changes data. There is no read-only scope to
+request; a grant always comes back as `expense` rather than something
+narrower, so do not treat the scope name as a limit.
 
 ## How access ends
 

@@ -616,6 +616,7 @@ describe("MCP OAuth", () => {
     const resource = (await resourceRes.json()) as {
       resource: string;
       authorization_servers: string[];
+      scopes_supported: string[];
       bearer_methods_supported: string[];
     };
     // The origin-level document describes the origin (RFC 9728 §3.1). Naming
@@ -625,6 +626,9 @@ describe("MCP OAuth", () => {
     expect(resource.authorization_servers).toEqual([
       "https://expense.localhost",
     ]);
+    // One scope, and it is the whole-account grant: an empty list read as
+    // "no scopes" to validators, and every token now says which one it has.
+    expect(resource.scopes_supported).toEqual(["expense"]);
     expect(resource.bearer_methods_supported).toEqual(["header"]);
     expect(resourceRes.headers.get("cache-control")).toBe(
       "public, max-age=3600",
