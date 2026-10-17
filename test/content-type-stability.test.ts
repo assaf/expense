@@ -10,13 +10,15 @@ import { describe, expect, it } from "vite-plus/test";
  *
  * The sample is one endpoint per response kind, plus an auth-gated page (the
  * gate redirects before any route runs, and it must not be Accept-aware
- * either).
+ * either). The marketing pages are the one exception — they negotiate
+ * markdown — so /about is pinned the other way around in
+ * test/markdown-negotiation.test.ts: it must answer markdown to an agent and
+ * HTML by default, and vary on Accept in both cases.
  */
 const baseURL = "http://localhost:5199";
 
 const PATHS = [
-  "/about", // marketing HTML, with a markdown mirror beside it
-  "/about.md", // the mirror, as its own URL
+  "/about.md", // the marketing mirror, as its own URL
   "/llms.txt", // plain text
   "/sitemap.xml", // XML
   // /mcp is deliberately NOT in the sample: it redirects a browser

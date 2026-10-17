@@ -607,6 +607,26 @@ export function authMarkdown(): string {
   return fill(FILE.auth, authMd);
 }
 
+/** Full markdown for `/`, negotiated by an agent that asks the site root for
+ * text/markdown. The landing page's own copy is JSX, so this mirrors the
+ * story it tells from the shared data: what the app is, what it does, the key
+ * facts, and where the reader goes next. */
+export function landingMarkdown(): string {
+  const benefits = ABOUT.benefits
+    .map((benefit) => `- **${benefit.title}** — ${wrap(benefit.body)}`)
+    .join("\n");
+  const facts = SITE.keyFacts.map((fact) => `- ${wrap(fact)}`).join("\n");
+  const more = [
+    `- [About Expense](${SITE_URL}/about.md)`,
+    `- [Questions and answers](${SITE_URL}/faq.md)`,
+    `- [AI and the MCP server](${SITE_URL}/ai.md)`,
+    `- [Connect an assistant](${SITE_URL}/connect.md)`,
+    `- [IRS mileage rates](${SITE_URL}/mileage-rates.md)`,
+    `- [The whole site, for a model](${SITE_URL}/llms.txt)`,
+  ].join("\n");
+  return `# Expense\n\n${SITE.appTagline}\n\n${SITE.appSummary}\n\n## ${ABOUT.benefitsHeading}\n\n${benefits}\n\n## ${ABOUT.factsHeading}\n\n${facts}\n\n## Where to go next\n\n${more}\n\n${createAccountMarkdown()}\n`;
+}
+
 /** Full markdown for /about.md. Mirrors the /about page content. */
 export function aboutMarkdown(): string {
   const benefits = ABOUT.benefits

@@ -22,6 +22,10 @@ import {
   userContext,
 } from "~/lib/auth.server";
 import { readReports } from "~/lib/db/reports";
+import {
+  negotiateMarkdown,
+  negotiatesPage,
+} from "~/lib/markdown-negotiation.server";
 import { discoveryLinks, securityHeaders } from "~/lib/seo-content";
 import { umamiConfig } from "~/lib/umami.server";
 import { useSession } from "~/lib/use-session";
@@ -156,7 +160,30 @@ const authGate: Route.MiddlewareFunction = async (
   await next();
 };
 
-export const middleware: Route.MiddlewareFunction[] = [authGate];
+/** Markdown for Agents: a public page asked for with `Accept: text/markdown`
+ * answers with the page's markdown instead of its HTML document (see
+ * ~/lib/markdown-negotiation.server.ts). It runs after the session gate, so
+ * reachability is still the gate's decision, and it only knows public pages. */
+const markdownForAgents: Route.MiddlewareFunction = async (
+  { request },
+  next,
+) => {
+  const negotiated = negotiateMarkdown(request);
+  if (negotiated) return negotiated;
+  const response = await next();
+  // The page has a markdown representation, so the HTML one must say so:
+  // without Vary a shared cache would hand this document to an agent that
+  // asked for markdown.
+  if (negotiatesPage(new URL(request.url).pathname)) {
+    response.headers.append("Vary", "Accept");
+  }
+  return response;
+};
+
+export const middleware: Route.MiddlewareFunction[] = [
+  authGate,
+  markdownForAgents,
+];
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const url = new URL(request.url);

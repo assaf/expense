@@ -283,8 +283,8 @@ describe("discovery pointers", () => {
       "service-desc": "/mcp/server-card",
       describedby: "/llms.txt",
     });
-    // Nothing here is negotiated: a URL has one representation, so no Vary
-    // at all (a cache that does not understand it serves the wrong body).
+    // The shared helper sets no Vary: only the pages the negotiation
+    // middleware covers have two representations, and it adds Vary there.
     expect(new Headers(headers()).get("Vary")).toBeNull();
     // The root's generic header names no mirror: it is served on pages
     // without one (the app, /login).

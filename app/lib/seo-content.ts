@@ -79,11 +79,13 @@ export function discoveryLinks(mirror?: string): Record<string, string> {
  * account's report names.) Letting a shared cache serve them is the point:
  * crawlers and uptime monitors then cost no function invocations. A page whose
  * body embeds the visitor's own data must not use this helper - see
- * /unsubscribe/:token, which sets its own headers. Nothing is negotiated
- * here: a URL has ONE representation, and the `.md` mirror is its own URL,
- * advertised by `mirror` through the `rel="alternate"` link. (Vary: Accept
- * used to be set for the mirror; a cache that keys the response on a header
- * it does not understand serves the wrong one.)
+ * /unsubscribe/:token, which sets its own headers. A marketing page also
+ * answers `Accept: text/markdown` with its markdown representation, negotiated
+ * by the root middleware (markdown-negotiation.server.ts); that middleware is
+ * what adds `Vary: Accept`, to the pages it covers and to both their
+ * representations. Nothing here varies, so this helper sets no Vary: the `.md`
+ * mirror stays a URL of its own, advertised by `mirror` through the
+ * `rel="alternate"` link.
  */
 export function marketingPageHeaders(mirror?: string): Record<string, string> {
   return {

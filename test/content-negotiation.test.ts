@@ -2,15 +2,17 @@ import { globSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 /**
- * A URL has one representation. Nothing under app/ may pick its response type
- * from the request's Accept header, and nothing here may set a `Vary` header: a
- * shared cache keys on the URL, so a response selected by a request header
- * needs every cache in front of it to honour Vary, and the ones that do not
- * serve the wrong body to the next client. A route with several formats
- * publishes them as several URLs (the `.md` mirrors, `/llms.txt`) and
- * advertises them with links. (The server's own `Vary: Accept-Encoding` comes
- * from compression middleware, is not ours, and is correct caching; this scan
- * is about app sources.)
+ * One representation per URL, with one deliberate exception: the marketing
+ * pages also answer `Accept: text/markdown` (markdown-negotiation.server.ts,
+ * applied by the root middleware), because that is how an agent asks for a
+ * page and Cloudflare calls it "Markdown for Agents". Both representations
+ * carry `Vary: Accept`, so a cache that honours Vary serves the right one;
+ * a cache that ignores it is no worse off than the HTML it already had.
+ *
+ * Everything else stays one representation. Nothing under app/ may pick its
+ * response type from the request's Accept header, and nothing may set a `Vary`
+ * header. A route with several formats publishes them as several URLs (the
+ * `.md` mirrors, `/llms.txt`) and advertises them with links.
  *
  * The MCP endpoint's own protocol negotiation is in the SDK
  * (@modelcontextprotocol/server), not here, and those responses are
@@ -24,6 +26,11 @@ const ALLOWED: Record<string, string> = {
   // never send text/html — the endpoint they reach is byte-identical
   // whatever the Accept says.
   "app/routes/mcp.ts": "no-store redirect for browsers only",
+  // Markdown for Agents: the one negotiated pair, both sides named. The
+  // module picks the markdown representation; the middleware puts Vary on the
+  // HTML one too, so neither can be served to the wrong client by a cache.
+  "app/lib/markdown-negotiation.server.ts": "negotiated markdown for agents",
+  "app/root.tsx": "adds Vary: Accept to the negotiated pages",
 };
 
 describe("content type never depends on Accept", () => {
