@@ -22,6 +22,11 @@ const request = (path: string, accept: string | null, method = "GET") =>
 const BROWSER_ACCEPT =
   "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
 
+/** A Vary value as tokens. The platform appends Accept-Encoding for
+ * compression, so Accept has to be compared as a token: a substring test
+ * would pass on Accept-Encoding alone. */
+const varyTokens = (value: string) => value.split(",").map((v) => v.trim());
+
 describe("Markdown for Agents", () => {
   afterAll(async () => {
     await closeBrowser();
@@ -82,15 +87,12 @@ describe("Markdown for Agents", () => {
     expect(negotiated.headers()["content-type"]).toBe(
       "text/markdown; charset=utf-8",
     );
-    // The platform appends Accept-Encoding for compression, so the token is
-    // what matters: "Accept-Encoding" alone would not key the variants.
-    const vary = (value: string) => value.split(",").map((v) => v.trim());
-    expect(vary(negotiated.headers()["vary"])).toContain("Accept");
+    expect(varyTokens(negotiated.headers()["vary"])).toContain("Accept");
     expect(await negotiated.text()).toBe(aboutMarkdown());
 
     const html = await page.request.get(`${BASE}/about`);
     expect(html.headers()["content-type"]).toContain("text/html");
-    expect(vary(html.headers()["vary"])).toContain("Accept");
+    expect(varyTokens(html.headers()["vary"])).toContain("Accept");
 
     // The site root is what the scanner asks for: it has no .md mirror, so
     // this is the only way an agent gets it as markdown.
@@ -124,6 +126,14 @@ describe("Markdown for Agents", () => {
     });
     expect(gated.status()).toBe(302);
     expect(gated.headers()["location"]).toContain("/login");
+
+    // /login shares the header helper but is not in the map: it stays HTML,
+    // and it must not claim to vary on Accept either.
+    const login = await page.request.get(`${BASE}/login`, {
+      headers: { Accept: "text/markdown" },
+    });
+    expect(login.headers()["content-type"]).toContain("text/html");
+    expect(varyTokens(login.headers()["vary"] ?? "")).not.toContain("Accept");
 
     await page.close();
   });

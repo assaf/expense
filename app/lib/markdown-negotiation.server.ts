@@ -51,10 +51,18 @@ const MARKDOWN_PAGES: Record<string, () => string> = {
  * the public page list in step. */
 export const NEGOTIATED_PATHS = Object.keys(MARKDOWN_PAGES);
 
+/** The builder for a path, or undefined. `Object.hasOwn` so an inherited key
+ * can never be mistaken for a page, whatever a future path shape looks like. */
+function pageFor(pathname: string): (() => string) | undefined {
+  return Object.hasOwn(MARKDOWN_PAGES, pathname)
+    ? MARKDOWN_PAGES[pathname]
+    : undefined;
+}
+
 /** Does this path answer in two representations? The middleware asks so it
  * can add `Vary: Accept` to the HTML one as well. */
 export function negotiatesPage(pathname: string): boolean {
-  return MARKDOWN_PAGES[pathname] !== undefined;
+  return pageFor(pathname) !== undefined;
 }
 
 /** Does the request ask for markdown? Only an explicit `text/markdown` with a
@@ -85,7 +93,7 @@ function tokenEstimate(body: string): number {
 export function negotiateMarkdown(request: Request): Response | null {
   if (request.method !== "GET" && request.method !== "HEAD") return null;
   if (!wantsMarkdown(request)) return null;
-  const page = MARKDOWN_PAGES[new URL(request.url).pathname];
+  const page = pageFor(new URL(request.url).pathname);
   if (page === undefined) return null;
   const body = page();
   return new Response(body, {
