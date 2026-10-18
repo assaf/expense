@@ -477,7 +477,7 @@ async function captureHome(page: Page): Promise<void> {
     .toFile("public/screenshot-og.png");
 }
 
-describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
+describe.skipIf(process.env.CI)("README screenshots", () => {
   it("seeds mock data and captures the home + receipt editor pages", async () => {
     await seedScreenshotData();
 
@@ -633,7 +633,7 @@ async function warmDemoExtraction(pdf: Buffer): Promise<void> {
  * it. The recording is a sequence of frames with explicit holds (see
  * helpers/demoRecord) so the cut is the same on every run.
  */
-describe.skipIf(!process.env.DEMO)("landing demo", () => {
+describe.skipIf(process.env.CI)("landing demo", () => {
   it("records the drop-a-receipt demo", async () => {
     await seedScreenshotData();
     const pdf = await demoReceiptPdf();
@@ -831,7 +831,7 @@ function receiptConfirmation(
   return [name, inlineCidImages(message.html, message.attachments ?? [])];
 }
 
-describe.skipIf(process.env.SCREENSHOT)("suite screenshots", () => {
+describe.skipIf(process.env.CI)("suite screenshots", () => {
   /** Drift findings across all captures, asserted empty at the end so one
    * run surfaces every drifted screen (and leaves its diff artifacts),
    * not just the first. Client-side exceptions are collected alongside:

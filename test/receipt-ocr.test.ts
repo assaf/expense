@@ -38,7 +38,7 @@ const images = readdirSync(FIXTURES_DIR)
   .filter((f) => f.endsWith(".png"))
   .sort();
 
-describe.skipIf(!process.env.RUN_OCR_TESTS)("receipt image OCR", () => {
+describe.skipIf(process.env.SKIP_OCR_TESTS)("receipt image OCR", () => {
   for (const file of images) {
     it(`OCRs ${file}`, async () => {
       const basename = file.replace(/\.png$/, "");

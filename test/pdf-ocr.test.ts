@@ -95,7 +95,7 @@ describe("PDF rasterization", () => {
  * CDN on first run (network + a few seconds), so it's opt-in locally and
  * enabled in CI (.github/workflows/deployment-checks.yml).
  */
-describe.skipIf(!process.env.RUN_OCR_TESTS)(
+describe.skipIf(process.env.SKIP_OCR_TESTS)(
   "OCR round-trip (RUN_OCR_TESTS)",
   () => {
     it("OCRs a pdfjs-rasterized receipt PDF with tesseract", async () => {
