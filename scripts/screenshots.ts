@@ -468,7 +468,27 @@ function serveStatic(relPath: string, res: ServerResponse): void {
   res.end(readFileSync(filePath));
 }
 
+/** Stop after this long without a request. The test run opens the review tab;
+ * if it is closed, never opened, or left alone, an unbounded server would
+ * outlive the run and keep port 3456 held (so the next drift could not start
+ * its own). Every request resets the timer, so a review in progress keeps the
+ * server alive. */
+const IDLE_TIMEOUT_MS = 15 * 60_000;
+let idleTimer: NodeJS.Timeout | undefined;
+
+function touch(): void {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    console.info(
+      `No review activity for ${IDLE_TIMEOUT_MS / 60_000} minutes; stopping.`,
+    );
+    cleanup();
+    process.exit(0);
+  }, IDLE_TIMEOUT_MS);
+}
+
 const server = createServer((req, res) => {
+  touch();
   // Drive-by CSRF guard: state-changing endpoints must be same-origin.
   // (The review tab itself sends same-origin Origins or none; a foreign
   // page's fetch/sendBeacon always tags its Origin.)
@@ -523,11 +543,14 @@ const server = createServer((req, res) => {
 
 const port = 3456;
 server.listen(port, "127.0.0.1", () => {
+  touch();
   console.info(`Opening http://localhost:${port}/review.html`);
   execFileSync("open", [`http://localhost:${port}/review.html`]);
 });
 
 function cleanup() {
+  clearTimeout(idleTimer);
+  idleTimer = undefined;
   server.close();
   for (const f of gitTempFiles) {
     try {

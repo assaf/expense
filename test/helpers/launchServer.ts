@@ -134,6 +134,11 @@ export async function launchServer(): Promise<string> {
     cwd: resolve("."),
     stdio: ["ignore", "pipe", "pipe"],
     env,
+    // `pnpm start` runs the server through a shell, so signalling the pnpm
+    // child alone leaves the actual node server orphaned and reparented to
+    // launchd on every run. A process group lets closeServer signal the
+    // whole tree.
+    detached: true,
   });
 
   serverProcess.stdout?.on("data", (_data: Buffer) => {
@@ -204,14 +209,35 @@ function run(cmd: string, args: string[]): Promise<void> {
 }
 
 export async function closeServer(): Promise<void> {
-  if (serverProcess) {
-    serverProcess.kill("SIGTERM");
-    await sleep(3000);
-    if (serverProcess?.killed === false) serverProcess.kill("SIGKILL");
-    serverProcess = undefined;
+  const child = serverProcess;
+  serverProcess = undefined;
+  if (child?.pid !== undefined) {
+    const pid = child.pid;
+    const exited = new Promise<void>((resolveExit) => {
+      if (child.exitCode !== null || child.signalCode !== null) resolveExit();
+      else child.once("exit", () => resolveExit());
+    });
+    signalGroup(pid, "SIGTERM");
+    // `exited` only reports the pnpm wrapper; wait on it, then force the
+    // group down if it did not take the signal.
+    await Promise.race([exited, sleep(5000)]);
+    if (child.exitCode === null && child.signalCode === null) {
+      signalGroup(pid, "SIGKILL");
+    }
   }
   mockJmap?.close();
   mockJmap = undefined;
+}
+
+/** Signal a detached child's whole process group; ignore a group that is
+ * already gone. */
+function signalGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ESRCH") throw error;
+  }
 }
 
 async function findAvailablePort() {

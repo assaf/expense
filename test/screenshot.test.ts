@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 /**
- * README + landing screenshot generator, skipped unless SCREENSHOT=1.
+ * README + landing screenshot generator. Runs on a local `vp test` and is
+ * skipped in CI.
  *
- *   SCREENSHOT=1 pnpm exec vp test run test/screenshot.test.ts
+ *   pnpm exec vp test run test/screenshot.test.ts
  *
  * Reuses the test-suite harness: seeds expense_test with a realistic mock
  * dataset (real-ish merchants, reports, categories, generated receipt
@@ -13,12 +14,9 @@ import { spawn } from "node:child_process";
  * viewport crop of the same home capture and the og card its 1200x630 top
  * slice, so all three stay in sync with the current UI (run this after any
  * home-page redesign and commit the refreshed public/screenshot-*.png).
- * The suite-screenshot drift block below skips during SCREENSHOT runs: the
- * README seeder replaces the shared seed state the drift block compares
- * against, so the two modes must not interleave.
- *
- * Inside the normal suite (`pnpm test`) the whole describe block is skipped,
- * so it never slows or pollutes the regular test run.
+ * The README and demo seeders replace the shared suite state the drift block
+ * below compares against (both mint a user with TEST_EMAIL), so each restores
+ * the suite seed when it finishes and all three can share one run.
  */
 import sharp from "sharp";
 import { ulid } from "ulid";
@@ -47,6 +45,7 @@ import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { replyHtml } from "~/lib/inbound-email.server";
 import { verificationEmailHtml } from "~/lib/verification-email.server";
 import {
+  seedTestData,
   TEST_ACCOUNT_ID,
   TEST_EMAIL,
   TEST_PASSWORD,
@@ -403,6 +402,15 @@ async function seedScreenshotData() {
   });
 }
 
+/** The README and demo seeders replace the shared suite state: both create a
+ * user with TEST_EMAIL, so they cannot coexist with the suite seed. Restore
+ * it after those blocks so a later block in the same run still finds the rows
+ * the suite verified (without it, the drift block inserts against the deleted
+ * TEST_ACCOUNT_ID and hits expenses_accountId_fkey). */
+async function restoreSuiteSeed(): Promise<void> {
+  await seedTestData();
+}
+
 // ---------------------------------------------------------------------------
 // Screenshot capture
 // ---------------------------------------------------------------------------
@@ -524,6 +532,7 @@ describe.skipIf(process.env.CI)("README screenshots", () => {
     } finally {
       await closeBrowser();
       if (launched) await closeServer();
+      await restoreSuiteSeed();
     }
   }, 180_000);
 });
@@ -628,10 +637,9 @@ async function warmDemoExtraction(pdf: Buffer): Promise<void> {
 
 /**
  * Landing hero demo: the receipt a visitor drops on the list, from the drop to
- * the filed expense. Skipped unless DEMO=1 (`pnpm demo`), because it encodes a
- * video and needs ffmpeg; the artifact is committed, so the suite never builds
- * it. The recording is a sequence of frames with explicit holds (see
- * helpers/demoRecord) so the cut is the same on every run.
+ * the filed expense. Runs on a local `vp test` (needs ffmpeg) and is skipped
+ * in CI; the artifact is committed. The recording is a sequence of frames with
+ * explicit holds (see helpers/demoRecord) so the cut is the same on every run.
  */
 describe.skipIf(process.env.CI)("landing demo", () => {
   it("records the drop-a-receipt demo", async () => {
@@ -745,6 +753,7 @@ describe.skipIf(process.env.CI)("landing demo", () => {
     } finally {
       await closeBrowser();
       if (launched) await closeServer();
+      await restoreSuiteSeed();
     }
   }, 600_000);
 });
