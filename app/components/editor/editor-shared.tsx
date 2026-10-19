@@ -803,6 +803,12 @@ export function useFormKeys(opts: {
       // Cmd/Ctrl+Enter always submits, even in textareas / autocomplete / dropdowns.
       e.preventDefault();
       if (!disabled) onSave();
+    } else if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
+      // Cmd/Ctrl+S saves, exactly like the Save button, and the browser's
+      // "save page" dialog must not open on top of the editor. Like
+      // Cmd/Ctrl+Enter, it works from any field, including a textarea.
+      e.preventDefault();
+      if (!disabled) onSave();
     } else if (
       e.key === "Enter" &&
       tag !== "TEXTAREA" &&

@@ -44,7 +44,7 @@ The a11y smoke tests (`test/a11y.test.ts`) enforce the contract (skip-link, page
 - WCAG AA contrast: nothing below `text-gray-500` on white (placeholder, helper text, functional icons included).
 - Touch targets ≥ 24×24 CSS px (small icon-only buttons need at least `p-1`).
 - Every route exports a `meta` with a descriptive `<title>`; pages use `<main id="main-content">` + exactly one `<h1>`; sections get `<h2>`.
-- Primary actions have keyboard shortcuts (editor: Enter saves, Escape cancels).
+- Primary actions have keyboard shortcuts (editor: Enter saves, Cmd/Ctrl+S saves, Escape cancels).
 - Respect `prefers-reduced-motion` (guard any new animation/smooth scroll).
 - Tests use accessible selectors (`getByRole`/`getByLabel`/`getByText`).
 

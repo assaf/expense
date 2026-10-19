@@ -90,6 +90,21 @@ describe("Accessibility", () => {
       await editor.close();
     });
 
+    it("Ctrl+S saves a completed receipt, like the Save button", async () => {
+      editor = await goto("/expense/new");
+      await editor.locator("input[list='merchants']").fill("Shortcut Save");
+      await editor.locator("input[type='number']").fill("35.00");
+      await editor.getByLabel("Date").fill("2026-07-03");
+      // Control (not Meta) so the assertion holds on every platform; the
+      // shortcut accepts both.
+      await editor.keyboard.press("Control+s");
+      await editor.waitForURL((url) => url.pathname === "/expenses", {
+        timeout: 10_000,
+      });
+      await expect(editor.getByText("Shortcut Save")).toBeVisible();
+      await editor.close();
+    });
+
     it("Enter does NOT save an incomplete receipt", async () => {
       editor = await goto("/expense/new");
       // Only fill the merchant; leave amount, date empty.
