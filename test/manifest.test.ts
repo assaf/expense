@@ -28,10 +28,11 @@ describe("installed web app", () => {
     expect(capable).toContain('content="yes"');
 
     // The status bar needs a style of its own: without one iOS keeps the
-    // bar the Safari one.
+    // Safari one. "default" is the one that needs no safe-area padding,
+    // and the app has none (no viewport-fit=cover, no env(safe-area-inset)).
     const statusBar = metaTag(head, "apple-mobile-web-app-status-bar-style");
     expect(statusBar).toBeDefined();
-    expect(statusBar).toMatch(/content="(default|black|black-translucent)"/);
+    expect(statusBar).toContain('content="default"');
 
     // iOS takes the Home Screen icon from these, not from the manifest's
     // icon list alone.

@@ -21,7 +21,7 @@
     "prebuild": "prisma contract emit && tsx scripts/build-warranty-policies.ts",
     "prepare": "vp config",
     "preview:confirmation": "NODE_OPTIONS=--import=./scripts/lib/vite-assets.mjs tsx scripts/preview-confirmation",
-    "screenshot": "SCREENSHOT=1 vp test run test/screenshot.test.ts",
+    "screenshot": "CI= vp test run test/screenshot.test.ts",
     "screenshots:review": "tsx scripts/screenshots.ts",
     "secretlint": "secretlint \"**/*\"",
     "setup:push": "tsx scripts/setup-push.ts",

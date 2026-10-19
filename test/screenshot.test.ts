@@ -848,11 +848,9 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
   const drift: string[] = [];
   const pageErrors: string[] = [];
 
-  // Stale .new/.diff artifacts from earlier failed runs would otherwise
-  // survive (a run that dies before the first capture, e.g. the server
-  // failing to launch) and read as fresh drift. Clearing in beforeAll means
-  // the files present afterwards were written by this run, after it ran to
-  // completion on screens that drifted. Baselines are never touched.
+  // Clear stale .new/.diff artifacts before capturing, so whatever is left
+  // afterwards was written by this run (a run that died before the first
+  // capture used to leave the previous run's behind). Baselines untouched.
   beforeAll(async () => {
     await removeDiffImages();
   });
