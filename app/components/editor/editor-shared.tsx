@@ -803,10 +803,12 @@ export function useFormKeys(opts: {
       // Cmd/Ctrl+Enter always submits, even in textareas / autocomplete / dropdowns.
       e.preventDefault();
       if (!disabled) onSave();
-    } else if (e.key === "s" && (e.metaKey || e.ctrlKey)) {
+    } else if (e.key.toLowerCase() === "s" && (e.metaKey || e.ctrlKey)) {
       // Cmd/Ctrl+S saves, exactly like the Save button, and the browser's
       // "save page" dialog must not open on top of the editor. Like
       // Cmd/Ctrl+Enter, it works from any field, including a textarea.
+      // The key is matched case-insensitively: Caps Lock (or Shift) makes
+      // it "S", and that must not fall through to the browser's dialog.
       e.preventDefault();
       if (!disabled) onSave();
     } else if (

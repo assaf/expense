@@ -46,11 +46,16 @@ describe("installed web app", () => {
     const manifest = (await res.json()) as {
       name?: string;
       display?: string;
+      start_url?: string;
       icons?: Array<{ src: string; sizes: string }>;
     };
 
     expect(manifest.display).toBe("standalone");
     expect(manifest.name).toBeTruthy();
+    // The installed app opens on the expense list, not on the marketing
+    // page: a signed-in user should land where they work, and a signed-out
+    // one is sent to the sign-in by the auth gate.
+    expect(manifest.start_url).toBe("/expenses");
     const sizes = manifest.icons?.map((icon) => icon.sizes) ?? [];
     expect(sizes).toContain("192x192");
     expect(sizes).toContain("512x512");
