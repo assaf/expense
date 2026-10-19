@@ -588,3 +588,16 @@ describe("jmapCall recovers from a session revoked under it", () => {
     }
   });
 });
+
+describe("JmapMethodError", () => {
+  it("masks a credential in the provider detail", async () => {
+    const { JmapMethodError } = await import("~/lib/jmap.server");
+    const err = new JmapMethodError("Email/set", "invalidProperties", {
+      access_token: "jmap-super-secret-value",
+    });
+    // The message reaches stdout and Sentry, so the provider JSON is masked
+    // at the quote site, the way the HTTP error path masks its body.
+    expect(err.message).not.toContain("jmap-super-secret-value");
+    expect(err.message).toContain("Email/set");
+  });
+});

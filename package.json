@@ -31,8 +31,7 @@
     "test:db:push": "bash scripts/reset-test-db",
     "test:ocr": "RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts test/receipt-ocr.test.ts",
     "test:related": "vp test related --run",
-    "postinstall": "prisma skills sync || exit 0",
-    "contract:emit": "prisma contract emit"
+    "postinstall": "prisma skills sync || exit 0"
   },
   "dependencies": {
     "@expense/pdfkit-standard-fonts": "file:vendor/pdfkit-standard-fonts",

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { guardAnonymousAttempt } from "~/lib/auth.server";
-import { buildRegisteredClient } from "~/lib/oauth.server";
+import { buildRegisteredClient, MAX_FORM_BYTES } from "~/lib/oauth.server";
+import { readBodyLimited } from "~/lib/ssrf.server";
 import { registerOAuthClient } from "~/lib/db/oauth";
 import type { Route } from "./+types/oauth.register";
 
@@ -24,9 +25,18 @@ export async function action({ request }: Route.ActionArgs) {
   // other anonymous network path (empty-IP requests skip, so tests are
   // unaffected).
   await guardAnonymousAttempt(request, "oauth-register");
+  let raw: Buffer;
+  try {
+    // The same bound the token and revoke endpoints use: registration is
+    // unauthenticated and every accepted call stores a row, so an
+    // unbounded body is an unbounded write.
+    raw = await readBodyLimited(new Response(request.body), MAX_FORM_BYTES);
+  } catch {
+    return registrationError("The request body is too large.");
+  }
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(raw.toString("utf8"));
   } catch {
     return registrationError("The request body must be a JSON object.");
   }

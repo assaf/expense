@@ -44,9 +44,10 @@ Everything an agent needs is published before it connects:
 Clients register themselves at `{{siteUrl}}/oauth/register` (RFC 7591
 dynamic client registration). Registration returns a public client id and
 needs no credentials of its own: the flow is PKCE, so there is no client
-secret to leak. Registered clients are per-account rows, so a client
-registered against one account is not visible to another. A client id
-created out of band works too, without calling the endpoint.
+secret to leak. Registration is unauthenticated and global to this
+deployment: a client id is a public identifier, and only the consent and
+the tokens are per-user. A client id created out of band works too,
+without calling the endpoint.
 
 One caveat in the current MCP specification: dynamic client registration is
 deprecated in favor of Client ID Metadata Documents, which this server does

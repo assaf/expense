@@ -1,6 +1,7 @@
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, fromIsoOrNull, toIso, toIsoOrNull } from "~/lib/db/wire";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 
 /**
  * Brute-force lockout state (Postgres `auth_attempts` table). Sign-in and
@@ -101,29 +102,25 @@ export async function authLockedUntil(
   return isLocked(state, now) ? state!.lockedUntil : null;
 }
 
-/** Record one failed attempt; returns the new state (possibly locked). */
+/** Record one failed attempt; returns the new state (possibly locked).
+ *
+ * The write is a compare-and-swap, not a read-then-write: the UPDATE only
+ * applies while the row still holds the state this call read (the same
+ * failure count and window start), so two concurrent failures cannot both
+ * write "failures + 1" and lose one. The old read-then-write lost those
+ * increments, which made the lockout budget 5 x the concurrency, and let a
+ * request that read the row BEFORE the lock landed overwrite the lock with
+ * its stale state - erasing it.
+ *
+ * The policy is unchanged: nextFailureState still computes the new state
+ * exactly as before, and it is still the one place the rule lives.
+ */
 export async function recordAuthFailure(
   key: string,
   options: AuthAttemptOptions = DEFAULT_OPTIONS,
   now: number = Date.now(),
 ): Promise<AuthAttemptState> {
-  const state = await readState(key);
-  const next = nextFailureState(state, now, options);
-  await db.orm.public.AuthAttempt.upsert({
-    create: {
-      key,
-      failures: next.failures,
-      windowStart: fromIso(next.windowStart),
-      lockedUntil: fromIsoOrNull(next.lockedUntil),
-      updatedAt: fromIso(new Date(now).toISOString()),
-    },
-    update: {
-      failures: next.failures,
-      windowStart: fromIso(next.windowStart),
-      lockedUntil: fromIsoOrNull(next.lockedUntil),
-      updatedAt: fromIso(new Date(now).toISOString()),
-    },
-  });
+  const state = await writeFailure(key, now, options);
   // Opportunistic sweep (best-effort, ~every 100th write): rows are only
   // ever deleted on a successful login, so without this an attacker can
   // grow auth_attempts unboundedly with unique keys (distinct emails or
@@ -145,7 +142,80 @@ export async function recordAuthFailure(
       console.warn("[auth] auth_attempts sweep failed:", err);
     }
   }
-  return next;
+  return state;
+}
+
+/** Apply one failure to the key's row without losing a concurrent one.
+ *
+ * The write is a compare-and-swap, not a read-then-write: the UPDATE only
+ * applies while the row still holds the state this call read (the same
+ * failure count and window start), so two concurrent failures cannot both
+ * write "failures + 1" and lose one. The old read-then-write lost those
+ * increments, which made the lockout budget 5 x the concurrency, and let a
+ * request that read the row BEFORE the lock landed overwrite the lock with
+ * its stale state - erasing it. The swap closes the erasure, because such
+ * a request's predicate (the old failure count) no longer matches the row
+ * the lock wrote.
+ *
+ * The policy is unchanged: nextFailureState still computes the new state
+ * exactly as before, and it is still the one place the rule lives.
+ *
+ * The residual: under a wave far wider than the retry budget, the writers
+ * that keep losing the swap give up and their failure is not counted. The
+ * complete fix is a single UPDATE that Postgres evaluates against the
+ * stored row (the SQL builder's raw-expression lane - the idiom
+ * bumpCounter uses in app/lib/email-connection-process.server.ts); that
+ * needs the builder's raw-value typing settled first, so it is not in
+ * this change.
+ */
+async function writeFailure(
+  key: string,
+  now: number,
+  options: AuthAttemptOptions,
+): Promise<AuthAttemptState> {
+  const stamp = fromIso(new Date(now).toISOString());
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const state = await readState(key);
+    const next = nextFailureState(state, now, options);
+    if (state === null) {
+      // No row yet: create it. A concurrent create takes the unique key,
+      // and the loop re-reads and updates THAT row instead.
+      try {
+        await db.orm.public.AuthAttempt.create({
+          key,
+          failures: next.failures,
+          windowStart: fromIso(next.windowStart),
+          lockedUntil: fromIsoOrNull(next.lockedUntil),
+          updatedAt: stamp,
+        });
+        return next;
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        continue;
+      }
+    }
+    // The compare-and-swap: the update applies only while the row still
+    // holds the state we read.
+    const updated = await db.orm.public.AuthAttempt.where((r) =>
+      and(
+        r.key.eq(key),
+        r.failures.eq(state.failures),
+        r.windowStart.eq(fromIso(state.windowStart)),
+      ),
+    ).updateAll({
+      failures: next.failures,
+      windowStart: fromIso(next.windowStart),
+      lockedUntil: fromIsoOrNull(next.lockedUntil),
+      updatedAt: stamp,
+    });
+    if (updated.length > 0) return next;
+    // Someone else wrote first: re-read and apply this failure on top of
+    // their state.
+  }
+  // Contention past the retry budget: the caller's best-effort wrapper
+  // logs and continues, exactly as a failed write does today.
+  const state = await readState(key);
+  return nextFailureState(state, now, options);
 }
 
 /** Writes between opportunistic sweeps of expired auth_attempts rows. */

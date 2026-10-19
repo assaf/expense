@@ -634,6 +634,11 @@ export async function resetPasswordWithToken(
   if (outcome.status === "expired") {
     throw new Error("This reset link has expired — request a new one.");
   }
+  // A locked account ("too many attempts") is the usual reason someone
+  // resets their password, and the support copy promises the reset gets
+  // them back in. It has to clear the lock, or the documented recovery
+  // path does not work and the account stays unreachable.
+  await clearFailuresBestEffort(`login:${outcome.email.trim().toLowerCase()}`);
   return { email: outcome.email };
 }
 

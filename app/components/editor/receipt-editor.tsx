@@ -35,7 +35,11 @@ import {
   submitDelete,
   type EditorData,
 } from "./editor-shared";
-import { readConversionNote, withConversionNote } from "~/lib/fx-note";
+import {
+  formatFxRate,
+  readConversionNote,
+  withConversionNote,
+} from "~/lib/fx-note";
 
 /**
  * Files carried from the home page (paste/upload) that are being uploaded as
@@ -636,7 +640,7 @@ export function ReceiptEditor({ data }: { data: EditorData }) {
           {fx.originalAmount
             ? `Receipt in ${fx.currency} ${fx.originalAmount}${
                 fx.fxRate
-                  ? ` · converted at ${fx.fxRate} USD/${fx.currency}${
+                  ? ` · converted at ${formatFxRate(fx.fxRate)} USD/${fx.currency}${
                       fx.rateDate ? ` (rate for ${fx.rateDate})` : ""
                     }`
                   : " · no exchange rate available, stored as-is"

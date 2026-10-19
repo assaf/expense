@@ -226,6 +226,34 @@ describe("password reset", () => {
       verifyAccessToken(issued.refreshToken),
     ).resolves.toBeUndefined();
   });
+
+  it("clears the sign-in lockout, so a locked account can get back in", async () => {
+    const email = `reset-${ulid().toLowerCase()}@example.com`;
+    const { user } = await seedUser(email);
+    const token = "reset-token-lockout";
+    await pinResetToken(user.id, token);
+
+    // Five wrong passwords lock the account. The lockout check runs before
+    // the password check, so the correct password is refused too.
+    const lockKey = `login:${email.toLowerCase()}`;
+    for (let i = 0; i < 5; i += 1) {
+      await expect(login(email, "wrong-password")).rejects.toThrow();
+    }
+    const locked = await testPrisma.authAttempt.findUnique({
+      where: { key: lockKey },
+    });
+    expect(locked?.lockedUntil).not.toBeNull();
+
+    // The reset is the documented way out of a lockout (the support copy
+    // tells the user to use it), so it has to clear the lock.
+    await resetPasswordWithToken(token, NEW_PASSWORD);
+    const after = await testPrisma.authAttempt.findUnique({
+      where: { key: lockKey },
+    });
+    expect(after?.lockedUntil ?? null).toBeNull();
+    const cookie = await login(email, NEW_PASSWORD);
+    expect(cookie).toContain("expense_session");
+  });
 });
 
 describe("password reset UI", () => {

@@ -398,6 +398,25 @@ describe("MCP endpoint", () => {
     ).toBe(before);
   });
 
+  it("refuses a stop address over the app's own length limit", async () => {
+    // The web route and the chat tool both refuse an address over 300
+    // characters; the agent route has to refuse it too, or a caller can
+    // hand the geocoder a multi-megabyte query.
+    await initialize(accessToken);
+    const before = await testPrisma.expense.count({
+      where: { accountId: TEST_ACCOUNT_ID },
+    });
+    const long = "a".repeat(301);
+    const result = await callTool(accessToken, "log_mileage", {
+      locations: [long, long],
+    });
+    expect(result.isError).toBe(true);
+    expect(String(result.payload.error)).toContain("300");
+    expect(
+      await testPrisma.expense.count({ where: { accountId: TEST_ACCOUNT_ID } }),
+    ).toBe(before);
+  });
+
   it("refuses a wrong JSON type for list_expenses.dateFrom", async () => {
     await initialize(accessToken);
     // A number where an ISO date string is declared.

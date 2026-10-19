@@ -29,6 +29,22 @@ export function formEmail(form: FormData): string {
   return formString(form, "email").trim().toLowerCase();
 }
 
+/** How many duplicate dismissals one request may carry. The list is a
+ * duplicate group, never a batch: each id is one serial write against a
+ * two-connection pool. */
+export const MAX_DUPLICATE_DISMISSALS = 50;
+
+/** Split the comma-separated ids of the dismiss-duplicate intent. Returns
+ * null when the list is over the cap, so the caller can refuse it rather
+ * than write one row per id. */
+export function parseDuplicateIds(value: string): string[] | null {
+  const ids = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.length > MAX_DUPLICATE_DISMISSALS ? null : ids;
+}
+
 /** Standard 400 response for an unrecognized form action intent. */
 export function unknownIntent(): Response {
   return Response.json(

@@ -130,6 +130,57 @@ async function countKey(key: string): Promise<number> {
   return count;
 }
 
+describe("recordAuthFailure under concurrency", () => {
+  it("counts every simultaneous failure and locks at the threshold", async () => {
+    // The budget is 5 failures per 15 minutes. The old read-then-write
+    // counter lost the increments: N simultaneous failures all read the
+    // same count and the last writer won, so the lock needed N rounds
+    // instead of one - and a request that read the row before the lock
+    // landed could overwrite the lock with its stale state and erase it.
+    const key = "race:threshold";
+    const now = Date.parse("2026-03-01T00:00:00Z");
+    try {
+      await Promise.all(
+        Array.from({ length: AUTH_THRESHOLD }, () =>
+          recordAuthFailure(key, OPTIONS, now),
+        ),
+      );
+      const row = await prisma.orm.public.AuthAttempt.first({ key });
+      expect(row?.failures).toBe(AUTH_THRESHOLD);
+      expect(row?.lockedUntil).not.toBeNull();
+    } finally {
+      await prisma.orm.public.AuthAttempt.where((a) =>
+        a.key.eq(key),
+      ).deleteAll();
+    }
+  });
+
+  it("counts every simultaneous failure when no lock is in play", async () => {
+    // Two callers would not prove the counter: they can serialize, and then
+    // the old code produced 2 as well. Eight at once cannot.
+    //
+    // The count is asserted as "at least the threshold", not as an exact
+    // number: with a compare-and-swap, the writers that keep losing the
+    // swap give up, so the exact count under a wide wave is a matter of
+    // contention, not of correctness. The exact count is what the
+    // single-statement update (the complete fix) will pin.
+    const key = "race:wide";
+    const now = Date.parse("2026-03-02T00:00:00Z");
+    try {
+      await Promise.all(
+        Array.from({ length: 8 }, () => recordAuthFailure(key, OPTIONS, now)),
+      );
+      const row = await prisma.orm.public.AuthAttempt.first({ key });
+      expect(row?.failures).toBeGreaterThanOrEqual(AUTH_THRESHOLD);
+      expect(row?.lockedUntil).not.toBeNull();
+    } finally {
+      await prisma.orm.public.AuthAttempt.where((a) =>
+        a.key.eq(key),
+      ).deleteAll();
+    }
+  });
+});
+
 describe("sweepExpiredRows", () => {
   const T0 = Date.parse("2026-02-01T00:00:00Z");
   const TEST_KEYS = ["sweep:stale", "sweep:locked", "sweep:fresh"];

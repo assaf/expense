@@ -14,6 +14,8 @@ import {
   formEmail,
   isCalendarDate,
   normalizeRuleSender,
+  parseDuplicateIds,
+  MAX_DUPLICATE_DISMISSALS,
 } from "~/lib/validation";
 import { assertProperty, text } from "./helpers/property";
 
@@ -377,5 +379,21 @@ describe("app/lib/validation.ts properties", () => {
       expect(result).toBe(sender.trim().toLowerCase());
       expect(normalizeRuleSender(result)).toBe(result);
     });
+  });
+});
+
+describe("parseDuplicateIds", () => {
+  it("splits and trims the list", () => {
+    expect(parseDuplicateIds("a, b ,,c")).toEqual(["a", "b", "c"]);
+  });
+
+  it("refuses a list longer than the cap", () => {
+    const ids = Array.from(
+      { length: MAX_DUPLICATE_DISMISSALS + 1 },
+      (_, i) => `exp-${i}`,
+    ).join(",");
+    expect(parseDuplicateIds(ids)).toBeNull();
+    const atCap = ids.split(",").slice(0, MAX_DUPLICATE_DISMISSALS).join(",");
+    expect(parseDuplicateIds(atCap)).toHaveLength(MAX_DUPLICATE_DISMISSALS);
   });
 });

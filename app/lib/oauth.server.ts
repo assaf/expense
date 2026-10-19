@@ -47,7 +47,12 @@ export const PKCE_METHOD = "S256";
 /** Ceiling on a form-urlencoded OAuth request body. The token and revoke
  * endpoints are unauthenticated protocol surface, and their real payloads
  * are a handful of short parameters. */
-const MAX_FORM_BYTES = 8 * 1024;
+export const MAX_FORM_BYTES = 8 * 1024;
+
+/** Ceiling on one registered redirect URI. The URI is stored in the
+ * client row forever, so an unbounded one is an unbounded write from an
+ * unauthenticated endpoint. */
+const MAX_REDIRECT_URI_LENGTH = 2000;
 
 // --- Primitives ------------------------------------------------------------
 
@@ -262,6 +267,11 @@ export function buildRegisteredClient(input: {
     return { error: "Too many redirect_uris (max 10)." };
   }
   for (const uri of input.redirectUris) {
+    if (uri.length > MAX_REDIRECT_URI_LENGTH) {
+      return {
+        error: `Redirect URI is too long (max ${MAX_REDIRECT_URI_LENGTH} characters).`,
+      };
+    }
     if (!isValidRedirectUri(uri)) {
       return {
         error: `Redirect URI "${uri}" must be https (or http on localhost).`,

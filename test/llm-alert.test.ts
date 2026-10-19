@@ -90,3 +90,19 @@ describe("maybeAlertLlmUnusable", () => {
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 });
+
+describe("llmProviderError", () => {
+  it("masks a credential in the provider body before it becomes a message", async () => {
+    const { llmProviderError } = await import("~/lib/receipt-ai.server");
+    const err = llmProviderError(
+      "deepseek-chat",
+      401,
+      '{"error":{"access_token":"sk-super-secret-value"}}',
+    );
+    // The body reaches stdout, Sentry and the operator alert email, so the
+    // mask has to happen here, at the quote site.
+    expect(err.message).not.toContain("sk-super-secret-value");
+    expect(err.body).not.toContain("sk-super-secret-value");
+    expect(err.message).toContain("401");
+  });
+});

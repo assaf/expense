@@ -61,7 +61,7 @@ export async function readCategoryCounts(
       .select("name", "closed")
       .all(),
   ]);
-  const closed = new Set(reports.filter((r) => r.closed).map((r) => r.name));
+  const closed = closedReportNames(reports);
   const counts = new Map<string, number>();
   for (const g of groups) {
     if (closed.has(g.report)) continue;

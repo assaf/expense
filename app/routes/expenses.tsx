@@ -76,7 +76,13 @@ import {
 } from "~/lib/db/settings";
 import type { Expense, Location, MileageType } from "~/lib/types";
 import type { DuplicateReason } from "~/lib/duplicates";
-import { formString, unknownIntent } from "~/lib/validation";
+import {
+  badRequest,
+  formString,
+  MAX_DUPLICATE_DISMISSALS,
+  parseDuplicateIds,
+  unknownIntent,
+} from "~/lib/validation";
 import type { Route } from "./+types/expenses";
 
 /** The app home: one account's expenses. `/` is the marketing landing
@@ -172,10 +178,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
   if (intent === "dismiss-duplicate") {
     const id = formString(form, "id");
-    const otherIds = formString(form, "otherIds")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // The list is a duplicate group, never a batch: each id is one serial
+    // write against a two-connection pool.
+    const otherIds = parseDuplicateIds(formString(form, "otherIds"));
+    if (!otherIds) {
+      return badRequest(
+        `Too many duplicates to dismiss at once — dismiss up to ${MAX_DUPLICATE_DISMISSALS} at a time.`,
+      );
+    }
     for (const otherId of otherIds) {
       await dismissDuplicatePair(user.accountId, id, otherId);
     }

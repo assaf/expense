@@ -17,6 +17,7 @@ import {
   APP_EMAIL,
 } from "~/lib/env";
 import { escapeHtml } from "~/lib/escape";
+import { redactCredentials } from "~/lib/error-text";
 import { normalizeAmount } from "~/lib/format";
 import { sendEmail } from "~/lib/reply.server";
 
@@ -626,6 +627,23 @@ export async function chatCompletion(
   return contentStr;
 }
 
+/** Build the error for a provider response that is not ok. The body is
+ * untrusted text: it can echo a credential, and this error reaches stdout,
+ * Sentry and the operator alert email. Mask it here, at the quote site, the
+ * way every other provider body in the app is masked. */
+export function llmProviderError(
+  model: string,
+  status: number,
+  body: string,
+): LLMError {
+  const text = redactCredentials(body);
+  return new LLMError(
+    `${model}: ${providerLabelOf()} API ${status}: ${text.slice(0, 500)}`,
+    status,
+    text,
+  );
+}
+
 /** One chat-completions POST shared by every LLM entry point: the API-key
  * guard, the caller signal and provider timeout as one bound, and the two
  * error mappings (unreachable vs bad status). */
@@ -664,11 +682,10 @@ async function postChatCompletions(
     );
   }
   if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => "");
-    const err = new LLMError(
-      `${model}: ${providerLabelOf()} API ${res.status}: ${text.slice(0, 500)}`,
+    const err = llmProviderError(
+      model,
       res.status,
-      text,
+      await res.text().catch(() => ""),
     );
     if (opts.alertOnBadStatus) maybeAlertLlmUnusable(err);
     throw err;
@@ -781,11 +798,13 @@ export async function streamChatRound(
         }
         if (parsed.error) {
           // The provider streams failures as frames too (rate limits,
-          // quota) — surface the reason instead of an empty answer.
+          // quota) — surface the reason instead of an empty answer. The
+          // frame is provider text: mask it, the way every other provider
+          // body is masked, before it can reach a log.
           throw new LLMError(
-            `${model}: ${providerLabelOf()} stream error: ${parsed.error.message ?? "unknown"}`,
+            `${model}: ${providerLabelOf()} stream error: ${redactCredentials(parsed.error.message ?? "unknown")}`,
             502,
-            payload,
+            redactCredentials(payload),
           );
         }
         const delta = parsed.choices?.[0]?.delta ?? {};

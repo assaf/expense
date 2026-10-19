@@ -63,6 +63,9 @@ function isPrivateIpv4(a: number, b: number, _c: number, _d: number): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
+    // 100.64.0.0/10, the shared address space (RFC 6598): carrier-grade NAT
+    // and Tailscale tails live here, so it is not a public destination.
+    (a === 100 && b >= 64 && b <= 127) ||
     a >= 224
   );
 }

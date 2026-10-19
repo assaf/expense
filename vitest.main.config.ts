@@ -72,6 +72,7 @@ export default defineConfig({
       "test/csv.test.ts",
       "test/date-days.test.ts",
       "test/error-text.test.ts",
+      "test/mime-inbound.test.ts",
     ],
     env: {
       DATABASE_URL: "postgres://assaf@localhost/expense_test",

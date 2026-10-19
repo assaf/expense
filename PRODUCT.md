@@ -410,7 +410,7 @@ migrating data or touching every call site rather than editing a module:
 
 ### Running it locally
 
-Node 24 or newer, pnpm 12.9.1 (pinned in `packageManager`), a Postgres you can
+Node 24 or newer, pnpm 12.14.0 (pinned in `packageManager`), a Postgres you can
 connect to, and the `portless` CLI on your `PATH` for `pnpm dev` (it serves on
 `expense.localhost`; without it, `pnpm build && pnpm start` serves the build on
 `:3000`).

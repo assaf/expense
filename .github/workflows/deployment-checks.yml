@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
-        # No `version` input: read pnpm@11.20.0 from package.json's
+        # No `version` input: read pnpm@12.14.0 from package.json's
         # packageManager field so the runner can never drift from the repo.
         # Pinning a version here made the action fail with
         # ERR_PNPM_BAD_PM_VERSION when the two disagreed.

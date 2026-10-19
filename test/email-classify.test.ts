@@ -103,6 +103,17 @@ describe("isBankNotificationSender", () => {
     );
   });
 
+  it("matches a sender that carries a display name", () => {
+    // A bank's From header carries a display name ("Capital One <...>"),
+    // and splitting that on "@" yields "capitalone.com>" - which matches
+    // no seed, so the alert read as a receipt and was imported.
+    expect(
+      isBankNotificationSender(
+        "Capital One <capitalone@notification.capitalone.com>",
+      ),
+    ).toBe(true);
+  });
+
   it("rejects non-bank senders", () => {
     expect(isBankNotificationSender("billing@apple.com")).toBe(false);
     expect(isBankNotificationSender("news@github.com")).toBe(false);

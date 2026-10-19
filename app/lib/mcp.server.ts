@@ -52,7 +52,7 @@ import { renameImageToConvention } from "~/lib/images.server";
 import { MAX_TRIP_STOPS } from "~/lib/maps.server";
 import { reconcileForMcp } from "~/lib/reconcile.server";
 import { buildReportPdf } from "~/lib/report-pdf.server";
-import type { Expense } from "~/lib/types";
+import { MAX_ADDRESS_LENGTH, type Expense } from "~/lib/types";
 
 /**
  * The MCP server for the expense tracker: the agent-facing window onto the
@@ -795,9 +795,12 @@ async function createMcpServer(accountId: string): Promise<McpServer> {
         locations: z
           .array(
             z.union([
-              z.string().describe("Address to geocode."),
+              z
+                .string()
+                .max(MAX_ADDRESS_LENGTH)
+                .describe("Address to geocode."),
               z.object({
-                address: z.string(),
+                address: z.string().max(MAX_ADDRESS_LENGTH),
                 lat: z
                   .number()
                   .optional()

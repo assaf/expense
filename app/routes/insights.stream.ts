@@ -6,6 +6,7 @@ import {
   updateLastExchange,
 } from "~/lib/db/insights-chat";
 import { captureError } from "~/lib/errors.server";
+import { redactCredentials } from "~/lib/error-text";
 import {
   answerInsightQuestion,
   loadInsightContext,
@@ -245,7 +246,9 @@ export async function action({ request, context }: Route.ActionArgs) {
         if (err instanceof LLMError) {
           console.error(
             `[insights] LLM call failed (status ${err.status}): ${err.message}` +
-              (err.body ? ` — ${err.body.slice(0, 300)}` : ""),
+              (err.body
+                ? ` — ${redactCredentials(err.body).slice(0, 300)}`
+                : ""),
           );
           send({
             type: "error",

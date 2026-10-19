@@ -677,10 +677,10 @@ Implementation (`app/lib/email-review.server.ts`, route
   card-only charge that would otherwise be silently lost (ignored Extra
   Space alerts) stays visible until the user acts.
 - **Process** (`processReviewItem` → `processConnectionEmail` with
-  `{ review: true }`): review mode is the auto-pipeline minus the rule
-  gate and the local receipt gate (the user's explicit choice replaces
-  them), with the model allowed (`localOnly: false`) so attachment
-  receipts and unparseable totals work. The claim flips the
+  `{ review: true }`): review mode is the auto-pipeline minus the
+  authentication verdict, the rule gate and the local receipt gate (the
+  user's explicit choice replaces them), with the model allowed
+  (`localOnly: false`) so attachment receipts and unparseable totals work. The claim flips the
   pending-review row to `processing` in place (no insert race); success
   logs created/partial, moves the email to Trash, and delivers the owner
   confirmation ("You processed this email as an expense…"); failure

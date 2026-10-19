@@ -683,7 +683,7 @@ export async function processConnectionEmail(
     // Review mode keeps the looser gate — the user's explicit choice is
     // the gate there.
     const classification = classifyReceiptEmail({
-      fromAddress: summary.from ?? "",
+      fromAddress,
       subject: summary.subject,
       bodyText: email.text ?? htmlToText(email.html ?? ""),
     });

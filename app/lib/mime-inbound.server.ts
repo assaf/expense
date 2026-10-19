@@ -59,6 +59,17 @@ const MAX_MIME_HEADER_BYTES = 256 * 1024;
  * forwarded receipt; deeper parts arrive as attachments instead. */
 const MAX_INLINE_RFC822_DEPTH = 1;
 
+/** How many MIME parts one message may carry. A receipt is a handful of
+ * parts; the library's own default is 10,000, which lets a 15 MB message
+ * present thousands of parsed nodes. */
+const MAX_MIME_PARTS = 100;
+
+/** How many addresses one message may carry across its headers and its
+ * inline forwarded messages. The library's default is 10,000, and every one
+ * of those addresses is rendered into the text the classifier and the LLM
+ * prompt read. */
+const MAX_FORWARDED_ADDRESSES = 50;
+
 function toBytes(content: ArrayBuffer | Uint8Array | string): Buffer {
   return Buffer.from(content as ArrayBuffer);
 }
@@ -113,6 +124,8 @@ export function createMimeInboundCache(): MimeInboundCache {
             maxNestingDepth: MAX_MIME_NESTING_DEPTH,
             maxHeadersSize: MAX_MIME_HEADER_BYTES,
             maxRfc822NestingDepth: MAX_INLINE_RFC822_DEPTH,
+            maxPartCount: MAX_MIME_PARTS,
+            maxForwardedAddresses: MAX_FORWARDED_ADDRESSES,
           });
           return { raw, email, fetchedAt: Date.now() };
         } catch (err) {

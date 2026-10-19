@@ -3,7 +3,10 @@
  * one definition of the parse (strict shape, UTC midnight) instead of one
  * per module. Client-safe: pure functions, no server imports. */
 
-/** Midnight UTC for a "YYYY-MM-DD" date, or null when malformed. */
+/** Midnight UTC for a "YYYY-MM-DD" date, or null when malformed. This is a
+ * formatter, not a validator: an impossible day rolls forward the way Date
+ * does (Feb 31 becomes Mar 3), and `isCalendarDate` in `~/lib/validation` is
+ * the validator that rejects it. */
 function utcDay(date: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!m) return null;

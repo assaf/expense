@@ -1,7 +1,7 @@
 import { looksLikeReceiptEmail } from "~/lib/email-classify";
 import { mailboxSummaries } from "~/lib/email-connection-mail.server";
 import type { JmapServer } from "~/lib/jmap.server";
-import { domainOf } from "~/lib/validation";
+import { domainOf, extractEmailAddress } from "~/lib/validation";
 
 /**
  * Infer candidate GENERAL email rules from a connected inbox: senders whose
@@ -91,11 +91,9 @@ export async function inferRuleCandidates(
   // mailboxSummaries formats `from` for display ("Name <email>" or the
   // bare email); the scan groups by the sender's domain, so pull the
   // address back out of the formatted string.
-  const senderEmail = (from: string | null): string =>
-    from?.match(/<([^>]+)>/)?.[1] ?? from ?? "";
   const stats = new Map<string, { total: number; receiptLike: number }>();
   for (const email of summaries) {
-    const address = senderEmail(email.from).toLowerCase();
+    const address = email.from ? extractEmailAddress(email.from) : "";
     const domain = domainOf(address);
     if (!domain) continue;
     if (FREE_MAIL_DOMAINS.has(domain) || selfDomains.has(domain)) continue;

@@ -1,4 +1,5 @@
 import { TRANSACTION_NOTIFICATION_SENDERS } from "~/data/notification-senders";
+import { domainOf, extractEmailAddress } from "~/lib/validation";
 /**
  * Local (no-LLM) classification for connected-account email: does this
  * email look like a receipt/order confirmation worth processing?
@@ -64,16 +65,28 @@ const TRANSACTION_NOTIFICATION_SUBJECT_RES =
  * check it against already-imported expenses (same amount, same date)
  * and supersede it when a real receipt covers the charge.
  */
+/** The index of the transaction-notification seed whose domain matches the
+ * sender, or -1. The suffix match is what stops "evilbank.com" from
+ * matching "bank.com". One definition, so the auto-drain's gate and the
+ * review's subject check cannot drift apart.
+ *
+ * The address is parsed, not split: a sender arrives as "Name <addr>" and
+ * splitting that on "@" yields "bank.com>" - which matches no seed, so a
+ * bank alert with a display name would look like a receipt. */
+function notificationSenderIndex(fromAddress: string): number {
+  const domain = domainOf(extractEmailAddress(fromAddress)) ?? "";
+  return TRANSACTION_NOTIFICATION_SENDERS.findIndex(
+    (seed) => domain === seed.domain || domain.endsWith(`.${seed.domain}`),
+  );
+}
+
 /** Is this sender a bank's notification address (the seed domains in
  * notification-senders.ts)? Bank notification mail is never a merchant
  * receipt: charge alerts are handled by inbox review (supersede + charges
  * feed), and every other account alert should stay in the Inbox untouched.
  * The auto-drain skips these; review mode still lets the user decide. */
 export function isBankNotificationSender(fromAddress: string): boolean {
-  const domain = fromAddress.split("@")[1] ?? "";
-  return TRANSACTION_NOTIFICATION_SENDERS.some(
-    (seed) => domain === seed.domain || domain.endsWith(`.${seed.domain}`),
-  );
+  return notificationSenderIndex(fromAddress) >= 0;
 }
 
 type ReceiptEmailVerdict = "receipt" | "not-receipt" | "uncertain";
@@ -131,10 +144,7 @@ export function isTransactionNotification(
   fromAddress: string,
   subject: string,
 ): boolean {
-  const domain = fromAddress.split("@")[1] ?? "";
-  const senderIndex = TRANSACTION_NOTIFICATION_SENDERS.findIndex(
-    (seed) => domain === seed.domain || domain.endsWith(`.${seed.domain}`),
-  );
+  const senderIndex = notificationSenderIndex(fromAddress);
   return (
     senderIndex >= 0 &&
     TRANSACTION_NOTIFICATION_SUBJECT_RES[senderIndex]!.test(subject.trim())

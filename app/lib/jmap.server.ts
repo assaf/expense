@@ -470,7 +470,10 @@ export class JmapMethodError extends Error {
     detail: unknown,
     message?: string,
   ) {
-    super(message ?? `JMAP ${method} error: ${JSON.stringify(detail)}`);
+    super(
+      message ??
+        `JMAP ${method} error: ${redactCredentials(JSON.stringify(detail))}`,
+    );
     this.name = "JmapMethodError";
   }
 }
@@ -590,7 +593,7 @@ export async function jmapBatch(
           name,
           firstFailureType(failures) ?? "unknown",
           failures,
-          `JMAP ${name} ${key}: ${JSON.stringify(failures)}`,
+          `JMAP ${name} ${key}: ${redactCredentials(JSON.stringify(failures))}`,
         );
       }
     }

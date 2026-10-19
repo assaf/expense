@@ -9,8 +9,8 @@ import {
   hasOAuthConsent,
   saveOAuthConsent,
 } from "~/lib/db/oauth";
-import { issueAuthorizationCode, PKCE_METHOD } from "~/lib/oauth.server";
 import type { OAuthClientRecord } from "~/lib/types";
+import { issueAuthorizationCode, PKCE_METHOD } from "~/lib/oauth.server";
 import { formString } from "~/lib/validation";
 import type { Route } from "./+types/oauth.authorize";
 
@@ -104,6 +104,17 @@ export async function action({ request, context }: Route.ActionArgs) {
   );
 }
 
+/** The host the authorization code will be delivered to. A self-registered
+ * client chooses both its name and its redirect, so the consent screen has
+ * to show the destination. */
+function redirectHostOf(uri: string): string {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return "the registered redirect";
+  }
+}
+
 export default function OAuthAuthorizePage({
   loaderData,
 }: Route.ComponentProps) {
@@ -116,7 +127,7 @@ export default function OAuthAuthorizePage({
     userEmail,
     previouslyConnected,
   } = loaderData as Route.ComponentProps["loaderData"] & {
-    client: NonNullable<Awaited<ReturnType<typeof findOAuthClient>>>;
+    client: OAuthClientRecord;
     clientId: string;
     redirectUri: string;
     codeChallenge: string;
@@ -124,6 +135,10 @@ export default function OAuthAuthorizePage({
     userEmail: string;
     previouslyConnected: boolean;
   };
+  // Registration is open, so both the client's name and its redirect are
+  // self-asserted. The name can be anything; the destination is where the
+  // access code lands, so the consent screen has to show it.
+  const redirectHost = redirectHostOf(redirectUri);
 
   return (
     <AuthCard>
@@ -143,7 +158,11 @@ export default function OAuthAuthorizePage({
               {client.name}
             </span>{" "}
             wants to access your expenses: capture receipts, log mileage, answer
-            spending questions, and build reports.
+            spending questions, and build reports. The access code goes to{" "}
+            <span className="font-medium text-gray-800 dark:text-gray-100">
+              {redirectHost}
+            </span>
+            .
           </>
         }
         note={

@@ -24,6 +24,10 @@ const PRIVATE_HOSTS = [
   "169.254.169.254",
   "0.0.0.0",
   "255.255.255.255",
+  // 100.64.0.0/10, the shared address space (RFC 6598): carrier-grade NAT
+  // and Tailscale tails live here, so it is not a public destination.
+  "100.64.0.1",
+  "100.127.255.255",
   "fe80::1",
   "fd00::1",
   "fc00::",

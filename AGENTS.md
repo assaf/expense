@@ -76,11 +76,11 @@ is written here), `app/data/` (all public copy plus the seeds),
 
 | Command                                           | Runs                                                             | Notes                                                          |
 | ------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost` (emits the table)        |
+| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost`; policy table first      |
 | `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table             |
 | `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
 | `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; fails on any issue (no auto-fix)    |
-| `pnpm test`                                       | `react-router build --force && vp test run`                      | **Gate.** Build then the full suite                            |
+| `pnpm test`                                       | `pnpm check && react-router build --force && vp test run`        | **Gate.** Static check, build, then the full suite             |
 | `pnpm test:changed [ref]`                         | `vp test run --changed ${1:-HEAD}`                               | Fast lane over the static import graph                         |
 | `pnpm test:related <file>`                        | `vp test related --run`                                          | Fast lane for tests importing the named files                  |
 | `pnpm test:ocr`                                   | `RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts ...`          | Real OCR round trip (script still says `vpr`; use `vp`)        |
@@ -88,7 +88,7 @@ is written here), `app/data/` (all public copy plus the seeds),
 | `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
 | `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                  |
 | `pnpm build:policies`                             | `tsx scripts/build-warranty-policies.ts`                         | Emits the merchant coverage table                              |
-| `pnpm screenshot`                                 | `SCREENSHOT=1 vp test run test/screenshot.test.ts`               | Regenerates README screenshots                                 |
+| `pnpm screenshot`                                 | `CI= vp test run test/screenshot.test.ts`                        | Regenerates README screenshots                                 |
 | `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                |
 | `pnpm setup:push` / `infer:rules` / `drain:email` | `tsx scripts/...`                                                | Fastmail push setup, email-rule inference, dev drain           |
 | `./scripts/deploy`                                | check -> test -> prod db sync -> vercel -> smoke                 | The only production writer; `--skip-tests`, `--skip-db-sync`   |
@@ -96,8 +96,9 @@ is written here), `app/data/` (all public copy plus the seeds),
 | `./scripts/smoke-check <url>`                     | `GET /api/smoke`, fails unless `ok === true`                     | Shared by `scripts/deploy` and CI                              |
 | `./scripts/upgrade`                               | bump all -> install -> suite -> commit                           | **Commits itself** (see below)                                 |
 
-`pnpm check` runs, in order: `prisma contract emit` -> the merchant coverage
-table emit (`tsx scripts/build-warranty-policies.ts`) ->
+`pnpm check` runs, in order: the Prisma ORM-vs-CLI pin check (the orm
+packages must match the toolchain the CLI pins) -> `prisma contract emit` ->
+the merchant coverage table emit (`tsx scripts/build-warranty-policies.ts`) ->
 `react-router typegen` -> `vp check` (oxfmt + oxlint with type-aware
 tsgolint + `tsc`) -> `node scripts/check-dark-mode.mjs` -> `secretlint` ->
 a tesseract patch probe -> `knip`. Nothing is auto-fixed: a nonzero exit
@@ -273,12 +274,16 @@ which files a partial row instead of failing after the blob is saved, and the
 reconcile row gate). Keep `prisma/backup.sql` (~300MB) out of Vercel uploads
 through the `.vercelignore` `backup*.sql` entries.
 
-**Security invariants.** Every mail-importing path gates on the delivered
-authentication verdict before it writes: the receipts pipeline and the
-connected-mailbox pipeline both run `evaluateAuthChain` over the provider's own
-stamp, and a new transport MUST register its authserv-id with `authResultsChain`
-(a filter keyed to one provider turns the gate into a silent no-op on another,
-because an empty chain reads as "legacy, allowed"). Any new session or token path
+**Security invariants.** Every _automatic_ mail-importing path gates on the
+delivered authentication verdict before it writes: the receipts pipeline and
+the connected-mailbox drain both run `evaluateAuthChain` over the provider's
+own stamp, and a new transport MUST register its authserv-id with
+`authResultsChain` (a filter keyed to one provider turns the gate into a
+silent no-op on another, because an empty chain reads as "legacy, allowed").
+A message the verdict refused stays in the Inbox, and importing that one
+message from inbox review is a deliberate per-message choice by the user, not
+an automatic import (the review path passes `review: true`, which skips the
+verdict, the rule gate and the local receipt gate). Any new session or token path
 MUST stamp and check `User.credentialsChangedAt`: a password reset bumps it,
 revokes that user's OAuth tokens and busts the user cache, and the OAuth
 callbacks resolve their user through the exported `sessionUser` rather than
@@ -344,7 +349,7 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
 
 ## Runtime/Tooling Preferences
 
-- **Node >= 24** (`engines`), **pnpm 12.9.1** (`packageManager`, authoritative;
+- **Node >= 24** (`engines`), **pnpm 12.14.0** (`packageManager`, authoritative;
   CI reads it and installs the matching version). Bun is not used anywhere in
   this repo.
 - **One toolchain: vite-plus.** `pnpm-workspace.yaml` catalogs `vite-plus`
@@ -389,7 +394,7 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   - `main` (`vitest.main.config.ts`): `test/**/*.test.ts(x)` minus an explicit
     exclude list. Real Postgres, a spawned app server, Playwright, and the email
     pipeline. `pool: "forks"`, one worker, `testTimeout: 30s`.
-  - `unit` (`vitest.unit.config.ts`): an explicit 53-file list of pure-logic
+  - `unit` (`vitest.unit.config.ts`): an explicit 56-file list of pure-logic
     suites, some of them property-based (fast-check, via `assertProperty` in
     `test/helpers/property.ts`; see `docs/testing.md`). `pool: "threads"`,
     parallel, no DB and no server.
@@ -427,11 +432,16 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
 ## Known Drift
 
 Docs and comments occasionally outlive what they describe. Verify a claim
-against the tree before acting on it, and add what you find here. Nothing is
-outstanding at the moment; the last three were fixed on 2026-10-05 (the demo
-doc's two invented `pnpm demo:*` scripts, the deleted `prisma/migrations/`
-reference, and the registry namespace in `docs/mcp-directories.md`, which is
-`org.labnotes/expense` to match `server.json`).
+against the tree before acting on it, and add what you find here. The last
+batch was fixed on 2026-10-19: the pinned pnpm version, the unit project's
+file count, three command rows in the table above, the `pnpm check` pipeline
+(which starts with the Prisma pin check), and the security invariant's claim
+that every mail-importing path gates on the authentication verdict (the
+inbox-review path does not, by design). The three before that were fixed on
+2026-10-05 (the demo doc's two invented `pnpm demo:*` scripts, the deleted
+`prisma/migrations/` reference, and the registry namespace in
+`docs/mcp-directories.md`, which is `org.labnotes/expense` to match
+`server.json`).
 
 One thing that looks like drift and is not: `vpr` is a real vite-plus binary,
 the shorthand for `vp run`, so `pnpm test:ocr` and `scripts/upgrade` are fine

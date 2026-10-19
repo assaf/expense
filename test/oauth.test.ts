@@ -272,6 +272,63 @@ describe("MCP OAuth", () => {
     expect(redirected.searchParams.get("state")).toBe("state-456");
   });
 
+  it("refuses an oversized registration body", async () => {
+    // Registration is unauthenticated and every accepted call stores a row,
+    // so the body is bounded the way the token endpoint bounds its own. The
+    // server stops reading mid-body, so the client sees a reset rather than
+    // a 400 - what matters is that no client row survives.
+    const res = await fetch(`${baseURL}/oauth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "oauth-test-huge",
+        redirect_uris: [CALLBACK],
+        padding: "x".repeat(64 * 1024),
+      }),
+    }).catch(() => null);
+    if (res) expect(res.status).toBe(400);
+    expect(
+      await testPrisma.oAuthClient.count({
+        where: { name: "oauth-test-huge" },
+      }),
+    ).toBe(0);
+  });
+
+  it("refuses a redirect URI longer than the cap", async () => {
+    const res = await fetch(`${baseURL}/oauth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_name: "oauth-test-long-uri",
+        redirect_uris: [`https://example.test/${"x".repeat(2500)}`],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(
+      await testPrisma.oAuthClient.count({
+        where: { name: "oauth-test-long-uri" },
+      }),
+    ).toBe(0);
+  });
+
+  it("shows where the access code will be sent on the consent page", async () => {
+    // A registered client chooses both its name and its redirect, so the
+    // destination has to be visible before the user approves.
+    const clientId = await registerClient("oauth-test-destination");
+    const verifier = generateCodeVerifier();
+    const page = await signedInPage(TEST_EMAIL, TEST_PASSWORD);
+    const res = await page.request.get(authorizeUrl(clientId, verifier));
+    expect(res.status()).toBe(200);
+    const html = await res.text();
+    // The phrase matters as much as the host: the host alone is already in
+    // the page, in the hidden redirect_uri field, so only the sentence
+    // proves the user is shown the destination.
+    expect(html).toContain("The access code goes to");
+    expect(html).toContain(new URL(CALLBACK).host);
+    await page.close();
+  });
+
   it("frames out the consent page (clickjacking protection)", async () => {
     const clientId = await registerClient("oauth-test-framing");
     const verifier = generateCodeVerifier();
