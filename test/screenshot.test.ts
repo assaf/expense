@@ -20,7 +20,7 @@ import { spawn } from "node:child_process";
  */
 import sharp from "sharp";
 import { ulid } from "ulid";
-import { afterAll, describe, expect, it } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import { hashPassword } from "~/lib/passwords";
 import {
   extractionCacheKey,
@@ -848,6 +848,15 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
   const drift: string[] = [];
   const pageErrors: string[] = [];
 
+  // Stale .new/.diff artifacts from earlier failed runs would otherwise
+  // survive (a run that dies before the first capture, e.g. the server
+  // failing to launch) and read as fresh drift. Clearing in beforeAll means
+  // the files present afterwards were written by this run, after it ran to
+  // completion on screens that drifted. Baselines are never touched.
+  beforeAll(async () => {
+    await removeDiffImages();
+  });
+
   // Any drift opens the review UI (baseline vs new side by side, A accepts,
   // Esc closes): the failure alone names files, the comparison is where the
   // decision happens. Detached + unref'd so the vitest fork can exit; the
@@ -900,10 +909,6 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
   }
 
   it("captures the important screens into screenshots/", async () => {
-    // Stale .new/.diff artifacts from earlier failed runs would otherwise
-    // pile up; baselines themselves are never touched here.
-    await removeDiffImages();
-
     const launched = await ensureServer();
 
     try {
@@ -986,8 +991,8 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
   }, 240_000);
 
   it("captures the emails the app sends into screenshots/emails/", async () => {
-    // Artifacts from the screens test must survive for review, so this
-    // block does NOT call removeDiffImages.
+    // Artifacts from the screens test must survive for review, so the email
+    // block never cleans up; the beforeAll above already cleared stale ones.
     const ORIGIN = "https://expense.example.com";
     const emails: Array<[string, string]> = [
       // account-verification.server.ts copy
