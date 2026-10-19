@@ -39,6 +39,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-19"
+    changes:
+      - type: improvement
+        text: "On an iPhone, the app now opens from the Home Screen the way an installed app does: no Safari address bar, no toolbars, just the app."
   - date: "2026-10-16"
     changes:
       - type: fix

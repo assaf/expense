@@ -323,6 +323,14 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* iOS drops the Safari toolbars for a Home Screen launch only when
+        the page asks to be a standalone web app. iOS 16.4+ reads the
+        manifest's `display`, older releases read the capable meta, and the
+        status bar's own treatment comes from its meta: "default" keeps the
+        bar on the app's background and lets iOS pick the text colour per
+        appearance, which is what the theme script follows. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         {/* Global, page-agnostic metadata. Route-level meta arrays replace
         (not merge) parent meta in React Router, so these apply everywhere
         while each page's meta() owns its title/description/canonical. */}
@@ -418,6 +426,8 @@ export function ErrorBoundary() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="theme-color" content="#ffffff" />
         <title>{`${status} — Expense`}</title>
         <Links />
