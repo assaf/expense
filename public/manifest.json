@@ -4,6 +4,21 @@
   "description": "Personal expense tracking with receipts and mileage.",
   "start_url": "/expenses",
   "display": "standalone",
+  "share_target": {
+    "action": "/api/share-receipt",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["image/*", "application/pdf"]
+        }
+      ]
+    }
+  },
   "background_color": "#f9fafb",
   "theme_color": "#0d9488",
   "icons": [

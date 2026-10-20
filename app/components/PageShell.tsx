@@ -91,7 +91,7 @@ export function PageShell({
                 aria-label={backLabel}
               >
                 <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-                <span className="hidden sm:inline">{backLabel}</span>
+                <span>{backLabel}</span>
               </Link>
             </Button>
           </div>
