@@ -97,4 +97,4 @@ echo "  - Receipt images are in image_blobs and come with the clone."
 echo "  - Local schema synced to the latest contract (prisma db update)."
 
 # 7. Open the local site (dev server must be running: pnpm dev).
-open "https://expense.localhost"
+open "https://expense.localhost/expenses"
