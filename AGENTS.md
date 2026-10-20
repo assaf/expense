@@ -294,7 +294,13 @@ silent no-op on another, because an empty chain reads as "legacy, allowed").
 A message the verdict refused stays in the Inbox, and importing that one
 message from inbox review is a deliberate per-message choice by the user, not
 an automatic import (the review path passes `review: true`, which skips the
-verdict, the rule gate and the local receipt gate). Any new session or token path
+verdict, the rule gate and the local receipt gate). A provider that cannot be
+read is a failure, not a mailbox with nothing to learn: the stamp lookup
+throws, the drain fails with the provider's own error, and the connection is
+flagged. That failure's wording must NOT contain the word "authentication" —
+the "Email ingestion failures" alert rule mutes every message that does, so
+the word is what keeps a by-design skip quiet and what lets a real outage
+reach the owner. Any new session or token path
 MUST stamp and check `User.credentialsChangedAt`: a password reset bumps it,
 revokes that user's OAuth tokens and busts the user cache, and the OAuth
 callbacks resolve their user through the exported `sessionUser` rather than
@@ -405,7 +411,7 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   - `main` (`vitest.main.config.ts`): `test/**/*.test.ts(x)` minus an explicit
     exclude list. Real Postgres, a spawned app server, Playwright, and the email
     pipeline. `pool: "forks"`, one worker, `testTimeout: 30s`.
-  - `unit` (`vitest.unit.config.ts`): an explicit 57-file list of pure-logic
+  - `unit` (`vitest.unit.config.ts`): an explicit 58-file list of pure-logic
     suites, some of them property-based (fast-check, via `assertProperty` in
     `test/helpers/property.ts`; see `docs/testing.md`). `pool: "threads"`,
     parallel, no DB and no server.

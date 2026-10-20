@@ -90,6 +90,11 @@ export async function connectionCredential(
  * persists it, and `null` means there is nothing to trust yet, so the
  * caller MUST skip (an empty chain reads as "legacy transport" and would
  * open the gate).
+ *
+ * A provider that cannot be read THROWS rather than answering `null`: the
+ * caller has to be able to tell "this mailbox has not taught us its stamp
+ * yet" from "this mailbox is unreachable", and only the second is a failure
+ * worth reporting (EXPENSE-1Q).
  */
 export async function connectionAuthservIds(
   connection: ConnectionAuthSource,

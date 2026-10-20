@@ -33,6 +33,7 @@ export default defineConfig({
       "test/llm-alert.test.ts",
       "test/email-corpus.test.ts",
       "test/email-mime.test.ts",
+      "test/email-connection-mail.test.ts",
       "test/fx.test.ts",
       "test/format.test.ts",
       "test/duplicates.test.ts",

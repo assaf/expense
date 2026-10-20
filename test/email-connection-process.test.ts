@@ -1737,7 +1737,7 @@ describe("drainEmailConnection", () => {
     ).catch((err: unknown) => err);
 
     expect((thrown as Error).message).toBe(
-      "[email-connections] reading the delivery authentication stamp failed: Error: JMAP /api/emailchanges query failed",
+      "[email-connections] reading the delivery stamp failed: Error: JMAP /api/emailchanges query failed",
     );
     expect((thrown as Error).cause).toBe(upstream);
   });

@@ -39,6 +39,12 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-20"
+    changes:
+      - type: fix
+        text: "The receipt confirmation you get by email is sent again: the note that says a receipt was accepted was dropped before it went out, so forwarding a receipt to Expense came back with no answer."
+      - type: fix
+        text: "A connected mailbox that stops working now says what went wrong: a mail server that is down is reported once, with the reason, instead of looking every time like a mailbox that has simply received no new mail, so you find out instead of wondering why nothing is being filed."
   - date: "2026-10-19"
     changes:
       - type: improvement

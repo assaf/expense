@@ -697,6 +697,56 @@ export async function jmapCall(
   }
 }
 
+// --- Mailboxes ---------------------------------------------------------------
+
+interface MailboxList {
+  list: Array<{ id: string; name?: string; role?: string }>;
+}
+
+/** Resolve a mailbox id by its role ("inbox", "sent", "trash"). Throws when
+ * the server has no mailbox with that role. */
+export async function mailboxIdByRole(
+  server: JmapServer,
+  role: string,
+): Promise<string> {
+  const responses = await jmapCall(server, [
+    [
+      "Mailbox/get",
+      {
+        accountId: (await jmapSessionForToken(server)).mailAccountId,
+        ids: null,
+        properties: ["id", "role"],
+      },
+      "m0",
+    ],
+  ]);
+  const args = responses[0]![1] as MailboxList;
+  const box = args.list.find((b) => b.role === role);
+  if (!box) throw new Error(`No mailbox with role "${role}"`);
+  return box.id;
+}
+
+/** Like `mailboxIdByRole`, but undefined instead of a throw when the server
+ * has no such role (RFC 8621 §2.5: no role is required to exist). Used
+ * where a missing role only skips an optional step (the Trash move) or
+ * where a fallback is tried instead. */
+export async function tryMailboxIdByRole(
+  server: JmapServer,
+  role: string,
+): Promise<string | undefined> {
+  try {
+    return await mailboxIdByRole(server, role);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith("No mailbox with role ")
+    ) {
+      return undefined;
+    }
+    throw err;
+  }
+}
+
 // --- PushSubscription + Email/import (shared by both auth flavors) ----------
 
 /** A Fastmail push subscription (PushSubscription/get). */

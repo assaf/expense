@@ -238,7 +238,14 @@ client and no provider-specific code. The entry point is the
   otherwise turn the sender-authentication gate into a silent no-op. A
   connection with neither a pinned nor a learnable stamp skips the tick
   (drain and review scan alike); the daily cron and the review page's scan
-  retry.
+  retry. A provider that cannot be read is a different fact from a mailbox
+  with nothing to teach: the lookup throws, the drain fails with the
+  provider's own error and the connection is flagged, the review page's scan
+  and import report the failure instead of listing nothing, and the "Email
+  ingestion failures" alert rule mails it (its mute is the word
+  "authentication", which the failure path must not use). A connect whose
+  lookup fails still creates the connection, and the drain learns the stamp
+  on its first walk.
 - **Mailbox roles**: an Inbox is required at connect (otherwise there is
   nothing to read); a missing `trash` role only skips the Trash move for that
   connection (RFC 8621 §2.5 requires neither role to exist).

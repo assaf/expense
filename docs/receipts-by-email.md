@@ -76,10 +76,17 @@ chain.
 failure/confirmation replies are sent FROM the FastMail identity
 (`INBOUND_EMAIL_ADDRESS`, default the account's primary identity) via
 `EmailSubmission/set` (upload raw MIME → `Email/import` into the
-identity's Sent mailbox → submit; the submit step retries once on a
+identity's Sent mailbox, or the account's own Sent mailbox when the
+identity names none → submit; the submit step retries once on a
 transient failure, reusing the same email id; the blob/Sent import
 doesn't repeat) when `FASTMAIL_TOKEN` has send
 permission; without it the send is skipped with a warning. The
+import needs a mailbox: FastMail stopped reporting
+`saveSentToMailboxId` on 2026-10-20 (it had one on 2026-09-11), and an
+empty one reaches JMAP as an empty `mailboxIds`, which the server rejects
+before the message exists, so the reply is never sent (EXPENSE-1V). The
+account's Sent mailbox is the fallback, and a reply with neither fails
+loudly instead of vanishing. The
 confirmation reply carries the **receipt itself**, never a copy of the
 original email text: an image/PDF attachment source is carried as the
 original file under its original filename with a byte-sniffed content type

@@ -1162,9 +1162,15 @@ async function drainConnection(
   // Fail closed: an unpinned generic JMAP connection with no learnable
   // delivery stamp must not run, because evaluateAuthChain([]) answers ok
   // ("legacy transport") and would open the sender-authentication gate.
-  const authservIds = await drainStep(
-    "reading the delivery authentication stamp failed",
-    () => connectionAuthservIds(connection, credential),
+  //
+  // The wording of this stage is load-bearing. The "Email ingestion
+  // failures" alert rule mails on a new failure under /api/email-connections
+  // and mutes every message that contains "authentication", which is how the
+  // by-design skips stay quiet. A provider that cannot be read must not use
+  // that word: a mailbox that went down would otherwise be reported as
+  // "no stamp yet" and never reach the owner (EXPENSE-1Q).
+  const authservIds = await drainStep("reading the delivery stamp failed", () =>
+    connectionAuthservIds(connection, credential),
   );
   if (authservIds === null) {
     captureWarning(

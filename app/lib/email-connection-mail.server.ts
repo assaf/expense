@@ -13,7 +13,9 @@ import {
   jmapImportEmail,
   jmapSessionForToken,
   jmapUploadBlob,
+  mailboxIdByRole,
   serverLabel,
+  tryMailboxIdByRole,
   type JmapServer,
   type JmapTokenInfo,
   type RawRfc822Email,
@@ -34,110 +36,62 @@ import {
 
 // --- Mailboxes ---------------------------------------------------------------
 
-interface MailboxList {
-  list: Array<{ id: string; name?: string; role?: string }>;
-}
-
-/** Resolve a mailbox id by its role ("inbox", "trash"); shared with the
- * rule-inference scan, which reads the Inbox the same way. Throws when the
- * server has no mailbox with that role. */
-export async function mailboxIdByRole(
-  server: JmapServer,
-  role: string,
-): Promise<string> {
-  const responses = await jmapCall(server, [
-    [
-      "Mailbox/get",
-      {
-        accountId: (await jmapSessionForToken(server)).mailAccountId,
-        ids: null,
-        properties: ["id", "role"],
-      },
-      "m0",
-    ],
-  ]);
-  const args = responses[0]![1] as MailboxList;
-  const box = args.list.find((b) => b.role === role);
-  if (!box) throw new Error(`No mailbox with role "${role}"`);
-  return box.id;
-}
-
-/** Like `mailboxIdByRole`, but undefined instead of a throw when the server
- * has no such role (RFC 8621 §2.5: no role is required to exist). Used
- * where a missing role only skips an optional step (the Trash move). */
-export async function tryMailboxIdByRole(
-  server: JmapServer,
-  role: string,
-): Promise<string | undefined> {
-  try {
-    return await mailboxIdByRole(server, role);
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      err.message.startsWith("No mailbox with role ")
-    ) {
-      return undefined;
-    }
-    throw err;
-  }
-}
-
 /** Learn the authserv-id of the mailbox's delivery stamp from the newest
  * clause-bearing Authentication-Results header of a recent email. Returns
  * undefined when the mailbox is empty, has no stamped mail yet, or the
- * server does not expose header properties. */
+ * server does not expose header properties.
+ *
+ * A server that cannot be reached THROWS. "The mailbox has nothing to teach
+ * us" and "the provider is down" are different facts, and only the first is
+ * a reason to wait: swallowing the second made a JMAP provider that answered
+ * HTTP 502 look like a mailbox that had not received mail yet, so the drain
+ * reported the same benign line on every push and never said what was
+ * actually wrong (EXPENSE-1Q). */
 export async function learnAuthservId(
   server: JmapServer,
   accountId: string,
 ): Promise<string | undefined> {
-  try {
-    const inboxId = await tryMailboxIdByRole(server, "inbox");
-    if (!inboxId) return undefined;
-    const query = await jmapCall(server, [
-      [
-        "Email/query",
-        {
-          accountId,
-          filter: { inMailbox: inboxId },
-          sort: [{ property: "receivedAt", isAscending: false }],
-          limit: 5,
-        },
-        "m0",
-      ],
-    ]);
-    const ids = (query[0]![1] as { ids?: string[] }).ids ?? [];
-    if (ids.length === 0) return undefined;
-    const got = await jmapCall(server, [
-      [
-        "Email/get",
-        {
-          accountId,
-          ids,
-          properties: ["header:Authentication-Results:asText"],
-        },
-        "m0",
-      ],
-    ]);
-    const list = (got[0]![1] as { list?: unknown[] }).list ?? [];
-    const records: string[] = [];
-    for (const row of list) {
-      if (!row || typeof row !== "object") continue;
-      const header =
-        "header:Authentication-Results:asText" in row
-          ? row["header:Authentication-Results:asText"]
-          : undefined;
-      if (!Array.isArray(header)) continue;
-      for (const value of header) {
-        if (typeof value === "string") records.push(value);
-      }
+  const inboxId = await tryMailboxIdByRole(server, "inbox");
+  if (!inboxId) return undefined;
+  const query = await jmapCall(server, [
+    [
+      "Email/query",
+      {
+        accountId,
+        filter: { inMailbox: inboxId },
+        sort: [{ property: "receivedAt", isAscending: false }],
+        limit: 5,
+      },
+      "m0",
+    ],
+  ]);
+  const ids = (query[0]![1] as { ids?: string[] }).ids ?? [];
+  if (ids.length === 0) return undefined;
+  const got = await jmapCall(server, [
+    [
+      "Email/get",
+      {
+        accountId,
+        ids,
+        properties: ["header:Authentication-Results:asText"],
+      },
+      "m0",
+    ],
+  ]);
+  const list = (got[0]![1] as { list?: unknown[] }).list ?? [];
+  const records: string[] = [];
+  for (const row of list) {
+    if (!row || typeof row !== "object") continue;
+    const header =
+      "header:Authentication-Results:asText" in row
+        ? row["header:Authentication-Results:asText"]
+        : undefined;
+    if (!Array.isArray(header)) continue;
+    for (const value of header) {
+      if (typeof value === "string") records.push(value);
     }
-    return authservIdsIn(records)[0];
-  } catch (err) {
-    console.warn("[email-connection] could not learn the delivery stamp", {
-      err,
-    });
-    return undefined;
   }
+  return authservIdsIn(records)[0];
 }
 
 // --- Inbox query --------------------------------------------------------------

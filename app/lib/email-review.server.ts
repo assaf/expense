@@ -42,7 +42,11 @@ import * as Sentry from "@sentry/react-router";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import { db } from "~/lib/prisma.server";
 import { fromIso, nowWire, toIso } from "~/lib/db/wire";
-import { captureError, captureWarning } from "~/lib/errors.server";
+import {
+  captureError,
+  captureWarning,
+  errorSummary,
+} from "~/lib/errors.server";
 import {
   isDeadCredential,
   reportConnectionFailure,
@@ -936,7 +940,18 @@ export async function processReviewItem(input: {
   const credential = await connectionCredential(connection);
   const client = mailClientFor(connection, credential);
   const adapter = input.adapter ?? client.adapter;
-  const authservIds = await connectionAuthservIds(connection, credential);
+  let authservIds: string[] | null;
+  try {
+    authservIds = await connectionAuthservIds(connection, credential);
+  } catch (err) {
+    // A provider that cannot be read is not a mailbox that has not taught
+    // us its stamp yet: say what went wrong instead of asking the owner to
+    // wait for mail that cannot arrive.
+    return {
+      ok: false,
+      error: `Could not read the mailbox: ${errorSummary(err)}`,
+    };
+  }
   if (authservIds === null) {
     return {
       ok: false,

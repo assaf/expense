@@ -43,13 +43,11 @@ import {
   destroyConnectionPushSubscription,
   ensureConnectionPushSubscription,
 } from "~/lib/email-connection-push.server";
-import {
-  learnAuthservId,
-  tryMailboxIdByRole,
-} from "~/lib/email-connection-mail.server";
+import { learnAuthservId } from "~/lib/email-connection-mail.server";
 import {
   verifyJmapServer,
   resolveJmapSessionUrl,
+  tryMailboxIdByRole,
   JmapMethodError,
   type JmapServer,
 } from "~/lib/jmap.server";
@@ -298,10 +296,19 @@ export async function action({ request, context }: Route.ActionArgs) {
             : "That server could not list its mailboxes; try again.",
         );
       }
-      const authservId = await learnAuthservId(
-        server,
-        verified.info.mailAccountId,
-      );
+      // The stamp is a nice-to-have here: the connection works without it
+      // and the drain learns it on the first walk. A server that cannot be
+      // read right now must not fail the connect, or a provider that is down
+      // for a minute would cost the owner their connection.
+      let authservId: string | undefined;
+      try {
+        authservId = await learnAuthservId(server, verified.info.mailAccountId);
+      } catch (err) {
+        captureWarning(
+          "[email-connections] could not learn the delivery stamp at connect",
+          { error: err },
+        );
+      }
       // tokenEnc holds the finished Authorization header for a JMAP row
       // (see email-connection-auth.server.ts), never a bare token.
       const tokenEnc = encryptSecret(authorization);

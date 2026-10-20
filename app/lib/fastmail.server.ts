@@ -20,6 +20,7 @@ import {
   jmapPushVerify,
   jmapSessionForToken,
   jmapUploadBlob,
+  tryMailboxIdByRole,
   type JmapCapability,
   type JmapServer,
   type JmapTokenInfo,
@@ -284,7 +285,9 @@ export interface FastmailIdentity {
   id: string;
   name: string;
   email: string;
-  /** The mailbox the identity saves sent mail to (e.g. the Sent folder). */
+  /** The mailbox the identity saves sent mail to (e.g. the Sent folder).
+   * Empty when the provider reports none, which is not an error: the
+   * account's own Sent mailbox is the fallback (see `sentMailboxId`). */
   saveSentToMailboxId: string;
 }
 
@@ -374,7 +377,23 @@ export interface JmapSendDeps {
   uploadBlob(raw: Buffer): Promise<string>;
   importEmail(blobId: string, mailboxId: string): Promise<string>;
   submitEmail(identityId: string, emailId: string): Promise<void>;
+  /** The account's Sent mailbox, used when the identity does not name one
+   * (see `sentMailboxId`). */
+  sentMailboxId(): Promise<string | undefined>;
   fromAddress?: string;
+}
+
+/** The mailbox the copy of a sent message is imported into.
+ *
+ * `Identity/get` carries `saveSentToMailboxId` only sometimes: the account
+ * had it on 2026-09-11 (the last receipt confirmation that went out) and by
+ * 2026-10-20 none of its eleven identities did. An empty id reaches JMAP as
+ * an empty `mailboxIds` object, which the server rejects with
+ * `invalidProperties` before the message is ever submitted, so the reply was
+ * never sent at all (EXPENSE-1V). The account's own Sent mailbox is the
+ * fallback; a copy of a sent message belongs there. */
+async function sentMailboxId(): Promise<string | undefined> {
+  return tryMailboxIdByRole(APP_SERVER, "sent");
 }
 
 const realJmapSendDeps: JmapSendDeps = {
@@ -383,6 +402,7 @@ const realJmapSendDeps: JmapSendDeps = {
   importEmail: (blobId: string, mailboxId: string) =>
     jmapImportEmail(APP_SERVER, { blobId, mailboxId }),
   submitEmail,
+  sentMailboxId,
 };
 
 /**
@@ -437,7 +457,18 @@ export async function sendEmailViaJmap(
       headers: input.headers,
     });
     const blobId = await deps.uploadBlob(raw);
-    const emailId = await deps.importEmail(blobId, chosen.saveSentToMailboxId);
+    // The identity's own Sent mailbox when it names one, the account's
+    // otherwise. An empty id is not an option: JMAP reads it as an empty
+    // `mailboxIds` and rejects the import, so the message is never created
+    // and the reply is never submitted.
+    const mailboxId =
+      chosen.saveSentToMailboxId || (await deps.sentMailboxId());
+    if (!mailboxId) {
+      throw new Error(
+        "no mailbox to import the sent copy into: the identity names none and the account has no Sent mailbox",
+      );
+    }
+    const emailId = await deps.importEmail(blobId, mailboxId);
     try {
       await deps.submitEmail(chosen.id, emailId);
     } catch (err) {

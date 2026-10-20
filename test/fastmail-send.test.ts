@@ -31,6 +31,7 @@ function fakes(
   uploadBlob: ReturnType<typeof vi.fn>;
   importEmail: ReturnType<typeof vi.fn>;
   submitEmail: ReturnType<typeof vi.fn>;
+  sentMailboxId: ReturnType<typeof vi.fn>;
 } {
   const uploadBlob = vi.fn(async (_raw: Buffer) => "blob-1");
   const importEmail = vi.fn(
@@ -39,18 +40,21 @@ function fakes(
   const submitEmail = vi.fn(
     async (_identityId: string, _emailId: string) => {},
   );
+  const sentMailboxId = vi.fn(async () => "sent-by-role" as string | undefined);
   return {
     deps: {
       listIdentities: vi.fn(async () => identities),
       uploadBlob,
       importEmail,
       submitEmail,
+      sentMailboxId,
       fromAddress: RECEIPTS,
       ...overrides,
     },
     uploadBlob,
     importEmail,
     submitEmail,
+    sentMailboxId,
   };
 }
 
@@ -121,6 +125,49 @@ describe("sendEmailViaJmap", () => {
 
     expect(await sendEmailViaJmap(input, deps)).toBe(true);
     expect(importEmail).toHaveBeenCalledWith("blob-1", "sent-1");
+  });
+
+  it("imports into the account's Sent mailbox when the identity names none", async () => {
+    // Fastmail's Identity/get stopped reporting saveSentToMailboxId on
+    // 2026-10-20; it had one on 2026-09-11, the last receipt confirmation
+    // that went out. An empty id reaches JMAP as an empty `mailboxIds`,
+    // which the server rejects before the message is created, so the reply
+    // was never sent at all (EXPENSE-1V).
+    const { deps, importEmail, submitEmail } = fakes([
+      identity({ saveSentToMailboxId: "" }),
+    ]);
+
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(importEmail).toHaveBeenCalledWith("blob-1", "sent-by-role");
+    expect(submitEmail).toHaveBeenCalledWith("id-1", "email-1");
+  });
+
+  it("prefers the identity's own mailbox when it names one", async () => {
+    const { deps, importEmail, sentMailboxId } = fakes([identity()]);
+
+    expect(await sendEmailViaJmap(input, deps)).toBe(true);
+    expect(importEmail).toHaveBeenCalledWith("blob-1", "sent-1");
+    // No need to ask the account when the identity already knows.
+    expect(sentMailboxId).not.toHaveBeenCalled();
+  });
+
+  it("fails with a clear cause when no mailbox can be resolved", async () => {
+    const { deps, importEmail, submitEmail } = fakes(
+      [identity({ saveSentToMailboxId: "" })],
+      { sentMailboxId: vi.fn(async () => undefined) },
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      expect(await sendEmailViaJmap(input, deps)).toBe(false);
+      // Nothing is created and nothing is submitted: the import is the
+      // failure, so the message never reaches the recipient.
+      expect(importEmail).not.toHaveBeenCalled();
+      expect(submitEmail).not.toHaveBeenCalled();
+      expect(warn.mock.calls.flat().join(" ")).toContain("Sent mailbox");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("passes attachments and In-Reply-To through to the message", async () => {
