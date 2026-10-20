@@ -45,6 +45,16 @@ set -a
 source .env.prod
 set +a
 export DATABASE_URL="$DATABASE_URL_UNPOOLED"
+# The pulled file redacts sensitive vars as [SENSITIVE], so CRON_SECRET from
+# it is not a value; the real one lives in the local .env (scripts/secret).
+# The smoke check is the only thing that can catch a broken deploy, so it has
+# to have a real secret BEFORE the code ships.
+if [ -n "$VERCEL_PROTECTION_BYPASS" ]; then
+  ./scripts/secret CRON_SECRET >/dev/null || {
+    echo -e "\033[0;31mRefusing to deploy: the post-deploy smoke check has no usable CRON_SECRET.\033[0m" >&2
+    exit 1
+  }
+fi
 if [ "$SKIP_DB_SYNC" = "1" ]; then
   echo -e "\033[0;33mSkipping prisma db update (--skip-db-sync) — verify schema drift separately with: pnpm prisma db verify\033[0m"
 else
@@ -76,14 +86,30 @@ else
   # Shared with the CI workflow's pdf-ocr-smoke job (see scripts/smoke-check).
   # A failed smoke rolls the deployment back immediately: broken code is
   # live for minutes instead of until the next deploy (two broken deploys
-  # stayed live for hours, see EXPENSE-Q).
+  # stayed live for hours, see EXPENSE-Q). Only a broken DEPLOYMENT is
+  # rolled back: a check that could not run (exit 2) says nothing about the
+  # code, and the rollback reverts production.
   if ./scripts/smoke-check "$DEPLOY_URL"; then
     echo -e "\033[0;32mSmoke passed — deployment is live.\033[0m"
   else
-    echo -e "\033[0;31mSmoke FAILED on ${DEPLOY_URL} — rolling back to the previous deployment.\033[0m" >&2
-    vercel rollback "$DEPLOY_URL" --yes || {
-      echo -e "\033[0;31mRollback failed — check the Vercel dashboard.\033[0m" >&2
-    }
+    smoke_status=$?
+    if [ "$smoke_status" -eq 1 ]; then
+      echo -e "\033[0;31mSmoke FAILED on ${DEPLOY_URL} — rolling back to the previous deployment.\033[0m" >&2
+      # The rollback target is the deployment that was live before this one:
+      # `vercel rollback` makes its argument the production deployment, so
+      # passing the deployment that just failed is a no-op Vercel refuses (422
+      # "Cannot rollback to this deployment, as it the current production
+      # deployment").
+      PREVIOUS=$(./scripts/previous-deployment "$DEPLOY_URL") || {
+        echo -e "\033[0;31mCould not determine the previous production deployment — roll back by hand: vercel rollback <previous-deployment-url>\033[0m" >&2
+        exit 1
+      }
+      vercel rollback "$PREVIOUS" --yes || {
+        echo -e "\033[0;31mRollback failed — check the Vercel dashboard (previous deployment: ${PREVIOUS}).\033[0m" >&2
+      }
+    else
+      echo -e "\033[0;31mSmoke check could not run (exit ${smoke_status}) — the deployment may be fine, so nothing was rolled back.\033[0m" >&2
+    fi
     exit 1
   fi
 fi

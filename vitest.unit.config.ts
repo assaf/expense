@@ -65,6 +65,7 @@ export default defineConfig({
       "test/dark-mode-gate.test.ts",
       "test/test-projects.test.ts",
       "test/ci-workflow.test.ts",
+      "test/deploy-scripts.test.ts",
       "test/upload-limits.test.ts",
       "test/warranty-expiry.test.ts",
       "test/warranty-policies.test.ts",

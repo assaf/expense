@@ -5,27 +5,76 @@
 # so the two can never drift apart.
 #
 # Usage: ./scripts/smoke-check <deployment-url-or-host>
-# Reads CRON_SECRET and VERCEL_PROTECTION_BYPASS from the environment
-# (the bypass header is needed because deployment URLs are behind Vercel SSO
-# protection). Exits 1 when the pipeline is broken.
+# Reads CRON_SECRET from the environment (CI passes GitHub secrets this way),
+# falling back to the local .env, and VERCEL_PROTECTION_BYPASS from the
+# environment (the bypass header is needed because deployment URLs are behind
+# Vercel SSO protection).
+#
+# Exit codes, and the callers roll back on them:
+#   0  the pipeline is fine
+#   1  the DEPLOYMENT is broken (a server error, a missing route, a pipeline
+#      that failed): roll back
+#   2  the CHECK could not run (no usable secret, the secret was rejected,
+#      the protection bypass is wrong): the deployment may be perfectly fine,
+#      so do NOT roll back
+# The split matters because the rollback reverts production: a credential
+# mistake must not undo a good deploy (it nearly did on 2026-10-20, when a
+# redacted secret made a healthy deploy look broken).
 set -eo pipefail
 
 URL="${1:-}"
 if [ -z "$URL" ]; then
   echo "usage: $0 <deployment-url-or-host>" >&2
-  exit 1
+  exit 2
 fi
 case "$URL" in
   http://* | https://*) ;;
   *) URL="https://${URL}" ;;
 esac
 
-RESPONSE=$(curl -sS --fail --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# A secret that is the redaction placeholder is not a secret, and sending one
+# makes the route answer a 404 that reads like a broken deployment.
+SMOKE_SECRET=$("$SCRIPT_DIR/secret" CRON_SECRET) || exit 2
+
+# Capture the status next to the body: a 404 from this route is a deliberate
+# answer to a wrong secret, not a missing route, and the two failures need
+# different fixes.
+RAW=$(curl -sS --retry 3 --retry-delay 5 --retry-connrefused --max-time 120 \
   -H "x-vercel-protection-bypass: ${VERCEL_PROTECTION_BYPASS}" \
-  -H "x-smoke-secret: ${CRON_SECRET}" "${URL}/api/smoke") || {
-  echo "Smoke check failed (network/HTTP). Check ${URL}/api/smoke manually." >&2
+  -H "x-smoke-secret: ${SMOKE_SECRET}" \
+  -w $'\n%{http_code}' "${URL}/api/smoke") || {
+  echo "Smoke check failed: could not reach ${URL}/api/smoke (network error)." >&2
   exit 1
 }
+STATUS=$(printf '%s\n' "$RAW" | tail -n 1)
+BODY=$(printf '%s\n' "$RAW" | sed '$d')
+
+if [ "$STATUS" != "200" ]; then
+  # The gate answers {"error":"Not found"} and nothing else; any other 404
+  # means the route is not there, which is a broken deployment.
+  if [ "$STATUS" = "404" ] && [ "$(printf '%s' "$BODY" | tr -d '[:space:]')" = '{"error":"Notfound"}' ]; then
+    echo "Smoke check could not run: ${URL}/api/smoke rejected the secret. The route answers a deliberate 404 when the x-smoke-secret header does not match the deployed CRON_SECRET (app/routes/api.smoke.ts) — the secret is wrong, not the deployment." >&2
+    exit 2
+  fi
+  case "$STATUS" in
+    401 | 403)
+      echo "Smoke check could not run: ${URL}/api/smoke answered ${STATUS}. The deployment is behind Vercel protection — VERCEL_PROTECTION_BYPASS is missing or wrong." >&2
+      exit 2
+      ;;
+    5??)
+      echo "Smoke check failed: ${URL}/api/smoke answered ${STATUS} — the deployment is broken." >&2
+      ;;
+    *)
+      echo "Smoke check failed: ${URL}/api/smoke answered ${STATUS}." >&2
+      ;;
+  esac
+  if [ -n "$BODY" ]; then
+    echo "Response: ${BODY}" >&2
+  fi
+  exit 1
+fi
+RESPONSE="$BODY"
 echo "$RESPONSE" | node -e '
   let body = "";
   process.stdin.on("data", (c) => (body += c));

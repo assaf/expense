@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Print the production deployment to roll back to when a deploy's smoke check
+# fails: the one that was production BEFORE the failed deploy.
+#
+# `vercel rollback <target>` makes <target> the production deployment, so the
+# target has to be the previous production deployment. Rolling back to the
+# deployment that just failed is a no-op Vercel refuses (422 "Cannot rollback
+# to this deployment, as it the current production deployment"), which is how
+# the safety net stayed broken while looking like it ran (2026-10-20).
+#
+# Usage: ./scripts/previous-deployment <failed-deployment-url>
+#        ./scripts/previous-deployment --from-stdin <failed-deployment-url>
+#
+# The deployment list comes from the Vercel REST API when a project token is
+# in the environment (CI), and from the local Vercel CLI otherwise (the CLI
+# carries the operator's own auth). --from-stdin reads the list from stdin
+# instead, which is how the selection is tested.
+set -eo pipefail
+
+FROM_STDIN=0
+if [ "${1:-}" = "--from-stdin" ]; then
+  FROM_STDIN=1
+  shift
+fi
+
+FAILED_URL="${1:-}"
+if [ -z "$FAILED_URL" ]; then
+  echo "usage: $0 [--from-stdin] <failed-deployment-url>" >&2
+  exit 1
+fi
+
+fetch_list() {
+  if [ -n "${VERCEL_TOKEN:-}" ] && [ -n "${VERCEL_PROJECT_ID:-}" ]; then
+    curl -sS --fail --max-time 60 \
+      -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+      "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&target=production&limit=20" || {
+      echo "Could not list the Vercel deployments of this project — the token may not have access to it." >&2
+      exit 1
+    }
+  else
+    vercel ls --json || {
+      echo "Could not list the Vercel deployments — is the Vercel CLI installed and logged in?" >&2
+      exit 1
+    }
+  fi
+}
+
+if [ "$FROM_STDIN" = "1" ]; then
+  cat
+else
+  fetch_list
+fi | node -e '
+let body = "";
+process.stdin.on("data", (c) => (body += c));
+process.stdin.on("end", () => {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    parsed = null;
+  }
+  const deployments = parsed && parsed.deployments;
+  if (!Array.isArray(deployments)) {
+    console.error("Could not read the Vercel deployment list (unexpected response).");
+    process.exit(1);
+  }
+  const host = (u) => String(u || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const failed = host(process.argv[1]);
+  // The rollback target is the deployment that was live BEFORE the one that
+  // failed, and the list is newest first, so it is the entry right after the
+  // failed one. A --prod deploy promotes the new deployment, so the newest
+  // entry is normally the deployment we just made: when the failed URL is
+  // the production alias rather than a deployment (the deploy script falls
+  // back to it when it cannot read the URL out of the CLI output), the
+  // target is the second newest.
+  const production = deployments
+    .filter((d) => d && d.target === "production" && d.state === "READY" && d.url)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const failedIndex = production.findIndex((d) => host(d.url) === failed);
+  const previous = production[failedIndex >= 0 ? failedIndex + 1 : 1];
+  if (!previous) {
+    console.error("No earlier production deployment is available to roll back to.");
+    process.exit(1);
+  }
+  console.log("https://" + host(previous.url));
+});
+' "$FAILED_URL"

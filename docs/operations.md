@@ -38,6 +38,14 @@ mirrored as the `DATABASE_URL_UNPOOLED` GitHub Actions secret for the CI
 `migrate-db` job (the CI `VERCEL_TOKEN` can't read project settings, so the
 DDL URL is passed directly rather than pulled via the Vercel CLI).
 
+`prisma.config.ts` prefers `DATABASE_URL_UNPOOLED` over `DATABASE_URL`, so a
+script that runs DDL must set BOTH: overriding only `DATABASE_URL` lets a
+stray `DATABASE_URL_UNPOOLED` in the environment aim the DDL at another
+database. That is how `scripts/reset-test-db`, the throwaway test database
+reset, once planned its schema against production (a leaked URL in a shell),
+where the plan wanted to disable row-level security and was refused only by
+the migration policy. It now pins both variables to the test database.
+
 Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
 pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for 30s
 (the image-list burst). Pooler `pool_size` is capped at **80% of the DB's
@@ -306,6 +314,9 @@ while the tick itself ran healthy.
 FASTMAIL_TOKEN) must source them from `.env` or read them from the Vercel
 dashboard, not from a pulled env file. (`SENTRY_AUTH_TOKEN` used to be on
 this list; it is stored as type Config, so pulls now deliver it in full.)
+`scripts/secret <NAME>` is the one place that resolves a secret: the
+environment first (CI passes GitHub secrets this way), then the local `.env`,
+and the literal `[SENSITIVE]` counts as no value at all.
 
 Related trap: `.env.prod`'s `FASTMAIL_TOKEN` is a short placeholder, not a
 working token (401 on the JMAP session endpoint). The real send token lives
@@ -389,6 +400,47 @@ Vercel SSO protection, so both `scripts/deploy` and the smoke workflow send it
 as the `x-vercel-protection-bypass` header to reach the fresh deployment while
 Deployment Checks hold it from the production alias. Set it as a Vercel
 production env var (for the deploy script) and as a GitHub Actions secret.
+
+### The deploy smoke check, and what a rollback has to target
+
+The post-deploy smoke check (`scripts/smoke-check`, shared by
+`scripts/deploy` and the workflow's `pdf-ocr-smoke` job) is the only thing
+that catches a broken deploy before it stays live, so two things about it are
+load-bearing.
+
+**The secret it sends.** `/api/smoke` answers a deliberate 404 when the
+`x-smoke-secret` header does not match the deployed `CRON_SECRET`, so a 404
+there means the secret is wrong, not that the deployment is missing. The
+script now says so instead of reporting a generic network failure, and it
+takes the secret from `scripts/secret` (environment, then the local `.env`).
+`scripts/deploy` refuses to deploy when it cannot get a real one: on
+2026-10-20 it deployed with the redacted `[SENSITIVE]` from the pulled
+`.env.prod`, the route answered 404, and a healthy deploy was reported as
+failed.
+
+**The rollback target.** `vercel rollback <target>` makes `<target>` the
+production deployment. Rolling back to the deployment that just failed is a
+no-op that Vercel refuses (422 "Cannot rollback to this deployment, as it the
+current production deployment"), which is how the safety net could fail
+without failing visibly. The target is the deployment that was live BEFORE
+the failed one, which `scripts/previous-deployment` prints from the
+deployment list (the REST API in CI, the local CLI otherwise). Vercel's Hobby
+plan only allows a rollback to the immediately previous production
+deployment, which is exactly what that picks. If the target cannot be
+determined, the deploy fails loudly with the manual command instead of
+pretending to have rolled back.
+
+**What gets rolled back.** The rollback reverts production, so it may only
+fire when the DEPLOYMENT is broken. `scripts/smoke-check` therefore has two
+failure codes: 1 for a broken deployment (a server error, a missing route, a
+pipeline that failed) and 2 for a check that could not run (no usable
+secret, the secret rejected by the gate, the protection bypass wrong).
+Both callers roll back only on 1. A credential mistake must never undo a
+good deploy, and on 2026-10-20 a redacted secret is exactly what a healthy
+deploy was judged by.
+
+A rollback re-assigns the production domain, so let it finish before
+starting another one.
 
 ## Dependency bumps (`scripts/upgrade`)
 

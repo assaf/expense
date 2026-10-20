@@ -9,4 +9,10 @@ set -eo pipefail
 TEST_DB_URL="postgres://assaf@localhost/expense_test"
 
 psql "$TEST_DB_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-DATABASE_URL="$TEST_DB_URL" pnpm exec prisma db init --quiet
+# Both variables, because prisma.config.ts prefers DATABASE_URL_UNPOOLED:
+# overriding only DATABASE_URL lets a stray DATABASE_URL_UNPOOLED in the
+# environment point this throwaway reset at another database. A leaked
+# production URL once planned it against prod, where the plan wanted to
+# disable row-level security (a "widening" operation) and was refused only
+# by the migration policy.
+DATABASE_URL="$TEST_DB_URL" DATABASE_URL_UNPOOLED="$TEST_DB_URL" pnpm exec prisma db init --quiet

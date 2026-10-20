@@ -468,7 +468,29 @@ jobs:
           if ./scripts/smoke-check "$URL"; then
             echo "Smoke passed — deployment stays live."
           else
-            echo "Smoke FAILED on $URL — rolling back to the previous deployment." >&2
-            npx vercel@latest rollback "$URL" --yes --token "$VERCEL_TOKEN" || echo "Rollback failed — check the Vercel dashboard." >&2
+            smoke_status=$?
+            # Only a broken DEPLOYMENT is rolled back. A check that could
+            # not run (exit 2: no usable secret, the secret was rejected,
+            # the protection bypass is wrong) says nothing about the code,
+            # and the rollback reverts production.
+            if [ "$smoke_status" -eq 1 ]; then
+              echo "Smoke FAILED on $URL — rolling back to the previous deployment." >&2
+              # The rollback target is the deployment that was live before
+              # this one: `vercel rollback` makes its argument the production
+              # deployment, so passing the deployment that just failed is a
+              # no-op Vercel refuses (422 "Cannot rollback to this
+              # deployment, as it the current production deployment") — the
+              # safety net that silently did nothing.
+              PREVIOUS=$(./scripts/previous-deployment "$URL") || {
+                echo "Could not determine the previous production deployment — roll back by hand: npx vercel@latest rollback <previous-deployment-url> --yes --token \$VERCEL_TOKEN" >&2
+                exit 1
+              }
+              echo "Previous production deployment: $PREVIOUS" >&2
+              npx vercel@latest rollback "$PREVIOUS" --yes --token "$VERCEL_TOKEN" || {
+                echo "Rollback failed — check the Vercel dashboard (previous deployment: $PREVIOUS)." >&2
+              }
+            else
+              echo "Smoke check could not run (exit $smoke_status) — the deployment may be fine, so nothing was rolled back." >&2
+            fi
             exit 1
           fi

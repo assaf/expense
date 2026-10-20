@@ -155,3 +155,83 @@ describe("the prod schema sync", () => {
     expect(out, out).toContain('"ok":true');
   });
 });
+
+/**
+ * A failed smoke is supposed to put the previous deployment back in
+ * production. `vercel rollback <target>` makes <target> the production
+ * deployment, so the target has to be the deployment that was live BEFORE
+ * the failed one; passing the failed one is a no-op Vercel refuses (422
+ * "Cannot rollback to this deployment, as it the current production
+ * deployment"). Both paths shipped that, and the CI one hid the refusal
+ * behind `|| echo`, so the safety net could fail without failing visibly
+ * (2026-10-20). Nothing in the job graph shows which deployment is the
+ * target, so pin it in both places.
+ */
+describe("the rollback target", () => {
+  const sources: [string, string][] = [
+    ["scripts/deploy", readFileSync("scripts/deploy", "utf8")],
+    [
+      "pdf-ocr-smoke job",
+      (workflow.jobs["pdf-ocr-smoke"]!.steps ?? [])
+        .map((s) => s.run ?? "")
+        .join("\n"),
+    ],
+  ];
+
+  for (const [name, source] of sources) {
+    it(`${name} rolls back to the previous deployment, not the failed one`, () => {
+      expect(source, name).toContain("scripts/previous-deployment");
+      // The failed deployment is the URL the smoke ran against; it must
+      // never be the rollback target.
+      expect(source, name).not.toMatch(/rollback\s+"\$(DEPLOY_)?URL"/);
+    });
+  }
+
+  it("fails loudly in CI when the previous deployment cannot be determined", () => {
+    const smokeJob = workflow.jobs["pdf-ocr-smoke"]!;
+    const run = (smokeJob.steps ?? []).map((s) => s.run ?? "").join("\n");
+    // A swallowed rollback failure leaves a broken deploy live while the job
+    // reports that it rolled back.
+    expect(run).not.toMatch(/\|\|\s*echo\s+"Rollback failed/);
+    expect(run).toContain(
+      "Could not determine the previous production deployment",
+    );
+  });
+
+  it("resolves the smoke secret before scripts/deploy ships code", () => {
+    const source = readFileSync("scripts/deploy", "utf8");
+    const guard = source.indexOf("./scripts/secret CRON_SECRET");
+    const deploy = source.indexOf("vercel deploy --prod");
+    expect(guard).toBeGreaterThan(-1);
+    // A deploy that cannot be smoked has to fail before the code is live,
+    // not after: on 2026-10-20 a healthy deploy was shipped and then
+    // reported as failed, because the secret it smoked with was the
+    // redacted placeholder from the pulled env file.
+    expect(guard).toBeLessThan(deploy);
+  });
+
+  for (const [name, source] of sources) {
+    it(`${name} rolls back only when the deployment itself is broken`, () => {
+      // The smoke check exits 1 for a broken deployment and 2 for a check
+      // that could not run (no usable secret, the secret was rejected, the
+      // protection bypass is wrong). A caller that rolls back on any
+      // failure reverts a healthy deploy over a credential mistake, which
+      // is what the exit-2 code exists to prevent.
+      expect(source, name).toMatch(/smoke_status=\$\?/);
+      expect(source, name).toMatch(
+        /smoke_status=\$\?[\s\S]{0,600}?-eq 1[\s\S]{0,600}?rollback/,
+      );
+    });
+  }
+
+  it("points the test database reset at the test database", () => {
+    const source = readFileSync("scripts/reset-test-db", "utf8");
+    // prisma.config.ts prefers DATABASE_URL_UNPOOLED, so overriding only
+    // DATABASE_URL lets a stray DATABASE_URL_UNPOOLED in the environment
+    // point this throwaway reset at another database: a leaked production
+    // URL once planned it against prod.
+    expect(source).toMatch(
+      /DATABASE_URL="\$TEST_DB_URL" DATABASE_URL_UNPOOLED="\$TEST_DB_URL"/,
+    );
+  });
+});
