@@ -885,7 +885,11 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
     page: Page,
     path: string,
     name: string,
-    opts: { reducedMotion?: boolean; waitFocus?: string } = {},
+    opts: {
+      reducedMotion?: boolean;
+      waitFocus?: string;
+      scrollToTop?: boolean;
+    } = {},
   ): Promise<void> {
     currentName = name;
     // The landing page plays a video, and a playing video is never the same
@@ -906,6 +910,17 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
         (selector) => document.activeElement?.matches(selector ?? ""),
         opts.waitFocus,
       );
+    }
+    // The Insights feed autofocuses the Ask box, which scrolls the feed to
+    // its bottom and hides the top of the page (the money checkup). The
+    // baseline is meant to guard that top, so put every scrollable
+    // container back before the shot.
+    if (opts.scrollToTop) {
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll<HTMLElement>("*")) {
+          if (el.scrollHeight > el.clientHeight + 1) el.scrollTop = 0;
+        }
+      });
     }
     // Post-mount rendering: <LocalDate> swaps ISO for local format, the
     // dashboard computes future badges after hydration.
@@ -939,7 +954,7 @@ describe.skipIf(process.env.CI)("suite screenshots", () => {
       await capture(page, "/expense/new", "expense-new", {
         waitFocus: 'input[placeholder="0.00"]',
       });
-      await capture(page, "/insights", "insights");
+      await capture(page, "/insights", "insights", { scrollToTop: true });
 
       // The editor needs a real expense row: the seeded Test Store receipt.
       // Target it by merchant, never by an unordered `findFirst`: the seed
