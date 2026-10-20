@@ -13,14 +13,22 @@ import { captureErrorOnce, isRouterNoise } from "~/lib/errors.server";
 // (the function config has an empty environment), so that code never
 // executed in production; server errors only ever reached Sentry locally.
 // Gate on VERCEL_ENV=production so local dev/test and preview deployments
-// don't emit to the production project. try/catch: if the profiling native
-// module fails to load in some runtime, the app must still boot.
-if (process.env.VERCEL_ENV === "production") {
+// don't emit to the production project.
+//
+// The DSN comes from the environment and is never a constant here. A
+// hardcoded one meant any process whose environment happened to say
+// "production" reported into the live project: `vercel env pull` writes
+// VERCEL_ENV=production and SENTRY_DSN into .env.prod, so sourcing that
+// file (or inheriting a shell that had) turned a local test run into a
+// source of production issues (six of them, on 2026-10-20). Reporting to
+// production is now a deployment setting, not a default. try/catch: if the
+// profiling native module fails to load in some runtime, the app must
+// still boot.
+const sentryDsn = process.env.SENTRY_DSN;
+if (process.env.VERCEL_ENV === "production" && sentryDsn) {
   try {
     Sentry.init({
-      dsn:
-        process.env.SENTRY_DSN ??
-        "https://c5f9e74db2e043db855cecb9eba20fcb@o510761.ingest.us.sentry.io/4511850854940672",
+      dsn: sentryDsn,
       // Matches the release the build created (sourcemaps, release health).
       release: process.env.VERCEL_GIT_COMMIT_SHA || undefined,
 
@@ -78,6 +86,10 @@ if (process.env.VERCEL_ENV === "production") {
   } catch (error) {
     console.error("[sentry] init failed:", error);
   }
+} else if (process.env.VERCEL_ENV === "production") {
+  // A deployment without a DSN reports nothing, and a silent monitoring
+  // outage is worse than a loud one: the next error would go unnoticed.
+  console.warn("[sentry] SENTRY_DSN is not set; error reporting is off");
 }
 
 export default Sentry.wrapSentryHandleRequest(

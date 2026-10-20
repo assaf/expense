@@ -137,6 +137,20 @@ with `vercel env pull --environment=production .env.prod` (use
 pooler, see “Database connections” below). Tests hardcode local services
 (`expense_test`, image blobs in Postgres), not `.env`.
 
+**Never `source .env.prod`.** The pulled file carries Vercel's own variables
+next to the project's (`VERCEL_ENV=production`, `VERCEL`, `SENTRY_DSN`,
+`NX_DAEMON`, `TURBO_*`) and every real secret. Sourcing it puts them in your
+shell and from there into everything you run: a test server inherited
+`VERCEL_ENV=production` and reported the suite's deliberately provoked errors
+into the live Sentry project (six issues on 2026-10-20), and a stray
+`DATABASE_URL_UNPOOLED` aimed a throwaway test-database reset at production.
+Read one value instead — `scripts/secret NAME` prints it without exporting
+anything — and let `scripts/deploy` source the file inside its own
+subprocess, where the exports cannot escape. The app itself only reports to
+Sentry when the environment gives it a DSN, and the local scripts
+(`dev`, `start`, `build`, the test suite) clear it, so a local run cannot
+report into the live project.
+
 Connected email accounts (auto-import, see `docs/email-connections.md`) add
 `EMAIL_TOKEN_ENCRYPTION_KEY`: a 32-byte base64 key encrypting users' Fastmail API
 tokens at rest (AES-256-GCM). Set it in production **before** anyone
@@ -595,6 +609,9 @@ How it is scoped, and why:
   `authentication`). Those are the security pipeline working: spoofed or
   unverifiable mail is not imported, by design, and they show up in
   `/email-review` instead. Notifying on them would be noise from the internet.
+  The word is a mute, so a failure that is NOT one of those rejections must
+  not use it: the drain's "reading the delivery stamp failed" stage names a
+  provider that cannot be read, and that one is meant to reach you.
 - **"Not a receipt" is not a failure.** Ordinary mail the classifier declines
   gets a reply to the sender and no Sentry event, so forwarding a non-receipt
   never emails anyone.

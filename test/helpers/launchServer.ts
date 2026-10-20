@@ -62,6 +62,25 @@ async function startMockJmap(): Promise<string> {
 
 let serverPort = 5199;
 
+/**
+ * The suite must never report to the production Sentry project.
+ *
+ * A developer's shell can carry Vercel's own variables: `vercel env pull`
+ * writes VERCEL_ENV=production, SENTRY_DSN and the rest into .env.prod,
+ * and sourcing that file (or inheriting a shell that had it) puts them in
+ * the environment. The app's Sentry init reads exactly those, so a local
+ * test run reported the suite's deliberately provoked errors into the live
+ * project — six issues on 2026-10-20, tagged environment=production. The
+ * build needs the same treatment: VITE_SENTRY_DSN is inlined into the
+ * client bundle at build time, so the test browser would report too.
+ */
+const NO_REPORTING = {
+  VERCEL_ENV: "test",
+  SENTRY_DSN: "",
+  VITE_SENTRY_DSN: "",
+  SENTRY_AUTH_TOKEN: "",
+} as const;
+
 /** The PID holding the port, or undefined when it is free (or lsof cannot
  * tell us — CI containers without it just skip the check). */
 function squatterPidOn(port: number): number | undefined {
@@ -94,6 +113,7 @@ export async function launchServer(): Promise<string> {
   const jmapBase = await startMockJmap();
   const env = {
     ...process.env,
+    ...NO_REPORTING,
     NODE_ENV: "test",
     PORT: String(serverPort),
     HOSTNAME: "127.0.0.1",
@@ -183,7 +203,10 @@ async function ensureBuild(): Promise<void> {
   if (buildMtime > 0 && buildMtime >= newestSource) return;
 
   console.info("Building app for tests…");
-  await run("pnpm", ["exec", "react-router", "build", "--force"]);
+  await run("pnpm", ["exec", "react-router", "build", "--force"], {
+    ...process.env,
+    ...NO_REPORTING,
+  });
 }
 
 function newestMtime(paths: string[]): number {
@@ -197,9 +220,17 @@ function newestMtime(paths: string[]): number {
   return newest;
 }
 
-function run(cmd: string, args: string[]): Promise<void> {
+function run(
+  cmd: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(cmd, args, { cwd: resolve("."), stdio: "inherit" });
+    const child = spawn(cmd, args, {
+      cwd: resolve("."),
+      stdio: "inherit",
+      env,
+    });
     child.on("exit", (code) => {
       if (code === 0) resolvePromise();
       else reject(new Error(`${cmd} exited with code ${code}`));
