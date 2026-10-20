@@ -47,6 +47,8 @@ releases:
         text: "Cmd+S (Ctrl+S on a PC) now saves the expense you are editing, the same as clicking Save, instead of asking the browser to save the page."
       - type: improvement
         text: "The app you install now opens on your expense list instead of the marketing page, so you land where you were working."
+      - type: fix
+        text: "Dismissing a duplicate now tells you what it did: a row that matches more than fifty others is cleared fifty at a time, with a note saying to click again for the rest, instead of the click quietly doing nothing."
   - date: "2026-10-16"
     changes:
       - type: fix

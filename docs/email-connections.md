@@ -680,12 +680,12 @@ Implementation (`app/lib/email-review.server.ts`, route
   `{ review: true }`): review mode is the auto-pipeline minus the
   authentication verdict, the rule gate and the local receipt gate (the
   user's explicit choice replaces them), with the model allowed
-  (`localOnly: false`) so attachment receipts and unparseable totals work. The claim flips the
-  pending-review row to `processing` in place (no insert race); success
-  logs created/partial, moves the email to Trash, and delivers the owner
-  confirmation ("You processed this email as an expense…"); failure
-  logs back to pending-review so the item stays on the list with the
-  error shown.
+  (`localOnly: false`) so attachment receipts and unparseable totals work.
+  The claim flips the pending-review row to `processing` in place (no insert
+  race); success logs created/partial, moves the email to Trash, and
+  delivers the owner confirmation ("You processed this email as an
+  expense…"); failure logs back to pending-review so the item stays on the
+  list with the error shown.
 - **Remember the sender** ("accept a new sender"): emails from senders
   with no rule show a "New sender" badge; the process confirmation
   offers a checkbox (default on) that adds a user rule

@@ -485,7 +485,7 @@ async function captureHome(page: Page): Promise<void> {
     .toFile("public/screenshot-og.png");
 }
 
-describe.skipIf(process.env.CI)("README screenshots", () => {
+describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {
   it("seeds mock data and captures the home + receipt editor pages", async () => {
     await seedScreenshotData();
 
@@ -641,7 +641,7 @@ async function warmDemoExtraction(pdf: Buffer): Promise<void> {
  * in CI; the artifact is committed. The recording is a sequence of frames with
  * explicit holds (see helpers/demoRecord) so the cut is the same on every run.
  */
-describe.skipIf(process.env.CI)("landing demo", () => {
+describe.skipIf(!process.env.DEMO)("landing demo", () => {
   it("records the drop-a-receipt demo", async () => {
     await seedScreenshotData();
     const pdf = await demoReceiptPdf();

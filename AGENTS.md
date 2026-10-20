@@ -76,7 +76,7 @@ is written here), `app/data/` (all public copy plus the seeds),
 
 | Command                                           | Runs                                                             | Notes                                                          |
 | ------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server behind `expense.localhost`; policy table first      |
+| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server on `expense.localhost`; policy table first          |
 | `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table             |
 | `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
 | `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; fails on any issue (no auto-fix)    |
@@ -88,7 +88,7 @@ is written here), `app/data/` (all public copy plus the seeds),
 | `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
 | `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                  |
 | `pnpm build:policies`                             | `tsx scripts/build-warranty-policies.ts`                         | Emits the merchant coverage table                              |
-| `pnpm screenshot`                                 | `CI= vp test run test/screenshot.test.ts`                        | Regenerates README screenshots                                 |
+| `pnpm screenshot`                                 | `SCREENSHOT=1 DEMO=1 CI= vp test run test/screenshot.test.ts`    | Regenerates README screenshots and demo; compares baselines    |
 | `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                |
 | `pnpm setup:push` / `infer:rules` / `drain:email` | `tsx scripts/...`                                                | Fastmail push setup, email-rule inference, dev drain           |
 | `./scripts/deploy`                                | check -> test -> prod db sync -> vercel -> smoke                 | The only production writer; `--skip-tests`, `--skip-db-sync`   |

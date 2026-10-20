@@ -33,6 +33,7 @@ import {
   useCommandRequest,
 } from "~/lib/command-requests";
 import { Button } from "~/components/ui/Button";
+import { Alert } from "~/components/ui/Alert";
 import { LiveStatus } from "~/components/ui/LiveStatus";
 import { Badge } from "~/components/ui/Badge";
 import { ConfirmDialog } from "~/components/ui/ConfirmDialog";
@@ -77,9 +78,8 @@ import {
 import type { Expense, Location, MileageType } from "~/lib/types";
 import type { DuplicateReason } from "~/lib/duplicates";
 import {
-  badRequest,
+  fetcherError,
   formString,
-  MAX_DUPLICATE_DISMISSALS,
   parseDuplicateIds,
   unknownIntent,
 } from "~/lib/validation";
@@ -179,15 +179,18 @@ export async function action({ request, context }: Route.ActionArgs) {
   if (intent === "dismiss-duplicate") {
     const id = formString(form, "id");
     // The list is a duplicate group, never a batch: each id is one serial
-    // write against a two-connection pool.
-    const otherIds = parseDuplicateIds(formString(form, "otherIds"));
-    if (!otherIds) {
-      return badRequest(
-        `Too many duplicates to dismiss at once — dismiss up to ${MAX_DUPLICATE_DISMISSALS} at a time.`,
-      );
-    }
-    for (const otherId of otherIds) {
+    // write against a two-connection pool, so one request writes at most
+    // MAX_DUPLICATE_DISMISSALS of them. A group larger than that drains in
+    // batches: the dismissed pairs drop out of the duplicate list on the
+    // next load, so the next click finishes the job.
+    const { ids, remaining } = parseDuplicateIds(formString(form, "otherIds"));
+    for (const otherId of ids) {
       await dismissDuplicatePair(user.accountId, id, otherId);
+    }
+    if (remaining > 0) {
+      return data({
+        notice: `Dismissed ${ids.length} of ${ids.length + remaining} duplicates — click “Not a duplicate” again for the rest.`,
+      });
     }
     return null;
   }
@@ -318,7 +321,11 @@ function ExpenseList({
   const fileRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ error?: string; notice?: string }>();
+  // The page's fetcher is fire-and-forget (dismiss a duplicate, delete a
+  // row), so nothing else would ever show that the action refused.
+  const actionError = fetcherError(fetcher.data);
+  const actionNotice = fetcher.data?.notice ?? "";
 
   // Handle one-shot palette requests this page owns (open the receipt file
   // picker / focus the search box). Only handled kinds are consumed; an
@@ -449,6 +456,19 @@ function ExpenseList({
       aria-label="Expense list — drag a receipt image anywhere to upload"
     >
       <LiveStatus>{drop.message}</LiveStatus>
+      {actionError ? (
+        <Alert bordered className="mb-4">
+          {actionError}
+        </Alert>
+      ) : null}
+      {actionNotice ? (
+        <p
+          role="status"
+          className="mb-4 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-300"
+        >
+          {actionNotice}
+        </p>
+      ) : null}
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1>
           <Logo link href="/expenses" shortcut="nav-expenses" />

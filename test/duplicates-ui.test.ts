@@ -1,6 +1,8 @@
 import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, it } from "vite-plus/test";
+import { and, or } from "@prisma/orm-postgres/orm-client";
+import prisma from "~/lib/prisma.server";
 import { duplicatePairKey } from "~/lib/duplicates";
 import { todayDate } from "~/lib/format";
 import { goto } from "./helpers/launchBrowser";
@@ -135,6 +137,47 @@ describe("Duplicate detection", () => {
     await expect(page.getByText(/Possible duplicate of DupCorp A/)).toHaveCount(
       0,
     );
+  });
+
+  it("clears a group of more than fifty in batches, and says so", async () => {
+    // 52 identical rows: each row matches 51 others, and one request
+    // writes at most 50 dismissals (one write each, against a
+    // two-connection pool). The rest are reported, not dropped silently.
+    const ids = Array.from({ length: 52 }, (_, i) => `dup-many-${i}`);
+    await testPrisma.expense.createMany({
+      data: ids.map((id) => receiptRow(id, "DupMany", "7.77")),
+    });
+    try {
+      await nav("/expenses");
+      await page
+        .locator("li")
+        .filter({ hasText: "DupMany" })
+        .getByRole("button", { name: "Not a duplicate" })
+        .first()
+        .click();
+      await expect(page.getByText(/Dismissed 50 of 51 duplicates/)).toBeVisible(
+        {
+          timeout: 20_000,
+        },
+      );
+      // The batch wrote exactly the cap: 50 pairs, one duplicate left.
+      const { count: written } =
+        await prisma.orm.public.DuplicateDismissal.where((d) =>
+          and(
+            d.accountId.eq(TEST_ACCOUNT_ID),
+            or(d.expenseAId.in(ids), d.expenseBId.in(ids)),
+          ),
+        ).aggregate((agg) => ({ count: agg.count() }));
+      expect(written).toBe(50);
+    } finally {
+      await testPrisma.expense.deleteMany({ where: { id: { in: ids } } });
+      await testPrisma.duplicateDismissal.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, expenseAId: { in: ids } },
+      });
+      await testPrisma.duplicateDismissal.deleteMany({
+        where: { accountId: TEST_ACCOUNT_ID, expenseBId: { in: ids } },
+      });
+    }
   });
 
   it("'View' opens the other side of the pair", async () => {

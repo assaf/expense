@@ -761,14 +761,6 @@ export function Lightbox({
   );
 }
 
-export function fetcherError(data: unknown): string {
-  if (data && typeof data === "object" && "error" in data) {
-    const e = (data as { error: unknown }).error;
-    return typeof e === "string" ? e : "";
-  }
-  return "";
-}
-
 /**
  * Form-wide keyboard shortcuts: Enter saves, Escape cancels.
  * Skipped while an overlay (lightbox/confirm) is open. Enter is ignored in

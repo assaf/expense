@@ -20,6 +20,7 @@ import type {
   RouteGeometry,
 } from "~/lib/types";
 import { HOME_NAME, geocodedLocations } from "~/lib/types";
+import { fetcherError } from "~/lib/validation";
 import {
   ClosedReportBanner,
   DateAmountFields,
@@ -31,7 +32,6 @@ import {
   ReportCategoryFields,
   Shell,
   TransitionOverlay,
-  fetcherError,
   submitDelete,
   useEditorFlow,
   useFormKeys,

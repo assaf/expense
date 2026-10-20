@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import prisma from "~/lib/prisma.server";
+import { toIso, toIsoOrNull } from "~/lib/db/wire";
 import {
   AUTH_LOCK_MS,
   AUTH_THRESHOLD,
@@ -159,11 +160,9 @@ describe("recordAuthFailure under concurrency", () => {
     // Two callers would not prove the counter: they can serialize, and then
     // the old code produced 2 as well. Eight at once cannot.
     //
-    // The count is asserted as "at least the threshold", not as an exact
-    // number: with a compare-and-swap, the writers that keep losing the
-    // swap give up, so the exact count under a wide wave is a matter of
-    // contention, not of correctness. The exact count is what the
-    // single-statement update (the complete fix) will pin.
+    // The count is exact: one statement, evaluated by Postgres against the
+    // stored row, so every failure is counted and none is lost to a
+    // concurrent writer.
     const key = "race:wide";
     const now = Date.parse("2026-03-02T00:00:00Z");
     try {
@@ -171,8 +170,62 @@ describe("recordAuthFailure under concurrency", () => {
         Array.from({ length: 8 }, () => recordAuthFailure(key, OPTIONS, now)),
       );
       const row = await prisma.orm.public.AuthAttempt.first({ key });
-      expect(row?.failures).toBeGreaterThanOrEqual(AUTH_THRESHOLD);
+      expect(row?.failures).toBe(8);
       expect(row?.lockedUntil).not.toBeNull();
+    } finally {
+      await prisma.orm.public.AuthAttempt.where((a) =>
+        a.key.eq(key),
+      ).deleteAll();
+    }
+  });
+});
+
+describe("the SQL policy and the TypeScript policy agree", () => {
+  it("writes the state nextFailureState computes, for every shape", async () => {
+    // The counter's rule lives twice: the CASE expressions Postgres
+    // evaluates, and nextFailureState. This walks the shapes and holds the
+    // two to the same answer, so a change to one without the other fails
+    // here.
+    const key = "diff:policy";
+    const now = Date.parse("2026-04-01T00:00:00Z");
+    const read = async (): Promise<AuthAttemptState | null> => {
+      const row = await prisma.orm.public.AuthAttempt.first({ key });
+      return row
+        ? {
+            failures: row.failures,
+            windowStart: toIso(row.windowStart),
+            lockedUntil: toIsoOrNull(row.lockedUntil),
+          }
+        : null;
+    };
+    const cases: Array<{ label: string; failures: number; at: number }> = [
+      { label: "no row yet", failures: 0, at: now },
+      { label: "inside the window", failures: 3, at: now },
+      { label: "at the threshold", failures: 4, at: now },
+      { label: "an active lock", failures: 5, at: now },
+      {
+        label: "exactly one window old",
+        failures: 2,
+        at: now - OPTIONS.windowMs,
+      },
+      {
+        label: "the window elapsed",
+        failures: 2,
+        at: now - OPTIONS.windowMs - 1,
+      },
+    ];
+    try {
+      for (const c of cases) {
+        await prisma.orm.public.AuthAttempt.where((a) =>
+          a.key.eq(key),
+        ).deleteAll();
+        for (let i = 0; i < c.failures; i += 1) {
+          await recordAuthFailure(key, OPTIONS, c.at);
+        }
+        const expected = nextFailureState(await read(), now, OPTIONS);
+        await recordAuthFailure(key, OPTIONS, now);
+        expect(await read(), c.label).toEqual(expected);
+      }
     } finally {
       await prisma.orm.public.AuthAttempt.where((a) =>
         a.key.eq(key),

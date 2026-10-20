@@ -29,20 +29,37 @@ export function formEmail(form: FormData): string {
   return formString(form, "email").trim().toLowerCase();
 }
 
-/** How many duplicate dismissals one request may carry. The list is a
+/** How many duplicate dismissals one request may write. The list is a
  * duplicate group, never a batch: each id is one serial write against a
  * two-connection pool. */
 export const MAX_DUPLICATE_DISMISSALS = 50;
 
-/** Split the comma-separated ids of the dismiss-duplicate intent. Returns
- * null when the list is over the cap, so the caller can refuse it rather
- * than write one row per id. */
-export function parseDuplicateIds(value: string): string[] | null {
-  const ids = value
+/** Split the comma-separated ids of the dismiss-duplicate intent, and cap
+ * the batch. The ids that did not fit are reported as `remaining`: they
+ * stay in the duplicate list, so the next click finishes them. */
+export function parseDuplicateIds(value: string): {
+  ids: string[];
+  remaining: number;
+} {
+  const all = value
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return ids.length > MAX_DUPLICATE_DISMISSALS ? null : ids;
+  return {
+    ids: all.slice(0, MAX_DUPLICATE_DISMISSALS),
+    remaining: Math.max(0, all.length - MAX_DUPLICATE_DISMISSALS),
+  };
+}
+
+/** The message in a JSON error envelope, or "" when the payload carries
+ * none. Shared by the editors and the expense list, which both read it off
+ * a fetcher's response. */
+export function fetcherError(data: unknown): string {
+  if (data && typeof data === "object" && "error" in data) {
+    const e = (data as { error: unknown }).error;
+    return typeof e === "string" ? e : "";
+  }
+  return "";
 }
 
 /** Standard 400 response for an unrecognized form action intent. */

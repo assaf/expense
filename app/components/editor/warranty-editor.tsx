@@ -20,13 +20,13 @@ import { MAX_WARRANTY_DOCUMENTS } from "~/lib/upload-limits";
 
 import type { Warranty, WarrantyExpenseOption } from "~/lib/types";
 import { termsForMerchant } from "~/lib/warranty-policies";
+import { fetcherError } from "~/lib/validation";
 import {
   DeleteConfirmDialog,
   EditorActions,
   ErrorBanner,
   Shell,
   TransitionOverlay,
-  fetcherError,
   submitDelete,
   useEditorFlow,
   useFormKeys,

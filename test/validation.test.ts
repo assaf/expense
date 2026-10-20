@@ -15,6 +15,7 @@ import {
   isCalendarDate,
   normalizeRuleSender,
   parseDuplicateIds,
+  fetcherError,
   MAX_DUPLICATE_DISMISSALS,
 } from "~/lib/validation";
 import { assertProperty, text } from "./helpers/property";
@@ -384,16 +385,32 @@ describe("app/lib/validation.ts properties", () => {
 
 describe("parseDuplicateIds", () => {
   it("splits and trims the list", () => {
-    expect(parseDuplicateIds("a, b ,,c")).toEqual(["a", "b", "c"]);
+    expect(parseDuplicateIds("a, b ,,c").ids).toEqual(["a", "b", "c"]);
   });
 
-  it("refuses a list longer than the cap", () => {
+  it("caps the batch and reports what did not fit", () => {
     const ids = Array.from(
-      { length: MAX_DUPLICATE_DISMISSALS + 1 },
+      { length: MAX_DUPLICATE_DISMISSALS + 3 },
       (_, i) => `exp-${i}`,
     ).join(",");
-    expect(parseDuplicateIds(ids)).toBeNull();
+    const parsed = parseDuplicateIds(ids);
+    expect(parsed.ids).toHaveLength(MAX_DUPLICATE_DISMISSALS);
+    expect(parsed.remaining).toBe(3);
     const atCap = ids.split(",").slice(0, MAX_DUPLICATE_DISMISSALS).join(",");
-    expect(parseDuplicateIds(atCap)).toHaveLength(MAX_DUPLICATE_DISMISSALS);
+    expect(parseDuplicateIds(atCap)).toEqual({
+      ids: atCap.split(","),
+      remaining: 0,
+    });
+  });
+});
+
+describe("fetcherError", () => {
+  it("reads the message out of an error envelope", () => {
+    expect(fetcherError({ error: "Too many duplicates." })).toBe(
+      "Too many duplicates.",
+    );
+    expect(fetcherError({ error: 42 })).toBe("");
+    expect(fetcherError({ ok: true })).toBe("");
+    expect(fetcherError(null)).toBe("");
   });
 });

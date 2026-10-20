@@ -14,6 +14,7 @@ import { imageVersion } from "~/lib/image-version";
 import { rotateReceiptImage } from "~/lib/rotate-image";
 import { usePasteImage } from "~/lib/use-paste-image";
 import { useDropTarget } from "~/lib/use-drop-target";
+import { fetcherError } from "~/lib/validation";
 import type { ReceiptExpense } from "~/lib/types";
 import {
   ClosedReportBanner,
@@ -31,7 +32,6 @@ import {
   useFormKeys,
   Shell,
   TransitionOverlay,
-  fetcherError,
   submitDelete,
   type EditorData,
 } from "./editor-shared";
