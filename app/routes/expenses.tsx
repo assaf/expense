@@ -14,6 +14,7 @@ import {
   Link,
   useFetcher,
   useNavigate,
+  useRevalidator,
   useSearchParams,
 } from "react-router";
 import {
@@ -45,6 +46,8 @@ import { matchesSearch, parseQuery } from "~/lib/expense-search";
 import type { DuplicateMatch } from "~/lib/duplicates";
 import { isReceiptFile } from "~/lib/file-types";
 import { DROP_OUTLINE, useDropTarget } from "~/lib/use-drop-target";
+import { usePullToRefresh } from "~/lib/use-pull-to-refresh";
+import { PullToRefreshIndicator } from "~/components/PullToRefresh";
 import {
   countLabel,
   formatAmount,
@@ -327,6 +330,12 @@ function ExpenseList({
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const fetcher = useFetcher<{ error?: string; notice?: string }>();
+  // Pull down to refresh. A Home Screen app has no browser reload gesture
+  // to fall back on — iOS takes the chrome, and the chrome took the reload
+  // — so the list is reloaded by the app itself. Revalidating re-runs this
+  // route's loader, which is what a reload would have done.
+  const revalidator = useRevalidator();
+  const pull = usePullToRefresh(() => revalidator.revalidate());
   // The page's fetcher is fire-and-forget (dismiss a duplicate, delete a
   // row), so nothing else would ever show that the action refused.
   const actionError = fetcherError(fetcher.data);
@@ -460,6 +469,11 @@ function ExpenseList({
       className={`mx-auto max-w-4xl px-4 py-8 ${drop.over ? DROP_OUTLINE : ""}`}
       aria-label="Expense list — drag a receipt image anywhere to upload"
     >
+      <PullToRefreshIndicator
+        pull={pull.pull}
+        armed={pull.armed}
+        refreshing={pull.refreshing || revalidator.state === "loading"}
+      />
       <LiveStatus>{drop.message}</LiveStatus>
       {actionError ? (
         <Alert bordered className="mb-4">
