@@ -91,11 +91,23 @@ describe("Pull to refresh", () => {
     // The list on screen is the one from before the row existed.
     await expect(page.getByText(merchant)).toHaveCount(0);
 
+    // The reload is slowed, so the states it passes through are seen: the
+    // answer comes from the network, so no fake clock would stand in for it.
+    await page.route("**/expenses.data*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.continue();
+    });
+
     await touch("touchstart", 100);
     await touch("touchmove", 100 + PULL_REFRESH_TRIGGER_PX + 90);
     // The pull is far enough now, and says so before it happens.
     await expect(indicator()).toHaveAttribute("data-pull-to-refresh", "armed");
     await touch("touchend", 100 + PULL_REFRESH_TRIGGER_PX + 90);
+    // And while the list is being re-read, the indicator says so.
+    await expect(indicator()).toHaveAttribute(
+      "data-pull-to-refresh",
+      "refreshing",
+    );
 
     // The list was re-read, so the row that arrived while the page was open
     // is on it.
@@ -117,8 +129,9 @@ describe("Pull to refresh", () => {
     );
     await touch("touchend", 100 + PULL_REFRESH_TRIGGER_PX - 40);
     await expect(indicator()).toHaveAttribute("data-pull-to-refresh", "idle");
-    // And the list was not re-read: the row stays off it.
-    await page.waitForTimeout(500);
+    // And the list was not re-read: the row stays off it. The network going
+    // quiet is the signal that the revalidation, had there been one, is over.
+    await page.waitForLoadState("networkidle");
     await expect(page.getByText(merchant)).toHaveCount(0);
   });
 
@@ -136,7 +149,7 @@ describe("Pull to refresh", () => {
     // The gesture never began: a pull further down the page is a scroll.
     await expect(indicator()).toHaveAttribute("data-pull-to-refresh", "idle");
     await touch("touchend", 300);
-    await page.waitForTimeout(500);
+    await page.waitForLoadState("networkidle");
     await expect(page.getByText(merchant)).toHaveCount(0);
     await page.evaluate(() => {
       document.body.style.minHeight = "";

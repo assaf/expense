@@ -41,6 +41,8 @@ typeLabels:
 releases:
   - date: "2026-10-20"
     changes:
+      - type: feature
+        text: "Pull down on the expense list to refresh it, the way a reload would: a receipt that arrived while the page was open is there without reloading the whole page."
       - type: fix
         text: "The receipt confirmation you get by email is sent again: the note that says a receipt was accepted was dropped before it went out, so forwarding a receipt to Expense came back with no answer."
       - type: fix

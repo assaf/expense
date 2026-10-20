@@ -38,7 +38,7 @@ export interface PullToRefresh {
  * sends them.
  */
 export function usePullToRefresh(
-  onRefresh: () => unknown,
+  onRefresh: () => void | Promise<void>,
   enabled = true,
 ): PullToRefresh {
   const [pull, setPull] = useState(0);

@@ -334,6 +334,13 @@ function ExpenseList({
   // to fall back on — iOS takes the chrome, and the chrome took the reload
   // — so the list is reloaded by the app itself. Revalidating re-runs this
   // route's loader, which is what a reload would have done.
+  //
+  // The gesture's own state is the indicator's, and not the router's: the
+  // router revalidates this route for reasons that have nothing to do with
+  // a pull (a deleted row, a dismissed duplicate), and the revalidator's
+  // state is the router's, so reading it would pop the spinner on every
+  // row the person deletes. `revalidate()` returns a promise, so the hook
+  // knows when the reload is over.
   const revalidator = useRevalidator();
   const pull = usePullToRefresh(() => revalidator.revalidate());
   // The page's fetcher is fire-and-forget (dismiss a duplicate, delete a
@@ -472,7 +479,7 @@ function ExpenseList({
       <PullToRefreshIndicator
         pull={pull.pull}
         armed={pull.armed}
-        refreshing={pull.refreshing || revalidator.state === "loading"}
+        refreshing={pull.refreshing}
       />
       <LiveStatus>{drop.message}</LiveStatus>
       {actionError ? (
