@@ -61,7 +61,10 @@ export type HighlightId =
  * server runs UTC); `hasRates` (server-computable, timezone-independent)
  * decides whether the mileage-rate highlight is eligible at all.
  * `hasEmailConnection` (no connected mailbox for the account) gates the
- * connect-email highlight. */
+ * connect-email highlight. `hasExpenses` (the account has at least one
+ * expense) gates the highlights that talk about reading what is already
+ * filed: an account with nothing in it cannot be told to check up its tax
+ * year, search it, or reconcile against a statement. */
 export interface HighlightData {
   inboundAddress: string;
   mcpUrl: string;
@@ -69,6 +72,7 @@ export interface HighlightData {
   mileageRate: string;
   hasRates: boolean;
   hasEmailConnection: boolean;
+  hasExpenses: boolean;
 }
 interface HighlightDef {
   icon: LucideIcon;
@@ -166,8 +170,8 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
     title: "Your inbox, processed automatically",
     body: () => (
       <>
-        Connect your Fastmail account and we'll process receipts landing in your
-        inbox: merchant, amount, and category filled in, no forwarding needed.
+        We'll process the receipts that land in your inbox: merchant, amount,
+        and category filled in, no forwarding needed.
       </>
     ),
     cta: { label: "Connect your email account", to: "/emails" },
@@ -330,7 +334,14 @@ export const HIGHLIGHT_IDS = Object.keys(HIGHLIGHTS) as HighlightId[];
 /** The highlight ids that can render with the given data: "email" needs the
  * inbound address configured, "mileage-rate" a published IRS rate, "invite"
  * the account's invite code. "capture" is always available, so the pool is
- * never empty. */
+ * never empty.
+ *
+ * The cards that make a claim about what the account has already filed are
+ * eligible only once it has filed something: an empty account cannot be
+ * told to check up its tax year, search its expenses, match a statement
+ * against no records, or have its spending read back by a browser agent.
+ * The cards that CREATE something (capture, insights, reports, warranties,
+ * mileage) stay eligible: they work on an empty account. */
 export function availableHighlights(data: HighlightData): HighlightId[] {
   const pool: HighlightId[] = [
     "capture",
@@ -353,6 +364,13 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
   if (data.hasRates) pool.push("mileage-rate");
   if (data.inviteCode) pool.push("invite");
   pool.push("insights");
+  // Nothing filed yet: drop the cards that read what is already there.
+  if (!data.hasExpenses) {
+    for (const id of ["checkup", "reconcile", "search-operators", "webmcp"]) {
+      const at = pool.indexOf(id as HighlightId);
+      if (at !== -1) pool.splice(at, 1);
+    }
+  }
   return pool;
 }
 
@@ -387,7 +405,7 @@ export function FeatureHighlight({
           <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">
             Did you know?
           </p>
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">

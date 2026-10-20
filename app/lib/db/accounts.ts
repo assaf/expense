@@ -151,14 +151,6 @@ export async function regenerateInviteCode(accountId: string): Promise<string> {
   return code;
 }
 
-/** How many accounts exist. */
-export async function countAccounts(): Promise<number> {
-  const agg = await db.orm.public.Account.aggregate((a) => ({
-    count: a.count(),
-  }));
-  return agg.count;
-}
-
 // --- Users ----------------------------------------------------------------
 
 /** Create a user in an account. Throws if the email is already taken.

@@ -49,6 +49,14 @@ releases:
         text: "The app you install now opens on your expense list instead of the marketing page, so you land where you were working."
       - type: fix
         text: "Dismissing a duplicate now tells you what it did: a row that matches more than fifty others is cleared fifty at a time, with a note saying to click again for the rest, instead of the click quietly doing nothing."
+      - type: improvement
+        text: 'The "Did you know?" tip no longer describes a tax year or a bank statement you don''t have yet: an account with nothing filed is only shown tips that work from zero, like adding a receipt or importing from your inbox, and the inbox tip no longer tells you to look for Fastmail.'
+      - type: improvement
+        text: 'An empty expense list now says what to do and lets you do it there: "Add your first receipt", "log a drive" and connecting a mailbox are links you can click instead of instructions you have to translate.'
+      - type: fix
+        text: "The pages a new visitor reads first are readable now: the light gray text on the marketing page, the sign-in card and the empty list is dark enough to read, the plan stays free, so there is no paid tier to wait for."
+      - type: fix
+        text: "Signing up now says what actually happened: the confirmation tells you a verification link is on its way instead of wondering whether your account still needs verifying, and it points at Gmail as well as Fastmail for the inbox import."
   - date: "2026-10-16"
     changes:
       - type: fix

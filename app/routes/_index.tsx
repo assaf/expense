@@ -2,7 +2,6 @@ import { data } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import { marketingPageHeaders, OG_IMAGE, SITE_URL } from "~/lib/seo-content";
 import { ABOUT } from "~/lib/content.server";
-import { countAccounts } from "~/lib/db/accounts";
 import type { Route } from "./+types/_index";
 
 /**
@@ -13,9 +12,7 @@ import type { Route } from "./+types/_index";
  * invoking a function for every hit.
  */
 export async function loader() {
-  // The landing page shows how many of the 100 free spots are claimed.
-  const signupCount = await countAccounts();
-  return data({ signupCount, benefits: ABOUT.benefits });
+  return data({ benefits: ABOUT.benefits });
 }
 
 export const headers = () => marketingPageHeaders();

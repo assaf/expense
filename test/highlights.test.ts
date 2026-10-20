@@ -13,6 +13,7 @@ const EMPTY: HighlightData = {
   mileageRate: "",
   hasRates: false,
   hasEmailConnection: false,
+  hasExpenses: false,
 };
 
 const FULL: HighlightData = {
@@ -22,19 +23,25 @@ const FULL: HighlightData = {
   mileageRate: "0.70",
   hasRates: true,
   hasEmailConnection: true,
+  hasExpenses: true,
 };
 
 describe("feature highlights", () => {
   it("always offers the always-on highlights", () => {
-    expect(availableHighlights(EMPTY).sort()).toEqual([
+    // The full pool: an account that has expenses, a mailbox, rates, an
+    // invite code and an inbound address can be told about everything.
+    expect(availableHighlights(FULL).sort()).toEqual([
       "capture",
       "categories",
       "checkup",
       "command-palette",
-      "connect-email",
       "connect-jmap",
+      "email",
       "insights",
+      "invite",
+      "mcp",
       "mileage-location",
+      "mileage-rate",
       "reconcile",
       "reports",
       "search-operators",
@@ -42,6 +49,23 @@ describe("feature highlights", () => {
       "warranties",
       "webmcp",
     ]);
+  });
+
+  it("drops the cards that read filed data when nothing is filed", () => {
+    // An account with no expenses cannot be told to check up its tax year,
+    // match a statement against no records, search nothing, or have its
+    // spending read back by a browser agent.
+    const pool = availableHighlights(EMPTY);
+    for (const id of ["checkup", "reconcile", "search-operators", "webmcp"]) {
+      expect(pool).not.toContain(id);
+    }
+    // The cards that CREATE something still apply: they work on an empty
+    // account, and one of them is the first thing a new user should do.
+    for (const id of ["capture", "insights", "reports", "warranties"]) {
+      expect(pool).toContain(id);
+    }
+    // The pool is never empty, so there is always a card to show.
+    expect(pool.length).toBeGreaterThan(0);
   });
 
   it("offers the connect-email highlight only when no mailbox is connected", () => {

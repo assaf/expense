@@ -12,7 +12,10 @@ export function EmptyState({ children, className }: EmptyStateProps) {
     <Card
       variant="dashed"
       className={cn(
-        "p-12 text-center text-gray-500 dark:text-gray-400",
+        // gray-600, not gray-500: on the page canvas (and on a white card)
+        // gray-500 lands at 3.4:1, under the 4.5:1 body-text floor, and this
+        // card is the first thing a new account reads.
+        "p-12 text-center text-gray-600 dark:text-gray-300",
         className,
       )}
       role="status"

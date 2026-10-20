@@ -131,6 +131,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     // The connect-email highlight is eligible only while the account has no
     // connected mailbox.
     hasEmailConnection: emailConnections.length > 0,
+    // The highlights that read what is already filed are eligible only once
+    // the account has something filed. Every expense counts, including the
+    // ones in a closed report: the checkup and the statement match read the
+    // whole account, not just the rows on this page.
+    hasExpenses: expenses.length > 0,
   };
   return data({
     expenses: sorted.map((e) => toListItem(e, matchesByExpense.get(e.id))),
@@ -480,7 +485,11 @@ function ExpenseList({
               asChild
               variant="ghost"
               size="sm"
-              className="px-1 sm:px-3"
+              // On a phone the label is hidden, so the icon is the whole
+              // target: it needs 44px of height and a little more room
+              // around it to be a comfortable tap. Both collapse back to the
+              // desktop row at sm.
+              className="h-11 px-2 sm:h-8 sm:px-3"
             >
               <Link
                 to={item.path}
@@ -504,7 +513,10 @@ function ExpenseList({
           <Button
             data-shortcut="new-receipt"
             onClick={() => createExpense("receipt")}
-            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+            // 44px tall on a phone: these three are the first thing a new
+            // account reaches for, and the desktop size is a comfortable
+            // target there.
+            className="h-11 min-w-0 flex-1 px-2 sm:h-10 sm:flex-none sm:px-4"
           >
             <ReceiptText aria-hidden="true" className="h-4 w-4" /> Receipt
           </Button>
@@ -512,7 +524,7 @@ function ExpenseList({
             data-shortcut="new-mileage"
             onClick={() => createExpense("mileage")}
             variant="secondary"
-            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+            className="h-11 min-w-0 flex-1 px-2 sm:h-10 sm:flex-none sm:px-4"
           >
             <MapPinned aria-hidden="true" className="h-4 w-4" /> Mileage
           </Button>
@@ -521,7 +533,7 @@ function ExpenseList({
             variant="secondary"
             data-shortcut="upload-expense"
             onClick={() => fileRef.current?.click()}
-            className="min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+            className="h-11 min-w-0 flex-1 px-2 sm:h-10 sm:flex-none sm:px-4"
           >
             <Upload aria-hidden="true" className="h-4 w-4" /> Upload
           </Button>
@@ -597,16 +609,42 @@ function ExpenseList({
            * itself: the whole page takes a dropped image, which the <main>
            * aria-label already states for assistive tech. The note is a
            * pseudo-element, so it adds nothing to the accessibility tree.
+           *
+           * The two invitations are links: the reader is already looking at
+           * this card, so the way to act belongs in the card, not in the
+           * toolbar above it. The toolbar keeps the same two actions for
+           * everyone else; these are the same destinations, said in the
+           * reader's own words.
            */}
           <EmptyState>
             <p>
-              Nothing here yet. Add your first receipt or log a drive; it takes
-              under a minute.
+              Nothing here yet.{" "}
+              <Link
+                to="/expense/new"
+                className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+              >
+                Add your first receipt
+              </Link>{" "}
+              or{" "}
+              <Link
+                to="/expense/new?type=mileage"
+                className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+              >
+                log a drive
+              </Link>
+              ; it takes under a minute.
             </p>
             {!hasEmailConnection ? (
               <p className="mt-2 text-sm">
-                Or connect your Gmail or Fastmail account and receipts from your
-                inbox are added automatically, no forwarding.
+                Or{" "}
+                <Link
+                  to="/emails"
+                  className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+                >
+                  connect your Gmail or Fastmail account
+                </Link>{" "}
+                and receipts from your inbox are added automatically, no
+                forwarding.
               </p>
             ) : null}
           </EmptyState>

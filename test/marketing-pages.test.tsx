@@ -336,7 +336,7 @@ const PAGES: MarketingPage[] = [
   {
     path: "/product-facts",
     mod: productFacts,
-    data: { ...PRODUCT_FACTS, spotsClaimed: 37, rows: scheduleCRows() },
+    data: { ...PRODUCT_FACTS, rows: scheduleCRows() },
     shows: [
       ...hero(PRODUCT_FACTS),
       PRODUCT_FACTS.factsHeading,

@@ -46,7 +46,7 @@ export function AuthHeader({
       {icon}
       <h1 className="text-xl font-bold">{title}</h1>
       {blurb ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">{blurb}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300">{blurb}</p>
       ) : null}
       {note ? (
         <p className="text-xs text-gray-500 dark:text-gray-400">{note}</p>

@@ -8,7 +8,8 @@ import type { Route } from "./+types/[_]highlights";
 
 /** Sample data chosen to render every card: the mailbox is shown as
  * unconnected so the connect nudge renders, and rates/invite/inbound are
- * placeholders (never the account's real values). */
+ * placeholders (never the account's real values). The account is shown as
+ * having filed something, so the cards that read filed expenses render too. */
 const SAMPLE_DATA: HighlightData = {
   inboundAddress: "receipts@labnotes.org",
   mcpUrl: "https://expense.labnotes.org/mcp",
@@ -16,6 +17,7 @@ const SAMPLE_DATA: HighlightData = {
   mileageRate: "0.76",
   hasRates: true,
   hasEmailConnection: false,
+  hasExpenses: true,
 };
 
 export function meta(): Route.MetaDescriptors {

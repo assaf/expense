@@ -265,9 +265,6 @@ export default function LandingPage({
       <main>
         {/* Hero */}
         <section className="mx-auto max-w-4xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pt-16">
-          <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-blue-600 dark:text-blue-400">
-            Expense tracking for tax season
-          </p>
           <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl lg:text-6xl">
             Every receipt, ready for tax season.
           </h1>
@@ -278,7 +275,7 @@ export default function LandingPage({
             category (from Schedule C), and then adds it to the proper report.
             When tax season comes, all is ready for you.
           </p>
-          <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500 dark:text-gray-400">
+          <p className="mx-auto mt-3 max-w-2xl text-base text-gray-600 dark:text-gray-300">
             Have a Fastmail account? Connect it and Expense will gather receipts
             from your inbox, no forwarding necessary.
           </p>
@@ -287,7 +284,7 @@ export default function LandingPage({
               <Link to="/login?mode=create">Create your account</Link>
             </Button>
           </div>
-          <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-5 text-sm text-gray-600 dark:text-gray-300">
             No credit card required. Your data stays in your account. Export and
             leave anytime.
           </p>

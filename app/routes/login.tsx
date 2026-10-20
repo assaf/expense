@@ -26,9 +26,12 @@ type Mode = "signin" | "create" | "join" | "resend-verification";
 /** Success payloads are `{ ok: true, email }` (no session yet; the account
  * is pending until the emailed link is clicked); failures are `{ error }`
  * with `unverifiedEmail` set when the only problem is a missing
- * verification, so the UI can offer a resend button. */
+ * verification, so the UI can offer a resend button. `sent` says whether
+ * this email is a first link (create, join) or a repeat (resend): the two
+ * want different words, because "if this account still needs verifying"
+ * only makes sense after a resend. */
 type ActionData =
-  | { ok: true; email: string }
+  | { ok: true; email: string; sent: "first" | "resent" }
   | { error: string; unverifiedEmail?: string };
 
 /** Only allow same-origin relative paths for the post-login destination.
@@ -100,6 +103,7 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json({
         ok: true,
         email: result.email,
+        sent: "first",
       } satisfies ActionData);
     }
     if (mode === "join") {
@@ -114,6 +118,7 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json({
         ok: true,
         email: result.email,
+        sent: "first",
       } satisfies ActionData);
     }
     if (mode === "resend-verification") {
@@ -121,6 +126,7 @@ export async function action({ request }: Route.ActionArgs) {
       return Response.json({
         ok: true,
         email: result.email,
+        sent: "resent",
       } satisfies ActionData);
     }
     const cookie = await login(email, password, origin);
@@ -187,6 +193,7 @@ export default function LoginPage() {
   // After signup/join/resend, the account exists but can't sign in until
   // emailed link is clicked; replace the form with that instruction.
   if (pendingEmail && !dismissed) {
+    const resent = data && "ok" in data && data.sent === "resent";
     return (
       <AuthCard center>
         <div className="mb-4 flex items-center justify-center">
@@ -196,14 +203,22 @@ export default function LoginPage() {
         </div>
         <h1 className="text-xl font-bold">Check your email</h1>
         <div className="mt-3 flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-300">
+          {resent ? (
+            <p>
+              If <b className="font-mono">{pendingEmail}</b> has an account that
+              still needs verifying, a fresh link is on its way. Click it to
+              activate your account, then sign in.
+            </p>
+          ) : (
+            <p>
+              We sent a verification link to{" "}
+              <b className="font-mono">{pendingEmail}</b>. Click it to activate
+              your account, then sign in.
+            </p>
+          )}
           <p>
-            If <b className="font-mono">{pendingEmail}</b> has an account that
-            still needs verifying, a fresh link is on its way. Click it to
-            activate your account, then sign in.
-          </p>
-          <p>
-            Once you're in, connect your Fastmail account and receipts from your
-            inbox are imported automatically, no forwarding.
+            Once you're in, connect your Gmail or Fastmail account and receipts
+            from your inbox are imported automatically, no forwarding.
           </p>
           <p>Can't find it? Check spam, or resend below.</p>
         </div>

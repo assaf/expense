@@ -4,16 +4,11 @@ import { InlineMarkdown } from "~/components/Markdown";
 import { MarketingCta, MarketingPage } from "~/components/MarketingPage";
 import { Card } from "~/components/ui/Card";
 import { PRODUCT_FACTS, scheduleCRows } from "~/lib/content.server";
-import { countAccounts } from "~/lib/db/accounts";
 import { marketingPageHeaders, pageMeta, SITE_URL } from "~/lib/seo-content";
 import type { Route } from "./+types/product-facts";
 
 export async function loader() {
-  // The one number on this page that moves: how much of the early-access cap
-  // is gone. The landing page counts the same accounts for anonymous
-  // visitors.
-  const spotsClaimed = await countAccounts();
-  return { ...PRODUCT_FACTS, spotsClaimed, rows: scheduleCRows() };
+  return { ...PRODUCT_FACTS, rows: scheduleCRows() };
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
