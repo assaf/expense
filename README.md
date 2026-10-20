@@ -25,7 +25,8 @@ amount and category, filed under an IRS Schedule C line, and kept with its image
 Drives are mapped and priced at the IRS rate for the trip date and type. The year
 leaves as a PDF per report, with the receipts attached, or as one ZIP of
 everything. A warranty document dropped on the warranties page becomes a record
-you can find by how soon coverage ends.
+you can find by how soon coverage ends. Installed from the Home Screen on a
+phone, it opens on your expense list.
 
 Free, no card, no ads, no paid tier. Not built for corporate expense policy,
 approvals, or double-entry bookkeeping. The full tour, with the pages and the

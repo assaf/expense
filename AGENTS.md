@@ -271,10 +271,21 @@ cannot hold is refused with a message, never a 500: `exceedsMaxMoney` in
 `app/lib/money.ts` is the one guard, and every writer calls it (the chat's
 resolve and confirm, MCP `capture_receipt`, the editor, the inbound pipeline,
 which files a partial row instead of failing after the blob is saved, and the
-reconcile row gate). Keep `prisma/backup.sql` (~300MB) out of Vercel uploads
-through the `.vercelignore` `backup*.sql` entries.
+reconcile row gate). Dismissing duplicates is capped at 50 pairs per click
+(`MAX_DUPLICATE_DISMISSALS` in `app/lib/validation.ts`): the list is a
+duplicate group, never a batch, and each id is one serial write against a
+two-connection pool, so a bigger group is dismissed in rounds and the
+remainder is reported rather than dropped. Keep `prisma/backup.sql` (~300MB)
+out of Vercel uploads through the `.vercelignore` `backup*.sql` entries.
 
-**Security invariants.** Every _automatic_ mail-importing path gates on the
+**Security invariants.** The sign-in failure counter is one atomic statement,
+never a read-then-write: `writeFailure` in `app/lib/db/auth-attempts.ts` is a
+single UPDATE whose CASE expressions re-derive the new state from the row
+inside the database, so two concurrent failures cannot both read the same old
+count and lose one. Its policy is written twice on purpose — the CASE
+expressions Postgres evaluates and `nextFailureState` in TypeScript, which the
+unit tests pin against the same states — and the two copies have to move
+together. Every _automatic_ mail-importing path gates on the
 delivered authentication verdict before it writes: the receipts pipeline and
 the connected-mailbox drain both run `evaluateAuthChain` over the provider's
 own stamp, and a new transport MUST register its authserv-id with
@@ -425,7 +436,9 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   (`waitForHydration`) or use `waitForEditorSettle(page)` before uploads.
 - **Screenshots**: `test/screenshot.test.ts` compares against the committed
   `screenshots/` baselines (delta-E 2.3) and is skipped under `CI`. Review
-  changes with `pnpm screenshots:review`.
+  changes with `pnpm screenshots:review`. The README stills and the landing
+  demo are opt-in (`SCREENSHOT=1`, `DEMO=1`): they rewrite tracked media in
+  `public/`, so a plain `pnpm test` leaves that media alone.
 - **Coverage is not configured.** No `coverage` block or thresholds exist in any
   vitest config; do not assume a coverage gate.
 

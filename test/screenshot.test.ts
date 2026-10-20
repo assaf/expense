@@ -1,9 +1,19 @@
 import { spawn } from "node:child_process";
 /**
- * README + landing screenshot generator. Runs on a local `vp test` and is
- * skipped in CI.
+ * Screenshot tooling: the README stills, the landing demo, and the suite
+ * drift comparison. The three blocks have different gates.
  *
- *   pnpm exec vp test run test/screenshot.test.ts
+ *   pnpm screenshot   # SCREENSHOT=1 DEMO=1: regenerates the README stills
+ *                     # and the landing demo, and compares the suite baselines
+ *   pnpm demo        # builds the app, then records the landing demo
+ *
+ * The README stills need SCREENSHOT=1 and the landing demo needs DEMO=1,
+ * because both rewrite tracked media in public/ and a recording is not
+ * byte-stable; the suite comparison at the bottom is the one block CI skips,
+ * so it runs unless the shell exports CI=1. A plain `pnpm test` therefore
+ * compares the baselines and rewrites no tracked media. `pnpm screenshot`
+ * passes an empty CI, which is how it compares the baselines even where the
+ * shell exports CI=1.
  *
  * Reuses the test-suite harness: seeds expense_test with a realistic mock
  * dataset (real-ish merchants, reports, categories, generated receipt

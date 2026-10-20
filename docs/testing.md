@@ -153,6 +153,11 @@
   `screenshots/<name>.new.png` (the new capture) and
   `screenshots/<name>.diff.png` next to the baseline; all drifted screens
   are reported in one failure, not just the first.
+- The two generators that rewrite tracked media are opt-in, so a plain
+  `pnpm test` leaves `public/` alone: the README stills need `SCREENSHOT=1`
+  and the landing demo needs `DEMO=1` (`pnpm screenshot` sets both). They
+  rewrite files that are committed, and a recording is not byte-stable, so
+  they only run when asked for.
 - Baselines are committed. When a capture changes on purpose, review the
   drift with `pnpm screenshots:review` (adapted from rentail's
   `scripts/screenshots.ts`): it serves a side-by-side UI on :3456, keyboard

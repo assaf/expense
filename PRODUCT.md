@@ -82,6 +82,14 @@ surface: `/`, `/about`, `/faq`, `/product-facts`, `/alternatives`, `/ai`,
 `/privacy`, `/changelog`, plus a `.md` mirror of each and `/llms.txt`. That is
 also how assistants find the app: see [docs/mcp.md](docs/mcp.md).
 
+A duplicate group can be larger than one click: dismissing a row with more
+than fifty matches clears fifty of them and says so, and the rest stay in the
+list for the next click.
+
+Installed on a phone, the app opens on the expense list rather than on the
+marketing page: `public/manifest.json` sets `start_url` to `/expenses` and
+`display` to `standalone`, so a Home Screen icon behaves like an app.
+
 ## How a receipt becomes an expense
 
 The same pipeline serves every entrance — upload, paste, drag and drop, the MCP
