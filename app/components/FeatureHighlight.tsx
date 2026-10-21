@@ -14,6 +14,7 @@ import {
   ReceiptText,
   Search,
   Server,
+  Share2,
   ShieldCheck,
   Tags,
   Users,
@@ -51,6 +52,7 @@ export type HighlightId =
   | "insights"
   | "reconcile"
   | "search-operators"
+  | "share"
   | "shortcut-hints"
   | "warranties"
   | "webmcp";
@@ -162,6 +164,17 @@ const HIGHLIGHTS: Record<HighlightId, HighlightDef> = {
         </code>
         . Combine prefixes to stack filters, and the status line will total all
         matches.
+      </>
+    ),
+  },
+  share: {
+    icon: Share2,
+    title: "Share a photo straight into Expense",
+    body: () => (
+      <>
+        On your phone, share a photo to Expense from another app and it becomes
+        an expense: the picture is read the way a receipt is, and whatever you
+        typed next to it becomes the note.
       </>
     ),
   },
@@ -355,6 +368,7 @@ export function availableHighlights(data: HighlightData): HighlightId[] {
     "reconcile",
     "reports",
     "search-operators",
+    "share",
     "warranties",
   ];
   // Only suggest connecting a mailbox when the account hasn't connected one.

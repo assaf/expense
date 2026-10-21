@@ -45,6 +45,7 @@ describe("feature highlights", () => {
       "reconcile",
       "reports",
       "search-operators",
+      "share",
       "shortcut-hints",
       "warranties",
       "webmcp",
