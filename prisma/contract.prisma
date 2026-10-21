@@ -137,6 +137,17 @@ model Expense {
   /// filing twice. Postgres treats NULLs as distinct, so rows without a
   /// fingerprint (mileage rows, legacy images) never collide.
   @@unique([accountId, imageSha256], map: "expenses_accountId_imageSha256_key")
+
+  /// Row-level security, no policies: every role that does not bypass RLS
+  /// is denied. The app's own role (postgres) HAS BYPASSRLS, so the app is
+  /// unaffected; this exists so a role that only has table grants (a
+  /// read-only reporting role) cannot read the rows. Production has RLS
+  /// enabled on this table with no policies, and no repository history
+  /// explains when it was turned on. It is declared here because
+  /// `prisma db update` compares the live `pg_class.relrowsecurity` against
+  /// this contract, so leaving it undeclared plans to DISABLE it (a
+  /// widening the CLI refuses without --allow).
+  @@rls
   @@map("expenses")
 }
 
@@ -459,6 +470,10 @@ model User {
   account                 Account             @relation(fields: [accountId], references: [id], onDelete: Cascade, onUpdate: Cascade, map: "users_accountId_fkey", index: false)
 
   @@index([email], map: "users_email_key", unique: true)
+  /// Row-level security, no policies: deny every role that does not bypass
+  /// RLS. The app's own role (postgres) HAS BYPASSRLS, so the app is
+  /// unaffected. See the note on Expense.
+  @@rls
   @@map("users")
 }
 

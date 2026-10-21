@@ -46,6 +46,25 @@ reset, once planned its schema against production (a leaked URL in a shell),
 where the plan wanted to disable row-level security and was refused only by
 the migration policy. It now pins both variables to the test database.
 
+### Row-level security: `expenses` and `users`
+
+Production has RLS **enabled with no policies** on `expenses` and `users`:
+every role that does not bypass RLS is denied those rows. The app's own role
+(`postgres`) has `BYPASSRLS` and owns both tables, so the app is unaffected;
+what RLS holds back is a role that only holds table grants — a read-only
+reporting role, which has `SELECT` on `expenses` and nothing else. `anon`,
+`authenticated`, `authenticator` and `service_role` hold no grants on either
+table, so no API path is affected.
+
+The contract declares it (`@@rls` on both models, no `policy_*` blocks, which
+is what a deny-all looks like) because the CLI compares the live
+`pg_class.relrowsecurity` against the contract's `rls` marker: an undeclared
+table reads as drift, and the plan is to **disable** RLS — a widening the CLI
+refuses without `--allow`. Declaring it makes `prisma db update` a no-op
+against production. `--allow Expense --allow User` would instead drop the
+protection and hand the reporting role every expense row, so the declaration
+is the posture to keep unless that access is wanted on purpose.
+
 Pool sizing still matters: `app/lib/prisma.server.ts` keeps the per-instance
 pool at `max: 2` with 4s idle release, and `findUserById` caches lookups for 30s
 (the image-list burst). Pooler `pool_size` is capped at **80% of the DB's
