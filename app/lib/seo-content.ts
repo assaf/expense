@@ -27,8 +27,10 @@ export const SITE_URL = "https://expense.labnotes.org";
 /** The public MCP endpoint (Streamable HTTP + OAuth): every install instruction points here. */
 export const MCP_ENDPOINT = `${SITE_URL}/mcp`;
 
-/** The social-card image shared by every marketing page's og:image. */
-export const OG_IMAGE = `${SITE_URL}/screenshot-og.png`;
+/** The social-card image shared by every marketing page's og:image.
+ * The card itself is composed by `pnpm og` (scripts/og-card.ts): the app's
+ * name and headline beside a shot of the expense list. */
+export const OG_IMAGE = `${SITE_URL}/og-card.png`;
 
 /** The one address the site publishes for itself: the support and policy
  * pages quote it as `{{supportEmail}}`, the User-Agent that identifies the app

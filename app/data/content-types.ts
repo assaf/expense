@@ -75,6 +75,8 @@ export interface SiteContent {
   /** Multi-line on purpose: the mirrors carry its line breaks verbatim. */
   appSummary: string;
   appTagline: string;
+  /** The promise on the landing page's h1 and on the social card. */
+  appHeadline: string;
   keyFacts: string[];
   /** The label on the mirrors' signup link. */
   createAccountLabel: string;

@@ -279,6 +279,7 @@ function document(file: string, raw: string): Readonly<DocumentPage> {
 export const SITE: Readonly<SiteContent> = bundle(FILE.site, siteYaml, [
   "appSummary",
   "appTagline",
+  "appHeadline",
   "keyFacts",
   "createAccountLabel",
 ]);

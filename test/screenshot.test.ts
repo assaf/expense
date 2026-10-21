@@ -21,8 +21,9 @@ import { spawn } from "node:child_process";
  * captures full-page screenshots with Playwright into public/.
  *
  * Also regenerates the landing page's marketing images: the hero is a
- * viewport crop of the same home capture and the og card its 1200x630 top
- * slice, so all three stay in sync with the current UI (run this after any
+ * viewport crop of the same home capture, and the social card
+ * (public/og-card.png) is composed from that hero by scripts/og-card.ts,
+ * so all three stay in sync with the current UI (run this after any
  * home-page redesign and commit the refreshed public/screenshot-*.png).
  * The README and demo seeders replace the shared suite state the drift block
  * below compares against (both mint a user with TEST_EMAIL), so each restores
@@ -485,14 +486,26 @@ async function captureHome(page: Page): Promise<void> {
   await shrinkForReadme("public/screenshot-home.png");
 
   // The landing page frames a viewport crop of the same home page as its
-  // hero, and the og card is the hero's top slice at social-card size.
-  // Regenerating them here keeps all three in sync with the current UI.
+  // hero, and the social card is composed from that hero. Regenerating them
+  // here keeps all three in sync with the current UI.
   await page.screenshot({ path: "public/screenshot-hero.png" });
   await shrinkForReadme("public/screenshot-hero.png");
-  await sharp("public/screenshot-hero.png")
-    .resize(1200, 630, { fit: "cover", position: "top" })
-    .png()
-    .toFile("public/screenshot-og.png");
+  await composeOgCard();
+}
+
+/**
+ * Compose the social card from the hero capture just written. The card is
+ * one script's job (scripts/og-card.ts, `pnpm og`), so the suite and the
+ * command cannot disagree about what the card looks like.
+ */
+function composeOgCard(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("pnpm", ["og"], { stdio: "inherit" });
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`pnpm og exited with ${code}`)),
+    );
+  });
 }
 
 describe.skipIf(!process.env.SCREENSHOT)("README screenshots", () => {

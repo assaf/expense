@@ -444,7 +444,10 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   `screenshots/` baselines (delta-E 2.3) and is skipped under `CI`. Review
   changes with `pnpm screenshots:review`. The README stills and the landing
   demo are opt-in (`SCREENSHOT=1`, `DEMO=1`): they rewrite tracked media in
-  `public/`, so a plain `pnpm test` leaves that media alone.
+  `public/`, so a plain `pnpm test` leaves that media alone. The social card
+  (`public/og-card.png`, the image every marketing page advertises) is
+  composed from the home capture by `scripts/og-card.ts` (`pnpm og`); the
+  screenshot suite runs that script, so the card follows the capture.
 - **Coverage is not configured.** No `coverage` block or thresholds exist in any
   vitest config; do not assume a coverage gate.
 

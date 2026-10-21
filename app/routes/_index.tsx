@@ -1,7 +1,7 @@
 import { data } from "react-router";
 import LandingPage from "~/components/LandingPage";
 import { marketingPageHeaders, OG_IMAGE, SITE_URL } from "~/lib/seo-content";
-import { ABOUT } from "~/lib/content.server";
+import { ABOUT, SITE } from "~/lib/content.server";
 import type { Route } from "./+types/_index";
 
 /**
@@ -12,12 +12,18 @@ import type { Route } from "./+types/_index";
  * invoking a function for every hit.
  */
 export async function loader() {
-  return data({ benefits: ABOUT.benefits });
+  return data({ benefits: ABOUT.benefits, headline: SITE.appHeadline });
 }
 
 export const headers = () => marketingPageHeaders();
 
-export function meta(): Route.MetaDescriptors {
+export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
+  // The card shows the headline, and its alt quotes it, so the two travel
+  // together. The other pages drop their meta when the loader data is
+  // missing; the front door keeps its title and its card either way.
+  const cardAlt = loaderData?.headline
+    ? `${loaderData.headline} A screenshot of the Expense app's expense list, with receipts, categories and amounts.`
+    : "A screenshot of the Expense app's expense list, with receipts, categories and amounts.";
   return [
     { title: "Expense: every receipt, ready for tax season" },
     {
@@ -41,8 +47,7 @@ export function meta(): Route.MetaDescriptors {
     { property: "og:image:height", content: "630" },
     {
       property: "og:image:alt",
-      content:
-        "The Expense home page: report totals, receipts with thumbnails, and a mileage entry",
+      content: cardAlt,
     },
     {
       name: "twitter:title",
@@ -56,12 +61,16 @@ export function meta(): Route.MetaDescriptors {
     { name: "twitter:image", content: OG_IMAGE },
     {
       name: "twitter:image:alt",
-      content:
-        "The Expense home page: report totals, receipts with thumbnails, and a mileage entry",
+      content: cardAlt,
     },
   ];
 }
 
 export default function IndexPage({ loaderData }: Route.ComponentProps) {
-  return <LandingPage benefits={loaderData.benefits} />;
+  return (
+    <LandingPage
+      benefits={loaderData.benefits}
+      headline={loaderData.headline}
+    />
+  );
 }

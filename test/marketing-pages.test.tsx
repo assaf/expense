@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   Outlet,
@@ -27,7 +29,8 @@ import {
   changelogReleases,
   scheduleCRows,
 } from "~/lib/content.server";
-import { mileageRateRows, SITE_URL } from "~/lib/seo-content";
+import { mileageRateRows, OG_IMAGE, SITE_URL } from "~/lib/seo-content";
+import * as index from "~/routes/_index";
 import * as about from "~/routes/about";
 import * as ai from "~/routes/ai";
 import * as alternatives from "~/routes/alternatives";
@@ -463,5 +466,35 @@ describe("the support page", () => {
     expect(text(await renderPage(support, SUPPORT))).toMatch(
       /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i,
     );
+  });
+});
+
+// The social card is the one image every marketing page advertises, and it
+// is a committed file rather than a render: a link preview that points at a
+// missing or misshapen file shows nothing at all, and the card is composed
+// by a script, so nothing else would notice it drifting.
+describe("the social card", () => {
+  it("is a PNG of the size the pages advertise", () => {
+    const file = fileURLToPath(
+      new URL("../public/og-card.png", import.meta.url),
+    );
+    const png = readFileSync(file);
+    expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
+    // The IHDR chunk: the width and height, big-endian, right after it.
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+  });
+
+  it("is the image the landing page advertises, described for a reader", () => {
+    const tags = metaTags(index, {
+      benefits: ABOUT.benefits,
+      headline: SITE.appHeadline,
+    }) as Array<Record<string, string>>;
+    const named = (name: string) =>
+      tags.find((tag) => tag.property === name || tag.name === name)?.content;
+    expect(named("og:image")).toBe(OG_IMAGE);
+    expect(named("og:image:width")).toBe("1200");
+    expect(named("og:image:height")).toBe("630");
+    // An alt is what a reader (and a crawler) gets instead of the image.
+    expect(named("og:image:alt")?.trim()).toBeTruthy();
   });
 });

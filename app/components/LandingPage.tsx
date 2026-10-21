@@ -16,7 +16,7 @@ import { MarketingCta } from "~/components/MarketingPage";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { SitePage } from "~/components/SitePage";
-import { SITE_URL } from "~/lib/seo-content";
+import { SITE_URL, OG_IMAGE } from "~/lib/seo-content";
 import { JsonLd } from "~/components/JsonLd";
 
 /** Structured data for rich search results (Google reads JSON-LD). */
@@ -25,7 +25,7 @@ const SOFTWARE_SCHEMA = {
   "@type": "SoftwareApplication",
   name: "Expense",
   url: SITE_URL,
-  image: `${SITE_URL}/screenshot-og.png`,
+  image: OG_IMAGE,
   description:
     "Expense reads your receipts, snapped, pasted, or forwarded from email, and files each expense into IRS Schedule C categories and reports, ready to export for tax season. Ask questions about your spending in the app and the answer is computed from your own records.",
   applicationCategory: "FinanceApplication",
@@ -238,8 +238,10 @@ function BrowserFrame({
 }
 export default function LandingPage({
   benefits,
+  headline,
 }: {
   benefits: Array<{ title: string; body: string }>;
+  headline: string;
 }) {
   const FEATURES: { icon: LucideIcon; title: string; body: string }[] =
     Object.keys(FEATURE_ICONS).map((title) => {
@@ -266,7 +268,7 @@ export default function LandingPage({
         {/* Hero */}
         <section className="mx-auto max-w-4xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pt-16">
           <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl lg:text-6xl">
-            Every receipt, ready for tax season.
+            {headline}
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-600 dark:text-gray-300">
             Expense makes tax filing boring. Capture a photo of your receipt,
