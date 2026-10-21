@@ -2,9 +2,6 @@
 
 targets:
   - universal
-  - claude
-  - copilot
-  - devin
   - omp
 
 ignore:

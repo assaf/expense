@@ -472,16 +472,27 @@ describe("the support page", () => {
 // The social card is the one image every marketing page advertises, and it
 // is a committed file rather than a render: a link preview that points at a
 // missing or misshapen file shows nothing at all, and the card is composed
-// by a script, so nothing else would notice it drifting.
+// by a script, so nothing else would notice it drifting. The file is read
+// through the advertised URL, so a renamed card is a failure here rather
+// than a 404 for every crawler.
 describe("the social card", () => {
+  const cardPath = new URL(OG_IMAGE).pathname;
+  const cardFile = fileURLToPath(
+    new URL(`../public${cardPath}`, import.meta.url),
+  );
+
   it("is a PNG of the size the pages advertise", () => {
-    const file = fileURLToPath(
-      new URL("../public/og-card.png", import.meta.url),
-    );
-    const png = readFileSync(file);
+    const png = readFileSync(cardFile);
     expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
     // The IHDR chunk: the width and height, big-endian, right after it.
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+  });
+
+  it.each(PAGES)("$path advertises the social card", ({ data, mod, path }) => {
+    expect(metaTags(mod, data), path).toContainEqual({
+      property: "og:image",
+      content: OG_IMAGE,
+    });
   });
 
   it("is the image the landing page advertises, described for a reader", () => {

@@ -18,14 +18,20 @@ export async function loader() {
 export const headers = () => marketingPageHeaders();
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
-  // The card shows the headline, and its alt quotes it, so the two travel
-  // together. The other pages drop their meta when the loader data is
-  // missing; the front door keeps its title and its card either way.
-  const cardAlt = loaderData?.headline
-    ? `${loaderData.headline} A screenshot of the Expense app's expense list, with receipts, categories and amounts.`
-    : "A screenshot of the Expense app's expense list, with receipts, categories and amounts.";
+  // The promise lives in app/data/site.yaml, and the page title reads it
+  // from here, so the title cannot drift from the h1. The other pages drop
+  // their meta when the loader data is missing; the front door keeps its
+  // title and its card either way.
+  const headline = loaderData?.headline;
+  const title = headline ? `Expense: ${headline}` : "Expense";
+  // The card's alt describes what the image shows, and deliberately does
+  // not quote the headline: the card is a committed picture of that
+  // sentence, so a live quote would contradict the image the day the copy
+  // moves and the card has not been regenerated yet.
+  const cardAlt =
+    "The Expense app's name and headline beside a framed screenshot of the expense list, with receipts, categories and amounts.";
   return [
-    { title: "Expense: every receipt, ready for tax season" },
+    { title },
     {
       name: "description",
       content:
@@ -35,7 +41,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
     { property: "og:url", content: `${SITE_URL}/` },
     {
       property: "og:title",
-      content: "Expense: every receipt, ready for tax season",
+      content: title,
     },
     {
       property: "og:description",
@@ -51,7 +57,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
     },
     {
       name: "twitter:title",
-      content: "Expense: every receipt, ready for tax season",
+      content: title,
     },
     {
       name: "twitter:description",

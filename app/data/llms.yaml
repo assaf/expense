@@ -3,7 +3,7 @@
 # which test/llms-txt.test.ts asserts.
 
 corePages:
-  - title: "Expense: every receipt, ready for tax season"
+  - title: "Expense: Every receipt, ready for tax season."
     url: "{{siteUrl}}/"
     blurb: |-
       The home page; free account signup.

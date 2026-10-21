@@ -447,7 +447,9 @@ mid-task (e.g. to exercise a deploy-specific path), ask first.
   `public/`, so a plain `pnpm test` leaves that media alone. The social card
   (`public/og-card.png`, the image every marketing page advertises) is
   composed from the home capture by `scripts/og-card.ts` (`pnpm og`); the
-  screenshot suite runs that script, so the card follows the capture.
+  screenshot suite runs that script, so the card follows the capture. Its
+  headline comes from `app/data/site.yaml`, so an edit to that copy needs a
+  run of `pnpm og` (or of the screenshot suite) as well.
 - **Coverage is not configured.** No `coverage` block or thresholds exist in any
   vitest config; do not assume a coverage gate.
 

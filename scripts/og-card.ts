@@ -13,6 +13,9 @@
  * depend on the fonts installed on the machine that made it.
  *
  * Run it with `pnpm og`, after `pnpm screenshot` has refreshed the capture.
+ * The headline it draws is read from app/data/site.yaml, so an edit to that
+ * copy needs a run of this script (or of the screenshot suite) to reach the
+ * card and the page's own alt text.
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { chromium } from "playwright";
@@ -34,8 +37,11 @@ const BOLD_FONT = "public/fonts/nebula-sans/NebulaSans-Bold.woff2";
 /** Where the card lands. */
 const OUTPUT = "public/og-card.png";
 
-/** The capture is a 1440px-wide viewport, shrunk to 1600px wide. */
+/** The capture is a 1440x940 viewport, shrunk to 1600px wide. */
 const HERO_CAPTURE = 1600;
+const HERO_CAPTURE_HEIGHT = 1044;
+/** The page's own background, which is where a crop is meant to end. */
+const CANVAS = { r: 248, g: 247, b: 242 };
 
 /**
  * The part of the app the card shows, in the capture's own pixels: the
@@ -87,9 +93,34 @@ async function headline(): Promise<string> {
 async function shot(): Promise<Buffer> {
   const image = sharp(await readFile(HERO));
   const meta = await image.metadata();
-  if (meta.width !== HERO_CAPTURE) {
+  // The capture is resized to a fixed width, so the width alone says
+  // nothing about the layout; its height does (a narrower viewport is
+  // taller once it is scaled to the same width).
+  if (meta.width !== HERO_CAPTURE || meta.height !== HERO_CAPTURE_HEIGHT) {
     throw new Error(
-      `${HERO} is ${meta.width}px wide, not ${HERO_CAPTURE}: the capture moved, so the card's crop needs new numbers`,
+      `${HERO} is ${meta.width}x${meta.height}, not ${HERO_CAPTURE}x${HERO_CAPTURE_HEIGHT}: the capture was taken differently, so the card's crop needs new numbers`,
+    );
+  }
+  // The crop is meant to end in the gap between two expense rows, so the
+  // last row of pixels is the page's background. A crop that lands inside
+  // a row would cut a receipt in half, and this is where that shows up.
+  const { data } = await image
+    .clone()
+    .extract({
+      left: Math.round((CROP.left + CROP.right) / 2),
+      top: CROP.bottom - 1,
+      width: 1,
+      height: 1,
+    })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const background =
+    Math.abs(data[0]! - CANVAS.r) < 4 &&
+    Math.abs(data[1]! - CANVAS.g) < 4 &&
+    Math.abs(data[2]! - CANVAS.b) < 4;
+  if (!background) {
+    throw new Error(
+      `${HERO}: the crop's last row is not the page background, so it lands inside an expense row: the card's crop numbers need revisiting`,
     );
   }
   return image
