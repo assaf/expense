@@ -83,7 +83,10 @@ interface Coll {
  * the v8 contract has no such default, so the shim mints a ulid. */
 const CLIENT_GENERATED_ID_MODELS = new Set(["ReceiptExtraction"]);
 
-/** v7 model names → v8 contract model names. */
+/** Model accessor names → v8 contract model names. The accessors keep the
+ * v7 camelCase shape; the models added in v8 (emailRuleRemoval,
+ * inboundEmailCooldown, insightConversation, location, warranty) are here
+ * too, because the tests (and the seed) reach them by name. */
 const MODEL_NAMES: Record<string, string> = {
   account: "Account",
   authAttempt: "AuthAttempt",
@@ -99,6 +102,7 @@ const MODEL_NAMES: Record<string, string> = {
   inboundEmailCooldown: "InboundEmailCooldown",
   inboundSender: "InboundSender",
   inboundSenderVerification: "InboundSenderVerification",
+  insightConversation: "InsightConversation",
   location: "Location",
   oAuthClient: "OAuthClient",
   reconciliationRun: "ReconciliationRun",

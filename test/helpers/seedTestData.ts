@@ -3,7 +3,13 @@
  * known expenses/reports/categories/settings. Requires Postgres running
  * locally (the schema is created by `pnpm test:db:push`; globalSetup ensures
  * it before seeding). Idempotent: replaces all rows on each call. Foreign
- * keys cascade, so deleting accounts wipes everything.
+ * keys cascade, so deleting accounts wipes everything except the tables
+ * with no account FK that hold seeded state (the email rules, the mint
+ * cooldown, the insights transcript), which are wiped explicitly below,
+ * plus the lockout and throttle counters, which are per-run state rather
+ * than seed state and are wiped for the same reason. A model added to the
+ * contract with no account FK needs the same treatment, or the next test
+ * file inherits its rows.
  */
 import { ulid } from "ulid";
 import { legacyClient, makeTestClient } from "./legacyClient";
@@ -39,6 +45,20 @@ export async function seedTestData() {
   // by design) — without an explicit wipe, rows from a previous run
   // suppress this run's first mints.
   await testPrisma.inboundEmailCooldown.deleteMany({});
+  // The insights transcript has no account FK either (it is keyed by user,
+  // and the account-close path deletes those rows by hand for the same
+  // reason). The account wipe above cannot reach it, so a transcript an
+  // earlier file wrote for the seeded user survives into the next file:
+  // /insights then renders that transcript instead of the opening starter,
+  // which is what drifted the insights screenshot.
+  await testPrisma.insightConversation.deleteMany({});
+  // The lockout and throttle counters are keyed by an email or an IP
+  // (global by design), so no account FK reaches them either. A lock an
+  // earlier file left behind stays live for the next file and refuses its
+  // request: test/insights-route.test.ts trips the insights-write:user_test1
+  // lock on purpose and never clears it, and the anonymous per-IP budgets
+  // fill up as tests make failed attempts.
+  await testPrisma.authAttempt.deleteMany({});
   await testPrisma.account.deleteMany({});
 
   // The seeded general email rules (accountId = "", from

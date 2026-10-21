@@ -51,10 +51,12 @@ the migration policy. It now pins both variables to the test database.
 Production has RLS **enabled with no policies** on `expenses` and `users`:
 every role that does not bypass RLS is denied those rows. The app's own role
 (`postgres`) has `BYPASSRLS` and owns both tables, so the app is unaffected;
-what RLS holds back is a role that only holds table grants — a read-only
-reporting role, which has `SELECT` on `expenses` and nothing else. `anon`,
-`authenticated`, `authenticator` and `service_role` hold no grants on either
-table, so no API path is affected.
+what RLS holds back is a read-only reporting role, which holds `SELECT` on ten
+tables (accounts, categories, duplicate_dismissals, email_process_log,
+email_rules, expenses, inbound_senders, mileage_rates, receipt_extractions,
+reconciliation_runs) — `expenses` is the only one of them under RLS, so it is
+the only one it cannot read. `anon`, `authenticated`, `authenticator` and
+`service_role` hold no grants on either table, so no API path is affected.
 
 The contract declares it (`@@rls` on both models, no `policy_*` blocks, which
 is what a deny-all looks like) because the CLI compares the live

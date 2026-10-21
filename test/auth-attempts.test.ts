@@ -5,6 +5,7 @@ import {
   AUTH_LOCK_MS,
   AUTH_THRESHOLD,
   AUTH_WINDOW_MS,
+  authLockedUntil,
   isLocked,
   nextFailureState,
   recordAuthFailure,
@@ -15,6 +16,7 @@ import {
   guardAnonymousAction,
   recordAnonymousAttempt,
 } from "~/lib/auth.server";
+import { seedTestData } from "./helpers/seedTestData";
 
 /**
  * Window/threshold rules for the brute-force lockout (see auth-attempts.ts):
@@ -269,5 +271,31 @@ describe("sweepExpiredRows", () => {
     await prisma.orm.public.AuthAttempt.where((a) =>
       a.key.in(TEST_KEYS),
     ).deleteAll();
+  });
+});
+
+describe("the per-file reseed", () => {
+  // The counters are keyed by an email or an IP, not by an account, so the
+  // seed's account wipe cannot reach them. A lock an earlier file left
+  // behind refuses the next file's attempts: the insights write budget
+  // trips one on purpose, and the anonymous per-IP budgets fill up as
+  // tests make failed attempts.
+  it("clears the counters, so a file cannot inherit the previous one's lockout", async () => {
+    const key = "reseed:lockout";
+    try {
+      for (let i = 0; i < AUTH_THRESHOLD; i += 1) {
+        await recordAuthFailure(key, OPTIONS, T0);
+      }
+      expect(await authLockedUntil(key, T0)).not.toBeNull();
+
+      await seedTestData();
+
+      expect(await authLockedUntil(key, T0)).toBeNull();
+      expect(await countKey(key)).toBe(0);
+    } finally {
+      await prisma.orm.public.AuthAttempt.where((a) =>
+        a.key.eq(key),
+      ).deleteAll();
+    }
   });
 });

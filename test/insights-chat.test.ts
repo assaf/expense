@@ -8,13 +8,13 @@ import {
 } from "~/lib/db/insights-chat";
 import { db } from "~/lib/prisma.server";
 import { asJson, nowWire } from "~/lib/db/wire";
-import { TEST_ACCOUNT_ID } from "./helpers/seedTestData";
+import { TEST_ACCOUNT_ID, seedTestData } from "./helpers/seedTestData";
 
 /**
  * The stored transcript: appends and the "New chat" cap. These use a
  * throwaway user id per test (the table has no foreign key, and the
  * insights-route suite asserts on the seeded user's own transcripts), and
- * clean up after themselves because a reseed does not clear the table.
+ * clean up after themselves so one case cannot see another's rows.
  */
 function freshUser(): string {
   return `chat-test-${ulid()}`;
@@ -199,5 +199,23 @@ describe("insights transcript", () => {
       .select("id")
       .all();
     expect(kept.length).toBe(50);
+  });
+});
+
+describe("the per-file reseed", () => {
+  // The transcript table has no account FK (the account-close path deletes
+  // those rows by hand for the same reason), so the seed's account wipe
+  // cannot reach it. A transcript an earlier file wrote for the seeded user
+  // used to survive into the next file, where /insights rendered it instead
+  // of the opening starter — the drift this case pins.
+  it("clears transcripts, so a file cannot inherit the previous one's chat", async () => {
+    const userId = `chat-test-${ulid()}`;
+    await startNewConversation(userId, TEST_ACCOUNT_ID);
+    await appendExchange(userId, TEST_ACCOUNT_ID, exchange("leftover"));
+    expect(await readLatestConversation(userId)).not.toBeNull();
+
+    await seedTestData();
+
+    expect(await readLatestConversation(userId)).toBeNull();
   });
 });
