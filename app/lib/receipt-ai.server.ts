@@ -585,13 +585,16 @@ export function maybeAlertLlmUnusable(err: unknown, now = Date.now()): void {
     text:
       `Receipt extraction is failing: ${cause}\n\n` +
       `Error: ${err.message}\n\n` +
-      "Forwarded receipts will stay in the Receipts folder (and bank " +
-      "alerts in the Inbox) until this is fixed. Sentry has the details.",
+      "Receipts are still captured, but without the model the merchant " +
+      "and category may be left blank (local OCR fills the amount when it " +
+      "can). Fix the key to restore full extraction. Sentry has the details.",
     html:
       `<p>Receipt extraction is failing: <strong>${escapeHtml(cause)}</strong>.</p>` +
       `<p>Error: <code>${escapeHtml(err.message)}</code></p>` +
-      "<p>Forwarded receipts will stay in the Receipts folder (and bank " +
-      "alerts in the Inbox) until this is fixed. Sentry has the details.</p>",
+      "<p>Receipts are still captured, but without the model the merchant " +
+      "and category may be left blank (local OCR fills the amount when it " +
+      "can). Fix the key to restore full extraction. Sentry has the " +
+      "details.</p>",
   }).catch((sendErr) =>
     console.error("[llm] availability alert failed:", sendErr),
   );

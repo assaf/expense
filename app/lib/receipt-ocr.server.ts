@@ -16,6 +16,7 @@ import { readExtractionContext } from "~/lib/db/extraction-context";
 import {
   composeLocalDescription,
   extractReceipt,
+  LLMError,
   parseReceiptAmount,
   resolveExtraction,
   tryKnownMerchantExtraction,
@@ -576,6 +577,37 @@ export async function prepareUploadOr400(
  * inbound-email path; a corrupt/undecodable PDF throws here and callers
  * decide the fate (the draft flow stores nothing and surfaces the error).
  */
+
+/**
+ * Best-effort result from receipt text alone, no model call: the
+ * known-merchant memory fills merchant/category/report, the deterministic
+ * amount parse fills the total, and everything else stays empty. The floor
+ * when the model is unavailable, so a receipt is captured instead of
+ * failing.
+ */
+function localExtraction(
+  text: string,
+  known: ReadonlyMap<string, KnownMerchant> | undefined,
+): ExtractionResult {
+  const knownMerchant = known ? tryKnownMerchantExtraction(text, known) : null;
+  if (knownMerchant) return knownMerchant;
+  const amount = parseReceiptAmount(text);
+  return {
+    isReceipt: true,
+    merchant: "",
+    description: composeLocalDescription("", text),
+    amount: amount?.amount ?? "",
+    currency: amount?.currency ?? "USD",
+    category: "",
+    report: "",
+    confidence: "low",
+    notes:
+      amount === null
+        ? "The receipt AI was unavailable and no total was read."
+        : "The receipt AI was unavailable; only the total was read.",
+  };
+}
+
 export async function extractFromImage(input: {
   accountId: string;
   buffer: Buffer;
@@ -593,33 +625,45 @@ export async function extractFromImage(input: {
     const png = await renderPdfToPng(input.buffer);
     const known = input.knownMerchants;
     const skipped = known ? tryKnownMerchantExtraction(pdfText, known) : null;
-    const result =
-      (skipped
-        ? {
-            ...skipped,
-            // The skip must not lose the receipt's own context (bill ref,
-            // billed account, Apple plan name). No subject here; the body
-            // text alone carries the Apple markers.
-            description: composeLocalDescription("", pdfText),
-          }
-        : null) ??
-      (pdfText.trim().length >= 20
-        ? await extractReceipt({
-            accountId: input.accountId,
-            text: pdfText,
-            categories: input.categories,
-            reports: input.reports,
-          })
-        : (
-            await extractFromImage({
-              accountId: input.accountId,
-              buffer: png,
-              mime: "image/png",
-              categories: input.categories,
-              reports: input.reports,
-              knownMerchants: known,
-            })
-          ).result);
+    let result: ExtractionResult;
+    if (skipped) {
+      // The skip must not lose the receipt's own context (bill ref,
+      // billed account, Apple plan name). No subject here; the body text
+      // alone carries the Apple markers.
+      result = {
+        ...skipped,
+        description: composeLocalDescription("", pdfText),
+      };
+    } else if (pdfText.trim().length >= 20) {
+      try {
+        result = await extractReceipt({
+          accountId: input.accountId,
+          text: pdfText,
+          categories: input.categories,
+          reports: input.reports,
+        });
+      } catch (err) {
+        // Only a model failure degrades to a local parse; a DB or decode
+        // error is not "AI unavailable" and must surface.
+        if (!(err instanceof LLMError)) throw err;
+        console.error(
+          "[receipt-ocr] PDF text extraction failed; using local parse",
+          err,
+        );
+        result = localExtraction(pdfText, known);
+      }
+    } else {
+      result = (
+        await extractFromImage({
+          accountId: input.accountId,
+          buffer: png,
+          mime: "image/png",
+          categories: input.categories,
+          reports: input.reports,
+          knownMerchants: known,
+        })
+      ).result;
+    }
     return {
       result,
       text: pdfText,
@@ -645,44 +689,77 @@ export async function extractFromImage(input: {
       reports: input.reports,
     });
   };
-  // OCR the stored image and extract only when the text has enough
-  // structure to name a total (same floor as the PDF path). Sets text
-  // either way: the caller's cache key and skip log carry the OCR output.
-  const extractFromOcr = async (): Promise<void> => {
-    text = await ocrImage(stored.buffer);
+  // OCR the stored image and, when asked, run the model's text extraction
+  // over it. `useModel` is false on the "auto" fallback: the vision call
+  // just failed, so the (already failing) provider is not asked a second
+  // time. Sets text either way: the caller's cache key and skip log carry
+  // the OCR output.
+  const extractFromOcr = async (useModel: boolean): Promise<void> => {
+    try {
+      text = await ocrImage(stored.buffer);
+    } catch (err) {
+      // tesseract can fail too (its CDN fetch in a cold serverless
+      // function); that must not stop the capture, which still files with
+      // empty fields.
+      console.error("[receipt-ocr] OCR failed", err);
+      text = "";
+    }
     const usableOcr =
       text.trim().length >= 20 && parseReceiptAmount(text) !== null;
-    if (usableOcr) {
-      result = await extractReceipt({
-        accountId: input.accountId,
-        text,
-        categories: input.categories,
-        reports: input.reports,
-      });
+    if (useModel && usableOcr) {
+      try {
+        result = await extractReceipt({
+          accountId: input.accountId,
+          text,
+          categories: input.categories,
+          reports: input.reports,
+        });
+        return;
+      } catch (err) {
+        // Only a model failure degrades to a local parse; anything else
+        // (a DB error) is not "AI unavailable" and must surface.
+        if (!(err instanceof LLMError)) throw err;
+        console.error(
+          "[receipt-ocr] text extraction failed; using local parse",
+          err,
+        );
+      }
     }
+    result = localExtraction(text, input.knownMerchants);
   };
   if (RECEIPT_OCR_MODE === "deepseek") {
-    result = await visionExtraction();
+    // Vision only, no local OCR: a model failure still accepts the receipt
+    // with empty fields rather than failing the capture.
+    try {
+      result = await visionExtraction();
+    } catch (err) {
+      if (!(err instanceof LLMError)) throw err;
+      console.error(
+        "[receipt-ocr] vision failed; no OCR fallback in deepseek mode",
+        err,
+      );
+      result = localExtraction("", input.knownMerchants);
+    }
   } else if (RECEIPT_OCR_MODE === "tesseract") {
-    // Local OCR only: extract whenever the text has enough structure to
-    // name a total (same floor as the PDF path).
-    await extractFromOcr();
+    // Local OCR reader, model structuring, with the local fallback when
+    // the model is down.
+    await extractFromOcr(true);
   } else {
     // "auto" mode: the LLM reads the image; tesseract runs only when the
-    // provider errors. The model is the better reader for photocopies,
-    // glare, and skew, so a weak vision result stands rather than
-    // spending local OCR CPU on a rescue it would likely miss anyway.
+    // provider errors and builds a local result rather than asking the
+    // provider a second time. The model is the better reader for
+    // photocopies, glare, and skew, so a weak vision result stands rather
+    // than spending local OCR CPU on a rescue it would likely miss anyway.
     try {
       result = await visionExtraction();
     } catch (err) {
       console.error("[receipt-ocr] vision failed; falling back to OCR", err);
-      await extractFromOcr();
+      await extractFromOcr(false);
     }
   }
   if (!result) {
-    // Unreachable: every mode above either sets a result or throws (deepseek
-    // and auto rethrow when nothing else produced one). Guards the non-null
-    // return contract for callers.
+    // Unreachable: every mode sets a result or throws a non-model error
+    // before this point. Guards the non-null return contract for callers.
     throw new Error("[receipt-ocr] extraction produced no result");
   }
   return { result, text, stored };

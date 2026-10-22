@@ -39,6 +39,10 @@ typeLabels:
   fix: "Fixed"
 
 releases:
+  - date: "2026-10-22"
+    changes:
+      - type: fix
+        text: "A receipt no longer fails when the receipt AI is down: it is filed anyway, the amount is read from the image when it can be, the merchant and category are left for you to fill in, and an email tells you the AI needs attention."
   - date: "2026-10-21"
     changes:
       - type: improvement

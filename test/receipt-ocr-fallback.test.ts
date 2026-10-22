@@ -20,9 +20,11 @@ import { extractFromImage } from "~/lib/receipt-ocr.server";
  * Vision-first fallback contract for image receipts. "auto" reads the image
  * with the LLM (no local OCR CPU), and runs tesseract only when the
  * provider errors: photocopies/glare/skew are the vision cases anyway, so a
- * weak vision result stands. The LLM is stubbed: the request body's user
- * content is a plain string for text calls, an array with an image_url for
- * vision calls.
+ * weak vision result stands. When the provider does error, the fallback is
+ * local only — tesseract reads the image and the deterministic amount parse
+ * fills the total, with no second model call, so a receipt is still
+ * captured. The LLM is stubbed: the request body's user content is a plain
+ * string for text calls, an array with an image_url for vision calls.
  */
 
 const createWorkerMock = vi.mocked(createWorker);
@@ -111,7 +113,7 @@ describe("receipt vision-first fallback (auto)", () => {
     expect(result.amount).toBe("9.73");
   });
 
-  it("falls back to OCR when the vision call errors", async () => {
+  it("falls back to local OCR when the vision call errors", async () => {
     mockOcr("ACME CAFE\nMONTEREY PARK CA\nTOTAL $12.50");
     failOn = { 0: true }; // the vision call fails
 
@@ -121,12 +123,16 @@ describe("receipt vision-first fallback (auto)", () => {
       mime: "image/png",
     });
 
-    expect(llmCalls).toHaveLength(2);
-    expect(llmCalls[0]!.image).toBe(true); // vision was attempted
-    expect(llmCalls[1]!.image).toBe(false); // then OCR text extraction
+    // The failing provider is not asked a second time: tesseract reads the
+    // image and the amount is parsed locally, so the capture still files.
+    expect(llmCalls).toHaveLength(1);
+    expect(llmCalls[0]!.image).toBe(true); // only the vision call
     expect(createWorkerMock).toHaveBeenCalled();
-    expect(result.merchant).toBe("OcrCorp");
+    expect(result.isReceipt).toBe(true);
+    expect(result.merchant).toBe("");
     expect(result.amount).toBe("12.50");
+    expect(result.confidence).toBe("low");
+    expect(result.notes).toContain("receipt AI was unavailable");
   });
 
   it("keeps a weak vision verdict without running OCR", async () => {
@@ -208,16 +214,38 @@ describe("receipt vision-first fallback (auto)", () => {
     expect(stored.mime).toBe("image/png");
   });
 
-  it("rethrows when vision fails and OCR produced nothing", async () => {
+  it("still accepts the receipt when vision fails and OCR read nothing", async () => {
     mockOcr("");
     failOn = { 0: true }; // the vision call fails
 
-    await expect(
-      extractFromImage({
-        accountId: "ocr-fallback-f",
-        buffer: RECEIPT_PNG,
-        mime: "image/png",
-      }),
-    ).rejects.toThrow();
+    const { result } = await extractFromImage({
+      accountId: "ocr-fallback-f",
+      buffer: RECEIPT_PNG,
+      mime: "image/png",
+    });
+
+    // Nothing was read, but the capture still succeeds: the image is the
+    // receipt, and the fields are left for the user to fill in.
+    expect(result.isReceipt).toBe(true);
+    expect(result.merchant).toBe("");
+    expect(result.amount).toBe("");
+    expect(result.confidence).toBe("low");
+  });
+
+  it("still accepts the receipt when OCR itself fails after a vision error", async () => {
+    createWorkerMock.mockRejectedValue(new Error("tesseract CDN unreachable"));
+    failOn = { 0: true }; // the vision call fails
+
+    const { result } = await extractFromImage({
+      accountId: "ocr-fallback-h",
+      buffer: RECEIPT_PNG,
+      mime: "image/png",
+    });
+
+    // Both readers are down; the image is still the receipt.
+    expect(result.isReceipt).toBe(true);
+    expect(result.merchant).toBe("");
+    expect(result.amount).toBe("");
+    expect(result.confidence).toBe("low");
   });
 });
