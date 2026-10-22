@@ -93,6 +93,12 @@ describe("deployment-checks job graph", () => {
  * surfaced only in the migrate job, after eight minutes of tests and with the
  * deploy blocked.
  *
+ * On 2026-10-22 the rc.24 bump moved the `"ok":true` envelope behind `--json`:
+ * the default output became a pretty planner preview, so the marker this test
+ * pins on stopped appearing while the command still exited 0. The run now
+ * passes `--json`, which is the machine-readable surface and carries the
+ * success marker the guard wants.
+ *
  * These run the command each path actually runs, against the throwaway test
  * database and with `--dry-run`, so nothing is applied and the dev database in
  * `.env` is never the target: a flag the installed CLI no longer accepts fails
@@ -117,7 +123,10 @@ function dbUpdateLine(source: string): string {
 function runDbUpdateDry(line: string): { status: number | null; out: string } {
   const result = spawnSync(
     "bash",
-    ["-c", `${line} --db ${TEST_DB_URL} --dry-run`],
+    // --json keeps the success marker machine-readable: since rc.24 the
+    // default output is a pretty planner preview, and only --json still
+    // emits the `"ok":true` envelope this drift-guard pins on.
+    ["-c", `${line} --db ${TEST_DB_URL} --dry-run --json`],
     {
       // prisma.config.ts loads .env (the dev database), so both variables the
       // CLI prefers are pointed at the throwaway one for this child.
