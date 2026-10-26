@@ -98,8 +98,7 @@
     "secretlint": "^13.0.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "vite-plus": "^1.4.0"
   },
   "engines": {
     "node": ">=24"
