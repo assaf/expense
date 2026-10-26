@@ -193,7 +193,7 @@ export function addReport(
     reportsCache,
     accountId,
     addNamedRow(db.orm.public.Report, "report", accountId, name, {
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     }),
   );
 }

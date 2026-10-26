@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import postgres from "@prisma/orm-postgres/runtime";
 import { lints } from "@prisma/orm-family-sql/runtime";
 import type { Contract } from "../../prisma/contract.d";
+import { contractFromJson } from "@prisma/orm-postgres/static";
 import contractJson from "../../prisma/contract.json" with { type: "json" };
 import { DATABASE_URL } from "~/lib/env";
 
@@ -47,9 +48,9 @@ const pool = new Pool({
   connectionTimeoutMillis: 5_000,
   allowExitOnIdle: true,
 });
-
+const contract = contractFromJson(contractJson);
 const _opts = {
-  contractJson,
+  contract,
   pg: pool,
   middleware: [lints()],
   // oxlint-disable-next-line typescript/no-explicit-any

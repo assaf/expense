@@ -10,6 +10,7 @@
  * contract's `_type` column name.
  */
 import { ulid } from "ulid";
+import { contractFromJson } from "@prisma/orm-postgres/static";
 import { and, or } from "@prisma/orm-postgres/orm-client";
 import type { Contract } from "../../prisma/contract.d";
 import contractJson from "../../prisma/contract.json" with { type: "json" };
@@ -152,7 +153,7 @@ function mapWhereKeys(where: Row): Row {
       Object.assign(out, mapWhereKeys(v as Row));
       continue;
     }
-    out[mapField(k)] = v;
+    out[mapField(k)] = v instanceof Date ? v.toISOString() : v;
   }
   return out;
 }
@@ -447,9 +448,10 @@ export function makeTestClient(): {
     connectionTimeoutMillis: 10_000,
     allowExitOnIdle: true,
   });
+  const contract = contractFromJson(contractJson);
   return {
     client: postgres<Contract>({
-      contractJson,
+      contract,
       pg: pool,
       middleware: [],
       // oxlint-disable-next-line typescript/no-explicit-any

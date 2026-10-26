@@ -3,13 +3,12 @@
 // To regenerate, run: prisma contract emit
 import type {
   CodecTypes as PgTypes,
-  Numeric,
-  TimestampString,
-  Varchar,
+  ParameterizedOutputTypesForTypeParams as PgParameterizedOutputTypes,
 } from '@prisma/orm-postgres/target/codec-types';
 import type { QueryOperationTypes as PgTargetQueryOps } from '@prisma/orm-postgres/target/operation-types';
 
 import type {
+  ColumnTypesFromStorage,
   ContractWithTypeMaps,
   RelationKeys,
   TypeMaps as TypeMapsType,
@@ -17,6 +16,7 @@ import type {
 import type {
   Contract as ContractType,
   ExecutionHashBase,
+  FieldTypesFromDomain,
   NamespaceId,
   ProfileHashBase,
   StorageHashBase,
@@ -235,1091 +235,46 @@ type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyo
     ? Encoded
     : CodecTypes[CodecId]['json']
   : Encoded;
+type ParameterizedOutputTypeFunctions = PgParameterizedOutputTypes;
 
-export type FieldOutputTypes = {
-  readonly public: {
-    readonly Account: {
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly inviteCode: CodecTypes['pg/text@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly plan: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly AuthAttempt: {
-      readonly failures: CodecTypes['pg/int4@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly lockedUntil: TimestampString<3> | null;
-      readonly updatedAt: TimestampString<3>;
-      readonly windowStart: TimestampString<3>;
-    };
-    readonly Category: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-    };
-    readonly DuplicateDismissal: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly expenseAId: CodecTypes['pg/text@1']['output'];
-      readonly expenseBId: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-    };
-    readonly EmailConnection: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly authservId: CodecTypes['pg/text@1']['output'] | null;
-      readonly createdAt: TimestampString<3>;
-      readonly emailAddress: CodecTypes['pg/text@1']['output'];
-      readonly errorNotifiedAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly lastPushAt: TimestampString<3> | null;
-      readonly processedCount: CodecTypes['pg/int4@1']['output'];
-      readonly provider: CodecTypes['pg/text@1']['output'];
-      readonly pushExpiresAt: TimestampString<3> | null;
-      readonly pushSubscriptionId: CodecTypes['pg/text@1']['output'] | null;
-      readonly receivedCount: CodecTypes['pg/int4@1']['output'];
-      readonly refreshTokenEnc: CodecTypes['pg/text@1']['output'] | null;
-      readonly remoteAccountId: CodecTypes['pg/text@1']['output'];
-      readonly reviewScannedAt: TimestampString<3> | null;
-      readonly sessionUrl: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: CodecTypes['pg/text@1']['output'];
-      readonly tokenEnc: CodecTypes['pg/text@1']['output'];
-      readonly tokenExpiresAt: TimestampString<3> | null;
-    };
-    readonly EmailProcessLog: {
-      readonly chargeAmount: CodecTypes['pg/text@1']['output'] | null;
-      readonly connectionId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly emailId: CodecTypes['pg/text@1']['output'];
-      readonly error: CodecTypes['pg/text@1']['output'] | null;
-      readonly expenseId: CodecTypes['pg/text@1']['output'] | null;
-      readonly fromAddress: CodecTypes['pg/text@1']['output'];
-      readonly fromDisplay: CodecTypes['pg/text@1']['output'] | null;
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly matched: CodecTypes['pg/bool@1']['output'];
-      readonly outcome: CodecTypes['pg/text@1']['output'];
-      readonly reason: CodecTypes['pg/text@1']['output'] | null;
-      readonly receivedAt: TimestampString<3> | null;
-      readonly subject: CodecTypes['pg/text@1']['output'];
-    };
-    readonly EmailRule: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly sender: CodecTypes['pg/text@1']['output'];
-      readonly source: CodecTypes['pg/text@1']['output'];
-    };
-    readonly EmailRuleRemoval: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly sender: CodecTypes['pg/text@1']['output'];
-    };
-    readonly Expense: {
-      readonly _type: CodecTypes['pg/text@1']['output'];
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly amount: Numeric<10, 2> | null;
-      readonly category: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly currency: CodecTypes['pg/text@1']['output'];
-      readonly date: CodecTypes['pg/text@1']['output'];
-      readonly description: CodecTypes['pg/text@1']['output'];
-      readonly distanceMiles: Numeric<10, 2> | null;
-      readonly fxRate: Numeric<10, 6> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly imageFile: CodecTypes['pg/text@1']['output'];
-      readonly imageMime: CodecTypes['pg/text@1']['output'];
-      readonly imageSha256: CodecTypes['pg/text@1']['output'] | null;
-      readonly locations: CodecTypes['pg/jsonb@1']['output'];
-      readonly merchant: CodecTypes['pg/text@1']['output'];
-      readonly mileageType: CodecTypes['pg/text@1']['output'];
-      readonly originalAmount: Numeric<10, 2> | null;
-      readonly originalName: CodecTypes['pg/text@1']['output'];
-      readonly reconciledAt: TimestampString<3> | null;
-      readonly reconciledInRunId: CodecTypes['pg/text@1']['output'] | null;
-      readonly report: CodecTypes['pg/text@1']['output'];
-      readonly roundTrip: CodecTypes['pg/bool@1']['output'];
-      readonly route: CodecTypes['pg/jsonb@1']['output'] | null;
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly ImageBlob: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly data: CodecTypes['pg/bytea@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly mime: CodecTypes['pg/text@1']['output'];
-      readonly sha256: CodecTypes['pg/text@1']['output'] | null;
-      readonly thumbnail: CodecTypes['pg/bytea@1']['output'] | null;
-    };
-    readonly InboundEmail: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly emailId: CodecTypes['pg/text@1']['output'];
-      readonly error: CodecTypes['pg/text@1']['output'];
-      readonly status: CodecTypes['pg/text@1']['output'];
-      readonly subject: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly InboundEmailCooldown: {
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly sentAt: TimestampString<3>;
-    };
-    readonly InboundSender: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly verificationSentAt: TimestampString<3> | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly InboundSenderVerification: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly verifiedAt: TimestampString<3>;
-    };
-    readonly InsightConversation: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly messages: CodecTypes['pg/jsonb@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly LegacyPrismaMigrations: {
-      readonly appliedStepsCount: CodecTypes['pg/int4@1']['output'];
-      readonly checksum: Varchar<64>;
-      readonly finishedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly id: Varchar<36>;
-      readonly logs: CodecTypes['pg/text@1']['output'] | null;
-      readonly migrationName: Varchar<255>;
-      readonly rolledBackAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly startedAt: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
-    readonly Location: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly lat: CodecTypes['pg/float8@1']['output'] | null;
-      readonly lng: CodecTypes['pg/float8@1']['output'] | null;
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly MileageRate: {
-      readonly _type: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly endDate: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly rate: Numeric<5, 3>;
-      readonly startDate: CodecTypes['pg/text@1']['output'];
-    };
-    readonly OAuthClient: {
-      readonly authMethod: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly redirectUris: CodecTypes['pg/text@1']['output'];
-      readonly secretHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly OAuthCode: {
-      readonly challenge: CodecTypes['pg/text@1']['output'];
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly expiresAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly redirectUri: CodecTypes['pg/text@1']['output'];
-      readonly used: CodecTypes['pg/bool@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly OAuthConsent: {
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly grantedAt: TimestampString<3>;
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly OAuthToken: {
-      readonly _type: CodecTypes['pg/text@1']['output'];
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly expiresAt: TimestampString<3>;
-      readonly familyId: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedAt: TimestampString<3> | null;
-      readonly scope: CodecTypes['pg/text@1']['output'];
-      readonly tokenHash: CodecTypes['pg/text@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly ReceiptExtraction: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly hash: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly result: CodecTypes['pg/jsonb@1']['output'];
-    };
-    readonly ReconciliationRun: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly completedAt: TimestampString<3> | null;
-      readonly createdAt: TimestampString<3>;
-      readonly createdCount: CodecTypes['pg/int4@1']['output'];
-      readonly data: CodecTypes['pg/jsonb@1']['output'];
-      readonly fileHash: CodecTypes['pg/text@1']['output'];
-      readonly fileName: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly matchedCount: CodecTypes['pg/int4@1']['output'];
-      readonly rowCount: CodecTypes['pg/int4@1']['output'];
-      readonly skipped: CodecTypes['pg/jsonb@1']['output'];
-      readonly status: CodecTypes['pg/text@1']['output'];
-    };
-    readonly Report: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly closed: CodecTypes['pg/bool@1']['output'];
-      readonly createdAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-    };
-    readonly Settings: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly value: CodecTypes['pg/text@1']['output'];
-    };
-    readonly User: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly credentialsChangedAt: TimestampString<3> | null;
-      readonly email: CodecTypes['pg/text@1']['output'];
-      readonly emailVerifiedAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly marketingUnsubscribedAt: TimestampString<3> | null;
-      readonly passwordHash: CodecTypes['pg/text@1']['output'];
-      readonly passwordResetSentAt: TimestampString<3> | null;
-      readonly passwordResetTokenHash: CodecTypes['pg/text@1']['output'] | null;
-      readonly verificationSentAt: TimestampString<3> | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly Warranty: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly documents: CodecTypes['pg/jsonb@1']['output'];
-      readonly expenseId: CodecTypes['pg/text@1']['output'] | null;
-      readonly expiresAt: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly merchant: CodecTypes['pg/text@1']['output'];
-      readonly product: CodecTypes['pg/text@1']['output'];
-      readonly purchasedAt: CodecTypes['pg/text@1']['output'];
-      readonly terms: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-      readonly value: Numeric<10, 2> | null;
-    };
-  };
-};
-export type FieldInputTypes = {
-  readonly public: {
-    readonly Account: {
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly inviteCode: CodecTypes['pg/text@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly plan: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly AuthAttempt: {
-      readonly failures: CodecTypes['pg/int4@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly lockedUntil: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly windowStart: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly Category: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-    };
-    readonly DuplicateDismissal: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly expenseAId: CodecTypes['pg/text@1']['input'];
-      readonly expenseBId: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-    };
-    readonly EmailConnection: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly authservId: CodecTypes['pg/text@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailAddress: CodecTypes['pg/text@1']['input'];
-      readonly errorNotifiedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly lastPushAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly processedCount: CodecTypes['pg/int4@1']['input'];
-      readonly provider: CodecTypes['pg/text@1']['input'];
-      readonly pushExpiresAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly pushSubscriptionId: CodecTypes['pg/text@1']['input'] | null;
-      readonly receivedCount: CodecTypes['pg/int4@1']['input'];
-      readonly refreshTokenEnc: CodecTypes['pg/text@1']['input'] | null;
-      readonly remoteAccountId: CodecTypes['pg/text@1']['input'];
-      readonly reviewScannedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly sessionUrl: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: CodecTypes['pg/text@1']['input'];
-      readonly tokenEnc: CodecTypes['pg/text@1']['input'];
-      readonly tokenExpiresAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-    };
-    readonly EmailProcessLog: {
-      readonly chargeAmount: CodecTypes['pg/text@1']['input'] | null;
-      readonly connectionId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailId: CodecTypes['pg/text@1']['input'];
-      readonly error: CodecTypes['pg/text@1']['input'] | null;
-      readonly expenseId: CodecTypes['pg/text@1']['input'] | null;
-      readonly fromAddress: CodecTypes['pg/text@1']['input'];
-      readonly fromDisplay: CodecTypes['pg/text@1']['input'] | null;
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly matched: CodecTypes['pg/bool@1']['input'];
-      readonly outcome: CodecTypes['pg/text@1']['input'];
-      readonly reason: CodecTypes['pg/text@1']['input'] | null;
-      readonly receivedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly subject: CodecTypes['pg/text@1']['input'];
-    };
-    readonly EmailRule: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly sender: CodecTypes['pg/text@1']['input'];
-      readonly source: CodecTypes['pg/text@1']['input'];
-    };
-    readonly EmailRuleRemoval: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly sender: CodecTypes['pg/text@1']['input'];
-    };
-    readonly Expense: {
-      readonly _type: CodecTypes['pg/text@1']['input'];
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly amount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly category: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly currency: CodecTypes['pg/text@1']['input'];
-      readonly date: CodecTypes['pg/text@1']['input'];
-      readonly description: CodecTypes['pg/text@1']['input'];
-      readonly distanceMiles: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly fxRate: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly imageFile: CodecTypes['pg/text@1']['input'];
-      readonly imageMime: CodecTypes['pg/text@1']['input'];
-      readonly imageSha256: CodecTypes['pg/text@1']['input'] | null;
-      readonly locations: CodecTypes['pg/jsonb@1']['input'];
-      readonly merchant: CodecTypes['pg/text@1']['input'];
-      readonly mileageType: CodecTypes['pg/text@1']['input'];
-      readonly originalAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly originalName: CodecTypes['pg/text@1']['input'];
-      readonly reconciledAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly reconciledInRunId: CodecTypes['pg/text@1']['input'] | null;
-      readonly report: CodecTypes['pg/text@1']['input'];
-      readonly roundTrip: CodecTypes['pg/bool@1']['input'];
-      readonly route: CodecTypes['pg/jsonb@1']['input'] | null;
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly ImageBlob: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly data: CodecTypes['pg/bytea@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly mime: CodecTypes['pg/text@1']['input'];
-      readonly sha256: CodecTypes['pg/text@1']['input'] | null;
-      readonly thumbnail: CodecTypes['pg/bytea@1']['input'] | null;
-    };
-    readonly InboundEmail: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailId: CodecTypes['pg/text@1']['input'];
-      readonly error: CodecTypes['pg/text@1']['input'];
-      readonly status: CodecTypes['pg/text@1']['input'];
-      readonly subject: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly InboundEmailCooldown: {
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly sentAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly InboundSender: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly verificationSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly InboundSenderVerification: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly verifiedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly InsightConversation: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly messages: CodecTypes['pg/jsonb@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly LegacyPrismaMigrations: {
-      readonly appliedStepsCount: CodecTypes['pg/int4@1']['input'];
-      readonly checksum: CodecTypes['sql/varchar@1']['input'];
-      readonly finishedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly id: CodecTypes['sql/varchar@1']['input'];
-      readonly logs: CodecTypes['pg/text@1']['input'] | null;
-      readonly migrationName: CodecTypes['sql/varchar@1']['input'];
-      readonly rolledBackAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly startedAt: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
-    readonly Location: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly lat: CodecTypes['pg/float8@1']['input'] | null;
-      readonly lng: CodecTypes['pg/float8@1']['input'] | null;
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly MileageRate: {
-      readonly _type: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly endDate: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly rate: CodecTypes['pg/numeric@1']['input'];
-      readonly startDate: CodecTypes['pg/text@1']['input'];
-    };
-    readonly OAuthClient: {
-      readonly authMethod: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly redirectUris: CodecTypes['pg/text@1']['input'];
-      readonly secretHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly OAuthCode: {
-      readonly challenge: CodecTypes['pg/text@1']['input'];
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly expiresAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly redirectUri: CodecTypes['pg/text@1']['input'];
-      readonly used: CodecTypes['pg/bool@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly OAuthConsent: {
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly grantedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly OAuthToken: {
-      readonly _type: CodecTypes['pg/text@1']['input'];
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly expiresAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly familyId: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly scope: CodecTypes['pg/text@1']['input'];
-      readonly tokenHash: CodecTypes['pg/text@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly ReceiptExtraction: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly hash: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly result: CodecTypes['pg/jsonb@1']['input'];
-    };
-    readonly ReconciliationRun: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly completedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly createdCount: CodecTypes['pg/int4@1']['input'];
-      readonly data: CodecTypes['pg/jsonb@1']['input'];
-      readonly fileHash: CodecTypes['pg/text@1']['input'];
-      readonly fileName: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly matchedCount: CodecTypes['pg/int4@1']['input'];
-      readonly rowCount: CodecTypes['pg/int4@1']['input'];
-      readonly skipped: CodecTypes['pg/jsonb@1']['input'];
-      readonly status: CodecTypes['pg/text@1']['input'];
-    };
-    readonly Report: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly closed: CodecTypes['pg/bool@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-    };
-    readonly Settings: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly value: CodecTypes['pg/text@1']['input'];
-    };
-    readonly User: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly credentialsChangedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly email: CodecTypes['pg/text@1']['input'];
-      readonly emailVerifiedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly marketingUnsubscribedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly passwordHash: CodecTypes['pg/text@1']['input'];
-      readonly passwordResetSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly passwordResetTokenHash: CodecTypes['pg/text@1']['input'] | null;
-      readonly verificationSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly Warranty: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly documents: CodecTypes['pg/jsonb@1']['input'];
-      readonly expenseId: CodecTypes['pg/text@1']['input'] | null;
-      readonly expiresAt: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly merchant: CodecTypes['pg/text@1']['input'];
-      readonly product: CodecTypes['pg/text@1']['input'];
-      readonly purchasedAt: CodecTypes['pg/text@1']['input'];
-      readonly terms: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly value: CodecTypes['pg/numeric@1']['input'] | null;
-    };
-  };
-};
-export type StorageColumnTypes = {
-  readonly public: {
-    readonly _prisma_migrations: {
-      readonly applied_steps_count: CodecTypes['pg/int4@1']['output'];
-      readonly checksum: Varchar<64>;
-      readonly finished_at: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly id: Varchar<36>;
-      readonly logs: CodecTypes['pg/text@1']['output'] | null;
-      readonly migration_name: Varchar<255>;
-      readonly rolled_back_at: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-      readonly started_at: CodecTypes['pg/timestamptz-string@1']['output'];
-    };
-    readonly accounts: {
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly inviteCode: CodecTypes['pg/text@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly plan: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly auth_attempts: {
-      readonly failures: CodecTypes['pg/int4@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly lockedUntil: TimestampString<3> | null;
-      readonly updatedAt: TimestampString<3>;
-      readonly windowStart: TimestampString<3>;
-    };
-    readonly categories: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-    };
-    readonly duplicate_dismissals: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly expenseAId: CodecTypes['pg/text@1']['output'];
-      readonly expenseBId: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-    };
-    readonly email_connections: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly authservId: CodecTypes['pg/text@1']['output'] | null;
-      readonly createdAt: TimestampString<3>;
-      readonly emailAddress: CodecTypes['pg/text@1']['output'];
-      readonly errorNotifiedAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly lastPushAt: TimestampString<3> | null;
-      readonly processedCount: CodecTypes['pg/int4@1']['output'];
-      readonly provider: CodecTypes['pg/text@1']['output'];
-      readonly pushExpiresAt: TimestampString<3> | null;
-      readonly pushSubscriptionId: CodecTypes['pg/text@1']['output'] | null;
-      readonly receivedCount: CodecTypes['pg/int4@1']['output'];
-      readonly refreshTokenEnc: CodecTypes['pg/text@1']['output'] | null;
-      readonly remoteAccountId: CodecTypes['pg/text@1']['output'];
-      readonly reviewScannedAt: TimestampString<3> | null;
-      readonly sessionUrl: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: CodecTypes['pg/text@1']['output'];
-      readonly tokenEnc: CodecTypes['pg/text@1']['output'];
-      readonly tokenExpiresAt: TimestampString<3> | null;
-    };
-    readonly email_process_log: {
-      readonly chargeAmount: CodecTypes['pg/text@1']['output'] | null;
-      readonly connectionId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly emailId: CodecTypes['pg/text@1']['output'];
-      readonly error: CodecTypes['pg/text@1']['output'] | null;
-      readonly expenseId: CodecTypes['pg/text@1']['output'] | null;
-      readonly fromAddress: CodecTypes['pg/text@1']['output'];
-      readonly fromDisplay: CodecTypes['pg/text@1']['output'] | null;
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly matched: CodecTypes['pg/bool@1']['output'];
-      readonly outcome: CodecTypes['pg/text@1']['output'];
-      readonly reason: CodecTypes['pg/text@1']['output'] | null;
-      readonly receivedAt: TimestampString<3> | null;
-      readonly subject: CodecTypes['pg/text@1']['output'];
-    };
-    readonly email_rule_removals: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly sender: CodecTypes['pg/text@1']['output'];
-    };
-    readonly email_rules: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly sender: CodecTypes['pg/text@1']['output'];
-      readonly source: CodecTypes['pg/text@1']['output'];
-    };
-    readonly expenses: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly amount: Numeric<10, 2> | null;
-      readonly category: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly currency: CodecTypes['pg/text@1']['output'];
-      readonly date: CodecTypes['pg/text@1']['output'];
-      readonly description: CodecTypes['pg/text@1']['output'];
-      readonly distanceMiles: Numeric<10, 2> | null;
-      readonly fxRate: Numeric<10, 6> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly imageFile: CodecTypes['pg/text@1']['output'];
-      readonly imageMime: CodecTypes['pg/text@1']['output'];
-      readonly imageSha256: CodecTypes['pg/text@1']['output'] | null;
-      readonly locations: CodecTypes['pg/jsonb@1']['output'];
-      readonly merchant: CodecTypes['pg/text@1']['output'];
-      readonly mileageType: CodecTypes['pg/text@1']['output'];
-      readonly originalAmount: Numeric<10, 2> | null;
-      readonly originalName: CodecTypes['pg/text@1']['output'];
-      readonly reconciledAt: TimestampString<3> | null;
-      readonly reconciledInRunId: CodecTypes['pg/text@1']['output'] | null;
-      readonly report: CodecTypes['pg/text@1']['output'];
-      readonly roundTrip: CodecTypes['pg/bool@1']['output'];
-      readonly route: CodecTypes['pg/jsonb@1']['output'] | null;
-      readonly type: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly image_blobs: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly data: CodecTypes['pg/bytea@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly mime: CodecTypes['pg/text@1']['output'];
-      readonly sha256: CodecTypes['pg/text@1']['output'] | null;
-      readonly thumbnail: CodecTypes['pg/bytea@1']['output'] | null;
-    };
-    readonly inbound_email_cooldowns: {
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly sentAt: TimestampString<3>;
-    };
-    readonly inbound_emails: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly emailId: CodecTypes['pg/text@1']['output'];
-      readonly error: CodecTypes['pg/text@1']['output'];
-      readonly status: CodecTypes['pg/text@1']['output'];
-      readonly subject: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly inbound_sender_verifications: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly verifiedAt: TimestampString<3>;
-    };
-    readonly inbound_senders: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly verificationSentAt: TimestampString<3> | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly insight_conversations: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly messages: CodecTypes['pg/jsonb@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly locations: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly address: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly lat: CodecTypes['pg/float8@1']['output'] | null;
-      readonly lng: CodecTypes['pg/float8@1']['output'] | null;
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-    };
-    readonly mileage_rates: {
-      readonly createdAt: TimestampString<3>;
-      readonly endDate: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly rate: Numeric<5, 3>;
-      readonly startDate: CodecTypes['pg/text@1']['output'];
-      readonly type: CodecTypes['pg/text@1']['output'];
-    };
-    readonly oauth_clients: {
-      readonly authMethod: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-      readonly redirectUris: CodecTypes['pg/text@1']['output'];
-      readonly secretHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly oauth_codes: {
-      readonly challenge: CodecTypes['pg/text@1']['output'];
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly expiresAt: TimestampString<3>;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly redirectUri: CodecTypes['pg/text@1']['output'];
-      readonly used: CodecTypes['pg/bool@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly oauth_consents: {
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly grantedAt: TimestampString<3>;
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly oauth_tokens: {
-      readonly clientId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly expiresAt: TimestampString<3>;
-      readonly familyId: CodecTypes['pg/text@1']['output'] | null;
-      readonly revokedAt: TimestampString<3> | null;
-      readonly scope: CodecTypes['pg/text@1']['output'];
-      readonly tokenHash: CodecTypes['pg/text@1']['output'];
-      readonly type: CodecTypes['pg/text@1']['output'];
-      readonly userId: CodecTypes['pg/text@1']['output'];
-    };
-    readonly receipt_extractions: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly hash: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly result: CodecTypes['pg/jsonb@1']['output'];
-    };
-    readonly reconciliation_runs: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly completedAt: TimestampString<3> | null;
-      readonly createdAt: TimestampString<3>;
-      readonly createdCount: CodecTypes['pg/int4@1']['output'];
-      readonly data: CodecTypes['pg/jsonb@1']['output'];
-      readonly fileHash: CodecTypes['pg/text@1']['output'];
-      readonly fileName: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly matchedCount: CodecTypes['pg/int4@1']['output'];
-      readonly rowCount: CodecTypes['pg/int4@1']['output'];
-      readonly skipped: CodecTypes['pg/jsonb@1']['output'];
-      readonly status: CodecTypes['pg/text@1']['output'];
-    };
-    readonly reports: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly closed: CodecTypes['pg/bool@1']['output'];
-      readonly createdAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/int8@1']['output'];
-      readonly name: CodecTypes['pg/text@1']['output'];
-    };
-    readonly settings: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly key: CodecTypes['pg/text@1']['output'];
-      readonly value: CodecTypes['pg/text@1']['output'];
-    };
-    readonly users: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly credentialsChangedAt: TimestampString<3> | null;
-      readonly email: CodecTypes['pg/text@1']['output'];
-      readonly emailVerifiedAt: TimestampString<3> | null;
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly marketingUnsubscribedAt: TimestampString<3> | null;
-      readonly passwordHash: CodecTypes['pg/text@1']['output'];
-      readonly passwordResetSentAt: TimestampString<3> | null;
-      readonly passwordResetTokenHash: CodecTypes['pg/text@1']['output'] | null;
-      readonly verificationSentAt: TimestampString<3> | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
-    };
-    readonly warranties: {
-      readonly accountId: CodecTypes['pg/text@1']['output'];
-      readonly createdAt: TimestampString<3>;
-      readonly documents: CodecTypes['pg/jsonb@1']['output'];
-      readonly expenseId: CodecTypes['pg/text@1']['output'] | null;
-      readonly expiresAt: CodecTypes['pg/text@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly merchant: CodecTypes['pg/text@1']['output'];
-      readonly product: CodecTypes['pg/text@1']['output'];
-      readonly purchasedAt: CodecTypes['pg/text@1']['output'];
-      readonly terms: CodecTypes['pg/text@1']['output'];
-      readonly updatedAt: TimestampString<3>;
-      readonly value: Numeric<10, 2> | null;
-    };
-  };
-};
-export type StorageColumnInputTypes = {
-  readonly public: {
-    readonly _prisma_migrations: {
-      readonly applied_steps_count: CodecTypes['pg/int4@1']['input'];
-      readonly checksum: CodecTypes['sql/varchar@1']['input'];
-      readonly finished_at: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly id: CodecTypes['sql/varchar@1']['input'];
-      readonly logs: CodecTypes['pg/text@1']['input'] | null;
-      readonly migration_name: CodecTypes['sql/varchar@1']['input'];
-      readonly rolled_back_at: CodecTypes['pg/timestamptz-string@1']['input'] | null;
-      readonly started_at: CodecTypes['pg/timestamptz-string@1']['input'];
-    };
-    readonly accounts: {
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly inviteCode: CodecTypes['pg/text@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly plan: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly auth_attempts: {
-      readonly failures: CodecTypes['pg/int4@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly lockedUntil: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly windowStart: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly categories: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-    };
-    readonly duplicate_dismissals: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly expenseAId: CodecTypes['pg/text@1']['input'];
-      readonly expenseBId: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-    };
-    readonly email_connections: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly authservId: CodecTypes['pg/text@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailAddress: CodecTypes['pg/text@1']['input'];
-      readonly errorNotifiedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly lastPushAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly processedCount: CodecTypes['pg/int4@1']['input'];
-      readonly provider: CodecTypes['pg/text@1']['input'];
-      readonly pushExpiresAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly pushSubscriptionId: CodecTypes['pg/text@1']['input'] | null;
-      readonly receivedCount: CodecTypes['pg/int4@1']['input'];
-      readonly refreshTokenEnc: CodecTypes['pg/text@1']['input'] | null;
-      readonly remoteAccountId: CodecTypes['pg/text@1']['input'];
-      readonly reviewScannedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly sessionUrl: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: CodecTypes['pg/text@1']['input'];
-      readonly tokenEnc: CodecTypes['pg/text@1']['input'];
-      readonly tokenExpiresAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-    };
-    readonly email_process_log: {
-      readonly chargeAmount: CodecTypes['pg/text@1']['input'] | null;
-      readonly connectionId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailId: CodecTypes['pg/text@1']['input'];
-      readonly error: CodecTypes['pg/text@1']['input'] | null;
-      readonly expenseId: CodecTypes['pg/text@1']['input'] | null;
-      readonly fromAddress: CodecTypes['pg/text@1']['input'];
-      readonly fromDisplay: CodecTypes['pg/text@1']['input'] | null;
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly matched: CodecTypes['pg/bool@1']['input'];
-      readonly outcome: CodecTypes['pg/text@1']['input'];
-      readonly reason: CodecTypes['pg/text@1']['input'] | null;
-      readonly receivedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly subject: CodecTypes['pg/text@1']['input'];
-    };
-    readonly email_rule_removals: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly sender: CodecTypes['pg/text@1']['input'];
-    };
-    readonly email_rules: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly sender: CodecTypes['pg/text@1']['input'];
-      readonly source: CodecTypes['pg/text@1']['input'];
-    };
-    readonly expenses: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly amount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly category: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly currency: CodecTypes['pg/text@1']['input'];
-      readonly date: CodecTypes['pg/text@1']['input'];
-      readonly description: CodecTypes['pg/text@1']['input'];
-      readonly distanceMiles: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly fxRate: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly imageFile: CodecTypes['pg/text@1']['input'];
-      readonly imageMime: CodecTypes['pg/text@1']['input'];
-      readonly imageSha256: CodecTypes['pg/text@1']['input'] | null;
-      readonly locations: CodecTypes['pg/jsonb@1']['input'];
-      readonly merchant: CodecTypes['pg/text@1']['input'];
-      readonly mileageType: CodecTypes['pg/text@1']['input'];
-      readonly originalAmount: CodecTypes['pg/numeric@1']['input'] | null;
-      readonly originalName: CodecTypes['pg/text@1']['input'];
-      readonly reconciledAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly reconciledInRunId: CodecTypes['pg/text@1']['input'] | null;
-      readonly report: CodecTypes['pg/text@1']['input'];
-      readonly roundTrip: CodecTypes['pg/bool@1']['input'];
-      readonly route: CodecTypes['pg/jsonb@1']['input'] | null;
-      readonly type: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly image_blobs: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly data: CodecTypes['pg/bytea@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly mime: CodecTypes['pg/text@1']['input'];
-      readonly sha256: CodecTypes['pg/text@1']['input'] | null;
-      readonly thumbnail: CodecTypes['pg/bytea@1']['input'] | null;
-    };
-    readonly inbound_email_cooldowns: {
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly sentAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly inbound_emails: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly emailId: CodecTypes['pg/text@1']['input'];
-      readonly error: CodecTypes['pg/text@1']['input'];
-      readonly status: CodecTypes['pg/text@1']['input'];
-      readonly subject: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly inbound_sender_verifications: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly verifiedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly inbound_senders: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly verificationSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly insight_conversations: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly messages: CodecTypes['pg/jsonb@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly locations: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly address: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly lat: CodecTypes['pg/float8@1']['input'] | null;
-      readonly lng: CodecTypes['pg/float8@1']['input'] | null;
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-    };
-    readonly mileage_rates: {
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly endDate: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly rate: CodecTypes['pg/numeric@1']['input'];
-      readonly startDate: CodecTypes['pg/text@1']['input'];
-      readonly type: CodecTypes['pg/text@1']['input'];
-    };
-    readonly oauth_clients: {
-      readonly authMethod: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-      readonly redirectUris: CodecTypes['pg/text@1']['input'];
-      readonly secretHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly oauth_codes: {
-      readonly challenge: CodecTypes['pg/text@1']['input'];
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly expiresAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly redirectUri: CodecTypes['pg/text@1']['input'];
-      readonly used: CodecTypes['pg/bool@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly oauth_consents: {
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly grantedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly oauth_tokens: {
-      readonly clientId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly expiresAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly familyId: CodecTypes['pg/text@1']['input'] | null;
-      readonly revokedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly scope: CodecTypes['pg/text@1']['input'];
-      readonly tokenHash: CodecTypes['pg/text@1']['input'];
-      readonly type: CodecTypes['pg/text@1']['input'];
-      readonly userId: CodecTypes['pg/text@1']['input'];
-    };
-    readonly receipt_extractions: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly hash: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly result: CodecTypes['pg/jsonb@1']['input'];
-    };
-    readonly reconciliation_runs: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly completedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly createdCount: CodecTypes['pg/int4@1']['input'];
-      readonly data: CodecTypes['pg/jsonb@1']['input'];
-      readonly fileHash: CodecTypes['pg/text@1']['input'];
-      readonly fileName: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly matchedCount: CodecTypes['pg/int4@1']['input'];
-      readonly rowCount: CodecTypes['pg/int4@1']['input'];
-      readonly skipped: CodecTypes['pg/jsonb@1']['input'];
-      readonly status: CodecTypes['pg/text@1']['input'];
-    };
-    readonly reports: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly closed: CodecTypes['pg/bool@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/int8@1']['input'];
-      readonly name: CodecTypes['pg/text@1']['input'];
-    };
-    readonly settings: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly key: CodecTypes['pg/text@1']['input'];
-      readonly value: CodecTypes['pg/text@1']['input'];
-    };
-    readonly users: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly credentialsChangedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly email: CodecTypes['pg/text@1']['input'];
-      readonly emailVerifiedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly marketingUnsubscribedAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly passwordHash: CodecTypes['pg/text@1']['input'];
-      readonly passwordResetSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly passwordResetTokenHash: CodecTypes['pg/text@1']['input'] | null;
-      readonly verificationSentAt: CodecTypes['pg/timestamp-string@1']['input'] | null;
-      readonly verificationTokenHash: CodecTypes['pg/text@1']['input'] | null;
-    };
-    readonly warranties: {
-      readonly accountId: CodecTypes['pg/text@1']['input'];
-      readonly createdAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly documents: CodecTypes['pg/jsonb@1']['input'];
-      readonly expenseId: CodecTypes['pg/text@1']['input'] | null;
-      readonly expiresAt: CodecTypes['pg/text@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly merchant: CodecTypes['pg/text@1']['input'];
-      readonly product: CodecTypes['pg/text@1']['input'];
-      readonly purchasedAt: CodecTypes['pg/text@1']['input'];
-      readonly terms: CodecTypes['pg/text@1']['input'];
-      readonly updatedAt: CodecTypes['pg/timestamp-string@1']['input'];
-      readonly value: CodecTypes['pg/numeric@1']['input'] | null;
-    };
-  };
-};
+type FieldTypeOverrides = {};
+export type FieldOutputTypes = FieldTypesFromDomain<
+  ContractBase['domain']['namespaces'],
+  CodecTypes,
+  ParameterizedOutputTypeFunctions,
+  FieldTypeOverrides,
+  'output'
+>;
+export type FieldInputTypes = FieldTypesFromDomain<
+  ContractBase['domain']['namespaces'],
+  CodecTypes,
+  ParameterizedOutputTypeFunctions,
+  FieldTypeOverrides,
+  'input'
+>;
+type ColumnTypeOverrides = {};
+export type StorageColumnTypes = ColumnTypesFromStorage<
+  ContractBase['storage'],
+  CodecTypes,
+  ParameterizedOutputTypeFunctions,
+  ColumnTypeOverrides,
+  'output'
+>;
+export type StorageColumnInputTypes = ColumnTypesFromStorage<
+  ContractBase['storage'],
+  CodecTypes,
+  ParameterizedOutputTypeFunctions,
+  ColumnTypeOverrides,
+  'input'
+>;
 
 export namespace Models {
   export type public_Account = {
-    createdAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    inviteCode: CodecTypes['pg/text@1']['output'];
-    name: CodecTypes['pg/text@1']['output'];
-    plan: CodecTypes['pg/text@1']['output'] | null;
+    createdAt: FieldOutputTypes['public']['Account']['createdAt'];
+    id: FieldOutputTypes['public']['Account']['id'];
+    inviteCode: FieldOutputTypes['public']['Account']['inviteCode'];
+    name: FieldOutputTypes['public']['Account']['name'];
+    plan: FieldOutputTypes['public']['Account']['plan'];
     categories: public_Category[];
     duplicateDismissals: public_DuplicateDismissal[];
     emailConnections: public_EmailConnection[];
@@ -1353,112 +308,112 @@ export namespace Models {
       | 'warranties';
   };
   export type public_AuthAttempt = {
-    failures: CodecTypes['pg/int4@1']['output'];
-    key: CodecTypes['pg/text@1']['output'];
-    lockedUntil: TimestampString<3> | null;
-    updatedAt: TimestampString<3>;
-    windowStart: TimestampString<3>;
+    failures: FieldOutputTypes['public']['AuthAttempt']['failures'];
+    key: FieldOutputTypes['public']['AuthAttempt']['key'];
+    lockedUntil: FieldOutputTypes['public']['AuthAttempt']['lockedUntil'];
+    updatedAt: FieldOutputTypes['public']['AuthAttempt']['updatedAt'];
+    windowStart: FieldOutputTypes['public']['AuthAttempt']['windowStart'];
     readonly [RelationKeys]?: never;
   };
   export type public_Category = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/int8@1']['output'];
-    name: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['Category']['accountId'];
+    id: FieldOutputTypes['public']['Category']['id'];
+    name: FieldOutputTypes['public']['Category']['name'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_DuplicateDismissal = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    expenseAId: CodecTypes['pg/text@1']['output'];
-    expenseBId: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['DuplicateDismissal']['accountId'];
+    expenseAId: FieldOutputTypes['public']['DuplicateDismissal']['expenseAId'];
+    expenseBId: FieldOutputTypes['public']['DuplicateDismissal']['expenseBId'];
+    id: FieldOutputTypes['public']['DuplicateDismissal']['id'];
     account: public_Account;
     expenseA: public_Expense;
     expenseB: public_Expense;
     readonly [RelationKeys]?: 'account' | 'expenseA' | 'expenseB';
   };
   export type public_EmailConnection = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    authservId: CodecTypes['pg/text@1']['output'] | null;
-    createdAt: TimestampString<3>;
-    emailAddress: CodecTypes['pg/text@1']['output'];
-    errorNotifiedAt: TimestampString<3> | null;
-    id: CodecTypes['pg/text@1']['output'];
-    lastPushAt: TimestampString<3> | null;
-    processedCount: CodecTypes['pg/int4@1']['output'];
-    provider: CodecTypes['pg/text@1']['output'];
-    pushExpiresAt: TimestampString<3> | null;
-    pushSubscriptionId: CodecTypes['pg/text@1']['output'] | null;
-    receivedCount: CodecTypes['pg/int4@1']['output'];
-    refreshTokenEnc: CodecTypes['pg/text@1']['output'] | null;
-    remoteAccountId: CodecTypes['pg/text@1']['output'];
-    reviewScannedAt: TimestampString<3> | null;
-    sessionUrl: CodecTypes['pg/text@1']['output'] | null;
-    status: CodecTypes['pg/text@1']['output'];
-    tokenEnc: CodecTypes['pg/text@1']['output'];
-    tokenExpiresAt: TimestampString<3> | null;
+    accountId: FieldOutputTypes['public']['EmailConnection']['accountId'];
+    authservId: FieldOutputTypes['public']['EmailConnection']['authservId'];
+    createdAt: FieldOutputTypes['public']['EmailConnection']['createdAt'];
+    emailAddress: FieldOutputTypes['public']['EmailConnection']['emailAddress'];
+    errorNotifiedAt: FieldOutputTypes['public']['EmailConnection']['errorNotifiedAt'];
+    id: FieldOutputTypes['public']['EmailConnection']['id'];
+    lastPushAt: FieldOutputTypes['public']['EmailConnection']['lastPushAt'];
+    processedCount: FieldOutputTypes['public']['EmailConnection']['processedCount'];
+    provider: FieldOutputTypes['public']['EmailConnection']['provider'];
+    pushExpiresAt: FieldOutputTypes['public']['EmailConnection']['pushExpiresAt'];
+    pushSubscriptionId: FieldOutputTypes['public']['EmailConnection']['pushSubscriptionId'];
+    receivedCount: FieldOutputTypes['public']['EmailConnection']['receivedCount'];
+    refreshTokenEnc: FieldOutputTypes['public']['EmailConnection']['refreshTokenEnc'];
+    remoteAccountId: FieldOutputTypes['public']['EmailConnection']['remoteAccountId'];
+    reviewScannedAt: FieldOutputTypes['public']['EmailConnection']['reviewScannedAt'];
+    sessionUrl: FieldOutputTypes['public']['EmailConnection']['sessionUrl'];
+    status: FieldOutputTypes['public']['EmailConnection']['status'];
+    tokenEnc: FieldOutputTypes['public']['EmailConnection']['tokenEnc'];
+    tokenExpiresAt: FieldOutputTypes['public']['EmailConnection']['tokenExpiresAt'];
     account: public_Account;
     emailProcessLogs: public_EmailProcessLog[];
     readonly [RelationKeys]?: 'account' | 'emailProcessLogs';
   };
   export type public_EmailProcessLog = {
-    chargeAmount: CodecTypes['pg/text@1']['output'] | null;
-    connectionId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    emailId: CodecTypes['pg/text@1']['output'];
-    error: CodecTypes['pg/text@1']['output'] | null;
-    expenseId: CodecTypes['pg/text@1']['output'] | null;
-    fromAddress: CodecTypes['pg/text@1']['output'];
-    fromDisplay: CodecTypes['pg/text@1']['output'] | null;
-    id: CodecTypes['pg/int8@1']['output'];
-    matched: CodecTypes['pg/bool@1']['output'];
-    outcome: CodecTypes['pg/text@1']['output'];
-    reason: CodecTypes['pg/text@1']['output'] | null;
-    receivedAt: TimestampString<3> | null;
-    subject: CodecTypes['pg/text@1']['output'];
+    chargeAmount: FieldOutputTypes['public']['EmailProcessLog']['chargeAmount'];
+    connectionId: FieldOutputTypes['public']['EmailProcessLog']['connectionId'];
+    createdAt: FieldOutputTypes['public']['EmailProcessLog']['createdAt'];
+    emailId: FieldOutputTypes['public']['EmailProcessLog']['emailId'];
+    error: FieldOutputTypes['public']['EmailProcessLog']['error'];
+    expenseId: FieldOutputTypes['public']['EmailProcessLog']['expenseId'];
+    fromAddress: FieldOutputTypes['public']['EmailProcessLog']['fromAddress'];
+    fromDisplay: FieldOutputTypes['public']['EmailProcessLog']['fromDisplay'];
+    id: FieldOutputTypes['public']['EmailProcessLog']['id'];
+    matched: FieldOutputTypes['public']['EmailProcessLog']['matched'];
+    outcome: FieldOutputTypes['public']['EmailProcessLog']['outcome'];
+    reason: FieldOutputTypes['public']['EmailProcessLog']['reason'];
+    receivedAt: FieldOutputTypes['public']['EmailProcessLog']['receivedAt'];
+    subject: FieldOutputTypes['public']['EmailProcessLog']['subject'];
     connection: public_EmailConnection;
     readonly [RelationKeys]?: 'connection';
   };
   export type public_EmailRule = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    sender: CodecTypes['pg/text@1']['output'];
-    source: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['EmailRule']['accountId'];
+    createdAt: FieldOutputTypes['public']['EmailRule']['createdAt'];
+    id: FieldOutputTypes['public']['EmailRule']['id'];
+    sender: FieldOutputTypes['public']['EmailRule']['sender'];
+    source: FieldOutputTypes['public']['EmailRule']['source'];
     readonly [RelationKeys]?: never;
   };
   export type public_EmailRuleRemoval = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    sender: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['EmailRuleRemoval']['accountId'];
+    createdAt: FieldOutputTypes['public']['EmailRuleRemoval']['createdAt'];
+    sender: FieldOutputTypes['public']['EmailRuleRemoval']['sender'];
     readonly [RelationKeys]?: never;
   };
   export type public_Expense = {
-    _type: CodecTypes['pg/text@1']['output'];
-    accountId: CodecTypes['pg/text@1']['output'];
-    amount: Numeric<10, 2> | null;
-    category: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    currency: CodecTypes['pg/text@1']['output'];
-    date: CodecTypes['pg/text@1']['output'];
-    description: CodecTypes['pg/text@1']['output'];
-    distanceMiles: Numeric<10, 2> | null;
-    fxRate: Numeric<10, 6> | null;
-    id: CodecTypes['pg/text@1']['output'];
-    imageFile: CodecTypes['pg/text@1']['output'];
-    imageMime: CodecTypes['pg/text@1']['output'];
-    imageSha256: CodecTypes['pg/text@1']['output'] | null;
-    locations: CodecTypes['pg/jsonb@1']['output'];
-    merchant: CodecTypes['pg/text@1']['output'];
-    mileageType: CodecTypes['pg/text@1']['output'];
-    originalAmount: Numeric<10, 2> | null;
-    originalName: CodecTypes['pg/text@1']['output'];
-    reconciledAt: TimestampString<3> | null;
-    reconciledInRunId: CodecTypes['pg/text@1']['output'] | null;
-    report: CodecTypes['pg/text@1']['output'];
-    roundTrip: CodecTypes['pg/bool@1']['output'];
-    route: CodecTypes['pg/jsonb@1']['output'] | null;
-    updatedAt: TimestampString<3>;
+    _type: FieldOutputTypes['public']['Expense']['_type'];
+    accountId: FieldOutputTypes['public']['Expense']['accountId'];
+    amount: FieldOutputTypes['public']['Expense']['amount'];
+    category: FieldOutputTypes['public']['Expense']['category'];
+    createdAt: FieldOutputTypes['public']['Expense']['createdAt'];
+    currency: FieldOutputTypes['public']['Expense']['currency'];
+    date: FieldOutputTypes['public']['Expense']['date'];
+    description: FieldOutputTypes['public']['Expense']['description'];
+    distanceMiles: FieldOutputTypes['public']['Expense']['distanceMiles'];
+    fxRate: FieldOutputTypes['public']['Expense']['fxRate'];
+    id: FieldOutputTypes['public']['Expense']['id'];
+    imageFile: FieldOutputTypes['public']['Expense']['imageFile'];
+    imageMime: FieldOutputTypes['public']['Expense']['imageMime'];
+    imageSha256: FieldOutputTypes['public']['Expense']['imageSha256'];
+    locations: FieldOutputTypes['public']['Expense']['locations'];
+    merchant: FieldOutputTypes['public']['Expense']['merchant'];
+    mileageType: FieldOutputTypes['public']['Expense']['mileageType'];
+    originalAmount: FieldOutputTypes['public']['Expense']['originalAmount'];
+    originalName: FieldOutputTypes['public']['Expense']['originalName'];
+    reconciledAt: FieldOutputTypes['public']['Expense']['reconciledAt'];
+    reconciledInRunId: FieldOutputTypes['public']['Expense']['reconciledInRunId'];
+    report: FieldOutputTypes['public']['Expense']['report'];
+    roundTrip: FieldOutputTypes['public']['Expense']['roundTrip'];
+    route: FieldOutputTypes['public']['Expense']['route'];
+    updatedAt: FieldOutputTypes['public']['Expense']['updatedAt'];
     account: public_Account;
     dismissedAsA: public_DuplicateDismissal[];
     dismissedAsB: public_DuplicateDismissal[];
@@ -1468,203 +423,203 @@ export namespace Models {
       'account' | 'dismissedAsA' | 'dismissedAsB' | 'reconciliationRun' | 'warranties';
   };
   export type public_ImageBlob = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    data: CodecTypes['pg/bytea@1']['output'];
-    key: CodecTypes['pg/text@1']['output'];
-    mime: CodecTypes['pg/text@1']['output'];
-    sha256: CodecTypes['pg/text@1']['output'] | null;
-    thumbnail: CodecTypes['pg/bytea@1']['output'] | null;
+    accountId: FieldOutputTypes['public']['ImageBlob']['accountId'];
+    data: FieldOutputTypes['public']['ImageBlob']['data'];
+    key: FieldOutputTypes['public']['ImageBlob']['key'];
+    mime: FieldOutputTypes['public']['ImageBlob']['mime'];
+    sha256: FieldOutputTypes['public']['ImageBlob']['sha256'];
+    thumbnail: FieldOutputTypes['public']['ImageBlob']['thumbnail'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_InboundEmail = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    emailId: CodecTypes['pg/text@1']['output'];
-    error: CodecTypes['pg/text@1']['output'];
-    status: CodecTypes['pg/text@1']['output'];
-    subject: CodecTypes['pg/text@1']['output'];
-    updatedAt: TimestampString<3>;
+    accountId: FieldOutputTypes['public']['InboundEmail']['accountId'];
+    createdAt: FieldOutputTypes['public']['InboundEmail']['createdAt'];
+    emailId: FieldOutputTypes['public']['InboundEmail']['emailId'];
+    error: FieldOutputTypes['public']['InboundEmail']['error'];
+    status: FieldOutputTypes['public']['InboundEmail']['status'];
+    subject: FieldOutputTypes['public']['InboundEmail']['subject'];
+    updatedAt: FieldOutputTypes['public']['InboundEmail']['updatedAt'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_InboundEmailCooldown = {
-    address: CodecTypes['pg/text@1']['output'];
-    sentAt: TimestampString<3>;
+    address: FieldOutputTypes['public']['InboundEmailCooldown']['address'];
+    sentAt: FieldOutputTypes['public']['InboundEmailCooldown']['sentAt'];
     readonly [RelationKeys]?: never;
   };
   export type public_InboundSender = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    address: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    verificationSentAt: TimestampString<3> | null;
-    verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
+    accountId: FieldOutputTypes['public']['InboundSender']['accountId'];
+    address: FieldOutputTypes['public']['InboundSender']['address'];
+    createdAt: FieldOutputTypes['public']['InboundSender']['createdAt'];
+    verificationSentAt: FieldOutputTypes['public']['InboundSender']['verificationSentAt'];
+    verificationTokenHash: FieldOutputTypes['public']['InboundSender']['verificationTokenHash'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_InboundSenderVerification = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    address: CodecTypes['pg/text@1']['output'];
-    verifiedAt: TimestampString<3>;
+    accountId: FieldOutputTypes['public']['InboundSenderVerification']['accountId'];
+    address: FieldOutputTypes['public']['InboundSenderVerification']['address'];
+    verifiedAt: FieldOutputTypes['public']['InboundSenderVerification']['verifiedAt'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_InsightConversation = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    messages: CodecTypes['pg/jsonb@1']['output'];
-    updatedAt: TimestampString<3>;
-    userId: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['InsightConversation']['accountId'];
+    createdAt: FieldOutputTypes['public']['InsightConversation']['createdAt'];
+    id: FieldOutputTypes['public']['InsightConversation']['id'];
+    messages: FieldOutputTypes['public']['InsightConversation']['messages'];
+    updatedAt: FieldOutputTypes['public']['InsightConversation']['updatedAt'];
+    userId: FieldOutputTypes['public']['InsightConversation']['userId'];
     readonly [RelationKeys]?: never;
   };
   export type public_LegacyPrismaMigrations = {
-    appliedStepsCount: CodecTypes['pg/int4@1']['output'];
-    checksum: Varchar<64>;
-    finishedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-    id: Varchar<36>;
-    logs: CodecTypes['pg/text@1']['output'] | null;
-    migrationName: Varchar<255>;
-    rolledBackAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
-    startedAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    appliedStepsCount: FieldOutputTypes['public']['LegacyPrismaMigrations']['appliedStepsCount'];
+    checksum: FieldOutputTypes['public']['LegacyPrismaMigrations']['checksum'];
+    finishedAt: FieldOutputTypes['public']['LegacyPrismaMigrations']['finishedAt'];
+    id: FieldOutputTypes['public']['LegacyPrismaMigrations']['id'];
+    logs: FieldOutputTypes['public']['LegacyPrismaMigrations']['logs'];
+    migrationName: FieldOutputTypes['public']['LegacyPrismaMigrations']['migrationName'];
+    rolledBackAt: FieldOutputTypes['public']['LegacyPrismaMigrations']['rolledBackAt'];
+    startedAt: FieldOutputTypes['public']['LegacyPrismaMigrations']['startedAt'];
     readonly [RelationKeys]?: never;
   };
   export type public_Location = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    address: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    lat: CodecTypes['pg/float8@1']['output'] | null;
-    lng: CodecTypes['pg/float8@1']['output'] | null;
-    name: CodecTypes['pg/text@1']['output'];
-    updatedAt: TimestampString<3>;
+    accountId: FieldOutputTypes['public']['Location']['accountId'];
+    address: FieldOutputTypes['public']['Location']['address'];
+    createdAt: FieldOutputTypes['public']['Location']['createdAt'];
+    id: FieldOutputTypes['public']['Location']['id'];
+    lat: FieldOutputTypes['public']['Location']['lat'];
+    lng: FieldOutputTypes['public']['Location']['lng'];
+    name: FieldOutputTypes['public']['Location']['name'];
+    updatedAt: FieldOutputTypes['public']['Location']['updatedAt'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_MileageRate = {
-    _type: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    endDate: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/int8@1']['output'];
-    rate: Numeric<5, 3>;
-    startDate: CodecTypes['pg/text@1']['output'];
+    _type: FieldOutputTypes['public']['MileageRate']['_type'];
+    createdAt: FieldOutputTypes['public']['MileageRate']['createdAt'];
+    endDate: FieldOutputTypes['public']['MileageRate']['endDate'];
+    id: FieldOutputTypes['public']['MileageRate']['id'];
+    rate: FieldOutputTypes['public']['MileageRate']['rate'];
+    startDate: FieldOutputTypes['public']['MileageRate']['startDate'];
     readonly [RelationKeys]?: never;
   };
   export type public_OAuthClient = {
-    authMethod: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    name: CodecTypes['pg/text@1']['output'];
-    redirectUris: CodecTypes['pg/text@1']['output'];
-    secretHash: CodecTypes['pg/text@1']['output'] | null;
+    authMethod: FieldOutputTypes['public']['OAuthClient']['authMethod'];
+    createdAt: FieldOutputTypes['public']['OAuthClient']['createdAt'];
+    id: FieldOutputTypes['public']['OAuthClient']['id'];
+    name: FieldOutputTypes['public']['OAuthClient']['name'];
+    redirectUris: FieldOutputTypes['public']['OAuthClient']['redirectUris'];
+    secretHash: FieldOutputTypes['public']['OAuthClient']['secretHash'];
     oauthCodes: public_OAuthCode[];
     oauthConsents: public_OAuthConsent[];
     oauthTokens: public_OAuthToken[];
     readonly [RelationKeys]?: 'oauthCodes' | 'oauthConsents' | 'oauthTokens';
   };
   export type public_OAuthCode = {
-    challenge: CodecTypes['pg/text@1']['output'];
-    clientId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    expiresAt: TimestampString<3>;
-    id: CodecTypes['pg/text@1']['output'];
-    redirectUri: CodecTypes['pg/text@1']['output'];
-    used: CodecTypes['pg/bool@1']['output'];
-    userId: CodecTypes['pg/text@1']['output'];
+    challenge: FieldOutputTypes['public']['OAuthCode']['challenge'];
+    clientId: FieldOutputTypes['public']['OAuthCode']['clientId'];
+    createdAt: FieldOutputTypes['public']['OAuthCode']['createdAt'];
+    expiresAt: FieldOutputTypes['public']['OAuthCode']['expiresAt'];
+    id: FieldOutputTypes['public']['OAuthCode']['id'];
+    redirectUri: FieldOutputTypes['public']['OAuthCode']['redirectUri'];
+    used: FieldOutputTypes['public']['OAuthCode']['used'];
+    userId: FieldOutputTypes['public']['OAuthCode']['userId'];
     client: public_OAuthClient;
     readonly [RelationKeys]?: 'client';
   };
   export type public_OAuthConsent = {
-    clientId: CodecTypes['pg/text@1']['output'];
-    grantedAt: TimestampString<3>;
-    userId: CodecTypes['pg/text@1']['output'];
+    clientId: FieldOutputTypes['public']['OAuthConsent']['clientId'];
+    grantedAt: FieldOutputTypes['public']['OAuthConsent']['grantedAt'];
+    userId: FieldOutputTypes['public']['OAuthConsent']['userId'];
     client: public_OAuthClient;
     readonly [RelationKeys]?: 'client';
   };
   export type public_OAuthToken = {
-    _type: CodecTypes['pg/text@1']['output'];
-    clientId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    expiresAt: TimestampString<3>;
-    familyId: CodecTypes['pg/text@1']['output'] | null;
-    revokedAt: TimestampString<3> | null;
-    scope: CodecTypes['pg/text@1']['output'];
-    tokenHash: CodecTypes['pg/text@1']['output'];
-    userId: CodecTypes['pg/text@1']['output'];
+    _type: FieldOutputTypes['public']['OAuthToken']['_type'];
+    clientId: FieldOutputTypes['public']['OAuthToken']['clientId'];
+    createdAt: FieldOutputTypes['public']['OAuthToken']['createdAt'];
+    expiresAt: FieldOutputTypes['public']['OAuthToken']['expiresAt'];
+    familyId: FieldOutputTypes['public']['OAuthToken']['familyId'];
+    revokedAt: FieldOutputTypes['public']['OAuthToken']['revokedAt'];
+    scope: FieldOutputTypes['public']['OAuthToken']['scope'];
+    tokenHash: FieldOutputTypes['public']['OAuthToken']['tokenHash'];
+    userId: FieldOutputTypes['public']['OAuthToken']['userId'];
     client: public_OAuthClient;
     readonly [RelationKeys]?: 'client';
   };
   export type public_ReceiptExtraction = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    hash: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/text@1']['output'];
-    result: CodecTypes['pg/jsonb@1']['output'];
+    accountId: FieldOutputTypes['public']['ReceiptExtraction']['accountId'];
+    createdAt: FieldOutputTypes['public']['ReceiptExtraction']['createdAt'];
+    hash: FieldOutputTypes['public']['ReceiptExtraction']['hash'];
+    id: FieldOutputTypes['public']['ReceiptExtraction']['id'];
+    result: FieldOutputTypes['public']['ReceiptExtraction']['result'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_ReconciliationRun = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    completedAt: TimestampString<3> | null;
-    createdAt: TimestampString<3>;
-    createdCount: CodecTypes['pg/int4@1']['output'];
-    data: CodecTypes['pg/jsonb@1']['output'];
-    fileHash: CodecTypes['pg/text@1']['output'];
-    fileName: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/text@1']['output'];
-    matchedCount: CodecTypes['pg/int4@1']['output'];
-    rowCount: CodecTypes['pg/int4@1']['output'];
-    skipped: CodecTypes['pg/jsonb@1']['output'];
-    status: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['ReconciliationRun']['accountId'];
+    completedAt: FieldOutputTypes['public']['ReconciliationRun']['completedAt'];
+    createdAt: FieldOutputTypes['public']['ReconciliationRun']['createdAt'];
+    createdCount: FieldOutputTypes['public']['ReconciliationRun']['createdCount'];
+    data: FieldOutputTypes['public']['ReconciliationRun']['data'];
+    fileHash: FieldOutputTypes['public']['ReconciliationRun']['fileHash'];
+    fileName: FieldOutputTypes['public']['ReconciliationRun']['fileName'];
+    id: FieldOutputTypes['public']['ReconciliationRun']['id'];
+    matchedCount: FieldOutputTypes['public']['ReconciliationRun']['matchedCount'];
+    rowCount: FieldOutputTypes['public']['ReconciliationRun']['rowCount'];
+    skipped: FieldOutputTypes['public']['ReconciliationRun']['skipped'];
+    status: FieldOutputTypes['public']['ReconciliationRun']['status'];
     account: public_Account;
     expenses: public_Expense[];
     readonly [RelationKeys]?: 'account' | 'expenses';
   };
   export type public_Report = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    closed: CodecTypes['pg/bool@1']['output'];
-    createdAt: TimestampString<3> | null;
-    id: CodecTypes['pg/int8@1']['output'];
-    name: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['Report']['accountId'];
+    closed: FieldOutputTypes['public']['Report']['closed'];
+    createdAt: FieldOutputTypes['public']['Report']['createdAt'];
+    id: FieldOutputTypes['public']['Report']['id'];
+    name: FieldOutputTypes['public']['Report']['name'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_Settings = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    key: CodecTypes['pg/text@1']['output'];
-    value: CodecTypes['pg/text@1']['output'];
+    accountId: FieldOutputTypes['public']['Settings']['accountId'];
+    key: FieldOutputTypes['public']['Settings']['key'];
+    value: FieldOutputTypes['public']['Settings']['value'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_User = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    credentialsChangedAt: TimestampString<3> | null;
-    email: CodecTypes['pg/text@1']['output'];
-    emailVerifiedAt: TimestampString<3> | null;
-    id: CodecTypes['pg/text@1']['output'];
-    marketingUnsubscribedAt: TimestampString<3> | null;
-    passwordHash: CodecTypes['pg/text@1']['output'];
-    passwordResetSentAt: TimestampString<3> | null;
-    passwordResetTokenHash: CodecTypes['pg/text@1']['output'] | null;
-    verificationSentAt: TimestampString<3> | null;
-    verificationTokenHash: CodecTypes['pg/text@1']['output'] | null;
+    accountId: FieldOutputTypes['public']['User']['accountId'];
+    createdAt: FieldOutputTypes['public']['User']['createdAt'];
+    credentialsChangedAt: FieldOutputTypes['public']['User']['credentialsChangedAt'];
+    email: FieldOutputTypes['public']['User']['email'];
+    emailVerifiedAt: FieldOutputTypes['public']['User']['emailVerifiedAt'];
+    id: FieldOutputTypes['public']['User']['id'];
+    marketingUnsubscribedAt: FieldOutputTypes['public']['User']['marketingUnsubscribedAt'];
+    passwordHash: FieldOutputTypes['public']['User']['passwordHash'];
+    passwordResetSentAt: FieldOutputTypes['public']['User']['passwordResetSentAt'];
+    passwordResetTokenHash: FieldOutputTypes['public']['User']['passwordResetTokenHash'];
+    verificationSentAt: FieldOutputTypes['public']['User']['verificationSentAt'];
+    verificationTokenHash: FieldOutputTypes['public']['User']['verificationTokenHash'];
     account: public_Account;
     readonly [RelationKeys]?: 'account';
   };
   export type public_Warranty = {
-    accountId: CodecTypes['pg/text@1']['output'];
-    createdAt: TimestampString<3>;
-    documents: CodecTypes['pg/jsonb@1']['output'];
-    expenseId: CodecTypes['pg/text@1']['output'] | null;
-    expiresAt: CodecTypes['pg/text@1']['output'];
-    id: CodecTypes['pg/text@1']['output'];
-    merchant: CodecTypes['pg/text@1']['output'];
-    product: CodecTypes['pg/text@1']['output'];
-    purchasedAt: CodecTypes['pg/text@1']['output'];
-    terms: CodecTypes['pg/text@1']['output'];
-    updatedAt: TimestampString<3>;
-    value: Numeric<10, 2> | null;
+    accountId: FieldOutputTypes['public']['Warranty']['accountId'];
+    createdAt: FieldOutputTypes['public']['Warranty']['createdAt'];
+    documents: FieldOutputTypes['public']['Warranty']['documents'];
+    expenseId: FieldOutputTypes['public']['Warranty']['expenseId'];
+    expiresAt: FieldOutputTypes['public']['Warranty']['expiresAt'];
+    id: FieldOutputTypes['public']['Warranty']['id'];
+    merchant: FieldOutputTypes['public']['Warranty']['merchant'];
+    product: FieldOutputTypes['public']['Warranty']['product'];
+    purchasedAt: FieldOutputTypes['public']['Warranty']['purchasedAt'];
+    terms: FieldOutputTypes['public']['Warranty']['terms'];
+    updatedAt: FieldOutputTypes['public']['Warranty']['updatedAt'];
+    value: FieldOutputTypes['public']['Warranty']['value'];
     account: public_Account;
     expense: public_Expense | null;
     readonly [RelationKeys]?: 'account' | 'expense';
