@@ -325,11 +325,12 @@ export default function App() {
     // Link this session's pageviews/events to the signed-in user. Safe even
     window.umami?.identify?.({ id: user.id });
     // WebMCP experiment: expose the read tools to browser agents when the
-    // browser has the API (Chrome 149+ origin trial); no-op elsewhere.
+    // browser has the API (Chrome 149+ origin trial), and under `pnpm dev`,
+    // where app/lib/webmcp.ts installs the polyfill first; no-op elsewhere.
     // Dynamic import keeps the tool catalog (and zod) out of the main
     // bundle, and the presence check avoids even the chunk fetch for
     // browsers where the module would be a silent no-op.
-    if ("modelContext" in document) {
+    if ("modelContext" in document || import.meta.env.DEV) {
       void import("~/lib/webmcp").then((m) => m.registerWebMcpTools());
     }
   }, [user]);

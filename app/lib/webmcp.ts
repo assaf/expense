@@ -1,7 +1,8 @@
 /**
  * WebMCP experiment: register the app's read tools with the browser so
  * page-embedded agents can use them (Chrome 149+ origin trial; the API is
- * absent everywhere else and this module is a no-op there).
+ * absent everywhere else and this module is a no-op there, except in dev,
+ * where installDevShim() installs the polyfill so the path is exercisable).
  *
  * `document.modelContext` is the standard surface the WebMCP explainer
  * (webmachinelearning/webmcp) and Chrome ship behind the origin trial.
@@ -45,13 +46,33 @@ async function api(path: string, signal?: AbortSignal): Promise<unknown> {
 }
 
 /**
+ * Dev shim: install the WebMCP polyfill so the registration path runs in any
+ * browser under `pnpm dev`, without the Chrome origin trial. The import sits
+ * inside the `import.meta.env.DEV` block on purpose: a build folds that to
+ * `false`, which drops the block and the chunk with it (an early return would
+ * leave the import reachable and ship it). A native `document.modelContext`
+ * always wins: the polyfill returns early when one exists.
+ *
+ * The dependency is `@mcp-b/webmcp-polyfill`, a published vendor of the W3C
+ * polyfill, because `@w3c/webmcp-polyfill` is not on npm yet (its roadmap
+ * still lists publishing as a goal and the repo commits no build output).
+ */
+async function installDevShim(): Promise<void> {
+  if (import.meta.env.DEV && !("modelContext" in document)) {
+    const { installWebMCP } = await import("@mcp-b/webmcp-polyfill");
+    installWebMCP();
+  }
+}
+
+/**
  * Idempotent: skips entirely when the browser has no WebMCP API (or the
  * tools are already registered, e.g. after dev-server hot reload).
  */
 export async function registerWebMcpTools(): Promise<void> {
-  const mc = modelContext();
-  if (!mc) return;
   try {
+    await installDevShim();
+    const mc = modelContext();
+    if (!mc) return;
     const existing = new Set((await mc.getTools()).map((t) => t.name));
     // Sequential on purpose: three quick calls at page load, deterministic
     // order, and no promise aggregator gymnastics for the skip case.
@@ -72,7 +93,7 @@ export async function registerWebMcpTools(): Promise<void> {
       });
     }
   } catch (err) {
-    // The origin-trial surface is a draft API; a browser that rejects
+    // The draft surface is not stable; a browser that rejects
     // mid-registration must cost a warning, never a page error.
     console.warn("[webmcp] tool registration failed:", err);
   }

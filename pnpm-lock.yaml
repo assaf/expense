@@ -299,6 +299,9 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
+      '@mcp-b/webmcp-polyfill':
+        specifier: ^6.0.3
+        version: 6.0.3
       '@modelcontextprotocol/client':
         specifier: ^2.4.0
         version: 2.4.0
@@ -1109,6 +1112,10 @@ packages:
     resolution: {integrity: sha512-uwPAhccfFJlsfCxMYTwOdVfOz3xqyj8xYL3zJj8f0pb30tLohnnFPhLuqp4/qoEz8sNxe4SESZedcBojRefIzg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@mcp-b/webmcp-polyfill@6.0.3':
+    resolution: {integrity: sha512-pD8iKBXpDKLeYyqDcWPiNFI0JuK7/f+/RxspA6qW81kcDdabWUTt7A0fH+cJx6EIjpoHkk4o3QPci7yQPuHofA==}
+    engines: {node: '>=20'}
 
   '@modelcontextprotocol/client@2.4.0':
     resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
@@ -5404,6 +5411,9 @@ packages:
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
 
+  webmcp-types@0.1.9:
+    resolution: {integrity: sha512-ibdkppgRDkQ/nvH541YS48kVt96OiuDr+d9JHnirAtI5k0coaFdo2QqCipbXyfwrteDC6xXwPoUGC9uS5ZGwfw==}
+
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
@@ -6152,6 +6162,10 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+
+  '@mcp-b/webmcp-polyfill@6.0.3':
+    dependencies:
+      webmcp-types: 0.1.9
 
   '@modelcontextprotocol/client@2.4.0':
     dependencies:
@@ -10162,6 +10176,8 @@ snapshots:
   webdriver-bidi-protocol@1.0.1: {}
 
   webidl-conversions@3.0.1: {}
+
+  webmcp-types@0.1.9: {}
 
   whatwg-encoding@3.1.1:
     dependencies:

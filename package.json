@@ -80,6 +80,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@mcp-b/webmcp-polyfill": "^6.0.3",
     "@modelcontextprotocol/client": "^2.4.0",
     "@prisma/cli-engine": "^0.9.0",
     "@secretlint/secretlint-rule-pattern": "^13.1.0",
