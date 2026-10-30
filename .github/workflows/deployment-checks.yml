@@ -1,7 +1,9 @@
 name: deployment-checks
 
-# CI + DB migration + production deploy for every push to main. All jobs
-# live in ONE workflow on purpose:
+# CI + DB migration + production deploy for every push to main. All DEPLOY
+# jobs live in ONE workflow on purpose (the weekly report in user-report.yml
+# is the only other workflow: it exists precisely so a `schedule:` trigger
+# cannot redeploy production every week):
 #
 #   - Ordering: GitHub has no cross-workflow dependencies. Here
 #     `secretlint` runs FIRST and gates the whole pipeline (a committed

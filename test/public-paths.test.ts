@@ -98,6 +98,7 @@ const SELF_GATED_PATHS = [
   "/api/smoke",
   "/api/inbound-cron",
   "/api/email-connections-cron",
+  "/api/user-report-cron",
   "/api/email-connections-push",
   "/api/email-connections-gmail-push",
   "/api/inbound-push",

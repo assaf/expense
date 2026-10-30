@@ -329,7 +329,7 @@ server errors only ever reached Sentry locally this way). The post-deploy smoke
 check reports `Sentry.isInitialized()` and `scripts/smoke-check` warns when a
 production deployment boots with it false.
 
-Sentry cron monitors: both daily crons run through the shared `cronTick`
+Sentry cron monitors: every cron runs through the shared `cronTick`
 helper (`app/lib/cron.server.ts`), which owns the `Sentry.withMonitor`
 wrapping and an EXPLICIT `Sentry.flush()` before the route returns. The
 flush is load-bearing: the SDK's automatic `flushIfServerless` only works on
@@ -338,6 +338,16 @@ Vercel's Edge runtime (its `vercelWaitUntil` helper returns early unless
 dropped when the lambda freezes after responding and every run reports a
 monitor timeout. Never hand-roll a cron route; add a `cronTick` call with a
 new monitor name and crontab instead.
+
+Three crons exist and only two can be Vercel crons: the Hobby plan caps cron
+jobs at two, and both slots are the daily mail-ingestion crons (`vercel.json`).
+The weekly all-users report (`/api/user-report-cron`, Saturday 16:00 UTC) is
+therefore fired by `.github/workflows/user-report.yml`, which calls the
+production domain with `CRON_SECRET` and fails the run when the route answers
+anything but `{ ok: true, sent: true }` — a 200 with `sent: false` is a report
+nobody got. The monitor (`expense-user-report-cron`) is the same either way,
+because the trigger is just an HTTP caller. A fourth cron needs a decision:
+replace a Vercel cron, upgrade the plan, or schedule it from GitHub too.
 
 `checkinMargin` is set to 30 minutes because Vercel fires crons late (2-4
 minutes typically, but observed ~25 minutes late on 2026-08-29); the

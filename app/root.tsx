@@ -99,6 +99,7 @@ const SELF_GATED_PATHS: Record<string, true> = {
   "/api/smoke": true,
   "/api/inbound-cron": true,
   "/api/email-connections-cron": true,
+  "/api/user-report-cron": true,
   "/api/email-connections-push": true,
   "/api/email-connections-gmail-push": true,
   "/api/inbound-push": true,

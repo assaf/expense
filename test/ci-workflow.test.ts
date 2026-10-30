@@ -19,6 +19,7 @@ const WORKFLOW_PATH = ".github/workflows/deployment-checks.yml";
 
 interface Step {
   run?: string;
+  env?: Record<string, string>;
 }
 
 interface Job {
@@ -242,5 +243,60 @@ describe("the rollback target", () => {
     expect(source).toMatch(
       /DATABASE_URL="\$TEST_DB_URL" DATABASE_URL_UNPOOLED="\$TEST_DB_URL"/,
     );
+  });
+});
+
+/**
+ * The weekly report (app/routes/api.user-report-cron.ts) is the one cron that
+ * does not live in vercel.json: the Hobby plan caps cron jobs at two and both
+ * slots are the mail-ingestion crons, so
+ * .github/workflows/user-report.yml schedules it. Nothing at runtime checks
+ * the trigger — a schedule that drifts is silently an hour off, and a run
+ * that answers 200 with `sent: false` is a report that never left — so pin
+ * both here.
+ */
+const REPORT_WORKFLOW_PATH = ".github/workflows/user-report.yml";
+
+describe("the weekly user report", () => {
+  const report = parse(readFileSync(REPORT_WORKFLOW_PATH, "utf8")) as {
+    on: { schedule: { cron: string }[] };
+    jobs: Record<string, Job>;
+  };
+
+  it("schedules the crontab the route hands cronTick", () => {
+    const route = readFileSync("app/routes/api.user-report-cron.ts", "utf8");
+    const crontab = /crontab:\s*"([^"]+)"/.exec(route)?.[1];
+    // GitHub reads `schedule:` as UTC, the same clock cronTick's crontab is
+    // written in, so the strings are directly comparable: 16:00 UTC is 8am
+    // PST / 9am PDT on Saturday.
+    expect(crontab).toBe("0 16 * * 6");
+    expect(report.on.schedule.map((entry) => entry.cron)).toEqual([crontab]);
+  });
+
+  it("calls the production domain with the cron secret", () => {
+    const deploy = readFileSync("scripts/deploy", "utf8");
+    const domain = /PROD_DOMAIN="([^"]+)"/.exec(deploy)?.[1];
+    expect(domain).toBe("expense.labnotes.org");
+
+    const steps = report.jobs.send!.steps ?? [];
+    expect(steps[0]!.env!.CRON_SECRET).toBe("${{ secrets.CRON_SECRET }}");
+
+    const run = steps.map((step) => step.run ?? "").join("\n");
+    expect(run).toContain(`https://${domain}/api/user-report-cron`);
+    expect(run).toContain("authorization: Bearer ${CRON_SECRET}");
+    // A deployment URL sits behind Vercel SSO and would need the bypass
+    // header (the run's own comment names it, so match the header, not the
+    // word); the custom domain does not, and this run calls nothing else.
+    expect(run.toLowerCase()).not.toContain("x-vercel-protection-bypass:");
+  });
+
+  it("fails when the tick ran but the mail did not send", () => {
+    // cronTick answers 200 { ok: true, sent: false } when the mail call
+    // failed, so a status-only check reports success for a report nobody
+    // got.
+    const run = (report.jobs.send!.steps ?? [])
+      .map((step) => step.run ?? "")
+      .join("\n");
+    expect(run).toContain("r.sent !== true");
   });
 });

@@ -1,0 +1,74 @@
+name: user-report
+
+# The weekly all-users report (app/routes/api.user-report-cron.ts): one email
+# to the owner listing every account's users with their expense totals.
+#
+# A SEPARATE workflow on purpose. Adding `schedule:` to
+# deployment-checks.yml would run that whole graph — secretlint → check →
+# test → migrate prod → deploy — every week, so a scheduled report would
+# redeploy production. This file does one thing: call the cron route.
+#
+# Why not vercel.json: the Hobby plan caps cron jobs at two and both slots
+# are the mail-ingestion crons (inbound-cron, email-connections-cron), so the
+# report is scheduled here. The route still authenticates itself with
+# CRON_SECRET, so a caller that is not this workflow gets a 401, and it still
+# runs through `cronTick`, so the Sentry monitor `expense-user-report-cron`
+# reports late and failed runs exactly like the Vercel crons.
+#
+# GitHub quirks worth knowing: `schedule:` is UTC only and best-effort (runs
+# can start minutes late under load), and GitHub disables scheduled workflows
+# in a repository with no activity for 60 days — any commit or a manual run
+# re-enables it.
+
+on:
+  schedule:
+    # Saturdays 16:00 UTC = 8am PST / 9am PDT. Must match the `crontab` the
+    # route hands cronTick; test/ci-workflow.test.ts pins the two together.
+    - cron: "0 16 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    name: Send report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Call the report route
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -o pipefail
+          # The production domain (scripts/deploy PROD_DOMAIN), not a
+          # deployment URL: those sit behind Vercel SSO and would need
+          # VERCEL_PROTECTION_BYPASS.
+          URL="https://expense.labnotes.org/api/user-report-cron"
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured on this repository — the route answers 401 to every caller." >&2
+            exit 1
+          fi
+          STATUS=$(curl -sS --retry 3 --retry-delay 10 --retry-connrefused \
+              --max-time 120 -o /tmp/body -w '%{http_code}' \
+              -H "authorization: Bearer ${CRON_SECRET}" "$URL") || {
+            echo "Could not reach ${URL} (network error)." >&2
+            exit 1
+          }
+          echo "HTTP ${STATUS}"
+          cat /tmp/body; echo
+          if [ "$STATUS" != "200" ]; then
+            echo "The report route answered ${STATUS}, so no report went out. 401 = CRON_SECRET mismatch with the deployment; 503 = FASTMAIL_TOKEN is missing there; 500 = the tick itself failed (the Sentry monitor has the detail)." >&2
+            exit 1
+          fi
+          # A 200 means the tick ran, not that the mail left: the route
+          # reports { sent } from the mail call, and a failed send is exactly
+          # what this workflow exists to surface.
+          node -e '
+            const r = JSON.parse(require("node:fs").readFileSync("/tmp/body", "utf8"));
+            if (r.ok !== true || r.sent !== true) {
+              console.error("The report did not send:", r.reason ?? JSON.stringify(r));
+              process.exit(1);
+            }
+            console.log(`Report sent (${r.count} account row${r.count === 1 ? "" : "s"}).`);
+          '
