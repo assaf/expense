@@ -1,0 +1,13 @@
+diff --git a/dist/vite/node/module-runner.js b/dist/vite/node/module-runner.js
+index 3faf2ae3df7c01d2c35ec217e03dced01b182f1e..9964bc50f367ef575d704235259647d7254aac7d 100644
+--- a/dist/vite/node/module-runner.js
++++ b/dist/vite/node/module-runner.js
+@@ -357,7 +357,7 @@ function extractInlineSourceMap(code) {
+ 	let start = code.lastIndexOf(MODULE_RUNNER_SOURCEMAPPING_PREFIX);
+ 	if (start === -1) return;
+ 	let dataStart = start + MODULE_RUNNER_SOURCEMAPPING_PREFIX.length, dataEnd = code.indexOf("\n", dataStart);
+-	return dataEnd === -1 && (dataEnd = code.length), code.charCodeAt(dataEnd - 1) === 13 && dataEnd--, code.slice(dataStart, dataEnd);
++	return dataEnd === -1 && (dataEnd = code.length), (Buffer.isBuffer(code) ? code[dataEnd - 1] : code.charCodeAt(dataEnd - 1)) === 13 && dataEnd--, Buffer.isBuffer(code) ? code.subarray(dataStart, dataEnd).toString("utf-8") : code.slice(dataStart, dataEnd);
+ }
+ const prefixedBuiltins = /* @__PURE__ */ new Set([
+ 	"node:sea",

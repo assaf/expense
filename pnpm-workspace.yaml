@@ -20,6 +20,7 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
 patchedDependencies:
+  "@voidzero-dev/vite-plus-core@1.4.0": patches/@voidzero-dev__vite-plus-core@1.4.0.patch
   tesseract.js@7.0.0: patches/tesseract.js@7.0.0.patch
 # No minimumReleaseAge floor is configured, so there is nothing to exempt
 # here. The block that used to sit here named Prisma rc versions the
