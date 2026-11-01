@@ -4,12 +4,17 @@ import type { ModelAccessor } from "@prisma/orm-postgres/orm-client";
 import type { Contract } from "../../../prisma/contract.d";
 import { db } from "~/lib/prisma.server";
 import { asJson, fromIso, nowWire, toIso, toIsoOrNull } from "~/lib/db/wire";
-import { renameImageToConvention, saveImage } from "~/lib/images.server";
+import {
+  deleteImages,
+  renameImageToConvention,
+  saveImage,
+} from "~/lib/images.server";
 import { renderReceiptImage } from "~/lib/receipt-render.server";
 import { validateDateNotFuture } from "~/lib/validation";
 import { hasAmount } from "~/lib/completeness";
 import { exceedsMaxMoney } from "~/lib/money";
 import { expenseData } from "~/lib/db/expenses";
+import { isUniqueViolation } from "~/lib/db/pg-errors";
 import type {
   NewExpenseDraft,
   ReceiptExpense,
@@ -343,7 +348,12 @@ async function applyReconciliationRun(
   }
 
   // Render the new-expense receipt images up front; the transaction below
-  // must not hold a sharp/render pass.
+  // must not hold a sharp/render pass. Each render carries the row number,
+  // because the image's sha256 rides on the expense and
+  // `(accountId, imageSha256)` is unique as the double-capture backstop: two
+  // identical charges in one statement (same merchant, date, category, memo
+  // and amount) would otherwise render identical bytes and the second create
+  // would throw 23505 inside the transaction (EXPENSE-25).
   const images = new Map<
     number,
     { filename: string; mime: string; originalName: string; sha256: string }
@@ -359,7 +369,7 @@ async function applyReconciliationRun(
         draft.category ? `Category: ${draft.category}` : "",
         draft.description ? `Memo: ${draft.description}` : "",
         `Amount: $${draft.amount}`,
-        `Reconciled from ${run.fileName}`,
+        `Reconciled from ${run.fileName} (row ${i + 1})`,
       ]
         .filter(Boolean)
         .join("\n");
@@ -387,129 +397,194 @@ async function applyReconciliationRun(
     }
   }
 
-  const outcome = await db.transaction(async (tx) => {
-    let matched = 0;
-    let created = 0;
-    const errors: string[] = [];
-    const createdExpenseIds: string[] = [];
+  // Renders are saved before the transaction, so every row the completion
+  // does not turn into an expense (a row error, a lost claim, a rollback)
+  // leaves its blob behind; `createdRows` records what landed.
+  const createdRows = new Set<number>();
+  const renderedKeys = [...images].map(([index, image]) => ({
+    index,
+    key: image.filename,
+  }));
+  let outcome: CompleteReconciliationResult | null;
+  try {
+    outcome = await db.transaction(async (tx) => {
+      let matched = 0;
+      let created = 0;
+      const errors: string[] = [];
+      const createdExpenseIds: string[] = [];
 
-    // Claim the run before creating anything. The conditional update lets
-    // exactly one concurrent completion through (a double submit, a retried
-    // POST, or two tabs), so the same statement rows can't be imported twice;
-    // a rollback releases the claim along with everything else.
-    const claim = await tx.orm.public.ReconciliationRun.where((r) =>
-      and(
-        r.id.eq(runId),
-        r.accountId.eq(accountId),
-        r.status.eq("draft"),
-        r.completedAt.isNull(),
-      ),
-    ).updateAll({ completedAt: fromIso(now) });
-    if (claim.length !== 1) return null;
+      // Claim the run before creating anything. The conditional update lets
+      // exactly one concurrent completion through (a double submit, a retried
+      // POST, or two tabs), so the same statement rows can't be imported twice;
+      // a rollback releases the claim along with everything else.
+      const claim = await tx.orm.public.ReconciliationRun.where((r) =>
+        and(
+          r.id.eq(runId),
+          r.accountId.eq(accountId),
+          r.status.eq("draft"),
+          r.completedAt.isNull(),
+        ),
+      ).updateAll({ completedAt: fromIso(now) });
+      if (claim.length !== 1) return null;
 
-    for (const [i, res] of resolutions) {
-      if (res.kind === "match") {
-        // The expense must still exist, belong to this account, and not be
-        // reconciled already (the reconciledAt-null predicate makes the
-        // claim atomic, so a concurrent completion can't double-mark).
-        const updated = await tx.orm.public.Expense.where((e) =>
+      // The fingerprint column stops the same CAPTURED bytes being filed twice;
+      // a statement row's rendered image is not a capture, and an earlier
+      // reconciliation of overlapping content can already have filed the same
+      // render. One read up front turns that into a row error: an insert that
+      // hits the unique index aborts the Postgres transaction, so no row-level
+      // catch could recover from it (EXPENSE-25).
+      const renderedShas = [...images.values()].map((image) => image.sha256);
+      const filed = new Set(
+        renderedShas.length === 0
+          ? []
+          : (
+              await tx.orm.public.Expense.where((e) =>
+                and(e.accountId.eq(accountId), e.imageSha256.in(renderedShas)),
+              )
+                .select("imageSha256")
+                .all()
+            ).map((row) => row.imageSha256 ?? ""),
+      );
+
+      for (const [i, res] of resolutions) {
+        if (res.kind === "match") {
+          // The expense must still exist, belong to this account, and not be
+          // reconciled already (the reconciledAt-null predicate makes the
+          // claim atomic, so a concurrent completion can't double-mark).
+          const updated = await tx.orm.public.Expense.where((e) =>
+            and(
+              e.id.eq(res.expenseId),
+              e.accountId.eq(accountId),
+              e.reconciledAt.isNull(),
+            ),
+          ).updateAll({
+            reconciledAt: fromIso(now),
+            reconciledInRunId: runId,
+          });
+          if (updated.length === 1) {
+            matched++;
+          } else {
+            errors.push(
+              `Row ${i + 1}: the matched expense is gone or already reconciled — left unmatched.`,
+            );
+          }
+          continue;
+        }
+
+        const draft = res.draft;
+        const dateError = validateDateNotFuture(draft.date, today);
+        if (dateError) {
+          errors.push(`Row ${i + 1}: ${dateError}`);
+          continue;
+        }
+        const report = await tx.orm.public.Report.where((r) =>
           and(
-            e.id.eq(res.expenseId),
-            e.accountId.eq(accountId),
-            e.reconciledAt.isNull(),
+            r.accountId.eq(accountId),
+            r.name.eq(draft.report),
+            r.closed.eq(false),
           ),
-        ).updateAll({
+        ).first();
+        if (!report) {
+          errors.push(
+            `Row ${i + 1}: report “${draft.report}” is missing or closed.`,
+          );
+          continue;
+        }
+        if (!hasAmount(draft.amount) || exceedsMaxMoney(draft.amount)) {
+          errors.push(`Row ${i + 1}: the amount is invalid.`);
+          continue;
+        }
+        const image = images.get(i);
+        if (!image) {
+          errors.push(`Row ${i + 1}: the receipt image wasn't rendered.`);
+          continue;
+        }
+        if (filed.has(image.sha256)) {
+          errors.push(
+            `Row ${i + 1}: this receipt was already filed by an earlier reconciliation.`,
+          );
+          continue;
+        }
+
+        const expense: ReceiptExpense = {
+          id: ulid(),
+          type: "receipt",
+          date: draft.date,
+          report: draft.report,
+          category: draft.category,
+          description: draft.description,
+          amount: draft.amount,
+          merchant: draft.merchant,
+          imageFile: image.filename,
+          imageMime: image.mime,
+          originalName: image.originalName,
+          imageSha256: image.sha256,
+          // Statement rows are the card's USD charge; no conversion happened.
+          currency: "USD",
+          originalAmount: "",
+          fxRate: "",
+          reconciledAt: now,
+          createdAt: now,
+          updatedAt: now,
+        };
+        // The receipt image was saved and named by convention before the
+        // transaction (2026-08-03_<report>_<file>.png).
+        await tx.orm.public.Expense.create({
+          ...expenseData(expense),
+          accountId,
           reconciledAt: fromIso(now),
           reconciledInRunId: runId,
         });
-        if (updated.length === 1) {
-          matched++;
-        } else {
-          errors.push(
-            `Row ${i + 1}: the matched expense is gone or already reconciled — left unmatched.`,
-          );
-        }
-        continue;
+        createdRows.add(i);
+        filed.add(image.sha256);
+        createdExpenseIds.push(expense.id);
+        created++;
       }
 
-      const draft = res.draft;
-      const dateError = validateDateNotFuture(draft.date, today);
-      if (dateError) {
-        errors.push(`Row ${i + 1}: ${dateError}`);
-        continue;
-      }
-      const report = await tx.orm.public.Report.where((r) =>
-        and(
-          r.accountId.eq(accountId),
-          r.name.eq(draft.report),
-          r.closed.eq(false),
-        ),
-      ).first();
-      if (!report) {
-        errors.push(
-          `Row ${i + 1}: report “${draft.report}” is missing or closed.`,
-        );
-        continue;
-      }
-      if (!hasAmount(draft.amount) || exceedsMaxMoney(draft.amount)) {
-        errors.push(`Row ${i + 1}: the amount is invalid.`);
-        continue;
-      }
-      const image = images.get(i);
-      if (!image) {
-        errors.push(`Row ${i + 1}: the receipt image wasn't rendered.`);
-        continue;
-      }
-
-      const expense: ReceiptExpense = {
-        id: ulid(),
-        type: "receipt",
-        date: draft.date,
-        report: draft.report,
-        category: draft.category,
-        description: draft.description,
-        amount: draft.amount,
-        merchant: draft.merchant,
-        imageFile: image.filename,
-        imageMime: image.mime,
-        originalName: image.originalName,
-        imageSha256: image.sha256,
-        // Statement rows are the card's USD charge; no conversion happened.
-        currency: "USD",
-        originalAmount: "",
-        fxRate: "",
-        reconciledAt: now,
-        createdAt: now,
-        updatedAt: now,
+      const completedData: ReconciliationRunData = {
+        ...data,
+        completed: { matched, created, errors, createdExpenseIds },
       };
-      // The receipt image was saved and named by convention before the
-      // transaction (2026-08-03_<report>_<file>.png).
-      await tx.orm.public.Expense.create({
-        ...expenseData(expense),
-        accountId,
-        reconciledAt: fromIso(now),
-        reconciledInRunId: runId,
+      await tx.orm.public.ReconciliationRun.where({ id: runId }).update({
+        status: "completed",
+        completedAt: fromIso(now),
+        matchedCount: matched,
+        createdCount: created,
+        data: asJson(completedData),
       });
-      createdExpenseIds.push(expense.id);
-      created++;
-    }
-
-    const completedData: ReconciliationRunData = {
-      ...data,
-      completed: { matched, created, errors, createdExpenseIds },
-    };
-    await tx.orm.public.ReconciliationRun.where({ id: runId }).update({
-      status: "completed",
-      completedAt: fromIso(now),
-      matchedCount: matched,
-      createdCount: created,
-      data: asJson(completedData),
+      return { matched, created, errors, createdExpenseIds };
     });
-    return { matched, created, errors, createdExpenseIds };
-  });
+  } catch (error) {
+    // The rollback undid the expenses, so no render is referenced any more.
+    await deleteImages(
+      accountId,
+      renderedKeys.map((rendered) => rendered.key),
+    );
+    if (isUniqueViolation(error)) {
+      // Another completion filed the same rendered bytes between the
+      // pre-check above and this insert; nothing from this run applied.
+      return {
+        error:
+          "Another reconciliation filed one of these receipts at the same time, so nothing was filed here. Run it again to see which rows remain.",
+        result: null,
+      };
+    }
+    throw error;
+  }
 
   if (!outcome) {
+    await deleteImages(
+      accountId,
+      renderedKeys.map((rendered) => rendered.key),
+    );
     return { error: "This reconciliation is already finished.", result: null };
   }
+  // Drop the renders of rows the completion reported on rather than filed.
+  await deleteImages(
+    accountId,
+    renderedKeys
+      .filter((rendered) => !createdRows.has(rendered.index))
+      .map((rendered) => rendered.key),
+  );
   return { error: null, result: outcome };
 }

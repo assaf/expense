@@ -791,6 +791,27 @@ async function draftRun(csv = CSV, accountId = TEST_ACCOUNT_ID) {
   });
 }
 
+/** Blob keys in the test account that no expense points at: the renders a
+ * completion saves before its transaction must not be left behind when a
+ * row is skipped or the transaction rolls back. */
+async function orphanBlobKeys(): Promise<string[]> {
+  const [blobs, expenses] = await Promise.all([
+    testPrisma.imageBlob.findMany({
+      where: { accountId: TEST_ACCOUNT_ID },
+      select: { key: true },
+    }),
+    testPrisma.expense.findMany({
+      where: { accountId: TEST_ACCOUNT_ID },
+      select: { imageFile: true },
+    }),
+  ]);
+  const used = new Set(expenses.map((e) => String(e.imageFile)));
+  return blobs
+    .map((b) => String(b.key))
+    .filter((key) => !used.has(key))
+    .sort();
+}
+
 describe("reconciliation store", () => {
   it("creates a draft run and reads it back with parsed rows + matches", async () => {
     const run = await draftRun();
@@ -903,6 +924,104 @@ describe("reconciliation store", () => {
     expect(blob).toBeTruthy();
     // saveImage's normalizer re-encodes the rendered receipt as JPEG.
     expect(blob!.mime).toMatch(/^image\/(png|jpeg)$/);
+  });
+
+  it("files two identical statement rows instead of colliding on the fingerprint", async () => {
+    // A card really can carry the same charge twice on the same day. Both
+    // rows render the same receipt text, and the expense carries the
+    // rendered image's sha256, which `(accountId, imageSha256)` holds
+    // unique as the double-capture backstop: before the row number went
+    // into the render, the second create threw 23505 inside the
+    // transaction and the whole completion 500'd (EXPENSE-25).
+    const csv = [
+      "date,description,amount",
+      "2026-07-02,DOUBLE CHARGE CAFE,5.00",
+      "2026-07-02,DOUBLE CHARGE CAFE,5.00",
+    ].join("\n");
+    const run = await draftRun(csv);
+    const draft = {
+      date: "2026-07-02",
+      merchant: "Double Charge Cafe",
+      amount: "5.00",
+      report: "2026 Test",
+      category: "Testing",
+      description: "",
+    };
+    await updateReconciliationDecision(TEST_ACCOUNT_ID, run.id, 0, {
+      kind: "new",
+      draft,
+    });
+    await updateReconciliationDecision(TEST_ACCOUNT_ID, run.id, 1, {
+      kind: "new",
+      draft,
+    });
+
+    const res = await completeReconciliationRun(TEST_ACCOUNT_ID, run.id);
+    expect(res.error).toBeNull();
+    expect(res.result!.errors).toEqual([]);
+    expect(res.result!.created).toBe(2);
+
+    const created = await testPrisma.expense.findMany({
+      where: { accountId: TEST_ACCOUNT_ID, merchant: "Double Charge Cafe" },
+    });
+    expect(created).toHaveLength(2);
+    // Distinct renders, so the two rows are separable files on disk too.
+    expect(created[0]!.imageFile).not.toBe(created[1]!.imageFile);
+    expect(await orphanBlobKeys()).toEqual([]);
+  });
+
+  it("reports a receipt an earlier reconciliation already filed, not a 500", async () => {
+    // Re-uploading overlapping statement content under the same file name
+    // renders the same image for the same row index, so the second run's
+    // create would hit the unique index. That is a duplicate worth naming,
+    // not a crash: the row becomes an error and the rest of the run lands.
+    // The draft is this test's own: the shared fixture's coffee row is
+    // already filed by the completion test above, which would make this
+    // run's first completion a duplicate instead of a create.
+    const draft = {
+      date: "2026-07-06",
+      merchant: "Repeat Runner Cafe",
+      amount: "12.34",
+      report: "2026 Test",
+      category: "Testing",
+      description: "",
+    };
+    const first = await draftRun();
+    await updateReconciliationDecision(TEST_ACCOUNT_ID, first.id, 2, {
+      kind: "new",
+      draft,
+    });
+    const firstResult = await completeReconciliationRun(
+      TEST_ACCOUNT_ID,
+      first.id,
+    );
+    expect(firstResult.error).toBeNull();
+    expect(firstResult.result!.created).toBe(1);
+    expect(await orphanBlobKeys()).toEqual([]);
+
+    const second = await draftRun();
+    await updateReconciliationDecision(TEST_ACCOUNT_ID, second.id, 2, {
+      kind: "new",
+      draft,
+    });
+    const secondResult = await completeReconciliationRun(
+      TEST_ACCOUNT_ID,
+      second.id,
+    );
+    expect(secondResult.error).toBeNull();
+    expect(secondResult.result!.created).toBe(0);
+    expect(secondResult.result!.errors).toEqual([
+      "Row 3: this receipt was already filed by an earlier reconciliation.",
+    ]);
+    // The skipped row's rendered image is not stranded: the completion
+    // deletes the blobs of rows it did not file.
+    expect(await orphanBlobKeys()).toEqual([]);
+    // Still exactly one expense for this merchant.
+    expect(
+      await testPrisma.expense.count({
+        where: { accountId: TEST_ACCOUNT_ID, merchant: "Repeat Runner Cafe" },
+      }),
+    ).toBe(1);
   });
 
   it("won't double-complete a run, and drops matches already reconciled", async () => {
