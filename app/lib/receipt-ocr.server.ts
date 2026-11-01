@@ -476,12 +476,12 @@ async function rasterizePdfUpload(uploaded: {
  * images, and the thumbnail/export pipelines assume sharp-decodable
  * bytes). Non-PDFs pass through unchanged. Returns null when an unreadable
  * PDF fails to render, and callers turn that into their own "Couldn't read
- * that PDF" response. Shared by the draft-upload (/api/expense) and the
- * editor image-replace (/expense/:id/image) routes, which differ only in
- * their log tag; `wasPdf` lets the draft route skip OCR for PDFs and run
- * it alongside the save for images.
+ * that PDF" response. Internal to `prepareUploadOr400`, which is the entry
+ * the draft-upload (/api/expense) and the editor image-replace
+ * (/expense/:id/image) routes call; `wasPdf` lets the draft route skip OCR
+ * for PDFs and run it alongside the save for images.
  */
-export async function prepareUploadedReceipt(
+async function prepareUploadedReceipt(
   uploaded: { buffer: Buffer; mime: string; originalName: string },
   logTag: string,
 ): Promise<{

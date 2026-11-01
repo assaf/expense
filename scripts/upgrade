@@ -7,6 +7,18 @@ pnpm self-update
 echo -e "\033[32m  Upgrading dependencies …\033[0m"
 pnpm update --latest
 
+# The orm packages publish ahead of the CLI they have to match (2026-11-01:
+# orm rc.22 was `latest` while prisma 8.0.0-rc.29 bundles rc.21), so
+# `update --latest` installs a pair no CLI accepts: `prisma contract emit`
+# then fails or emits a contract.d.ts the CLI cannot explain. The CLI decides
+# the pin, so align it here rather than letting the bump commit an unusable
+# tree.
+echo -e "\033[32m  Aligning Prisma orm packages with the CLI …\033[0m"
+node scripts/prisma-orm-pins.mjs --fix
+# Install right away so the lockfile matches the corrected pins before the
+# dedupe/prune pass reasons about them.
+pnpm install
+
 echo -e "\033[32m  Deduping dependencies …\033[0m"
 pnpm dedupe --ignore-scripts
 pnpm prune --ignore-scripts
@@ -27,6 +39,11 @@ echo -e "\033[32m  Running tests …\033[0m"
 # *.new.png / *.diff.png artifacts, so there is nothing to reset here.
 vpr check
 vpr test
+
+# The pin check lives in scripts/check, which the vpr commands above skip;
+# run it explicitly so a registry that moved one side only can never be
+# committed green (472e261 did exactly that).
+node scripts/prisma-orm-pins.mjs
 
 echo -e "\033[32m  Auditing dependencies …\033[0m"
 AUDIT_FAILED=0

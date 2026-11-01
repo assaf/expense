@@ -20,6 +20,8 @@
     "logo": "tsx scripts/logo.ts",
     "og": "tsx scripts/og-card.ts",
     "prebuild": "prisma contract emit && tsx scripts/build-warranty-policies.ts",
+    "prisma:pins": "node scripts/prisma-orm-pins.mjs",
+    "prisma:pins:fix": "node scripts/prisma-orm-pins.mjs --fix",
     "prepare": "vp config",
     "preview:confirmation": "NODE_OPTIONS=--import=./scripts/lib/vite-assets.mjs tsx scripts/preview-confirmation",
     "screenshot": "SCREENSHOT=1 DEMO=1 CI= vp test run test/screenshot.test.ts",

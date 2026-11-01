@@ -492,13 +492,29 @@ starting another one.
 `./scripts/upgrade` is the only script in the repo that writes to git
 history. The sequence, and what each step is protecting:
 
-1. `pnpm self-update`, `pnpm update --latest`, `pnpm dedupe`, `pnpm prune`
-2. `pnpm install` from the new lockfile, then `pnpm exec playwright install
-   chromium --with-deps` (the suite launches chromium; browsers must match the
-   just-bumped playwright)
-3. `vpr check` and the full suite. **A failure aborts here**, before anything
-   is staged: the bumped tree is left dirty so you can read the diff, and
-   nothing is committed.
+1. `pnpm self-update`, `pnpm update --latest`. Then
+   `node scripts/prisma-orm-pins.mjs --fix` and an immediate
+   `pnpm install`: the Prisma orm packages publish ahead of the CLI they have
+   to match (on 2026-11-01 `latest` was orm rc.22 while prisma 8.0.0-rc.29
+   bundles orm-toolchain rc.21), so `--latest` alone installs a pair no CLI
+   accepts, and `contract emit` either fails with
+   `CONTRACT.PACK_CONTRIBUTION_INVALID` or writes a `contract.d.ts` from
+   codecs the CLI does not know. The CLI decides the pin, never the orm
+   package's own `latest`. If the suite then fails on a newer pair, hold BOTH
+   at the release whose pairing passes rather than only moving the orm down
+   (orm rc.21 truncates `TimestampString(3)` to seconds where rc.20 kept the
+   milliseconds, which the suite catches as changed timestamp strings).
+2. `pnpm dedupe`, `pnpm prune`, `pnpm install` from the new lockfile, then
+   `pnpm exec playwright install chromium --with-deps` (the suite launches
+   chromium; browsers must match the just-bumped playwright)
+3. `vpr check`, the full suite, then `node scripts/prisma-orm-pins.mjs` again.
+   `vpr check` does not include the pin gate (that lives in `scripts/check`),
+   so before 2026-11-01 an upgrade could leave the tree with `latest` orm
+   packages against a CLI that bundles an older rc, commit nothing, and fail
+   only the next time someone ran `pnpm check` — which is what a half-applied
+   upgrade on 2026-11-01 did. **A failure aborts here**, before anything is
+   staged: the bumped tree is left dirty so you can read the diff, and nothing
+   is committed.
 4. `git add package.json pnpm-lock.yaml pnpm-workspace.yaml` and `omp commit`.
    All three files matter — the catalog, `overrides` and `patchedDependencies`
    live in `pnpm-workspace.yaml`, and a bump that moves a catalog entry commits
