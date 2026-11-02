@@ -74,27 +74,29 @@ is written here), `app/data/` (all public copy plus the seeds),
 
 ## Development Commands
 
-| Command                                           | Runs                                                             | Notes                                                          |
-| ------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------- |
-| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server on `expense.localhost`; policy table first          |
-| `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table             |
-| `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                      |
-| `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; fails on any issue (no auto-fix)    |
-| `pnpm test`                                       | `pnpm check && react-router build --force && vp test run`        | **Gate.** Static check, build, then the full suite             |
-| `pnpm test:changed [ref]`                         | `vp test run --changed ${1:-HEAD}`                               | Fast lane over the static import graph                         |
-| `pnpm test:related <file>`                        | `vp test related --run`                                          | Fast lane for tests importing the named files                  |
-| `pnpm test:ocr`                                   | `RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts ...`          | Real OCR round trip (script still says `vpr`; use `vp`)        |
-| `pnpm test:db:push`                               | `bash scripts/reset-test-db`                                     | Drops and recreates `expense_test`                             |
-| `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy) |
-| `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                  |
-| `pnpm build:policies`                             | `tsx scripts/build-warranty-policies.ts`                         | Emits the merchant coverage table                              |
-| `pnpm screenshot`                                 | `SCREENSHOT=1 DEMO=1 CI= vp test run test/screenshot.test.ts`    | Regenerates README screenshots and demo; compares baselines    |
-| `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                |
-| `pnpm setup:push` / `infer:rules` / `drain:email` | `tsx scripts/...`                                                | Fastmail push setup, email-rule inference, dev drain           |
-| `./scripts/deploy`                                | check -> test -> prod db sync -> vercel -> smoke                 | The only production writer; `--skip-tests`, `--skip-db-sync`   |
-| `./scripts/clone`                                 | prod dump -> local DB                                            | Read-only against prod; `LOCAL_DB_URL` overrides               |
-| `./scripts/smoke-check <url>`                     | `GET /api/smoke`, fails unless `ok === true`                     | Shared by `scripts/deploy` and CI                              |
-| `./scripts/upgrade`                               | bump all -> install -> suite -> commit                           | **Commits itself** (see below)                                 |
+| Command                                           | Runs                                                             | Notes                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `pnpm dev`                                        | `portless run -- react-router dev`                               | Dev server on `expense.localhost`; policy table first                  |
+| `pnpm build`                                      | `react-router build --force`                                     | `prebuild` emits the contract + the policies table                     |
+| `pnpm start`                                      | `NODE_ENV=production react-router-serve ./build/server/index.js` | Serves the build on :3000                                              |
+| `pnpm check`                                      | `./scripts/check`                                                | **Gate.** Static pipeline; fails on any issue (no auto-fix)            |
+| `pnpm test`                                       | `pnpm check && react-router build --force && vp test run`        | **Gate.** Static check, build, then the full suite                     |
+| `pnpm test:changed [ref]`                         | `vp test run --changed ${1:-HEAD}`                               | Fast lane over the static import graph                                 |
+| `pnpm test:related <file>`                        | `vp test related --run`                                          | Fast lane for tests importing the named files                          |
+| `pnpm test:ocr`                                   | `RUN_OCR_TESTS=1 vpr test run test/pdf-ocr.test.ts ...`          | Real OCR round trip (script still says `vpr`; use `vp`)                |
+| `pnpm test:db:push`                               | `bash scripts/reset-test-db`                                     | Drops and recreates `expense_test`                                     |
+| `pnpm prisma:pins`                                | `node scripts/prisma-orm-pins.mjs`                               | Verify Prisma orm packages match the installed CLI's bundled toolchain |
+| `pnpm prisma:pins:fix`                            | `node scripts/prisma-orm-pins.mjs --fix`                         | Rewrite the orm pins to match the installed CLI                        |
+| `pnpm db:push`                                    | `prisma db update`                                               | **Gate.** Syncs a DB to the contract (dev now, prod on deploy)         |
+| `pnpm build:prisma`                               | `prisma contract emit`                                           | Regenerates `contract.json` / `contract.d.ts`                          |
+| `pnpm build:policies`                             | `tsx scripts/build-warranty-policies.ts`                         | Emits the merchant coverage table                                      |
+| `pnpm screenshot`                                 | `SCREENSHOT=1 DEMO=1 CI= vp test run test/screenshot.test.ts`    | Regenerates README screenshots and demo; compares baselines            |
+| `pnpm screenshots:review`                         | `tsx scripts/screenshots.ts`                                     | :3456 baseline-vs-new review UI                                        |
+| `pnpm setup:push` / `infer:rules` / `drain:email` | `tsx scripts/...`                                                | Fastmail push setup, email-rule inference, dev drain                   |
+| `./scripts/deploy`                                | check -> test -> prod db sync -> vercel -> smoke                 | The only production writer; `--skip-tests`, `--skip-db-sync`           |
+| `./scripts/clone`                                 | prod dump -> local DB                                            | Read-only against prod; `LOCAL_DB_URL` overrides                       |
+| `./scripts/smoke-check <url>`                     | `GET /api/smoke`, fails unless `ok === true`                     | Shared by `scripts/deploy` and CI                                      |
+| `./scripts/upgrade`                               | bump all -> install -> suite -> commit                           | **Commits itself** (see below)                                         |
 
 `pnpm check` runs, in order: the Prisma ORM-vs-CLI pin check (the orm
 packages must match the toolchain the CLI pins) -> `prisma contract emit` ->
