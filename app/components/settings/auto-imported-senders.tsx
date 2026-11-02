@@ -12,6 +12,17 @@ import type { AcceptedSenderRow } from "~/lib/types";
 /** One list row's shell: the same surface the Email page's other rows use. */
 const ROW_CLASS =
   "flex flex-col gap-1 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-900";
+
+/**
+ * A rule row's view-transition name. A custom ident may not contain a dot or
+ * "@", and two rows must never end up with the same name or the browser
+ * skips both silently, so every non-alphanumeric is hex-escaped instead of
+ * stripped: one name per pattern, still readable by eye.
+ */
+function ruleTransitionName(sender: string): string {
+  return `rule-${sender.replace(/[^a-z0-9]/g, (c) => `-${c.charCodeAt(0).toString(16)}`)}`;
+}
+
 /**
  * The trash control for a rule row. Unlike the app's shared RemoveButton,
  * this submits a real navigation: react-router only starts a view
@@ -38,8 +49,10 @@ function RemoveRuleButton({ sender }: { sender: string }) {
   return (
     <>
       <Form
+        ref={formRef}
         method="post"
         preventScrollReset
+        viewTransition
         className="contents"
         onSubmit={(e) => {
           if (confirmed.current) return;
@@ -92,7 +105,10 @@ function RuleRow({
   tone: "blue" | "gray";
 }) {
   return (
-    <li className={ROW_CLASS}>
+    <li
+      className={ROW_CLASS}
+      style={{ viewTransitionName: ruleTransitionName(sender) }}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-sm">{sender}</span>
@@ -111,7 +127,10 @@ function RuleRow({
 /** One turned-off pre-selected sender, with the control that puts it back. */
 function TurnedOffRow({ sender }: { sender: string }) {
   return (
-    <li className={ROW_CLASS}>
+    <li
+      className={ROW_CLASS}
+      style={{ viewTransitionName: ruleTransitionName(sender) }}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate font-mono text-sm">{sender}</span>
@@ -120,7 +139,12 @@ function TurnedOffRow({ sender }: { sender: string }) {
           </Badge>
         </span>
         <div className="flex shrink-0 items-center gap-2">
-          <Form method="post" preventScrollReset className="contents">
+          <Form
+            method="post"
+            preventScrollReset
+            viewTransition
+            className="contents"
+          >
             <input type="hidden" name="intent" value="restoreAcceptedSender" />
             <input type="hidden" name="sender" value={sender} />
             <button
